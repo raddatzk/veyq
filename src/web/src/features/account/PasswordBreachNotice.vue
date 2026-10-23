@@ -20,7 +20,6 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <small class="field-hint">{{ t('password.pwnedNote') }}</small>
   <VeyqMessage v-if="state.kind === 'hit' || state.kind === 'accepted'" tone="warn">
     {{ t('password.pwnedWarning', { count: state.count }) }}
     <span class="checkbox-row breach-use-anyway">

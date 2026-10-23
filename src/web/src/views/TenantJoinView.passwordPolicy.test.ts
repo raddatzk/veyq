@@ -135,7 +135,6 @@ describe('TenantJoinView — where the password floor applies', () => {
 
   it('REGISTER: the finished password is checked when its field is left — never while typing, once per password', async () => {
     const w = await mountFor(false)
-    expect(w.text()).toContain(t('password.pwnedNote'))
     const field = w.find('input[type="password"]')
     await field.setValue('a long')
     await field.setValue('a long enough password')
@@ -202,7 +201,6 @@ describe('TenantJoinView — where the password floor applies', () => {
     await flushPromises()
     expect(login).toHaveBeenCalledWith('owner@acme.example', 'a long enough password')
     expect(pwnedCount).not.toHaveBeenCalled()
-    expect(w.text()).not.toContain(t('password.pwnedNote'))
   })
 })
 

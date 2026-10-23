@@ -116,7 +116,7 @@ const en = {
   },
   "releaseCheck": {
     "title": "New releases",
-    "sub": "Once a day this server reads the published releases and compares them with its own. The request names no release and nothing about this server’s users; what it finds is only shown — upgrading stays yours.",
+    "sub": "Once a day this server reads the published releases and compares them with its own.",
     "loading": "Reading what the release check found…",
     "loadFailed": "Couldn’t read the release check.",
     "noReleaseLine": "This build carries no release stamp, so it has nothing to compare and makes no request.",
@@ -419,7 +419,7 @@ const en = {
   },
   "store": {
     "navTitle": "Object store",
-    "sub": "Where this server keeps the encrypted media. It stores ciphertext only; the credentials entered here are sealed and never shown again. Tenants can be created once the store has passed its check.",
+    "sub": "Regarding where this server stores the encrypted media: tenants can only be created once the storage has passed the validation check.",
     "provisioningTitle": "Setting the store up",
     "provisioningSub": "Whether this server has brought its Garage store from running to usable — media cannot be uploaded or shown until it has.",
     "source": "Store",
@@ -543,18 +543,18 @@ const en = {
   },
   "configSecret": {
     "navTitle": "Config-secret key",
-    "sub": "Whether the key that seals this server's stored secrets — such as a tenant's SMTP password — is the one they were sealed with. After a restore or an update, this is the reading that says the key came along.",
+    "sub": "Some secrets must be known to the server itself at runtime—for instance, a tenant’s SMTP password. These are sealed using a configuration key that the server generates upon its initial startup and never displays again. This indicator shows whether the key is still present and whether it is the same one that was used to seal the secrets..",
     "loading": "Reading the config-secret key's state…",
     "loadFailed": "Couldn’t read the config-secret key's state.",
     "notOwner": "Only the server owner can see the state of this instance's config-secret key.",
     "stateLabel": "Reported state",
-    "ok": "The config-secret key is in place, and it is the one this server's stored secrets were sealed with — or nothing has been sealed yet. Sealed settings can be opened.",
+    "ok": "The config-secret key is in place, and it is the one this server's stored secrets were sealed with.",
     "absent": "No config-secret key is available: it could not be created, or this server cannot read the key file. After a restore, the file must be readable by the application's runtime user. Until it is, nothing can be sealed, and tenants whose mail needs a password cannot send — member invites and password resets are refused.",
     "mismatch": "The config-secret key is not the one this server's stored secrets were sealed with — the key file was lost, replaced, or not restored. Content is unaffected, but the sealed settings cannot be opened, so member invites and password resets are refused. Put the original key file back and restart, or have each tenant owner re-enter their SMTP password to seal it under the current key."
   },
   "capabilities": {
     "navTitle": "Capabilities",
-    "sub": "What this instance offers at all. Switching something off takes effect at once, without a restart, and never deletes what a member stored. Each entry says in its own words what switching it off does.",
+    "sub": "Whatever this entity offers, switching it off has an immediate effect.",
     "loading": "Reading the capabilities…",
     "loadFailed": "Couldn’t read the capabilities.",
     "notOwner": "Only the server owner can see and switch this instance's capabilities.",
@@ -626,7 +626,6 @@ const en = {
   "password": {
     "minLength": "Use at least 10 characters.",
     "strong": "Nice and long — that is a strong password.",
-    "pwnedNote": "When you leave this field, the first 5 characters of a hash of the password go to Have I Been Pwned to check it against known data breaches — never the password itself.",
     "pwnedWarning": "This password appeared in {count} known data breaches. Choose a different one, or use it anyway.",
     "pwnedAnyway": "Use it anyway",
     "pwnedUnavailable": "This password could not be checked against known data breaches."
@@ -793,7 +792,7 @@ const de: typeof en = {
   },
   "releaseCheck": {
     "title": "Neue Releases",
-    "sub": "Einmal am Tag liest dieser Server die veröffentlichten Releases und vergleicht sie mit seinem eigenen. Die Anfrage nennt kein Release und nichts über die Personen auf diesem Server; was sie findet, wird nur angezeigt — das Update bleibt deins.",
+    "sub": "Einmal am Tag liest dieser Server die veröffentlichten Releases und vergleicht sie mit seinem eigenen.",
     "loading": "Ergebnis der Release-Prüfung wird gelesen…",
     "loadFailed": "Die Release-Prüfung konnte nicht gelesen werden.",
     "noReleaseLine": "Dieser Stand trägt keine Release-Kennung, hat also nichts zu vergleichen und stellt keine Anfrage.",
@@ -1096,7 +1095,7 @@ const de: typeof en = {
   },
   "store": {
     "navTitle": "Objektspeicher",
-    "sub": "Wo dieser Server die verschlüsselten Medien ablegt. Er speichert nur Chiffretext; die hier eingegebenen Zugangsdaten werden versiegelt und nie wieder angezeigt. Tenants lassen sich anlegen, sobald der Speicher die Prüfung bestanden hat.",
+    "sub": "Wo dieser Server die verschlüsselten Medien ablegt, Tenants lassen sich erst anlegen, sobald der Speicher die Prüfung bestanden hat.",
     "provisioningTitle": "Einrichtung des Speichers",
     "provisioningSub": "Ob dieser Server seinen Garage-Speicher von laufend auf nutzbar gebracht hat — ohne das lassen sich keine Medien hochladen oder anzeigen.",
     "source": "Speicher",
@@ -1220,18 +1219,18 @@ const de: typeof en = {
   },
   "configSecret": {
     "navTitle": "Konfigurationsschlüssel",
-    "sub": "Ob der Schlüssel, der die gespeicherten Geheimnisse dieses Servers versiegelt — etwa das SMTP-Passwort eines Tenants —, derjenige ist, mit dem sie versiegelt wurden. Nach einer Wiederherstellung oder einem Update ist das die Anzeige, die sagt, dass der Schlüssel mitgekommen ist.",
+    "sub": "Manche Geheimnisse muss der Server selber zur Laufzeit kennen, etwa das SMTP-Passwort eines Tenants. Sie werden unter einem Konfigurationsschlüssel versiegelt, den der Server beim ersten Start erzeugt und nie wieder anzeigt. Diese Anzeige sagt, ob der Schlüssel noch da ist und ob er der ist, mit dem die Geheimnisse versiegelt wurden.",
     "loading": "Zustand des Konfigurationsschlüssels wird gelesen…",
     "loadFailed": "Der Zustand des Konfigurationsschlüssels konnte nicht gelesen werden.",
     "notOwner": "Nur der Server-Eigentümer sieht den Zustand des Konfigurationsschlüssels dieser Instanz.",
     "stateLabel": "Gemeldeter Zustand",
-    "ok": "Der Konfigurationsschlüssel ist vorhanden, und er ist der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — oder es wurde noch nichts versiegelt. Versiegelte Einstellungen lassen sich öffnen.",
+    "ok": "Der Konfigurationsschlüssel ist vorhanden, und er ist der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden.",
     "absent": "Es ist kein Konfigurationsschlüssel verfügbar: Er konnte nicht erzeugt werden, oder dieser Server kann die Schlüsseldatei nicht lesen. Nach einer Wiederherstellung muss die Datei für den Laufzeitbenutzer der Anwendung lesbar sein. Bis dahin lässt sich nichts versiegeln, und Tenants, deren Mail ein Passwort braucht, können nicht senden — Mitgliedseinladungen und Passwort-Zurücksetzungen werden abgelehnt.",
     "mismatch": "Der Konfigurationsschlüssel ist nicht der, mit dem die gespeicherten Geheimnisse dieses Servers versiegelt wurden — die Schlüsseldatei ging verloren, wurde ersetzt oder nicht wiederhergestellt. Inhalte sind nicht betroffen, aber die versiegelten Einstellungen lassen sich nicht öffnen, deshalb werden Mitgliedseinladungen und Passwort-Zurücksetzungen abgelehnt. Lege die ursprüngliche Schlüsseldatei zurück und starte neu, oder lass die Besitzperson jedes Tenants ihr SMTP-Passwort neu eingeben, damit es unter dem aktuellen Schlüssel versiegelt wird."
   },
   "capabilities": {
     "navTitle": "Funktionen",
-    "sub": "Was diese Instanz überhaupt anbietet. Abschalten wirkt sofort, ohne Neustart, und löscht nie etwas, das ein Mitglied gespeichert hat. Jeder Eintrag sagt in eigenen Worten, was Abschalten bewirkt.",
+    "sub": "Was diese Instanz überhaupt anbietet, abschalten wirkt sich sofort aus.",
     "loading": "Funktionen werden gelesen…",
     "loadFailed": "Die Funktionen konnten nicht gelesen werden.",
     "notOwner": "Nur der Server-Eigentümer sieht und schaltet die Funktionen dieser Instanz.",
@@ -1303,7 +1302,6 @@ const de: typeof en = {
   "password": {
     "minLength": "Mindestens 10 Zeichen verwenden.",
     "strong": "Schön lang — ein starkes Passwort.",
-    "pwnedNote": "Wenn du das Feld verlässt, gehen die ersten 5 Zeichen eines Hashwerts des Passworts an Have I Been Pwned, um es mit bekannten Datenlecks abzugleichen — nie das Passwort selbst.",
     "pwnedWarning": "Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle ein anderes oder verwende es trotzdem.",
     "pwnedAnyway": "Trotzdem verwenden",
     "pwnedUnavailable": "Dieses Passwort konnte nicht mit bekannten Datenlecks abgeglichen werden."

@@ -629,7 +629,6 @@ const en = {
   password: {
     minLength: 'Use at least 10 characters.',
     strong: 'Nice and long — that is a strong password.',
-    pwnedNote: 'When you leave this field, the first 5 characters of a hash of the password go to Have I Been Pwned to check it against known data breaches — never the password itself.',
     pwnedWarning: 'This password appeared in {count} known data breaches. Choose a different one, or use it anyway.',
     pwnedAnyway: 'Use it anyway',
     pwnedUnavailable: 'This password could not be checked against known data breaches.',
@@ -2568,7 +2567,6 @@ const de: typeof en = {
   password: {
     minLength: 'Mindestens 10 Zeichen verwenden.',
     strong: 'Schön lang — ein starkes Passwort.',
-    pwnedNote: 'Wenn du das Feld verlässt, gehen die ersten 5 Zeichen eines Hashwerts des Passworts an Have I Been Pwned, um es mit bekannten Datenlecks abzugleichen — nie das Passwort selbst.',
     pwnedWarning: 'Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle ein anderes oder verwende es trotzdem.',
     pwnedAnyway: 'Trotzdem verwenden',
     pwnedUnavailable: 'Dieses Passwort konnte nicht mit bekannten Datenlecks abgeglichen werden.',

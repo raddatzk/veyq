@@ -53,7 +53,7 @@ const i18n = createI18n({
   messages: {
     en: {
       common: { email: 'Email', password: 'Password' },
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedNote: 'Prefix to HIBP.', pwnedWarning: 'Seen in {count}.', pwnedAnyway: 'Use it anyway', pwnedUnavailable: 'Not checked.' },
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.', pwnedAnyway: 'Use it anyway', pwnedUnavailable: 'Not checked.' },
       setup: {
         title: 'Set up', sub: 'sub', submit: 'Set up', submitting: 'Setting up', failed: 'failed', kitTitle: 'Kit', kitSub: 'kit',
         kitProceed: 'Proceed', creating: 'Creating', createFailed: 'create failed', alreadyComplete: 'already complete',
@@ -88,7 +88,6 @@ describe('SetupView — the breached-password check', () => {
 
   it('checks the finished password when its field is left — never while typing, once per password', async () => {
     const w = await mountView()
-    expect(w.text()).toContain('Prefix to HIBP.')
     const field = w.find('input[type="password"]')
     await field.setValue('a long')
     await field.setValue('a long enough password')
