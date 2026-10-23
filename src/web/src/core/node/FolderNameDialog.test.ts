@@ -68,14 +68,14 @@ async function settle() {
 describe('FolderNameDialog', () => {
   it('create calls createFolder with the parent and ITS key + closes + emits done', async () => {
     const parentKey = new Uint8Array(32).fill(7)
-    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey })
+    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey, parentEpoch: 0 })
     expect(wrapper.find('.hdr').text()).toBe(t('node.createFolderTitle'))
     expect(wrapper.find('button[type="submit"]').text()).toBe(t('common.create'))
     await wrapper.find('input').setValue('Trips')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey })
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey, epoch: 0 }, { reread: expect.any(Function) })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })

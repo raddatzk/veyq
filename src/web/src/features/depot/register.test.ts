@@ -12,6 +12,7 @@ import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent } from './exportImport'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 describe('registerDepot', () => {
   it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its rows, its own page and link dialog', () => {
@@ -46,6 +47,8 @@ describe('registerDepot', () => {
         { id: 'depot.uploadFolder', label: 'depot.uploadFolder', icon: 'folder-open', order: 31, acceptsDrop: true, allowed: expect.any(Function) },
       ],
       placement: { root: true, parents: [FOLDER_KIND] },
+      // Depot stores nothing of its own under a node's key: a file's content wrap is a core attachment (ADR 0109)
+      rekeyContent: nothingOfItsOwnToRekey,
     })
   })
 
@@ -100,6 +103,7 @@ describe('registerDepot', () => {
       importsAsFolder: true,
       // a copy makes it a plain folder too: its dialog names what stays behind (cr-copy-node Decision 4)
       copyLosses: ['depot.dropBox.copyLoss'],
+      rekeyContent: nothingOfItsOwnToRekey,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding

@@ -60,10 +60,10 @@ describe('a single-file share on the wire', () => {
     const fileKey = nodeContentKey(SCOPE_ID, EPOCHS, TREE, FILE)! // what the host hands the dialog: k0 → folder → file
     expect(Array.from(fileKey)).toEqual(Array.from(keyFile))
 
-    const minted = await mintShare(SCOPE_ID, FILE, fileKey, EPOCHS, 'Ticket.pdf', role)
+    const minted = await mintShare(SCOPE_ID, FILE, { key: fileKey, epoch: 0 }, EPOCHS, 'Ticket.pdf', role)
 
     const { json } = bodies[0]
-    expect(json).toMatchObject({ shareId: minted.shareId, nodeId: FILE, role })
+    expect(json).toMatchObject({ shareId: minted.shareId, nodeId: FILE, role, nodeEpoch: 0 })
     expect(json.sealedDropPublicKey).toBeUndefined() // no WRITE_ONLY link on a file: no drop key either
     const wrapped = v1.open(SHARE_KEY, minted.kShare, fromB64std(json.wrap as string))
     expect(Array.from(wrapped)).toEqual(Array.from(keyFile))

@@ -24,6 +24,7 @@ import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeParent } from '../../../core/node/tree'
+import { memberCreateOptions } from '../../../core/node/rereadNode'
 import type { NodeCreateDialogProps, NodeCreateDialogEmits } from '../../../core/applications/registry'
 import { createMemory, createChapter } from '../memoryNodes'
 import { activeSpace } from '../../../app/activeSpace'
@@ -65,20 +66,24 @@ const confirmLabel = computed(() => t('common.create'))
  *  creates nothing, rather than a node its parent's holders could not open. */
 function createParent(): NodeParent {
   if (!props.parentId) return null
-  if (!props.parentKey) throw new Error('parent_key_unavailable')
-  return { id: props.parentId, key: props.parentKey }
+  if (!props.parentKey || props.parentEpoch == null) throw new Error('parent_key_unavailable')
+  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }
 }
 
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const trimmed = name.value.trim()
     if (isChapter.value) {
-      if (!props.parentId || !props.parentKey) throw new Error('chapter_parent_missing')
-      await createChapter(props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId)
+      if (!props.parentId || !props.parentKey || props.parentEpoch == null) throw new Error('chapter_parent_missing')
+      await createChapter(
+        props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId, props.parentEpoch,
+        memberCreateOptions(props.scopeId, { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }),
+      )
     } else {
       const location = showLocationStep.value && wantsLocation.value ? { name: '', nameSource: 'geocoded' as const, derivedMode: 'auto' as const } : null
       const participants = showWasThere.value && wasThere.value ? [account.userId] : []
-      await createMemory(props.scopeId, props.epochs, trimmed, createParent(), { location, participants })
+      const parent = createParent()
+      await createMemory(props.scopeId, props.epochs, trimmed, parent, { location, participants }, memberCreateOptions(props.scopeId, parent))
     }
     emit('done')
     emit('close')

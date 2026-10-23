@@ -23,6 +23,7 @@ import { registry } from '../../core/applications/registry'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { session } from '../../app/session'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f0'
@@ -37,7 +38,7 @@ const MODIFIED = 1_700_000_000_000
 // This node-environment suite gets no application registry (`src/test/setup.ts`), so it registers FILE with its own
 // folding on the app's registry, as Depot's `register.ts` does.
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
   session.accessToken = 'access-token'
 })
 afterEach(() => {
@@ -117,9 +118,9 @@ const ctx = () => ({ onProgress: vi.fn(), signal: new AbortController().signal }
 const shape = (rs: Req[]) => rs.map((r) => `${r.method} ${r.path.replace(/\/b\/[^/]+\/\d+$/, '/b/…')}`)
 const blobKeyCtx = (ownerId: string, blobId: string) =>
   ({ purpose: 'blob-key', scopeId: SCOPE, ownerId, blobId, role: 'FILE_CONTENT' }) as const
-const newTarget = (): FileUploadTarget => ({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: { id: FOLDER, key: folderKey } })
+const newTarget = (): FileUploadTarget => ({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: { id: FOLDER, key: folderKey, epoch: 0 } })
 const replaceTarget = (expectedBlobId: string | null): FileUploadTarget => ({
-  ...newTarget(), replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId },
+  ...newTarget(), replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId },
 })
 /** No JSON body that left the client names the file or its type in plaintext (the create seals the name). */
 const expectNoPlaintextName = (rs: Req[]) => {
@@ -179,8 +180,8 @@ describe('a new file on the wire', () => {
     expect(v1.openBlobMeta(blobKey, sealedMeta)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     expect(() => v1.openBlobMeta(nodeKey, sealedMeta)).toThrow(v1.OpenRefused)
 
-    // the completion: the started upload, no expectedBlobId at all (an empty slot)
-    expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001' })
+    // the completion: the started upload and the node's epoch (ADR 0109 point 6), no expectedBlobId at all (an empty slot)
+    expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000001' })
     expect(requests.some((r) => r.method === 'PATCH'), 'no node-meta write').toBe(false)
     expectNoPlaintextName(requests)
   })
@@ -213,13 +214,13 @@ describe('a replace on the wire', () => {
     const blobKey = v1.open(blobKeyCtx(EXISTING, start.blobId), existingKey, fromB64std(start.wrappedBlobKey))
     // the replace's meta describes the bytes it brings — the picked file's type and name; the node keeps its own name
     expect(v1.openBlobMeta(blobKey, fromB64std(start.wrappedBlobMeta))).toEqual({ v: 1, type: 'image/png', name: 'Andere Datei', modifiedAt: MODIFIED + 1 })
-    expect(requests[2].json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001', expectedBlobId: '9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a' })
+    expect(requests[2].json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000001', expectedBlobId: '9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a' })
   })
 
   it('a node that holds no blob yet is filled like a new one: no expectedBlobId', async () => {
     const requests = fakeServer()
     await fileUploadJob(replaceTarget(null), fileOf(100)).run(ctx())
-    expect(requests[2].json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001' })
+    expect(requests[2].json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000001' })
   })
 
   it('a 409 stale_file fails with the conflict and the current blob, and a rerun sends nothing', async () => {
@@ -276,7 +277,7 @@ describe('a file upload\'s other outcomes', () => {
     expect(requests.filter((r) => r.path === `/api/scopes/${SCOPE}/nodes`)).toHaveLength(1)
     const starts = requests.filter((r) => r.path.endsWith('/blob-uploads-batch'))
     expect(starts.map((s) => (s.json!.items as { ownerId: string }[])[0].ownerId)).toEqual([nodeId, nodeId])
-    expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000002' })
+    expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000002' })
   })
 
   it('given up after its retry, a job trashes the node it created when the slot is still empty (inbox #384)', async () => {

@@ -558,6 +558,10 @@ export type AddMediaOptions = {
    *  medium's original shares instead of being uploaded (ADR 0013 § 5: a video banner, `storedMatch.bannerOriginalOf`).
    *  A member's upload only; absent, the original is uploaded. */
   storedOriginal?: (sha256: string, byteSize: number) => StoredBlob | null
+  /** The target node's epoch as read with `memoryKey` (`TreeNode.epoch`): the completion states it as `nodeEpoch`, since
+   *  every wrap and seal of the medium is under that node's key (ADR 0109 point 6). Every production caller states it
+   *  ([UploadTarget.nodeEpoch], the import); absent it is 0, the epoch of a scope never rotated — a suite's fake scope. */
+  nodeEpoch?: number
 }
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
@@ -698,11 +702,14 @@ export async function addCopiedMedia(
   const meta = copied.meta ? { ...copied.meta, v: finiteNum(copied.meta.v) ?? 1 } : null
   const wrappedMeta = meta && metaHasContent(meta) ? sealJson(memoryKey, prune(meta), mediaMetaContext(scopeId, mediaId)) : null
   const wrappedExif = copied.exif && hasExifPayload(copied.exif) ? sealExifTier(memoryKey, mediaExifContext(scopeId, mediaId), copied.exif) : null
-  return uploadSealedMedia(scopeId, memoryKey, mediaId, { original: copied.original, tiers: copied.tiers, wrappedMeta, wrappedExif }, mediaApiTransport(scopeId, nodeId), opts)
+  return uploadSealedMedia(
+    scopeId, memoryKey, mediaId, { original: copied.original, tiers: copied.tiers, wrappedMeta, wrappedExif },
+    mediaApiTransport(scopeId, nodeId, opts.nodeEpoch ?? 0), opts,
+  )
 }
 
 /** The authed upload transport — the internal Memory control plane (`startBlobUploads` + `presignBlobUploadWindows` + `completeMedia`). */
-function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTransport {
+function mediaApiTransport(scopeId: string, nodeId: string, nodeEpoch: number): MediaUploadTransport {
   return {
     reserve: (declares) => authedReserve(scopeId, declares),
     window: authedWindow(scopeId),
@@ -712,7 +719,7 @@ function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTranspor
           scopeId,
           mediaBatchRequest: {
             items: [{
-              mediaId: media.mediaId, nodeId, originalUploadId: media.originalUploadId ?? null, originalShared: media.originalShared ?? null,
+              nodeEpoch, mediaId: media.mediaId, nodeId, originalUploadId: media.originalUploadId ?? null, originalShared: media.originalShared ?? null,
               derivatives: media.derivatives, wrappedMeta: media.wrappedMeta, wrappedExif: media.wrappedExif,
             }],
           },
@@ -738,7 +745,7 @@ export async function addMedia(
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
-  return uploadMediaVia(scopeId, memoryKey, source, deriver, mediaApiTransport(scopeId, nodeId), opts)
+  return uploadMediaVia(scopeId, memoryKey, source, deriver, mediaApiTransport(scopeId, nodeId, opts.nodeEpoch ?? 0), opts)
 }
 
 // --- the standalone cover blob is core's since inbox #411 ---------------------------------------------------------------
@@ -973,10 +980,11 @@ export async function setMediaMeta(
   scopeId: string,
   media: MediaMetaTarget,
   memoryKey: Uint8Array,
+  nodeEpoch: number,
   overrideMs: number | null,
 ): Promise<MediaMetaWrite> {
   const openedWith = unsealMeta(scopeId, memoryKey, media as MediaItem)?.capturedAtOverride
-  return persistMeta(scopeId, media, memoryKey, (raw, { retry, state }) => {
+  return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw, { retry, state }) => {
     if (retry && finiteNum(raw.capturedAtOverride) !== openedWith) throw new MetaConflictError(state)
     if (overrideMs === null) delete raw.capturedAtOverride
     else raw.capturedAtOverride = overrideMs
@@ -1020,10 +1028,11 @@ export async function backfillPlaceName(
   scopeId: string,
   media: MediaMetaTarget,
   memoryKey: Uint8Array,
+  nodeEpoch: number,
   placeName: string,
   placeLevel?: string,
 ): Promise<MediaMetaWrite> {
-  return persistMeta(scopeId, media, memoryKey, (raw) => {
+  return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw) => {
     if (cleanStr(raw.placeName) !== undefined) return null // the fresh tier already has one — nothing to fill
     raw.placeName = clampPlaceName(placeName)
     if (placeLevel === undefined) delete raw.placeLevel
@@ -1047,12 +1056,14 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
  * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
- * left worth sealing.
+ * left worth sealing. `nodeEpoch` is the medium's node's epoch as read with `memoryKey`, which the write states (ADR 0109
+ * point 6).
  */
 async function persistMeta(
   scopeId: string,
   media: MediaMetaTarget,
   memoryKey: Uint8Array,
+  nodeEpoch: number,
   edit: (raw: RawMediaMeta, ctx: MetaEditContext) => RawMediaMeta | null,
 ): Promise<MediaMetaWrite> {
   const { mediaId } = media
@@ -1063,7 +1074,7 @@ async function persistMeta(
       seal: (raw) =>
         metaHasContent(raw) ? sealJson(mediaKey(scopeId, memoryKey, media), prune(raw), mediaMetaContext(scopeId, mediaId)) : null,
       send: async (wrappedMeta, metaRevision) => {
-        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision } }))
+        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision, nodeEpoch } }))
       },
     },
     edit,

@@ -112,7 +112,7 @@ describe("ShareView — the uploader's picker inherits E3s re-read window", () =
       role: ShareRole.WriteOnly,
       // the shared Memory's scope: an uploader's photos are sealed bound to it
       scopeId: '5c09e000-0000-4000-8000-0000000000df',
-      access: { kind: 'drop', nodeId: '5c09e000-0000-4000-8000-0000000000d0', dropPublicKey: new Uint8Array() },
+      access: { kind: 'drop', nodeId: '5c09e000-0000-4000-8000-0000000000d0', dropPublicKey: new Uint8Array(), rootEpoch: 0 },
       items: [],
     })
   })

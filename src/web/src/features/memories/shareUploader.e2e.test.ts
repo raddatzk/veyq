@@ -70,7 +70,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     const nodeId = memory.nodeId
     const kNode = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
+    const minted = await createShare(scopeId, nodeId, { key: kNode, epoch: 0 }, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
     const fragmentKey = b64url(minted.kShare)
 
     // --- anonymous: what the server sends the guest carries no wrap, only the sealed drop public key ----------
@@ -91,7 +91,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     expect(sameBytes(sealKey!, kNode), 'and that key is not the Memory key').toBe(false)
     const photo = bytes(7)
     const uploaded = await addSharePhoto(
-      { ...session, shareId: minted.shareId, scopeId: resolved.scopeId, sealKey: sealKey! },
+      { ...session, shareId: minted.shareId, scopeId: resolved.scopeId, sealKey: sealKey!, nodeEpoch: resolved.access.rootEpoch },
       { blob: new Blob([photo as BlobPart]), mediaType: '' },
     )
     expect(uploaded.mediaId, 'the upload attached').toBeTruthy()
@@ -110,12 +110,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     expect(recoveredName, 'the curator recovered the uploader display name').toBe(UPLOADER_NAME)
 
     // a second WRITE_ONLY link on the same Memory seals to the drop key the Memory already has
-    const second = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
+    const second = await createShare(scopeId, nodeId, { key: kNode, epoch: 0 }, epochsOf(scopeKey), MEMORY_NAME, ShareRole.WriteOnly)
     const secondResolved = await resolveShare(second.shareId, b64url(second.kShare))
     expect(secondResolved.access.kind, 'the second uploader link resolves to a drop key too').toBe('drop')
 
     // --- a viewer link of the same Memory opens the guest's upload too --------------------------------------
-    const viewer = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Read)
+    const viewer = await createShare(scopeId, nodeId, { key: kNode, epoch: 0 }, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Read)
     const viewed = await resolveShare(viewer.shareId, b64url(viewer.kShare))
     const shared = viewed.items.find((i) => i.item.mediaId === uploaded.mediaId)
     expect(shared, "the upload is in the viewer link's gallery").toBeDefined()

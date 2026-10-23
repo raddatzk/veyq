@@ -29,7 +29,7 @@ const KEY = new Uint8Array(32)
 let wrapper: VueWrapper | null = null
 async function createWith(value: string) {
   wrapper = mount(DropBoxCreateDialog, {
-    props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: 'p', parentKey: KEY },
+    props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: 'p', parentKey: KEY, parentEpoch: 0 },
     global: { plugins: [realI18n()], stubs },
     attachTo: document.body,
   })
@@ -69,7 +69,7 @@ describe('DropBoxCreateDialog', () => {
 
   it('a free name is created under the parent, trimmed', async () => {
     const w = await createWith('  Fotos  ')
-    expect(createDropBox).toHaveBeenCalledWith(SCOPE, EPOCHS, { id: 'p', key: KEY }, 'Fotos')
+    expect(createDropBox).toHaveBeenCalledWith(SCOPE, EPOCHS, { id: 'p', key: KEY, epoch: 0 }, 'Fotos', { reread: expect.any(Function) })
     expect(w.emitted('done')).toBeTruthy()
   })
 

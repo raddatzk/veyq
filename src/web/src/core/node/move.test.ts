@@ -38,6 +38,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { GuestIdentity } from '../sharing/guestIdentity'
 import { treeNode, memberAccessOf, guestAccessOf, memberTreeOf } from '../../test/models'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 const ITEM = 'ITEM' // lives at the root or in a folder (as a Memory, a file)
 const PART = 'PART' // lives only in an ITEM (as a chapter)
@@ -66,9 +67,9 @@ const hereAt = (tree: TreeSource, node: TreeNode, mode: Access['mode'], ats: (st
 
 beforeEach(() => {
   holder.reg = createRegistry()
-  holder.reg.registerKind({ kind: ITEM, icon: 'images', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
-  holder.reg.registerKind({ kind: PART, icon: 'image', shareable: false, placement: { root: false, parents: [ITEM] } })
-  holder.reg.registerKind({ kind: BOX, icon: 'inbox', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ITEM, icon: 'images', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: PART, icon: 'image', shareable: false, placement: { root: false, parents: [ITEM] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX, icon: 'inbox', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
   for (const f of Object.values(calls)) f.mockClear()
 })
 
@@ -320,6 +321,7 @@ describe('moveRefusalOf: every refusal by its code', () => {
     [422, 'illegal_scope', 'illegal_scope'],
     [409, 'stale_placement', 'stale_placement'],
     [409, 'stale_epoch', 'stale_epoch'],
+    [409, 'node_rekey_pending', 'node_rekey_pending'],
     [403, 'share_not_contributable', 'share_not_contributable'],
     [404, 'node_not_found', 'gone'],
     [404, 'share_not_found', 'gone'],

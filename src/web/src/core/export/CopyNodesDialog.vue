@@ -127,7 +127,8 @@ async function submit() {
   if (!ready || step.value !== 'ready' || here.value !== null || !canCopy.value || fits.value === false) return
   if (a.mode !== 'member' || !a.epochs) return
   const parentKey = to === null ? null : props.tree.keyOf(to)
-  if (to !== null && !parentKey) return
+  const parentNode = to === null ? null : props.tree.node(to)
+  if (to !== null && (!parentKey || !parentNode)) return
   error.value = ''
   step.value = 'running'
   try {
@@ -135,7 +136,7 @@ async function submit() {
       scopeId: a.scopeId,
       epochs: a.epochs,
       tree: treeStore.nodes,
-      parent: to === null ? null : { id: to, key: parentKey! },
+      parent: to === null ? null : { id: to, key: parentKey!, epoch: parentNode!.epoch },
       signal: control.signal,
       onProgress: (p) => (progress.value = { nodesDone: p.nodesDone, nodesTotal: p.nodesTotal }),
     })

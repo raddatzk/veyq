@@ -182,7 +182,7 @@ describe('a place that is a name only (inbox #458)', () => {
     expect(validateMemoryContent(wire)).toBeNull()
 
     const nodeKey = v1.randomBytes(32)
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey })
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
     vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
     const n = { id: 'n4', kind: MEMORY_KIND, name: 'Granny', content: { ...wire, media: [], cover: undefined } } as unknown as ManifestNode
     const made = await importMemoryContent(MEMORY_KIND)({
@@ -219,7 +219,7 @@ describe('importMemoryContent', () => {
 
   beforeEach(() => {
     const nodeKey = v1.randomBytes(32)
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey })
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue(['m1', 'm2', 'm3'].map((id) => ({ ...item(id), wrappedMeta: 'w', metaRevision: 1 })))
@@ -247,10 +247,10 @@ describe('importMemoryContent', () => {
     await importMemoryContent(MEMORY_KIND)(ctx(node()))
     expect(vi.mocked(setMediaMeta)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(setMediaMeta).mock.calls[0][1]).toMatchObject({ mediaId: 'm2' })
-    expect(vi.mocked(setMediaMeta).mock.calls[0][3]).toBe(Date.parse('2023-11-14T22:15:00.000Z'))
+    expect(vi.mocked(setMediaMeta).mock.calls[0][4]).toBe(Date.parse('2023-11-14T22:15:00.000Z'))
     expect(vi.mocked(backfillPlaceName)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(backfillPlaceName).mock.calls[0][1]).toMatchObject({ mediaId: 'm1' })
-    expect(vi.mocked(backfillPlaceName).mock.calls[0][3]).toBe('Lisbon')
+    expect(vi.mocked(backfillPlaceName).mock.calls[0][4]).toBe('Lisbon')
   })
 
   it('creates a chapter under its Memory with the chapter kind', async () => {
@@ -400,7 +400,7 @@ describe('the banner travels with its Memory', () => {
   beforeEach(() => {
     vi.mocked(makeChunkProvider).mockReturnValue({ chunkCount: 1, byteSize: 100, getPlaintextChunk: async () => new Uint8Array([1]) } as unknown as ReturnType<typeof makeChunkProvider>)
     vi.mocked(openBlob).mockResolvedValue(new Uint8Array([0xff, 0xd8]))
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: v1.randomBytes(32) })
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: v1.randomBytes(32), epoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue([])

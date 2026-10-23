@@ -23,6 +23,8 @@ import type { BlobSource } from '../../blob/types'
 import { editField, unsealNodeMeta } from '../nodeMeta'
 import { writeNodeMeta } from '../nodeMetaWrite'
 import type { SealedMetaState } from '../sealedMetaWrite'
+import type { NodeMetaState } from '../nodeMeta'
+import { assertActiveScopeFloor } from '../rereadNode'
 import { COVER_ROLE, uploadBlobIdOf } from './coverModel'
 
 /**
@@ -120,8 +122,9 @@ export type WriteNodeCoverArgs = {
   scopeId: string
   nodeId: string
   nodeKey: Uint8Array
-  /** The node's sealed meta as the writer last saw it (the tree's); a `409 stale_revision` re-bases it. */
-  current: SealedMetaState
+  /** The node's sealed meta as the writer last saw it (the tree's), with the node's epoch read alongside (the write
+   *  states it, ADR 0109 point 6); a `409 stale_revision` re-bases it. */
+  current: NodeMetaState
   /** The node's new `cover` field value (null: none), built by the caller. */
   cover: unknown | null
   /** The open upload that becomes the cover (its blob is the one `cover` names); absent when no new blob is attached. */
@@ -152,7 +155,7 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
   const openedWith = unsealNodeMeta(a.nodeKey, address, a.current.wrappedMeta).cover
   const edit = editField('cover', a.cover, openedWith, a.surfaceConflict ?? true)
   let replaced: unknown | null = null
-  const send = async (wrappedMeta: string | null, metaRevision: number): Promise<void> => {
+  const send = async (wrappedMeta: string | null, metaRevision: number, nodeEpoch: number): Promise<void> => {
     const sealed = wrappedMeta!
     const oldBlob = uploadBlobIdOf(replaced)
     const keptBlob = uploadBlobIdOf(a.cover)
@@ -163,19 +166,19 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
           contentApi().setNodeCover({
             scopeId, nodeId,
             setNodeCoverRequest: a.uploadId
-              ? { uploadId: a.uploadId, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision }
-              : { shared: a.shared, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision },
+              ? { nodeEpoch, uploadId: a.uploadId, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision }
+              : { nodeEpoch, shared: a.shared, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else if (oldBlob && oldBlob !== keptBlob) {
         await withRefresh(() =>
           contentApi().removeNodeCover({
-            scopeId, nodeId, removeNodeCoverRequest: { blobId: oldBlob, wrappedMeta: sealed, metaRevision },
+            scopeId, nodeId, removeNodeCoverRequest: { nodeEpoch, blobId: oldBlob, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else {
         await withRefresh(() =>
-          contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaRevision } }),
+          contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaRevision, nodeEpoch } }),
         )
       }
     } catch (e) {
@@ -190,6 +193,9 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
       return edit(meta, ctx)
     },
     send,
+    // The cover names a blob wrapped under the key it was uploaded with, so an epoch refusal is not rebuilt under another
+    // (no `reread`): the caller's. The floor runs first — a cover is a member's write (ADR 0109 point 6).
+    { atFloor: (epoch) => assertActiveScopeFloor(a.scopeId, { id: a.nodeId, epoch }) },
   )
   return { ...state, replaced }
 }

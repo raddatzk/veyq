@@ -41,7 +41,7 @@ beforeEach(() => {
 
 describe('the drop box create dialog', () => {
   it('says what a drop box is before it asks the name, and submits with "Create"', () => {
-    const w = mount(DropBoxCreateDialog, { props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: null, parentKey: null }, global })
+    const w = mount(DropBoxCreateDialog, { props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: null, parentKey: null, parentEpoch: null }, global })
     expect(w.find('.veyq-form-copy').text()).toBe(t('depot.dropBox.createHint'))
     expect(w.find('button[type="submit"]').text()).toBe(t('common.create'))
   })
@@ -83,7 +83,7 @@ describe('the drop box share dialog', () => {
   it('deletes a link only after the member confirmed, saying what its guests sent stays', async () => {
     vi.mocked(listSharesFor).mockResolvedValue([link])
     const w = mount(DropBoxShareDialog, {
-      props: { scopeId: SCOPE, nodeId: 'b1', nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Einsendungen', nodeKind: DROPBOX_KIND },
+      props: { scopeId: SCOPE, nodeId: 'b1', nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Einsendungen', nodeKind: DROPBOX_KIND },
       global,
     })
     await flushPromises()
@@ -104,7 +104,7 @@ describe('the drop box share dialog', () => {
   // Inbox #394: switching off asks first, and an off link is switched on again (core's reactivate), as on a folder.
   const mountDialog = async () => {
     const w = mount(DropBoxShareDialog, {
-      props: { scopeId: SCOPE, nodeId: 'b1', nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Einsendungen', nodeKind: DROPBOX_KIND },
+      props: { scopeId: SCOPE, nodeId: 'b1', nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Einsendungen', nodeKind: DROPBOX_KIND },
       global,
     })
     await flushPromises()

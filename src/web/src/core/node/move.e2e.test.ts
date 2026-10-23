@@ -33,6 +33,7 @@ import { fileUploadJob } from '../../features/depot/uploadFile'
 import { fetchFileContent } from '../../features/depot/download'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../../features/depot/dropBox'
 import { guestFileUploadJob } from '../../features/depot/shareUpload'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 const A_NAME = 'Umzug Kranichfeld'
 const B_NAME = 'Archiv Sommerwiese'
@@ -48,7 +49,7 @@ const wire: string[] = []
 let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -84,11 +85,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
     const aId = await createFolder(scopeId, epochs, A_NAME)
     const bId = await createFolder(scopeId, epochs, B_NAME)
     let tree = await listTree(scopeId, epochs)
-    const nId = await createFolder(scopeId, epochs, N_NAME, { id: aId, key: nodeContentKey(scopeId, epochs, tree, aId)! })
+    const nId = await createFolder(scopeId, epochs, N_NAME, { id: aId, key: nodeContentKey(scopeId, epochs, tree, aId)!, epoch: byId(tree, aId).epoch })
     tree = await listTree(scopeId, epochs)
     const nKey = nodeContentKey(scopeId, epochs, tree, nId)!
     const bytes = bytesOf(CHUNK_SIZE + 4321, 3)
-    const fileId = (await fileUploadJob({ scopeId, epochs, parent: { id: nId, key: nKey } }, fileOf(bytes, FILE_NAME)).run(ctx())).nodeId
+    const fileId = (await fileUploadJob({ scopeId, epochs, parent: { id: nId, key: nKey, epoch: byId(tree, nId).epoch } }, fileOf(bytes, FILE_NAME)).run(ctx())).nodeId
 
     /** After a move: N listed under `parent` with its name, its key unchanged, and its file decrypting byte for byte. */
     const readsUnder = async (parent: string | null) => {
@@ -120,9 +121,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
 
     // --- a drop box guest's folder, moved out by the member ---------------------------------------------------------
     tree = await listTree(scopeId, epochs)
-    const boxId = await createDropBox(scopeId, epochs, { id: bId, key: nodeContentKey(scopeId, epochs, tree, bId)! }, BOX_NAME)
-    const boxKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), boxId)!
-    const link = await mintDropBoxLink(scopeId, boxId, boxKey, epochs, BOX_NAME)
+    const boxId = await createDropBox(scopeId, epochs, { id: bId, key: nodeContentKey(scopeId, epochs, tree, bId)!, epoch: byId(tree, bId).epoch }, BOX_NAME)
+    const boxTree = await listTree(scopeId, epochs)
+    const boxKey = nodeContentKey(scopeId, epochs, boxTree, boxId)!
+    const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: byId(boxTree, boxId).epoch }, epochs, BOX_NAME)
     const head = await resolvePublicShare(link.shareId, b64url(link.kShare))
     const hilde = await nameDropGuest(head, { name: GUEST_NAME })
     const folder = await ensureDropFolder(head, hilde, GUEST_NAME)

@@ -26,6 +26,7 @@ import { session } from '../../app/session'
 import { memberAccessOf, treeNode } from '../../test/models'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { exportFile, importFile } from './exportImport'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const SCOPE = '44444444-4444-4444-8444-444444444444'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000a1'
@@ -50,7 +51,7 @@ const originalBlob = {
 
 beforeAll(() => {
   if (!registry.kind(FILE_KIND).supported) {
-    registry.registerKind({
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug, downloadsAsFile: true,
       exportContent: exportFile, importContent: importFile, importStreams: true,
     })

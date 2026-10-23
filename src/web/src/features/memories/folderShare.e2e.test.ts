@@ -67,13 +67,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     // The folder's key exactly as the member's shell finds it: the tree as listed, the chain walked (MemoryHomeView).
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)
     expect(folderKey, "the folder's key opens through the chain").not.toBeNull()
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey! })
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey!, epoch: 0 })
     const inMemory = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
-    const subId = await createFolder(scopeId, epochs, SUB_NAME, { id: folderId, key: folderKey! })
+    const subId = await createFolder(scopeId, epochs, SUB_NAME, { id: folderId, key: folderKey!, epoch: 0 })
     const outside = await createMemory(scopeId, epochs, OUTSIDE_NAME)
 
     // --- A: a READ link of the folder, through core's mint (what FolderShareDialog calls) --------------------------
-    const minted = await mintShare(scopeId, folderId, folderKey!, epochs, FOLDER_NAME, ShareRole.Read)
+    const minted = await mintShare(scopeId, folderId, { key: folderKey!, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.Read)
     const shareId = minted.shareId
 
     // --- anonymous: the link opens the folder under its name; the walk opens the descendants' names --------------
@@ -110,7 +110,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     const refused = await sharesApi()
       .createShare({
         createShareRequest: {
-          shareId: writeOnlyId, nodeId: folderId, role: ShareRole.WriteOnly,
+          shareId: writeOnlyId, nodeId: folderId, nodeEpoch: 0, role: ShareRole.WriteOnly,
           sealedDropPublicKey: b64std(v1.randomBytes(48)),
           sealedName: b64std(v1.sealField(SHARE_MEMORY_NAME, kShare, v1.utf8(FOLDER_NAME))),
           sealedShareKey: b64std(v1.randomBytes(72)), sealedShareKeyEpoch: epochs.current,
@@ -123,7 +123,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
 
     // --- uc.sharing.share-note: a note that asks to be accepted carries its switch INSIDE the seal ---------------
     expect(head.noteAcceptance, 'a link without a note asks nothing').toBeUndefined()
-    const asked = await mintShare(scopeId, folderId, folderKey!, epochs, FOLDER_NAME, ShareRole.Read, null, { texts: { en: GATED_NOTE }, mustAccept: true })
+    const asked = await mintShare(scopeId, folderId, { key: folderKey!, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.Read, null, { texts: { en: GATED_NOTE }, mustAccept: true })
     const gated = await resolvePublicShare(asked.shareId, b64url(asked.kShare))
     expect(gated.noteByLocale, 'the guest opens the note with the fragment key').toEqual({ en: GATED_NOTE })
     expect(gated.noteAcceptance?.digest, 'and learns from inside the seal that it asks to be accepted').toMatch(/^[A-Za-z0-9_-]{43}$/)

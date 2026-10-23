@@ -74,14 +74,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     scopeKey = (await openPersonalScope())!
     const memory = await createMemory(scopeId, epochsOf(scopeKey), MEMORY_NAME)
     memoryId = memory.nodeId
-    const chapter = await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, CHAPTER_NAME, memoryId)
+    const chapter = await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, CHAPTER_NAME, memoryId, 0)
     chapterId = chapter.nodeId
     chapterKey = chapter.chapterKey
-    siblingId = (await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, SIBLING_NAME, memoryId)).nodeId
+    siblingId = (await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, SIBLING_NAME, memoryId, 0)).nodeId
     const onMemory = await addMedia(scopeId, memoryId, memory.memoryKey, photo(1))
     const inChapter = await addMedia(scopeId, chapterId, chapterKey, photo(2))
 
-    const minted = await createShare(scopeId, chapterId, chapterKey, epochsOf(scopeKey), CHAPTER_NAME, ShareRole.ReadWrite)
+    const minted = await createShare(scopeId, chapterId, { key: chapterKey, epoch: 0 }, epochsOf(scopeKey), CHAPTER_NAME, ShareRole.ReadWrite)
     const shareId = minted.shareId
     const fragmentKey = b64url(minted.kShare)
 
@@ -109,7 +109,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
 
     // --- anonymous: name yourself, add a photo — it lands in the chapter ------------------------------------------
     const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.access, CONTRIBUTOR_NAME, fragmentKey)
-    const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sessionSealKey(session, resolved.access)! }
+    const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sessionSealKey(session, resolved.access)!, nodeEpoch: resolved.access.rootEpoch }
     const added = await addSharePhoto(upload, photo(3))
     const chapterItems = await listMedia(scopeId, chapterId)
     const contributed = chapterItems.find((i) => i.mediaId === added.mediaId)
@@ -134,7 +134,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
   }, 240_000)
 
   it('an uploader link on a chapter seals to the chapter; the guest uploads and the member opens it', async () => {
-    const minted = await createShare(scopeId, chapterId, chapterKey, epochsOf(scopeKey), CHAPTER_NAME, ShareRole.WriteOnly)
+    const minted = await createShare(scopeId, chapterId, { key: chapterKey, epoch: 0 }, epochsOf(scopeKey), CHAPTER_NAME, ShareRole.WriteOnly)
     const shareId = minted.shareId
     const fragmentKey = b64url(minted.kShare)
 
@@ -149,7 +149,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     expect(resolved.access).toMatchObject({ kind: 'drop', nodeId: chapterId })
     const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.access, UPLOADER_NAME, fragmentKey)
     const uploaded = await addSharePhoto(
-      { ...session, shareId, scopeId: resolved.scopeId, sealKey: sessionSealKey(session, resolved.access)! },
+      { ...session, shareId, scopeId: resolved.scopeId, sealKey: sessionSealKey(session, resolved.access)!, nodeEpoch: resolved.access.rootEpoch },
       photo(4),
     )
 

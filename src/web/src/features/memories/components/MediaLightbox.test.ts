@@ -120,6 +120,7 @@ function memberProps(memoryKey: Uint8Array) {
     blobMetaResolver: (it: MediaItem) => l.blobMeta(it, memoryKey),
     exifLoader: (it: MediaItem) => l.exif!(it, memoryKey),
     mediaMeta: source.mediaMeta,
+    memoryNode: { id: NODE_ID, epoch: 0 },
   }
 }
 /** What a share guest's source leaves out: no media-meta door, no EXIF, no delete of this item. */

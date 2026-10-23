@@ -13,7 +13,8 @@
 import type { MediaItem } from './media'
 import { openedMeta } from './openedListing'
 import { editField, unsealNodeMeta } from '../../core/node/nodeMeta'
-import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
+import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
+import type { NodeMetaState } from '../../core/node/nodeMeta'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import type { GeoLevel } from './geocode'
 
@@ -122,11 +123,12 @@ export async function setMemoryLocation(
   nodeId: string,
   nodeKey: Uint8Array,
   location: MemoryLocation | null,
-  current: SealedMetaState,
+  current: NodeMetaState,
+  opts: WriteNodeMetaOptions = {},
 ): Promise<SealedMetaState> {
   const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).location
   const bounded = location ? { ...location, name: boundPlaceName(location.name) } : null
-  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('location', bounded, openedWith))
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('location', bounded, openedWith), undefined, opts)
   return state
 }
 

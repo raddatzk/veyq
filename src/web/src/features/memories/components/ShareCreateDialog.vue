@@ -35,6 +35,8 @@ const props = defineProps<{
   scopeId: string
   nodeId: string
   memoryKey: Uint8Array
+  /** The epoch `memoryKey` was minted at (`TreeNode.epoch`): a mint or re-issue states it (ADR 0109 point 6). */
+  memoryEpoch: number
   /** The scope's epoch keys: a new share's recovery copy seals under the current one, an edited share's opens at its
    *  own epoch (ADR 0036 point 4). */
   epochs: EpochKeys
@@ -191,14 +193,14 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
       emit('saved')
       emit('close')
     } else if (isReissue.value && props.reissueFrom) {
-      const minted = await reissueShare(props.reissueFrom, props.memoryKey, props.epochs, props.memoryName, {
+      const minted = await reissueShare(props.reissueFrom, { key: props.memoryKey, epoch: props.memoryEpoch }, props.epochs, props.memoryName, {
         note: effectiveNote, name: name.value, password: passwordEnabled.value ? password.value : '', expiresAt: expiry,
       })
       link.value = buildShareLink(minted.shareId, minted.kShare)
       emit('saved')
     } else {
       const minted = await createShare(
-        props.scopeId, props.nodeId, props.memoryKey, props.epochs, props.memoryName, role.value, expiry,
+        props.scopeId, props.nodeId, { key: props.memoryKey, epoch: props.memoryEpoch }, props.epochs, props.memoryName, role.value, expiry,
         effectiveNote, name.value, passwordEnabled.value ? password.value : '',
       )
       link.value = buildShareLink(minted.shareId, minted.kShare) // the origin belongs here, not in the data layer

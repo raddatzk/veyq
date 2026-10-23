@@ -28,18 +28,19 @@ import { publicShareFilesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { FINAL, FileUploadError, fileBlobMeta, rethrowCompletion, type FileJobExtra, type FileUploadResult } from './uploadFile'
 
-/** A guest's replace: the file node, its key from the chain and the blob the guest saw in it (null: none yet). */
-export type GuestFileReplace = { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null }
+/** A guest's replace: the file node, its key from the chain with the node's served epoch (`ShareNode.epoch`, stated by the
+ *  completion, ADR 0109 point 6) and the blob the guest saw in it (null: none yet). */
+export type GuestFileReplace = { nodeId: string; nodeKey: Uint8Array; nodeEpoch: number; expectedBlobId: string | null }
 
 /** Where a guest's upload goes: the link's context (identity, password token, keys) and the folder a new file is
  *  created under, or the file it replaces. */
 export type GuestFileTarget = { ctx: GuestTreeContext; parentId: string; replace?: GuestFileReplace }
 
 /** Create the FILE node as the guest, mapping the refusals a create ends on to Depot's final codes. */
-async function createGuestFileNode(target: GuestFileTarget, name: string): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
+async function createGuestFileNode(target: GuestFileTarget, name: string): Promise<{ nodeId: string; nodeKey: Uint8Array; nodeEpoch: number }> {
   try {
-    const { nodeId, contentKey } = await createShareNodeAsGuest(target.ctx, { parentId: target.parentId, kind: FILE_KIND, name })
-    return { nodeId, nodeKey: contentKey }
+    const { nodeId, contentKey, epoch } = await createShareNodeAsGuest(target.ctx, { parentId: target.parentId, kind: FILE_KIND, name })
+    return { nodeId, nodeKey: contentKey, nodeEpoch: epoch }
   } catch (e) {
     const err = await guestTreeErrorOf(e)
     if (err instanceof GuestTreeError && err.code === 'slug_taken') throw new Error(FileUploadError.slugTaken)
@@ -52,13 +53,13 @@ async function createGuestFileNode(target: GuestFileTarget, name: string): Promi
 
 /** Depot's `completeShareFile`: the upload becomes the file's blob (its meta is the blob's own). */
 async function completeGuestFile(
-  ctx: GuestTreeContext, nodeId: string, uploadId: string, expectedBlobId: string | null,
+  ctx: GuestTreeContext, nodeId: string, nodeEpoch: number, uploadId: string, expectedBlobId: string | null,
 ): Promise<FileBlobRef> {
   try {
     return await publicShareFilesApi().completeShareFile({
       shareId: ctx.shareId,
       nodeId,
-      shareFileCompleteRequest: { contributorToken: ctx.contributorToken, uploadId, expectedBlobId: expectedBlobId ?? undefined },
+      shareFileCompleteRequest: { nodeEpoch, contributorToken: ctx.contributorToken, uploadId, expectedBlobId: expectedBlobId ?? undefined },
       xSharePassword: ctx.pwToken,
     })
   } catch (e) {
@@ -69,7 +70,7 @@ async function completeGuestFile(
 /** One queue job for one file a guest picked (see the header). */
 export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJob<FileUploadResult, FileJobExtra> {
   const { ctx } = target
-  let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
+  let node: { nodeId: string; nodeKey: Uint8Array; nodeEpoch: number; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
   /** The node this job created and that holds nothing of it yet — what {@link abandon} takes back. */
@@ -87,7 +88,7 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
       const plan = planBlob(ctx.scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => guestReserve(to, d), guestWindow(to), onProgress, signal)
       throwIfAborted(signal)
-      const attached = await completeGuestFile(ctx, node.nodeId, uploadId, node.expectedBlobId)
+      const attached = await completeGuestFile(ctx, node.nodeId, node.nodeEpoch, uploadId, node.expectedBlobId)
       created = null // the node holds the file now: nothing to take back, whatever fails after
       expectMintedId(plan.blobId, attached.blobId)
       return { nodeId: node.nodeId }

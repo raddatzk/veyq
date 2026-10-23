@@ -114,7 +114,7 @@ describe('a drop box as a download', () => {
     const opened = await openExport({ kind: 'zip', file: new File([archive], 'd.zip') })
     expect(planImport(opened.manifest)).toMatchObject({ nodes: 5, skipped: [] })
     let n = 0
-    vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(n) }))
+    vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(n), epoch: 1 }))
     const uploaded: { parent: string | undefined; name: string; body: string }[] = []
     vi.mocked(fileUploadJob).mockImplementation((target: FileUploadTarget, file: PayloadFile) => ({
       name: file.name, sizeBytes: file.size, extra: { file },
@@ -123,7 +123,7 @@ describe('a drop box as a download', () => {
         return { nodeId: `file-${file.name}` }
       },
     }))
-    await importSubtree({ scopeId: 's', epochs, tree: [], parent: { id: 'target', key: new Uint8Array(32) }, opened })
+    await importSubtree({ scopeId: 's', epochs, tree: [], parent: { id: 'target', key: new Uint8Array(32), epoch: 1 }, opened })
     // every node core created is a FOLDER; the two guests' folders of one name are told apart as siblings of one folder are
     expect(vi.mocked(createContentNode).mock.calls.map(([, , parent, kind, name]) => [parent?.id, kind, name])).toEqual([
       ['target', FOLDER_KIND, 'Postfach'], ['new1', FOLDER_KIND, 'Dr. Anna'], ['new1', FOLDER_KIND, 'Dr. Anna (2)'],

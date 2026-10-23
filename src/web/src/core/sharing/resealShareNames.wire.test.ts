@@ -40,7 +40,7 @@ describe('resealShareNames on the wire', () => {
       if ((init?.method ?? 'GET') === 'GET') return json([row])
       return new Response(null, { status: 204 })
     }))
-    const minted = await mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Alt', ShareRole.Read)
+    const minted = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 0 }, EPOCHS, 'Alt', ShareRole.Read)
     calls.length = 0
 
     const report = await resealShareNames(NODE_ID, 'Neu', EPOCHS)

@@ -111,7 +111,7 @@ async function guestUploads(kShare: Uint8Array, api: ReturnType<typeof guestApi>
   const session = await createContributorIdentity(UPLOADER_SHARE, resolved.scopeId, resolved.access, 'Gast', b64url(kShare))
   const sealKey = sessionSealKey(session, resolved.access)!
   await addSharePhoto(
-    { ...session, shareId: UPLOADER_SHARE, scopeId: resolved.scopeId, sealKey },
+    { ...session, shareId: UPLOADER_SHARE, scopeId: resolved.scopeId, sealKey, nodeEpoch: resolved.access.rootEpoch },
     { blob: new Blob([PHOTO as BlobPart]), mediaType: 'application/pdf', name: 'Gast-Scan.pdf' },
     noTiers,
   )
@@ -202,7 +202,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     expect(originalBlobMeta(SCOPE_ID, kNode, item)).toMatchObject({ type: 'application/pdf', name: 'Gast-Scan.pdf' })
 
     // a member edits its capture time: the re-seal is under the guest's key, never K_node — no media changes path
-    const edited = await setMediaMeta(SCOPE_ID, item, kNode, 1_700_000_000_000)
+    const edited = await setMediaMeta(SCOPE_ID, item, kNode, 0, 1_700_000_000_000)
     const metaCtx = { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: item.mediaId } as const
     expect(() => v1.openField(metaCtx, kNode, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
     expect(unsealMeta(SCOPE_ID, kNode, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)

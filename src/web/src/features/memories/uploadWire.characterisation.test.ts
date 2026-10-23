@@ -269,7 +269,7 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
       uploadCoverImage(
         SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 }),
       ).then((up) => writeNodeCover({
-        scopeId: SCOPE_ID, nodeId: NODE_ID, nodeKey: memoryKey(), current: { wrappedMeta: null, metaRevision: 0 },
+        scopeId: SCOPE_ID, nodeId: NODE_ID, nodeKey: memoryKey(), current: { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 },
         cover: uploadedCover(up.plan, { ...FULL_FRAME }), uploadId: up.uploadId, surfaceConflict: false,
       })).then((r) => ({ wrappedMeta: r.wrappedMeta, metaRevision: r.metaRevision })),
     )
@@ -295,7 +295,7 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
     const wire = await expectWire('addSharePhoto', 4, () => {
       session.accessToken = null // the anonymous /s/ page has no session
       return addSharePhoto(
-        { identityId: 'identity-1', contributorToken: CONTRIBUTOR_TOKEN, shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey: memoryKey(), pwToken: PW_TOKEN, nodeId: NODE_ID },
+        { identityId: 'identity-1', contributorToken: CONTRIBUTOR_TOKEN, shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey: memoryKey(), nodeEpoch: 0, pwToken: PW_TOKEN, nodeId: NODE_ID },
         imageSource(4 * CHUNK_SIZE + 17, 4),
         fixedDeriver({ preview: 800, thumbnail: 250, cover: 0 }),
       )

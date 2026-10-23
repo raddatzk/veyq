@@ -32,6 +32,7 @@ import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../tes
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 function node(id: string, kind: NodeKind, parentId: string | null = 'Trips'): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
@@ -47,12 +48,12 @@ beforeEach(() => {
   setLevelTab('all')
   setViewMode('list')
   // ALPHA copies (both hooks, an import that takes a payload by frame); BETA has no hooks: it is no copy's.
-  holder.reg.registerKind({
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
     exportContent: async () => null, importContent: async () => ({ nodeId: 'x', nodeKey: new Uint8Array(0) }), importStreams: true,
   })
   // BETA moves (its application's selection answer) but cannot be copied
-  holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
 })
 
 function mountLevel(access: Access) {

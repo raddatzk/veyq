@@ -143,7 +143,7 @@ describe('the original file name and type never leave the device in the clear', 
     session.accessToken = null // the anonymous /s/ page has no session
     const sent = recordFetch()
     const sealKey = v1.randomBytes(32)
-    await addSharePhoto({ identityId: 'identity-1', contributorToken: 'tok-1', shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey }, video(), noTiers)
+    await addSharePhoto({ identityId: 'identity-1', contributorToken: 'tok-1', shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey, nodeEpoch: 0 }, video(), noTiers)
 
     const [original] = declares(sent)
     expect(openDeclaredMeta(original, sealKey)).toEqual({ v: 1, type: TYPE, name: NAME, modifiedAt: MODIFIED, sha256: DIGEST })

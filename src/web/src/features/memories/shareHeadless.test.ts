@@ -43,7 +43,7 @@ describe('share.ts is headless — the data layer never touches the DOM (see sha
 
     const kNode = v1.randomBytes(32)
     const epochs = { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) }
-    const minted = await createShare(SCOPE_ID, NODE_ID, kNode, epochs, 'Rom 2026')
+    const minted = await createShare(SCOPE_ID, NODE_ID, { key: kNode, epoch: 0 }, epochs, 'Rom 2026')
 
     // the id is minted client-side (ADR 0072) — the one the request carried
     expect(minted.shareId).toBe(create.mock.calls[0][0].createShareRequest.shareId)

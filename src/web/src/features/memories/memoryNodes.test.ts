@@ -107,7 +107,7 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
       wrappedContentKey: r.wrappedContentKey, wrappedMeta: null, metaRevision: 0, placementRevision: 0,
     }))
     const folderKey = nodeContentKey(SCOPE_ID, epochs, rows(), folderId)!
-    const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochs, 'Italien', { id: folderId, key: folderKey })
+    const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochs, 'Italien', { id: folderId, key: folderKey, epoch: 0 })
 
     const req = create.mock.calls[1][0].createNodeRequest
     expect(req.parentId).toBe(folderId)
@@ -126,7 +126,7 @@ describe('createChapter — recursive K_node (cr-0060)', () => {
     const parentKey = v1.randomBytes(32) // the parent Memory's K_node
     const MEM = '5c09e000-0000-4000-8000-00000000000a'
 
-    const { nodeId, chapterKey } = await createChapter(SCOPE_ID, epochsOf(scopeKey), parentKey, 'Tag 1', MEM)
+    const { nodeId, chapterKey } = await createChapter(SCOPE_ID, epochsOf(scopeKey), parentKey, 'Tag 1', MEM, 0)
 
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('CHAPTER')

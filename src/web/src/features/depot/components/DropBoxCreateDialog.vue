@@ -12,6 +12,7 @@ import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeCreateDialogEmits, NodeCreateDialogProps } from '../../../core/applications/registry'
 import { createDropBox } from '../dropBox'
+import { memberCreateOptions } from '../../../core/node/rereadNode'
 import { DROPBOX_KIND } from '../kinds'
 import { treeStore } from '../../../core/node/treeStore'
 import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCollision'
@@ -36,8 +37,9 @@ async function submit() {
   }
   loading.value = true
   try {
-    const parent = props.parentId && props.parentKey ? { id: props.parentId, key: props.parentKey } : null
-    await createDropBox(props.scopeId, props.epochs, parent, name.value.trim())
+    const parent =
+      props.parentId && props.parentKey && props.parentEpoch != null ? { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch } : null
+    await createDropBox(props.scopeId, props.epochs, parent, name.value.trim(), memberCreateOptions(props.scopeId, parent))
     emit('done')
     emit('close')
   } catch (e) {

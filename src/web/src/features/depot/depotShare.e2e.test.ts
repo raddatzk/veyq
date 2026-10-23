@@ -25,7 +25,7 @@ import { createFolder, deleteNode, listTree, nodeContentKey } from '../../core/n
 import { CHUNK_SIZE } from '../../core/blob/transport'
 import { registry } from '../../core/applications/registry'
 import { mintShare } from '../../core/sharing/manageShares'
-import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch } from '../../core/sharing/resolvePublicShare'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { guestTreeContext, openGuestTreeParts } from '../../core/sharing/guestTree'
 import { guestReserve, guestWindow, shareChunkUrls } from '../../core/sharing/guestBlob'
@@ -37,6 +37,7 @@ import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { fileUploadJob, StaleFileError } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
 import { fetchFileContent, fileFacts } from './download'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const FOLDER_NAME = 'Vereinsablage Kranichfeld'
 const MEMBER_FILE = 'Satzung Kranichfeld 1987.pdf'
@@ -49,7 +50,7 @@ let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as
   // Depot's `register.ts` registers it, so the guest's slug is the one the page computes.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -78,12 +79,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const personal = (await openScope(ScopeKind.Personal))!
     const { scopeId, epochs } = personal
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
-    const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
+    const withFolder = await listTree(scopeId, epochs)
+    const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
+    const folderRoot = { key: folderKey, epoch: withFolder.find((n) => n.id === folderId)!.epoch }
     const memberBytes = bytesOf(CHUNK_SIZE + 321, 1)
-    const memberFile = (await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey } }, fileOf(memberBytes, MEMBER_FILE)).run(ctx())).nodeId
+    const memberFile = (await fileUploadJob({ scopeId, epochs, parent: { id: folderId, ...folderRoot } }, fileOf(memberBytes, MEMBER_FILE)).run(ctx())).nodeId
 
     // --- a READ link: the guest lists and downloads through the link ----------------------------------------------
-    const read = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.Read)
+    const read = await mintShare(scopeId, folderId, folderRoot, epochs, FOLDER_NAME, ShareRole.Read)
     const readHead = await resolvePublicShare(read.shareId, b64url(read.kShare))
     const readParts = openGuestTreeParts(readHead)
     expect(readParts.names.get(memberFile)).toBe(MEMBER_FILE)
@@ -94,10 +97,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     expect(await contentOf(guestRead)).toEqual(Array.from(memberBytes))
 
     // --- a READ_WRITE link: a named guest creates a file and uploads into it ---------------------------------------
-    const rw = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.ReadWrite)
+    const rw = await mintShare(scopeId, folderId, folderRoot, epochs, FOLDER_NAME, ShareRole.ReadWrite)
     const rwFragment = b64url(rw.kShare)
     let rwHead = await resolvePublicShare(rw.shareId, rwFragment)
-    const guest = await createGuestIdentity(rwHead, openGuestTreeParts(rwHead).keys.get(folderId)!, { name: GUEST_NAME, fragmentKey: rwFragment })
+    const guest = await createGuestIdentity(rwHead, openGuestTreeParts(rwHead).keys.get(folderId)!, { name: GUEST_NAME, fragmentKey: rwFragment, rootEpoch: shareRootEpoch(rwHead.share) })
     const guestCtx = () => guestTreeContext(rwHead, { contributorToken: guest.contributorToken, fragmentKey: rwFragment })
     const guestBytes = bytesOf(2 * CHUNK_SIZE + 99, 2)
     const created = await guestFileUploadJob({ ctx: guestCtx(), parentId: folderId }, fileOf(guestBytes, GUEST_FILE)).run(ctx())
@@ -105,7 +108,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
 
     // a READ link refuses the same write: its token names no identity there, and its role takes none
     const readWrite = await failure(publicShareFilesApi().completeShareFile({
-      shareId: read.shareId, nodeId: guestFile, shareFileCompleteRequest: { contributorToken: guest.contributorToken, uploadId: crypto.randomUUID() },
+      shareId: read.shareId, nodeId: guestFile, shareFileCompleteRequest: { contributorToken: guest.contributorToken, uploadId: crypto.randomUUID(), nodeEpoch: epochs.current },
     }))
     expect(httpStatus(readWrite)).toBe(403)
 
@@ -127,7 +130,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const replacement = bytesOf(777, 3)
     await guestFileUploadJob({
       ctx: guestCtx(), parentId: folderId,
-      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, expectedBlobId: memberBlob.blobId },
+      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, nodeEpoch: tree.find((n) => n.id === memberFile)!.epoch, expectedBlobId: memberBlob.blobId },
     }, fileOf(replacement, MEMBER_FILE)).run(ctx())
     const replacedBlob = (await filesApi().listFiles({ scopeId, parentId: folderId })).items.find((i) => i.nodeId === memberFile)!.fileBlob!
     expect(replacedBlob.blobId).not.toBe(memberBlob.blobId)
@@ -139,7 +142,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     expect(fileFacts(scopeId, rwKeys.get(memberFile)!, memberFile, guestListed).meta).toMatchObject({ type: MIME, name: MEMBER_FILE })
     const stale = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: folderId,
-      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, expectedBlobId: memberBlob.blobId },
+      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, nodeEpoch: tree.find((n) => n.id === memberFile)!.epoch, expectedBlobId: memberBlob.blobId },
     }, fileOf(bytesOf(5, 4), MEMBER_FILE)).run(ctx()))
     expect(stale).toBeInstanceOf(StaleFileError)
     expect((stale as StaleFileError).currentBlobId).toBe(replacedBlob.blobId)

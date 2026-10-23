@@ -5,6 +5,7 @@ import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { GRID_VIEW } from '../node/levelViews'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -19,14 +20,14 @@ describe('registry: kinds', () => {
 
   it('is write-once: registering the same kind twice throws and keeps the first descriptor', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true })
-    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: false })).toThrow(/already registered/)
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images', shareable: true })
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: false })).toThrow(/already registered/)
     expect(r.kind(MEMORY_KIND)).toMatchObject({ supported: true, icon: 'images', shareable: true })
   })
 
   it('refuses an application re-registering the platform FOLDER', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'file', shareable: false })).toThrow(/already registered/)
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file', shareable: false })).toThrow(/already registered/)
     expect(r.kind(FOLDER_KIND)).toMatchObject({ icon: 'folder', shareable: true })
   })
 
@@ -43,7 +44,7 @@ describe('registry: kinds', () => {
   // registered from rendering as anything but the explicit unsupported state (cr-platform-contract-split slice 4).
   it('answers by the registered token only: an unregistered kind is unsupported, whatever its spelling', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'EXPENSE', icon: 'tag', shareable: false })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'EXPENSE', icon: 'tag', shareable: false })
     expect(r.kind('EXPENSE')).toMatchObject({ supported: true, kind: 'EXPENSE', icon: 'tag' })
     for (const unknown of ['INVOICE', 'expense', 'EXPENSES', '']) {
       expect(r.kind(unknown)).toEqual({ supported: false, kind: unknown })
@@ -54,7 +55,7 @@ describe('registry: kinds', () => {
 
   it('copies the descriptor: mutating the caller object afterwards does not change the registration', () => {
     const r = createRegistry()
-    const d: KindDescriptor = { kind: MEMORY_KIND, icon: 'images', shareable: true }
+    const d: KindDescriptor = { kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: nothingOfItsOwnToRekey }
     r.registerKind(d)
     d.shareable = false
     expect(r.kind(MEMORY_KIND)).toMatchObject({ shareable: true })
@@ -66,7 +67,7 @@ describe('registry: kinds', () => {
 describe('registry: slugFor', () => {
   it('folds with slugify for a kind that registers no hook, the platform FOLDER included', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images', shareable: true })
     expect(r.slugFor(FOLDER_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG'))
     expect(r.slugFor(MEMORY_KIND, 'Day1.md')).toBe('day1-md')
   })
@@ -77,7 +78,7 @@ describe('registry: slugFor', () => {
 
   it('folds with the kind\'s own hook when it registers one, and only for that kind', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
     expect(r.slugFor('LEAF', 'Day1.md')).toBe('day1.md')
     expect(r.slugFor('LEAF', 'Foto.JPG')).toBe(r.slugFor('LEAF', 'foto.jpg'))
     expect(r.slugFor(FOLDER_KIND, 'Day1.md')).toBe('day1-md')
@@ -86,8 +87,8 @@ describe('registry: slugFor', () => {
 
   it('keeps the first hook: a second registration of the kind throws and does not swap the folding', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
-    expect(() => r.registerKind({ kind: 'LEAF', icon: 'file', shareable: false, slug: () => 'x' })).toThrow(/already registered/)
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false, slug: () => 'x' })).toThrow(/already registered/)
     expect(r.slugFor('LEAF', 'A.B')).toBe('a.b')
   })
 })
@@ -110,9 +111,9 @@ describe('registry: dialogs per kind', () => {
 
   it('hands each kind its own createDialog and shareDialog; one component may serve several kinds', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, createDialog: Stub, shareDialog: Other })
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: true, createDialog: Stub, shareDialog: Other })
-    r.registerKind({ kind: 'LEAF', icon: 'file', shareable: false })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, createDialog: Stub, shareDialog: Other })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: true, createDialog: Stub, shareDialog: Other })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false })
     for (const k of [MEMORY_KIND, CHAPTER_KIND]) expect(r.kind(k)).toMatchObject({ createDialog: Stub, shareDialog: Other })
     const leaf = r.kind('LEAF')
     expect(leaf.supported && [leaf.createDialog, leaf.shareDialog]).toEqual([undefined, undefined])
@@ -122,7 +123,7 @@ describe('registry: dialogs per kind', () => {
   it("an application cannot replace FOLDER's share dialog (FOLDER is write-once like every kind)", () => {
     const r = createRegistry()
     const before = r.kind(FOLDER_KIND)
-    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'file', shareable: true, shareDialog: Stub })).toThrow(/already registered/)
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file', shareable: true, shareDialog: Stub })).toThrow(/already registered/)
     expect(r.kind(FOLDER_KIND)).toEqual(before)
   })
 
@@ -138,7 +139,7 @@ describe('registry: dialogs per kind', () => {
     const a = createRegistry()
     const b = createRegistry()
     a.addSlotItem('topbarTray', 'a.tray', Stub)
-    a.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, shareDialog: Stub })
+    a.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, shareDialog: Stub })
     expect(b.slotItems('topbarTray')).toEqual([])
     expect(b.kind(MEMORY_KIND).supported).toBe(false)
   })
@@ -360,30 +361,30 @@ describe('registry: the level "New" menu (inbox #406)', () => {
 
   it('is empty until a kind brings an entry', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'A', icon: 'file', shareable: false })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', shareable: false })
     expect(r.levelMenu()).toEqual([])
   })
 
   it('lists every create entry (id create:<KIND>) and level action by order, a tie in registration order', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'B', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(20, 'b.new') })
-    r.registerKind({ kind: 'A', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(10, 'a.new'), levelActions: [{ id: 'a.up', ...entry(30, 'a.up') }] })
-    r.registerKind({ kind: 'C', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(20, 'c.new') })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(20, 'b.new') })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(10, 'a.new'), levelActions: [{ id: 'a.up', ...entry(30, 'a.up') }] })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', shareable: false, createDialog: Stub, createEntry: entry(20, 'c.new') })
     expect(r.levelMenu().map((e) => [e.id, e.create ?? null])).toEqual([['create:A', 'A'], ['create:B', 'B'], ['create:C', 'C'], ['a.up', null]])
   })
 
   it('refuses a create entry without a createDialog to open, and registers nothing', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ kind: 'A', icon: 'file', shareable: false, createEntry: entry(1) })).toThrow(/no createDialog/)
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', shareable: false, createEntry: entry(1) })).toThrow(/no createDialog/)
     expect(r.kind('A')).toEqual({ supported: false, kind: 'A' })
   })
 
   it('is write-once for level action ids: a taken id, a duplicate within a kind and the reserved create: prefix throw', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'A', icon: 'file', shareable: false, levelActions: [{ id: 'a.up', ...entry(1) }] })
-    expect(() => r.registerKind({ kind: 'B', icon: 'file', shareable: false, levelActions: [{ id: 'a.up', ...entry(2) }] })).toThrow(/already registered/)
-    expect(() => r.registerKind({ kind: 'C', icon: 'file', shareable: false, levelActions: [{ id: 'c.1', ...entry(1) }, { id: 'c.1', ...entry(2) }] })).toThrow(/already registered/)
-    expect(() => r.registerKind({ kind: 'D', icon: 'file', shareable: false, levelActions: [{ id: 'create:FOLDER', ...entry(1) }] })).toThrow(/already registered/)
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', shareable: false, levelActions: [{ id: 'a.up', ...entry(1) }] })
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', shareable: false, levelActions: [{ id: 'a.up', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', shareable: false, levelActions: [{ id: 'c.1', ...entry(1) }, { id: 'c.1', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'D', icon: 'file', shareable: false, levelActions: [{ id: 'create:FOLDER', ...entry(1) }] })).toThrow(/already registered/)
     expect(r.levelMenu().map((e) => e.id)).toEqual(['a.up'])
   })
 })
@@ -408,17 +409,17 @@ describe('registry: the unified level list', () => {
 
   it('a kind without a list adds none, and a refused re-registration does not add its list or its tab', () => {
     const r = createRegistry()
-    r.registerKind({ kind: 'LEAF', icon: 'file', shareable: false })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false })
     expect(r.lists()).toEqual([])
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true })
-    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })).toThrow(/already registered/)
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true })
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })).toThrow(/already registered/)
     expect(r.lists()).toEqual([])
     expect(r.tabs()).toEqual([])
   })
 
   it('hands out copies: mutating what lists() and tabs() returned changes nothing', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
     const lists = r.lists() as unknown as { kinds: string[]; views: unknown[] }[]
     lists[0].kinds.push('FORGED')
     lists[0].views.push(GRID_VIEW)
@@ -431,9 +432,9 @@ describe('registry: the unified level list', () => {
 
   it('keys a row source by its function: two kinds naming one factory are ONE source carrying both, in registration order', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
-    r.registerKind({ kind: 'OTHER', icon: 'file', shareable: false, list: { rows: rowsB } })
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'OTHER', icon: 'file', shareable: false, list: { rows: rowsB } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
     expect(r.lists()).toEqual([
       { rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] },
       { rows: rowsB, kinds: ['OTHER'], views: [] },
@@ -442,23 +443,23 @@ describe('registry: the unified level list', () => {
 
   it('refuses a kind naming a shared factory with other views, and registers nothing of it', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
-    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW] } }))
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW] } }))
       .toThrow(/CHAPTER names the row source of MEMORY with views \[grid\], not \[grid, map\]/)
     expect(r.kind(CHAPTER_KIND)).toEqual({ supported: false, kind: CHAPTER_KIND })
     expect(r.lists()).toHaveLength(1)
     // the refused kind added no tab either
     expect(r.tabs()).toEqual([])
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
     expect(r.lists()).toEqual([{ rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] }])
   })
 
   it('derives one tab per distinct label, in registration order: kinds sharing a label share a tab, the id is its first kind', () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
-    r.registerKind({ kind: 'FILE', icon: 'file', shareable: true, list: { rows: rowsB, tabLabel: 'x.files' } })
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
-    r.registerKind({ kind: 'NOTAB', icon: 'file', shareable: false, list: { rows: rowsB } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'FILE', icon: 'file', shareable: true, list: { rows: rowsB, tabLabel: 'x.files' } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'NOTAB', icon: 'file', shareable: false, list: { rows: rowsB } })
     expect(r.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
       { id: MEMORY_KIND, label: 'x.mem', kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { id: 'FILE', label: 'x.files', kinds: ['FILE'] },
@@ -467,7 +468,7 @@ describe('registry: the unified level list', () => {
 
   it('gives every menu entry the kind that declared it', () => {
     const r = createRegistry()
-    r.registerKind({
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: 'FILE', icon: 'file', shareable: true,
       levelActions: [{ id: 'f.up', label: 'x', icon: 'file', order: 1, allowed: () => true, acceptsDrop: true }],
     })

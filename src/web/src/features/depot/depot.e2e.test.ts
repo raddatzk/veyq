@@ -74,8 +74,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const folderId = await createFolder(scopeId, epochs, 'E2E Dokumente')
     let tree = await listTree(scopeId, epochs)
     const folderKey = nodeContentKey(scopeId, epochs, tree, folderId)!
+    const folderEpoch = tree.find((n) => n.id === folderId)!.epoch
     const first = bytesOf(2 * CHUNK_SIZE + 1234, 1)
-    const uploaded = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey } }, fileOf(first)).run(ctx())
+    const uploaded = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch } }, fileOf(first)).run(ctx())
     const nodeId = uploaded.nodeId
 
     // the tree lists it as a FILE named as picked, its own payload untouched; listFiles pairs it with its blob, whose
@@ -117,8 +118,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     // replace with new bytes, expecting the blob read: the download returns the new bytes, the blob id moved
     const second = bytesOf(CHUNK_SIZE + 7, 2)
     const replaced = await fileUploadJob({
-      scopeId, epochs, parent: { id: folderId, key: folderKey },
-      replace: { nodeId, nodeKey, expectedBlobId: blob1.blobId },
+      scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch },
+      replace: { nodeId, nodeKey, nodeEpoch: fileNode.epoch, expectedBlobId: blob1.blobId },
     }, new File([second as BlobPart], 'ersetzt-e2e.bin', { type: `${MIME}-2`, lastModified: 1_700_000_100_000 })).run(ctx())
     expect(replaced).toEqual({ nodeId })
     const blob2 = (await filesApi().listFiles({ scopeId, parentId: folderId })).items[0].fileBlob!
@@ -133,7 +134,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     // a replace that still expects the OLD blob: 409 stale_file naming the current one, and nothing changes
     const stalePlan = planBlob(scopeId, { ownerId: nodeId, role: FILE_CONTENT_ROLE }, nodeKey, new Blob([bytesOf(10, 3) as BlobPart]))
     const [staleUpload] = await reserveAndPump([stalePlan], (d) => authedReserve(scopeId, d), authedWindow(scopeId))
-    const stale = await completeFileUpload(scopeId, nodeId, staleUpload, blob1.blobId).catch((e: unknown) => e)
+    const stale = await completeFileUpload(scopeId, nodeId, fileNode.epoch, staleUpload, blob1.blobId).catch((e: unknown) => e)
     expect(stale).toBeInstanceOf(StaleFileError)
     expect((stale as StaleFileError).currentBlobId).toBe(blob2.blobId)
     expect((await filesApi().listFiles({ scopeId, parentId: folderId })).items[0].fileBlob!.blobId).toBe(blob2.blobId)
@@ -167,7 +168,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const third = bytesOf(500, 5)
     await fileUploadJob({
       scopeId: sharedM.scopeId, epochs: sharedM.epochs, parent: null,
-      replace: { nodeId: sharedNode.id, nodeKey: sharedKeyM, expectedBlobId: sharedBlob.blobId },
+      replace: { nodeId: sharedNode.id, nodeKey: sharedKeyM, nodeEpoch: sharedNode.epoch, expectedBlobId: sharedBlob.blobId },
     }, fileOf(third, 'shared-e2e.txt')).run(ctx())
     const sharedBlob2 = (await filesApi().listFiles({ scopeId: sharedM.scopeId })).items.find((i) => i.nodeId === sharedNode.id)!.fileBlob!
     expect(sharedBlob2.blobId).not.toBe(sharedBlob.blobId)

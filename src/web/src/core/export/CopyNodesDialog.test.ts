@@ -161,7 +161,7 @@ describe('CopyNodesDialog: the copy', () => {
     const w = await mountDialog([byId('reisen')])
     await goTo('Archiv')
     await click(submit())
-    expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ scopeId: 'scope-1', epochs, parent: { id: 'archiv', key: expect.any(Uint8Array) } }))
+    expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ scopeId: 'scope-1', epochs, parent: { id: 'archiv', key: expect.any(Uint8Array), epoch: 0 } }))
     expect(toast.success).toHaveBeenCalledWith(t('node.copy.copied', { name: 'Reisen', to: 'Archiv' }))
     expect(w.emitted('copied')).toEqual([[{ nodeIds: ['new1'], to: 'archiv' }]])
     expect(w.emitted('close')).toBeTruthy()

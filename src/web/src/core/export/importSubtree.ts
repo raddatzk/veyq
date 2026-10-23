@@ -358,7 +358,8 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
     if (top) tops.push(made.nodeId)
     nodesDone++
     report()
-    const here: NodeParent = { id: made.nodeId, key: made.nodeKey }
+    // a node this import just made is minted at the scope's current epoch, the one its children's creates state
+    const here: NodeParent = { id: made.nodeId, key: made.nodeKey, epoch: epochs.current }
     for (const c of n.children ?? []) {
       if (leftOut.has(c)) continue // listed in the plan, named in the result
       await walk(c, here, item, leftOut, false)

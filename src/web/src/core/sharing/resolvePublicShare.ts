@@ -75,6 +75,14 @@ export class SharePasswordRequiredError extends Error {
 /** cr-0118: the presented password token was wrong (403) — the caller re-prompts. */
 export class SharePasswordIncorrectError extends Error {}
 
+/** The epoch the shared root's key was minted at (`PublicShare.rootEpoch`, ADR 0109 point 6): what a guest's write under
+ *  the root's key — or a WRITE_ONLY guest's under its drop key — states. Null only in a locked response, which no write
+ *  follows; a server that serves none is stated 0, the epoch of a never-rotated scope, which it refuses as stale if the
+ *  root was re-keyed — the epoch is a check, never a key, so a wrong one costs a refusal and nothing more. */
+export function shareRootEpoch(share: Pick<PublicShare, 'rootEpoch'>): number {
+  return share.rootEpoch ?? 0
+}
+
 /** What the platform half of a resolve yields: the unlocked server response (the application opens its own seals from
  *  it), `K_share`, and the kind-independent fields already opened. `scopeId` is the shared object's scope — every seal
  *  the application opens is bound to it (ADR 0072). */

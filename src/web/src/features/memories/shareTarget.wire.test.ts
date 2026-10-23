@@ -46,7 +46,7 @@ function recordFetch(): Sent[] {
 
 const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
 const threeChunks = () => ({ blob: new Blob([new Uint8Array(2 * CHUNK_SIZE + 1)]), mediaType: 'application/pdf' })
-const session = { identityId: 'id-1', contributorToken: 'tok-1', shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey: v1.randomBytes(32) }
+const session = { identityId: 'id-1', contributorToken: 'tok-1', shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey: v1.randomBytes(32), nodeEpoch: 0 }
 
 describe('addSharePhoto names its target on the wire', () => {
   it('a target below the root: `nodeId` on the start, the window and the completion', async () => {

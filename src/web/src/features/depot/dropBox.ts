@@ -13,12 +13,12 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { EpochKeys } from '../spaces/epochs'
-import { createContentNode, openContentKey, sealName, slugTokenFor, wrapContentKey, type NodeParent } from '../../core/node/tree'
+import { createContentNode, openContentKey, sealName, slugTokenFor, wrapContentKey, type CreateNodeOptions, type NodeParent } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
-import { mintShare, NO_NOTE, type MintedShare } from '../../core/sharing/manageShares'
+import { mintShare, NO_NOTE, type MintedShare, type ShareRootKey } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
 import { forgetGuestSession, identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
-import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
+import { shareRootEpoch, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
 import type { UploadJob } from '../../core/blob/queue'
 import { decodeHttpError, HttpStatus, isCodedError } from '../../shared/httpError'
@@ -30,8 +30,10 @@ import { DROPBOX_KIND } from './kinds'
 
 /** Create a drop box named `name` under `parent` (a folder, or the scope root): a node like any other, its key under
  *  its parent's. It takes guests only once a WRITE_ONLY link exists ({@link mintDropBoxLink}). */
-export async function createDropBox(scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string): Promise<string> {
-  return (await createContentNode(scopeId, epochs, parent, DROPBOX_KIND, name)).nodeId
+export async function createDropBox(
+  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, opts: CreateNodeOptions = {},
+): Promise<string> {
+  return (await createContentNode(scopeId, epochs, parent, DROPBOX_KIND, name, undefined, opts)).nodeId
 }
 
 /** The drop box's sealed drop private key as the server holds it now — null until its first link. */
@@ -47,11 +49,11 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
  * link at once: the server keeps one and refuses the other `drop_key_exists`, which re-reads the node and retries once.
  */
 export function mintDropBoxLink(
-  scopeId: string, nodeId: string, nodeKey: Uint8Array, epochs: EpochKeys, nodeName: string, name = '', password = '',
+  scopeId: string, nodeId: string, node: ShareRootKey, epochs: EpochKeys, nodeName: string, name = '', password = '',
   expiresAt: Date | null = null,
 ): Promise<MintedShare> {
-  return mintShare(scopeId, nodeId, nodeKey, epochs, nodeName, ShareRole.WriteOnly, expiresAt, NO_NOTE, name, password, {
-    dropFields: async (kShare) => dropKeysForShare(scopeId, nodeId, nodeKey, kShare, await currentSealedDropKey(scopeId, nodeId)),
+  return mintShare(scopeId, nodeId, node, epochs, nodeName, ShareRole.WriteOnly, expiresAt, NO_NOTE, name, password, {
+    dropFields: async (kShare, nodeKey) => dropKeysForShare(scopeId, nodeId, nodeKey, kShare, await currentSealedDropKey(scopeId, nodeId)),
     retryOnce: (e) => isCodedError(e, HttpStatus.conflict, 'drop_key_exists'),
   })
 }
@@ -102,7 +104,8 @@ export async function nameDropGuest(
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.identityKey, v1.utf8(name)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
+    // `K_up` is sealed to the drop box's drop public key, which a re-key replaces: the root's epoch as read (ADR 0109 point 6)
+    createShareIdentityRequest: { nodeEpoch: shareRootEpoch(head.share), identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
     xSharePassword: pwToken,
     xShareWrite: b64std(v1.shareWriteToken(kShare, shareId)),
   })
@@ -115,9 +118,10 @@ export type DropFolder = { nodeId: string; key: Uint8Array; epoch: number; place
 
 /**
  * The guest's own folder in the drop box: created on the first call — a fresh id and key `K_F`, the folder's name (the
- * guest's display name) and slug sealed under `K_up`, `K_F` wrapped under `K_up`, at epoch 0 (a write-only link serves
- * no epoch; off the scope root an older one is accepted and opens nothing) — and the same folder on every later call,
- * whose stored wrap opens under `K_up` here.
+ * guest's display name) and slug sealed under `K_up`, `K_F` wrapped under `K_up`, at the drop box's epoch as the link
+ * serves it (`PublicShare.rootEpoch`: a create states the scope's current epoch, which a guest does not know — the root's
+ * equals it unless the root is being re-keyed, which the server answers stale or pending, ADR 0109 point 6) — and the same
+ * folder on every later call, whose stored wrap opens under `K_up` here.
  */
 export async function ensureDropFolder(
   head: PublicShareHead, session: DropGuestSession, displayName: string, pwToken?: string,
@@ -125,7 +129,7 @@ export async function ensureDropFolder(
   const { shareId, scopeId } = head
   const dropBoxId = head.share.nodeId!
   const identityKey = fromB64std(session.identityKey)
-  const address = { scopeId, nodeId: crypto.randomUUID(), epoch: 0, placementRevision: 0 }
+  const address = { scopeId, nodeId: crypto.randomUUID(), epoch: shareRootEpoch(head.share), placementRevision: 0 }
   const folderKey = v1.randomBytes(32)
   const res = await publicShareFilesApi().ensureShareDropFolder({
     shareId,

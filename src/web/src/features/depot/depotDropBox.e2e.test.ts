@@ -31,6 +31,7 @@ import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
 import { fetchFileContent, fileFacts } from './download'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const FOLDER_NAME = 'Vereinsablage Kranichfeld'
 const BOX_NAME = 'Einsendungen Sommerfest'
@@ -45,7 +46,7 @@ const wire: string[] = []
 let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -73,10 +74,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
     await ensurePersonalScope()
     const { scopeId, epochs } = (await openScope(ScopeKind.Personal))!
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
-    const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
-    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey }, BOX_NAME)
-    const boxKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), boxId)!
-    const link = await mintDropBoxLink(scopeId, boxId, boxKey, epochs, BOX_NAME)
+    const withFolder = await listTree(scopeId, epochs)
+    const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
+    const folderEpoch = withFolder.find((n) => n.id === folderId)!.epoch
+    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, epoch: folderEpoch }, BOX_NAME)
+    const withBox = await listTree(scopeId, epochs)
+    const boxKey = nodeContentKey(scopeId, epochs, withBox, boxId)!
+    const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: withBox.find((n) => n.id === boxId)!.epoch }, epochs, BOX_NAME)
     const head = await resolvePublicShare(link.shareId, b64url(link.kShare))
     expect(head.share.nodes).toEqual([]) // a write-only link serves no node
     expect(head.share.rootKind).toBe(DROPBOX_KIND)
@@ -123,7 +127,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
     const tree = await memberReads()
 
     // A member places nothing in a guest's folder.
-    const memberCreate = await failure(createContentNode(scopeId, epochs, { id: annaFolder.nodeId, key: nodeContentKey(scopeId, epochs, tree, annaFolder.nodeId)! }, FILE_KIND, 'mine.txt'))
+    const memberCreate = await failure(createContentNode(scopeId, epochs, { id: annaFolder.nodeId, key: nodeContentKey(scopeId, epochs, tree, annaFolder.nodeId)!, epoch: tree.find((n) => n.id === annaFolder.nodeId)!.epoch }, FILE_KIND, 'mine.txt'))
     expect(await decodeHttpError(memberCreate)).toEqual({ status: 422, code: 'illegal_structure' })
 
     // --- revoking the link keeps everything; the guest is refused --------------------------------------------------

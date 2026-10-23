@@ -23,6 +23,7 @@ import type { ImportInput } from './importSource'
 import { memberAccessOf } from '../../test/models'
 import type { TreeSource } from '../access'
 import * as v1 from '@veyq/crypto/v1'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const FILE = 'T_FILE'
 const ALBUM = 'T_ALBUM'
@@ -72,10 +73,10 @@ beforeEach(() => {
   let n = 0
   vi.mocked(createContentNode).mockImplementation(async (_s, _e, parent, kind, name) => {
     imported.push({ name, parent: parent?.id ?? null, bytes: '', kind })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9) }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
   })
   if (!registry.kind(FILE).supported) {
-    registry.registerKind({
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const bytes = contents.get(ctx.node.id)!
@@ -91,7 +92,7 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const files = albumFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
@@ -105,9 +106,9 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({ kind: ODD, icon: 'file', shareable: false }) // no hooks: cannot be downloaded
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ODD, icon: 'file', shareable: false }) // no hooks: cannot be downloaded
     // a container that downloads with a content of its own and imports as a plain folder (a Depot drop box's shape)
-    registry.registerKind({
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: BOX, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
       exportContent: async () => ({ type: 't.box', schema: 1 }),
       validateContent: (c) => (Object.keys(c).every((k) => k === 'type' || k === 'schema') ? null : { code: 'invalid_manifest', message: 'a box with more' }),

@@ -24,6 +24,7 @@ import {
 import type { PublicShareHead } from './resolvePublicShare'
 import { ShareRole, type ShareNode } from '../../api/generated/sharing'
 import { t } from '../../test/i18n'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0' // a 43-char base64url id, as `newShareId` mints
@@ -102,8 +103,8 @@ describe('a guest creates a node', () => {
     expect(url).toContain(`/api/shares/${SHARE_ID}/nodes`)
     expect(headers.get('X-Contributor-Token')).toBe(TOKEN)
     expect(headers.get('X-Share-Password')).toBe(PW)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'kind', 'nodeId', 'parentId', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ nodeId, parentId: LEFT, kind: FOLDER_KIND, epoch: 3 }) // the parent's served epoch, not the root's 5
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'kind', 'nodeId', 'parentEpoch', 'parentId', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ nodeId, parentId: LEFT, kind: FOLDER_KIND, epoch: 3, parentEpoch: 3 }) // the parent's served epoch, not the root's 5
     expect(JSON.stringify(json)).not.toContain('Urlaub')
 
     const wrap = { id: nodeId, epoch: 3, placementRevision: 0, wrappedContentKey: json.wrappedContentKey as string }
@@ -148,7 +149,7 @@ describe('a guest creates a node', () => {
 })
 
 describe('a guest places a node', () => {
-  it('re-wraps under the DESTINATION key at served+1, re-seals name and slug there, and states no epoch', async () => {
+  it('re-wraps under the DESTINATION key at served+1, re-seals name and slug there, and states only the destination\'s epoch', async () => {
     const sent = recordFetch(noContent)
     await placeShareNodeAsGuest(context(), { nodeId: ITEM, newParentId: RIGHT })
 
@@ -157,8 +158,8 @@ describe('a guest places a node', () => {
     expect(method).toBe('PATCH')
     expect(url).toContain(`/api/shares/${SHARE_ID}/nodes/${ITEM}`)
     expect(headers.get('X-Contributor-Token')).toBe(TOKEN)
-    expect(Object.keys(json).sort(), 'no epoch on the wire').toEqual(['encryptedName', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: RIGHT, placementRevision: 2 }) // the revision it was built on
+    expect(Object.keys(json).sort(), 'no node epoch on the wire').toEqual(['encryptedName', 'parentEpoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: RIGHT, parentEpoch: 1, placementRevision: 2 }) // the revision it was built on; RIGHT's served epoch
 
     const wrap = { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kRight, wrap)), 'opens under the destination key at served+1').toEqual(bytes(kItem))
@@ -192,7 +193,7 @@ describe('a guest places a node', () => {
   // registers the file folding (fileNameSlug: foto.jpg).
   describe('folds by kind (inbox #350)', () => {
     const LEAF = 'LEAFTEST'
-    registry.registerKind({ kind: LEAF, icon: 'file', shareable: false, slug: fileNameSlug })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', shareable: false, slug: fileNameSlug })
     const DIR = '6e5a0000-0000-4000-8000-0000000000b1'
     const FILE = '6e5a0000-0000-4000-8000-0000000000b2'
     const byKind = () => {
@@ -265,7 +266,8 @@ describe('a guest places a node', () => {
 describe('a refusal maps by its code, whatever the status', () => {
   const expected: Record<(typeof GUEST_TREE_CODES)[number], string> = {
     slug_taken: 'share.folder.nameTakenHere',
-    stale_epoch: 'share.folder.createFailed',
+    stale_epoch: 'share.folder.placementConflict',
+    node_rekey_pending: 'share.folder.rekeyPending',
     id_taken: 'share.folder.createFailed',
     illegal_structure: 'share.folder.notAllowed',
     illegal_scope: 'share.folder.notAllowed',

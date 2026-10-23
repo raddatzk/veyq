@@ -66,7 +66,7 @@ afterEach(() => {
 describe("a contributor's upload into a chapter, through the guest's source", () => {
   it("names the chapter on the start, the window and the completion, sealed under the chapter's key", async () => {
     const sent = recordFetch()
-    await source().upload!.target(CHAPTER, keys.chapter)!.upload!(pdf(), {})
+    await source().upload!.target(CHAPTER, keys.chapter, 0)!.upload!(pdf(), {})
 
     expect(sent.map((s) => s.path)).toEqual([
       `/api/shares/${SHARE}/blob-uploads`, `/api/shares/${SHARE}/blob-upload-windows`, `/api/shares/${SHARE}/media`,
@@ -80,7 +80,7 @@ describe("a contributor's upload into a chapter, through the guest's source", ()
 
   it('into the share root: no `nodeId` key on any request', async () => {
     const sent = recordFetch()
-    await source().upload!.target(MEMORY, keys.memory)!.upload!(pdf(), {})
+    await source().upload!.target(MEMORY, keys.memory, 0)!.upload!(pdf(), {})
     expect(sent).toHaveLength(3)
     for (const s of sent) expect(Object.keys(s.json), s.path).not.toContain('nodeId')
   })

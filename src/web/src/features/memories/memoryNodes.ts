@@ -5,7 +5,7 @@
 // of the Memory's share reads its chapter titles.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { EpochKeys } from '../spaces/epochs'
-import { createContentNode, type NodeAddress, type NodeParent } from '../../core/node/tree'
+import { createContentNode, type CreateNodeOptions, type NodeAddress, type NodeParent } from '../../core/node/tree'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
 import { normalizeParticipants } from './memoryParticipants'
@@ -29,25 +29,28 @@ export interface MemoryBirthMeta {
  */
 export async function createMemory(
   scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null,
-  birth: MemoryBirthMeta = {},
+  birth: MemoryBirthMeta = {}, opts: CreateNodeOptions = {},
 ): Promise<{ nodeId: string; memoryKey: Uint8Array }> {
   const meta: Record<string, unknown> = {}
   if (birth.location) meta.location = birth.location
   const participants = normalizeParticipants({ userIds: birth.participants ?? [] })
   if (participants.length > 0) meta.participants = { userIds: participants }
   const metaSealer = Object.keys(meta).length > 0 ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, ...meta }) : undefined
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parent, MEMORY_KIND, name, metaSealer)
+  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parent, MEMORY_KIND, name, metaSealer, opts)
   return { nodeId, memoryKey: contentKey }
 }
 
 /**
  * Create a CHAPTER inside a Memory (or another chapter) — births a fresh random `K_node` wrapped under the
  * **parent node's `K_node`** (`parentKey`), so the chapter is a sharing unit of its own (ADR 0012, cr-0060).
- * Returns the node id + the chapter's K_node.
+ * `parentEpoch` is the parent's epoch as read, which the create states (ADR 0109 point 6). Returns the node id + the
+ * chapter's K_node.
  */
 export async function createChapter(
-  scopeId: string, epochs: EpochKeys, parentKey: Uint8Array, name: string, parentId: string,
+  scopeId: string, epochs: EpochKeys, parentKey: Uint8Array, name: string, parentId: string, parentEpoch: number,
+  opts: CreateNodeOptions = {},
 ): Promise<{ nodeId: string; chapterKey: Uint8Array }> {
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, { id: parentId, key: parentKey }, CHAPTER_KIND, name)
+  const parent = { id: parentId, key: parentKey, epoch: parentEpoch }
+  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parent, CHAPTER_KIND, name, undefined, opts)
   return { nodeId, chapterKey: contentKey }
 }

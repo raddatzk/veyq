@@ -447,7 +447,7 @@ function enqueueBatch(picked: File[]) {
   const targetNodeId = props.node.id
   // Into the node on screen, sealed under its key: a member's `addMedia`; a guest's upload names this node (the server
   // creates the guest's own bucket there).
-  const target = upload.target(targetNodeId, key)
+  const target = upload.target(targetNodeId, key, props.node.epoch)
   if (!target) return
   enqueueUploads(
     target,
@@ -800,6 +800,7 @@ watch(
             ref="bucketsView"
             :scope-id="scopeId"
             :node-id="node.id"
+            :node-epoch="node.epoch"
             :memory-key="memoryKey"
             :media="items"
             :thumbs="thumbs"
@@ -881,6 +882,7 @@ watch(
     <MediaLightbox
       v-if="lightboxIndex !== null && memoryKey"
       :memory-key="memoryKey"
+      :memory-node="node"
       :items="lightboxItems"
       :start-index="lightboxIndex"
       :memory-name="node.name"

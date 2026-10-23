@@ -24,7 +24,7 @@ describe('createGuestIdentity', () => {
     const rootKey = v1.randomBytes(32)
     const kShare = v1.randomBytes(32)
 
-    const identity = await createGuestIdentity({ shareId: SHARE_ID, scopeId: SCOPE_ID }, rootKey, { name: 'Oma', fragmentKey: b64url(kShare), pwToken: 'pw' })
+    const identity = await createGuestIdentity({ shareId: SHARE_ID, scopeId: SCOPE_ID }, rootKey, { name: 'Oma', fragmentKey: b64url(kShare), pwToken: 'pw', rootEpoch: 0 })
 
     const call = createShareIdentity.mock.calls[0][0]
     const req = call.createShareIdentityRequest
@@ -45,7 +45,7 @@ describe('createGuestIdentity', () => {
 describe('openIdentityName', () => {
   async function named(rootKey: Uint8Array, name: string) {
     const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'ignored', contributorToken: 'tok-1' } })
-    await createGuestIdentity({ shareId: SHARE_ID, scopeId: SCOPE_ID }, rootKey, { name, fragmentKey: b64url(v1.randomBytes(32)) })
+    await createGuestIdentity({ shareId: SHARE_ID, scopeId: SCOPE_ID }, rootKey, { name, fragmentKey: b64url(v1.randomBytes(32)), rootEpoch: 0 })
     const { identityId, sealedDisplayName } = createShareIdentity.mock.calls[0][0].createShareIdentityRequest
     return { identityId, sealed: sealedDisplayName }
   }

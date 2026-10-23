@@ -59,6 +59,11 @@ export type UploadTarget = {
   scopeId?: string
   nodeId?: string
   memoryKey?: Uint8Array
+  /** The node's epoch as read with `memoryKey` (`TreeNode.epoch`): the completion states it (ADR 0109 point 6). */
+  nodeEpoch?: number
+  /** The device floor (`core/node/rekey/floor.ts`), run as each file's upload starts: a member's upload never seals under
+   *  a node key from before the last rotation it holds (a refused file fails, and is retried like any failed upload). */
+  atFloor?: () => void
   /** Grouping key for the optimistic tiles (which view an in-flight file belongs to); defaults to `nodeId`. */
   key?: string
   /** The transport for this batch; defaults to the authed `addMedia` over `scopeId`/`nodeId`/`memoryKey`. */
@@ -179,9 +184,12 @@ export function enqueueUploads(
   // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
   // A member's file equal to the node's video banner shares the banner's stored object (ADR 0013 § 5, `storedMatch.ts`).
   const upload: UploadFn =
-    target.upload ?? ((source, o) => addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, {
-      ...o, storedOriginal: bannerOriginalOf(target.scopeId!, target.nodeId!, target.memoryKey!),
-    }))
+    target.upload ?? (async (source, o) => {
+      target.atFloor?.()
+      return addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, {
+        ...o, storedOriginal: bannerOriginalOf(target.scopeId!, target.nodeId!, target.memoryKey!), nodeEpoch: target.nodeEpoch,
+      })
+    })
   return enqueueJobs<MediaUploadResult, MediaFileFields, { target: UploadTarget }>(
     selections.map((s) => ({
       name: s.file.name,

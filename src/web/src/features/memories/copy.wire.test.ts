@@ -33,6 +33,7 @@ import { registry } from '../../core/applications/registry'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 import { MEMORIES_CONTENT_SCHEMA, exportMemoryContent, importMemoryContent } from './exportImport'
 import { MEDIA_PAGE_LIMIT } from './media'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const SCOPE = '44444444-4444-4444-8444-444444444444'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
@@ -198,7 +199,7 @@ beforeAll(() => {
   // registers Depot's. That the real registration declares `importStreams` is `CopyNodesDialog.test.ts`'s (the real registry).
   for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
     if (!registry.kind(kind).supported) {
-      registry.registerKind({
+      registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
         kind, icon: 'images', shareable: false, contentSchema: MEMORIES_CONTENT_SCHEMA,
         exportContent: exportMemoryContent, importContent: importMemoryContent(kind), importStreams: true,
       })

@@ -62,7 +62,7 @@ const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
 
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -251,7 +251,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
   // Core's real acceptance field (its checkbox is the layer's, installed for every test), beside the stubs above.
   const mountWithField = (props: Record<string, unknown>) =>
     mount(ShareCreateDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
       global: { plugins: [realI18n()], stubs },
     })
   const mustAccept = (w: ReturnType<typeof mountWithField>) => w.find('#share-note-must-accept')
@@ -332,7 +332,7 @@ describe('ShareCreateDialog — a stopped link gets its password on the same lin
       // The edit handed over as the other mounts here hand it (a row built by `editShareWith`, not a whole ManagedShare).
       const edit: Record<string, unknown> = { editShare: editShareWith({ shareId: 's-stopped', guestStops: [{ reason: 'linkPassword' }] }) }
       const w = mount(ShareCreateDialog, {
-        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...edit },
+        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...edit },
         global: { plugins: [realI18n()], stubs: typing },
       })
       await flushPromises()

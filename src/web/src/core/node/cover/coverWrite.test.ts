@@ -83,7 +83,7 @@ const openMeta = (wrappedMeta: string) => unsealNodeMeta(key, { scopeId: SCOPE, 
 const plan = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: NODE })
 const uploadedMeta = (blobId: string, extra: object = {}) => sealMeta({ v: 1, ...extra, cover: uploadedCover(plan(blobId)) })
 const stale = (body: object) => ({ response: new Response(JSON.stringify(body), { status: 409 }) })
-const base = (wrappedMeta: string | null, metaRevision = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaRevision } })
+const base = (wrappedMeta: string | null, metaRevision = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaRevision, nodeEpoch: 0 } })
 
 type Doors = { setNodeCover: Mock<ContentApi['setNodeCover']>; removeNodeCover: Mock<ContentApi['removeNodeCover']>; updateNode: Mock<ContentApi['updateNode']> }
 function api(over: Partial<Doors> = {}): Doors {

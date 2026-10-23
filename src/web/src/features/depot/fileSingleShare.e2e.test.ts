@@ -25,7 +25,7 @@ import { createFolder, deleteNode, listTree, nodeContentKey } from '../../core/n
 import { CHUNK_SIZE } from '../../core/blob/transport'
 import { registry } from '../../core/applications/registry'
 import { mintShare, NO_NOTE } from '../../core/sharing/manageShares'
-import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch } from '../../core/sharing/resolvePublicShare'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { createShareNodeAsGuest, GuestTreeError, guestTreeContext, openGuestTreeParts } from '../../core/sharing/guestTree'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
@@ -36,6 +36,7 @@ import { FILE_KIND } from './kinds'
 import { fileUploadJob, StaleFileError } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
 import { fetchFileContent, fileFacts } from './download'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const FOLDER_NAME = 'Nachlass Hohenfels'
 const TARGET_FILE = 'Kaufvertrag Hohenfels 1962.pdf'
@@ -48,7 +49,7 @@ let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: true, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: true, slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -79,26 +80,29 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     const personal = (await openScope(ScopeKind.Personal))!
     const { scopeId, epochs } = personal
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
-    const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
+    const withFolder = await listTree(scopeId, epochs)
+    const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
     const targetBytes = bytesOf(CHUNK_SIZE + 211, 1)
     const siblingBytes = bytesOf(900, 2)
-    const parent = { id: folderId, key: folderKey }
+    const parent = { id: folderId, key: folderKey, epoch: withFolder.find((n) => n.id === folderId)!.epoch }
     const target = (await fileUploadJob({ scopeId, epochs, parent }, fileOf(targetBytes, TARGET_FILE)).run(ctx())).nodeId
     const sibling = (await fileUploadJob({ scopeId, epochs, parent }, fileOf(siblingBytes, SIBLING_FILE)).run(ctx())).nodeId
     const tree = await listTree(scopeId, epochs)
     const targetKey = nodeContentKey(scopeId, epochs, tree, target)!
+    const targetEpoch = tree.find((n) => n.id === target)!.epoch
+    const targetRoot = { key: targetKey, epoch: targetEpoch }
     const listing = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
     const targetBlob = listing.find((i) => i.nodeId === target)!.fileBlob!
     const siblingBlob = listing.find((i) => i.nodeId === sibling)!.fileBlob!
 
     // --- a WRITE_ONLY link on a file is refused ------------------------------------------------------------------------
-    const dropOnFile = await failure(mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.WriteOnly, null, NO_NOTE, '', '', {
+    const dropOnFile = await failure(mintShare(scopeId, target, targetRoot, epochs, TARGET_FILE, ShareRole.WriteOnly, null, NO_NOTE, '', '', {
       dropFields: async () => ({ sealedDropPublicKey: filler(), sealedDropPrivateKey: filler() }),
     }))
     expect(await decodeHttpError(dropOnFile)).toEqual({ status: 422, code: 'illegal_scope' })
 
     // --- a READ link on the file: the guest sees that file alone and downloads it ------------------------------------
-    const read = await mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.Read)
+    const read = await mintShare(scopeId, target, targetRoot, epochs, TARGET_FILE, ShareRole.Read)
     const readHead = await resolvePublicShare(read.shareId, b64url(read.kShare))
     expect(readHead.rootKind).toBe(FILE_KIND)
     expect(readHead.name).toBe(TARGET_FILE)
@@ -115,21 +119,21 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     expect(httpStatus(await failure(shareChunkUrls(read.shareId, siblingBlob.blobId)))).toBe(404)
     // a READ link takes no write
     const readWrite = await failure(publicShareFilesApi().completeShareFile({
-      shareId: read.shareId, nodeId: target, shareFileCompleteRequest: { contributorToken: 'x'.repeat(43), uploadId: crypto.randomUUID() },
+      shareId: read.shareId, nodeId: target, shareFileCompleteRequest: { contributorToken: 'x'.repeat(43), uploadId: crypto.randomUUID(), nodeEpoch: targetEpoch },
     }))
     expect(httpStatus(readWrite)).toBe(403)
 
     // --- a READ_WRITE link: a named guest replaces the content -----------------------------------------------------------
-    const rw = await mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.ReadWrite)
+    const rw = await mintShare(scopeId, target, targetRoot, epochs, TARGET_FILE, ShareRole.ReadWrite)
     const rwFragment = b64url(rw.kShare)
     const rwHead = await resolvePublicShare(rw.shareId, rwFragment)
     const rwKeys = openGuestTreeParts(rwHead).keys
-    const guest = await createGuestIdentity(rwHead, rwKeys.get(target)!, { name: GUEST_NAME, fragmentKey: rwFragment })
+    const guest = await createGuestIdentity(rwHead, rwKeys.get(target)!, { name: GUEST_NAME, fragmentKey: rwFragment, rootEpoch: shareRootEpoch(rwHead.share) })
     const guestCtx = () => guestTreeContext(rwHead, { contributorToken: guest.contributorToken, fragmentKey: rwFragment })
     const replacement = bytesOf(640, 3)
     await guestFileUploadJob({
       ctx: guestCtx(), parentId: target,
-      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, expectedBlobId: targetBlob.blobId },
+      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, nodeEpoch: targetEpoch, expectedBlobId: targetBlob.blobId },
     }, fileOf(replacement, TARGET_FILE)).run(ctx())
     const replacedBlob = (await filesApi().listFiles({ scopeId, parentId: folderId })).items.find((i) => i.nodeId === target)!.fileBlob!
     expect(replacedBlob.blobId).not.toBe(targetBlob.blobId)
@@ -138,7 +142,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     // a replace still expecting the old blob is stale; the file keeps the guest's content
     const stale = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: target,
-      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, expectedBlobId: targetBlob.blobId },
+      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, nodeEpoch: targetEpoch, expectedBlobId: targetBlob.blobId },
     }, fileOf(bytesOf(5, 4), TARGET_FILE)).run(ctx()))
     expect(stale).toBeInstanceOf(StaleFileError)
     expect((stale as StaleFileError).currentBlobId).toBe(replacedBlob.blobId)
@@ -150,7 +154,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     expect((underFile as GuestTreeError).code).toBe('illegal_scope')
     const siblingTarget = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: target,
-      replace: { nodeId: sibling, nodeKey: targetKey, expectedBlobId: siblingBlob.blobId },
+      replace: { nodeId: sibling, nodeKey: targetKey, nodeEpoch: tree.find((n) => n.id === sibling)!.epoch, expectedBlobId: siblingBlob.blobId },
     }, fileOf(bytesOf(5, 6), SIBLING_FILE)).run(ctx()))
     expect(httpStatus(siblingTarget), 'the sibling is no node of this link').toBe(404)
 
@@ -160,11 +164,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     expect(httpStatus(await failure(shareChunkUrls(rw.shareId, replacedBlob.blobId)))).toBe(404)
     const intoTrash = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: target,
-      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, expectedBlobId: replacedBlob.blobId },
+      replace: { nodeId: target, nodeKey: rwKeys.get(target)!, nodeEpoch: targetEpoch, expectedBlobId: replacedBlob.blobId },
     }, fileOf(bytesOf(5, 7), TARGET_FILE)).run(ctx()))
     expect([403, 404]).toContain(httpStatus(intoTrash))
     // a file in the trash is shared by nobody
-    const trashed = await failure(mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.Read))
+    const trashed = await failure(mintShare(scopeId, target, targetRoot, epochs, TARGET_FILE, ShareRole.Read))
     expect(await decodeHttpError(trashed)).toMatchObject({ status: 404, code: 'node_not_found' })
 
     // --- the wire: no name, no MIME type in the clear; the canaries the orchestrator sweeps for -----------------------

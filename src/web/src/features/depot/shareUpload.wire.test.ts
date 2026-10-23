@@ -21,6 +21,7 @@ import { registry } from '../../core/applications/registry'
 import type { GuestTreeContext } from '../../core/sharing/guestTree'
 import type { ShareNode } from '../../api/generated/sharing'
 import { fileNameSlug } from '../../shared/naming'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const SCOPE = '33333333-3333-4333-8333-333333333334'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_4'
@@ -34,7 +35,7 @@ const NAME = 'Rezept.pdf'
 const MODIFIED = 1_700_000_000_000
 
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -144,10 +145,12 @@ describe("a guest's new file on the wire", () => {
     expect(() => v1.open(blobCtx, nodeKey, fromB64std(item.wrappedBlobKey))).not.toThrow()
     expect(() => v1.open(blobCtx, rootKey, fromB64std(item.wrappedBlobKey)), 'never under the folder key').toThrow()
 
-    // The meta: the blob's own, declared with it, describing the picked file; the completion: ids only.
+    // The meta: the blob's own, declared with it, describing the picked file; the completion: ids and the new node's
+    // epoch (its parent's served one, ADR 0109 point 6).
     expect(declaredMeta(start, node, nodeKey)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     const done = requests[2].json!
-    expect(Object.keys(done).sort()).toEqual(['contributorToken', 'uploadId'])
+    expect(Object.keys(done).sort()).toEqual(['contributorToken', 'nodeEpoch', 'uploadId'])
+    expect(done.nodeEpoch).toBe(2)
     expectNoPlaintextName(requests, NAME)
   })
 
@@ -213,7 +216,7 @@ describe("a guest's given-up new file on the wire", () => {
 describe("a guest's replace on the wire", () => {
   it('sends no create, expects the blob it saw, and declares the NEW file\'s meta on the new blob', async () => {
     const requests = fakeServer()
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
     await guestFileUploadJob(target, fileOf(7)).run(ctx())
 
     expect(control(requests)).toEqual([`POST /api/shares/${SHARE}/blob-uploads`, `POST /api/shares/${SHARE}/files/${EXISTING}/content`])
@@ -225,7 +228,7 @@ describe("a guest's replace on the wire", () => {
 
   it('a 409 stale_file is StaleFileError with the current blob, and a rerun sends nothing', async () => {
     const requests = fakeServer(() => json({ code: 'stale_file', currentBlobId: 'c0c0c0c0-0000-4000-8000-000000000002' }, 409))
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId: null } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId: null } }
     const job = guestFileUploadJob(target, fileOf(7))
     const err = await job.run(ctx()).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(StaleFileError)

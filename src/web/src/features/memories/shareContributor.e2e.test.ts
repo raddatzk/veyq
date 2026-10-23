@@ -101,7 +101,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     nodeId = memory.nodeId
     const kNode = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kNode, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, { texts: NOTE, mustAccept: false }, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, { key: kNode, epoch: 0 }, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, { texts: NOTE, mustAccept: false }, SHARE_NAME)
     shareId = minted.shareId
     expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 
@@ -121,7 +121,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     const sealKey = sessionSealKey(session, resolved.access)
     expect(sealKey, 'a contributor seals under the K_node its link holds').not.toBeNull()
 
-    const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sealKey! }
+    const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sealKey!, nodeEpoch: resolved.access.rootEpoch }
     // raw bytes with no MIME ⇒ the original-only path (nothing derivable) — the byte transport is what this gates
     const first = await addSharePhoto(upload, { blob: new Blob([bytes(3) as BlobPart]), mediaType: '' })
     const second = await addSharePhoto(upload, { blob: new Blob([bytes(101) as BlobPart]), mediaType: '' })

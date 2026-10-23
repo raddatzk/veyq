@@ -74,7 +74,7 @@ describe('a guest\'s primary bucket name is the identity name the server copied 
   it('the envelope createGuestIdentity sends opens through openBucketName as the contributor primary\'s name', async () => {
     const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'ignored', contributorToken: 'tok' } })
     const key = v1.randomBytes(32)
-    const identity = await createGuestIdentity({ shareId: SHARE, scopeId: SCOPE }, key, { name: 'Oma', fragmentKey: b64url(v1.randomBytes(32)) })
+    const identity = await createGuestIdentity({ shareId: SHARE, scopeId: SCOPE }, key, { name: 'Oma', fragmentKey: b64url(v1.randomBytes(32)), rootEpoch: 0 })
     const sent = createShareIdentity.mock.calls[0][0].createShareIdentityRequest.sealedDisplayName
     const row = { ...contributorRow(sent), ownerKey: `share:${identity.identityId}` }
     expect(fromB64std(sent)[0]).toBe(0x03)
@@ -137,7 +137,7 @@ describe('media buckets (cr-0113)', () => {
       const { createBucket: createBucketFn } = stubApi(bucketsApi, {
         createBucket: { bucketId: 'b3', ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, parentBucketId: 'b1', sealedName: 'x' },
       })
-      await createBucket(SCOPE, NODE, key, 'Urlaub 2026')
+      await createBucket(SCOPE, NODE, key, 0, 'Urlaub 2026')
       const req = createBucketFn.mock.calls[0][0].createBucketRequest
       expect(req.sealedName).not.toContain('Urlaub') // ciphertext, never the cleartext name
       // the client mints the bucket id and binds the name to it (ADR 0072)

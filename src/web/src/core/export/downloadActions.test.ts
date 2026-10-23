@@ -4,15 +4,16 @@ import { FOLDER_KIND } from '../node/kind'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { canDownload, downloadHeaderActions, downloadRowActions } from './downloadActions'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const unlocked = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })
 const t = (k: string) => k
 
 beforeAll(() => {
   if (!registry.kind('X_WITH').supported) {
-    registry.registerKind({ kind: 'X_WITH', icon: 'file', shareable: false, exportContent: async () => null })
-    registry.registerKind({ kind: 'X_WITHOUT', icon: 'file', shareable: false })
-    registry.registerKind({ kind: 'X_ONE_FILE', icon: 'file', shareable: false, exportContent: async () => null, downloadsAsFile: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITH', icon: 'file', shareable: false, exportContent: async () => null })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITHOUT', icon: 'file', shareable: false })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_ONE_FILE', icon: 'file', shareable: false, exportContent: async () => null, downloadsAsFile: true })
   }
 })
 

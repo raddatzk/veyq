@@ -55,6 +55,7 @@ import { MEMORY_KIND } from '../features/memories/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 import { OPERATOR_SECTION } from '../test/models'
+import { nothingOfItsOwnToRekey } from '../core/node/rekey/hooks'
 
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
@@ -78,7 +79,7 @@ const StubDetail = defineComponent({ name: 'StubDetail', setup: () => () => h('d
 
 function registryWith(claims: NodeKind[], details: NodeKind[] = []): Registry {
   const r = createRegistry()
-  for (const key of details) r.registerKind({ kind: key, icon: 'file', shareable: true, detail: StubDetail })
+  for (const key of details) r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file', shareable: true, detail: StubDetail })
   for (const key of claims) r.claimShareBody(key, StubBody)
   return r
 }

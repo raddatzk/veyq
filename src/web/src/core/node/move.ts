@@ -39,6 +39,7 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import { registry } from '../applications/registry'
 import { guestTreeContext, GuestTreeError, placeShareNodeAsGuest } from '../sharing/guestTree'
 import { decodeHttpError } from '../../shared/httpError'
+import { isBelowNodeKeyFloor } from '../../shared/rekeyRetry'
 import { ShareRole } from '../../api/generated/sharing'
 
 /** Why "Move here" cannot be chosen at a place (or, for `self`/`inside`, why a listed place cannot be opened); null: it can. */
@@ -264,15 +265,19 @@ function guestMover(access: () => GuestAccess): NodeMover {
 
 /** The refusals a move explains by name; `failed` is anything else (a network failure, an unexpected code). */
 export type MoveRefusalCode =
-  | 'slug_taken' | 'illegal_structure' | 'illegal_scope' | 'stale_placement' | 'stale_epoch'
+  | 'slug_taken' | 'illegal_structure' | 'illegal_scope' | 'stale_placement' | 'stale_epoch' | 'node_rekey_pending'
   | 'share_not_contributable' | 'gone' | 'rate_limited' | 'scope_deleting' | 'failed'
 
 /** A failed move as the code the dialog explains (`node.move.refused.<code>`). A placement that kept losing races
- *  ({@link PlacementConflictError}, after the bounded re-read) is `stale_placement`. */
+ *  ({@link PlacementConflictError}, after the bounded re-read) is `stale_placement`. A node still not re-keyed after the
+ *  waits (`node_rekey_pending`, or the device floor's own refusal) is `node_rekey_pending` — the space's new lock is
+ *  still going in (ADR 0109 point 6). */
 export async function moveRefusalOf(e: unknown): Promise<MoveRefusalCode> {
   if (e instanceof PlacementConflictError) return 'stale_placement'
+  if (isBelowNodeKeyFloor(e)) return 'node_rekey_pending'
   const code = e instanceof GuestTreeError ? e.code : (await decodeHttpError(e)).code
   switch (code) {
+    case 'node_rekey_pending':
     case 'slug_taken':
     case 'illegal_structure':
     case 'illegal_scope':

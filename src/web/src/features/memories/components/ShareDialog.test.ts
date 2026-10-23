@@ -54,7 +54,7 @@ const stubs = {
 
 const mountList = () =>
   mount(ShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY' },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY' },
     global: { plugins: [realI18n()], stubs },
   })
 
@@ -63,7 +63,7 @@ const mountList = () =>
 describe('ShareDialog — the wording follows the shared node\'s kind', () => {
   const mountKind = (nodeKind: string, uploader = false) =>
     mount(ShareDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, nodeName: 'Tag 2', nodeKind, uploader },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Tag 2', nodeKind, uploader },
       global: { plugins: [realI18n()], stubs },
     })
 

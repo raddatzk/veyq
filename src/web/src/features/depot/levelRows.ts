@@ -231,7 +231,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       if (existing && !nodeKey) continue
       entries.push(
         existing && nodeKey
-          ? { file, replace: { nodeId: existing.id, nodeKey, expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null } }
+          ? { file, replace: { nodeId: existing.id, nodeKey, nodeEpoch: existing.epoch, expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null } }
           : { file },
       )
     }

@@ -66,7 +66,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
 
 function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -132,7 +132,8 @@ describe('FolderShareDialog — a new link', () => {
     expect(mintShare).toHaveBeenCalledTimes(1)
     const [scopeId, nodeId, key, epochs, name, mintedRole] = mintShare.mock.calls[0]
     expect({ scopeId, nodeId, name, mintedRole }).toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, name: 'Trips', mintedRole: role })
-    expect(key).toBe(FOLDER_KEY)
+    expect(key).toEqual({ key: FOLDER_KEY, epoch: 0 }) // the folder's key with the epoch it was minted at (ADR 0109 point 6)
+    expect(key.key).toBe(FOLDER_KEY)
     expect(epochs).toEqual(EPOCHS)
     expect(w.text()).toContain(t('share.linkReady'))
     expect(w.find('input.input').attributes('value')).toBe('https://x/s/new-share#k=abc')

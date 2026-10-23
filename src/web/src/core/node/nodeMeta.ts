@@ -72,10 +72,15 @@ export function openNodeMetaForWrite(nodeKey: Uint8Array, node: NodeMetaAddress,
   return { ...(parsed as RawNodeMeta), v: 1 }
 }
 
-/** A node's sealed meta as the tree holds it (`listNodes` carries both). */
-export const nodeMetaState = (node: { wrappedMeta: string | null; metaRevision: number }): SealedMetaState => ({
+/** A node's sealed meta as the tree holds it, with the node's epoch read alongside: the meta is sealed under the node's
+ *  key, and the write states the epoch that key was minted at (`nodeEpoch`, ADR 0109 point 6). */
+export type NodeMetaState = SealedMetaState & { nodeEpoch: number }
+
+/** A node's sealed meta as the tree holds it (`listNodes` carries all three). */
+export const nodeMetaState = (node: { wrappedMeta: string | null; metaRevision: number; epoch: number }): NodeMetaState => ({
   wrappedMeta: node.wrappedMeta,
   metaRevision: node.metaRevision,
+  nodeEpoch: node.epoch,
 })
 
 /**
