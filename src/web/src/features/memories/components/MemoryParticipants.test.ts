@@ -71,7 +71,9 @@ const openPopover = async (w: VueWrapper) => {
 }
 const saveButton = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Save'))!
 const rows = () => [...document.body.querySelectorAll<HTMLElement>('.memory-participants-option')]
-const boxes = () => [...document.body.querySelectorAll<HTMLInputElement>('.memory-participants-option input[type="checkbox"]')]
+/** The layer's checkboxes (ADR 0107): Reka `role="checkbox"` buttons, ticked when `aria-checked` is "true". */
+const boxes = () => [...document.body.querySelectorAll<HTMLButtonElement>('.memory-participants-option button[role="checkbox"].veyq-checkbox')]
+const ticked = (b: Element) => b.getAttribute('aria-checked') === 'true'
 /** What the header's "Participants" action does (`MemoryDetail`): the row's exposed `openPicker`. */
 const openPicker = async (w: VueWrapper) => {
   await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker()
@@ -201,7 +203,7 @@ describe('MemoryParticipants: the picker', () => {
     expect(document.body.querySelectorAll('.memory-participants-option .veyq-checkbox')).toHaveLength(5) // not raw inputs
     expect(rows().map((r) => r.querySelector('.memory-participants-name')!.textContent)).toEqual(['Anna', 'Ben', 'Carl', 'Dora', 'Élodie'])
     expect(rows().every((r) => r.querySelector('.veyq-avatar'))).toBe(true)
-    expect(boxes().map((b) => b.checked)).toEqual([true, false, false, false, false])
+    expect(boxes().map(ticked)).toEqual([true, false, false, false, false])
     boxes()[2].click() // Carl
     boxes()[1].click() // Ben
     await flushPromises()
@@ -268,7 +270,7 @@ describe('MemoryParticipants: the picker', () => {
     await flushPromises()
     expect(rows().map((r) => r.classList.contains('is-former'))).toEqual([true, false]) // former + Ben
     const former = boxes()[0]
-    expect(former.checked).toBe(true)
+    expect(ticked(former)).toBe(true)
     former.click()
     await flushPromises()
     saveButton().click()
@@ -283,7 +285,7 @@ describe('MemoryParticipants: the picker', () => {
     const w = await mountRow({ ids: many })
     await openPicker(w)
     const carl = rows().find((l) => l.textContent?.includes('Carl'))!
-    expect(carl.querySelector('input')!.disabled).toBe(true)
+    expect(carl.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.disabled).toBe(true)
     expect(document.body.textContent).toContain(`up to ${MAX_PARTICIPANTS} people`)
   })
 
@@ -291,8 +293,13 @@ describe('MemoryParticipants: the picker', () => {
     const w = await mountRow({ ids: [A] })
     await openPicker(w)
     const first = rows()[0]
-    expect(first.querySelector('.veyq-checkbox')).not.toBeNull()
-    expect(first.querySelectorAll('input')).toHaveLength(1) // one overlay input in the box, nothing stretching beside it
+    const box = first.querySelector('.veyq-checkbox')
+    expect(box).not.toBeNull()
+    expect(first.closest('.veyq-form'), 'the picker sits inside the full-width form rule').not.toBeNull()
+    // The layer's checkbox is a Reka button with no input of its own, so `.veyq-form input` has nothing to stretch...
+    expect(first.querySelectorAll('input')).toHaveLength(0)
+    // ...and the box itself is none of what that rule (`styles/ui.css`) makes full width.
+    expect(box!.matches(".veyq-form .veyq-input, .veyq-form .veyq-password, .veyq-form .veyq-select, .veyq-form .veyq-date-field, .veyq-form input:not([type='radio']):not([type='checkbox']), .veyq-form select, .veyq-form textarea")).toBe(false)
     void w
   })
 })

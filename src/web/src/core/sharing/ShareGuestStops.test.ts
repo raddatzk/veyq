@@ -12,20 +12,16 @@ import { i18n } from '../../i18n'
 
 const DAY = 24 * 3600 * 1000
 
-const Button = {
-  props: ['label'],
-  emits: ['click'],
-  template: '<button class="fix" @click="$emit(\'click\')">{{ label }}</button>',
-}
-
 function mountStops(stops: ShareGuestStop[], over: { createdAt?: Date; canEdit?: boolean; canRenew?: boolean } = {}) {
   return mount(ShareGuestStops, {
     props: { stops, createdAt: over.createdAt ?? new Date(), canEdit: over.canEdit ?? true, canRenew: over.canRenew ?? true },
-    global: { plugins: [realI18n()], stubs: { Button } },
+    global: { plugins: [realI18n()] },
   })
 }
 
 const reasons = (w: ReturnType<typeof mountStops>) => w.findAll('.share-guest-stop').map((s) => s.text())
+/** A fix is the layer's real button (`VeyqButton` renders a plain `<button class="veyq-button">`, ADR 0107). */
+const FIX = 'button.veyq-button.share-guest-stops-fix'
 
 /** Each reason the contract names, alone, with what a reader sees in each language. */
 const CASES: { stop: ShareGuestStop; en: string; de: string }[] = [
@@ -120,16 +116,16 @@ describe('ShareGuestStops', () => {
 
   it('offers the fix the dialog has: an edit adds the password, and sets an end date while the lifetime leaves a day', async () => {
     const pw = mountStops([{ reason: 'linkPassword' }])
-    expect(pw.findAll('.fix').map((b) => b.text())).toEqual(['Add a password'])
-    await pw.find('.fix').trigger('click')
+    expect(pw.findAll(FIX).map((b) => b.text())).toEqual(['Add a password'])
+    await pw.find(FIX).trigger('click')
     expect(pw.emitted('edit')).toHaveLength(1)
 
     const young = mountStops([{ reason: 'linkMaxDays', maxDays: 7 }], { createdAt: new Date(Date.now() - 2 * DAY) })
-    expect(young.findAll('.fix').map((b) => b.text())).toEqual(['Set an end date'])
+    expect(young.findAll(FIX).map((b) => b.text())).toEqual(['Set an end date'])
 
     // Both through the one edit: one button, named plainly
     const both = mountStops([{ reason: 'linkPassword' }, { reason: 'linkMaxDays', maxDays: 7 }])
-    expect(both.findAll('.fix').map((b) => b.text())).toEqual(['Edit link'])
+    expect(both.findAll(FIX).map((b) => b.text())).toEqual(['Edit link'])
   })
 
   it('offers a renew for a link older than the lifetime — no edit can fix it — and says it makes a new address', async () => {
@@ -140,19 +136,19 @@ describe('ShareGuestStops', () => {
     expect(reasons(old)).toEqual([OLD.de])
     i18n.global.locale.value = 'en'
     await old.vm.$nextTick()
-    expect(old.findAll('.fix').map((b) => b.text())).toEqual(['Renew link'])
-    await old.find('.fix').trigger('click')
+    expect(old.findAll(FIX).map((b) => b.text())).toEqual(['Renew link'])
+    await old.find(FIX).trigger('click')
     expect(old.emitted('renew')).toHaveLength(1)
     expect(old.emitted('edit')).toBeUndefined()
   })
 
   it('offers no fix the host does not have, and none for a switch or a paused space', () => {
-    expect(mountStops([{ reason: 'linkPassword' }], { canEdit: false }).findAll('.fix')).toHaveLength(0)
+    expect(mountStops([{ reason: 'linkPassword' }], { canEdit: false }).findAll(FIX)).toHaveLength(0)
     const old = mountStops([{ reason: 'linkMaxDays', maxDays: 7 }], { createdAt: new Date(Date.now() - 30 * DAY), canRenew: false })
-    expect(old.findAll('.fix')).toHaveLength(0)
-    expect(mountStops([CASES[1]!.stop, CASES[3]!.stop]).findAll('.fix')).toHaveLength(0)
+    expect(old.findAll(FIX)).toHaveLength(0)
+    expect(mountStops([CASES[1]!.stop, CASES[3]!.stop]).findAll(FIX)).toHaveLength(0)
     // a moderator's block: no member's fix, the renew included (uc.moderation.take-a-measure)
-    expect(mountStops([{ reason: 'operatorBlocked' }]).findAll('.fix')).toHaveLength(0)
+    expect(mountStops([{ reason: 'operatorBlocked' }]).findAll(FIX)).toHaveLength(0)
   })
 })
 

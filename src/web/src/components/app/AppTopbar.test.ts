@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+// The bar gives every crumb a real `href` (`router.resolve`), so the stub resolves a hash the way the hash history does.
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), resolve: ({ hash }: { hash: string }) => ({ href: `/${hash}` }) }) }))
 vi.mock('../../features/memories/media', () => ({ addMedia: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'

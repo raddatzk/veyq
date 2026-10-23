@@ -75,10 +75,12 @@ async function mountSidebar() {
   await flushPromises()
   return w
 }
+// The bar resolves every crumb's `href` through the router, so it gets a real one (nothing here navigates).
+const topbarRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
 const mountTopbar = (component: Component = AppTopbar) =>
   mount(component, {
     global: {
-      plugins: [realI18n()],
+      plugins: [topbarRouter(), realI18n()],
       stubs: { InvitationsBadge: true, VeyqBreadcrumb: true },
     },
   })
