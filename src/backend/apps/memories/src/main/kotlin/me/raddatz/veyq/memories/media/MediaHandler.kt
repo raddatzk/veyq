@@ -67,6 +67,10 @@ sealed interface MetaOutcome {
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
     /** The tier moved past the stated revision; nothing was written (ADR 0077). Carries the current tier + revision. */
     data class Stale(val wrappedMeta: String?, val metaRevision: Long) : MetaOutcome, HttpFailure by Failures.staleRevision
+    /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
+    object StaleEpoch : MetaOutcome, HttpFailure by Failures.staleEpoch
+    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    object RekeyPending : MetaOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface DeleteMediaOutcome {
@@ -115,6 +119,10 @@ sealed interface CreateBucketOutcome {
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoNode : CreateBucketOutcome, HttpFailure by Failures.nodeNotFound
     object IdTaken : CreateBucketOutcome, HttpFailure by Failures.idTaken
+    /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
+    object StaleEpoch : CreateBucketOutcome, HttpFailure by Failures.staleEpoch
+    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    object RekeyPending : CreateBucketOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface RenameBucketOutcome {
@@ -125,6 +133,10 @@ sealed interface RenameBucketOutcome {
     object NoBucket : RenameBucketOutcome, HttpFailure by httpFailure("bucket_not_found", NOT_FOUND)
     /** The bucket is a primary (not renameable) — a 403. */
     object Forbidden : RenameBucketOutcome, HttpFailure by httpFailure("illegal_target", FORBIDDEN)
+    /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
+    object StaleEpoch : RenameBucketOutcome, HttpFailure by Failures.staleEpoch
+    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    object RekeyPending : RenameBucketOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface DeleteBucketOutcome {
@@ -228,14 +240,16 @@ class MediaHandler(
         return MediaExifOutcome.Found(media.wrappedExif)
     }
 
-    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date), revision-checked. */
-    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaRevision: Long): MetaOutcome {
+    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date), revision-checked and
+     *  epoch-gated on the medium's node ([nodeEpoch], ADR 0109 point 6). */
+    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaRevision: Long, nodeEpoch: Int): MetaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
-        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision, PrincipalKey.User(userId))) {
+        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))) {
             is MediaStore.SetMetaResult.Written -> MetaOutcome.Found(r.wrappedMeta)
             MediaStore.SetMetaResult.Missing -> MetaOutcome.NoMedia
             is MediaStore.SetMetaResult.Stale -> MetaOutcome.Stale(r.wrappedMeta, r.metaRevision)
+            is MediaStore.SetMetaResult.EpochRefused -> epochRefusal(r.code, MetaOutcome.StaleEpoch, MetaOutcome.RekeyPending)
         }
     }
 
@@ -288,7 +302,9 @@ class MediaHandler(
      * be a **primary** (any owner's — so a member can add sub-buckets under a contributor's root), and the new sub
      * inherits that root's owner_key. A missing/non-primary parent → Forbidden (403). Non-member / unknown node → NoNode (404).
      */
-    fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String, parentBucketId: String?): CreateBucketOutcome {
+    fun createBucket(
+        userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String, parentBucketId: String?, nodeEpoch: Int,
+    ): CreateBucketOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateBucketOutcome.NoNode, CreateBucketOutcome.Suspended, CreateBucketOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CreateBucketOutcome.NoNode
@@ -301,13 +317,19 @@ class MediaHandler(
         }
         // The client-minted id (ADR 0072): the sealed name is bound to it.
         return createOrConflict(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
-            store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName, PrincipalKey.User(userId))
-                ?.let { CreateBucketOutcome.Ok(it) } ?: CreateBucketOutcome.IdTaken
+            when (val r = store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName, nodeEpoch, PrincipalKey.User(userId))) {
+                is MediaStore.CreateSubBucketResult.Created -> CreateBucketOutcome.Ok(r.bucket)
+                MediaStore.CreateSubBucketResult.IdTaken -> CreateBucketOutcome.IdTaken
+                is MediaStore.CreateSubBucketResult.EpochRefused -> when (r.code) {
+                    MediaStore.NODE_NOT_FOUND -> CreateBucketOutcome.NoNode
+                    else -> epochRefusal(r.code, CreateBucketOutcome.StaleEpoch, CreateBucketOutcome.RekeyPending)
+                }
+            }
         }
     }
 
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */
-    fun renameBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String): RenameBucketOutcome {
+    fun renameBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String, nodeEpoch: Int): RenameBucketOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RenameBucketOutcome.NoBucket, RenameBucketOutcome.Suspended, RenameBucketOutcome.Deleting)?.let { return it }
         // ADR 0061: the bucket lookup is keyed on (scope, node, bucket) and never touches the node row, so the
@@ -316,8 +338,11 @@ class MediaHandler(
         if (store.findNode(scopeId, nodeId) == null) return RenameBucketOutcome.NoBucket
         val b = store.findBucket(scopeId, nodeId, bucketId) ?: return RenameBucketOutcome.NoBucket
         if (b.isPrimary) return RenameBucketOutcome.Forbidden
-        val row = store.renameBucket(bucketId, sealedName, PrincipalKey.User(userId)) ?: return RenameBucketOutcome.NoBucket
-        return RenameBucketOutcome.Ok(row)
+        return when (val r = store.renameBucket(scopeId, nodeId, bucketId, sealedName, nodeEpoch, PrincipalKey.User(userId))) {
+            is MediaStore.RenameResult.Renamed -> RenameBucketOutcome.Ok(r.bucket)
+            MediaStore.RenameResult.Missing -> RenameBucketOutcome.NoBucket
+            is MediaStore.RenameResult.EpochRefused -> epochRefusal(r.code, RenameBucketOutcome.StaleEpoch, RenameBucketOutcome.RekeyPending)
+        }
     }
 
     /**
@@ -347,4 +372,8 @@ class MediaHandler(
         val ok = store.moveMedia(scopeId, nodeId, mediaIds, targetBucketId)
         return if (ok) MoveMediaOutcome.Done else MoveMediaOutcome.Forbidden
     }
+
+    /** A refused epoch's code ([MediaStore.epochCode]) as the operation's own outcome: [stale] or [pending]. */
+    private fun <T> epochRefusal(code: String, stale: T, pending: T): T =
+        if (code == Failures.nodeRekeyPending.code) pending else stale
 }

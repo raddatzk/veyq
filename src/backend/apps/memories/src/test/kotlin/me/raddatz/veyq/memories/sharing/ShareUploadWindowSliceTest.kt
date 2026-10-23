@@ -98,7 +98,7 @@ class ShareUploadWindowSliceTest {
     }
 
     private fun identity(shareId: String): String =
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path("contributorToken")
 
@@ -124,7 +124,7 @@ class ShareUploadWindowSliceTest {
 
     private fun complete(shareId: String, contributorToken: String, uploadId: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200)
 }

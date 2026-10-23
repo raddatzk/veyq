@@ -75,7 +75,7 @@ class ShareMediaRouteSliceTest {
         },
         "reissueShare" to Probe("POST", "/api/shares/{shareId}/reissue") { w ->
             val id = TestIds.shareId()
-            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"wrap":"d3JhcA==","sealedName":"$sealedName","sealedShareKey":"cmVjb3ZlcmFibGUta2V5","sealedShareKeyEpoch":1}""")
+            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"wrap":"d3JhcA==","sealedName":"$sealedName","sealedShareKey":"cmVjb3ZlcmFibGUta2V5","nodeEpoch":0,"sealedShareKeyEpoch":1}""")
                 .`when`().post("/api/shares/${w.unknown}/reissue").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "resolveShare" to Probe("GET", "/api/shares/{shareId}") { w ->
@@ -99,7 +99,7 @@ class ShareMediaRouteSliceTest {
         },
         "createShareIdentity" to Probe("POST", "/api/shares/{shareId}/identities") { w ->
             given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(w.unknown))
-                .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
+                .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
                 .`when`().post("/api/shares/${w.unknown}/identities").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "startShareBlobUploads" to Probe("POST", "/api/shares/{shareId}/blob-uploads") { w ->
@@ -115,12 +115,12 @@ class ShareMediaRouteSliceTest {
             // (GuestNodeRules), so only this handler answers `illegal_scope` here.
             val id = TestIds.uuid()
             given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
-                .body("""{"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","epoch":0,"wrappedContentKey":"d3JhcA=="}""")
+                .body("""{"parentEpoch":0,"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","epoch":0,"wrappedContentKey":"d3JhcA=="}""")
                 .`when`().post("/api/shares/${w.shareId}/nodes").then().statusCode(422).body("code", equalTo("illegal_scope"))
         },
         "updateShareNode" to Probe("PATCH", "/api/shares/{shareId}/nodes/{nodeId}") { w ->
             given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
-                .body("""{"parentId":"${w.memory}","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA==","placementRevision":0}""")
+                .body("""{"parentEpoch":0,"parentId":"${w.memory}","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA==","placementRevision":0}""")
                 .`when`().patch("/api/shares/${w.shareId}/nodes/${TestIds.uuid()}").then().statusCode(404).body("code", equalTo("node_not_found"))
         },
         "abandonShareNode" to Probe("DELETE", "/api/shares/{shareId}/nodes/{nodeId}") { w ->
@@ -148,7 +148,7 @@ class ShareMediaRouteSliceTest {
         },
         "completeShareMedia" to Probe("POST", "/api/shares/{shareId}/media") { w ->
             given().contentType(ContentType.JSON)
-                .body("""{"contributorToken":"${w.token}","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"${TestIds.uuid()}"}]}""")
+                .body("""{"nodeEpoch":0,"contributorToken":"${w.token}","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"${TestIds.uuid()}"}]}""")
                 .`when`().post("/api/shares/${w.shareId}/media").then().statusCode(200).body("results[0].error", equalTo("upload_not_found"))
         },
         "deleteShareMedia" to Probe("DELETE", "/api/shares/{shareId}/media/{mediaId}") { w ->
@@ -197,7 +197,7 @@ class ShareMediaRouteSliceTest {
             .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ_WRITE",${shareKeysJson("READ_WRITE", memory)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().statusCode(201)
         val token: String = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId))
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract().path("contributorToken")
         return World(userId, memory, shareId, token, TestIds.shareId())
     }

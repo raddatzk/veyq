@@ -167,7 +167,7 @@ class ShareDeletedNodeSliceTest {
         given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"slugToken":"cmVzdG9yZWQtc2x1Zw=="}""")
+            .body("""{"parentEpoch":0,"slugToken":"cmVzdG9yZWQtc2x1Zw=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/restore").then().statusCode(204)
 
         given().`when`().get("/api/shares/$shareId")
@@ -297,7 +297,7 @@ class ShareDeletedNodeSliceTest {
     /** A guest identity on a WRITE_ONLY share → (identityId, contributorToken). */
     private fun createIdentity(shareId: String): Pair<String, String> {
         val r = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson("WRITE_ONLY")}}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson("WRITE_ONLY")}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
@@ -310,7 +310,7 @@ class ShareDeletedNodeSliceTest {
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).extract().path<String>("results[0].mediaId")
     }

@@ -120,7 +120,7 @@ class UploadWindowMemoriesSliceTest {
 
     private fun complete(userId: String, scopeId: String, nodeId: String, uploadId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$nodeId","mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"items":[{"nodeId":"$nodeId","mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
 

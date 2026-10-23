@@ -52,7 +52,7 @@ class GuestWriteRecordMemoriesSliceTest {
             .`when`().post("/api/shares").then().statusCode(201).extract().path("shareId")
         val id = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId))
             .header("X-Forwarded-For", "203.0.113.30:40000")
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract()
         return Guest(scopeId, shareId, id.path("identityId"), id.path("contributorToken"))
     }
@@ -62,7 +62,7 @@ class GuestWriteRecordMemoriesSliceTest {
             .body("""{"contributorToken":"${g.token}","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/${g.shareId}/blob-uploads").then().statusCode(200).extract().path("results[0].uploadId")
         return given().contentType(ContentType.JSON).header("X-Forwarded-For", xff)
-            .body("""{"contributorToken":"${g.token}","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","wrappedMeta":"bWV0YQ=="}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"${g.token}","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/shares/${g.shareId}/media").then().statusCode(200)
             .body("results[0].mediaId", notNullValue()).extract().path("results[0].mediaId")
     }
@@ -86,7 +86,7 @@ class GuestWriteRecordMemoriesSliceTest {
         val g = guest()
         val missing = TestIds.uuid()
         given().contentType(ContentType.JSON).header("X-Forwarded-For", "203.0.113.32")
-            .body("""{"contributorToken":"${g.token}","items":[{"mediaId":"$missing","originalUploadId":"${TestIds.uuid()}"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"${g.token}","items":[{"mediaId":"$missing","originalUploadId":"${TestIds.uuid()}"}]}""")
             .`when`().post("/api/shares/${g.shareId}/media").then().statusCode(200).body("results[0].error", equalTo("upload_not_found"))
         assertEquals(0, rows(missing).size)
         assertEquals(1, rows(upload(g, xff = "203.0.113.32")).size, "control: one that attaches records")

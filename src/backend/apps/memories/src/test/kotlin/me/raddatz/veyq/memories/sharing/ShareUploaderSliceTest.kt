@@ -231,7 +231,7 @@ class ShareUploaderSliceTest {
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200)
         val usageBefore = QuarkusTransaction.requiringNew().call { quota.tenantUsage(tenantId) }
@@ -296,7 +296,7 @@ class ShareUploaderSliceTest {
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
 
         val mediaId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).extract().path<String>("results[0].mediaId")
 
@@ -392,7 +392,7 @@ class ShareUploaderSliceTest {
         val mediaId = seedMedia(scopeId, memory, identityId = null)
 
         // a READ share accepts neither an identity (upload) nor a delete
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
         given().header("X-Contributor-Token", "notARealToken000000000000000000000000000000")
@@ -411,7 +411,7 @@ class ShareUploaderSliceTest {
             .`when`().post("/api/shares")
 
     private fun postIdentity(shareId: String, key: String) =
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"$key}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
 
     /** An identity on a WRITE_ONLY share — with the wrapped key such an identity must hand over. */

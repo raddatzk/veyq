@@ -188,7 +188,7 @@ class ShareWriteProofSliceTest {
     private fun nameGuest(shareId: String, writeToken: String?, role: String = "READ_WRITE") =
         given().contentType(ContentType.JSON)
             .apply { if (writeToken != null) header(ShareWriteProof.HEADER, writeToken) }
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedGuestName"${identityKeyJson(role)}}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedGuestName"${identityKeyJson(role)}}""")
             .`when`().post("/api/shares/$shareId/identities")
 
     private fun identitiesOf(shareId: String): Long =
@@ -202,7 +202,7 @@ class ShareWriteProofSliceTest {
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path<String>("results[0].uploadId")
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).body("results[0].mediaId", notNullValue())
     }

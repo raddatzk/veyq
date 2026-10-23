@@ -77,7 +77,7 @@ class MediaBudgetBranchSliceTest {
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original",""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","nodeEpoch":0,"originalUploadId":"$original",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -121,8 +121,8 @@ class MediaBudgetBranchSliceTest {
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(short)}","originalUploadId":"$short"},""" +
-                    """{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(exact)}","originalUploadId":"$exact"}]}""",
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(short)}","nodeEpoch":0,"originalUploadId":"$short"},""" +
+                    """{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(exact)}","nodeEpoch":0,"originalUploadId":"$exact"}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)

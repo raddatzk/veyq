@@ -49,9 +49,9 @@ class MediaFieldEditorSliceTest {
         assertEquals(PrincipalKey.Share(identity), media(guests).metaEditor, "a guest's upload names the guest")
 
         // Control, the other kind: the member's edit takes the guest's meta over; a cleared meta has no editor.
-        putMeta(userId, scopeId, guests, """{"wrappedMeta":"ZWRpdGVk","metaRevision":0}""")
+        putMeta(userId, scopeId, guests, """{"wrappedMeta":"ZWRpdGVk","nodeEpoch":0,"metaRevision":0}""")
         assertEquals(PrincipalKey.User(userId), media(guests).metaEditor)
-        putMeta(userId, scopeId, guests, """{"wrappedMeta":null,"metaRevision":1}""")
+        putMeta(userId, scopeId, guests, """{"wrappedMeta":null,"nodeEpoch":0,"metaRevision":1}""")
         assertNull(media(guests).metaEditor)
     }
 
@@ -70,14 +70,14 @@ class MediaFieldEditorSliceTest {
 
         // A member names a sub-bucket under the contributor's root: the member, not the root's owner, is its editor.
         val sub = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"${contributors.id}"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"${contributors.id}"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
         assertEquals(PrincipalKey.User(userId), bucket(sub).nameEditor)
 
         // Another member's rename takes it over.
         val other = addMember(scopeId, tenantId)
-        given().header("Authorization", bearer(other)).contentType(ContentType.JSON).body("""{"sealedName":"cmVuYW1lZA=="}""")
+        given().header("Authorization", bearer(other)).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"sealedName":"cmVuYW1lZA=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$sub").then().statusCode(200)
         assertEquals(PrincipalKey.User(other), bucket(sub).nameEditor)
     }
@@ -91,7 +91,7 @@ class MediaFieldEditorSliceTest {
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
         val metaField = wrappedMeta?.let { ""","wrappedMeta":"$it"""" } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue()).extract().path("results[0].mediaId")
     }
@@ -104,7 +104,7 @@ class MediaFieldEditorSliceTest {
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ_WRITE","wrap":"d3JhcA==","sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         val r = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract()
         return Contributor(r.path("identityId"), r.path("contributorToken"), shareId)
@@ -116,7 +116,7 @@ class MediaFieldEditorSliceTest {
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","wrappedMeta":"$wrappedMeta"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","wrappedMeta":"$wrappedMeta"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).body("results[0].error", nullValue()).extract().path("results[0].mediaId")
     }

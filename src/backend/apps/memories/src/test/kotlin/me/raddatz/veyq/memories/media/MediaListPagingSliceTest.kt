@@ -45,7 +45,7 @@ class MediaListPagingSliceTest {
         val edited = first.ids[3]
         val trashed = first.ids[7]
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"ZWRpdGVk","metaRevision":0}""")
+            .body("""{"wrappedMeta":"ZWRpdGVk","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/media/$edited/meta").then().statusCode(200)
         val second = page(userId, scopeId, memory, limit = 500, since = first.cursor, sinceDelete = first.deleteRevision)
         held.putAll(second.metas)

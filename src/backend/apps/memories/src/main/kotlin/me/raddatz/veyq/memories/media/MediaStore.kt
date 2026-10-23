@@ -12,10 +12,12 @@ import me.raddatz.veyq.core.blob.SharedBlobs
 import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.items.ItemsCursor
 import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -80,6 +82,21 @@ sealed interface OriginalAttach {
     data class Shared(val scopeId: String, val spec: SharedBlobSpec) : OriginalAttach
 }
 
+/** What [MediaStore.attach] did. Only [Attached] wrote anything. */
+sealed interface AttachResult {
+    data class Attached(val blobId: String, val mediaId: String) : AttachResult
+
+    /** A session was spent concurrently, or the caller's gate refused it in the attach's transaction. */
+    object NotAdmitted : AttachResult
+
+    /** A shared original's source did not pass [SharedBlobs.persist]. */
+    object SharedSourceInvalid : AttachResult
+
+    /** The node's epoch gate refused the item's `nodeEpoch` (ADR 0109 point 6): [code] is the per-item error
+     *  (`stale_epoch`, `node_rekey_pending`, or `node_not_found` for a node gone since). Its uploads stay open. */
+    data class EpochRefused(val code: String) : AttachResult
+}
+
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
 data class BucketRow(
     val bucketId: String,
@@ -115,6 +132,8 @@ class MediaStore(
     private val ledger: ErasureLedger,
     /** Core's measures: a content block on a medium ends with it (ADR 0093 § 6), from [purgeMediaRows]. */
     private val measures: MeasureTargets,
+    /** Layer 1 of ADR 0109 point 6: every write here that seals under a node's key states that node's epoch. */
+    private val epochs: NodeEpochGate,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -138,6 +157,10 @@ class MediaStore(
      * [admitted] is the caller's gate asked again, before anything else in this transaction — a guest's link under
      * the row lock its delete holds (`ShareMediaHandler.complete`); a member's complete passes none.
      *
+     * Every wrap and seal of the item is under [nodeId]'s key, so the item states that node's epoch ([nodeEpoch]) and
+     * the epoch gate judges it under the node's row lock — after the scope and share locks [admitted] and a shared
+     * original take, before the first write (ADR 0109 point 6). A refusal writes nothing: the sessions stay open.
+     *
      * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
      * transaction's first write and its row count decides. Two completes of one upload both found the session live;
      * the loser's delete waits for the winner's and then hits no row, so it answers `upload_not_found` exactly as a
@@ -152,13 +175,14 @@ class MediaStore(
         derivatives: List<DerivativeAttach>,
         wrappedMeta: String?,
         wrappedExif: String?,
+        nodeEpoch: Int,
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a READ_WRITE share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
         admitted: () -> Boolean = { true },
         /** Told the medium's id last, once it is attached (the guest-write record, ADR 0093 § 10); never on a refusal. */
         attached: (mediaId: String) -> Unit = {},
-    ): Pair<String?, String>? {
-        if (!admitted()) return null
+    ): AttachResult {
+        if (!admitted()) return AttachResult.NotAdmitted
         val scopeId = when (original) {
             is OriginalAttach.Upload -> original.session.scopeId
             is OriginalAttach.Shared -> original.scopeId
@@ -166,19 +190,21 @@ class MediaStore(
         // A shared original's source is checked under the scope row's lock, the order every attachment writer takes
         // (scope, then the sessions it spends), so a removal of the banner it shares is seen or waits (`SharedBlobs`).
         if (original is OriginalAttach.Shared) nodes.lockScope(scopeId)
+        val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
+        lockPrimary(nodeId, ownerKey) // the existing row [ensurePrimaryBucket] may refresh, before the node's lock
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return AttachResult.EpochRefused(it) }
         val sessionIds = listOfNotNull((original as? OriginalAttach.Upload)?.session?.id) + derivatives.map { it.session.id }
         if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
-            return null
+            return AttachResult.NotAdmitted
         }
         val originalBlobId = when (original) {
             is OriginalAttach.Upload -> blobs.persistBlob(original.session, original.manifest)
             is OriginalAttach.Shared -> shared.persist(scopeId, nodeId, original.spec) ?: run {
                 QuarkusTransaction.setRollbackOnly() // the derivatives' sessions stay open for a retry as an upload
-                return null to mediaId
+                return AttachResult.SharedSourceInvalid
             }
         }
-        val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
         val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val now = Instant.now()
         val medium = MediaEntity().apply {
@@ -210,8 +236,15 @@ class MediaStore(
         // the revision it moved to is the new medium's place at the list's end (ADR 0033 decision 3, [MediaEntity.position]).
         medium.position = items.bump(scopeId, nodeId)
         attached(mediaId)
-        return originalBlobId to mediaId
+        return AttachResult.Attached(originalBlobId, mediaId)
     }
+
+    /**
+     * The epoch gate on [nodeId] in the caller's transaction (ADR 0109 point 6), as a per-item error code — null when
+     * [stated] holds. Takes the node row's lock: a caller takes it after any scope or share lock it holds and before
+     * any media, bucket or blob row of its own.
+     */
+    fun epochRefusal(scopeId: String, nodeId: String, stated: Int): String? = epochCode(epochs.check(scopeId, nodeId, stated))
 
     /**
      * One page of the node's live media as a **keyset delta** past [since] (cr-0107, ADR 0033 decisions 3 and 6): at most
@@ -409,6 +442,8 @@ class MediaStore(
         data class Written(val wrappedMeta: String?) : SetMetaResult
         object Missing : SetMetaResult
         data class Stale(val wrappedMeta: String?, val metaRevision: Long) : SetMetaResult
+        /** The medium's node refused [nodeEpoch] ([epochRefusal]'s code); nothing was written. */
+        data class EpochRefused(val code: String) : SetMetaResult
     }
 
     /**
@@ -416,11 +451,22 @@ class MediaStore(
      * [expectedRevision] is still the stored `metaRevision` (ADR 0077). A miss writes nothing and moves no counter, so
      * no open gallery re-fetches a media that did not change.
      *
-     * The compare-and-set is a bulk UPDATE that runs before this transaction loads the entity — the order
-     * `NodesStore.applyUpdate` explains: the entity read afterwards holds the row as it now is.
+     * The meta is sealed under the medium's node's key, so [nodeEpoch] is judged under that node's row lock before the
+     * row is written (ADR 0109 point 6) — in the one lock order (see the note above [ensurePrimaryBucket]): the medium's
+     * row first, then the node's. The compare-and-set is then a bulk UPDATE, which does not touch the entity the lock
+     * loaded, so that entity is refreshed afterwards to hold the row as it now is (`NodesStore.applyUpdate`'s reason).
      */
     @Transactional
-    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedRevision: Long, editor: PrincipalKey.User): SetMetaResult {
+    fun setMeta(
+        scopeId: String, mediaId: String, wrappedMeta: String?, expectedRevision: Long, nodeEpoch: Int, editor: PrincipalKey.User,
+    ): SetMetaResult {
+        val media = MediaEntity.find("id = ?1 and scopeId = ?2", mediaId, scopeId)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return SetMetaResult.Missing
+        when (val code = epochRefusal(scopeId, media.nodeId, nodeEpoch)) {
+            null -> Unit
+            NODE_NOT_FOUND -> return SetMetaResult.Missing
+            else -> return SetMetaResult.EpochRefused(code)
+        }
         // cr-0107: the edit advances updatedAt (the keyset cursor), so the live poll re-fetches it. Panache binds no
         // null parameter, so a cleared tier (null) is spelled into the statement rather than bound — and so is its
         // editor (ADR 0093 § 8): a cleared meta has none, a written one the member who wrote it.
@@ -434,7 +480,7 @@ class MediaStore(
                 *bound, wrappedMeta, editor.userId,
             )
         }
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return SetMetaResult.Missing
+        MediaEntity.getEntityManager().refresh(media)
         if (rows == 0) return SetMetaResult.Stale(media.wrappedMeta, media.metaRevision)
         placeAt(mediaId, items.bump(scopeId, media.nodeId)) // a meta edit moves the item revision, not the delete revision
         return SetMetaResult.Written(media.wrappedMeta)
@@ -524,11 +570,26 @@ class MediaStore(
      * styleguide §12: the parent's row lock): a second resolve of a missing primary waits for the first and then finds
      * it. Read without it, two first uploads of one uploader both found none and both created one
      * (`MediaCreateRaceSliceTest.concurrentFirstUploadsOfOneUploaderShareOnePrimary`). The lock is only taken —
-     * nothing here reads the node, so a copy this transaction already holds does not matter. A caller that also locks
-     * a bucket or media rows takes those first (bucket → media → node: [deleteBucketReparent], [moveMedia]), the order
-     * a trash or a guest's delete (media → node) agrees with; `MediaLockOrderRaceSliceTest` deadlocks on either
-     * writer's pair swapped (inbox #319).
+     * nothing here reads the node, so a copy this transaction already holds does not matter.
+     *
+     * **The one lock order of every Memories writer** (ADR 0109 point 6, inbox #319): the scope row, then a share row
+     * (where the path takes them), then the writer's own EXISTING rows — buckets, then media, each set in id order — then
+     * the node row (the epoch gate's lock, or this one), then inserts and blob rows (sessions, `veyq_blob`, through
+     * [StoredObjectLocks]) and the item revision row last. So a writer that writes an existing bucket or medium locks it
+     * before the node: [deleteBucketReparent] and [moveMedia] (bucket → media → node), a trash or a guest's delete
+     * (media → node), [setMeta] and [renameBucket] (their row, then the gate), and [attach] / [createSubBucket], which
+     * lock the existing primary this may refresh ([lockPrimary]) before the gate. A re-key's commit takes the same order
+     * (`MediaNodeRekeyParticipant.lockRows` before the node). `MediaLockOrderRaceSliceTest` deadlocks on a writer's pair
+     * swapped.
      */
+    /** Lock [ownerKey]'s existing primary in [nodeId], if any — before the node's lock, as the one lock order (the note
+     *  on [ensurePrimaryBucket]) wants of a row [ensurePrimaryBucket] may write (a still-missing name). A primary
+     *  created after it is an insert, under the node's lock. */
+    private fun lockPrimary(nodeId: String, ownerKey: String) {
+        BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+    }
+
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
         NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
         val existing = BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey).firstResult()
@@ -578,13 +639,24 @@ class MediaStore(
     /** Is the client-minted [bucketId] already a bucket, in any scope? */
     fun bucketIdTaken(bucketId: String): Boolean = BucketEntity.findById(bucketId) != null
 
+    /** What [createSubBucket] did: created it, found the id taken, or the node refused the stated epoch. */
+    sealed interface CreateSubBucketResult {
+        data class Created(val bucket: BucketRow) : CreateSubBucketResult
+        object IdTaken : CreateSubBucketResult
+        /** [epochRefusal]'s code; nothing was written. */
+        data class EpochRefused(val code: String) : CreateSubBucketResult
+    }
+
     /** Create a sub-bucket one level under `ownerKey`'s primary (materialized if needed) — the caller's own or,
-     *  post-cr0123, a contributor root a member curates. */
+     *  post-cr0123, a contributor root a member curates. Its name is sealed under the node's key, so [nodeEpoch] is
+     *  judged first, under the node's row lock (ADR 0109 point 6). */
     @Transactional
     fun createSubBucket(
-        bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String, editor: PrincipalKey.User,
-    ): BucketRow? {
-        if (bucketIdTaken(bucketId)) return null // taken anywhere → nothing written (ADR 0072)
+        bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String, nodeEpoch: Int, editor: PrincipalKey.User,
+    ): CreateSubBucketResult {
+        lockPrimary(nodeId, ownerKey) // the existing row this may refresh, before the node's lock
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return CreateSubBucketResult.EpochRefused(it) }
+        if (bucketIdTaken(bucketId)) return CreateSubBucketResult.IdTaken // taken anywhere → nothing written (ADR 0072)
         val primary = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val sub = BucketEntity().apply {
             id = bucketId
@@ -597,22 +669,38 @@ class MediaStore(
             isPrimary = false
             createdAt = Instant.now()
         }.also { it.persist() }
-        return BucketRow(sub.id, sub.ownerKey, sub.parentBucketId, false, sub.sealedName, 0)
+        return CreateSubBucketResult.Created(BucketRow(sub.id, sub.ownerKey, sub.parentBucketId, false, sub.sealedName, 0))
     }
 
     /** A bucket in this scope+node (for the handler's member-gated sub-bucket ops + primary check), or null. */
     fun findBucket(scopeId: String, nodeId: String, bucketId: String): BucketEntity? =
         BucketEntity.findById(bucketId)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId }
 
-    /** Re-store a sub-bucket's sealed name (the handler validated own + non-primary). Returns the updated row. */
+    /** What [renameBucket] did: renamed it, found no such bucket, or the node refused the stated epoch. */
+    sealed interface RenameResult {
+        data class Renamed(val bucket: BucketRow) : RenameResult
+        object Missing : RenameResult
+        /** [epochRefusal]'s code; nothing was written. */
+        data class EpochRefused(val code: String) : RenameResult
+    }
+
+    /** Re-store a sub-bucket's sealed name (the handler validated own + non-primary). The name is sealed under the
+     *  node's key, so [nodeEpoch] is judged under the node's row lock before it is written (ADR 0109 point 6) — the
+     *  bucket's row locked first, then the node's (the one lock order, see the note above [ensurePrimaryBucket]). */
     @Transactional
-    fun renameBucket(bucketId: String, sealedName: String, editor: PrincipalKey.User): BucketRow? {
-        val b = BucketEntity.findById(bucketId) ?: return null
+    fun renameBucket(scopeId: String, nodeId: String, bucketId: String, sealedName: String, nodeEpoch: Int, editor: PrincipalKey.User): RenameResult {
+        val b = BucketEntity.findById(bucketId, LockModeType.PESSIMISTIC_WRITE)
+            ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId } ?: return RenameResult.Missing
+        when (val code = epochRefusal(scopeId, nodeId, nodeEpoch)) {
+            null -> Unit
+            NODE_NOT_FOUND -> return RenameResult.Missing
+            else -> return RenameResult.EpochRefused(code)
+        }
         b.sealedName = sealedName
         b.nameWrittenBy(editor)
         b.persist()
         val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", b.nodeId, b.id).toInt()
-        return BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count)
+        return RenameResult.Renamed(BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count))
     }
 
     /**
@@ -671,5 +759,18 @@ class MediaStore(
         media.forEach { it.bucketId = target.id; it.persist() }
         items.bump(scopeId, nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
         return true
+    }
+
+    companion object {
+        /** [epochRefusal]'s code for a node that is gone. */
+        val NODE_NOT_FOUND: String = Failures.nodeNotFound.code
+
+        /** A gate verdict as a per-item error code, null for [NodeEpochGate.Verdict.OK]. */
+        fun epochCode(verdict: NodeEpochGate.Verdict): String? = when (verdict) {
+            NodeEpochGate.Verdict.OK -> null
+            NodeEpochGate.Verdict.STALE -> Failures.staleEpoch.code
+            NodeEpochGate.Verdict.PENDING -> Failures.nodeRekeyPending.code
+            NodeEpochGate.Verdict.MISSING -> NODE_NOT_FOUND
+        }
     }
 }

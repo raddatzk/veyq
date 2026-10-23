@@ -217,16 +217,16 @@ class SharedBlobSliceTest {
         // exactly one form
         CoverKit.start(userId, scopeId, memory).let { up ->
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"uploadId":"${up.uploadId}","shared":${shared(live.preview.blobId)},"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+                .body("""{"uploadId":"${up.uploadId}","shared":${shared(live.preview.blobId)},"wrappedMeta":"bWV0YQ==","nodeEpoch":0,"metaRevision":0}""")
                 .`when`().put("/api/scopes/$scopeId/nodes/$memory/cover").then().statusCode(400).body("code", equalTo("invalid_request"))
         }
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+            .body("""{"wrappedMeta":"bWV0YQ==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$memory/cover").then().statusCode(400).body("code", equalTo("invalid_request"))
 
         // the seam: a guest's completion never names a shared original, whatever a caller hands it
         val node = QuarkusTransaction.requiringNew().call { NodeEntity.findById(memory)!! }
-        val item = CompleteItem(UUID.randomUUID().toString(), memory, null, emptyList(), emptyMap(), specOf(live.preview.blobId))
+        val item = CompleteItem(UUID.randomUUID().toString(), memory, null, emptyList(), mapOf(MediaUploadCompletion.NODE_EPOCH to "0"), specOf(live.preview.blobId))
         assertEquals("shared_source_invalid", completion.complete(scopeId, node, item, UploadOpener.Contributor(UUID.randomUUID().toString()), { true }).error)
 
         // control on the same predicate: the node's own live medium is a source
@@ -433,7 +433,7 @@ class SharedBlobSliceTest {
 
     private fun setCover(userId: String, scopeId: String, nodeId: String, shared: String): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shared":$shared,"expectedBlobId":null,"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+            .body("""{"shared":$shared,"expectedBlobId":null,"wrappedMeta":"bWV0YQ==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/cover").then()
 
     private fun completeShared(
@@ -441,7 +441,7 @@ class SharedBlobSliceTest {
     ): ValidatableResponse {
         val derivatives = previewUploadId?.let { """[{"kind":"PREVIEW","uploadId":"$it"}]""" } ?: "[]"
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalShared":$shared,"derivatives":$derivatives}]}""")
+            .body("""{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","nodeEpoch":0,"originalShared":$shared,"derivatives":$derivatives}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200)
     }
 

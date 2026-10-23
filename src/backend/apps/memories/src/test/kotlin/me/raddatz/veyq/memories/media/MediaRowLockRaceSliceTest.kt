@@ -87,7 +87,7 @@ class MediaRowLockRaceSliceTest {
                 change = {
                     assertEquals(
                         NodesStore.ApplyResult.Applied,
-                        tree.applyUpdate(g.upload.scopeId, g.upload.nodeId, NodesStore.Placement(g.outside, "bmV3", "c2x1Zy0$round", CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
+                        tree.applyUpdate(g.upload.scopeId, g.upload.nodeId, NodesStore.Placement(g.outside, "bmV3", "c2x1Zy0$round", CONTENT_KEY, 0), null, null, null, FIXTURE_EDITOR),
                         "round $round: the move",
                     )
                 },

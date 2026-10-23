@@ -99,7 +99,7 @@ class GuestWriteRaceSliceTest {
 
     private fun postIdentity(shareId: String, identityId: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"identityId":"$identityId","sealedDisplayName":"$sealedUploaderName"${identityKeyJson("WRITE_ONLY")}}""")
+            .body("""{"nodeEpoch":0,"identityId":"$identityId","sealedDisplayName":"$sealedUploaderName"${identityKeyJson("WRITE_ONLY")}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().extract()
 
@@ -119,7 +119,7 @@ class GuestWriteRaceSliceTest {
     /** A guest complete's answer as (status, the item's error). */
     private fun complete(shareId: String, token: String, uploadId: String): Pair<Int, String?> =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media").then().extract()
             .let { r -> r.statusCode() to runCatching { r.path<String?>("results[0].error") }.getOrNull() }
 

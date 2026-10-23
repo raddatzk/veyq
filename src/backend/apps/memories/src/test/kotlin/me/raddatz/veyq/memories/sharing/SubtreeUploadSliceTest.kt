@@ -126,7 +126,7 @@ class SubtreeUploadSliceTest {
         deleteOwn(link, own).statusCode(204)
 
         val away = seedNode(t.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
-        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.memory, placementTo(away), null, null, null))
+        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.memory, placementTo(away), null, null, null, null))
         deleteOwn(link, movedAway).statusCode(404).body("code", equalTo("share_media_not_found"))
         QuarkusTransaction.requiringNew().run {
             assertNull(MediaEntity.findById(own), "the guest's own medium is gone")
@@ -241,7 +241,7 @@ class SubtreeUploadSliceTest {
 
     private fun complete(link: GuestTreeShare.Link, target: String?, uploadId: String): ValidatableResponse =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${link.token}"${nodeField(target)},"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"${link.token}"${nodeField(target)},"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/${link.shareId}/media").then()
 
     private fun stage(uploadId: String) =

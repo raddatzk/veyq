@@ -22,7 +22,7 @@ object SharedObjectKit {
         val preview = CoverKit.start(userId, scopeId, nodeId, role = "PREVIEW", ownerId = mediaId)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalUploadId":"${original.uploadId}",""" +
+                """{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"${original.uploadId}",""" +
                     """"derivatives":[{"kind":"PREVIEW","uploadId":"${preview.uploadId}"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
@@ -35,7 +35,7 @@ object SharedObjectKit {
 
     fun setBanner(userId: String, scopeId: String, nodeId: String, shared: String, posterShared: String?): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shared":$shared,"posterShared":${posterShared ?: "null"},"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+            .body("""{"shared":$shared,"posterShared":${posterShared ?: "null"},"wrappedMeta":"bWV0YQ==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/banner").then()
 
     /** The medium trashed and purged at once (the member-expedited purge). */

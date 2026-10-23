@@ -46,7 +46,7 @@ class NodePlacementSliceTest {
     }
 
     private fun place(userId: String, scopeId: String, node: String, to: String?, wrap: String = "cmUtd3JhcA=="): ValidatableResponse {
-        val parent = to?.let { "\"parentId\":\"$it\"," } ?: ""
+        val parent = to?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         val slug = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{$parent"encryptedName":"bW92ZWQ=","slugToken":"$slug","wrappedContentKey":"$wrap","epoch":0,"placementRevision":0}""")

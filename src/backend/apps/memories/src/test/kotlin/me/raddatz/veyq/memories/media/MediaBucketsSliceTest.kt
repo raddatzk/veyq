@@ -78,7 +78,7 @@ class MediaBucketsSliceTest {
 
         // create a sub-bucket under the caller's primary (one level, owner inherited)
         val sub = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("isPrimary", equalTo(false))
@@ -123,7 +123,7 @@ class MediaBucketsSliceTest {
         val sub = createSub(userId, scopeId, memory, "YnVja2V0")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"cmVuYW1lZA=="}""")
+            .body("""{"nodeEpoch":0,"sealedName":"cmVuYW1lZA=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$sub")
             .then().statusCode(200)
             .body("bucketId", equalTo(sub))
@@ -140,7 +140,7 @@ class MediaBucketsSliceTest {
 
         // cr-0123: a fellow member may rename + delete another root's SUB-bucket (curating contributions) → 200 / 204
         given().header("Authorization", bearer(bob)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"Ym9i"}""")
+            .body("""{"nodeEpoch":0,"sealedName":"Ym9i"}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$aliceSub")
             .then().statusCode(200).body("sealedName", equalTo("Ym9i"))
         given().header("Authorization", bearer(bob))
@@ -156,7 +156,7 @@ class MediaBucketsSliceTest {
         val primary = firstPrimaryId(userId, scopeId, memory)
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"eA=="}""")
+            .body("""{"nodeEpoch":0,"sealedName":"eA=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$primary")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
         given().header("Authorization", bearer(userId))
@@ -174,7 +174,7 @@ class MediaBucketsSliceTest {
 
         // cr-0123: bob nests a sub under alice's primary root (via parentBucketId) → it inherits alice's owner_key
         given().header("Authorization", bearer(bob)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"$alicePrimary"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"$alicePrimary"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("ownerKey", equalTo("user:$alice"))
@@ -191,7 +191,7 @@ class MediaBucketsSliceTest {
 
         // a sub-bucket can't be a parent — sub-buckets nest one level under a primary → 403
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"eA==","parentBucketId":"$sub"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"eA==","parentBucketId":"$sub"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
     }
@@ -238,7 +238,7 @@ class MediaBucketsSliceTest {
             val meta = "bWV0YQ==" // "meta"
             whileUncommitted(
                 change = { store.deleteBucketReparent(sub) },
-                overlapping = { assertTrue(store.setMeta(scopeId, media, meta, 0L, PrincipalKey.User(userId)) is MediaStore.SetMetaResult.Written) },
+                overlapping = { assertTrue(store.setMeta(scopeId, media, meta, 0L, 0, PrincipalKey.User(userId)) is MediaStore.SetMetaResult.Written) },
             )
             QuarkusTransaction.requiringNew().run {
                 val row = MediaEntity.findById(media)!!
@@ -302,7 +302,7 @@ class MediaBucketsSliceTest {
 
     private fun createSub(userId: String, scopeId: String, nodeId: String, sealedName: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$sealedName"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"$sealedName"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path("bucketId")
 
@@ -314,7 +314,7 @@ class MediaBucketsSliceTest {
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, wrap)
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")

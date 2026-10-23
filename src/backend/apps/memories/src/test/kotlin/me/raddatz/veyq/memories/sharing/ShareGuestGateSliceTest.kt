@@ -295,7 +295,7 @@ class ShareGuestGateSliceTest {
 
     private fun createIdentity(shareId: String, role: String, pw: String? = null): String =
         base(pw).contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson(role)}}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson(role)}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path("contributorToken")
 
@@ -308,14 +308,14 @@ class ShareGuestGateSliceTest {
     private fun upload(shareId: String, token: String): String {
         val uploadId = startUpload(shareId, token).then().statusCode(200).extract().path<String>("results[0].uploadId")
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).extract().path("results[0].mediaId")
     }
 
     private fun complete(shareId: String, token: String, uploadId: String, pw: String? = null) =
         base(pw).contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
 
     private fun window(shareId: String, token: String) =

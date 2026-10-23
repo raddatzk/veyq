@@ -100,11 +100,11 @@ class SharePasswordAttemptBoundTest {
 
         // exhaust the budget via the WRITE endpoint (create-identity) — the bound rides all six passwordCheck sites
         repeat(3) {
-            given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
+            given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
                 .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
                 .then().statusCode(403).body("code", equalTo("share_password_incorrect"))
         }
-        given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
+        given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(429).body("code", equalTo("rate_limited"))
     }

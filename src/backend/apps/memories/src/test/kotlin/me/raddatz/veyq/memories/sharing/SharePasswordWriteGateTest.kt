@@ -58,13 +58,13 @@ class SharePasswordWriteGateTest {
 
         // --- createShareIdentity: no token → 404, wrong token → 403, valid token → 201 (+ the real contributorToken)
         val key = identityKeyJson(role)
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
-        given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
+        given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_password_incorrect"))
-        val contributorToken = given().header("X-Share-Password", pwToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
+        val contributorToken = given().header("X-Share-Password", pwToken).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
 
@@ -97,7 +97,7 @@ class SharePasswordWriteGateTest {
             .`when`().post("/api/shares/$shareId/blob-uploads")
 
     private fun postComplete(shareId: String, pw: String?, token: String, items: String) =
-        base(pw).contentType(ContentType.JSON).body("""{"contributorToken":"$token",$items}""")
+        base(pw).contentType(ContentType.JSON).body("""{"nodeEpoch":0,"contributorToken":"$token",$items}""")
             .`when`().post("/api/shares/$shareId/media")
 
     private fun deleteMedia(shareId: String, pw: String?, token: String, mediaId: String) =

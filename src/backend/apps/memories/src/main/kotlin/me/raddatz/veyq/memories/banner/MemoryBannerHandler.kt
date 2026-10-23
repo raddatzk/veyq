@@ -66,6 +66,12 @@ sealed interface MemoryBannerOutcome {
 
     /** The node's `wrappedMeta` moved past the stated revision; NOTHING was written, the uploads are still open (ADR 0077). */
     data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : MemoryBannerOutcome, HttpFailure by Failures.staleRevision
+
+    /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6); NOTHING was written, the uploads are still open. */
+    object StaleEpoch : MemoryBannerOutcome, HttpFailure by Failures.staleEpoch
+
+    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6); NOTHING was written. */
+    object RekeyPending : MemoryBannerOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 /**
@@ -93,7 +99,7 @@ class MemoryBannerHandler(
     fun set(
         userId: String, scopeId: String, nodeId: String, uploadId: String?, shared: SharedBlobSpec?,
         posterUploadId: String?, posterShared: SharedBlobSpec?,
-        expectedBlobId: String?, expectedPosterBlobId: String?, wrappedMeta: String, metaRevision: Long,
+        expectedBlobId: String?, expectedPosterBlobId: String?, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int,
     ): MemoryBannerOutcome {
         if ((uploadId == null) == (shared == null) || (posterUploadId != null && posterShared != null)) {
             return MemoryBannerOutcome.InvalidRequest
@@ -128,18 +134,19 @@ class MemoryBannerHandler(
             scopeId, node.id,
             checkNotNull(fill(banner, shared, expectedBlobId)),
             fill(poster, posterShared, expectedPosterBlobId),
-            expectedPosterBlobId, wrappedMeta, metaRevision, PrincipalKey.User(userId),
+            expectedPosterBlobId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId),
         )
     }
 
     /** Empty both banner slots (only while they hold [blobId] and [posterBlobId], or nothing) and write the meta without it. */
     fun remove(
         userId: String, scopeId: String, nodeId: String, blobId: String, posterBlobId: String?, wrappedMeta: String, metaRevision: Long,
+        nodeEpoch: Int,
     ): MemoryBannerOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MemoryBannerOutcome.NotFound, MemoryBannerOutcome.Suspended, MemoryBannerOutcome.ScopeDeleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return MemoryBannerOutcome.NotFound
         if (node.kind !in MemoryBanner.KINDS) return MemoryBannerOutcome.IllegalTarget
-        return store.remove(scopeId, node.id, blobId, posterBlobId, wrappedMeta, metaRevision, PrincipalKey.User(userId))
+        return store.remove(scopeId, node.id, blobId, posterBlobId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))
     }
 }

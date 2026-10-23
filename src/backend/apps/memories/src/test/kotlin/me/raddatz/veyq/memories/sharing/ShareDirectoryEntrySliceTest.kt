@@ -94,7 +94,7 @@ class ShareDirectoryEntrySliceTest {
     fun aResolveServesEachDescendantsPlacementRevisionAndNoneForTheRoot() {
         val t = seedTree()
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"${t.memory}","encryptedName":"cmVuYW1lZA==","slugToken":"cmVuYW1lZC1zbHVn","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":0}""")
+            .body("""{"parentEpoch":0,"parentId":"${t.memory}","encryptedName":"cmVuYW1lZA==","slugToken":"cmVuYW1lZC1zbHVn","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":0}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/${t.chapter}").then().statusCode(204)
         val shareId = createShare(t.userId, t.memory, "READ")
 

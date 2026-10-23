@@ -105,10 +105,10 @@ class NodeCoverMemoriesSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val started = CoverKit.start(userId, scopeId, memory)
         given().contentType(ContentType.JSON)
-            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaRevision":0}""")
+            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$memory/cover").then().statusCode(401)
         given().contentType(ContentType.JSON)
-            .body("""{"blobId":"${started.blobId}","wrappedMeta":"bQ==","metaRevision":0}""")
+            .body("""{"blobId":"${started.blobId}","wrappedMeta":"bQ==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover/removal").then().statusCode(401)
         assertNull(CoverKit.slot(memory))
     }

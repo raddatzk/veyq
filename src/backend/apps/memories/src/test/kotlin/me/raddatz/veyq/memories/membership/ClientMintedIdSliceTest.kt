@@ -103,7 +103,7 @@ class ClientMintedIdSliceTest {
     fun completeMediaRefusesAMediaIdTakenInAnotherScope() {
         val taken = w.control.mediaId
         val upload = start(ownerId = taken)
-        asOwner().body("""{"items":[{"mediaId":"$taken","originalUploadId":"$upload","nodeId":"${w.live.nodeId}"}]}""")
+        asOwner().body("""{"items":[{"mediaId":"$taken","nodeEpoch":0,"originalUploadId":"$upload","nodeId":"${w.live.nodeId}"}]}""")
             .`when`().post("/api/scopes/${w.live.scopeId}/media-batch")
             .then().statusCode(200)
             .body("results[0].error", equalTo("id_taken"))
@@ -116,7 +116,7 @@ class ClientMintedIdSliceTest {
 
         val fresh = TestIds.uuid()
         val freshUpload = start(ownerId = fresh)
-        asOwner().body("""{"items":[{"mediaId":"$fresh","originalUploadId":"$freshUpload","nodeId":"${w.live.nodeId}"}]}""")
+        asOwner().body("""{"items":[{"mediaId":"$fresh","nodeEpoch":0,"originalUploadId":"$freshUpload","nodeId":"${w.live.nodeId}"}]}""")
             .`when`().post("/api/scopes/${w.live.scopeId}/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
@@ -133,7 +133,7 @@ class ClientMintedIdSliceTest {
 
     @Test
     fun createBucketRefusesAnIdTakenInAnotherScope() {
-        asOwner().body("""{"bucketId":"${w.control.bucketId}","sealedName":"bmV3"}""")
+        asOwner().body("""{"nodeEpoch":0,"bucketId":"${w.control.bucketId}","sealedName":"bmV3"}""")
             .`when`().post("/api/scopes/${w.live.scopeId}/nodes/${w.live.nodeId}/buckets")
             .then().statusCode(409).body("code", equalTo("id_taken"))
         read {
@@ -143,7 +143,7 @@ class ClientMintedIdSliceTest {
         }
 
         val fresh = TestIds.uuid()
-        asOwner().body("""{"bucketId":"$fresh","sealedName":"bmV3"}""")
+        asOwner().body("""{"nodeEpoch":0,"bucketId":"$fresh","sealedName":"bmV3"}""")
             .`when`().post("/api/scopes/${w.live.scopeId}/nodes/${w.live.nodeId}/buckets")
             .then().statusCode(200).body("bucketId", equalTo(fresh))
     }
@@ -180,11 +180,11 @@ class ClientMintedIdSliceTest {
         asOwner().body(shareBody(liveShare, w.live.nodeId, "READ_WRITE")).`when`().post("/api/shares")
             .then().statusCode(201)
         val taken = TestIds.uuid()
-        given().contentType(ContentType.JSON).body("""{"identityId":"$taken","sealedDisplayName":"$B64"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"$taken","sealedDisplayName":"$B64"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(controlShare)).`when`().post("/api/shares/$controlShare/identities")
             .then().statusCode(201).body("identityId", equalTo(taken))
 
-        given().contentType(ContentType.JSON).body("""{"identityId":"$taken","sealedDisplayName":"bmV3"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"$taken","sealedDisplayName":"bmV3"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(liveShare)).`when`().post("/api/shares/$liveShare/identities")
             .then().statusCode(409).body("code", equalTo("id_taken"))
         read {
@@ -194,7 +194,7 @@ class ClientMintedIdSliceTest {
         }
 
         val fresh = TestIds.uuid()
-        given().contentType(ContentType.JSON).body("""{"identityId":"$fresh","sealedDisplayName":"bmV3"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"$fresh","sealedDisplayName":"bmV3"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(liveShare)).`when`().post("/api/shares/$liveShare/identities")
             .then().statusCode(201).body("identityId", equalTo(fresh))
     }
@@ -213,7 +213,7 @@ class ClientMintedIdSliceTest {
         ).map { it.`when`().post("/api/scopes/${w.live.scopeId}/blob-uploads-batch").then().statusCode(200).extract().path<String>("results[0].uploadId") }
         for (thumb in cases) {
             asOwner().body(
-                """{"items":[{"mediaId":"$mediaId","originalUploadId":"$original","nodeId":"${w.live.nodeId}",""" +
+                """{"items":[{"mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"$original","nodeId":"${w.live.nodeId}",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""",
             ).`when`().post("/api/scopes/${w.live.scopeId}/media-batch")
                 .then().statusCode(200).body("results[0].error", equalTo("upload_mismatch"))
@@ -225,7 +225,7 @@ class ClientMintedIdSliceTest {
             .`when`().post("/api/scopes/${w.live.scopeId}/blob-uploads-batch").then().statusCode(200)
             .extract().path<String>("results[0].uploadId")
         asOwner().body(
-            """{"items":[{"mediaId":"$mediaId","originalUploadId":"$original","nodeId":"${w.live.nodeId}",""" +
+            """{"items":[{"mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"$original","nodeId":"${w.live.nodeId}",""" +
                 """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""",
         ).`when`().post("/api/scopes/${w.live.scopeId}/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue()).body("results[0].mediaId", equalTo(mediaId))

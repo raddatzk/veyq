@@ -110,7 +110,7 @@ class ShareRootKindSliceTest {
             assertFalse(body.containsKey("rootKind"), "a trashed root names no kind: $body")
         }
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"slugToken":"cmVzdG9yZWQtc2x1Zw=="}""")
+            .body("""{"parentEpoch":0,"slugToken":"cmVzdG9yZWQtc2x1Zw=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/restore").then().statusCode(204)
         for (shareId in listOf(read, drop)) assertEquals("MEMORY", resolve(shareId)["rootKind"])
     }

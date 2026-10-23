@@ -21,6 +21,8 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.sharing.ShareETag
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface ShareMediaListOutcome {
@@ -61,6 +63,10 @@ sealed interface ShareMediaCompleteOutcome {
     object PasswordIncorrect : ShareMediaCompleteOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     /** Too many wrong password attempts (cr-0165), or the per-share upload budget spent (ADR 0051) — a 429. */
     object RateLimited : ShareMediaCompleteOutcome, HttpFailure by Failures.rateLimited
+    /** The batch's `nodeEpoch` is not the target node's stored epoch (ADR 0109 point 6) — nothing attached; re-read. */
+    object StaleEpoch : ShareMediaCompleteOutcome, HttpFailure by Failures.staleEpoch
+    /** The target node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing attached; retry. */
+    object RekeyPending : ShareMediaCompleteOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface ShareMediaDeleteOutcome {
@@ -103,6 +109,7 @@ class ShareMediaHandler(
     private val guestWriteRecords: GuestWriteRecords,
     private val items: NodeItemsRevisions,
     private val tags: ShareMediaTags,
+    private val epochs: NodeEpochGate,
 ) {
 
     /**
@@ -206,10 +213,15 @@ class ShareMediaHandler(
      * decision 6, [ShareGuestGate.target]; a `WRITE_ONLY` link only its root). The kind decides as the start's did: no
      * Memory or chapter, not contributable. Each medium attached records [seen] in its attach's transaction (the
      * guest-write record, ADR 0093 § 10: the upload and the meta it carries are the guest's).
+     *
+     * [nodeEpoch] is the target node's epoch as the guest read it (ADR 0109 point 6) — stated by a `WRITE_ONLY` guest
+     * too, whose wraps are under its own `K_up`. The batch is refused whole (`409`) when the target refuses it now, and
+     * each item's attach asks again in its own transaction, under the node's row lock after the scope and link locks
+     * ([MediaStore.attach]): a re-key committing between two items refuses the rest per item, nothing of them stored.
      */
     fun complete(
         shareId: String, pwToken: String?, contributorToken: String, items: List<ShareMediaItem>, nodeId: String?,
-        seen: ClientSeen?,
+        seen: ClientSeen?, nodeEpoch: Int,
     ): ShareMediaCompleteOutcome {
         // Attaching is what creates the media rows, so it spends the per-share upload budget the start spends
         // (ADR 0051, `@RateLimit(key = SHARE)`): the two are one contributor write flow.
@@ -229,6 +241,13 @@ class ShareMediaHandler(
         // With no node named the gate names the root's kind as stored, so a Memory or chapter in the trash still
         // passes: its items then answer `node_not_found` (the dispatcher takes live nodes only).
         if (!guestWrites.supports(target.kind)) return ShareMediaCompleteOutcome.NotContributable
+        // The batch's answer (the contract's top-level 409); the write's own check is each attach's, below.
+        when (QuarkusTransaction.requiringNew().call { epochs.check(gated.scopeId, target.nodeId, nodeEpoch) }) {
+            NodeEpochGate.Verdict.OK -> Unit
+            NodeEpochGate.Verdict.STALE -> return ShareMediaCompleteOutcome.StaleEpoch
+            NodeEpochGate.Verdict.PENDING -> return ShareMediaCompleteOutcome.RekeyPending
+            NodeEpochGate.Verdict.MISSING -> return ShareMediaCompleteOutcome.NodeNotFound
+        }
         val completeItems = items.map {
             MediaUploadCompletion.item(
                 mediaId = it.mediaId,
@@ -237,6 +256,7 @@ class ShareMediaHandler(
                 derivatives = it.derivatives,
                 wrappedMeta = it.wrappedMeta,
                 wrappedExif = it.wrappedExif,
+                nodeEpoch = nodeEpoch,
             )
         }
         // Each item's attach re-checks first, in its own transaction ([ShareGuestGate.admittedInto]): the scope lock,

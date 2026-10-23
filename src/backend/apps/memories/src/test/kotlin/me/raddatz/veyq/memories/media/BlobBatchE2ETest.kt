@@ -99,7 +99,7 @@ class BlobBatchE2ETest {
 
         // complete → backend stats every object at its exact derived length (declare-then-verify), attaches the media
         val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].blobId", notNullValue())
@@ -170,7 +170,7 @@ class BlobBatchE2ETest {
         chunks.forEachIndexed { i, bytes -> assertEquals(200, put(urls.getValue(i), bytes, PINNED), "PUT chunk $i") }
 
         val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", org.hamcrest.CoreMatchers.nullValue())
             .extract().path<String>("results[0].blobId")

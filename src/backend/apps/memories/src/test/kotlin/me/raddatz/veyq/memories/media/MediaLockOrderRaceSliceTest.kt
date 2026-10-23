@@ -227,5 +227,5 @@ class MediaLockOrderRaceSliceTest {
     }
 
     private fun removeBanner(f: BannerFixture): MemoryBannerOutcome =
-        banners.remove(f.scopeId, f.memory, f.banner, f.poster, "bWV0YQ==", 1, PrincipalKey.User(f.userId))
+        banners.remove(f.scopeId, f.memory, f.banner, f.poster, "bWV0YQ==", 1, 0, PrincipalKey.User(f.userId))
 }

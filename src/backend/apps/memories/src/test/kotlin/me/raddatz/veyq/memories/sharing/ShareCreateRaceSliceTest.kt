@@ -117,7 +117,7 @@ class ShareCreateRaceSliceTest {
 
     private fun createIdentity(shareId: String, identityId: String): Pair<Int, String?> =
         given().contentType(ContentType.JSON)
-            .body("""{"identityId":"$identityId","sealedDisplayName":"c2VhbGVkLWNvbnRyaWJ1dG9yLW5hbWU="}""")
+            .body("""{"nodeEpoch":0,"identityId":"$identityId","sealedDisplayName":"c2VhbGVkLWNvbnRyaWJ1dG9yLW5hbWU="}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId))
             .`when`().post("/api/shares/$shareId/identities").then().extract().answer()
 }

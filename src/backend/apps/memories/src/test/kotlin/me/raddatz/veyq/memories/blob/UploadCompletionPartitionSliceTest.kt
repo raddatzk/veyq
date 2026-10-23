@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.media.MediaUploadCompletion
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -79,7 +80,7 @@ class UploadCompletionPartitionSliceTest {
 
     /** Dispatch one item for an unknown upload to [nodeId] through a dispatcher over [acceptors]; its error code. */
     private fun completeOne(acceptors: MutableList<UploadCompletion>, scopeId: String, nodeId: String): String? {
-        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), emptyMap())
+        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), mapOf(MediaUploadCompletion.NODE_EPOCH to "0"))
         return QuarkusTransaction.requiringNew().call {
             UploadCompletions(nodes, acceptors).complete(scopeId, listOf(item), UploadOpener.Member(UUID.randomUUID().toString()))
         }.single().error

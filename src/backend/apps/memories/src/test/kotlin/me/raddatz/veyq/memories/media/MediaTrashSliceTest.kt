@@ -335,7 +335,7 @@ class MediaTrashSliceTest {
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, wrap)
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")

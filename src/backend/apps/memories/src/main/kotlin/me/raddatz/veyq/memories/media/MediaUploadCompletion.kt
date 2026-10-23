@@ -21,7 +21,8 @@ import jakarta.enterprise.context.ApplicationScoped
  * (`UploadCompletions`); the member path and the guest path reach it alike.
  *
  * Core's item is generic: Memories reads its [CompleteItem.ownerId] as the media id, its derivative kinds as
- * `MediaDerivativeKind` values, and its payloads under [META] and [EXIF]. Both paths build the item through [item],
+ * `MediaDerivativeKind` values, and its payloads under [META] and [EXIF] — and the node's stated epoch under
+ * [NODE_EPOCH], which [MediaStore.attach] judges in the attach's transaction (ADR 0109 point 6). Both paths build the item through [item],
  * and map [CompleteItemResult.ownerId] back to their response's `mediaId`.
  */
 @ApplicationScoped
@@ -46,6 +47,8 @@ class MediaUploadCompletion(
         // link role sends one (the share contract has no such field), and the seam holds it for every caller.
         val shared = item.originalShared
         if ((item.originalUploadId == null) == (shared == null)) return CompleteItemResult(null, null, "invalid_request")
+        // Stated by every caller (the member's item, the guest's batch): an item without it is refused, never ungated.
+        val nodeEpoch = item.payloads[NODE_EPOCH]?.toIntOrNull()?.takeIf { it >= 0 } ?: return CompleteItemResult(null, null, "invalid_request")
         if (shared != null && opener !is UploadOpener.Member) return CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
         val original = item.originalUploadId?.let {
             blobs.findSession(scopeId, it, opener) ?: return CompleteItemResult(null, null, "upload_not_found")
@@ -90,18 +93,25 @@ class MediaUploadCompletion(
             original != null -> OriginalAttach.Upload(original, manifests[original.id])
             else -> OriginalAttach.Shared(scopeId, shared!!)
         }
-        val (blobId, mediaId) = store.attach(
-            item.ownerId, source, item.nodeId,
-            derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
-            item.payloads[META],
-            item.payloads[EXIF],
-            (opener as? UploadOpener.Contributor)?.shareIdentityId,
-            (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
-            admitted,
-            attached,
-        ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
-        if (blobId == null) return CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
-        return CompleteItemResult(blobId, mediaId, null)
+        return when (
+            val r = store.attach(
+                item.ownerId, source, item.nodeId,
+                derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
+                item.payloads[META],
+                item.payloads[EXIF],
+                nodeEpoch,
+                (opener as? UploadOpener.Contributor)?.shareIdentityId,
+                (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
+                admitted,
+                attached,
+            )
+        ) {
+            is AttachResult.Attached -> CompleteItemResult(r.blobId, r.mediaId, null)
+            AttachResult.NotAdmitted -> CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
+            AttachResult.SharedSourceInvalid -> CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
+            // ADR 0109 point 6: nothing stored, the item's uploads stay open for a retry under the node's current key.
+            is AttachResult.EpochRefused -> CompleteItemResult(null, null, r.code)
+        }
     }
 
     companion object {
@@ -110,6 +120,13 @@ class MediaUploadCompletion(
 
         /** The [CompleteItem.payloads] key of a medium's sealed EXIF (`wrappedExif`). */
         const val EXIF = "wrappedExif"
+
+        /**
+         * The [CompleteItem.payloads] key of the epoch of the item's node as the client read it (ADR 0109 point 6),
+         * decimal: core's item has no field for it and carries its payloads to this completion unread, so Memories'
+         * two callers state it here and [complete] refuses an item without one. Not a sealed value — never stored.
+         */
+        const val NODE_EPOCH = "nodeEpoch"
 
         /** The item's error when `originalShared` names no blob the node holds, a blocked one, or a taken id. */
         const val SHARED_SOURCE_INVALID = "shared_source_invalid"
@@ -120,13 +137,13 @@ class MediaUploadCompletion(
          */
         fun item(
             mediaId: String, nodeId: String, originalUploadId: String?, derivatives: List<DerivativeDeclare>,
-            wrappedMeta: String?, wrappedExif: String?, originalShared: SharedBlobSpec? = null,
+            wrappedMeta: String?, wrappedExif: String?, nodeEpoch: Int, originalShared: SharedBlobSpec? = null,
         ): CompleteItem = CompleteItem(
             ownerId = mediaId,
             nodeId = nodeId,
             originalUploadId = originalUploadId,
             derivatives = derivatives,
-            payloads = listOfNotNull(wrappedMeta?.let { META to it }, wrappedExif?.let { EXIF to it }).toMap(),
+            payloads = listOfNotNull(wrappedMeta?.let { META to it }, wrappedExif?.let { EXIF to it }, NODE_EPOCH to nodeEpoch.toString()).toMap(),
             originalShared = originalShared,
         )
 

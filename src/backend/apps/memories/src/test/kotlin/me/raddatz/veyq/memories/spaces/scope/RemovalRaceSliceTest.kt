@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -69,8 +70,10 @@ class RemovalRaceSliceTest {
             )
             assertEquals(404, status, "round $round: a removed member created a link")
             assertNull(tx { ShareEntity.findById(id) }, "round $round: nothing written")
-            // Control: a member who stays shares the same Memory, with a copy at the epoch the removal reached.
-            assertEquals(201, postShare(t.owner, memory, TestIds.shareId(), epoch = 1), "round $round: control")
+            // Control: a member who stays shares the same Memory, with a copy at the epoch the removal reached — once the
+            // Memory is re-keyed to it (ADR 0109 point 6: a node the rotation has not re-keyed takes no new link).
+            rekeyed(memory, 1)
+            assertEquals(201, postShare(t.owner, memory, TestIds.shareId(), epoch = 1, nodeEpoch = 1), "round $round: control")
         }
     }
 
@@ -93,8 +96,9 @@ class RemovalRaceSliceTest {
             assertEquals(404, status, "round $round: a removed member re-issued a link")
             assertNull(tx { ShareEntity.findById(fresh) }, "round $round: no new link")
             assertFalse(tx { ShareEntity.findById(old)!!.deleted }, "round $round: the old link is not spent")
-            // Control: a member who stays re-issues it (the removal moved the epoch to 1).
-            assertEquals(201, reissue(t.owner, old, TestIds.shareId(), epoch = 1), "round $round: control")
+            // Control: a member who stays re-issues it (the removal moved the epoch to 1), once the Memory is re-keyed to it.
+            rekeyed(memory, 1)
+            assertEquals(201, reissue(t.owner, old, TestIds.shareId(), epoch = 1, nodeEpoch = 1), "round $round: control")
         }
     }
 
@@ -135,14 +139,17 @@ class RemovalRaceSliceTest {
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
     }
 
-    private fun postShare(userId: String, nodeId: String, id: String, epoch: Int = 0): Int =
+    /** [nodeId]'s re-key reached [epoch]: its key is minted at it (the re-key's own commit is `RekeyCoreSliceTest`'s). */
+    private fun rekeyed(nodeId: String, epoch: Int) = tx { NodeEntity.findById(nodeId)!!.epoch = epoch }
+
+    private fun postShare(userId: String, nodeId: String, id: String, epoch: Int = 0, nodeEpoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"READ","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"READ","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares").statusCode()
 
-    private fun reissue(userId: String, shareId: String, newId: String, epoch: Int = 0): Int =
+    private fun reissue(userId: String, shareId: String, newId: String, epoch: Int = 0, nodeEpoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares/$shareId/reissue").statusCode()
 
     private fun putItemFavorite(userId: String, scopeId: String, nodeId: String): Int =

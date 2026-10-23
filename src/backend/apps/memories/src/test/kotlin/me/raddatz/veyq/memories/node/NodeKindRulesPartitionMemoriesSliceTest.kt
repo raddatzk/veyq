@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.arc.All
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -54,6 +55,9 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Inject
     lateinit var handler: NodesHandler
 
+    @Inject
+    lateinit var gate: NodeEpochGate
+
     /** A rule for [kind] that allows it anywhere and records each placement it is asked about. */
     private class Forged(private val kind: String) : NodeKindRules {
         val asked = mutableListOf<String>()
@@ -78,7 +82,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Test
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
-        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, blocks)
+        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, blocks, gate)
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 
@@ -93,5 +97,5 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     }
 
     private fun create(h: NodesHandler, userId: String, scopeId: String, parent: String?, kind: String): CreateNodeOutcome =
-        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null)
+        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null, parent?.let { 0 })
 }

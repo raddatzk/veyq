@@ -44,7 +44,7 @@ class MediaSliceTest {
 
         // complete + attach to the Memory; the merged listed-metadata tier is listed, EXIF is lazy (cr-0068)
         val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ==","wrappedExif":"ZXhpZg=="}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ==","wrappedExif":"ZXhpZg=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].blobId", notNullValue())
@@ -80,7 +80,7 @@ class MediaSliceTest {
 
         // complete with no EXIF sealed (source carried no readable EXIF)
         val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
@@ -108,14 +108,14 @@ class MediaSliceTest {
 
         // complete with an initial listed-metadata tier (cr-0068)
         val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ=="}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
 
         // PUT a re-sealed listed-metadata blob (e.g. a corrected date) — opaque, echoed back verbatim (cr-0068)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaRevision":0}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", equalTo("Y29ycmVjdGVk"))
 
@@ -126,7 +126,7 @@ class MediaSliceTest {
 
         // null clears it
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":null,"metaRevision":1}""")
+            .body("""{"wrappedMeta":null,"nodeEpoch":0,"metaRevision":1}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", nullValue())
     }
@@ -144,10 +144,10 @@ class MediaSliceTest {
         val media = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "djA=") // media_revision = 1
         listedMedia(userId, scopeId, memory).body("media[0].metaRevision", equalTo(0)).body("mediaRevision", equalTo(1))
 
-        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(200)
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","nodeEpoch":0,"metaRevision":0}""").then().statusCode(200)
         listedMedia(userId, scopeId, memory).body("media[0].metaRevision", equalTo(1)).body("mediaRevision", equalTo(2))
 
-        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12MQ==","nodeEpoch":0,"metaRevision":0}""")
             .then().statusCode(409)
             .body("code", equalTo("stale_revision"))
             .body("wrappedMeta", equalTo("YS12MQ=="))
@@ -158,7 +158,7 @@ class MediaSliceTest {
             .body("mediaRevision", equalTo(2))
 
         // control: stating the revision the 409 handed back lands, and moves both counters
-        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12Mg==","metaRevision":1}""")
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12Mg==","nodeEpoch":0,"metaRevision":1}""")
             .then().statusCode(200).body("wrappedMeta", equalTo("Yi12Mg=="))
         listedMedia(userId, scopeId, memory)
             .body("media[0].wrappedMeta", equalTo("Yi12Mg=="))
@@ -175,14 +175,14 @@ class MediaSliceTest {
         putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ=="}""").then().statusCode(400)
         listedMedia(userId, scopeId, memory).body("media[0].wrappedMeta", equalTo("djA="))
         // control: the same body with its revision lands
-        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(200)
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","nodeEpoch":0,"metaRevision":0}""").then().statusCode(200)
     }
 
     @Test
     fun updateMetaForUnknownMediaIs404() {
         val (userId, scopeId) = seedMemberScope()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaRevision":0}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/media/${UUID.randomUUID()}/meta")
             .then().statusCode(404).body("code", equalTo("media_not_found"))
     }
@@ -200,7 +200,7 @@ class MediaSliceTest {
         // complete: one logical media = original + two role-tagged derivatives
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original","derivatives":[""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","nodeEpoch":0,"originalUploadId":"$original","derivatives":[""" +
                     """{"kind":"THUMBNAIL","uploadId":"$thumb"},{"kind":"PREVIEW","uploadId":"$preview"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -234,7 +234,7 @@ class MediaSliceTest {
 
         // a media with no derivable frame attaches the original only
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original"}]}""")
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","nodeEpoch":0,"originalUploadId":"$original"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
@@ -257,7 +257,7 @@ class MediaSliceTest {
         // a missing derivative session fails the whole item atomically — nothing is attached
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original",""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","nodeEpoch":0,"originalUploadId":"$original",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$bogus"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -279,7 +279,7 @@ class MediaSliceTest {
         val bogus = UUID.randomUUID()
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"},{"mediaId":"${TestBlob.ownerOf(bogus.toString())}","originalUploadId":"$bogus","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$memory"},{"mediaId":"${TestBlob.ownerOf(bogus.toString())}","nodeEpoch":0,"originalUploadId":"$bogus","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].mediaId", notNullValue())
@@ -294,7 +294,7 @@ class MediaSliceTest {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", equalTo("illegal_target"))
@@ -309,7 +309,7 @@ class MediaSliceTest {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$alien"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$alien"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", equalTo("illegal_target"))
@@ -369,7 +369,7 @@ class MediaSliceTest {
 
         // a meta edit re-seals the tier → media_revision bumps + updated_at advances past the cursor
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaRevision":0}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","nodeEpoch":0,"metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/media/$a/meta")
             .then().statusCode(200)
 
@@ -454,7 +454,7 @@ class MediaSliceTest {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = wrap)
         val metaField = if (meta != null) ""","wrappedMeta":"$meta"""" else ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","nodeEpoch":0,"originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")
