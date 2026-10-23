@@ -60,8 +60,9 @@ async function save() {
   if (!ready || step.value !== 'ready') return
   error.value = ''
   try {
-    // FIRST await of the click: the save picker needs its user activation
-    const sink = await openSaveTarget(fileName.value, ready.bytes)
+    // FIRST await of the click: the save picker needs its user activation. The size is the ZIP's own length, never the
+    // payloads' sum: the SW download route serves it as the exact Content-Length and fails a longer stream (F11).
+    const sink = await openSaveTarget(fileName.value, ready.archiveBytes)
     step.value = 'writing'
     await ready.write(sink, (p) => {
       fraction.value = p.bytesTotal > 0 ? p.bytesDone / p.bytesTotal : 1

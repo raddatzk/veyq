@@ -19,7 +19,7 @@ import type { Access, TreeSource } from '../access'
 import { FOLDER_KIND } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { ByteSink } from '../blob/stream'
-import { ZipWriter } from './zip'
+import { ZipWriter, zipLength, type ZipPlanEntry } from './zip'
 import { MANIFEST_DIR, archiveName, foldArchiveName } from './archiveName'
 import {
   MANIFEST_FORMAT, MANIFEST_PATH, MANIFEST_VERSION, ExportError, applicationOf, type Manifest, type ManifestApplication, type ManifestNode,
@@ -55,6 +55,10 @@ export type ExportSubtreeParams = PrepareExportParams & {
 /** A download whose tree is walked and whose payloads are declared, with nothing written yet: what the dialog shows
  *  ({@link ExportResult} less the writing) and, once the member has picked where to save, {@link write}s. */
 export type PreparedExport = ExportResult & {
+  /** The exact length of the ZIP {@link write} produces - what a save target is opened with. Not {@link ExportResult.bytes}
+   *  (the payloads alone): the headers, descriptors, directory and the manifest come on top, and the SW download route
+   *  serves this number as the `Content-Length` it holds the stream to (F11). */
+  archiveBytes: number
   write(sink: ByteSink, onProgress?: (p: ExportProgress) => void): Promise<void>
 }
 
@@ -168,9 +172,34 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
   const { signal } = params
   const { root: exportedRoot, payloads: pending, directories, skipped, applications, nodes } = await walkSubtree(params)
 
+  const now = params.now ?? (() => new Date())
   const bytesTotal = pending.reduce((sum, p) => sum + p.source.size, 0)
+  const manifestBytes = (exportedAt: Date): Uint8Array => {
+    const manifest: Manifest = {
+      format: MANIFEST_FORMAT,
+      version: MANIFEST_VERSION,
+      exportedAt: exportedAt.toISOString(),
+      appVersion: params.appVersion,
+      applications: [...applications].map(([id, contentSchema]): ManifestApplication => ({ id, contentSchema })),
+      root: exportedRoot,
+    }
+    return new TextEncoder().encode(JSON.stringify(manifest, null, 2))
+  }
+  // The manifest is written last, once every payload's `sha256` is known - but a SHA-256 in hex is always 64 characters and
+  // an ISO time stamp always 24, so the manifest's length is known now: serialise it with a stand-in hash on every payload
+  // (set and removed again, so the real one later lands at the same place in each object) and the time of now.
+  for (const { ref } of pending) ref.sha256 = '0'.repeat(64)
+  const manifestLength = manifestBytes(now()).length
+  for (const { ref } of pending) delete ref.sha256
+  const plan: ZipPlanEntry[] = [
+    ...directories.map((path) => ({ path, directory: true as const })),
+    ...pending.map(({ ref, source }) => ({ path: ref.path, size: source.size })),
+    { path: MANIFEST_PATH, size: manifestLength },
+  ]
+  const archiveBytes = zipLength(plan)
+
   async function write(sink: ByteSink, onProgress?: (p: ExportProgress) => void): Promise<void> {
-    const writer = new ZipWriter(sink, { modified: (params.now ?? (() => new Date()))() })
+    const writer = new ZipWriter(sink, { modified: now() })
     let bytesDone = 0
     try {
       for (const dir of directories) await writer.addDirectory(dir)
@@ -188,22 +217,18 @@ export async function prepareExport(params: PrepareExportParams): Promise<Prepar
         await writer.addFile(ref.path, source.size, hashed())
         ref.sha256 = hex(hasher.digest())
       }
-      const manifest: Manifest = {
-        format: MANIFEST_FORMAT,
-        version: MANIFEST_VERSION,
-        exportedAt: (params.now ?? (() => new Date()))().toISOString(),
-        appVersion: params.appVersion,
-        applications: [...applications].map(([id, contentSchema]): ManifestApplication => ({ id, contentSchema })),
-        root: exportedRoot,
-      }
-      await writer.addBytes(MANIFEST_PATH, new TextEncoder().encode(JSON.stringify(manifest, null, 2)))
+      const manifest = manifestBytes(now())
+      // the one record whose length was derived rather than known (a five-digit year would do it): a target held to the
+      // announced length would fail the download, so it fails here, before anything past the payloads is written
+      if (manifest.length !== manifestLength) throw new ExportError('size_mismatch', 'the manifest is not the length announced')
+      await writer.addBytes(MANIFEST_PATH, manifest)
       await writer.finish()
     } catch (e) {
       await writer.abort(e)
       throw e
     }
   }
-  return { nodes, payloads: pending.length, bytes: bytesTotal, skipped, write }
+  return { nodes, payloads: pending.length, bytes: bytesTotal, archiveBytes, skipped, write }
 }
 
 export async function exportSubtree(params: ExportSubtreeParams): Promise<ExportResult> {
