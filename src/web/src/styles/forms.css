@@ -33,18 +33,18 @@
   margin-top: 0;
 }
 
-.tenant-dialog .veyq-dialog__close {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.tenant-dialog .veyq-dialog__close:hover {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:hover {
   border: 0;
   background: var(--app-surface-muted);
 }
 
-.tenant-dialog .veyq-dialog__close:focus-visible {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:focus-visible {
   outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   box-shadow: none;

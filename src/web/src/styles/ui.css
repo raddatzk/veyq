@@ -488,7 +488,9 @@
   color: var(--app-accent);
   font-weight: 800;
 }
-.veyq-level-tabs .veyq-tab:not([aria-selected='true']):hover {
+/* `.veyq-tabs__list` keeps the weight the old double `:not()` had: one less ties the library's own tab-hover rule,
+   which is injected later and would then win. */
+.veyq-level-tabs .veyq-tabs__list .veyq-tab:not([aria-selected='true']):hover {
   color: var(--app-text);
 }
 .veyq-level-tabs .veyq-tabs__ink {
