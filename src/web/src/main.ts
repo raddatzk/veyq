@@ -7,9 +7,8 @@ import { registerApplications } from './applications'
 import { registerApplicationMessages } from './applicationMessages'
 import { initializeTheme } from './shared/state/useThemeState'
 import './style.css'
-// After style.css: the layer brings the icon font's sheet, whose `.pi` rules must come after the app's own (ui.css says
-// where two classes are needed to win against it).
-import { uiPlugin } from './shared/ui/plugin'
+// The UI layer's own sheet (ADR 0107), after the app's: a sheet that styles a layer part compounds with its class.
+import './shared/ui/layer.css'
 
 async function bootstrap() {
   // Apply the stored theme before first paint (no flash of the wrong mode).
@@ -24,7 +23,6 @@ async function bootstrap() {
 
   const app = createApp(App)
     .use(i18n)
-    .use(uiPlugin)
     .use(router)
 
   router.isReady().then(() => app.mount('#app'))
