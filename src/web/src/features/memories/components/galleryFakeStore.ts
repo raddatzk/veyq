@@ -112,7 +112,7 @@ export function galleryFakeStore() {
   const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
       objects.set(url, new Uint8Array(init.body as Uint8Array))
-      return { ok: true, status: 200 } as Response
+      return new Response('', { status: 200 }) // the store's answer to a PUT: 200, an empty body
     }
     const body = objects.get(url)
     if (!body) return { ok: false, status: 404 } as Response

@@ -514,7 +514,7 @@ describe('addSharePhoto — the contributor transport signs each next window (AD
       }),
     })
     const putUrls: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => { putUrls.push(url); return { ok: true, status: 200 } as Response }))
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { putUrls.push(url); return new Response('', { status: 200 }) }))
     const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
 
     const done = await addSharePhoto(

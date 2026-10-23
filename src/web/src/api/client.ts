@@ -38,20 +38,34 @@ import { FavoritesApi, Configuration as FavoritesConfiguration } from './generat
 import { OperatorApi, Configuration as OperatorConfiguration } from './generated/operator'
 import { session } from '../app/session'
 
+/**
+ * The fetch every generated client sends through. A `304` (a live poll's "unchanged", ADR 0081) has no body, and none
+ * of ours is read: the generated runtime throws it as a `ResponseError` whose status is all a caller looks at. But
+ * Chromium cancels the load of an empty body nobody reads, and reports the request `net::ERR_ABORTED` although the
+ * server answered — every tree and media poll of a Memory then read as a failed request in the V1 heavy stage
+ * (ADR 0105 § Targets, "no failed request"). Reading the empty body to its end lets the load finish. `fetch` is looked
+ * up at each call, so a test's stubbed global is the one sent through.
+ */
+export const fetchApi: typeof fetch = async (input, init) => {
+  const response = await fetch(input, init)
+  if (response.status === 304) await response.arrayBuffer().catch(() => undefined)
+  return response
+}
+
 export function setupApi(): SetupApi {
-  return new SetupApi(new Configuration({ basePath: session.apiBase }))
+  return new SetupApi(new Configuration({ basePath: session.apiBase, fetchApi }))
 }
 
 // The one bearer-credential contract every authed client shares: same-origin basePath + the access token
 // from the in-memory session. Each generated package has its own Configuration class but the same parameter
 // shape, so this single source feeds them all — change the token source once, here. Exported for an
 // application's own clients (`features/memories/api.ts`), which core does not import (ADR 0079).
-export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '', fetchApi })
 
 // The token-less counterpart: same-origin basePath and no credential at all, so no Authorization header is sent.
 // For the calls a caller makes without a session by design ([publicPairingApi], [publicSharesApi], and an
 // application's guest operations).
-export const publicParams = () => ({ basePath: session.apiBase })
+export const publicParams = () => ({ basePath: session.apiBase, fetchApi })
 
 export function loginApi(): LoginApi {
   return new LoginApi(new AuthConfiguration(bearerParams()))
