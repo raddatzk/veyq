@@ -62,7 +62,7 @@ Memory, an expense and a file side by side).
    accident. Moving and renaming what is already there are unchanged. Inside an application's container (a Memory),
    that application decides. Reading needs no server decision (reading is holding keys, and the keys flow down the tree).
    **`READ_WRITE` is interpreted by each application for its kinds** (what a contributor may do in a Memory, in a
-   file tree, in an expense list), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
+   file tree, in an Expenses Pot), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
    declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write
    rights by accident. A `READ_WRITE` share on a folder gives a contributor's rights in every Memory or chapter below it (owner, 2026-10-07: the role is
    inherited as the share allows; the share root's kind no longer decides who writes, the target node's kind does):
@@ -81,7 +81,8 @@ Memory, an expense and a file side by side).
    which editor makes a node a guest's own, whether its delete trashes or erases, and how it meets a member's edit in
    between were judged not worth answering for it. The records *inside* an application's container are that
    application's interpretation of `READ_WRITE` above, not a node delete: Memories lets a guest purge its own media
-   ([docs/apps/memories.md](../apps/memories.md)). **What a guest may take back is its own empty upload placeholder** (`abandonShareNode`, owner decision 2026-10-16): the node its upload created before
+   ([docs/apps/memories.md](../apps/memories.md)), Expenses lets a guest edit and delete entries as revisions nobody
+   loses ([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)). **What a guest may take back is its own empty upload placeholder** (`abandonShareNode`, owner decision 2026-10-16): the node its upload created before
    the link refused the bytes (a full link: the limit is checked at the upload's start, after the create) or the guest
    gave up, erased at once — never trashed — so nothing of a refused upload is kept. Erased only if the calling guest's
    identity last wrote the node's name (its name editor, ADR 0093 § 8), so a member's empty node, one a member renamed,

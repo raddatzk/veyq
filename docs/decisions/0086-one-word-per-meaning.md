@@ -46,6 +46,10 @@ safely" without promising more. Its code id follows the product name (`depot`), 
 names. The worker's capability tags keep their name: they also mean "what this side can do", they never reach a
 client, and they live in the database baseline, so a rename would cost a migration for no reader.
 
+**Expenses is the third application's name** (*Ausgaben*), code id `expenses`; what a person creates in it is a
+**Pot** (*Kasse*). Never "group", which is the `GROUP` scope, and never "tab", which is a UI tab
+([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 1).
+
 Where the name *Files* sits today decides what moves, and the test is Memories' precedent: the application's id
 names its directories, module, package, i18n namespace and app-prefixed seams (`MemoriesNodeKinds`), while its API
 is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
