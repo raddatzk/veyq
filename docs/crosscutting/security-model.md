@@ -304,8 +304,11 @@ way to add code after the fact would be a way to read everything, and the releas
 **Known gap, per application:** the server holds an application's entries and chooses what it serves. Binding an
 entry to its object ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)) does not bind it to its
 neighbours, so for an append-only application (a ledger) a server can **drop or reorder** entries unless a
-sequence number or hash chain is bound into each entry's associated data. That is the same limit as freshness
-above, and each such application states it in its concept doc ([docs/apps](../apps/README.md)).
+sequence number or hash chain is bound into each entry's seal. That is the same limit as freshness
+above, and each such application states it in its concept doc ([docs/apps](../apps/README.md)). Expenses' answer,
+decided and not built, is a graph of seen revisions inside each seal, which catches a dropped entry somebody wrote
+after and leaves the newest ones to the freshness limit
+([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 5).
 
 ## Cryptographic stance
 
