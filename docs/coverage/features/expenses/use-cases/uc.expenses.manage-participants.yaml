@@ -1,0 +1,22 @@
+useCase: uc.expenses.manage-participants
+feature: expenses
+title: Manage the people of a Pot
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: writers-add-and-rename
+    text: "A member or a READ_WRITE guest adds a participant (a record whose id the client mints) and renames one (its next revision); no entry changes."
+  - id: member-deactivates-a-settled-participant
+    text: "A member deactivates a participant with a zero balance and activates it again; entries keep its name, new entries and the overviews do not offer it; neither is offered while the balance is not zero."
+  - id: member-deletes-and-the-name-is-erased
+    text: "A member deletes a settled participant by a sealed erasure revision, and the server erases that record's earlier revisions in the same transaction; entries show it as deleted people, and no row the server holds keeps any spelling of its name."
+  - id: member-removes-an-unnamed-participant
+    text: "A member removes a participant no revision of any entry names, by the same erasure; it appears nowhere afterwards. Remove is not offered for a named one."
+  - id: erasure-is-a-members-only
+    text: "The server takes the erasure from a member only and refuses it from a link; a guest's page offers add and rename only."
+  - id: an-unsettling-edit-shows-the-participant-again
+    text: "An edit of an old entry that unsettles a deactivated or deleted participant shows it again in the balances and the settle-up, by name or as deleted people."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."

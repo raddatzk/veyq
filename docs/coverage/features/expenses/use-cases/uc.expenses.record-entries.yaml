@@ -1,0 +1,22 @@
+useCase: uc.expenses.record-entries
+feature: expenses
+title: Record, edit and delete entries
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: an-entry-is-a-sealed-padded-revision
+    text: "An expense, a refund, a transfer and a participant are each a revision sealed as an expense-entry field under a key of its own (K_rev), K_rev wrapped under the Pot key by expense-entry-key bound to scope, node, entry and revision; padded to a size class and at most 16 KiB; the server cannot tell the kinds apart."
+  - id: revision-n-plus-one-or-stale
+    text: "The server takes revision n+1 only where n is the entry's latest and answers anything else 409 stale_revision; two concurrent edits never overwrite each other, and the editor shows the current revision before saving again."
+  - id: allocation-and-rounding-are-exact-and-equal-everywhere
+    text: "Splits (equal, shares, exact) and line items with the rest spread in proportion or equally are computed in minor units with exact arithmetic, converted once and allocated by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it."
+  - id: an-entry-that-does-not-add-up-is-not-saved
+    text: "Payers' amounts that differ from the total, exact amounts that do not sum to it, line items above it, or a revision above 16 KiB are refused by the editor before anything is sent."
+  - id: delete-is-a-tombstone-revision
+    text: "A delete is a tombstone revision the server sees as such; the entry leaves the list and the balances and moves to the Pot's deleted entries."
+  - id: open-views-follow-every-write
+    text: "Every writer bumps the Pot's item revision in its transaction, so an open view of the Pot, a member's or a guest's, learns of each write on its next poll."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."

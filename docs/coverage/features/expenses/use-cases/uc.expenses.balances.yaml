@@ -1,0 +1,18 @@
+useCase: uc.expenses.balances
+feature: expenses
+title: See who owes whom, settle up, and see where the money went
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: balances-from-the-live-entries
+    text: "Each participant's balance is what they paid and received against their share of every expense and refund, transfers included, computed in the client from the live entries."
+  - id: settle-up-is-greedy-and-deterministic
+    text: "The settle-up suggests at most one transfer fewer than there are people, by the greedy rule with ties by join order, the same on every device; a writer records one or all as transfer entries."
+  - id: overviews-by-category-and-person
+    text: "The overviews show cost per category, per person (paid and share side by side) and category by person; refunds count against their category, transfers are not costs."
+  - id: who-am-i-stays-on-the-device
+    text: "The viewer's choice of who they are marks their row and never leaves the device."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."

@@ -1,0 +1,18 @@
+useCase: uc.expenses.share-pot
+feature: expenses
+title: Share a Pot through a link
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: read-and-read-write-never-write-only
+    text: "A Pot is a share root for READ and READ_WRITE; the dialog offers no upload-only link and the server refuses one on an EXPENSES_POT."
+  - id: the-guest-sees-the-members-view
+    text: "A guest's Pot is the member's view with what the role does not allow removed: entries, history, deleted entries, balances, settle-up and overviews, under the link's key chain."
+  - id: a-contributor-writes-like-a-member
+    text: "A READ_WRITE guest adds, edits, deletes and restores entries and adds and renames participants; each write passes the link's gate and is recorded as a guest write."
+  - id: what-stays-a-members
+    text: "From a link the server refuses the Pot's meta write and the erasure, and a READ guest's every write; the page does not offer them."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
