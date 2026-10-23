@@ -1,4 +1,4 @@
-# admin-web (Vue 3 + PrimeVue)
+# admin-web (Vue 3 + its own UI layer on Reka UI)
 
 The Server-Owner administration surface, extracted from `src/web/` by
 [ADR 0065](../../docs/decisions/0065-admin-ui-cli-separate-service.md). Loaded in addition to the root
@@ -95,4 +95,4 @@ after a contracts change.
 - i18n is this package's own catalog (EN + DE) in `src/i18n/index.ts`, lifted from `src/web/`'s for the strings
   that moved with their views.
 
-Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../../docs/ai/README.md`](../../docs/ai/README.md).
+Stack: Vue 3, the UI layer in `src/shared/ui/` (its own copy, Reka UI and Lucide underneath, ADR 0107), vue-router. Working rules: [`../../docs/ai/README.md`](../../docs/ai/README.md).

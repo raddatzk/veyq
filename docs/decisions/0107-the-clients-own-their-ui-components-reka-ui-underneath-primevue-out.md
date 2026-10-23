@@ -1,6 +1,6 @@
 # ADR 0107 — The clients own their UI components; Reka UI underneath, PrimeVue out
 
-- Status: Accepted 2026-10-22 (owner: Reka UI behind a wrapper layer of our own); not built — cr-own-ui-components-on-reka
+- Status: Accepted 2026-10-22 (owner: Reka UI behind a wrapper layer of our own); built 2026-10-23 (cr-own-ui-components-on-reka): `src/web/` in the steps decision 7 names, `src/admin-web/` in one, its layer written on Reka directly with its call sites moved alongside. No PrimeVue, `@primeuix/*` or `primeicons` package is left in the repository.
 - Date: 2026-10-22
 
 ## Context
@@ -57,6 +57,27 @@ users see is a dependency on PrimeTek inside every instance.
    plain markup, one component at a time, and PrimeVue is removed once nothing imports it. Each step leaves both
    clients working.
 
+## Behaviour changed on purpose
+
+The target was the screens as they were (decision 4); these are the only changes made deliberately, and a layer
+component that cites "behaviour changed on purpose" means one of them:
+
+- **No dialog drags.** The library's dialog was draggable by default, by mouse on its title bar; nobody had chosen it,
+  and Reka has none.
+- **A password field's accessible name is its label only.** The library added a hidden "Enter a password" to every
+  password field's name; with its strength meter always off that text had no job.
+- **A date is typed into segments**, day, month and year, each a spinbutton typed as digits or stepped by the arrow
+  keys, in the order and with the separators of the language: `tt.mm.jjjj` in German, `mm/dd/yyyy` in English, on
+  every date field (owner 2026-10-22; the share and drop-box expiry and the moderation deadlines showed a fixed
+  `yy-mm-dd` before). Pasting a whole date as text is gone. The calendar stays: its button opens it, and so does the
+  field's focus, on every date field, as the library's did (its open-on-focus was the default everywhere, not only
+  on the Memory date). It steps by month; a distant year is typed into its segment. Days outside the bounds are
+  disabled, and a typed one is refused: leaving the field restores the day it held. The model (`YYYY-MM-DD`) stays.
+- **A breadcrumb entry with a `url` is a real link**; a plain click runs its command in place of the link's default,
+  a modified click follows it.
+- **The console's filtered select is a combobox** (`src/admin-web/`, the operator recipients' country): the field is
+  the filter input, and a pick can be cleared.
+
 ## Consequences
 
 - **The migration is large, and most of its cost is in what reaches into PrimeVue's DOM**, not in the imports:
@@ -73,6 +94,9 @@ users see is a dependency on PrimeTek inside every instance.
   it is a measurement after the swap, and tightening the policy is a change of its own.
 - **Guards that read PrimeVue move with it**: `scripts/validate_web_contrast.py` pairs read `--p-*` variables, and
   the stylesheet-anchor guard sees every `.p-*` rule as anchored only while PrimeVue renders that class.
+- **The e2e suites have not run against the layer yet.** Their selectors moved with the layer's classes and roles;
+  the first run is the owner's V1-end run (web-e2e and L1), and a red there that names a `veyq-*` hook or a role goes
+  back to the layer.
 - **Rejected — PrimeVue 5 under the Community License.** Free for us today, but every operator receives the client,
   the caps and the yearly key bind the project to PrimeTek's terms, and the next change of those terms would find us
   as deeply coupled as now.

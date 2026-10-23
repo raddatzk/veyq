@@ -1464,10 +1464,11 @@ red on purpose once, in the same session, before any green from it is allowed to
 
 The corollary, and the place where the repair is more dangerous than the fault. The same fingerprint reported
 *every element on the page* changed, with no visible difference, whenever a surface was probed before a
-PrimeVue `Select` or `Tabs` had ever mounted: those components register `--p-select-*` / `--p-tabs-*` on
-`:root` lazily, and custom properties inherit. The obvious repair — drop the vendor's `--p-` namespace from
-the fingerprint — **would have blinded the gate**, because the project's own `base.css` deliberately defines
-some `--p-*` names itself, and their deletion is exactly the regression the gate exists to catch. The repair
+`Select` or `Tabs` of the component library the clients used then (PrimeVue, retired by ADR 0107) had ever
+mounted: those components registered `--p-select-*` / `--p-tabs-*` on `:root` lazily, and custom properties
+inherit. The obvious repair — drop the vendor's `--p-` namespace from the fingerprint — **would have blinded the
+gate**, because the project's own `base.css` then deliberately defined some `--p-*` names itself, and their deletion
+was exactly the regression the gate existed to catch. The repair
 that holds removes the *confounder* instead: warm every surface once before measuring, so the registry is in
 the same state on both sides of the comparison.
 
