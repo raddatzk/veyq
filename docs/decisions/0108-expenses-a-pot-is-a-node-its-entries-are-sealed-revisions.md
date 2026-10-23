@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); not built; on the V1 line (owner 2026-10-23)
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); not built — by `changes/cr-expenses-ledger.md`, then `cr-expenses-receipts` and `cr-expenses-exchange-rates`; on the V1 line (owner 2026-10-23)
 - Date: 2026-10-23
 
 ## Context
@@ -10,8 +10,9 @@ shared expense tracking in the shape of Splid — people put in what they paid, 
 domain (entry kinds, splits, balances, overviews) is [docs/apps/expenses.md](../apps/expenses.md); this record holds
 what it asks of the platform, because three things in it are new there:
 
-- **A list of sealed records with no blob.** Every record row today is a media row that requires one
-  (`veyq_media.blob_id NOT NULL`); the nearest small sealed payload, a node's `node-meta`, is one per node and capped
+- **A live list of sealed records with no blob.** The one list a view keeps live through core's revisioned-list
+  primitive is Memories' media, whose rows require a blob (`veyq_media.blob_id NOT NULL`); the blobless sealed rows
+  that exist (a Memory's buckets, a member's favorites) are no such list. The nearest small sealed payload, a node's `node-meta`, is one per node and capped
   at 8192 base64 characters (`content.openapi.yaml`).
 - **A guest that writes a record, not a blob.** Every guest write today is an upload, or taking one back
   (`ShareGuestWrites`), and a guest deletes no node that holds anything
@@ -55,13 +56,20 @@ record's earlier revisions, so its name and every earlier spelling of it are gon
 participant by its id only, so none of them changes. The list is published with
 core's revisioned-list primitive ([docs/apps](../apps/README.md) § How an application publishes a revisioned list).
 
-**4. Each revision is sealed under a new field purpose, `expense-entry`,** bound to (scope, node, entry, revision) under
-a field key derived from the Pot's `K_node`, with its vector in `contracts/crypto/vectors/v1.json` (additive, ADR 0072
-Consequences). Its plaintext is padded to fixed size classes, so an itemized restaurant bill does not stand out from a
+**4. Each revision has a key of its own, `K_rev`, and is sealed under a new field purpose, `expense-entry`,** with a
+field key derived from `K_rev` ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 9's envelope, `K_rev` in the place of the parent key); `K_rev` is random and wrapped under the Pot's `K_node` by a
+second purpose, `expense-entry-key`, bound to (scope, node, entry, revision) — the shape of a `K_blob` under its node.
+Both vectors go into `contracts/crypto/vectors/v1.json` (additive, ADR 0072 Consequences). So a re-key after a rotation
+([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)) re-wraps each `K_rev` and never re-encrypts a body
+(that ADR's decision 3, applied to revisions): every body and its digest (decision 5) stay byte-identical, and the server
+refuses a re-key that changes one, so not even the owner who re-keys can rewrite the history. Rejected: a field key
+derived from `K_node` directly, with the digest taken over the plaintext — one purpose less, but every re-key rewrites
+every body, and its owner could rewrite the history undetected (owner 2026-10-23). Its plaintext is padded to fixed size classes, so an itemized restaurant bill does not stand out from a
 single taxi ride, and the contract caps a revision at 16 KiB.
 
 **5. Each revision names the revisions its writer had seen.** Its plaintext carries the current **heads** of the Pot as
-its writer read them (entry id, revision, SHA-256 of that revision's ciphertext); the revisions form a graph in which
+its writer read them (entry id, revision, SHA-256 of that revision's body ciphertext, which no re-key changes); the revisions form a graph in which
 two concurrent writes share a parent and the next write names both — the shape of git's commits, not a sequence.
 On every read the client checks that each named revision is present and matches its digest, and says so where one is
 missing. That catches the server dropping any revision somebody wrote after; it cannot catch the newest revisions
@@ -92,7 +100,9 @@ because a link is served no name: no guest's ([ADR 0030](0030-contributor-public
 (inbox #190 — a Memory's uploader and Depot's guest file listing stay unnamed for a guest the same way).
 A guest's revision and receipt are guest writes like any other: behind `ShareGuestGate`, recorded by
 `GuestWriteRecords`, and reportable with a hold copy
-([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)). A report of an entry
+reaches the whole entry — every revision's `K_rev` and every receipt's `K_blob` — and a receipt can also be reported
+on its own; both are an `ITEM` (owner 2026-10-23).
 
 **7. Receipts are images or PDFs of at most 10 MB, any number per entry, in Expenses' own table.** Core's
 attachments hold one blob per named slot of a node (`ux_attachment_node_slot`), so a receipt is a row of Expenses'
@@ -111,7 +121,10 @@ consent per space ([ADR 0016](0016-geocoding-provider-neutrality.md)) would guar
 which would hand the operator the date of a trip. The rate an entry used is sealed into it and can be typed by hand,
 so a later table never moves an old balance and a device without the provider still works. The provider is
 configurable, and the operator and a tenant owner switch the fetch off as `expenses.exchange-rates`
-([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
+([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A new instance starts with
+**Frankfurter** (open source and self-hostable, serving the ECB's reference rates), as the breached-password check starts
+with HIBP; a mirror can replace it (owner 2026-10-23). Its CORS headers, terms and currency list are checked when the
+fetch is built, before anything depends on them; a currency the table lacks is typed.
 
 **9. Everything that reads amounts runs in the client**: balances, the settle-up suggestion, the overviews. The entry
 format is versioned from its first revision (ADR 0079 decision 7), and its rounding rule is part of the version, so
@@ -123,7 +136,7 @@ every device computes the same balance from the same entries.
   receipts per entry; every revision's time, size class and writer (a member or a link identity); which entries are
   deleted; which records were erased; receipt sizes. Not who owes whom, no amount, no participant, no category, no currency.
 - **New on the platform:** the first blobless record list (decision 3), the first guest write that is a record
-  (decision 6), a seal purpose (decision 4), the second record type with its own blobs after media (decision 7). A
+  (decision 6), two seal purposes (decision 4), the second record type with its own blobs after media (decision 7). A
   generic "record with attachments" primitive in core waits for a third concrete user (Inventory is a concept).
 - **When it is built,** the instance privacy notice (GDPR Art. 13) names the rate provider and the security model lists
   the fetch beside the breached-password check — not before, because no doc claims what does not run.
