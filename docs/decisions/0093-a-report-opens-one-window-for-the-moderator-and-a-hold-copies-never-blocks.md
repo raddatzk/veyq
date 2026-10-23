@@ -305,7 +305,10 @@ objects, and the step ends at once.
   address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
   moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
   facts by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
-  every member could expose one member's content to all). The mail goes once: the server keeps no clear copy to retry.
+  every member could expose one member's content to all). While the instance names no contact (§ 14), that objection
+  has no route but the courts the statement names: accepted for now (owner 2026-10-23), so a Server Owner's step does
+  not offer the in-app objection a moderator's measure has. The mail goes once: the server keeps no clear copy to
+  retry.
   **So the step reports what the mail reached** (owner 2026-10-21): its answer's `statementDelivery` says whether the
   mail reached everyone, and names the address of each one it did not reach — the instance mail is not set up, or the
   send failed; a step with nobody to tell (a tenant without an owner, an account erased before the send) says so, and
