@@ -71,3 +71,18 @@ acceptanceCriteria:
         integration: [TenantStorageFitSliceTest.aMemberWhoIsNotTheOwnerGetsAYesOrANoAtTheExactQuotaBoundary, TenantStorageFitSliceTest.whatTheTenantAlreadyHoldsCountsOpenSessionsIncluded, TenantStorageFitSliceTest.aTenantWithoutAQuotaFitsAnything, TenantStorageFitSliceTest.theAnswerCarriesNothingButTheYesOrNo, TenantStorageFitSliceTest.aStrangerIsNotFoundAndSpendsNoTokenOfTheTenant, TenantStorageFitSliceTest.aMemberPastItsAllowanceIsThrottledAndAnotherMemberIsNot, TenantStorageFitSliceTest.theTenantsAggregateBoundTripsEvenWhenEachMemberIsWithinItsOwn, TenantStorageFitSliceTest.noTokenOrAMalformedByteCountIsRefusedBeforeAnyAnswer]
       web:
         unit: [src/features/tenant/tenantStorageFits.test.ts, src/core/export/ImportSubtreeDialog.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/export-import.spec.ts`, inbox #379) drives `memories-content`,
+    `archive-reads-as-the-tree`, `recognised-on-upload`, `round-trip-by-hooks`, `dialogs` and
+    `manifest-is-trusted-for-nothing` in Chromium against the release candidate's two images, installed through `veyqctl`
+    (ADR 0090), each test tagged with its criterion: a Memory with an uploaded cover and two GPS-tagged photos and a Files
+    folder tree three levels deep are each downloaded through the Service Worker's route, opened in Node (originals and
+    files byte for byte, the manifest's coordinates and cover) and imported into another folder by picking the ZIP for an
+    upload - the Memory's cover, its originals and each photo's Location row come back, the tree downloads again entry for
+    entry; both dialogs' progress bars are recorded moving; five altered downloads are refused with their reasons, a
+    payload whose SHA-256 no longer matches stops the import with "N of M" and trashes what it made, and a ZIP without a
+    manifest, like a download sent through "Upload as a file", is uploaded as a file. Not driven there: a multi-GB
+    export, the OS directory picker or a dropped directory, the quota refusal, other browsers. Written, not yet run: the
+    suite waits for the V1 heavy stage, and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.
+    On that run the file becomes a ref on the criteria its tests are tagged with, and this gap goes.
