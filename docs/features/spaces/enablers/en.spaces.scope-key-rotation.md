@@ -6,9 +6,10 @@
   makes "remove a member" mean something cryptographically; the end-user goal lives in
   [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md).
 - **Provides:** the ability to **rotate a scope's content key forward into a new epoch** — granting the new epoch
-  only to the **remaining** members — so a removed member can read pre-removal content but **never** post-removal
-  content — against a malicious operator as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md)
-  § Guarantee states — and **without re-encrypting anything**.
+  only to the **remaining** members, then re-keying every node of the scope under it — so a removed member can read
+  pre-removal content but **never** post-removal content, except through a link they could rebuild until it is
+  re-issued — against a malicious operator as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md)
+  § Guarantee states — and **without re-encrypting anything in the store**.
 - **Serves (use-cases/enablers):** [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
   (member removal triggers a rotation), [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
   (a compromise re-keys **every** scope the holder is in) and
@@ -26,15 +27,18 @@
 - **Preconditions:** A group with ≥1 remaining owner online who holds its current grant, to perform the rotation
   (mint + wrap are client-side; the blind server cannot).
 - **Postconditions (success):** The scope carries a new **current epoch**; the new epoch is `symWrap`'d over the
-  previous (the backward chain) and `asymWrap`'d to each remaining member; new content seals under it; the removed
-  member's membership is gone (403). The server saw only opaque epoch-chain links, opaque grants, and per-node
-  epoch indices — never a key.
+  previous (the backward chain) and `asymWrap`'d to each remaining member; new content seals under it, and every
+  live and trashed node carries a fresh key minted at it ([uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md));
+  the removed member's membership is gone (403). The server saw only opaque epoch-chain links, opaque grants,
+  rewritten ciphertext in rows it already held, and per-node epoch indices — never a key.
 
 ## How rotation works (the epoch chain)
 
 The scope content key is a sequence `E0, E1, …`; each new epoch **wraps its predecessor** (`symWrap(E_{n+1}, E_n)`),
 so holding the latest epoch derives every earlier one, but an old epoch can never derive a newer one. A member's
-grant wraps the **latest epoch they hold**. Nodes are **tagged with the epoch** they were sealed under. Full model,
+grant wraps the **latest epoch they hold**. Each node carries the epoch its key was minted at, and every write sealed
+under a node's key states it ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)
+point 6). Full model,
 guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisions/0024-scope-key-rotation.md).
 
 ## Main flow — rotate on removal
@@ -54,7 +58,12 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
    **grant-delivery** reconciler finishes the rest — its trigger widened from *grant-less* to *grant-less or
    stale-epoch*, first-online-wins, idempotent ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
 3. New content (names, `slug_token`s, `K_node`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
-4. The removed member holds ≤ `E_n` → decrypts pre-removal content, never `E_{n+1}` content.
+4. The same device re-keys every existing node of the scope under `E_{n+1}`, top-down: a fresh key per node, every
+   field sealed under the old one re-sealed, each `K_blob` re-wrapped, nothing re-encrypted in the store
+   ([uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md)). A write into a node not yet
+   re-keyed waits (`409 node_rekey_pending`).
+5. The removed member holds ≤ `E_n` and the node keys from before → decrypts pre-removal content, never what is
+   added afterwards, except through a link they could rebuild, until it is re-issued.
 
 ```mermaid
 ---
@@ -68,6 +77,7 @@ sequenceDiagram
   O->>S: one request — chain-link symWrap(E_{n+1}, E_n) + re-grants asymWrap(remainingPub, E_{n+1}) + removes X
   Note right of S: deletes X's membership and commits n+1 in one transaction (rest via grant-delivery)
   Note right of S: opaque epoch link + grants + per-node epoch index — never a key
+  O->>S: re-key every node under E_{n+1}, top-down (fresh keys, re-sealed fields, re-wrapped K_blob)
   Note over O,X: new content
   O->>S: new node sealed under E_{n+1}, tagged epoch n+1
   X->>S: (colluding) fetch new node
@@ -84,7 +94,7 @@ sequenceDiagram
   removals before anyone is online still cost one rotation; an event that arrives after a job was claimed gets a
   job of its own, because the claimed job's worker may already have read the directory the event changed — one
   rotation more, in a window of seconds. A job is `done` only once its lease holder committed an epoch while
-  holding its lease. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
+  holding its lease and no node of the scope lags it (`409 rekey_incomplete`). This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
   co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4); its
   whole lifecycle, failure modes included, is
   [uc.spaces.complete-queued-rotation](../use-cases/uc.spaces.complete-queued-rotation.md). When the
@@ -120,10 +130,13 @@ sequenceDiagram
 
 ## Quality notes
 
-- **Forward-confidential, cheaply.** One random key + one chain-wrap + one `asymWrap` per remaining member — **no
-  content re-seal, no media re-encryption** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)).
+- **Forward-confidential, without re-encryption.** The epoch costs one random key + one chain-wrap + one `asymWrap`
+  per remaining member ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); the re-key that follows costs
+  symmetric re-seals per node and medium in the database, and no store object is read or written
+  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Cost).
 - **Operator-blind.** The server stores only the opaque epoch-chain links, the per-member grants and admission
-  tags, a per-membership granted-epoch marker, and a per-node epoch index — no key, no plaintext. The epoch
+  tags, a per-membership granted-epoch marker, a per-node epoch index and the re-key's rewritten ciphertext — no key,
+  no plaintext. The epoch
   index is operational metadata the operator could infer from timing anyway.
 - **Honest limit.** Already-read + pre-rotation content is not retractable; rotation protects **future** content.
   Layer-1 (deleted membership → 403) is the instant defense for everything future against an honest server.
@@ -135,6 +148,7 @@ sequenceDiagram
 
 - Feature: [Spaces (scopes)](../_index.md)
 - Decisions: [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (the epoch model),
+  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) (every rotation re-keys every node),
   [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy),
   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (§6 removal → rotation),
   [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) / [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)

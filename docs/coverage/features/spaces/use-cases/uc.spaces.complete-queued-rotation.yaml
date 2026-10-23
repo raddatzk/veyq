@@ -57,3 +57,21 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [RotationSliceTest.anOwnerSeesAStuckCompromiseRotationOnTheirOwnRowAndRequeuesIt] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/components/app/AppSidebar.test.ts] }
+  - id: done-only-once-rekeyed
+    text: >
+      After committing the epoch the owner's worker re-keys every node of the scope (uc.spaces.rekey-after-rotation)
+      and completes the job only then: a completion while a live or trashed node lags the current epoch is 409
+      rekey_incomplete with the job kept leased, and a re-key that does not finish leaves the job leased and
+      uncompleted (ADR 0109 point 7).
+    coverage:
+      backend: { integration: [RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone] }
+      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
+  - id: an-unfinished-rekey-resumes
+    text: >
+      E10: while a node lags, an owner's own scope row carries rekeying, derived from the node rows and never on a
+      plain member's row; each run of an owner's worker resumes every scope reading rekeying before it claims
+      anything, and a job whose epoch an earlier lease committed completes once the re-key is done, without a second
+      rotation.
+    coverage:
+      backend: { integration: [RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags] }
+      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }

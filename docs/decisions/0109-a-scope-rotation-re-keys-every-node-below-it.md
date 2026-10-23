@@ -1,6 +1,6 @@
 # ADR 0109 — A scope rotation re-keys every node below it
 
-- Status: Accepted (built by `changes/cr-scope-rotation-rekeys-nodes.md`; until it lands, what § Context measured holds)
+- Status: Accepted 2026-10-23 (owner); built 2026-10-23 (cr-scope-rotation-rekeys-nodes: contracts, backend, web)
 - Date: 2026-10-23
 
 ## Context
@@ -8,7 +8,7 @@
 A rotation moves `K_SC` into a new epoch and touches nothing else: `commitRotation` (`src/web/src/features/spaces/scopes.ts`)
 mints the epoch, its chain link and the grants, and `ScopesStore.rotate` writes no node row
 (`grep -c "NodeEntity\|veyq_node\|wrappedContentKey" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/ScopesStore.kt`
-→ 0, 2026-10-23). Node keys never re-keyed ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+→ 0, 2026-10-23). Until this decision, node keys were not re-keyed ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 4). So everything added after a rotation **inside a folder, Memory or chapter that existed before it** is
 sealed under a node key the excluded party already holds: a new child's key and name, a new medium's `K_blob` wrap,
 its meta and EXIF. Only a new scope-root entry is out of their reach. With a dump, the excluded party reads it.
@@ -142,3 +142,8 @@ for a group removal on the remover's (it was `O(members)`, it becomes `O(members
 6. An upload to a drop box after the re-key does not open with the drop private key from before.
 7. A trashed node restored after a rotation opens only from the new epoch.
 8. No store object is written or read by a re-key.
+
+Explained for security researchers on the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md),
+[Known limitations](../../site/src/content/docs/security/known-limitations.md),
+[Threat model](../../site/src/content/docs/security/threat-model.md),
+[Protocols](../../site/src/content/docs/security/protocols.mdx).

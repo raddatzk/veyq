@@ -18,16 +18,18 @@
   Master-Key-sealed blob is re-sealed and the caller's item marks are re-tagged; the Secret-Key proof key is
   unchanged. Self-served scopes sit at a new
   epoch granted to the new identity; every shared scope carries a queued rotation for another owner of it to
-  complete. Every other session is revoked. **What the old identity already read is not retracted.** A new epoch
-  re-keys no node yet ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) decides
-  it, not built): what is added inside a folder, Memory or chapter that existed before still seals under node keys
-  the old identity holds.
+  complete. Every other session is revoked. **What the old identity already read is not retracted.** Each new
+  epoch re-keys every node of its scope ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
+  [uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md)), so once that is done
+  the old identity reads nothing added there. What stays in its reach: what existed at the rotation, and every link
+  made before, until it is renewed.
 
 ## Main flow
 
-1. **Entry.** Settings → Personal → security. The screen states, before any button, the three things that
-   decide whether the user should be here at all: it ends the compromise but retracts nothing; it signs every
-   other device out and takes their saved keys; and it needs the Emergency Kit.
+1. **Entry.** Settings → Personal → security. The screen states, before any button, what decides whether the
+   user should be here at all and what it costs: it ends the compromise but retracts nothing; links made before stay
+   open to the old key until renewed; it signs every other device out and takes their saved keys; it needs the
+   Emergency Kit. It lists every shared space, the tenant included, where the holder is the only owner (E4).
 2. **The cold gate.** The client asks for the password + Secret Key (the shared control —
    [uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — on **every** path, cold ones included,
    because rewriting the two cold wraps needs both as material and no KEK survives the unlock — re-derives the
@@ -54,8 +56,10 @@
    who ever pinned this account sees **changed**, and every automated wrap to it declines
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
 6. **Re-key what this account can re-key alone.** For each scope where the holder is the only member — the
-   personal scope — the client mints the next epoch, chain-links it and grants it to the **new** identity. That moves
-   `K_SC` only; every node keeps its key until ADR 0109's re-key is built.
+   personal scope — the client mints the next epoch, chain-links it and grants it to the **new** identity, then
+   re-keys every node of the scope on this device
+   ([uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md)). A re-key that stops
+   leaves the scope *re-keying*; this device's scope-rotation worker finishes it the next time veyq opens.
 7. **Queue what it must not re-key alone.** For every shared scope, a `SCOPE_ROTATION` job is originated, and the
    rotator is excluded from every live rotation job of that scope. It is completed by **another owner** of the
    scope, never by the rotator: a rotator who could drive their own re-grant would let an attacker holding the old
@@ -67,14 +71,15 @@
    [uc.spaces.complete-queued-rotation](../../spaces/use-cases/uc.spaces.complete-queued-rotation.md).
 8. **Cut the rest.** Every other session family is revoked, so the granted device loses server access as well
    as its future reads.
-9. **Report honestly.** The result screen is a per-scope status, not a success tick: *secured* where step 6
-   finished, and for every scope step 7 queued, the **server's** state of its covering rotation, re-read on every
-   visit rather than synthesised once: *waiting* (an owner who may complete it exists), *stalled* (none does — E4),
-   *secured* (the rotation landed, or the holder's own grant is already behind, so the old identity holds no grant
-   to the current epoch) or *failed* (the job dead-lettered — E3). Until it is *secured*, the old key still reads
-   what is new in that space, and for each such scope the holder is outside it until someone there accepts the new
-   key. *Secured* reaches the scope's root only: inside a folder, Memory or chapter that existed before, the old key
-   still reads what is added (ADR 0109, not built), and the result screen says so.
+9. **Report honestly.** The result screen is a per-scope status, not a success tick: *secured* or *re-keying*
+   where step 6 finished or stopped, and for every scope step 7 queued, the **server's** state of its covering
+   rotation, re-read on every visit rather than synthesised once: *waiting* (an owner who may complete it exists),
+   *stalled* (none does — E4), *re-keying* (the new epoch is in and a node still carries a key from before),
+   *secured* (the old identity holds no grant to the current epoch and every node of the scope is re-keyed) or
+   *failed* (the job dead-lettered — E3). Until it is *secured*, the old key still reads what is new in that space,
+   and for each such scope the holder is outside it until someone there accepts the new key. *Secured* closes what
+   is added afterwards to the old key, except through a link made before, until it is renewed; the result screen
+   says so.
 
 ```mermaid
 ---
@@ -128,7 +133,7 @@ sequenceDiagram
   owner holds no grant or has declined the job. The remedy is to **promote a co-owner first**
   ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)), the same shape
   [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) already uses for the sole-key-holder case —
-  and the entry screen names it as a precondition for those scopes rather than letting the user discover it at
+  and the entry screen lists those scopes by name before the button rather than letting the user discover them at
   step 9.
 - **E5 — a group invitation to this account is pending.** Its `sealed_name_key` is wrapped to the old identity
   and there is no re-mint path, so the proposal is dead: it must be withdrawn and re-issued after
@@ -174,9 +179,8 @@ sequenceDiagram
 
 ## User impact
 
-If someone got into your account, you can replace your keys so that their device is signed out and shut out of each
-space's own new key; what is added inside folders and Memories that already existed stays in its reach until node keys
-are replaced too.
+If someone got into your account, you can replace your keys: their device is signed out, and once each space has its
+new lock they cannot read what is added there, except through a link made before until you renew it.
 
 ## Related
 
@@ -195,6 +199,8 @@ are replaced too.
   (Master-Key-sealed, so re-sealed), [en.memory.favorites](../../memory/enablers/en.memory.favorites.md) (the
   Memory pins re-sealed, the item marks re-tagged)
 - Use-cases: [uc.account.sessions](uc.account.sessions.md) (containment, the step before this one),
+  [uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md) (the re-key every
+  rotated scope runs),
   [uc.account.onboard-device](uc.account.onboard-device.md) (E4 — the mistake this answers),
   [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the re-admission review),
   [uc.account.recover-access](uc.account.recover-access.md) (the other cold path)

@@ -9,6 +9,7 @@ sources:
   - docs/decisions/0072-a-seal-binds-its-object.md
   - docs/decisions/0068-favorites-two-confidentiality-levels.md
   - docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md
+  - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -34,10 +35,10 @@ operator is you, and the active-operator entries do not apply.
 | [A departing member's sockpuppet](#scope-rotation-forks-queued-rotations-and-a-colluding-departing-member) | departing member + operator | ADR 0020, ADR 0024 | a client-held member roster (not taken) |
 | [QR reader who also runs the relay](#device-linking-an-attacker-who-reads-the-qr-and-runs-the-relay) | operator who also sees the QR | ADR 0059 §11 | nothing recorded |
 | [Item favorites under `E_0`](#item-favorites-sealed-under-the-base-epoch) | former member with a dump or the operator; the operator alone for counts | ADR 0068 | re-open condition named in ADR 0068 §9 |
-| [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075 | re-issue (built, honest-server cut) |
+| [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075, ADR 0109 | re-issue (built; with a rotation also against a dump) |
 | [Guest names vs. a viewer link](#guest-names-and-an-operator-holding-a-link) | operator holding a link | ADR 0030 point 8 | accepted |
 | [Share password is access control](#a-share-password-is-access-control-not-cryptography) | operator colluding with a link holder | ADR 0037 | [cryptographic share password](/veyq/security/roadmap/) |
-| [Revocation cannot retract what was read](#revocation-cannot-retract-what-was-already-read) | any former recipient | security-model, ADR 0024, ADR 0025 | inherent |
+| [Revocation cannot retract what was read](#revocation-cannot-retract-what-was-already-read) | any former recipient | security-model, ADR 0024, ADR 0025, ADR 0109 | inherent; links by re-issue |
 | [Server-visible metadata](#metadata-the-server-sees) | operator | security-model | by design |
 | [Append-only entries can be dropped or reordered](#applications-entries-are-not-bound-to-their-neighbours) | operator | security-model, ADR 0072 | a sequence number or hash chain per application |
 | [Per-instance rate limiting](#rate-limiting-is-per-instance) | online attacker | cc.security.rate-limit | deferred hardening |
@@ -237,7 +238,8 @@ sealed under the member's Master Key.
 A public share link is a bearer capability: `/s/{shareId}#k=K_share`, with the key in the fragment. Every member can
 rebuild every link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
 link that existed on its Memories while they belonged. Using one needs no dump: against an honest server the link
-alone works, and a Memory's content key `K_node` never re-keys.
+alone works, and a rotation re-wraps the link to the Memory's new key rather than closing it
+([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4).
 
 What is built: a **re-issue** (one request, one transaction: a new id and a fresh `K_share` carrying the old settings,
 the old link deleted) cuts a departed member off. Re-activating a link a departed member may hold is refused
@@ -249,14 +251,16 @@ once.
 - **The cut is honest-server only.** Revocation is access control; a malicious operator can keep serving a revoked
   id.
 - **Until a link is re-issued, the departed member can keep using it**, with no dump.
-- **With a dump**, they also read the old share's later password, label or note edits, and the Memory's content under
-  `K_node` stays readable whatever the link does.
+- **With a dump**, they also read the old share's later password, label or note edits, and what is added below the
+  link's root through its `K_share`, after a rotation too. Without a rotation (a tenant member's routine removal), the
+  Memory's content under the `K_node` they kept stays readable whatever the link does.
 
 **Decided in:** [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md).
 
-**Closed by:** a re-issue, against an honest server. The dump case is the class
-  [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md) accepts:
-  `K_node` is not re-keyed.
+**Closed by:** a re-issue, against an honest server; once the scope has also rotated, against a dump of what is
+  added afterwards too, since the fresh `K_share` opens nothing the old one reaches. Without a rotation, the dump case
+  is the class [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md)
+  accepts until the next one.
 
 ## Guest names and an operator holding a link
 
@@ -296,12 +300,18 @@ can retract content a recipient already downloaded and decrypted; rotation prote
 - **Layer 2 is a per-scope policy.** Groups rotate on removal; the **tenant** uses layer 1 alone by default and
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
-- **A rotation re-keys no node yet.** It moves `K_SC` only, so what is added inside a folder, Memory or chapter that
-  existed before it seals under node keys the excluded party holds, and with a dump they read it; only a new entry at
-  the scope's root is out of their reach. [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)
-  decides that every rotation re-keys every node below the scope key; it is not built yet.
-- **A scope rotation does not revoke a share.** A shared `K_node` is wrapped independently of the scope key, so links
-  are revoked separately ([above](#departed-members-and-the-links-they-could-copy)).
+- **A rotation closes what is added afterwards, not everything.** It re-keys every live and trashed node of the
+  scope ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)); writes into a node not yet re-keyed wait. What stays in the excluded party's reach:
+  - what existed at the rotation;
+  - every link they could rebuild, until it is re-issued: the re-key re-wraps it to the new key
+    ([above](#departed-members-and-the-links-they-could-copy));
+  - a drop box's guest identity from before: its `K_up` is re-sealed to the new drop key, not replaced (only the
+    guest holds it), so whoever held the old drop key reads what that guest adds to their identity folder afterwards,
+    until the link is re-issued;
+  - a queued rotation before an owner runs it (*waiting*, *stalled*).
+- **Without a rotation, kept node keys keep reading.** A removal that does not rotate (the tenant's routine one) and
+  a revoked link's guest read, with a dump, what is added under the nodes whose keys they kept, until the next
+  rotation.
 - **Account-key rotation after a compromise is forward secrecy, not repair.** What was already read stays read.
 
 **Decided in:** [security-model § Revocation](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#revocation--two-layers),

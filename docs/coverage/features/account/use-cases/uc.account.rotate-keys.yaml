@@ -190,6 +190,25 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [RotationSliceTest.rotationSupersedesLivePairingChannelsAndRevokesEveryOtherSession] }
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: every-rotated-scope-rekeys-its-nodes
+    # ADR 0109. The re-key itself is uc.spaces.rekey-after-rotation's (its refs run it through the real crypto); what
+    # this criterion adds is who runs it for an account rotation.
+    text: >
+      Every scope the rotation advances re-keys every node of it — a sole-member scope on the rotating device right
+      after its new epoch, a shared scope on the device of the owner who completes the covering rotation — so what is
+      added afterwards inside a folder, Memory or chapter that existed before opens with no key of the old identity.
+      What existed at the rotation, and every link made before until it is renewed, stay in its reach. A sole-member
+      re-key that stops leaves the scope rekeying, and that device's scope-rotation worker resumes it.
+    coverage:
+      backend: { integration: [RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone] }
+      web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
+  - id: secured-only-once-rekeyed
+    text: >
+      The rotator's state of a queued rotation reads rekeying, never secured, while a node of the scope still carries a
+      key from before — by the grant rule and by the done rule alike — and an owner's row needs nobody for it, since a
+      worker resumes it.
+    coverage:
+      backend: { unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying] }
 # Backend built by cr-account-key-rotation-after-compromise: POST /api/account/rotation (RotationResource →
 # RotationHandler → RotationStore, one transaction), the member-count split on MembershipStore, the
 # rotator-excluding origination on TasksStore, and POST /api/tasks/declines/clear. Web: the Security section of

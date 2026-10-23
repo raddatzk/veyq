@@ -31,10 +31,12 @@ acceptanceCriteria:
       web:
         unit: [src/features/memories/share.test.ts]
   - id: follows-new-content
-    text: Because K_node is stable and never re-keyed (ADR 0024, no re-encryption), content added to the shared Memory after a rotation seals under the same K_node and is visible via the existing share; the URL/fragment never changes and no re-wrap is performed.
+    text: Content added to the shared Memory is visible via the existing share, after a rotation too - between rotations K_node stays, and a rotation's re-key re-wraps the share's root key under its unchanged K_share (ADR 0109 point 4); the URL/fragment never changes, and the link stays reissueRequired because its recovery copy keeps its epoch.
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks]
+        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction]
+      web:
+        unit: [src/core/node/rekey/rekeyScope.test.ts]
   - id: operator-blind-unchanged
     text: A shared-scope share is the same opaque record shape (shareId, symWrap(K_share,K_node), role, sealed name, nodeId, owner_account, enabled) and adds no new operator-visible signal; the server never sees K_share, K_node, names, or the visitor. The manage list's `mine` flag is derived per request, never stored.
     coverage:
