@@ -123,7 +123,6 @@ describe('ChangePasswordPanel — the password floor', () => {
   it('checks the finished new password when its field is left — never while typing, once per password', async () => {
     const w = mount(ChangePasswordPanel, { global: { plugins: [realI18n()], stubs } })
     await flushPromises()
-    expect(w.text()).toContain(t('password.pwnedNote'))
 
     const pw = passwords(w)
     await pw[1].setValue('a long enough')

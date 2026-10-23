@@ -80,17 +80,17 @@ Locators:
 4. **No new keys for the sweep.** A shorter text replaces the old value under the same key. A key whose text becomes
    empty is deleted, after the grep.
 
-## Open questions (owner)
+## Questions (owner, decided 2026-10-23)
 
-- **Q1: Does the owner review each sweep's texts before merge?** **Recommendation:** yes. Each sweep phase presents
+- **Q1: Does the owner review each sweep's texts before merge?** **Decided (owner 2026-10-23: "Ja, Q1 und Q2 wie empfohlen"): yes, as recommended**, phase 1's review items included. Each sweep phase presents
   a before/after table (key, EN, DE, the rule bullet) in its session, and merges after the owner's answer. Texts are
   the product's voice; a rule is not enough to decide every one.
-- **Q2: Does the sweep cover the site's Use pages' own prose?** **Recommendation:** no. The rule is a UI rule; the
+- **Q2: Does the sweep cover the site's Use pages' own prose?** **Decided (owner 2026-10-23, same answer): no, as recommended.** The rule is a UI rule; the
   site explains on purpose. A Use page changes only where it quotes a changed UI text.
 
 ## Phases
 
-- [ ] **1 the owner's pass**: commit the `veyq-i18n` worktree's changes onto `main` with the owner's consent, in their
+- [x] **1 the owner's pass** (landed 2026-10-23: the owner's commit as theirs, then the review items; the owner approved the table and the two R3 clauses on the contributor and drop-box switches beyond the CR's items): commit the `veyq-i18n` worktree's changes onto `main` with the owner's consent, in their
   name or as theirs (ask). Resolve the two conflicts: take `main`'s `VeyqMessage` line and drop the note. Apply the
   review items above, and show them to the owner first. · Done when: `npm run check` in `src/web/` and `src/admin-web/`
   green; every `scripts/validate_*.py` except `validate_guard_gaps.py` green; the worktree is clean (the owner removes

@@ -321,7 +321,6 @@ describe('RecoverView', () => {
 
   it('checks the finished new password when its field is left — never while typing, once per password', async () => {
     const w = await onPasswordStep()
-    expect(w.text()).toContain(t('password.pwnedNote'))
     const pw = w.findAll('input[type="password"]')
     await pw[0].setValue('a brand')
     await pw[0].setValue('a brand new password')

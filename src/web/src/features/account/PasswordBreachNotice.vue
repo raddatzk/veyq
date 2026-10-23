@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// What a password-choosing dialog shows of the breached-password check (useBreachCheck, passwordWarning.ts): the
-// one-sentence note of what leaves the device, always; a hit's warning with its explicit "Use it anyway"; and the
-// one line saying a check could not run. One component for the dialogs that choose a password, so the wording and
+// What a password-choosing dialog shows of the breached-password check (useBreachCheck, passwordWarning.ts): a
+// hit's warning with its explicit "Use it anyway", and the one line saying a check could not run. What leaves the
+// device is the privacy notice's to say, not the field's (owner 2026-10-21, ADR 0093 § Legal basis). One component for the dialogs that choose a password, so the wording and
 // the control cannot drift apart between them.
 import { useI18n } from 'vue-i18n'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
@@ -20,7 +20,6 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <small class="field-hint">{{ t('password.pwnedNote') }}</small>
   <VeyqMessage v-if="state.kind === 'hit' || state.kind === 'accepted'" tone="warn">
     {{ t('password.pwnedWarning', { count: state.count }) }}
     <span class="checkbox-row breach-use-anyway">

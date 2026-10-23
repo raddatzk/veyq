@@ -80,7 +80,8 @@ range API whether the password appears in known breaches. The fences apply like 
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
-  [Change your password](../../site/src/content/docs/account/change-password.mdx). A one-sentence note under the password field says what leaves the device.
+  [Change your password](../../site/src/content/docs/account/change-password.mdx). The field itself carries no note: the privacy notice names the check, its recipient and its switch
+  (ADR 0093 § Legal basis; the note was removed under the copy rule, owner 2026-10-21).
 - **Its address is the Server Owner's** ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
   decision 7): the register entry `core.breached-password` carries it, a new instance starts with the HIBP range API, a
   mirror can replace it, and an instance with none configured (or the entry switched off) runs no check at all, sends
