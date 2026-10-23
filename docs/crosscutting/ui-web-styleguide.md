@@ -263,11 +263,11 @@ Owner 2026-10-23; the same rule holds for `src/admin-web/`'s texts.
 - **A consequence the reader cannot see is not reassurance.** That existing links stop at once, or that nothing is
   deleted and the links work again when switched back, tells the person clicking what their click does to *others*.
   Keep it, in a clause.
-- **The exception: where losing something only the reader holds would hurt, the text explains enough to prevent
-  it.** The config-secret key is the case in point. The server generates it, never shows it again, and seals its
-  stored secrets under it. Without it, media are unreachable and every sealed secret must be entered again
-  (ADR 0089 decision 4, ADR 0050). So its panel says what the key is and what its status means. A Secret Key, a
-  recovery code or an Emergency Kit gets the same.
+- **The exception: what the reader should keep safe gets enough explanation that they do.** How much depends on what
+  a loss costs. A Secret Key, a recovery code or an Emergency Kit cannot be replaced, so the text says so plainly. The
+  config-secret key costs work rather than data: without it, media are unreachable until the store credentials are
+  entered again, and so is every other sealed secret (ADR 0089 decision 4, ADR 0050). So its panel says what the key
+  is, what its status means and what a loss would mean, without alarm.
 
 **Deleting an i18n key needs a grep — nothing else catches it.** A missing `vue-i18n` key resolves at *runtime*
 (it renders as the key path), so neither typecheck nor the component tests see it — those supply their own
@@ -299,8 +299,8 @@ before component-specific media queries.
   colour pairing has a row in `scripts/validate_web_contrast.py` (§ *Contrast*).
 - **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders — in every `.css` under the package's `src/`, an application's own sheet included. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Adjusting a layer component is a rule compounded with or scoped by one of ours (`.memory-card .veyq-card-frame__body`, `.veyq-danger-action.veyq-button`), and the layer's own classes are applied by its markup like any other.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
-- Copy is short, says what happens, and does not reassure; only a key, code or kit the reader must not lose gets
-  an explanation (§ *Copy*).
+- Copy is short, says what happens, and does not reassure; only what the reader should keep safe gets an
+  explanation, sized to what its loss costs (§ *Copy*).
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.
 - Confirmed a destructive action through `useConfirm` (or an existing inline/dedicated form) — never
