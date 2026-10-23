@@ -162,7 +162,7 @@ const STATEMENT_FLAGS: Record<string, Flag> = {
   'over-content': { describe: 'the step is over content though no case or proposal names it — it then carries a statement', required: false, switch: true },
   ground: { describe: 'the ground the statement rests on', required: false, oneOf: GROUNDS },
   provision: { describe: 'the law or the clause it relies on, e.g. "§ 86a StGB" or "Space terms, clause 4"', required: false },
-  facts: { describe: 'what you found, in your words — mailed to the affected; the server keeps it only sealed', required: false },
+  facts: { describe: 'what you found, in your words — mailed to the affected', required: false },
 }
 const domain: Flag = { describe: 'domain the tenant is reached at', required: true }
 const ownerEmail: Flag = { describe: "owner's email address", required: true }

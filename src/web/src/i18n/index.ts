@@ -1236,7 +1236,7 @@ const en = {
   },
   unlock: {
     secretKey: 'Secret Key',
-    secretKeyHint: 'First time on this device — paste or upload your Secret Key from your Emergency Kit. You won’t need it here again.',
+    secretKeyHint: 'From your Emergency Kit: paste it or upload the kit.',
     // Instead of the hint above, on a device whose remembered unlock the server's Owner switched off
     // (ADR 0088 decision 5): the wrap is withheld, not deleted, and this device keeps its key.
     deviceHeldBack:
@@ -1327,8 +1327,8 @@ const en = {
     saved: 'Email settings saved.',
     saveFailed: 'Couldn’t save the email settings.',
     invalidTemplate: 'Your template uses a placeholder that isn’t allowed. Only {vars} can be used.',
-    kekUnavailable: 'This server can’t encrypt secrets yet, so the password can’t be saved. An administrator needs to configure the encryption key (KEK) first.',
-    keyMismatch: 'The server’s encryption key has changed, so your saved SMTP password can’t be decrypted anymore. Re-enter the password below to save it under the new key, or restore the original key file. Until then, no invitations or password-reset emails can be sent.',
+    kekUnavailable: 'This server’s config-secret key is not available, so the password can’t be saved. Whoever runs this server has to make it available first.',
+    keyMismatch: 'The server’s config-secret key has changed, so your saved SMTP password can’t be opened any more. Enter the password again below to save it under the new key, or ask whoever runs this server to put the original key file back. Until then, no invitations or password-reset emails can be sent.',
   },
   tenantCapabilities: {
     navTitle: 'Capabilities',
@@ -3167,7 +3167,7 @@ const de: typeof en = {
   },
   unlock: {
     secretKey: 'Secret Key',
-    secretKeyHint: 'Erstes Mal auf diesem Gerät — füge deinen Secret Key aus dem Notfall-Kit ein oder lade ihn hoch. Hier wird er nicht wieder gebraucht.',
+    secretKeyHint: 'Aus deinem Notfall-Kit: füge ihn ein oder lade das Kit hoch.',
     deviceHeldBack:
       'Dieser Server lässt gemerkte Geräte gerade nicht zu, darum braucht dieses Gerät deinen Secret Key aus dem Notfall-Kit. Darauf wurde nichts entfernt: Sobald der Server es wieder zulässt, entsperrt es wie zuvor.',
     upload: 'Notfall-Kit hochladen',
@@ -3256,8 +3256,8 @@ const de: typeof en = {
     saved: 'E-Mail-Einstellungen gespeichert.',
     saveFailed: 'E-Mail-Einstellungen konnten nicht gespeichert werden.',
     invalidTemplate: 'Deine Vorlage nutzt einen nicht erlaubten Platzhalter. Nur {vars} sind möglich.',
-    kekUnavailable: 'Dieser Server kann noch keine Secrets verschlüsseln, daher lässt sich das Passwort nicht speichern. Ein Administrator muss zuerst den Verschlüsselungsschlüssel (KEK) konfigurieren.',
-    keyMismatch: 'Der Verschlüsselungsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr entschlüsseln. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder stelle die ursprüngliche Schlüsseldatei wieder her. Bis dahin lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
+    kekUnavailable: 'Der Konfigurationsschlüssel dieses Servers ist nicht verfügbar, daher lässt sich das Passwort nicht speichern. Wer diesen Server betreibt, muss ihn zuerst verfügbar machen.',
+    keyMismatch: 'Der Konfigurationsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr öffnen. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder bitte die Person, die diesen Server betreibt, die ursprüngliche Schlüsseldatei zurückzulegen. Bis dahin lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
   },
   tenantCapabilities: {
     navTitle: 'Funktionen',
