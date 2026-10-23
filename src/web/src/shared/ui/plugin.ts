@@ -7,6 +7,7 @@ import ToastService from 'primevue/toastservice'
 import Aura from '@primeuix/themes/aura'
 import { syncPrimeVueLocale } from './primeVueLocale'
 import 'primeicons/primeicons.css'
+import './layer.css'
 
 export const uiPlugin = {
   install(app: App): void {

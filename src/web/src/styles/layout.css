@@ -163,7 +163,7 @@
 
 .sidebar-tenant-avatar,
 .sidebar-scope-icon,
-.sidebar-nav-link > .pi {
+.sidebar-nav-link > .veyq-icon {
   display: grid;
   place-items: center;
   width: 2.1rem;
@@ -174,7 +174,7 @@
   font-weight: 800;
 }
 
-.sidebar-scope-icon.pi {
+.sidebar-scope-icon.veyq-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,7 +224,7 @@
   color: var(--app-control-text);
 }
 
-.sidebar-tenant-switch .pi {
+.sidebar-tenant-switch .veyq-icon {
   font-size: 0.72rem;
 }
 
@@ -248,12 +248,12 @@
   font-size: 0.72rem;
 }
 
-.sidebar-scope-icon.pi-users {
+.sidebar-scope-icon[data-icon='users'] {
   background: var(--app-danger-soft);
   color: var(--app-danger);
 }
 
-.sidebar-scope-icon.pi-user {
+.sidebar-scope-icon[data-icon='user'] {
   background: var(--app-success-soft);
   color: var(--app-success-text);
 }
@@ -701,7 +701,7 @@
 
   .sidebar-tenant-avatar,
   .sidebar-scope-icon,
-  .sidebar-nav-link > .pi {
+  .sidebar-nav-link > .veyq-icon {
     width: 2.35rem;
     height: 2.35rem;
   }

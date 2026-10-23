@@ -228,7 +228,7 @@
   justify-content: center;
 }
 
-.memory-card-icon.veyq-icon::before {
+.memory-card-icon.veyq-icon .veyq-icon__svg {
   transform: scale(1.45);
   transform-origin: center;
 }

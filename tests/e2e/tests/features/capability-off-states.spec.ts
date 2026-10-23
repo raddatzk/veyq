@@ -43,7 +43,8 @@ const SWITCHED = [DROP_BOX, DEVICE_LINKING, PASSWORDLESS, REMEMBER]
 const HELD_BACK = 'This server does not allow remembered devices right now, so this device needs your Secret Key from '
   + 'your Emergency Kit. Nothing on it was removed: once the server allows it again, it unlocks as before.'
 
-// PrimeVue's Password field adds its placeholder to the accessible name, so the label is matched as the name's start.
+// The password field's accessible name is its label's text (the UI layer names the input by it, so its reveal toggle
+// adds nothing); the label is matched as the name's start, because a label may carry a hint after the word.
 const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
 const secretKeyField = (on: Page) => on.locator('#unlock-secret-key')
 const stayField = (on: Page) => on.getByRole('checkbox', { name: /^Stay signed in on this device/ })

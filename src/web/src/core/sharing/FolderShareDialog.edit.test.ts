@@ -66,8 +66,10 @@ type W = ReturnType<typeof mountDialog>
 const click = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
 const byLabel = (w: W, label: string) => w.findAll(`button[aria-label="${label}"]`)
 const byText = (w: W, text: string) => w.findAll('button').find((b) => b.text() === text)
-/** A `VeyqSwitch` is a checkbox input carrying the switch's aria-label. */
-const toggle = (w: W, label: string) => w.find(`input[role="switch"][aria-label="${label}"]`)
+/** A `VeyqSwitch` is a `role="switch"` button carrying the switch's aria-label. */
+const toggle = (w: W, label: string) => w.find(`button[role="switch"][aria-label="${label}"]`)
+/** Whether a layer switch or checkbox (both Reka buttons) is on: `aria-checked`, as assistive technology reads it. */
+const isOn = (el: { attributes: (name: string) => string | undefined }) => el.attributes('aria-checked') === 'true'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -115,9 +117,9 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
     expect(w.find('.header').text()).toBe(t('share.editTitle'))
     expect((w.find('#folder-share-name').element as HTMLInputElement).value).toBe('Family')
-    expect((toggle(w, t('share.noteSection')).element as HTMLInputElement).checked, 'the note is on').toBe(true)
-    expect((toggle(w, t('share.expirySection')).element as HTMLInputElement).checked, 'the expiry is on').toBe(true)
-    expect((toggle(w, t('share.passwordSection')).element as HTMLInputElement).checked, 'no password').toBe(false)
+    expect(isOn(toggle(w, t('share.noteSection'))), 'the note is on').toBe(true)
+    expect(isOn(toggle(w, t('share.expirySection'))), 'the expiry is on').toBe(true)
+    expect(isOn(toggle(w, t('share.passwordSection'))), 'no password').toBe(false)
 
     await w.find('#folder-share-name').setValue('Grandparents')
     click(w.findAll('.folder-share-roles button').find((b) => b.text() === t('share.folder.roleContributor'))!.element)
@@ -167,7 +169,7 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
     click(byLabel(w, t('share.edit'))[0].element)
     await flushPromises()
-    expect((toggle(w, t('share.passwordSection')).element as HTMLInputElement).checked, 'the protection stays on').toBe(true)
+    expect(isOn(toggle(w, t('share.passwordSection'))), 'the protection stays on').toBe(true)
     expect(byText(w, t('common.save'))!.attributes('disabled'), 'never quietly drops it').toBeDefined()
 
     await w.find('#folder-share-password').setValue('a brand new password')
@@ -233,7 +235,7 @@ describe("FolderShareDialog — the note's acceptance switch", () => {
     await flushPromises()
     click(byLabel(w, t('share.edit'))[0].element)
     await flushPromises()
-    expect((mustAccept(w).element as HTMLInputElement).checked, 'read back from the opened note').toBe(true)
+    expect(isOn(mustAccept(w)), 'read back from the opened note').toBe(true)
     expect(mustAccept(w).attributes('disabled'), 'the note has text').toBeUndefined()
 
     click(byText(w, t('common.save'))!.element)
@@ -258,7 +260,7 @@ describe("FolderShareDialog — the note's acceptance switch", () => {
     await flushPromises()
     click(toggle(w, t('share.noteSection')).element)
     await flushPromises()
-    expect((mustAccept(w).element as HTMLInputElement).checked, 'off by default').toBe(false)
+    expect(isOn(mustAccept(w)), 'off by default').toBe(false)
     expect(mustAccept(w).attributes('disabled'), 'no text, nothing to accept').toBeDefined()
 
     w.findComponent({ name: 'LocaleMarkdownEditor' }).vm.$emit('update:modelValue', { en: 'Read me first' })
@@ -287,9 +289,9 @@ describe('FolderShareDialog — a stopped link gets its password back on the sam
       click(fix.element)
       await flushPromises()
       expect(w.find('.header').text()).toBe(t('share.editTitle'))
-      const pw = toggle(w, t('share.passwordSection')).element as HTMLInputElement
-      expect(pw.checked, 'the password is on').toBe(true)
-      expect(pw.disabled, 'and cannot be switched off').toBe(true)
+      const pw = toggle(w, t('share.passwordSection'))
+      expect(isOn(pw), 'the password is on').toBe(true)
+      expect((pw.element as HTMLButtonElement).disabled, 'and cannot be switched off').toBe(true)
       expect(byText(w, t('common.save'))!.attributes('disabled'), 'no save without a password').toBeDefined()
 
       await w.find('#folder-share-password').setValue('a long new password')

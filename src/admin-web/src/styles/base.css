@@ -43,6 +43,11 @@
      where --app-line stays a decorative divider. */
   --app-control-line: #848e9e;
   --app-control-bg: #f8fafc;
+  /* A text field's or checkbox's own background: the surface in light, a well below it in dark. */
+  --app-field: #ffffff;
+  /* A toggle group: its track, and the picked option standing on it (lighter than the track in both modes). */
+  --app-segment-track: #f1f5f9;
+  --app-segment-thumb: #ffffff;
   --app-control-text: #334155;
   --app-backdrop-strong: #0f172a;
   --app-radius: 12px;
@@ -106,6 +111,9 @@
   --app-primary-active: #a7f3d0;
   --app-control-line: #68737f;
   --app-control-bg: #20262e;
+  --app-field: #0b0f14;
+  --app-segment-track: #0b0f14;
+  --app-segment-thumb: #2a313b;
   --app-control-text: #eef3f8;
   --app-backdrop-strong: #0b0f14;
   --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.26);

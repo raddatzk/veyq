@@ -205,7 +205,7 @@ async function confirm() {
           <div class="settings-field">
             <label for="rotation-password">{{ t('rotation.passwordLabel') }}</label>
             <VeyqPassword
-              id="rotation-password"
+              input-id="rotation-password"
               v-model="password"
               autocomplete="current-password"
               :disabled="busy"

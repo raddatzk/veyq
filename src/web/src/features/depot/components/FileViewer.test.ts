@@ -98,7 +98,10 @@ describe('an image', () => {
     await flushPromises()
     expect(w.find('img').attributes('src')).toBe('blob:viewer-1')
     expect(minted[0].type).toBe('image/svg+xml')
-    expect(w.find('svg').exists()).toBe(false)
+    // The layer's own icons are inline SVGs (`VeyqIcon`: `<span class="veyq-icon"><svg class="veyq-icon__svg">`, ADR
+    // 0107); every other <svg> in the viewer would be the FILE's markup parsed into the page.
+    const inline = w.findAll('svg').filter((s) => !(s.classes('veyq-icon__svg') && s.element.parentElement?.classList.contains('veyq-icon')))
+    expect(inline, 'the file\'s SVG is never inline markup').toHaveLength(0)
     expect(w.find('script').exists()).toBe(false)
     expect(w.find('object, iframe, embed').exists()).toBe(false)
   })

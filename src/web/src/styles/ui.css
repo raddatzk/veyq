@@ -311,7 +311,7 @@
   color: var(--app-warning-text);
 }
 
-.veyq-badge .pi {
+.veyq-badge .veyq-icon {
   margin-right: 0.3rem;
   font-size: 0.85em;
 }
@@ -510,7 +510,7 @@
   cursor: pointer;
 }
 
-.veyq-create-card .pi {
+.veyq-create-card .veyq-icon {
   display: grid;
   place-items: center;
   width: 84px;
@@ -522,7 +522,7 @@
   font-size: 1.25rem;
 }
 
-.veyq-create-card .pi {
+.veyq-create-card .veyq-icon {
   width: 42px;
   height: 42px;
 }
@@ -556,7 +556,7 @@
   background: var(--app-info-soft);
 }
 
-/* Two classes on purpose: PrimeIcons' own `.pi` (display, font-size) is loaded after this sheet and would otherwise win,
+/* Two classes on purpose: PrimeIcons' own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
    leaving a 16 px glyph in the corner of a tile that is meant to centre a 20 px one (seen in a real browser). */
 .veyq-node-header .veyq-node-header-icon {
   display: grid;
@@ -661,7 +661,7 @@
   color: var(--app-muted);
 }
 
-.veyq-create-card .pi {
+.veyq-create-card .veyq-icon {
   background: var(--app-accent-soft);
   color: var(--app-accent);
 }
@@ -682,9 +682,9 @@
 /* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407): ONE list of
    folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-grid` items are tiles
    (visual on top, name, meta, actions), `is-list` items rows. Tokens only, so the dark theme needs no rule of its own.
-   The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): PrimeIcons' own `.pi`
+   The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): PrimeIcons' own `.veyq-icon`
    rule (display and font-size) loads earlier but ties a single-class rule on specificity, and a glyph that kept its
-   `.pi` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
+   `.veyq-icon` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
 .veyq-level-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 340px));
@@ -900,11 +900,11 @@ div.veyq-level-item-main,
   opacity: 0;
   cursor: pointer;
 }
-.veyq-level-item-check .pi {
+.veyq-level-item-check .veyq-icon {
   font-size: 0.75rem;
   opacity: 0;
 }
-.veyq-level-item-check.is-on .pi {
+.veyq-level-item-check.is-on .veyq-icon {
   opacity: 1;
 }
 
