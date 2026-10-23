@@ -28,18 +28,23 @@ the `GROUP` scope ([ADR 0086](0086-one-word-per-meaning.md)) — and never "tab"
 client and its docs ("Trash tab"). Rejected: *Ledger* (an accountant's word), *Kitty* (unknown outside British
 English), *Tab*.
 
-**2. A Pot is one node; what belongs to the whole Pot is its sealed meta.** It lives in any folder beside Memories and
+**2. A Pot is one node; its participants are records in it, its settings its sealed meta.** It lives in any folder beside Memories and
 Depot files, carries its own key like every node ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
 and is a share root with `READ` and `READ_WRITE` — never `WRITE_ONLY`, which reads nothing and so has no balance to
-write against. Only a member creates one: Expenses declares no guest-creatable kind (owner decision 2026-10-14). The
-Pot's `node-meta` holds its participants, its own categories and its base currency, written whole with the revision it
-read ([ADR 0077](0077-a-write-carries-the-version-it-read.md)). A participant is **only a name in this Pot**, linked
+write against. Only a member creates one: Expenses declares no guest-creatable kind (owner decision 2026-10-14).
+Deleted, it goes to the space's node trash like every node ([ADR 0061](0061-node-deletion-reversible-node-trash.md));
+its deleted entries never do, they stay inside it (decision 6). The Pot's `node-meta` holds only its base currency and
+its own categories, written by a member whole with the revision it read
+([ADR 0077](0077-a-write-carries-the-version-it-read.md)). Its **participants are records in its list** (decision 3),
+not meta: a guest adds them (decision 6), and meta is written whole with no history, so a guest who could write it could
+rewrite the list without a trace. A participant is **only a name in this Pot**, linked
 to no account (owner 2026-10-23): the friends of a trip have none, and a link guest has no stable identity to link to.
 That is unlike a Memory's participants, which are member ids
 ([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)) — a Memory says who was there, a
 Pot only whose money it is. Who *wrote* a revision is a separate fact and stays the platform's (decision 6).
 
-**3. An entry is a record with revisions, in Expenses' own table — not a node, and never overwritten.** The client
+**3. An entry — an expense, a refund, a transfer or a participant — is a record with revisions, in Expenses' own
+table — not a node, and never overwritten.** The server cannot tell the four apart. The client
 mints an entry's id ([ADR 0072](0072-a-seal-binds-its-object.md) decision 3). Every change is a new **revision** row
 of that entry: the server takes revision `n + 1` only where `n` is the entry's latest and answers anything else
 `409 stale_revision`, so two concurrent edits never overwrite each other silently. A delete is a revision too, with a
@@ -64,10 +69,14 @@ seal under the Pot's key already proves a revision came from a key holder, and t
 **6. Members and `READ_WRITE` guests create, edit and delete entries alike** — Expenses' interpretation of
 `READ_WRITE` for its kind (ADR 0080 decision 6), and a share stays the member's view with functions removed. A guest
 may change and delete another person's entry, unlike a Memory's media, because in a ledger forbidding it protects
-nothing: whoever may write can cancel any entry with a counter-entry. What protects is **that nothing is lost**, which
-keeps ADR 0080's rule that a guest never destroys content: an edit or a delete is a revision, every revision stays
+nothing: whoever may write can cancel any entry with a counter-entry. What protects is **that nothing is lost**, the reason
+ADR 0080 decision 6 refuses a guest's node delete: an edit or a delete is a revision, every revision stays
 readable with its writer, a deleted entry is shown in the Pot's own deleted list and restorable for the platform's
 trash retention ([ADR 0061](0061-node-deletion-reversible-node-trash.md)), and no guest action erases anything at once.
+**Participants** follow the same shape (owner 2026-10-23): whoever may write adds and renames one; a member hides one
+whose balance is settled (old entries keep showing the name, new ones cannot pick it, and an edit that unsettles it
+shows it again) and deletes one no live entry names. The server cannot see which of these a revision is, so the rule is
+the client's, and a revision that breaks it is visible in the history and undone like any other.
 There is no extra permission; the server knows each revision's writer (a member's user id or a link identity, the
 pair core's attachments record), so "only one's own entries" could be enforced later without the server learning more.
 A member reads the history with each writer's name; a guest reads every revision and its time but no writer's name,
@@ -87,7 +96,7 @@ to the server, and a receipt nothing holds any more, or whose entry is deleted, 
 
 **8. Exchange rates are fetched automatically, straight from the client — the second third-party request without
 opt-in.** Where a Pot uses a currency other than its base, a device fetches **the whole day's table** of an
-exchange-rate provider once per day: the provider learns the client's address, the `Origin` (the instance's domain)
+exchange-rate provider once per day, one table for every Pot on that device: the provider learns the client's address, the `Origin` (the instance's domain)
 and a date — no currency, no amount, no veyq identity. That is the breached-password check's justification
 ([security model](../crosscutting/security-model.md) § third-party services): what crosses carries no content, so
 consent per space ([ADR 0016](0016-geocoding-provider-neutrality.md)) would guard nothing. Never through the backend,

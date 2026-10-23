@@ -11,9 +11,20 @@ and anyone in the Pot sees at any time who owes whom.
 ## The Pot
 
 - **Participants** are only names in this Pot, linked to no account — a link guest has no stable identity to link
-  to. Renaming is always possible; removing only while no entry names the person, else the participant is hidden.
-- **Categories**: a fixed default set with stable ids, translated in the client (food, accommodation, transport,
-  shopping, leisure, other), plus the Pot's own.
+  to. Whoever may write adds and renames one. A member **hides** one whose balance is settled: old entries keep the
+  name, new ones cannot pick it, and an edit that unsettles it brings it back. A member **deletes** one no live entry
+  names. Each of these is a line in the Pot's history like an entry's change (ADR 0108 decisions 2 and 6).
+- **Categories**: a default set with stable ids the client translates, plus the Pot's own (a member's to add):
+
+  | id | de | en |
+  |---|---|---|
+  | `food` | Essen & Trinken | Food & drink |
+  | `groceries` | Einkäufe | Groceries |
+  | `accommodation` | Unterkunft | Accommodation |
+  | `transport` | Transport | Transport |
+  | `leisure` | Freizeit | Leisure |
+  | `household` | Haushalt | Household |
+  | `other` | Sonstiges | Other |
 - **Base currency**: chosen when the Pot is created, fixed from its first entry on, because every entry carries its
   rate to it.
 - **Who am I** is each viewer's own choice, kept on the device; it marks "you" in balances and never leaves the client.
@@ -37,9 +48,17 @@ PDFs). Three kinds:
   **in proportion to each person's items** (the default) or **equally among the people on the bill**, chosen per entry
   and sealed with it.
 
-Amounts are integers in the currency's minor unit, never floating point. Where an amount does not divide evenly, the
-format's rounding rule decides which participant gets the remaining cent, deterministically, so every device computes
-the same balance.
+**Rounding** is part of the entry format, so every device computes the same balance:
+
+- Amounts are integers in the currency's ISO 4217 minor unit (the yen has none, the dinar three); a rate is a decimal
+  string, and all arithmetic is exact (`BigInt` fractions), never floating point.
+- A foreign amount is converted **once**, its total into the base currency, rounded half away from zero to the minor
+  unit; it is allocated after that, in the base currency.
+- An allocation gives each person their exact share rounded down, then hands the cents left over one each to the
+  people with the largest cut-off remainders, ties broken by the order the people joined the Pot (largest remainder):
+  nobody is ever more than one cent off their share.
+- An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
+  first and allocated as one, so rounding never accumulates across items.
 
 **Editing and deleting** are open to everyone who may write (ADR 0108 decision 6). Each change keeps the earlier
 version: an entry shows that it was edited, and its history what changed and when — and, for a member, who (the
@@ -54,8 +73,11 @@ An entry keeps the rate it was saved with; a later rate never changes it.
 
 - **Balances**: per participant, what they paid (and received as refunds) against their share of every expense and
   refund, transfers included.
-- **Settle up**: the fewest transfers that bring every balance to zero, computed deterministically so every device
-  suggests the same ones; recording one is a transfer entry.
+- **Settle up**: transfers that bring every balance to zero, computed greedily — debtors and creditors each sorted by
+  amount, largest first, ties by the order the people joined; the largest debtor pays the largest creditor the smaller
+  of the two amounts, until nothing is left. At most one transfer fewer than there are people, and the same on every
+  device; not always the fewest possible (finding those is NP-hard in general), which at the size of a trip does not
+  matter. Recording one is a transfer entry.
 - **Overviews**: total cost per category, per person (what they paid and what their share was, side by side — either
   alone misleads), and category by person. Refunds count against their category; transfers are not costs.
 
@@ -67,11 +89,13 @@ A share is the member's view with functions removed. On a Pot:
 |---|---|---|---|
 | see entries, history, balances, overviews; download receipts | ✓ | ✓ | ✓ |
 | create, edit, delete and restore entries; add and remove receipts | ✓ | ✗ | ✓ |
-| participants, categories, base currency (the Pot's meta) | ✓ | ✗ | ✗ |
+| add and rename participants | ✓ | ✗ | ✓ |
+| hide a settled participant, delete one no entry names | ✓ | ✗ | ✗ |
+| own categories, base currency (the Pot's meta) | ✓ | ✗ | ✗ |
 | create a Pot | ✓ | ✗ | ✗ |
 
-A `WRITE_ONLY` link on a Pot does not exist. Whether a contributor may add a participant (a friend joining a trip half
-way) is open below.
+A `WRITE_ONLY` link on a Pot does not exist. A deleted Pot goes to the space's trash like any node; a deleted entry
+stays inside the Pot (§ Entries).
 
 ## Download and import
 
@@ -83,10 +107,3 @@ and its receipts as files beside them. History is not exported; an import starts
 
 Previews of receipts, offline use, push notices, a category per line item, and rates by entry date (an entry entered
 late takes the day's rate unless typed).
-
-## Open questions
-
-- May a `READ_WRITE` guest add a participant? The Pot's meta is a member's today, but a link-only group has no member
-  on the trip.
-- The default category set and its icons; the rounding rule; the settle-up algorithm (greedy largest-first is the
-  usual choice and deterministic once ties are ordered).
