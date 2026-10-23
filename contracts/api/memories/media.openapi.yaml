@@ -40,6 +40,10 @@ paths:
     post:
       tags: [media]
       operationId: completeMedia
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: items.nodeEpoch
       summary: Complete a media's uploads (original + derivatives) + attach to a node.
       description: >
         Each item is **one logical media**: an `originalUploadId` plus up to two role-tagged `derivatives`
@@ -65,7 +69,8 @@ paths:
             schema: { $ref: "#/components/schemas/MediaBatchRequest" }
             example:
               items:
-                - mediaId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+                - nodeEpoch: 0
+                  mediaId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
                   nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
                   originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
                   derivatives:
@@ -92,7 +97,14 @@ paths:
           description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). An item whose
+            `nodeEpoch` the node refuses is reported per item and never fails the batch: `stale_epoch` (below the node's
+            stored epoch — the client re-reads) or `node_rekey_pending` (the node is not re-keyed since the last rotation
+            — it retries; ADR 0109 point 6). Either way the item stored nothing and its uploads stay open.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media:
@@ -165,6 +177,95 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
 
+  /api/scopes/{scopeId}/nodes/{nodeId}/media-rekey:
+    get:
+      tags: [media]
+      operationId: listMediaRekey
+      summary: The Memories fields a node's re-key re-seals — its media, live and trashed, and its bucket names (ADR 0109 point 2).
+      description: >
+        Every medium of the node — live, trashed, and on a trashed node — with what is sealed under the node's key:
+        its `wrappedMeta`, its `wrappedExif` and the `K_blob` wrap of its original and of each derivative; and every
+        bucket name sealed under the node's key. Rows a `WRITE_ONLY` guest sealed under its own `K_up` are not listed
+        (its identity has a wrapped key, `uploaderKeys`): the re-key leaves them as they are (ADR 0109 point 5). Paged
+        by `since` / `limit` / `more` as `listNodeMedia`; the buckets ride on every page. Only a caller who may commit
+        the node's re-key (core's `listRekeyNodes`) reads it, else `403`. Nothing here is new to the server.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+      responses:
+        "200":
+          description: One page of the node's re-key fields.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaRekeyPage" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+  /api/scopes/{scopeId}/nodes/{nodeId}/media-rekey/{rekeyId}:
+    post:
+      tags: [media]
+      operationId: stageMediaRekey
+      summary: Stage one batch of a node's re-sealed Memories fields under a core re-key id (CR decision 1).
+      description: >
+        Up to 256 media and 256 buckets per call, each value re-sealed under the node's NEW key: a medium's
+        `wrappedMeta` and `wrappedExif` (bound as before, its `metaRevision` + 1 for the meta), and every `K_blob` of it
+        re-wrapped (`K_blob` itself unchanged — no store object is read or written, ADR 0109 point 3); a bucket's name.
+        Nothing staged is served before core's `commitNodeRekey` under the same `rekeyId`, whose transaction swaps it in
+        through Memories' participant. A value staged twice is replaced; an unclaimed stage expires after a day.
+        `fromEpoch` is the node's epoch as read; a node re-keyed since is `409 stale_epoch`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/RekeyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MediaRekeyStage" }
+      responses:
+        "204":
+          description: The batch is staged.
+        "400":
+          description: Malformed request (a list over 256 entries, a malformed value).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: The node's epoch is no longer `fromEpoch`, or it does not lag the scope's current one (`stale_epoch` — nothing to stage), or the space is being deleted and read-only (`scope_deleting`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+
   /api/scopes/{scopeId}/nodes/{nodeId}/buckets:
     get:
       tags: [buckets]
@@ -200,6 +301,10 @@ paths:
     post:
       tags: [buckets]
       operationId: createBucket
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Create a sub-bucket under a primary root (uc.memory.buckets).
       description: >
         Create a **sub-bucket** one level under a **primary** in this node. Without `parentBucketId` it nests under
@@ -220,6 +325,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateBucketRequest" }
             example:
+              nodeEpoch: 0
               bucketId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
               sealedName: YnVja2V0LW5hbWUtY2lwaGVy
       responses:
@@ -245,7 +351,10 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: The `bucketId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: >
+            The `bucketId` is already taken (`id_taken`); the space is being deleted and read-only (`scope_deleting`,
+            uc.spaces.delete-group A4); `nodeEpoch` is below the node's stored epoch (`stale_epoch` — the caller re-reads)
+            or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries; ADR 0109 point 6).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -259,6 +368,8 @@ paths:
         reason: >-
           The write carries only the name the member typed, sealed fresh; nothing the editor did not see is
           re-sent, so a concurrent rename loses only to another rename of the same bucket.
+        epochs:
+          - field: nodeEpoch
       summary: Rename a sub-bucket (uc.memory.buckets).
       description: >
         Re-store a **sub-bucket's** `K_node`-sealed name. Any scope **member** may rename a sub-bucket (incl. a
@@ -276,6 +387,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RenameBucketRequest" }
             example:
+              nodeEpoch: 0
               sealedName: cmVuYW1lZC1jaXBoZXI=
       responses:
         "200":
@@ -299,7 +411,13 @@ paths:
           description: No such scope/node/bucket, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
-        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` is below the node's stored epoch (`stale_epoch` — the caller holds the key from before a
+            rotation and re-reads) or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries
+            once the re-key reached the node; ADR 0109 point 6). Nothing was written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [buckets]
@@ -427,6 +545,8 @@ paths:
         mode: revision
         fields:
           - field: metaRevision
+        epochs:
+          - field: nodeEpoch
       summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
       description: >
         Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob
@@ -447,6 +567,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MediaMetaUpdate" }
             example:
+              nodeEpoch: 0
               wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
               metaRevision: 2
       responses:
@@ -471,8 +592,9 @@ paths:
         "409":
           description: >
             The media's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob
-            and revision — nothing was written, ADR 0077); or the space is being deleted and read-only
-            (`scope_deleting`, uc.spaces.delete-group A4).
+            and revision — nothing was written, ADR 0077); `nodeEpoch` is below the node's stored epoch (`stale_epoch` —
+            the caller re-reads) or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries;
+            ADR 0109 point 6); or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -607,6 +729,12 @@ components:
       required: true
       description: Opaque id of a bucket (a primary or a sub-bucket) within the node.
       schema: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a }
+    RekeyId:
+      name: rekeyId
+      in: path
+      required: true
+      description: The id of the node's re-key attempt — the one core's `commitNodeRekey` names (`content.openapi.yaml`).
+      schema: { type: string, format: uuid, example: 6c7c3f0e-2a9b-1d4a-6e8b-2c1f2d3e4a5b }
 
   schemas:
     # --- complete + attach ---------------------------------------------------
@@ -627,7 +755,7 @@ components:
         One logical media: the original upload plus up to two role-tagged derivative uploads (THUMBNAIL,
         PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads` for this `mediaId`. The original
         is exactly one of `originalUploadId` and `originalShared`, else the item fails `invalid_request`.
-      required: [mediaId, nodeId]
+      required: [mediaId, nodeId, nodeEpoch]
       properties:
         mediaId:
           x-veyq-visibility: id
@@ -658,6 +786,16 @@ components:
           format: uuid
           description: The MEMORY/CHAPTER node to attach the media to.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of `nodeId` as the client read it: every wrap and seal of the item is under that node's key.
+            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         derivatives:
           type: [array, "null"]
           description: >
@@ -741,7 +879,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `shared_source_invalid` = `originalShared` names no blob the node holds, or its id is taken, `invalid_request` = neither or both of `originalUploadId` and `originalShared`); null on success.
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `shared_source_invalid` = `originalShared` names no blob the node holds, or its id is taken, `invalid_request` = neither or both of `originalUploadId` and `originalShared`, `stale_epoch` / `node_rekey_pending` = the item's `nodeEpoch` was refused, ADR 0109 point 6); null on success.
           maxLength: 64
           example: null
 
@@ -1011,8 +1149,18 @@ components:
         Overwrite a media's sealed listed-metadata blob (re-sealed client-side under a field key derived from `K_node`), e.g. to persist a
         corrected date. Null clears it. Opaque to the server. `metaRevision` is the `MediaSummary.metaRevision` the
         blob was built from (ADR 0077).
-      required: [metaRevision]
+      required: [metaRevision, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of the medium's node as the client read it: the blob is sealed under its key.
+            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         metaRevision:
           x-veyq-visibility: structure
           # Nullable in the TYPE on purpose, and refused null by the annotation: a required `type: integer` generates a
@@ -1132,8 +1280,18 @@ components:
         Create a sub-bucket. Without `parentBucketId` it nests under the caller's own primary; with it, under that
         primary root (e.g. a contributor's). The name is sealed client-side under a field key derived from `K_node`, bound to the
         client-minted `bucketId`.
-      required: [bucketId, sealedName]
+      required: [bucketId, sealedName, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of the Memory as the client read it: the name is sealed under its key.
+            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         bucketId:
           x-veyq-visibility: id
           type: string
@@ -1158,8 +1316,18 @@ components:
     RenameBucketRequest:
       type: object
       description: Re-store a sub-bucket's sealed name (under a field key derived from `K_node`).
-      required: [sealedName]
+      required: [sealedName, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of the Memory as the client read it: the name is sealed under its key.
+            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         sealedName:
           type: string
           description: The new name sealed under a field key derived from `K_node` (opaque base64).
@@ -1187,6 +1355,160 @@ components:
           format: uuid
           description: The destination bucket (same owner as the source), or null ⇒ that owner's primary.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+
+    # --- re-key (ADR 0109) ----------------------------------------------------
+    MediaRekeyPage:
+      type: object
+      required: [media, buckets, more]
+      properties:
+        media:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/RekeyMedium" }
+        buckets:
+          type: array
+          description: Every bucket of the node whose name is sealed under the node's key.
+          items: { $ref: "#/components/schemas/RekeyBucketName" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Rows remain past this page; ask again with this page's `cursor` as `since`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 80
+          description: The keyset position of this page's last row, opaque to the client; null when the page carries no row.
+          example: null
+
+    RekeyMedium:
+      type: object
+      required: [mediaId, metaRevision, blobs]
+      properties:
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        metaRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 0
+          example: 0
+        wrappedMeta:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 8192
+          example: null
+        wrappedExif:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+        blobs:
+          type: array
+          description: The original and each derivative — every `K_blob` of the medium wrapped under the node's key.
+          items: { $ref: "#/components/schemas/RekeyMediumBlob" }
+
+    RekeyMediumBlob:
+      type: object
+      required: [blobId, role, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        role:
+          $ref: "../_common.openapi.yaml#/components/schemas/BlobRole"
+        wrappedBlobKey:
+          type: string
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    RekeyBucketName:
+      type: object
+      required: [bucketId, sealedName]
+      properties:
+        bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        sealedName:
+          type: string
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVk
+
+    MediaRekeyStage:
+      type: object
+      required: [fromEpoch]
+      properties:
+        fromEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The node's epoch as the re-keyer read it.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        media:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyMediumSeal" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+        buckets:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyBucketSeal" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+
+    RekeyMediumSeal:
+      type: object
+      required: [mediaId, metaRevision, blobs]
+      properties:
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        metaRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The medium's meta revision as read; the commit stores it + 1 when `wrappedMeta` is staged, and a medium whose revision moved is `rekey_parts_stale`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        wrappedMeta:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 8192
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedExif:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        blobs:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/RekeyMediumBlobWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 8)'
+
+    RekeyMediumBlobWrap:
+      type: object
+      required: [blobId, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        wrappedBlobKey:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RekeyBucketSeal:
+      type: object
+      required: [bucketId, sealedName]
+      properties:
+        bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        sealedName:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 512
+          example: c2VhbGVk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -693,10 +693,13 @@ paths:
         match wins:
         `secured` when the caller's own grant on the scope is behind the scope's epoch or absent (the old identity
         then holds no grant to the current epoch, whatever the jobs say), or when the job is `done` (its holder
-        committed an epoch during its lease); `failed` when the job dead-lettered — `failed`, or still `leased`
+        committed an epoch during its lease) — but `rekeying` instead while a live or trashed node of the scope lags
+        the current epoch, its key still the one from before (ADR 0109 point 1: a rotation is done only once its
+        re-key is); `failed` when the job dead-lettered — `failed`, or still `leased`
         with an expired lease and no attempts left; `stalled` when it is live and no owner of the scope both holds
         a grant and has not declined it (uc.account.rotate-keys E4); `waiting` otherwise. Until a scope reads
-        `secured`, the old identity can still read what is new there. Empty for an account that never rotated.
+        `secured`, the old identity can still read what is new there (while `rekeying`, what is new in a node not yet
+        re-keyed). Empty for an account that never rotated.
         Only the caller's own rows; operator-blind: scope ids the server routes on and one enum per scope.
       security:
         - bearerAuth: []
@@ -1841,9 +1844,10 @@ components:
           type: string
           description: >
             `waiting` — an owner who may complete it exists; `stalled` — no owner may (promote a co-owner);
-            `secured` — the old identity holds no grant to the scope's current epoch; `failed` — the job
-            dead-lettered, and it can be queued again.
-          enum: [waiting, stalled, secured, failed]
+            `rekeying` — the new epoch is in, and an owner's device is re-keying the scope's nodes (some still carry
+            a key from before, ADR 0109); `secured` — the old identity holds no grant to the scope's current epoch and
+            every node of the scope is re-keyed; `failed` — the job dead-lettered, and it can be queued again.
+          enum: [waiting, stalled, rekeying, secured, failed]
           example: waiting
 
     ChangePasswordRequest:

@@ -118,6 +118,10 @@ paths:
     post:
       tags: [files]
       operationId: completeFile
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Complete an upload as the file's blob — the first one, or a replacement of the blob the caller read.
       description: >
         Promote one `startBlobUploads` session — started with `role: FILE_CONTENT` and `ownerId` = this node, since
@@ -144,6 +148,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/FileCompleteRequest" }
             example:
+              nodeEpoch: 0
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
               expectedBlobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
       responses:
@@ -172,7 +177,7 @@ paths:
           description: >
             The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
             reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or the space is being deleted
-            and read-only (`scope_deleting`, uc.spaces.delete-group A4), which carries `code` alone.
+            and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6) — both carry `code` alone.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FileConflict" }
@@ -237,6 +242,10 @@ paths:
     post:
       tags: [share-files]
       operationId: completeShareFile
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Complete a guest upload as a file's blob (unauthenticated) — the first one, or a replacement of the blob the guest read.
       description: >
         **No auth.** A `READ_WRITE` guest's `completeFile`: promote one session it opened with `startShareBlobUploads`
@@ -261,6 +270,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ShareFileCompleteRequest" }
             example:
+              nodeEpoch: 0
               contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
       responses:
@@ -293,7 +303,8 @@ paths:
         "409":
           description: >
             The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
-            reclaimed, and `currentBlobId` is what the slot holds now (null: empty).
+            reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6), which carries
+            `code` alone; the upload stays open.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FileConflict" }
@@ -415,7 +426,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: The `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is above the scope's current one (`stale_epoch`) — nothing stored.
+          description: The `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is not the scope's current one (`stale_epoch` — the folder's key is minted at the current epoch, ADR 0109 point 6) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -489,8 +500,18 @@ components:
   schemas:
     FileCompleteRequest:
       type: object
-      required: [uploadId]
+      required: [uploadId, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The file node's epoch as the client read it: the content blob's key is wrapped under the file node's key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         uploadId:
           x-veyq-visibility: id
           type: string
@@ -649,8 +670,18 @@ components:
 
     ShareFileCompleteRequest:
       type: object
-      required: [contributorToken, uploadId]
+      required: [contributorToken, uploadId, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The file node's epoch as the client read it: the content blob's key is wrapped under the file node's key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         contributorToken:
           x-veyq-visibility: token
           type: string

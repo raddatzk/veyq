@@ -236,7 +236,9 @@ paths:
         the worker that holds the lease **at the moment it lands** — a worker whose expired lease another worker
         reclaimed meanwhile writes nothing, the grant included, and gets `not_lease_holder`. A `scope-rotation` job
         completes only once its lease holder has committed an epoch of the scope while holding the lease;
-        otherwise `409 rotation_not_committed`, nothing written and the lease kept.
+        otherwise `409 rotation_not_committed`, nothing written and the lease kept — and only once no live or
+        trashed node of the scope lags the current epoch (its re-key is done, ADR 0109 point 7); otherwise `409
+        rekey_incomplete`, nothing written and the lease kept.
       security:
         - bearerAuth: []
       parameters:
@@ -276,7 +278,8 @@ paths:
             (`scope_deleting`, uc.spaces.scope-access A5), a grant-delivery completion states an epoch that is
             not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs), or
             the holder of a `scope-rotation` job committed no epoch during its lease (`rotation_not_committed` —
-            nothing written, the lease kept).
+            nothing written, the lease kept), or a node of its scope is not re-keyed yet (`rekey_incomplete` —
+            nothing written, the lease kept; ADR 0109 point 7).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }

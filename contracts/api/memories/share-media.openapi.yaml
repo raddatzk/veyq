@@ -125,6 +125,10 @@ paths:
     post:
       tags: [share-media]
       operationId: completeShareMedia
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Complete a guest upload (unauthenticated) — the application attaches it to the shared root or a node below.
       description: >
         **No auth.** A guest's completion of its uploads into media on the shared Memory or chapter, or on a Memory or chapter below the share's root. Core's guest gate runs
@@ -149,6 +153,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ShareMediaBatchRequest" }
             example:
+              nodeEpoch: 0
               contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
               items:
                 - mediaId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
@@ -176,6 +181,11 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: >
+            The batch's `nodeEpoch` is below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing was attached; the uploads stay open.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_rekey_pending } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/shares/{shareId}/media/{mediaId}:
@@ -491,8 +501,20 @@ components:
 
     ShareMediaBatchRequest:
       type: object
-      required: [contributorToken, items]
+      required: [contributorToken, items, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of the target node (`nodeId`, the share's root when absent) as the guest read it (`ShareNode.epoch`,
+            `PublicShare.rootEpoch`): every item's wraps are under that node's key, or for a `WRITE_ONLY` link under the
+            guest's own `K_up`, sealed to the root's drop key — stated either way.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         contributorToken:
           x-veyq-visibility: token
           type: string
