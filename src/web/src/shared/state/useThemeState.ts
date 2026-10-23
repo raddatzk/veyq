@@ -1,5 +1,5 @@
 // Theme preference (cr-0031, ported from the design source). Drives the `.veyq-dark` class on <html> — which
-// both our vendored dark.css and PrimeVue's darkModeSelector key off — plus a matching favicon. The preference
+// our vendored dark.css and the UI layer's roles key off — plus a matching favicon. The preference
 // (system / light / dark) persists in localStorage; "system" follows the OS via a media query. No secrets here.
 import { readonly, ref } from 'vue'
 import logoDarkSvg from '../../assets/brand/logo-dark.svg?raw'
@@ -43,7 +43,7 @@ function applyTheme(): void {
   resolvedTheme.value = next
   if (typeof document === 'undefined') return
   // `.veyq-dark` is the ONLY class any stylesheet reads: dark.css is one `.veyq-dark { ... }`
-  // and PrimeVue's darkModeSelector points at it. A `.veyq-light` companion used to be written
+  // and base.css's dark roles sit under `:root.veyq-dark`. A `.veyq-light` companion used to be written
   // beside it and was read by nothing (inbox #137); admin-web already declined to carry either
   // (shared/state/systemTheme.ts), so it is gone here too rather than kept by symmetry.
   document.documentElement.classList.toggle('veyq-dark', next === 'dark')

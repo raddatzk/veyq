@@ -556,7 +556,7 @@
   background: var(--app-info-soft);
 }
 
-/* Two classes on purpose: PrimeIcons' own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
+/* Two classes on purpose: the layer's own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
    leaving a 16 px glyph in the corner of a tile that is meant to centre a 20 px one (seen in a real browser). */
 .veyq-node-header .veyq-node-header-icon {
   display: grid;
@@ -682,8 +682,8 @@
 /* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407): ONE list of
    folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-grid` items are tiles
    (visual on top, name, meta, actions), `is-list` items rows. Tokens only, so the dark theme needs no rule of its own.
-   The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): PrimeIcons' own `.veyq-icon`
-   rule (display and font-size) loads earlier but ties a single-class rule on specificity, and a glyph that kept its
+   The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): the layer's own `.veyq-icon`
+   rule (display and font-size, `layer.css`) loads after this sheet and wins a single-class tie, and a glyph that kept its
    `.veyq-icon` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
 .veyq-level-list {
   display: grid;
@@ -963,7 +963,7 @@ div.veyq-level-item-main,
 }
 
 /* A toggle action on an item (the Memory's heart, inbox #409 moves it to core): pressed = the accent-soft tile with the
-   filled favourite heart, the same purple tile the sidebar icons use. Two classes, so it beats PrimeVue's outlined button. */
+   filled favourite heart, the same purple tile the sidebar icons use. Two classes, so it beats the layer's outlined button. */
 .veyq-level-item-action.is-pressed {
   border-color: color-mix(in srgb, var(--app-favorite) 30%, var(--app-line));
   background: var(--app-accent-soft);

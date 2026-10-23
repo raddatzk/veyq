@@ -193,7 +193,7 @@ export default defineConfig(({ command }) => {
       __VEYQ_MAJOR__: JSON.stringify(platformMajor()),
     },
     test: {
-      // Provide the PrimeVue toast service to every mounted component (cr-0157) — see src/test/setup.ts.
+      // The catalog, the application registry, auto-unmount and the instance's services for every test — see src/test/setup.ts.
       setupFiles: ['./src/test/setup.ts'],
       // The setup hook imports the registry and, for some suites, heavy modules (pdf.js, the sessions panel's whole
       // account tree). On a loaded machine (load 20-40, measured 2026-10-19) that import alone passed vitest's default

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The layer's dialog (ADR 0107): it is a modal dialog named by its header, and on opening focus goes to the field
-// marked `autofocus`, else to its close button - what the PrimeVue dialog did, which every name dialog relies on.
+// marked `autofocus`, else to its close button - what the dialog before the layer did, which every name dialog relies on.
 import { describe, it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'

@@ -54,7 +54,7 @@ function dayOf(iso: string | undefined): DateValue | undefined {
 
 const minValue = computed(() => dayOf(props.minDate))
 const maxValue = computed(() => dayOf(props.maxDate))
-/** A day outside `minDate`/`maxDate` typed into the segments is refused, as the PrimeVue field refused it: the model
+/** A day outside `minDate`/`maxDate` typed into the segments is refused, as the field before the layer refused it: the model
  *  never holds it, and once focus leaves the field the field goes back to the day it held when focus came in (typing
  *  "19" passes through the valid "1" first) and the segments show it again - a fresh value object (`redraw`), since
  *  Reka re-reads its segments when the value it is handed is another object. */

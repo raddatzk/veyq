@@ -12,7 +12,7 @@ const props = withDefaults(
   defineProps<{ name: string; userId?: string | null; image?: string | null; size?: 'normal' | 'large' | 'xlarge' | 'xxl' }>(),
   { userId: null, image: null, size: 'normal' },
 )
-// PrimeVue's largest step is `xlarge` (4rem); `xxl` (8rem = 128 px, the profile page's picture) is ours, so the 256 px stored
+// The layer avatar's largest step is `xlarge` (4rem); `xxl` (8rem = 128 px, the profile page's picture) is ours, so the 256 px stored
 // picture is shown at half its pixels and stays sharp on a 2x screen.
 const baseSize = computed(() => (props.size === 'xxl' ? 'xlarge' : props.size))
 const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
