@@ -249,6 +249,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   90 a dead rule in Depot's own stylesheet (`src/web/src/features/depot/depot.css`) — rejected: the second application's
      sheet (inbox #517 moved `styles/pdf.css` there) is read as well; 89 alone would stay green if the guard's walk
      narrowed to Memories' directory, which is where the first application sheet happened to sit
+  91 `completeMedia`'s per-item `nodeEpoch` declaration dropped, the field still on the batch's items — rejected:
+     `validate_write_concurrency` reads epoch-shaped fields one level into a batch's items and requires each to be
+     declared (ADR 0109 point 6). Before, the guard resolved top-level properties only, so a per-item epoch was invisible
+  92 `commitNodeRekey`'s `409` no longer naming `node_rekey_pending` — rejected: an epoch declaration owes both of its
+     refusals in the `409`, so a client meeting the one that means "retry" finds it documented
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1456,6 +1461,19 @@ def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
     return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
 
 
+def forge_batch_epoch_undeclared(root: pathlib.Path) -> str:
+    # The batch's only declaration goes; the per-item field stays, so the reverse angle is all that can catch it.
+    _in_operation(root, "memories/media.openapi.yaml", "completeMedia",
+                  "      x-veyq-concurrency:\n        mode: node-epoch\n        epochs:\n          - field: items.nodeEpoch\n", "")
+    return "completeMedia's items.nodeEpoch declaration dropped, the field kept (must be REJECTED)"
+
+
+def forge_epoch_refusal_unnamed(root: pathlib.Path) -> str:
+    # Only the retry code: stale_epoch stays named, so one named refusal must not cover the other.
+    _in_operation(root, "content.openapi.yaml", "commitNodeRekey", "`node_rekey_pending` — the parent", "`node_rekey_p3nding` — the parent")
+    return "commitNodeRekey's 409 no longer names node_rekey_pending (must be REJECTED)"
+
+
 def forge_revision_field_named_version(root: pathlib.Path) -> str:
     # Both sides renamed together, so every other rule still holds: only the word is wrong.
     _in_operation(root, "account.openapi.yaml", "writeIdentityPins", "          - field: revision\n",
@@ -1617,6 +1635,8 @@ CASES = [
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
+    ("91", WRITE_CONCURRENCY, forge_batch_epoch_undeclared, False),
+    ("92", WRITE_CONCURRENCY, forge_epoch_refusal_unnamed, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),
