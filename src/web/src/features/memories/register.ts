@@ -10,6 +10,7 @@
 // `sidebarPins` list. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`,
 // cr-files-application B3) and lists Memories' batches with every other application's, so Memories adds nothing to the
 // `topbarTray` list.
+import { rekeyMemoryContent } from './rekey'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, LevelMenuEntry, Registry } from '../../core/applications/registry'
@@ -71,11 +72,11 @@ export function registerMemories(registry: Registry): void {
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }
   registry.registerKind({
-    kind: MEMORY_KIND, ...memories, importContent: importMemoryContent(MEMORY_KIND), createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+    kind: MEMORY_KIND, ...memories, importContent: importMemoryContent(MEMORY_KIND), rekeyContent: rekeyMemoryContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
     placement: { root: true, parents: [FOLDER_KIND] },
   })
   registry.registerKind({
-    kind: CHAPTER_KIND, ...memories, importContent: importMemoryContent(CHAPTER_KIND), deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
+    kind: CHAPTER_KIND, ...memories, importContent: importMemoryContent(CHAPTER_KIND), rekeyContent: rekeyMemoryContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
     placement: { root: false, parents: [MEMORY_KIND] },
   })
   // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters

@@ -18,6 +18,7 @@
 // READ_WRITE guest of a folder link above it, inbox #380 and #401 S3), its `shareDialog` (WRITE_ONLY links only) and the
 // share BODY: on its own WRITE_ONLY link the guest's drop page (name yourself, pick files, upload into your own folder),
 // the one page core renders by claim (every other guest page is the member's views, inbox #401).
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
@@ -65,6 +66,9 @@ export function registerDepot(registry: Registry): void {
   // into every stored slug token from the first `FILE` on, and pinned by `name_folding` in `contracts/crypto/vectors/v1.json`.
   registry.registerKind({
     kind: FILE_KIND,
+    // A file's content wrap is a core attachment and a drop box's guests are core's: Depot stores nothing else under a
+    // node's key (ADR 0109).
+    rekeyContent: nothingOfItsOwnToRekey,
     icon: 'file',
     shareable: true,
     detail: FileDetail,
@@ -104,6 +108,9 @@ export function registerDepot(registry: Registry): void {
   // Shared WRITE_ONLY only (the backend's `DepotShareRoots`); its name folds as a container's (`slugify`, the default).
   registry.registerKind({
     kind: DROPBOX_KIND,
+    // A file's content wrap is a core attachment and a drop box's guests are core's: Depot stores nothing else under a
+    // node's key (ADR 0109).
+    rekeyContent: nothingOfItsOwnToRekey,
     icon: 'inbox',
     // A drop box carries a cover (inbox #411: core's action, picker, upload and display); a file does not.
     cover: {},

@@ -29,7 +29,7 @@ import {
 } from './generated/account'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from './generated/scopes'
-import { ContentApi, Configuration as ContentConfiguration } from './generated/content'
+import { ContentApi, Configuration as ContentConfiguration, RekeyApi } from './generated/content'
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { ModerationApi, ReportsApi, StatementsApi, Configuration as ModerationConfiguration } from './generated/moderation'
@@ -147,6 +147,12 @@ export function favoritesApi(): FavoritesApi {
 
 export function contentApi(): ContentApi {
   return new ContentApi(new ContentConfiguration(bearerParams()))
+}
+
+// A scope's re-key after a rotation (ADR 0109, core's `rekey` tag): list every node with its epoch, a node's core parts,
+// stage, commit. Only an owner holding the current grant reaches it.
+export function rekeyApi(): RekeyApi {
+  return new RekeyApi(new ContentConfiguration(bearerParams()))
 }
 
 // The platform's generic blob transfer (core's `blob` tag, ADR 0079): start an upload, sign each next window,
