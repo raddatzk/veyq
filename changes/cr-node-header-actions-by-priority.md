@@ -21,7 +21,7 @@ work order's rules.
 
 ## Context & constraints
 
-- **A sibling CR writes the same catalogs:** `cr-copy-follows-the-rule` (planned) lands the owner's text pass and sweeps both catalogs to the styleguide's § *Copy*; new header keys follow the rule from the start. Its phase 1 lands first; re-read it when it does.
+- **A sibling CR wrote the same catalogs:** `cr-copy-follows-the-rule` landed on 2026-10-23 and is deleted: both catalogs and the capability register now follow the styleguide's § *Copy* (merges `975e3331`, `217225f5` and the phase-3 merge); new header keys follow the rule from the start.
 ### Measured substrate (worktree `cover-button-phone-width-da4c46` at `4842eaa4` = `main`, clean)
 
 - `NodeHeader.vue` renders `mergeHeaderActions(coreActions, actions).filter(shown)` as `VeyqTooltip` + icon-only

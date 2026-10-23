@@ -280,6 +280,14 @@ list every key a template actually reads and check it against **both** locale bl
 grep -rho "t('members\.\w*'" src/web/src --include="*.vue" --include="*.ts" | sort -u
 ```
 
+Run it on the branch the deletion lands on, not the one it was written on: the owner's pass that removed
+`password.pwnedNote` was two days older than `main`, and `main` had meanwhile added a test asserting the note
+(admin-web's `SetupView.test.ts`), which only the landing branch's `npm run check` caught.
+
+**A sweep for reassurance reads more than one pattern.** `ciphertext|encrypt|sealed|never (the|shown|sees|leaves|reads)|safe|secure`
+finds most of it, but the 2026-10-23 sweep found a fifth of its changes only through `locked (on|with)`, `in your browser`,
+`leaves`, `blind` and `stored or sent`; a future sweep reads both sets, and every hit is a lead, not a verdict.
+
 **The layer's own texts come from the catalog too.** What a `shared/ui/` component says on its own - a dialog's
 close button, the password field's show/hide toggle, the date field's segment names and calendar buttons, the toast
 region's name - is a key of the catalog's `ui` block (one per package), read where the component renders, in EN and

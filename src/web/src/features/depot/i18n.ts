@@ -90,7 +90,7 @@ const en = {
         // The prompt for a password-protected PDF: the password goes to the PDF reader on this device and nowhere else.
         passwordTitle: '{name} is password protected',
         passwordLabel: 'Password',
-        passwordHint: 'The password is only used on this device to open the PDF. It is not stored or sent anywhere.',
+        passwordHint: 'It is not saved: you enter it each time you open this PDF.',
         passwordChecking: 'Checking the password…',
         passwordWrong: 'Wrong password, try again',
         passwordOpen: 'Open',
@@ -278,7 +278,7 @@ const de: typeof en = {
         fitWidth: 'An Breite anpassen',
         passwordTitle: '{name} ist passwortgeschützt',
         passwordLabel: 'Passwort',
-        passwordHint: 'Das Passwort wird nur auf diesem Gerät zum Öffnen des PDFs verwendet. Es wird weder gespeichert noch irgendwohin gesendet.',
+        passwordHint: 'Es wird nicht gespeichert: Du gibst es bei jedem Öffnen dieses PDFs neu ein.',
         passwordChecking: 'Das Passwort wird geprüft…',
         passwordWrong: 'Falsches Passwort, bitte erneut versuchen',
         passwordOpen: 'Öffnen',

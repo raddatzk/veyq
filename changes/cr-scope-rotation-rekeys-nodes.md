@@ -26,7 +26,7 @@ real screenshot.
 
 ## Context & constraints
 
-- **A sibling CR writes the same catalogs:** `cr-copy-follows-the-rule` (planned) lands the owner's text pass and sweeps both catalogs to the styleguide's § *Copy*; its sweeps skip `rotation.*`, which this CR owns. Its phase 1 lands first; re-read it when it does.
+- **A sibling CR wrote the same catalogs:** `cr-copy-follows-the-rule` landed on 2026-10-23 and is deleted: both catalogs and the capability register now follow the styleguide's § *Copy* (merges `975e3331`, `217225f5` and the phase-3 merge); it skipped `rotation.*`, which this CR owns and writes to the rule.
 - **The false claims are live today.** The panel's `rotation.statusHint.secured` (*only your new keys open it*),
   `rotation.doneNotRepair` (*the old device is shut out*), `queuedHint.secured`, the site page's *Secured*, and the
   removal paragraph of `space-owners/who-gets-into-your-space` say more than is built. Phase 1 makes them true for

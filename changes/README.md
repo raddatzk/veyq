@@ -1675,6 +1675,9 @@ share one refresh cookie and the second "device" opens on the first one's sessio
 `VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
 its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
 8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
+The capability register's texts are compiled into the backend (buildSrc generates `CapabilityTexts.kt` from
+`contracts/platform/capabilities.json`, and both clients read them over the API), so a live proof of a changed register
+text boots a jar rebuilt after the edit; a Vite reload shows the old text (cr-copy-follows-the-rule, 2026-10-23).
 A live proof that shortens a duration to fit in minutes (a grace, a retention) shows the screen a value no unit test
 rendered: cr-bucket-reconcile's three-minute grace read "0 days" in the verdict and the confirm dialog, every unit test
 having used the 30-day default. So a UI that renders a configured duration is unit-tested with the shortest value its
