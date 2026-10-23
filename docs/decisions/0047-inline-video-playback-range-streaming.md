@@ -173,7 +173,11 @@ sandbox CSP, `Cache-Control: no-store` and the exact `Content-Length`. A handle 
 which leaves the tab where it is (a 404 would replace the page holding the keys with an empty document). A page
 failure, a stream that ends short of or runs past the registered size, and an ended session **error** the body, so
 the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
-reaches the page as an abort.
+reaches the page as an abort. Every end reaches the page: the SW confirms a clean end, so the page's close resolves only
+then, and reports a stream it refused (short, overlong, or out of protocol), so the page's pending write or close fails
+instead of waiting for a credit that never comes (F11, 2026-10-24: a refusal the page never heard of left the export
+dialog at 100 % for ever). The registered size is the exact length of what the page streams, so a caller that builds
+the bytes, as a ZIP download does, announces the built file's length, never its payloads' sum (`zipLength`, ADR 0082).
 
 Both applications save through it: Depot's download, and Memories' "download original" in the lightbox. A Memories
 original is saved under its own file name, the one sealed in its original's blob meta at upload and served on the
@@ -187,7 +191,7 @@ of chunk 0) would break.
 
 The media route also serves **audio**: a playback may be registered under one well-formed `audio/<subtype>` essence as
 well as a `video/<subtype>` one (the same one-essence rule, `isStreamableMediaType`). The SW protocol is versioned
-(`PROTOCOL_VERSION`, now 4), so a still-controlling worker that predates a change fails the handshake and the page falls
+(`PROTOCOL_VERSION`, now 5: 5 made a download's end and the SW's refusal reach the page), so a still-controlling worker that predates a change fails the handshake and the page falls
 back as before. Depot's file page is a second caller: it registers the sniffed container of a file (never the claimed
 type) with the same page-side chunk provider the download uses. The worker still holds no key and no plaintext at rest.
 
