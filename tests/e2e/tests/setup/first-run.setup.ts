@@ -135,7 +135,7 @@ test(
     await expect(page.getByText('What you may have to state', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Contact address')).toHaveAttribute('placeholder', 'Not stated')
     await expect(page.getByText('No recipient is stated yet', { exact: false })).toBeVisible()
-    await expect(page.locator('.p-message-warn')).toHaveCount(0)
+    await expect(page.locator('.veyq-message--warn')).toHaveCount(0)
 
     await page.getByLabel('Contact address').fill(`contact@${stack().domain}`)
     await page.getByLabel('Languages it answers in').fill('en, de')

@@ -103,8 +103,8 @@ test(
       display: 'grid',
       'row-gap': await probe(page, 'row-gap: 1.45rem', 'row-gap'),
     })
-    expect(await styleOf(page.locator('.memory-tabs .p-tablist-tab-list'), ['overflow-x'])).toEqual({ 'overflow-x': 'auto' })
-    const activeTab = page.locator('.memory-tabs .p-tab[data-p-active="true"]')
+    expect(await styleOf(page.locator('.memory-tabs .veyq-tabs__list'), ['overflow-x'])).toEqual({ 'overflow-x': 'auto' })
+    const activeTab = page.locator('.memory-tabs .veyq-tab[aria-selected="true"]')
     expect(await styleOf(activeTab, ['font-weight', 'color'])).toEqual({
       'font-weight': '800',
       color: await probe(page, 'color: var(--app-success)', 'color'),
@@ -219,7 +219,7 @@ test(
     expect(await styleOf(close, ['width', 'height', 'border-top-left-radius'])).toEqual({
       width: '44px', height: '44px', 'border-top-left-radius': '8px',
     })
-    // The paging button: 44 px too, but round (its 8 px never won over core's `:not(.p-button)`); disabled on the only
+    // The paging button: 44 px too, but round (its 8 px never won over core's `:not(.veyq-button)`); disabled on the only
     // photo, where its own `default` cursor and 0.28 opacity win over core's pointer.
     await expect(previous).toBeDisabled()
     expect(await styleOf(previous, ['width', 'border-top-left-radius', 'cursor', 'opacity'])).toEqual({

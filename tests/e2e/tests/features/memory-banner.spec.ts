@@ -58,7 +58,7 @@ async function drawnImage(page: Page, w: number, h: number): Promise<Buffer> {
 }
 
 const banner = (page: Page) => page.getByTestId('memory-banner')
-const tabRow = (page: Page) => page.locator('.memory-tabs .p-tablist')
+const tabRow = (page: Page) => page.locator('.memory-tabs .veyq-tabs__bar')
 const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i })
 
 test.beforeAll(async ({ browser }) => {
