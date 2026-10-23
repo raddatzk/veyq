@@ -627,6 +627,13 @@
     flex-direction: column;
   }
 
+  /* Stacked, the leading box spans the header's width instead of shrinking to its content (`align-items: flex-start`), so
+     a visual sized in % of it (the Memory cover's `width: 100%`) has a width to resolve against: shrink-wrapped, it was
+     the cover's own content, an absolute `<img>`, and the cover collapsed to a 3.5 x 2 px button at 375 px (inbox #525). */
+  .veyq-node-header.has-visual .veyq-node-header-leading {
+    align-self: stretch;
+  }
+
   .veyq-node-header.has-visual .veyq-node-header-title {
     font-size: 1.5rem;
   }
