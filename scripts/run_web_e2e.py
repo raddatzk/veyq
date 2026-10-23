@@ -1522,7 +1522,10 @@ def upgrade_record_problems(raw: object) -> list[str]:
             string(date, "to", "memory.date")
         cover = obj(memory, "cover", "memory")
         if cover is not None:
-            string(cover, "mediaId", "memory.cover")
+            # `blobId`: the uploaded image a cover is set by now; `mediaId`: a seed from before, which named one of its
+            # photos. One of the two, as upgradeRecord.ts reads it (the fixture holds the two to each other).
+            if not any(isinstance(cover.get(k), str) and cover[k] for k in ("blobId", "mediaId")):
+                problems.append("memory.cover names neither a blob nor a medium")
             crop = obj(cover, "crop", "memory.cover")
             if crop is not None:
                 for k in ("x", "y", "width", "height"):

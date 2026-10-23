@@ -33,12 +33,17 @@
     },
     "share": { "shareId": "s1", "fragmentKey": "k1", "name": "A Memory", "media": [{ "size": 10, "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }] }
   },
+  "accepted": [
+    { "why": "a cover set by an upload: a blob, no medium", "path": ["memory", "cover"], "value": { "blobId": "55555555-5555-4555-8555-555555555555", "crop": { "x": 0.1, "y": 0.2, "width": 0.5, "height": 0.28125 } } }
+  ],
   "refused": [
     { "why": "an unknown version", "path": ["version"], "value": 2 },
     { "why": "no owner password", "path": ["owner", "password"], "value": "" },
     { "why": "no Memory", "path": ["memory"], "delete": true },
     { "why": "a date that is no range", "path": ["memory", "date", "mode"], "value": "single" },
     { "why": "a cover without a crop", "path": ["memory", "cover", "crop"], "delete": true },
+    { "why": "a cover that names neither a blob nor a medium", "path": ["memory", "cover", "mediaId"], "delete": true },
+    { "why": "a cover whose blob is empty", "path": ["memory", "cover"], "value": { "blobId": "", "crop": { "x": 0, "y": 0, "width": 1, "height": 1 } } },
     { "why": "a Memory without media", "path": ["memory", "media"], "value": [] },
     { "why": "a chapter without media", "path": ["memory", "chapter", "media"], "delete": true },
     { "why": "a hash that is no SHA-256", "path": ["memory", "media", 0, "sha256"], "value": "abc" },

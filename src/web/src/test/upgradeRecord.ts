@@ -170,7 +170,8 @@ export function upgradeRecordProblems(raw: unknown): string[] {
     }
     const cover = obj(memory, 'cover', 'memory')
     if (cover) {
-      if (typeof cover.blobId !== 'string' && typeof cover.mediaId !== 'string') problems.push('memory.cover names neither a blob nor a medium')
+      const names = (k: string) => typeof cover[k] === 'string' && (cover[k] as string).length > 0
+      if (!names('blobId') && !names('mediaId')) problems.push('memory.cover names neither a blob nor a medium')
       const crop = obj(cover, 'crop', 'memory.cover')
       if (crop) for (const k of ['x', 'y', 'width', 'height']) num(crop, k, 'memory.cover.crop')
     }
