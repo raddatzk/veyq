@@ -58,11 +58,17 @@ const createGroupOpen = ref(false)
 const trustRefused = ref(false)
 
 // True once every answer a gate below depends on is in (a section is never judged hidden on a guess).
-const settled = ref(false)
+const loaded = ref(false)
 onMounted(async () => {
   await Promise.all([loadGroups(), loadTrustRefusals(), loadTenantRole(), loadAppointment()])
-  settled.value = true
+  loaded.value = true
 })
+// A reload or a deep link on a settings page boots with no space open, and the shell enters the tenant while this hub
+// mounts (AppShell). Until that entry is through, no tenant is known: a tenant page mounted then reads none and says it
+// could not load (the V1 heavy stage at 999 members, 2026-10-23), and the tenant role read for no tenant says "no owner". So nothing is
+// judged on a guess: the answers are in once the entry is through AND the role was read for the tenant it opened.
+const entering = computed(() => activeSpace.status === 'loading')
+const settled = computed(() => loaded.value && !entering.value && roleTenant.value === activeSpace.tenantId)
 
 // The caller's moderator appointment (uc.moderation.serve-as-moderator): the Moderation section — a door to the
 // surface, which lives outside this shell (ADR 0099 § 6) — is in the rail for a pending or accepted appointee and for
@@ -85,13 +91,19 @@ watch(() => activeSpace.tenantId, () => void loadTenantRole())
 // Whether the caller owns the active tenant: the owner-only sections (mail, storage) are in the rail for an owner and for
 // nobody else - a member is not offered a page that can only refuse them. False until the answer is in, and on a failed read.
 const isTenantOwner = ref(false)
+/** The tenant `isTenantOwner` answers for (undefined before the first answer): an answer for another tenant is none. */
+const roleTenant = ref<string | null | undefined>(undefined)
 async function loadTenantRole() {
+  const tenantId = activeSpace.tenantId
+  let owner = false
   try {
-    const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
-    isTenantOwner.value = mine?.role === 'OWNER'
+    owner = (await listMyTenants()).find((tn) => tn.tenantId === tenantId)?.role === 'OWNER'
   } catch {
-    isTenantOwner.value = false
+    owner = false
   }
+  if (tenantId !== activeSpace.tenantId) return // a later tenant's read owns the answer
+  isTenantOwner.value = owner
+  roleTenant.value = tenantId
 }
 
 async function loadTrustRefusals() {
@@ -224,7 +236,14 @@ const isHidden = (id: string): boolean =>
           : false
 // The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
 // pages that depend on an answer still on its way, before that answer is in.
-const detailVisible = computed(() => !isHidden(activeId.value) && (settled.value || !OWNER_ONLY.has(activeId.value)))
+// A tenant page reads the tenant the shell opened, so it is not mounted while the space is still being entered.
+const TENANT_PAGES = new Set(['tenant-members', 'terms', ...OWNER_ONLY])
+const detailVisible = computed(
+  () =>
+    !isHidden(activeId.value) &&
+    (settled.value || !OWNER_ONLY.has(activeId.value)) &&
+    !(entering.value && TENANT_PAGES.has(activeId.value)),
+)
 watch(
   [settled, hasSection, activeId, isTenantOwner, trustRefused, ownedGroups, isAppointed],
   () => {
