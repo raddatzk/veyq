@@ -287,7 +287,7 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
   16 a CSS class that no markup applies passes `validate_stylesheet_anchors` when it is not the selector's
      ANCHOR — `.a-live-class .never-applied` is green, `.never-applied` alone is red. **Left open on purpose**
      — the inside of a selector is exactly where a stylesheet legitimately reaches into a dependency's DOM
-     (`.memory-card .p-card-body`), and the trust-chain job is buildless, so there is no `node_modules` and
+     (a class a library applies at runtime), and the trust-chain job is buildless, so there is no `node_modules` and
      therefore no honest way to tell a vendor class from a typo at that position. Anchoring is what lets that
      guard need no vendor list at all. Pinned so the limit in that guard's docstring is executable rather than
      a sentence.

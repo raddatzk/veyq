@@ -526,7 +526,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   only download), so it lists the files with their download only. No send form, no upload, no replace, no share, no
   delete, no move — the guest's source carries no delete and the matrix grants a guest neither share nor delete; the
   server refuses each anyway (a create inside an identity folder `illegal_structure` for anyone but its identity, a
-  guest move out above). Pinned by `DropBoxDetail.guest.test.ts` (the real registry, router and PrimeVue, DOM clicks,
+  guest move out above). Pinned by `DropBoxDetail.guest.test.ts` (the real registry, router and UI layer, DOM clicks,
   guarded clients; red with the write controls let through or the guest's form embedded).
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box

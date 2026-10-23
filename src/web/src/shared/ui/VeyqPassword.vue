@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // A password field with a reveal toggle (ADR 0107). There is no strength meter: the app judges a password by its own
-// policy notice. The field's accessible name is its label alone (cr-own-ui-components-on-reka decision 5). `inputId`
-// is the `<input>`'s id, for a `<label for>`; `name` and `autocomplete` go onto the input; the caller's other
-// attributes land on the wrapper. The toggle is a real button, named from the catalog. A label's name is computed
-// from its whole content, so a toggle inside the caller's `<label>` would add "Show password" to the field's name:
-// the input therefore names itself with the label's visible text, read again when the language changes. Sheets reach it by
-// `veyq-password`, its input by `veyq-input` (as every text field) or `veyq-password__input`, and the toggle by
-// `veyq-password__toggle` (styled in `layer.css`).
+// policy notice. The field's accessible name is its label alone (ADR 0107 § Behaviour changed on purpose). `inputId` is
+// the `<input>`'s id, for a `<label for>`; `name` and `autocomplete` go onto the input; the caller's other attributes
+// land on the wrapper. The toggle is a real button, named from the catalog. A label's name is computed from its whole
+// content, so a toggle inside the caller's `<label>` would add "Show password" to the field's name: the input therefore
+// names itself with the label's visible text, read again when the language changes. Sheets reach it by `veyq-password`,
+// its input by `veyq-input` (as every text field) or `veyq-password__input`, and the toggle by `veyq-password__toggle`
+// (styled in `layer.css`).
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqIcon from './VeyqIcon.vue'

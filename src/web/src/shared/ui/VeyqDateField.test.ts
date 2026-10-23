@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The layer's date field (ADR 0107, cr-own-ui-components-on-reka decision 5): segments in the language's order with a
+// The layer's date field (ADR 0107 § Behaviour changed on purpose): segments in the language's order with a
 // leading zero and the language's names, a typed day outside min/max refused (the model never holds it, and leaving
 // the field shows the day it held on entry), and a `<label>` around it meaning its first segment, not its button.
 import { describe, it, expect } from 'vitest'

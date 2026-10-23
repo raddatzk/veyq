@@ -3,7 +3,7 @@
 // zone, exactly what a Memory's date range and an expiry store; a caller holding a `Date` converts through
 // `shared/isoDate`. The day is typed into segments - day, month and year, each a spinbutton typed as digits or stepped
 // by the arrow keys - in the order and with the separators of the language (`tt.mm.jjjj` in German, `mm/dd/yyyy` in
-// English; cr-own-ui-components-on-reka decision 5). The calendar opens from its button and, as before, when the field
+// English; ADR 0107 § Behaviour changed on purpose). The calendar opens from its button and, as before, when the field
 // gets focus; it steps by month, its week starts on the catalog's first day, and days outside `minDate`/`maxDate`
 // (ISO too) cannot be picked or typed. `inputId` names the field for a `<label for>`. Sheets reach it by
 // `veyq-date-field`, a segment by `veyq-date-field__segment` and its calendar by `veyq-date-panel` (styled below).

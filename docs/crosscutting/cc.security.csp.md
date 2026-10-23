@@ -58,9 +58,9 @@ Why each non-obvious source is there:
 - **`script-src 'self'`, with no `unsafe-*`.** The entry is a hashed same-origin module. The app has no inline
   script, no `eval`/`Function` and no WebAssembly (Argon2id is pure-JS `@noble`), so scripts stay strictly
   same-origin.
-- **`style-src 'unsafe-inline'`.** PrimeVue and `@primeuix` inject `<style>` tags at runtime, and the app uses
-  `:style` bindings. Neither can carry a nonce. Style injection is far lower-risk than script, so this is an
-  accepted gap.
+- **`style-src 'unsafe-inline'`.** The app uses `:style` bindings, which cannot carry a nonce (no component library
+  injects a `<style>` tag any more, ADR 0107; tightening the directive is inbox #523). Style injection is far
+  lower-risk than script, so this is an accepted gap.
 - **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
   only works in a header, which is one reason the policy is not a `<meta>`.
 - **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: the

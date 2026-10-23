@@ -149,6 +149,14 @@ turned the closing quote of `'E2E Files'` into a broken string. So after each sw
 whole tree, untracked moves included (`git grep` does not see a directory moved with plain `mv`; `grep -r` does),
 and every remaining hit is spared by name — the CR's look-alike list, or a comment at the line that says why.
 
+**A locator for a class name searches the bare name, not only its selector form.** cr-own-ui-components-on-reka's
+inventory found the library's classes as `\.p-[a-z]` — the way a sheet or a query writes them — so two native
+inputs with `class="p-inputtext order-received"` in admin-web's order form passed every phase's locator, the call-site
+agents' closing grep and every guard, and lost their field look the day the library's global sheet went; only the
+browser pass saw it. A class name has three spellings in this repo: the selector (`.x`), the attribute value
+(`class="… x …"`, `:class`) and the string a script builds (`'x'`). A locator meant to prove an absence greps the bare
+word (`\bp-[a-z][a-z-]*`) and spares its look-alikes by name.
+
 **"Measured against `main`, so no phase re-derives it" means *don't rebuild the inventory* — never *believe every
 row*.** A CR that carries its measurements in a table earns the implementer's time, and the clause that hands
 them over is doing the opposite of what it reads as: it suppresses re-derivation of the whole set, which is
@@ -1464,10 +1472,11 @@ red on purpose once, in the same session, before any green from it is allowed to
 
 The corollary, and the place where the repair is more dangerous than the fault. The same fingerprint reported
 *every element on the page* changed, with no visible difference, whenever a surface was probed before a
-PrimeVue `Select` or `Tabs` had ever mounted: those components register `--p-select-*` / `--p-tabs-*` on
-`:root` lazily, and custom properties inherit. The obvious repair — drop the vendor's `--p-` namespace from
-the fingerprint — **would have blinded the gate**, because the project's own `base.css` deliberately defines
-some `--p-*` names itself, and their deletion is exactly the regression the gate exists to catch. The repair
+`Select` or `Tabs` of the component library the clients used then (PrimeVue, retired by ADR 0107) had ever
+mounted: those components registered `--p-select-*` / `--p-tabs-*` on `:root` lazily, and custom properties
+inherit. The obvious repair — drop the vendor's `--p-` namespace from the fingerprint — **would have blinded the
+gate**, because the project's own `base.css` then deliberately defined some `--p-*` names itself, and their deletion
+was exactly the regression the gate existed to catch. The repair
 that holds removes the *confounder* instead: warm every surface once before measuring, so the registry is in
 the same state on both sides of the comparison.
 

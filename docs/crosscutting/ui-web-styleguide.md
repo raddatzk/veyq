@@ -81,29 +81,28 @@ values), never for application UI roles. Repeated raw colors must become a role 
 focus ring reach 3:1** (WCAG 1.4.3 / 1.4.11) — in light **and** dark. Exempt: disabled controls, text over media or
 a gradient (rendered content), decorative dividers (`--app-line`). Three tokens carry the rule:
 
-- **`--app-primary` / `-hover` / `-active`** — the submit/confirm green. PrimeVue's primary is routed onto them, so
-  every primary button, checkbox, switch and primary-coloured link follows. Light is emerald-700/800/900 under
-  white text; dark keeps Aura's emerald-400/300/200 under dark text.
+- **`--app-primary` / `-hover` / `-active`** — the submit/confirm green. The layer's primary button, checkbox, switch
+  and primary-coloured link paint from them. Light is emerald-700/800/900 under white text; dark is emerald-400/300/200
+  under dark text.
 - **`--app-on-fill`** — text or an icon on a *filled* role colour (primary, accent, success, danger): white in light,
   near-black in dark, because the dark twins of those fills are light. **Not `--app-on-strong`**, which stays white
   in both modes and paints white surfaces and labels over media scrims.
 - **`--app-control-line`** — the boundary of an input, checkbox or switch track. `--app-line` stays the decorative
   divider and is not held to 3:1.
 
-**PrimeVue's colours come from our tokens, not from its preset.** Aura's defaults failed AA in 36 pairs (inbox
-#388: white on `#10b981` 2.54:1, warn/success/error messages 2.8–4.4:1, input borders 1.5:1). The `--p-*` block at
-the end of `:root` in `styles/base.css` routes the primary, the danger and warn buttons, messages, toasts and form
-boundaries onto `--app-*` roles; that block is the one place to change a PrimeVue colour — never a component's
-`<style>` and never `main.ts`'s preset. `scripts/validate_web_contrast.py` (trust-chain glob) computes every key
-pair from `base.css` in both modes and is red below the floor, or when a pair reads a `--p-*` variable the block no
-longer sets. **A new pairing — a role's text on a fill no row names — gets a row in its `PAIRS`**; nothing else
-will notice it.
+**Every colour the UI layer paints is an `--app-*` role; there is no preset.** The former component library's preset
+(Aura) failed AA in 36 pairs (inbox #388: white on `#10b981` 2.54:1, warn/success/error messages 2.8–4.4:1, input
+borders 1.5:1); since ADR 0107 the layer's components (`shared/ui/layer.css`) paint from the roles directly, so a
+colour changes in `styles/base.css`, never in a component's `<style>`. `scripts/validate_web_contrast.py` (trust-chain
+glob) computes every key pair from `base.css` in both modes and is red below the floor, or when a pair reads a role
+`base.css` does not set. **A new pairing — a role's text on a fill no row names, a new layer component's own — gets a
+row in its `PAIRS`**; nothing else will notice it.
 
-**`src/admin-web/` follows the same rule on its own copy** (inbox #390): its `src/styles/base.css` carries the same three
-tokens with both twins and the same `--p-*` block — ported, not imported (ADR 0065) — and the guard reads that
-sheet against the same `PAIRS` (its `SHEETS`), so a lightened admin primary is red there too. Before the port the
-copy was still on Aura's defaults: 34 pairs below AA (23 light, 11 dark), measured on a throwaway harness of the
-real PrimeVue preset, admin-web's `style.css` and its `LoginView`. The guard holds each copy to the floor, not the
+**`src/admin-web/` follows the same rule on its own copy** (inbox #390): its `src/styles/base.css` carries the same
+tokens with both twins — ported, not imported (ADR 0065) — and the guard reads that sheet against the same `PAIRS`
+(its `SHEETS`), so a lightened admin primary is red there too. Before the port the copy was still on the preset's
+defaults: 34 pairs below AA (23 light, 11 dark), measured on a throwaway harness of the preset, admin-web's
+`style.css` and its `LoginView`. The guard holds each copy to the floor, not the
 two to each other — they may drift apart, and both must still pass.
 
 ## Typography
@@ -149,6 +148,14 @@ or a one-off `1rem` label sitting in them.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
+- **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
+  a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of
+  `shared/ui/` (its header comment is its API, its look `shared/ui/layer.css`), on our markup or on Reka UI underneath.
+  **Views, composables, applications and tests import the layer, never a component library** (`reka-ui`,
+  `@lucide/vue`, or any other): lint holds it (`veyq/ui-through-the-layer` in `src/web/`, `veyq-admin/ui-through-the-layer`
+  in `src/admin-web/`), so the next library swap stays in one directory. An icon is a `VeyqIcon` name
+  (`shared/ui/icons.ts`), never a library's class or component. A sheet reaches a layer part by its `veyq-*` class.
+  `src/admin-web/` has its own copy of the layer, cut to what it renders (ADR 0065) — never an import of web's.
 - **Where a component lives:** one used by two features, or by a feature and the app shell, lives in
   `shared/ui/`; `components/app/` is the shell alone. `shared/` imports no feature. The one known inversion,
   `SecretKeyField` importing the Emergency Kit's read half out of `features/account/`, is left because undoing it
@@ -165,14 +172,14 @@ or a one-off `1rem` label sitting in them.
 - Submit/save/confirm = positive (green); cancel/neutral = secondary; destructive = danger with an
   explicit label. Icon-only actions use `.veyq-icon-button` + an `aria-label`/tooltip. Two icon-only actions in one bar
   (a `NodeHeader`'s, a row's) never share an icon: the icon is the only thing a sighted user tells them apart by, so a new
-  action's icon is checked against the list it joins (the Memory header carries `pi-user-plus` twice until inbox #425 is decided).
+  action's icon is checked against the list it joins (the Memory header carries `user-plus` twice until inbox #425 is decided).
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm
   (e.g. *Cover entfernen* / *Ort entfernen*) sits in a trailing `.veyq-action-group` **immediately left of the
-  confirm**, styled **`severity="danger" outlined`** (danger colour, but lighter than the filled primary so it
+  confirm**, styled **`variant="danger" appearance="outlined"`** (danger colour, but lighter than the filled primary so it
   doesn't compete). When the destructive action **is** the dialog's primary confirm (a dedicated delete/confirm
-  dialog), it is a **filled `severity="danger"`** button on the right — the dialog's one primary. Confirm/
+  dialog), it is a **filled `variant="danger"`** button on the right — the dialog's one primary. Confirm/
   destructive actions show an in-progress state and **disable confirm/cancel/close + inputs while the mutation
   runs** (no double-submit).
 
@@ -254,11 +261,11 @@ list every key a template actually reads and check it against **both** locale bl
 grep -rho "t('members\.\w*'" src/web/src --include="*.vue" --include="*.ts" | sort -u
 ```
 
-**PrimeVue's own texts come from the catalog too, set in one place.** A PrimeVue component reads some strings from
-its config's `locale` - a Dialog's close button, every `<Password>`'s hidden "Enter a password", the DatePicker's
-month names - and `src/app/primeVueLocale.ts` (one per package, `src/web/` and `src/admin-web/`) writes them from the
-catalog's `primevue` block at start and on every language change; no component sets PrimeVue's locale itself, and
-a newly used PrimeVue component or prop brings the keys it reads into that file and both locale blocks (inbox #434).
+**The layer's own texts come from the catalog too.** What a `shared/ui/` component says on its own - a dialog's
+close button, the password field's show/hide toggle, the date field's segment names and calendar buttons, the toast
+region's name - is a key of the catalog's `ui` block (one per package), read where the component renders, in EN and
+DE; no layer component carries a literal string, and a new one brings its keys into both locale blocks (inbox #434,
+ADR 0107 decision 6). Month and weekday names come from the browser's `Intl` for the language, not the catalog.
 
 ## Accessibility & responsiveness
 
@@ -272,7 +279,7 @@ before component-specific media queries.
 - Defined light **and** dark for any new semantic color — both in `styles/base.css` (`:root` and `:root.veyq-dark`).
 - Text 4.5:1, controls/icons/focus 3:1, both modes; text on a filled role colour uses `--app-on-fill`; a new
   colour pairing has a row in `scripts/validate_web_contrast.py` (§ *Contrast*).
-- **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders — in every `.css` under the package's `src/`, an application's own sheet included. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Overriding a PrimeVue class is unaffected as long as it stays scoped by one of ours (`.memory-card .p-card-body`, `.veyq-danger-action.p-button`) — which is the house style anyway, and is what lets that guard need no list of vendor class names.
+- **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders — in every `.css` under the package's `src/`, an application's own sheet included. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Adjusting a layer component is a rule compounded with or scoped by one of ours (`.memory-card .veyq-card-frame__body`, `.veyq-danger-action.veyq-button`), and the layer's own classes are applied by its markup like any other.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.

@@ -118,7 +118,7 @@ operator ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md); the bo
   fine-grained content authorization is a small domain guard in the handler — a different layer.
   → [ADR 0008](../decisions/0008-centralized-http-auth.md),
   [cc.security.authorization](../crosscutting/cc.security.authorization.md)
-- **`src/web/`** — Vue 3 + PrimeVue, and **the client surface**. All content crypto runs here.
+- **`src/web/`** — Vue 3 + its own UI layer on Reka UI (ADR 0107), and **the client surface**. All content crypto runs here.
 - **`contracts/`** — OpenAPI + crypto vectors. The source of truth both sides are generated from; never a
   hand-written DTO.
 

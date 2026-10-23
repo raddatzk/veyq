@@ -1,6 +1,6 @@
 # ADR 0039 — Transient feedback via a floating Toast
 
-- Status: Accepted
+- Status: Accepted (amended 2026-10-23 by [ADR 0107](0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md): the channel stands; the layer draws it)
 - Date: 2026-07-13
 
 ## Context
@@ -26,11 +26,13 @@ Audit finding #74 (P3d) flagged exactly this ("add `useToast`/`useUndo` — no t
 
 ## Decision
 
-Adopt **PrimeVue Toast** as the client's single **transient-feedback channel**, and route *both* kinds of
+Adopt **one toast** as the client's single **transient-feedback channel**, and route *both* kinds of
 transient feedback through it:
 
-- Register `ToastService` (`main.ts`) and mount **one** global `<Toast />` (`App.vue`), wrapped by a thin
-  **`useToast`** composable that fixes the app conventions (severity, i18n summary/detail, default `life`).
+- Mount **one** global toaster (`App.vue`), reached only through a thin **`useToast`** composable that fixes the app
+  conventions (severity, i18n summary/detail, default `life`). Since ADR 0107 the toaster is the UI layer's own
+  (`shared/ui/VeyqToaster.vue` on Reka's Toast, fed by `shared/ui/toast.ts`); it was the component library's toast
+  service until then, and no call site changed with the swap.
 - **Success confirmations** (the `notice` refs) become **auto-dismissing toasts** — the inline
   `<Message severity="success">` + `notice` ref pattern is retired at those sites.
 - **Undo affordances** become **undo-toasts**: a toast carrying a "Rückgängig / Undo" action, its
@@ -39,8 +41,8 @@ transient feedback through it:
 
 This **deliberately overrides "reuse UI, never invent" for transient feedback only.** The justification: there
 was no one pattern to reuse — two hand-rolled undo bars duplicating a timer skeleton, plus scattered `notice`
-refs — so consolidating all ephemeral feedback into one consistent, accessible channel (PrimeVue Toast ships
-the `role`/aria + focus semantics) beats copying either shape a third time.
+refs — so consolidating all ephemeral feedback into one consistent, accessible channel (the toaster carries the
+live region, the role and the focus semantics) beats copying either shape a third time.
 Form-level *validation errors* and persistent *load-error* states stay inline — this decision covers success +
 undo (ephemeral) feedback, not error states pinned to a form.
 

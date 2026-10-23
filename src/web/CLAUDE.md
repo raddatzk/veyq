@@ -1,4 +1,4 @@
-# web (Vue 3 + PrimeVue)
+# web (Vue 3 + its own UI layer on Reka UI)
 
 The web client. Loaded in addition to the root `CLAUDE.md` when working here. All content crypto runs
 here; the server is blind.
@@ -27,13 +27,22 @@ here; the server is blind.
   does not name, so a bite that adds one to a request body stays green — assert a body at `fetch`, as the
   `*.wire.test.ts` suites do.
 - **A test that asserts what a click handler calls has not clicked anything.** The element's own default action
-  runs too, and only a real DOM click sees it: a PrimeVue `Breadcrumb` item without a real `url` renders
-  `<a href="#">`, whose default ran after the `command` and cleared the `#k=` fragment that carries a share key —
-  every guest write after a reload then failed, while the unit test that asserted the `router.push` arguments stayed
-  green (found only in a real browser, 2026-10-07). A core page that keeps the share key in the URL fragment
+  runs too, and only a real DOM click sees it: the component library's breadcrumb (before ADR 0107) rendered an item
+  without a real `url` as `<a href="#">`, whose default ran after the `command` and cleared the `#k=` fragment that
+  carries a share key — every guest write after a reload then failed, while the unit test that asserted the
+  `router.push` arguments stayed green (found only in a real browser, 2026-10-07). The layer's `VeyqBreadcrumb` makes
+  an entry with a `url` a real link and runs its `command` in place of a plain click's default; an entry still needs
+  that `url`. A core page that keeps the share key in the URL fragment
   navigates with `hash: route.hash` and gives every link a real `href`; its test mounts the real component and the
   real router and clicks the rendered element (`ShareTreePage.breadcrumb.test.ts`, `ShareTreePage.test.ts`,
   `FolderShareGuest.test.ts`).
+- **A Reka primitive answers the press, not the click.** A layer tab switches on a left-button `mousedown` (and on
+  focus), a select opens on `pointerdown`, a hover card opens on its trigger's `pointerenter` and closes only on a
+  document `pointermove` outside it; a test that sends `click` stays green while nothing switched — the pending-deletion
+  case of `MemoryDetail.rights.test.ts` asserted an absence on the wrong tab until ADR 0107's swap showed it. Send the
+  event the primitive listens to (`trigger('mousedown')` for a tab), and before asserting that something is absent,
+  assert something only the target state shows. A list or panel a primitive portals lands in `document.body`: mount
+  with `attachTo: document.body` and query `document`. `src/admin-web/` has the same primitives under its own layer.
 - **A guest-mode mount proves it calls no authenticated client** (inbox #401): mock each client module through
   `src/test/guestMode.ts`'s `guardedClients` (`vi.mock('…/api/client', async (o) => (await import('…/test/guestMode'))
   .guardedClients(await o()))` — the public factories become `vi.fn`s to stub, every other one throws and is recorded)
@@ -170,7 +179,7 @@ here; the server is blind.
   `getMemberAvatar` ONLY for a non-zero revision it does not hold, keeps ONE object URL per user (revoked on a new revision, a 404, `resetPeopleDirectory`)
   and shows the letter for anything that does not open or is no image - **never fetch or draw a member's picture on a share page**
   (`ShareView.memory.test.ts` records every export of the cache and the directory). Draw a person with `core/people/PersonAvatar.vue`
-  (`:user-id`), never a bare PrimeVue `Avatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
+  (`:user-id`), never a bare `VeyqAvatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
   `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
   **One header for every node (inbox #406).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
   Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
@@ -195,7 +204,7 @@ here; the server is blind.
   over `useViewMode` - the map is the level's `SpaceMap`, the views `memoryViews.ts`, inbox #417 -, [docs/apps](../../docs/apps/README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), the PRIMARY click (what a plain click does: it opens
   the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
-  row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
+  row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (the layer's `VeyqMenu`, entries
   `veyq-row-action-<id>`), `shown` by the application's fail-closed rights function - a share guest gets this very row with
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
@@ -226,7 +235,7 @@ here; the server is blind.
   meta so a replaced or removed cover drops its object URL at once; a source core cannot open - Memories' photo - is the kind's
   `cover.load`), `rights.ts` the fail-closed `coverRights` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
   kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and ONE core action `cover`
-  (Set / Change, `pi-image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
+  (Set / Change, `image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
   it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
   stored crop, Remove where a cover exists, Save/Cancel; a non-image, empty or over-40-MB file is refused inside it, `pickImage.ts`
   `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, `DropBoxDetail`,
@@ -289,7 +298,7 @@ here; the server is blind.
   `dropDirectory` (a directory that is no download) only while the entry is `allowed` AND its handler `enabled` (a drop is
   never more than the menu entry). There is no import entry: core recognises a download in what an upload picks or drops
   (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's toolbar is core's: the "New" menu
-  (`registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
+  (`registry.levelMenu()` plus core's own folder entry, one `VeyqButton` + popup `VeyqMenu`, each entry only where its own
   rights function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
   `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
   list for every row, plus the shown kinds' `views` (`core/node/levelViews.ts`, inbox #370); the level shows the stored mode
@@ -434,4 +443,4 @@ here; the server is blind.
   test and `verify:pdf-worker`; check that its options still exist** (v6 dropped `isEvalSupported`). The member and the guest
   mount the same component.
 
-Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../../docs/ai/README.md`](../../docs/ai/README.md).
+Stack: Vue 3, the UI layer in `src/shared/ui/` (Reka UI and Lucide underneath, ADR 0107), vue-router. Working rules: [`../../docs/ai/README.md`](../../docs/ai/README.md).
