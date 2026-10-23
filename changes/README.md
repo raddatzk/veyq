@@ -1701,6 +1701,15 @@ the done-when does not ask for is skipped by default. So a phase that changes a 
 is clicked and where (and § above: what the instance must hold for it); a phase that cannot run a browser says so
 and the CR carries the pass as an open item, not a footnote.
 
+### A layout that switches at a breakpoint is computed on both sides of it at refine
+
+cr-node-header-actions-by-priority fixed a node header's actions to a row of their own up to 540 px and to the right
+end of the title row above it, beside a 12rem minimum title — and the numbers to see the result were all in the CR (a
+180 px Memory cover, 41 px buttons, the 12rem). Only the browser pass computed them: 9 buttons at 540 px, **1** at
+541 px, 6 at 768 px (#531). A refine that puts a layout switch at a width does the arithmetic for a width just below and
+just above it, from the sizes it already measured, and shows the owner both — a cliff at a breakpoint is a design
+question, and the refine is where it is cheap.
+
 ### A constraint on a module's imports is measured on what that module must CALL
 
 "The ending imports no feature" (ADR 0070) was a sound rule and an unbuildable instruction as written: the first
