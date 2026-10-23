@@ -51,8 +51,9 @@ gives `memories` and `depot` an entry each in the capability register and makes 
    of the application's kinds: create (copy and import are creates), update (rename, move, meta), cover, blob upload
    start and completion for an owner node of the kinds, a share rooted on one created, reactivated, re-issued or given
    a write role, and every guest write. **Exempt, each by name and reason:** delete to the trash and restore (core's
-   and Memories' `deleteMedia`, `restoreMedia`, `deleteShareMedia`, `deleteBucket`), the purge (`purgeMedia`), the
-   re-key, erasures, moderation measures.
+   and Memories' `deleteMedia`, `restoreMedia`, `deleteShareMedia`, `deleteBucket`) — a restored node is read-only like
+   the rest —, the purge (`purgeMedia`), a member's own item marks (`putItemFavorites`: the member's blob, which a
+   Master-Key rotation re-tags through the same write, ADR 0068 § 9), the re-key, erasures, moderation measures.
 3. **The completeness proof is a sweep, not a list.** A slice test derives every non-GET operation from each
    application's generated API package (as `OperatorBlindProbeTest` does) and asserts each answers
    `422 capability_disabled` with its application off, or is in the exemption list with its reason; a new operation
@@ -99,7 +100,7 @@ The titles and purposes are the implementer's, to the rule (§ Copy); the applic
    naming it; restore → green); slice tests, each negative with a positive control on the same predicate: with
    `memories` off a Memory's rename, a medium's completion and a `READ_WRITE` guest's upload answer
    `422 capability_disabled` (control: with it on they land), a Memory reads, downloads and goes to the trash and back,
-   a rotation's re-key lands; with `memories` off for the instance and on for a tenant it is off; with `depot` off a
+   a rotation's re-key lands, and a heart on a medium is taken; with `memories` off for the instance and on for a tenant it is off; with `depot` off a
    file's completion is refused and its download presigns.
 3. **Web, site, docs, coverage.** Decision 4; the line on the node's page; the texts in EN and DE. Site: the two
    capability pages and Applications (EN+DE). Docs: ADR 0088's entry tree and § Built today, ADR 0079 decision 8's *not
@@ -117,8 +118,8 @@ proves none is left out; reads, downloads and removals stay; the site says so in
 
 ## Open questions (owner)
 
-None open. Settled here and not stopped: a delete to the trash and its restore stay while an application is off;
-`putItemFavorites` (a heart on a medium) is a write and refused.
+None open. Answered (owner 2026-10-23): a delete to the trash and its restore stay, and a restored node is read-only
+like every node of the application; a member's own item marks (`putItemFavorites`) are taken.
 
 ## Retrospective
 
