@@ -95,7 +95,7 @@ Locators:
   review items above, and show them to the owner first. · Done when: `npm run check` in `src/web/` and `src/admin-web/`
   green; every `scripts/validate_*.py` except `validate_guard_gaps.py` green; the worktree is clean (the owner removes
   it or keeps it).
-- [ ] **2 admin-web and `capabilities.json`**: the sweep (Q1). · Done when: each inventory hit is changed or kept with
+- [x] **2 admin-web and `capabilities.json`** (landed 2026-10-23, the owner approved the table; it also corrected phase 1's `configSecret.sub`: a lost key leaves the bundled store reachable, ADR 0089 decision 3): the sweep (Q1). · Done when: each inventory hit is changed or kept with
   its reason in the phase's table; checks green; a browser pass over the console's changed screens, light and dark.
 - [ ] **3 web (core, Memories, Depot)**: the sweep, `rotation.*` skipped. · Done when: as phase 2, over the web's
   changed screens and the site pages that quote them.

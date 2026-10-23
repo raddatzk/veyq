@@ -90,8 +90,8 @@
         "de": "Mitglieder können Gruppen anlegen: Bereiche, die mehrere Mitglieder gemeinsam nutzen, neben dem persönlichen Bereich jedes Mitglieds."
       },
       "whenOff": {
-        "en": "No new group can be created, so only personal spaces are offered. Groups that already exist stay as they are: members keep using, renaming and deleting them, adding and removing members, and accepting or declining being added.",
-        "de": "Es lässt sich keine neue Gruppe mehr anlegen; angeboten werden dann nur persönliche Bereiche. Bestehende Gruppen bleiben, wie sie sind: Mitglieder können sie weiter nutzen, umbenennen und löschen, Mitglieder aufnehmen und entfernen und eine Aufnahme annehmen oder ablehnen."
+        "en": "No new group can be created, so only personal spaces are offered. Groups that already exist stay and work as before.",
+        "de": "Es lässt sich keine neue Gruppe mehr anlegen; angeboten werden dann nur persönliche Bereiche. Bestehende Gruppen bleiben und funktionieren wie bisher."
       },
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],
       "source": "operator-policy",
@@ -104,8 +104,8 @@
             "de": "Aufnahme in eine Gruppe braucht ein Ja"
           },
           "whenSet": {
-            "en": "Whoever is added to a group is asked first and joins only once they say yes, whatever their own setting says. Members already in a group stay, including someone added just before whose access is still on its way.",
-            "de": "Wer in eine Gruppe aufgenommen wird, wird zuerst gefragt und kommt erst nach einem Ja dazu, egal was die eigene Einstellung sagt. Wer schon in einer Gruppe ist, bleibt, auch wer gerade erst aufgenommen wurde und dessen Zugang noch unterwegs ist."
+            "en": "Whoever is added to a group is asked first and joins only once they say yes, whatever their own setting says. Members already in a group stay.",
+            "de": "Wer in eine Gruppe aufgenommen wird, wird zuerst gefragt und kommt erst nach einem Ja dazu, egal was die eigene Einstellung sagt. Wer schon in einer Gruppe ist, bleibt."
           }
         }
       },
@@ -117,12 +117,12 @@
         "de": "Gemerkte Geräte"
       },
       "purpose": {
-        "en": "A device a member has signed in on can keep a key of its own, so that it unlocks next time with the password alone, without the Secret Key from the Emergency Kit. Unlocking without a password hangs below this entry.",
-        "de": "Ein Gerät, auf dem sich ein Mitglied angemeldet hat, kann einen eigenen Schlüssel behalten und entsperrt dann beim nächsten Mal allein mit dem Passwort, ohne den Secret Key aus dem Notfall-Kit. Das Entsperren ohne Passwort hängt unter diesem Eintrag."
+        "en": "A device a member has signed in on can keep a key of its own, so that it unlocks next time with the password alone, without the Secret Key from the Emergency Kit.",
+        "de": "Ein Gerät, auf dem sich ein Mitglied angemeldet hat, kann einen eigenen Schlüssel behalten und entsperrt dann beim nächsten Mal allein mit dem Passwort, ohne den Secret Key aus dem Notfall-Kit."
       },
       "whenOff": {
-        "en": "No device can be newly remembered. Devices remembered before stop unlocking that way at once: the server withholds what they unlock with, and deletes none of it. Members who relied on a remembered device then need their password and their Secret Key from the Emergency Kit. Unlocking without a password hangs below this entry, so it is off too, whatever its own switch says. Switching back on restores every remembered device. The password with the Secret Key always works.",
-        "de": "Kein Gerät lässt sich neu merken. Bereits gemerkte Geräte entsperren sofort nicht mehr auf diesem Weg: Der Server hält zurück, womit sie entsperren, und löscht nichts davon. Mitglieder, die sich auf ein gemerktes Gerät verlassen haben, brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Das Entsperren ohne Passwort hängt unter diesem Eintrag und ist damit ebenfalls aus, egal wie sein eigener Schalter steht. Wird der Eintrag wieder eingeschaltet, entsperrt jedes gemerkte Gerät wieder wie zuvor. Passwort und Secret Key zusammen funktionieren immer."
+        "en": "No device can be newly remembered, and devices remembered before stop unlocking that way at once; unlocking without a password is off too. Members then need their password and their Secret Key from the Emergency Kit. Nothing is deleted, so switching back on restores every remembered device.",
+        "de": "Kein Gerät lässt sich neu merken, und bereits gemerkte Geräte entsperren sofort nicht mehr auf diesem Weg; das Entsperren ohne Passwort ist ebenfalls aus. Mitglieder brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Gelöscht wird nichts, also entsperrt jedes gemerkte Gerät wieder wie zuvor, sobald der Eintrag wieder an ist."
       },
       "serves": ["uc.account.trust-device", "uc.account.remember-this-device"],
       "source": "operator-policy",
@@ -135,8 +135,8 @@
             "de": "Nach so vielen Tagen erneut nach dem Passwort fragen"
           },
           "whenSet": {
-            "en": "A signed-in device asks for the password again once this many days have passed since it signed in, on remembered devices too; after that, a remembered device opens as before. It applies at once: devices signed in for longer are asked at their next renewal, at most a quarter of an hour later. A device added from another one counts from when it was added. Nothing is deleted.",
-            "de": "Ein angemeldetes Gerät fragt erneut nach dem Passwort, sobald seit der Anmeldung so viele Tage vergangen sind, auch ein gemerktes Gerät; danach öffnet ein gemerktes Gerät wie zuvor. Das gilt sofort: Geräte, die schon länger angemeldet sind, werden bei ihrer nächsten Verlängerung gefragt, spätestens eine Viertelstunde später. Ein Gerät, das über ein anderes hinzugefügt wurde, zählt ab dem Hinzufügen. Gelöscht wird nichts."
+            "en": "Every signed-in device, remembered ones too, asks for the password again once this many days have passed since it signed in or was added. Devices already past that are asked within a quarter of an hour.",
+            "de": "Jedes angemeldete Gerät, auch ein gemerktes, fragt erneut nach dem Passwort, sobald seit der Anmeldung oder dem Hinzufügen so viele Tage vergangen sind. Geräte, bei denen das schon so ist, werden innerhalb einer Viertelstunde gefragt."
           }
         }
       },
@@ -152,8 +152,8 @@
         "de": "Ein gemerktes Gerät kann direkt öffnen, ganz ohne Passwort und Secret Key, weil es einen Schlüssel hält, der allein genügt."
       },
       "whenOff": {
-        "en": "No device can be newly set up to unlock without a password, and a device added from another one gets a session but keeps no key. Devices set up this way before stop opening straight in at once: the server withholds what they unlock with, and deletes none of it. Members who relied on such a device then need their password and their Secret Key from the Emergency Kit. Switching back on restores them. This entry is also off whenever Remembered devices is off.",
-        "de": "Kein Gerät lässt sich neu so einrichten, dass es ohne Passwort entsperrt, und ein Gerät, das über ein anderes hinzugefügt wird, bekommt eine Sitzung, aber keinen Schlüssel. Bereits so eingerichtete Geräte öffnen sofort nicht mehr direkt: Der Server hält zurück, womit sie entsperren, und löscht nichts davon. Mitglieder, die sich auf ein solches Gerät verlassen haben, brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Wird der Eintrag wieder eingeschaltet, öffnen diese Geräte wieder direkt. Dieser Eintrag ist außerdem immer dann aus, wenn „Gemerkte Geräte“ aus ist."
+        "en": "No device can be newly set up to unlock without a password, and a device added from another one keeps no key. Devices set up this way stop opening straight in at once; members then need their password and their Secret Key from the Emergency Kit. Nothing is deleted, so switching back on restores them. This entry is also off whenever Remembered devices is off.",
+        "de": "Kein Gerät lässt sich neu so einrichten, dass es ohne Passwort entsperrt, und ein Gerät, das über ein anderes hinzugefügt wird, behält keinen Schlüssel. So eingerichtete Geräte öffnen sofort nicht mehr direkt; Mitglieder brauchen dann ihr Passwort und ihren Secret Key aus dem Notfall-Kit. Gelöscht wird nichts, also öffnen diese Geräte wieder direkt, sobald der Eintrag wieder an ist. Dieser Eintrag ist außerdem immer dann aus, wenn „Gemerkte Geräte“ aus ist."
       },
       "serves": ["uc.account.remember-this-device"],
       "source": "operator-policy",
@@ -170,8 +170,8 @@
         "de": "Ein Mitglied meldet sich auf einem neuen Gerät an, indem es dieses per QR-Code mit einem bereits entsperrten Gerät koppelt – ohne auf dem neuen Gerät Passwort und Secret Key einzugeben."
       },
       "whenOff": {
-        "en": "No device can be added this way any more, and an addition already under way stops. Devices added before are not affected. Members sign in on a new device with their password and their Secret Key. This entry is independent of Remembered devices.",
-        "de": "Auf diesem Weg lässt sich kein Gerät mehr hinzufügen, und ein Hinzufügen, das gerade läuft, bricht ab. Bereits hinzugefügte Geräte sind nicht betroffen. Auf einem neuen Gerät melden sich Mitglieder dann mit Passwort und Secret Key an. Dieser Eintrag ist unabhängig von „Gemerkte Geräte“."
+        "en": "No device can be added this way any more, and an addition already under way stops. Devices added before are not affected. Members sign in on a new device with their password and their Secret Key.",
+        "de": "Auf diesem Weg lässt sich kein Gerät mehr hinzufügen, und ein Hinzufügen, das gerade läuft, bricht ab. Bereits hinzugefügte Geräte sind nicht betroffen. Auf einem neuen Gerät melden sich Mitglieder dann mit Passwort und Secret Key an."
       },
       "serves": ["uc.account.onboard-device"],
       "source": "operator-policy",
@@ -184,8 +184,8 @@
         "de": "Prüfung auf geleakte Passwörter"
       },
       "purpose": {
-        "en": "When someone chooses a password, the browser asks a breached-password service whether it appears in a known leak, sending only the first five characters of its hash, never the password, and warns them if it does. The service’s address is a setting of this instance.",
-        "de": "Wählt jemand ein Passwort, fragt der Browser einen Dienst für geleakte Passwörter, ob es in einem bekannten Leck vorkommt – er schickt nur die ersten fünf Zeichen seines Hashes, nie das Passwort – und warnt, wenn ja. Die Adresse des Dienstes ist eine Einstellung dieser Instanz."
+        "en": "When someone chooses a password, the browser asks a breached-password service whether it appears in a known leak, and warns them if it does. The service’s address is a setting of this instance.",
+        "de": "Wählt jemand ein Passwort, fragt der Browser einen Dienst für geleakte Passwörter, ob es in einem bekannten Leck vorkommt, und warnt, wenn ja. Die Adresse des Dienstes ist eine Einstellung dieser Instanz."
       },
       "whenOff": {
         "en": "Nobody’s new password is checked against known leaks any more, and the browser is no longer allowed to reach the service at all. Passwords already chosen are not affected. The same holds while no address is set.",
