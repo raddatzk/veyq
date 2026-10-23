@@ -260,66 +260,53 @@ const en = {
   },
   rotation: {
     title: 'Replace your keys',
-    sub: 'Only for an emergency: when someone else has your keys — for example because you approved a device that wasn’t yours.',
+    sub: 'For an emergency: someone else has your keys, for example through a device you approved that wasn’t yours.',
     whatTitle: 'What gets replaced',
-    whatBody:
-      'The keys that actually open your data: your Master Key and your identity, the key everyone else recognises you by. Your password and your Secret Key stay the same, and your Emergency Kit keeps working.',
-    whyTitle: 'Why this step exists',
-    whyBody:
-      'Signing a device out and removing its saved key take away its access to the server, but not the keys it already holds. With them, that person can keep reading as soon as they reach your encrypted data some other way, and can pose as you. Only new keys change that.',
+    whatBody: 'Your Master Key and your identity. Your password, Secret Key and Emergency Kit stay as they are.',
+    whyTitle: 'Why',
+    whyBody: 'Signing a device out ends its access to the server, not the keys it holds. New keys shut those out of everything added from now on.',
     whenTitle: 'Do you need this?',
-    whenBody:
-      'Yes, if a device that isn’t yours had your keys. No, if you only lost a device of your own: choose “Sign out and remove this device’s saved key” for it instead.',
-    afterTitle: 'What changes afterwards',
-    factIdentity:
-      'To everyone else you are a new identity: they all see that your key changed, and anyone who had verified you has to compare the safety number again.',
-    factSharedSpaces:
-      'In every shared space you are outside until someone there confirms your new key — best by comparing the safety number over a call.',
-    factSignsOut:
-      'Every other device is signed out and loses its saved key. To get back in, each one needs your password and your Secret Key — or to be added again from this device with “Add a device”.',
-    factInvites: 'Group invitations to you that are still open lapse and have to be sent again.',
-    factNotRepair: 'It can’t be undone, and it takes nothing back: what that person already saw stays with them.',
-    soleOwner:
-      'If you are the only owner of a shared space, make someone else an owner first. Otherwise nobody there can fit the new lock, and your old key keeps reading there.',
-    factNeedsKit:
-      'You need your Emergency Kit. That’s on purpose: it’s the one thing they don’t have, and it’s what stops them doing this to you.',
-    gateNotCold:
-      'This device unlocked without your Secret Key, so it asks for it here. That’s the check that stops someone who got into your account from doing this to you — they don’t have your Emergency Kit.',
+    whenBody: 'Only if a device that isn’t yours had your keys. For a lost device of your own, choose “Sign out and remove this device’s saved key” instead.',
+    afterTitle: 'What it costs',
+    factIdentity: 'Everyone sees that your key changed. Whoever had verified you compares the safety number again.',
+    factSharedSpaces: 'You are outside every shared space until someone there confirms your new key.',
+    factSignsOut: 'Every other device is signed out and needs your password and Secret Key again, or to be added from this one with “Add a device”.',
+    factInvites: 'Open group invitations to you lapse.',
+    factNotRepair: 'It can’t be undone. What is there now stays readable to the old key; only what is added afterwards is closed to it.',
+    factLinks: 'Links made before stay open to the old key until you renew them.',
+    soleOwner: 'You are the only owner of these spaces. Make someone else an owner first, or they keep the old lock:',
+    factNeedsKit: 'You need your Emergency Kit. Without it, your keys can’t be replaced — keep it where only you can reach it.',
+    gateNotCold: 'This device unlocked without your Secret Key, so enter it here.',
     passwordLabel: 'Your password',
     secretKeyLabel: 'Your Secret Key',
     secretKeyHint: 'From your Emergency Kit.',
     action: 'Replace my keys',
     confirmTitle: 'Replace your keys?',
-    confirmBody:
-      'Your spaces get new locks and every other device is signed out. What that person already saw stays with them. This can’t be undone.',
+    confirmBody: 'Every space gets a new lock and every other device is signed out. This can’t be undone.',
     errorLocked: 'Unlock your memories on this device first, then replace your keys.',
     errorCredential: 'That password or Secret Key didn’t match. Nothing was changed.',
     errorNoFloor: 'This account has no password sign-in to check against, so its keys can’t be replaced here.',
     errorFailed: 'Your keys could not be replaced. Nothing was changed — please try again.',
-    doneNotRepair:
-      'Your keys are replaced and every other device is signed out. Below, each space shows how far its new lock reaches.',
+    doneNotRepair: 'Your keys are replaced. Below, each space shows whether its new lock is in.',
     status: {
       secured: 'New lock',
       rekeying: 'Fitting the new lock',
-      waiting: 'Waiting for someone else',
+      waiting: 'Waiting for another owner',
       stalled: 'Nobody can do it',
-      failed: 'Not secured',
+      failed: 'Old lock',
     },
     statusHint: {
       secured: 'What is added here from now on is closed to the old key. Links made before stay open to it until you renew them.',
       rekeying: 'The new lock is going in. Adding things here waits until it’s done.',
-      failed: 'This space still has its old lock. Try replacing your keys again.',
+      failed: 'This space still has its old lock. Try again.',
     },
     queuedTitle: 'Shared spaces',
     queuedHint: {
-      waiting:
-        'Another owner of this space fits the new lock the next time they open veyq. Until then, the old key can still read what’s new here. And someone here has to confirm it’s really you before you’re back in.',
-      stalled:
-        'Nobody here can fit the new lock: no other owner is left who can. Make someone else an owner of this space. Until then, the old key can still read what’s new here.',
+      waiting: 'Another owner fits the new lock the next time they open veyq. Until then, the old key reads what is added here.',
+      stalled: 'No other owner is left who can fit the new lock. Make someone an owner here. Until then, the old key reads what is added here.',
       secured: 'New lock in. Someone here still has to confirm it’s you.',
       rekeying: 'The new lock is going in. Someone here still has to confirm it’s you.',
-      failed:
-        'Fitting the new lock kept failing, so this space still has its old one — the old key can still read what’s new here. Start it again, and another owner takes it on.',
+      failed: 'Fitting the new lock kept failing, so the old key still reads what is added here. Start it again.',
     },
     groupNameUnavailable: 'Group (name unavailable until you’re re-admitted)',
     groupNameLastSeen: 'Name as this device last saw it — it may have changed.',
@@ -327,8 +314,7 @@ const en = {
     scopeNameUnavailable: 'A space this device hasn’t opened (its name isn’t available here)',
     requeue: 'Start again',
     requeueFailed: 'That didn’t work. Please try again.',
-    errorTrustState:
-      'This device can’t open one of your lists — the keys you trust or your device names — so replacing your keys would carry it across unchecked. Nothing was changed. Start that list over first, under “Start a list over”.',
+    errorTrustState: 'This device can’t open your list of trusted keys or your device names. Nothing was changed. Start that list over first, under “Start a list over”.',
   },
   trustReset: {
     navTitle: 'Start a list over',
@@ -2227,67 +2213,54 @@ const de: typeof en = {
   },
   rotation: {
     title: 'Schlüssel ersetzen',
-    sub: 'Nur für den Notfall: wenn jemand anderes deine Schlüssel hat — etwa weil du einem fremden Gerät den Zugang bestätigt hast.',
+    sub: 'Für den Notfall: Jemand anderes hat deine Schlüssel, etwa über ein fremdes Gerät, dem du den Zugang bestätigt hast.',
     whatTitle: 'Was ersetzt wird',
-    whatBody:
-      'Die Schlüssel, die deine Daten tatsächlich öffnen: dein Master Key und deine Identität, an der dich alle anderen erkennen. Dein Passwort und dein Secret Key bleiben gleich, dein Notfall-Kit gilt weiter.',
-    whyTitle: 'Warum es diesen Schritt gibt',
-    whyBody:
-      'Abmelden und den gespeicherten Schlüssel eines Geräts entfernen nehmen ihm den Zugang zum Server, aber nicht die Schlüssel, die es schon hat. Mit ihnen kann die Person weiterlesen, sobald sie anders an deine verschlüsselten Daten kommt, und sich als dich ausgeben. Das ändern nur neue Schlüssel.',
+    whatBody: 'Dein Master Key und deine Identität. Passwort, Secret Key und Notfall-Kit bleiben, wie sie sind.',
+    whyTitle: 'Warum',
+    whyBody: 'Abmelden beendet den Zugang eines Geräts zum Server, nicht die Schlüssel, die es hat. Neue Schlüssel sperren diese für alles aus, was ab jetzt dazukommt.',
     whenTitle: 'Brauchst du das?',
-    whenBody:
-      'Ja, wenn ein Gerät deine Schlüssel hatte, das nicht deins ist. Nein, wenn du nur ein eigenes Gerät verloren hast: Wähle dafür stattdessen „Abmelden und gespeicherten Schlüssel entfernen“.',
-    afterTitle: 'Was danach anders ist',
-    factIdentity:
-      'Für alle anderen bist du eine neue Identität: Alle sehen, dass sich dein Schlüssel geändert hat, und wer dich verifiziert hatte, muss die Sicherheitsnummer neu vergleichen.',
-    factSharedSpaces:
-      'In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht.',
-    factSignsOut:
-      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes dein Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
-    factInvites: 'Offene Gruppeneinladungen an dich verfallen und müssen neu geschickt werden.',
-    factNotRepair: 'Es lässt sich nicht rückgängig machen, und es holt nichts zurück: Was die Person schon gesehen hat, bleibt bei ihr.',
-    soleOwner:
-      'Bist du in einem geteilten Bereich die einzige besitzende Person, mach vorher jemand anderen dazu. Sonst kann dort niemand das neue Schloss einbauen, und dein alter Schlüssel liest dort weiter mit.',
-    factNeedsKit:
-      'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
-    gateNotCold:
-      'Dieses Gerät wurde ohne deinen Secret Key entsperrt, deshalb wird er hier abgefragt. Genau diese Prüfung hindert jemanden, der in dein Konto gekommen ist, daran, das mit dir zu tun — dein Notfall-Kit hat die Person nicht.',
+    whenBody: 'Nur wenn ein fremdes Gerät deine Schlüssel hatte. Für ein verlorenes eigenes Gerät wähle stattdessen „Abmelden und gespeicherten Schlüssel entfernen“.',
+    afterTitle: 'Was es kostet',
+    factIdentity: 'Alle sehen, dass sich dein Schlüssel geändert hat. Wer dich verifiziert hatte, vergleicht die Sicherheitsnummer neu.',
+    factSharedSpaces: 'In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt.',
+    factSignsOut: 'Alle anderen Geräte werden abgemeldet und brauchen wieder Passwort und Secret Key oder werden von diesem aus über „Gerät hinzufügen“ neu hinzugefügt.',
+    factInvites: 'Offene Gruppeneinladungen an dich verfallen.',
+    factNotRepair: 'Es lässt sich nicht rückgängig machen. Was jetzt da ist, bleibt für den alten Schlüssel lesbar; nur was danach dazukommt, ist für ihn zu.',
+    factLinks: 'Vorher erstellte Links bleiben für den alten Schlüssel offen, bis du sie erneuerst.',
+    soleOwner: 'In diesen Bereichen bist du die einzige besitzende Person. Mach vorher jemand anderen dazu, sonst behalten sie das alte Schloss:',
+    factNeedsKit: 'Du brauchst dein Notfall-Kit. Ohne es lassen sich deine Schlüssel nicht ersetzen – bewahr es so auf, dass nur du drankommst.',
+    gateNotCold: 'Dieses Gerät wurde ohne deinen Secret Key entsperrt, gib ihn deshalb hier ein.',
     passwordLabel: 'Dein Passwort',
     secretKeyLabel: 'Dein Secret Key',
     secretKeyHint: 'Aus deinem Notfall-Kit.',
     action: 'Schlüssel ersetzen',
     confirmTitle: 'Schlüssel wirklich ersetzen?',
-    confirmBody:
-      'Deine Bereiche bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
+    confirmBody: 'Jeder Bereich bekommt ein neues Schloss, und alle anderen Geräte werden abgemeldet. Das lässt sich nicht rückgängig machen.',
     errorLocked: 'Entsperre auf diesem Gerät zuerst deine Erinnerungen, dann kannst du die Schlüssel ersetzen.',
     errorCredential: 'Passwort oder Secret Key haben nicht gepasst. Es wurde nichts geändert.',
     errorNoFloor:
       'Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lassen sich die Schlüssel hier nicht ersetzen.',
     errorFailed: 'Deine Schlüssel konnten nicht ersetzt werden. Es wurde nichts geändert — bitte versuche es erneut.',
-    doneNotRepair:
-      'Deine Schlüssel sind ersetzt, alle anderen Geräte sind abgemeldet. Unten steht bei jedem Bereich, wie weit sein neues Schloss reicht.',
+    doneNotRepair: 'Deine Schlüssel sind ersetzt. Unten steht bei jedem Bereich, ob sein neues Schloss drin ist.',
     status: {
       secured: 'Neues Schloss',
       rekeying: 'Schloss wird eingebaut',
-      waiting: 'Wartet auf jemand anderen',
+      waiting: 'Wartet auf eine andere besitzende Person',
       stalled: 'Niemand kann es tun',
-      failed: 'Nicht gesichert',
+      failed: 'Altes Schloss',
     },
     statusHint: {
       secured: 'Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für ihn offen, bis du sie erneuerst.',
       rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.',
-      failed: 'Dieser Bereich hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
+      failed: 'Dieser Bereich hat noch sein altes Schloss. Versuch es noch einmal.',
     },
     queuedTitle: 'Geteilte Bereiche',
     queuedHint: {
-      waiting:
-        'Eine andere besitzende Person dieses Bereichs baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
-      stalled:
-        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Bereichs. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
+      waiting: 'Eine andere besitzende Person baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin liest der alte Schlüssel, was hier dazukommt.',
+      stalled: 'Keine andere besitzende Person kann das neue Schloss einbauen. Mach hier jemanden zur besitzenden Person. Bis dahin liest der alte Schlüssel, was hier dazukommt.',
       secured: 'Neues Schloss drin. Jemand hier muss noch bestätigen, dass du es bist.',
       rekeying: 'Das neue Schloss wird eingebaut. Jemand hier muss noch bestätigen, dass du es bist.',
-      failed:
-        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Bereich noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
+      failed: 'Das Einbauen ist wiederholt gescheitert, deshalb liest der alte Schlüssel noch, was hier dazukommt. Stoß es neu an.',
     },
     groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
@@ -2295,8 +2268,7 @@ const de: typeof en = {
     scopeNameUnavailable: 'Ein Bereich, den dieses Gerät nicht geöffnet hat (sein Name ist hier nicht verfügbar)',
     requeue: 'Neu anstoßen',
     requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
-    errorTrustState:
-      'Dieses Gerät kann eine deiner Listen nicht öffnen — deine vertrauten Schlüssel oder deine Gerätenamen —, deshalb würde das Ersetzen der Schlüssel sie ungeprüft mitnehmen. Es wurde nichts geändert. Beginne diese Liste zuerst neu, unter „Liste neu beginnen“.',
+    errorTrustState: 'Dieses Gerät kann deine Liste vertrauter Schlüssel oder deine Gerätenamen nicht öffnen. Es wurde nichts geändert. Beginne die Liste zuerst neu, unter „Liste neu beginnen“.',
   },
   trustReset: {
     navTitle: 'Liste neu beginnen',
