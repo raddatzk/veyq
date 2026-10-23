@@ -26,6 +26,8 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/models'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import { headerActionLabels, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
+import type { CoreHeaderAction } from '../../../core/node/nodeHeader'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -62,9 +64,9 @@ async function seedDated(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 
-async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean } = {}) {
+async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[] } = {}) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights, coreActions: o.coreActions ?? [] },
     global: { plugins: [realI18n()] },
     ...(o.attach ? { attachTo: document.body } : {}),
   })
@@ -74,16 +76,28 @@ async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { person
 }
 
 const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.participants.title', 'memory.banner.add', 'node.rename', 'node.move.action', 'node.delete'] as const
-const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
-  HEADER.filter((key) => w.find(`.veyq-node-header-actions button[aria-label="${t(key)}"]`).exists())
+/** The header's actions among {@link HEADER}, a button or a ⋯ menu entry (delete is always the latter, ADR 0110). */
+const header = async (w: Awaited<ReturnType<typeof mountDetail>>) => {
+  const offered = await headerActionLabels(w)
+  return HEADER.filter((key) => offered.includes(t(key)))
+}
 // a tab is picked by `mousedown` below: Reka's tabs switch on the left button's press, not on `click`
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
 const disabled = (w: Awaited<ReturnType<typeof mountDetail>>, selector: string) => w.find(selector).attributes('disabled') !== undefined
 
 describe('MemoryDetail follows rights', () => {
+  it('a Memory\'s header in the owner\'s priority (ADR 0110), core\'s actions by their ids; report and delete in the ⋯', async () => {
+    const core = (id: string, over: Partial<CoreHeaderAction> = {}): CoreHeaderAction => ({ id, label: id, icon: 'heart', onClick: () => {}, ...over })
+    const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
+      coreActions: [core('favorite', { placement: 'before' }), core('cover'), core('copy', { placement: { after: 'move' } }), core('download'), core('report', { menuOnly: true })],
+    })
+    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'shareUpload', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'])
+    expect(await headerMenuIds(w)).toEqual(['report', 'delete'])
+  })
+
   it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
     const w = await mountDetail(memberMemoryRights())
-    expect(header(w)).toEqual([...HEADER])
+    expect(await header(w)).toEqual([...HEADER])
     expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
     expect(disabled(w, '.memory-cover-preview')).toBe(false)
@@ -97,7 +111,7 @@ describe('MemoryDetail follows rights', () => {
 
   it('no rights: none of them — the gallery alone, nothing editable, no marks read', async () => {
     const w = await mountDetail(NO_MEMORY_RIGHTS)
-    expect(header(w)).toEqual([])
+    expect(await header(w)).toEqual([])
     expect(tabs(w)).toEqual([t('memory.gallery')])
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(disabled(w, '.memory-cover-preview')).toBe(true)
@@ -195,17 +209,17 @@ describe('MemoryDetail follows rights', () => {
     }
     // the `participants` gate on its own, with the meta writable: a role that may write the meta still gets no action
     const writerWithout = await mountDetail({ ...memberMemoryRights(), participants: false })
-    expect(header(writerWithout), 'participants off, editMeta on').not.toContain('memory.participants.title')
+    expect(await header(writerWithout), 'participants off, editMeta on').not.toContain('memory.participants.title')
     const personal = await mountDetail(memberMemoryRights(), MEMORY_KIND, { personalScope: true })
-    expect(header(personal), 'personal scope').not.toContain('memory.participants.title')
-    expect(header(personal), 'control: the rest of the header is there').toContain('node.rename')
+    expect(await header(personal), 'personal scope').not.toContain('memory.participants.title')
+    expect(await header(personal), 'control: the rest of the header is there').toContain('node.rename')
     const onChapter = await mountDetail(memberMemoryRights({}, CHAPTER_KIND), CHAPTER_KIND)
-    expect(header(onChapter), 'chapter').not.toContain('memory.participants.title')
+    expect(await header(onChapter), 'chapter').not.toContain('memory.participants.title')
   })
 
   it('a pending deletion: share stays, every write goes', async () => {
     const w = await mountDetail(memberMemoryRights({ readonly: true }))
-    expect(header(w)).toEqual(['share.share', 'share.uploadRequest'])
+    expect(await header(w)).toEqual(['share.share', 'share.uploadRequest'])
     expect(disabled(w, '.memory-date-chip')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
@@ -219,7 +233,7 @@ describe('MemoryDetail follows rights', () => {
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`).trigger('click')
     expect(w.emitted('move')).toHaveLength(1)
     const only = await mountDetail({ ...NO_MEMORY_RIGHTS, move: true })
-    expect(header(only)).toEqual(['node.move.action'])
+    expect(await header(only)).toEqual(['node.move.action'])
   })
 
   it('a chapter offers no "Add chapter" (a chapter lives only directly in a Memory)', async () => {

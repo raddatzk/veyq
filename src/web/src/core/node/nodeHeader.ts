@@ -1,7 +1,12 @@
 // What core's `NodeHeader` (`core/node/components/NodeHeader.vue`) is fed: the data of ONE header row. Every node page and
 // level header — a folder's, a file's, a drop box's, a Memory's — is that one component; an application only says WHAT
-// is in it (a leading icon or image, a title, a subtitle, a meta row, its actions) and core decides the look, the
-// spacing, the wrap, the keyboard and the dark mode (owner design 2026-10-12, inbox #406).
+// is in it (a leading icon or image, a title, a subtitle, a meta row, its actions and their order) and core decides the
+// look, the spacing, which actions are buttons, the keyboard and the dark mode (owner design 2026-10-12, inbox #406).
+//
+// **As many actions as fit are buttons, the rest one menu** (ADR 0110): the page that draws the header names its kind's
+// priority as an id list (`order`), core measures the row and {@link fitHeaderActions} says how many of the actions that
+// may be buttons are; the rest, and every {@link isMenuOnly} action (delete, report) after a separator, are entries of
+// one ⋯ menu. No action is lost at any width.
 //
 // **An action is already a rights answer.** The caller builds the list from its fail-closed rights function
 // (`core/access.ts`, `../rights.ts`): an action it was not granted is `shown: false` or simply left out, and the
@@ -29,6 +34,8 @@ export interface NodeHeaderAction {
   pressed?: boolean
   /** An extra class for the application's own styling hook. */
   class?: string
+  /** Never a button, always an entry of the ⋯ menu's last group (report; a `danger` action is one anyway, ADR 0110). */
+  menuOnly?: boolean
 }
 
 /** A core-owned action (e.g. a future favorite heart that every node gets, whatever its application): contributed by
@@ -56,6 +63,55 @@ export function placeCoreActions<A extends { id: string }, C extends A & { place
  *  is where a core action plugs in — `NodeHeader` takes them as `coreActions`; no application change is needed. */
 export function mergeHeaderActions(core: readonly CoreHeaderAction[], app: readonly NodeHeaderAction[]): NodeHeaderAction[] {
   return placeCoreActions(core, app)
+}
+
+/** Delete and report are never buttons (ADR 0110 decision 6): a button that moves with the width is too easy to hit by
+ *  mistake, and both open a consequential dialog. */
+export function isMenuOnly(a: Pick<NodeHeaderAction, 'menuOnly' | 'severity'>): boolean {
+  return a.menuOnly === true || a.severity === 'danger'
+}
+
+/** The header's actions in the kind's priority: the ones whose ids `order` lists first, in that order, then every other
+ *  one in the given (merge) order — so a core action added later appears, it never vanishes for being unlisted. */
+export function orderHeaderActions<A extends { id: string }>(actions: readonly A[], order: readonly string[] = []): A[] {
+  const rank = new Map(order.map((id, i) => [id, i]))
+  const listed = actions.filter((a) => rank.has(a.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+  return [...listed, ...actions.filter((a) => !rank.has(a.id))]
+}
+
+/** The shown actions split into those that may be buttons (in order) and the menu-only ones, a `danger` one last. */
+export function partitionHeaderActions<A extends NodeHeaderAction>(actions: readonly A[]): { buttons: A[]; menuOnly: A[] } {
+  const menuOnly = actions.filter(isMenuOnly)
+  return {
+    buttons: actions.filter((a) => !isMenuOnly(a)),
+    menuOnly: [...menuOnly.filter((a) => a.severity !== 'danger'), ...menuOnly.filter((a) => a.severity === 'danger')],
+  }
+}
+
+/** What {@link fitHeaderActions} weighs, in CSS pixels. Header buttons are icon-only and one size, so one measured button
+ *  width stands for all of them. */
+export interface HeaderFit {
+  /** How many actions may be buttons. */
+  count: number
+  /** The width the buttons and the ⋯ may take; 0 (or less) is unmeasured. */
+  rowWidth: number
+  buttonWidth: number
+  /** The gap between two buttons, and between the last button and the ⋯. */
+  gap: number
+  moreWidth: number
+  /** A menu-only action exists, so the ⋯ is drawn whatever fits. */
+  menuOnly: boolean
+}
+
+/** How many of the actions that may be buttons are buttons: all of them when they fit and no menu-only action needs the
+ *  ⋯; otherwise the ⋯ is reserved first and as many as fit beside it are (none at all in a row too narrow for one).
+ *  Unmeasured — no width yet, as in a unit test or a hidden tab — every one is a button (ADR 0110). */
+export function fitHeaderActions(f: HeaderFit): number {
+  if (!(f.rowWidth > 0) || !(f.buttonWidth > 0)) return f.count
+  // A hundredth of a pixel of slack: a measured width is fractional, and a row exactly as wide as its buttons fits them.
+  const room = f.rowWidth + 0.01
+  if (!f.menuOnly && f.count * f.buttonWidth + Math.max(0, f.count - 1) * f.gap <= room) return f.count
+  return Math.max(0, Math.min(f.count, Math.floor((room - f.moreWidth) / (f.buttonWidth + f.gap))))
 }
 
 /** The four actions every container-like node shares, in their fixed order: share, rename, move, delete. */

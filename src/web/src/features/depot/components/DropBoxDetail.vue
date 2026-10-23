@@ -88,6 +88,9 @@ const source: DepotSource = guest
       move: (node) => emit('move', node),
     })
 const rights = computed(() => sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source))
+/** The drop box header's priority (ADR 0110): favorite, sharing (what a drop box is for), its content, its look, then
+ *  moving it; delete and report are always the ⋯ menu's last entries. */
+const DROP_BOX_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'move', 'copy'] as const
 /** The header's actions: share, move, delete — each only where the rights matrix grants it (a drop box is never renamed here). */
 const headerActions = computed(() =>
   standardNodeActions(
@@ -135,7 +138,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
+    <NodeHeader icon="inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" :order="DROP_BOX_HEADER_ORDER">
       <template v-if="nodeCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="nodeCover.url" :crop="nodeCover.crop" /></span>
       </template>

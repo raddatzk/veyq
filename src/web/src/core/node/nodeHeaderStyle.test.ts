@@ -1,6 +1,7 @@
-// The node header's narrow-width layout is CSS, which a unit test cannot render - so the rule a stacked header's leading
-// visual rests on is pinned at the source (as `levelRowStyle.test.ts` does for the level's items). A real browser pass is
-// still the proof of the look; this stops the rule being dropped unseen.
+// The node header's layout is CSS, which a unit test cannot render - so the rules it rests on are pinned at the source (as
+// `levelRowStyle.test.ts` does for the level's items), among them the two the component's measuring reads (ADR 0110): the
+// title's flex-basis is its minimum beside the buttons, and on a phone the title row draws no box. A real browser pass is
+// still the proof of the look; this stops a rule being dropped unseen.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 
@@ -30,13 +31,30 @@ function rule(selector: string, within: string): string {
 describe('node header styles', () => {
   const narrow = mediaBlock('(max-width: 540px)')
 
-  it('stacks a header with a leading visual on a narrow screen', () => {
-    expect(rule('.veyq-node-header.has-visual', narrow)).toMatch(/flex-direction:\s*column/)
+  it('never stacks: no rule turns the header into a column, at any width (ADR 0110 decision 1)', () => {
+    expect(css).not.toMatch(/\.veyq-node-header(?![-\w])[^{]*\{[^}]*flex-direction:\s*column/)
   })
 
-  it('stacked, the leading box spans the header, so a visual sized in % of it keeps its size (inbox #525)', () => {
-    // Shrink-wrapped by the column's `align-items: flex-start`, the box was only as wide as its content - the Memory
-    // cover's absolute `<img>` - and the cover button collapsed to 3.5 x 2 px at 375 px.
-    expect(rule('.veyq-node-header.has-visual .veyq-node-header-leading', narrow)).toMatch(/align-self:\s*stretch/)
+  it('the name is two lines at most, then an ellipsis, at every width', () => {
+    const title = rule('.veyq-node-header-title', css)
+    expect(title).toMatch(/display:\s*-webkit-box/)
+    expect(title).toMatch(/-webkit-box-orient:\s*vertical/)
+    expect(title).toMatch(/-webkit-line-clamp:\s*2/)
+    expect(title).toMatch(/overflow:\s*hidden/)
+  })
+
+  it('wide, the title keeps a flex-basis (the minimum the component reserves for it) and the title row does not wrap', () => {
+    expect(rule('.veyq-node-header-title', css)).toMatch(/flex:\s*1 1 12rem/)
+    expect(rule('.veyq-node-header-titlerow', css)).not.toMatch(/flex-wrap:\s*wrap/)
+    expect(rule('.veyq-node-header-actions', css)).not.toMatch(/flex-wrap:\s*wrap/)
+  })
+
+  it('on a phone the visual and the name share the first row and the actions get one of their own, the header wide', () => {
+    expect(rule('.veyq-node-header', narrow)).toMatch(/display:\s*grid/)
+    expect(rule('.veyq-node-header.has-leading', narrow)).toMatch(/grid-template-columns:\s*auto minmax\(0, 1fr\)/)
+    // No box of their own: the title becomes the grid's second cell, and the component reads `contents` as "the actions'
+    // own box is the room".
+    expect(rule('.veyq-node-header-body,\n  .veyq-node-header-titlerow', narrow)).toMatch(/display:\s*contents/)
+    expect(rule('.veyq-node-header-actions,\n  .veyq-node-header-body > :not(.veyq-node-header-titlerow)', narrow)).toMatch(/grid-column:\s*1 \/ -1/)
   })
 })

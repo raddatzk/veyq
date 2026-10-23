@@ -136,6 +136,7 @@ import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/depot/api'
 import { setViewMode, useViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
+import { chooseHeaderEntry } from '../test/nodeHeader'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -395,8 +396,7 @@ describe('MemoryHomeView over the real registry', () => {
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('rename|trips|Trips')
-    await w.find(`button[aria-label="${t('node.delete')}"]`).trigger('click')
-    await flushPromises()
+    await chooseHeaderEntry(w, 'delete')
     expect(w.find('.delete-stub').text()).toBe('Trips')
     // the dialog deleted it (inbox #385 (c)): the host says so with an undo that restores the folder as the trash does
     showUndo.mockClear()

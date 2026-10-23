@@ -463,7 +463,9 @@ const coreRowActions = (item: Item): CoreRowAction[] =>
         ...reportRowActions(t, reportOn.value, props.access, item.node, () => reportNodes(props.access, props.tree, [item.node], null)),
       ]
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
-// has neither).
+// has neither). Its priority (ADR 0110): what is first a button — favorite, then sharing, its content, its look, then editing
+// and moving it; delete and report are always the ⋯ menu's last entries.
+const FOLDER_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'] as const
 const folderCoreActions = computed(() => [
   ...favoriteHeaderActions(t, toast.error, props.access, props.folder),
   ...cover.headerActions(props.folder),
@@ -605,7 +607,7 @@ async function onDrop(e: DragEvent): Promise<void> {
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
     <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-    <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions">
+    <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" :order="FOLDER_HEADER_ORDER">
       <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
       <template v-if="folderCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>

@@ -174,6 +174,9 @@ const facts = computed(() => {
 })
 const empty = computed(() => blob.value === null)
 
+/** The file header's priority (ADR 0110): favorite, the download (what a file is for), sharing, replacing the content,
+ *  then editing and moving it; delete and report are always the ⋯ menu's last entries. */
+const FILE_HEADER_ORDER = ['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'] as const
 /** The header's actions (owner decision 2026-10-14): the download, the replace of the content (an upload into a file that
  *  holds none), then share, rename, move, delete — each only where the rights matrix grants it. The download is the
  *  page's call to action; it runs inside the click (the save picker needs its activation). */
@@ -303,7 +306,7 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
+    <NodeHeader icon="file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" :order="FILE_HEADER_ORDER">
       <template v-if="uploader" #meta>
         <p class="file-detail-uploader" data-testid="file-uploader">
           <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->

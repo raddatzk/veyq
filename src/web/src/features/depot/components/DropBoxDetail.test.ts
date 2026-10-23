@@ -37,6 +37,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
@@ -128,6 +129,20 @@ describe('DropBoxDetail', () => {
     expect(w.emitted('move')).toEqual([[ANNA_2], [BOX]])
   })
 
+  it('a drop box\'s header in its priority (ADR 0110): favorite, share, download, cover, move, copy; delete in the ⋯', async () => {
+    const epochs = epochsOf(new Uint8Array(32).fill(4))
+    const w = mount(DropBoxDetail, {
+      props: {
+        node: BOX, scopeId: SCOPE, epochs, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
+        access: memberAccessOf({ scopeId: SCOPE, publicSharesDropBox: true, publicShares: true, epochs }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
+      },
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download', 'cover', 'move', 'copy'])
+    expect(await headerMenuIds(w)).toEqual(['delete'])
+  })
+
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
@@ -137,7 +152,8 @@ describe('DropBoxDetail', () => {
     expect(card.find('.veyq-node-header-title').text()).toBe(BOX.name)
     expect(card.findComponent(VeyqIcon).props('name')).toBe('inbox')
     await card.find('button[aria-label="Share link"]').trigger('click')
-    await card.find('button[aria-label="Delete drop box"]').trigger('click')
+    expect(card.find('button[aria-label="Delete drop box"]').exists(), 'delete is never a button (ADR 0110)').toBe(false)
+    expect((await chooseHeaderEntry(w, 'delete')).textContent?.trim()).toBe('Delete drop box')
     expect(w.emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
     expect(w.emitted('delete')).toHaveLength(1)
     // control: no share offered where the host says the kind cannot be shared

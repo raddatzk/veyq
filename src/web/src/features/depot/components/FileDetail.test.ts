@@ -57,6 +57,7 @@ import { stubApi } from '../../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -212,13 +213,14 @@ describe('an opened file: its page for a member', () => {
     const w = mountDetail()
     await flushPromises()
     expect(ariaLabels(w)).toEqual(expect.arrayContaining([
-      t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete'),
+      t('share.share'), t('node.rename'), t('node.move.action'),
       t('depot.download', { name: 'Report.pdf' }), t('depot.replace', { name: 'Report.pdf' }),
     ]))
-    // owner decision 2026-10-14: the download and the replace are header actions, before the standard four; core's
-    // "Copy to…" beside the move (uc.platform.copy-node)
-    const ids = w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))
-    expect(ids.filter((id) => id !== 'favorite' && id !== 'export')).toEqual(['download', 'replace', 'share', 'rename', 'move', 'copy', 'delete'])
+    // owner decision 2026-10-14: the download and the replace are header actions; core's "Copy to…" beside the move
+    // (uc.platform.copy-node). In a file's priority (ADR 0110): favorite, download, share, replace, then editing and
+    // moving it; delete is the ⋯ menu's last entry, never a button.
+    expect(headerButtonIds(w)).toEqual(['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'])
+    expect(await headerMenuIds(w)).toEqual(['delete'])
     expect(w.findAll('button').filter((b) => !b.element.closest('.veyq-node-header') && !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label')), 'no action button below the header')
       .not.toEqual(expect.arrayContaining([t('depot.download', { name: 'Report.pdf' }), t('depot.replace', { name: 'Report.pdf' })]))
   })
@@ -245,7 +247,7 @@ describe('an opened file: its page for a member', () => {
     await flushPromises()
     await w.find(`.veyq-node-header-actions button[aria-label="${t('share.share')}"]`).trigger('click')
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.rename')}"]`).trigger('click')
-    await w.find(`.veyq-node-header-actions button[aria-label="${t('node.delete')}"]`).trigger('click')
+    await chooseHeaderEntry(w, 'delete')
     expect(w.emitted('share')).toHaveLength(1)
     expect(w.emitted('rename')).toHaveLength(1)
     expect(w.emitted('delete')).toHaveLength(1)
@@ -262,9 +264,10 @@ describe('an opened file: its page for a member', () => {
     const pending = mountDetail({ pending: true })
     await flushPromises()
     expect(byLabel(pending, t('share.share')).exists(), 'a link list is a read').toBe(true)
-    for (const label of [t('node.rename'), t('node.delete'), t('depot.replace', { name: 'Report.pdf' })]) {
+    for (const label of [t('node.rename'), t('depot.replace', { name: 'Report.pdf' })]) {
       expect(byLabel(pending, label).exists(), label).toBe(false)
     }
+    expect(await headerMenuIds(pending), 'no delete in the menu either').not.toContain('delete')
     expect(byLabel(pending, t('depot.download', { name: 'Report.pdf' })).exists()).toBe(true)
   })
 
@@ -274,7 +277,8 @@ describe('an opened file: its page for a member', () => {
     for (const label of [t('share.share'), t('node.rename'), t('depot.replace', { name: 'Report.pdf' })]) {
       expect(byLabel(w, label).exists(), label).toBe(false)
     }
-    for (const label of [t('node.delete'), t('depot.download', { name: 'Report.pdf' })]) expect(byLabel(w, label).exists(), label).toBe(true)
+    expect(byLabel(w, t('depot.download', { name: 'Report.pdf' })).exists()).toBe(true)
+    expect(await headerMenuIds(w)).toContain('delete')
   })
 
   it('downloads with a real click, inside the click: under the file\'s key as the node name; failures are said', async () => {
