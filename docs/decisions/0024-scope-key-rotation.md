@@ -22,7 +22,7 @@ Two constraints shape the mechanism:
   — a threat veyq otherwise punts on pre-key-transparency. Rejected. (Replacing every `K_node` **without**
   re-encrypting a blob — re-wrapping each `K_blob` and re-sealing the database fields under the new keys — is what
   keeps *post-rotation* content inside existing folders and Memories out of reach, and every rotation does it:
-  [ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md).)
+  [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md).)
 
 ## Decision
 
@@ -72,7 +72,7 @@ members; new content seals under it. Nothing is re-encrypted.**
    the meantime, so reusing that key would give the server a grant it could hand them.
 
    New content now seals under `E_{n+1}`, and the same device then **re-keys every node of the scope**
-   ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)), so what is added inside an existing folder
+   ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)), so what is added inside an existing folder
    or Memory seals under a key the removed member never held. The removed member keeps ≤ `E_n` and the node keys of
    before → reads pre-removal content, **never** post-removal content — against whom, § Guarantee states.
 
@@ -98,11 +98,11 @@ members; new content seals under it. Nothing is re-encrypted.**
 
 **Guarantee.** *Forward-confidential for post-rotation content* — against an honest operator and a database or
 store dump once every writer holds the new epoch, which Decision 6 makes the condition for writing, **and once the
-rotation's re-key has reached every node** ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md), which
+rotation's re-key has reached every node** ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md), which
 holds every write into a node not yet re-keyed). **Until `changes/cr-scope-rotation-rekeys-nodes.md` lands it holds
 only for new scope-root entries:** node keys are not re-keyed yet, so what is added inside a folder or Memory that
 existed before the rotation seals under a key the excluded party holds (inbox #518). A link they could rebuild stays
-their way in until it is re-issued (ADR 0108 point 4). Against an
+their way in until it is re-issued (ADR 0109 point 4). Against an
 **active** operator, on a client it does not serve ([ADR 0026](0026-client-trust-tiers.md)), it holds for content
 sealed by any client that has received the new epoch: the removal's own rotation cannot be redirected to the
 removed member (Decision 4), and no client goes back below an epoch it has held (Decision 6). Three things it

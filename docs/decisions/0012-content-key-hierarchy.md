@@ -66,7 +66,7 @@ revocation of a link: a link never re-keys on its own; a re-issue mints a new on
 ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)). `K_SC` rotates **forward into a new epoch** —
 re-wrap the new epoch to the remaining members (the epoch chain, [ADR 0024](0024-scope-key-rotation.md)) — and every
 rotation **re-keys every node below it**: each `K_node` is replaced, everything sealed under it re-sealed, each
-`K_blob` re-wrapped, no blob re-encrypted ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)). A node
+`K_blob` re-wrapped, no blob re-encrypted ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)). A node
 key never re-keys otherwise. Already-read content, and what existed at the rotation, cannot be retracted — a stated
 limitation.
 

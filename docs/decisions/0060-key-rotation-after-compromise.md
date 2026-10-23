@@ -162,7 +162,7 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
   ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) already reasoned this through and chose async delivery
   for it).
 - **Every rotated scope re-keys its nodes**, so the old identity reads nothing added afterwards, inside an existing
-  folder or Memory included ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)): `O(nodes + media)`
+  folder or Memory included ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)): `O(nodes + media)`
   symmetric re-seals on the device that commits each scope's epoch — the rotator's own for the personal scope, the
   completing owner's elsewhere — and nothing re-encrypted in the store. A space reads *secured* only once its re-key
   is done. What stays in the old identity's reach is what existed at the rotation and every link it could rebuild,

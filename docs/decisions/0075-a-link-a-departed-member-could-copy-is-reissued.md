@@ -6,7 +6,7 @@
 ## Context
 
 A public share link is a bearer capability: `/s/{shareId}#k=K_share`. A scope-key rotation re-keys the shared node
-and re-wraps its new key under the same `K_share` ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)
+and re-wraps its new key under the same `K_share` ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
 point 4), so a link keeps showing photos added after a removal ([ADR 0029](0029-public-viewer-share.md) Consequences),
 to everyone who holds its `K_share`.
 
@@ -21,7 +21,7 @@ Who may hold a link is wider than "the people it was handed to":
   database dump holds the `K_node` of before and reads what the Memory held at the removal whatever the link does;
   that is the ADR 0012 class and this decision does not move it. What is added after the removal's rotation they read
   only through a link whose `K_share` they hold — the dump-side reach a re-issue's fresh `K_share` ends
-  (ADR 0108 point 4). What is decided here is the **honest-server** cut.
+  (ADR 0109 point 4). What is decided here is the **honest-server** cut.
 - **Re-activation revived the removed member's own link.** A removal soft-revokes the removed member's shares
   (ADR 0029 §6), and re-activation by a remaining member turned the very same link — same id, same fragment — back
   on.
@@ -116,7 +116,7 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 - **What this buys is honest-server only.** Revocation is layer 1: a malicious operator can keep serving a revoked
   id. Against a dump, a new `K_share` keeps the *new* share's later password, label and note edits out of a
   departed member's reach, and — once the scope has rotated and re-keyed its nodes
-  ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)) — what is added below the link's root after
+  ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)) — what is added below the link's root after
   the rotation; what the Memory held at the rotation stays the ADR 0012 class.
 - **The operator learns nothing new.** A re-issue is a create plus a tombstone of the old row, whose deletion the
   operator serves anyway; the removal counter counts membership deletes the operator already performs, and `reissue_only` records a

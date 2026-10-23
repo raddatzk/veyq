@@ -1,4 +1,4 @@
-# ADR 0108 — A scope rotation re-keys every node below it
+# ADR 0109 — A scope rotation re-keys every node below it
 
 - Status: Accepted (built by `changes/cr-scope-rotation-rekeys-nodes.md`; until it lands, what § Context measured holds)
 - Date: 2026-10-23

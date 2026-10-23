@@ -3,7 +3,7 @@ id: cr-scope-rotation-rekeys-nodes
 title: Every scope rotation re-keys every node below it, and the rotation's texts say what it does and costs
 status: planned
 satisfies: ["uc.spaces.rekey-after-rotation", "uc.account.rotate-keys", "uc.spaces.complete-queued-rotation"]
-adrs: ["0108", "0024", "0080", "0060", "0075", "0012"]
+adrs: ["0109", "0024", "0080", "0060", "0075", "0012"]
 invariants:
   - operator-blind — no key, name or plaintext reaches the server; the re-key adds rewritten ciphertext in rows it already holds and node epochs it already sees
   - no store object is written or read by a re-key; K_blob never changes
@@ -18,7 +18,7 @@ invariants:
 Inbox #518: a rotation moves `K_SC` only, so whoever is shut out keeps every node key and, with a dump, reads
 everything later added inside a folder, Memory or chapter that existed before. That breaks every rotation's promise:
 an account's after a compromise, a group removal's, an explicit re-key. The owner decided (2026-10-23) that **every
-rotation re-keys every node below the scope key**. [ADR 0108](../docs/decisions/0108-a-scope-rotation-re-keys-every-node-below-it.md)
+rotation re-keys every node below the scope key**. [ADR 0109](../docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)
 holds the decision; [uc.spaces.rekey-after-rotation](../docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md)
 the flow. This CR builds it and rewrites the rotation's texts to the owner's copy direction (short, what happens and
 what it costs, no reassurance), folding in the rest of inbox #519: the sole-owner list before the button, and the
@@ -30,7 +30,7 @@ real screenshot.
   `rotation.doneNotRepair` (*the old device is shut out*), `queuedHint.secured`, the site page's *Secured*, and the
   removal paragraph of `space-owners/who-gets-into-your-space` say more than is built. Phase 1 makes them true for
   today, before anything else is built; phase 5 writes the final wording.
-- **The decisions are ADR 0108's; read it before each phase.** Points 1–8 are the work order's rules: what a
+- **The decisions are ADR 0109's; read it before each phase.** Points 1–8 are the work order's rules: what a
   node's commit re-seals (2), re-wrap not re-encrypt (3), shares (4), drop keys (5), the two refusals and the floor
   (6), who runs and resumes it (7), what the server learns and moderation (8).
 - **Owner decisions of 2026-10-23** (each is in the ADR): every rotation re-keys, not only a compromise; links keep
@@ -39,7 +39,7 @@ real screenshot.
 - **Defaults the owner was shown and did not stop** (same date): re-seal every field rather than a key chain per
   node; trashed nodes are re-keyed; a node's drop keypair is replaced and its guests' `K_up` re-sealed; moderation
   hold copies stay untouched.
-- **ADR 0080 Decision 6 narrows** (ADR 0108 point 6): a guest's create below the current epoch, stored as sent so
+- **ADR 0080 Decision 6 narrows** (ADR 0109 point 6): a guest's create below the current epoch, stored as sent so
   far, becomes `409 stale_epoch`. That changes a guest path the e2e and slice tests drive; the locator below finds
   them.
 
@@ -58,7 +58,7 @@ real screenshot.
 
 ## Decisions this CR takes
 
-ADR 0108 decides the mechanism. These are the work order's own shape decisions, each settled here:
+ADR 0109 decides the mechanism. These are the work order's own shape decisions, each settled here:
 
 1. **A node's re-key is one core operation, with parts.** Core owns the endpoint (scope + node, stating the node's
    placement and meta revisions and its epoch) and the transaction; its body carries core's fields (the node's own
@@ -75,7 +75,7 @@ ADR 0108 decides the mechanism. These are the work order's own shape decisions, 
    the columns sealed under another key (`blob-meta` under `K_blob`, `share` fields under `K_share`, `item-favorites`
    under `E_0`, report keys) are its named exclusions, each with the reason.
 3. **The node epoch is the write's freshness token.** Every write in the inventory states `nodeEpoch` (the epoch of
-   the node whose key it sealed under, as read); the two refusals are ADR 0108 point 6's. Declared in
+   the node whose key it sealed under, as read); the two refusals are ADR 0109 point 6's. Declared in
    `x-veyq-concurrency` like `placementRevision`, so `validate_write_concurrency.py` carries it.
 4. **The re-key's state is derived, never stored.** `rekeying` = the scope's epoch moved and a node lags; the
    server derives it from `veyq_node.epoch` against the scope's current epoch (an index on `(scope_id, epoch)` keeps
@@ -99,7 +99,7 @@ Each row hands over the command that finds the sites; run it at implement time.
 | Trash | re-key lists and commits trashed descendants | `grep -rn "deletedAt is null\|deleted_at is null" src/backend --include='*.kt' \| grep -i node` |
 | Status states | `rekeying` beside `waiting/stalled/secured/failed` | `grep -rn "stalled" contracts/api src/web/src/features/account/rotation src/web/src/features/spaces --include='*.yaml' --include='*.ts' --include='*.vue'` |
 | Texts | interim (phase 1), final (phase 5) | `src/web/src/i18n/index.ts` blocks `rotation:` (EN and DE); `grep -rn "rotation\.\|newLock\|needsNewLock" src/web/src --include='*.vue' --include='*.ts' -l` |
-| Site pages | per phase below | `git grep -ln -E "uc.account.rotate-keys\|uc.spaces.complete-queued-rotation\|uc.spaces.rekey-after-rotation\|0024-scope-key-rotation\|0080-every-node\|0075-a-link\|0108-a-scope" -- site/src/content/docs` — at refine: `account/replace-your-keys` (EN+DE), `space-owners/who-gets-into-your-space` (EN+DE), `sharing/manage-links` (EN+DE), `security/key-hierarchy`, `security/known-limitations`, `security/threat-model`, `security/protocols` |
+| Site pages | per phase below | `git grep -ln -E "uc.account.rotate-keys\|uc.spaces.complete-queued-rotation\|uc.spaces.rekey-after-rotation\|0024-scope-key-rotation\|0080-every-node\|0075-a-link\|0109-a-scope" -- site/src/content/docs` — at refine: `account/replace-your-keys` (EN+DE), `space-owners/who-gets-into-your-space` (EN+DE), `sharing/manage-links` (EN+DE), `security/key-hierarchy`, `security/known-limitations`, `security/threat-model`, `security/protocols` |
 | Docs stating "node keys never re-key" | rewritten in the phase that builds it | `grep -rn -i -E "never re-key\|stable and never re-keyed\|node keys? never" docs site/src` |
 
 ## Texts
@@ -120,7 +120,7 @@ Site, same phase: `account/replace-your-keys` EN+DE — the *Secured* bullet bec
 above; `space-owners/who-gets-into-your-space` EN+DE — the removal paragraph adds that folders and Memories already
 there keep their keys; `security/key-hierarchy` and `security/known-limitations` state the residual as today's
 (*a rotation re-keys no node yet; what is added inside an existing folder or Memory seals under keys the excluded
-party holds*), linking ADR 0108 as decided, not built.
+party holds*), linking ADR 0109 as decided, not built.
 
 ### Phase 5 — final (the panel, `rotation.*`)
 
@@ -168,7 +168,7 @@ none of it is small print*) and the closing paragraph's reassurance (*which is e
 and Memory, adding there waits while it goes in, links made before stay open to the removed member until renewed.
 `sharing/manage-links` EN+DE: *Renew* is what closes a link to someone who left or replaced their keys, since the
 link keeps showing what is added. `security/key-hierarchy` (*Rotation touches one layer only* becomes the re-key and
-its cost), `known-limitations` (the residual list of ADR 0108 § Consequences), `threat-model` (removed member and
+its cost), `known-limitations` (the residual list of ADR 0109 § Consequences), `threat-model` (removed member and
 link holder rows), `protocols` (the rotation section).
 
 ### The sole-owner list (#519)
@@ -200,13 +200,13 @@ screen promise is then met.
    (core, Memories, Depot, the guest handlers), the derived `rekeying` state and its index, the completion gate, the
    guest-create narrowing. `scripts/validate_node_rekey_arity.py`, bitten per changes/README.md (snapshot-and-restore:
    remove a participant's column write → red; restore → green; run its predicate on the untouched tree first).
-   **Done when:** `./gradlew check` green; slice tests for ADR 0108 bite tests 2, 3, 7, 8 (each negative with a
+   **Done when:** `./gradlew check` green; slice tests for ADR 0109 bite tests 2, 3, 7, 8 (each negative with a
    positive control on the same predicate, anchored on the status code); the new guard green and bitten.
 4. **Web.** The re-key driver (list, top-down, staged parts, resumable from the derived state), run after each of
    the three `commitRotation` callers and by the scope-rotation worker for a scope reading `rekeying`; the
    `rekeyContent` hook for Memories' and Depot's kinds; `nodeEpoch` on every write and the retry on
    `node_rekey_pending` / re-read on `stale_epoch`, members and guests; the device floor in the sealing helper;
-   `rekeying` on the panel and the owner's row. **Done when:** `npm run check` green; unit tests for ADR 0108 bite
+   `rekeying` on the panel and the owner's row. **Done when:** `npm run check` green; unit tests for ADR 0109 bite
    tests 1, 4, 5, 6 through the real crypto (no mocked seal); a browser pass: rotate a dev account that owns a group
    with a Memory of 20+ photos and a link, add a photo afterwards, and show it opens for a member and through the
    link, while the link shows *renew*.
@@ -214,7 +214,7 @@ screen promise is then met.
    final; the real `account-replace-keys` screenshot; `uc.account.rotate-keys`, `uc.spaces.complete-queued-rotation`,
    `uc.sharing.share-shared-scope`, `en.spaces.scope-key-rotation`, `docs/crosscutting/security-model.md` (the
    *What holds today* row this refine added flips to *Cannot*, except through a link until re-issued; § Revocation's
-   *Not built yet* goes), ADR 0024 § Guarantee's and ADR 0080 Decision 5's *until … lands* sentences and ADR 0108's
+   *Not built yet* goes), ADR 0024 § Guarantee's and ADR 0080 Decision 5's *until … lands* sentences and ADR 0109's
    status line; the coverage of `uc.spaces.rekey-after-rotation` from `planned` to refs, and the new criteria under
    the other two use cases. **Done when:** `npm run check` green; every `scripts/validate_*.py` exits `0`
    (`validate_guard_gaps.py --force` too, since phase 3 added a guard); a browser pass of the panel before and after
@@ -227,7 +227,7 @@ screen promise is then met.
 - No store object moved; vectors unchanged.
 - `scripts/validate_node_rekey_arity.py` guards the field set; `validate_write_concurrency.py` carries `nodeEpoch`.
 - Panel and site say what happens and what it costs in EN and DE, and nothing more than is built.
-- Inbox #518 and #519 rows deleted; ADR 0108's status line says built.
+- Inbox #518 and #519 rows deleted; ADR 0109's status line says built.
 
 ## Open questions (owner)
 

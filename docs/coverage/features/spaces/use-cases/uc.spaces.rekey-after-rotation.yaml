@@ -2,7 +2,7 @@ useCase: uc.spaces.rekey-after-rotation
 feature: spaces
 title: Re-key a space's nodes after a rotation
 status: planned
-# Refined 2026-10-23 (inbox #518, ADR 0108); built by changes/cr-scope-rotation-rekeys-nodes.md, whose phases turn
+# Refined 2026-10-23 (inbox #518, ADR 0109); built by changes/cr-scope-rotation-rekeys-nodes.md, whose phases turn
 # each gap below into refs. The property has several triggers (a group removal, a queued rotation, an account's own
 # personal scope), so it owns its criteria rather than any one trigger's use-case (changes/README.md § coverage).
 acceptanceCriteria:

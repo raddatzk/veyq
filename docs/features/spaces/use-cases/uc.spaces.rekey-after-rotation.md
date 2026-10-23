@@ -9,7 +9,7 @@
   that node is re-keyed.
 - **Goal:** After a rotation, nothing added to the space seals under a key the excluded party holds — inside a
   folder, Memory or chapter that existed before it as much as at the scope root
-  ([ADR 0108](../../../decisions/0108-a-scope-rotation-re-keys-every-node-below-it.md)).
+  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
 - **Preconditions:** The scope has just committed epoch `n+1` ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)).
   The device holds `E_{n+1}`.
 - **Postconditions (success):** Every live and trashed node of the scope carries epoch `n+1`: a fresh random key,
@@ -72,6 +72,6 @@ After a space gets new keys, whoever was shut out cannot read anything added to 
 - Triggers: [uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md),
   [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md),
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (a removal)
-- Decisions: [ADR 0108](../../../decisions/0108-a-scope-rotation-re-keys-every-node-below-it.md),
+- Decisions: [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md), [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)

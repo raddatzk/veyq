@@ -76,7 +76,7 @@ vault") is an explicit, rare action. This is the established practice for per-us
   `rotateScope` endpoint (live for groups); a dedicated tenant re-key flow is not separately wired. The group
   path is already live.
 - **No rotation means no epoch signal for a public link.** A link a removed tenant member could copy cannot be
-  "rotated away" (a rotation re-wraps it to the new node key, [ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)
+  "rotated away" (a rotation re-wraps it to the new node key, [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
   point 4), and the tenant's epoch does not move on a removal, so the scope instead
   counts its removals and each share stamps the count it was minted under; a link minted before a removal is
   re-issued, never re-activated, and the removal can turn every tenant link off in the same act
