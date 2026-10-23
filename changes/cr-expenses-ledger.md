@@ -42,7 +42,9 @@ test -f changes/cr-scope-rotation-rekeys-nodes.md && echo "re-key CR still open"
 At refine (2026-10-23) the seam existed **only uncommitted** in that CR's worktree
 (`core/node/rekey/NodeRekeyParticipant.kt`: `part`, `commit(scopeId, nodeId, staged): Verdict` with
 `APPLIED/MISSING/STALE`, core rolling back on anything but `APPLIED`), no participant existed, `rekeyContent` and the
-guard did not exist. Every sentence below that leans on that CR's plan carries **"(planned in
+guard did not exist. **And `cr-application-switches` has landed** (`test -f changes/cr-application-switches.md && echo "switch CR still
+open"`); its seam (`applicationOf`, `ApplicationSwitch.requireWritable`) is planned there too. Every sentence below that
+leans on that CR's plan carries **"(planned in
 cr-scope-rotation-rekeys-nodes)"**; the first implementer re-reads each against the merged tree
 (`grep -n "planned in cr-scope-rotation" changes/cr-expenses-ledger.md`) and says what moved.
 
@@ -57,8 +59,10 @@ cr-scope-rotation-rekeys-nodes)"**; the first implementer re-reads each against 
 - **What the inventory corrected in ADR 0108:** blobless sealed rows already exist (`veyq_bucket.sealed_name`,
   `veyq_scope_item_favorites.ciphertext`); what is new is a blobless list *published live* and a guest write that is an
   application record. Its § Context now says so.
-- **Expenses has no application switch.** Neither Memories nor Depot has one in `contracts/platform/capabilities.json`
-  (10 entries, all `core.*` or `memories.places`/`memories.map`); `expenses.exchange-rates` is the rates CR's.
+- **Expenses' own switch comes from `cr-application-switches`** (owner 2026-10-23): that CR lands first and gives every
+  application an entry of the register which, off, makes it read-only. This CR adds `expenses` to it — the entry, its
+  kind through the seam, its write operations under the sweep (the erasure is a removal and exempt) — and its criterion
+  under `uc.platform.switch-application-off`. `expenses.exchange-rates` is the rates CR's.
 - **What the two later CRs need from this one, so it is built here:** the editor's rate field (typed), the revision's
   list of receipts held (empty until receipts exist, in the v1 format already), and the Pot page's place for receipts.
 - **"The platform's trash retention" is two keys today:** `veyq.node.trash.retention` (core) and
@@ -116,7 +120,7 @@ Each row hands over the command that finds the sites; run it at implement time. 
 |---|---|---|
 | New module | `src/backend/apps/expenses` (`me.raddatz.veyq.expenses.*`), as Depot | `find src/backend/apps/depot -type f \| sort` (33 files at refine: 14 main, 15 test); `python3 scripts/validate_backend_module_graph.py` names every edge it derives |
 | Module wiring | `include`, root runtime edge, `beans.xml`, two Dockerfile `COPY` lines | `grep -n "apps:depot\|apps/depot" src/backend/settings.gradle.kts src/backend/build.gradle.kts infra/docker/Dockerfile` |
-| Kind seams | `NodeKindRules`, `ShareRoots`, `capabilityToCreate` (none) | `grep -rn "NodeKindRules\|ShareRoots\|GuestCreatableKinds\|WriteOnlyGuestKinds" src/backend/apps/depot/src/main` |
+| Kind seams | `NodeKindRules` (`applicationOf` → `expenses`), `ShareRoots` | `grep -rn "NodeKindRules\|ShareRoots\|GuestCreatableKinds\|WriteOnlyGuestKinds" src/backend/apps/depot/src/main` |
 | Composition test | kinds, covers, never-guest-creatable loop, upload owner map, module anchors | `grep -n "DEPOT_DROPBOX\|depot" src/backend/src/test/kotlin/me/raddatz/veyq/app/ModuleCompositionTest.kt` |
 | Migrations | `V<ts>__expenses_*.sql` + pin line; tables carry `node_id` (else `validate_node_subtree_erasure.py` cannot see them) and `scope_id` per `validate_scope_erasure_arity.py` | `ls src/backend/*/src/main/resources/db/migration src/backend/apps/*/src/main/resources/db/migration; tail -3 scripts/applied_migrations.sha256` |
 | Revisioned list | bump in every writer, guard learns Expenses' writers | `grep -n "MediaEntity\|bumping" src/backend/src/test/kotlin/me/raddatz/veyq/core/items/NodeItemsRevisionBumpsTest.kt` (Memories-shaped at refine: its `writes` regex names `MediaEntity` only) |
@@ -170,14 +174,17 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    rows' locks, then `items.bump`, then the position (docs/apps/README.md step 2's lock order); the erasure; member and
    guest reads; the guest gate and the guest-write record per revision; the subtree and scope erasers and the writer
    column's account-erasure class; the re-key participant (decision 0, planned in cr-scope-rotation-rekeys-nodes);
-   `ReportableItems` and the hold contributor; `NodeItemsRevisionBumpsTest` learns the writers. **Done when:**
+   `ReportableItems` and the hold contributor; `NodeItemsRevisionBumpsTest` learns the writers; the `expenses` entry
+   and every Expenses write asking `ApplicationSwitch` (planned in cr-application-switches), under its sweep.
+   **Done when:**
    `./gradlew check` green; every guard of the baseline still `0`; slice tests, each negative anchored on its status and
    code with a positive control on the same predicate: a stale append lands nothing of its batch (control: the fresh one
    lands all); a guest's erasure refused (control: a member's erases the record's earlier revisions and only those); a
    `WRITE_ONLY` link on a Pot refused (control: `READ_WRITE` created); a guest read has no writer (control: the member
    read does); a guest append writes one guest-write record per revision; a re-key part that names a body is refused
    and lands nothing (control: one with the wraps alone lands, bodies byte-identical); a reported entry's hold copies
-   its revision rows and survives the erasure. Bites, by snapshot-and-restore on a detached worktree: drop the bump
+   its revision rows and survives the erasure; with `expenses` off an append is `422 capability_disabled` (control: on,
+   it lands) while the list reads and the Pot goes to the trash. Bites, by snapshot-and-restore on a detached worktree: drop the bump
    from the append → `NodeItemsRevisionBumpsTest` red; drop the table from the subtree eraser →
    `validate_node_subtree_erasure.py` red; drop the wrap column from the participant → `validate_node_rekey_arity.py`
    red.
@@ -206,7 +213,7 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    settled participant; download the Pot and import it into another folder (balances equal); copy it; report an entry as
    a guest and open it as a moderator; rotate the space's key and see every balance unchanged and no ledger notice; the
    Pot at 375 px.
-5. **Close.** Coverage: the seven files from `planned` to refs; Expenses' criteria in `uc.platform.export-import`,
+5. **Close.** Coverage: the seven files from `planned` to refs; Expenses' criteria in `uc.platform.switch-application-off`, `uc.platform.export-import`,
    `uc.platform.copy-node`, `uc.moderation.report` and `uc.spaces.rekey-after-rotation`, each beside the test that
    answers it. `docs/apps/expenses.md` and `docs/apps/README.md`'s table row say what is built; ADR 0108's status line
    names the two CRs still open; inbox #325's row names them as its next step. **Done when:** every

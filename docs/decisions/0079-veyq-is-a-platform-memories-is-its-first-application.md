@@ -69,9 +69,14 @@ application.
 and created on demand inside a scope: many Memories, many Expenses Pots, one inventory, one file tree per scope.
 Nobody "turns an application on", so there is no "activated but empty" state. What the operator (for the
 instance) and a tenant owner (for their tenant) can do is switch an application, or one of its functions,
-**off** through the capability register ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
-The server then refuses to create that application's nodes with `422 capability_disabled`, and what already
-exists stays readable and shareable.
+**off** through the capability register ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)):
+each application is an entry of its own (`memories`, `depot`, `expenses`), switchable by both. **Off, an application
+is read-only** (owner 2026-10-23): the server refuses with `422 capability_disabled` every write of it — a node of its
+kinds created, renamed, moved, copied or imported, its records and blobs written, a link rooted on one of its nodes
+created or given a write role, a guest's write through any link — while what exists stays readable and downloadable,
+through the links that exist too, so nobody's data is trapped. Taking something out is never refused: a delete to the
+trash and its restore, an erasure and a moderation measure go on, and so does a rotation's re-key, which is the security of what
+exists. Switched on again, everything is as before; nothing was deleted. Not built yet: `cr-application-switches`.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new

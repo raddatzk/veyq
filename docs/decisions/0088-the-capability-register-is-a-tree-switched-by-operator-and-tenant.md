@@ -55,7 +55,10 @@ instance and tenant layers.
    `DEVICE_KEY` for `passwordless`) from the key material the server hands out, the way the `RECOVERY` wrap is
    already withheld. It never deletes them, so switching back on restores every remembered device, and the
    `PASSWORD` wrap is always served, so nobody is locked out (owner, 2026-10-15). A feature switch refuses only
-   what is **new**.
+   what is **new**. An **application switch** (`memories`, `depot`, `expenses`, the application's own node of the tree)
+   is the one feature switch that reaches what exists: it makes the application read-only, every write refused and
+   every read, download and removal kept ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
+   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path.
    What exists stays readable and shareable, so there is no "activated but empty" state machine, and the gate sits
    at creation instead of on every endpoint (the cost ADR 0079 named).
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a

@@ -1,0 +1,22 @@
+useCase: uc.platform.switch-application-off
+feature: platform
+title: An application switched off is read-only
+status: planned
+# Refined 2026-10-23 (owner: an application off is read-only; ADR 0079 decision 8, ADR 0088 decision 5); built by
+# changes/cr-application-switches.md, whose phases turn each gap below into refs.
+acceptanceCriteria:
+  - id: each-application-is-an-entry
+    text: "memories, depot and expenses are entries of the capability register, switchable by the Server Owner for the instance and by a tenant owner for the tenant, each with its title, purpose and whenOff text in EN and DE; their children are off with them."
+  - id: every-write-is-refused
+    text: "With an application off, every write of it answers 422 capability_disabled - a node of its kinds created, renamed, moved, given a cover, copied or imported, its records and blobs written, a link rooted on one of its nodes created, reactivated or given a write role, a guest's write through any link - and a sweep derived from the generated APIs holds that no write operation of an application is left out."
+  - id: reads-downloads-and-removals-stay
+    text: "With an application off, its nodes and records open, read and download for members and through existing links, and a member deletes one to the trash and restores it."
+  - id: rekey-erasure-and-measures-run
+    text: "With an application off, a rotation's re-key, an erasure and a moderation measure reach its nodes as always."
+  - id: the-client-removes-every-write
+    text: "With an application off, the client offers none of its kinds to create and removes every write function from its nodes, and says in one line that it is switched off here and what is there can still be opened and downloaded."
+  - id: on-again-nothing-lost
+    text: "Switched on again, every write is accepted and nothing stored was lost."
+gaps:
+  web: "No application has an entry in contracts/platform/capabilities.json, so the client has none to read; built by cr-application-switches."
+  backend: "Only DEPOT_DROPBOX is gated (NodeKindRules.capabilityToCreate); no application write is refused by an application switch; built by cr-application-switches."
