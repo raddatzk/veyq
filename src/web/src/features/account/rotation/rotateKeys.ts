@@ -10,6 +10,7 @@
 // job per shared scope for another *owner* of it, and re-admission runs through that human's changed-key
 // review (ADR 0060 Decision 4). A rotator who could drive their own re-grant would let an attacker holding the
 // old identity re-admit only themselves, which turns the exclusion into the takeover's final step.
+import { rekeyScope } from '../../../core/node/rekey/rekeyScope'
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -58,9 +59,11 @@ export class RotationRefused extends Error {
 /** One scope this device re-keyed alone, and how that went (uc.account.rotate-keys §6/§9). */
 export type ScopeOutcome = {
   scopeId: string
-  /** `secured` — re-keyed here, and the new identity holds it. `failed` — the self-served re-key did not
-   *  complete; the scope is unchanged and the old identity still reads it. */
-  status: 'secured' | 'failed'
+  /** `secured` — re-keyed here, the new identity holds it and every node of it carries a key minted at the new epoch
+   *  (ADR 0109). `rekeying` — the new epoch is in, but the nodes' re-key did not finish here; this device's worker
+   *  resumes it. `failed` — the self-served rotation did not complete; the scope is unchanged and the old identity
+   *  still reads it. */
+  status: 'secured' | 'rekeying' | 'failed'
 }
 
 /** What a completed rotation re-keyed here — a per-scope status, never a success tick. The shared scopes it queued
@@ -232,6 +235,14 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // `cold` is a statement of fact: this rotation ran on a live proof of password + Secret Key moments
     // ago, so the session it leaves behind is cold however it was originally opened.
     setUnlocked(newMasterKey.slice(), identity.priv, 'cold')
+
+    // ADR 0109: each self-served rotation re-keys every node of the scope — only now, with the vault on the new
+    // identity, whose grant is the one that opens the new epoch. A re-key that stops leaves the scope `rekeying`.
+    for (const outcome of secured) {
+      if (outcome.status !== 'secured') continue
+      const done = await rekeyScope(outcome.scopeId).then((r) => r.done, () => false)
+      if (!done) outcome.status = 'rekeying'
+    }
 
     return { scopes: secured }
   } finally {

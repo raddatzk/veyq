@@ -53,14 +53,17 @@ export async function restoreGroup(scopeId: string): Promise<void> {
 }
 
 /** A scope's pending-deletion state (cr-0090), and — on an owner's row only — whether a compromise rotation queued
- *  on it needs an owner (uc.spaces.complete-queued-rotation). Null when the caller holds no such scope. No name
- *  decryption. */
-export async function scopeLifecycle(
-  scopeId: string,
-): Promise<{ deletedAt: Date | null; purgeAfter: Date | null; compromiseRotation: CompromiseRotation | null } | null> {
+ *  on it needs an owner (uc.spaces.complete-queued-rotation) and whether its re-key is unfinished (ADR 0109, derived by
+ *  the server). Null when the caller holds no such scope. No name decryption. */
+export async function scopeLifecycle(scopeId: string): Promise<{
+  deletedAt: Date | null; purgeAfter: Date | null; compromiseRotation: CompromiseRotation | null; rekeying: boolean
+} | null> {
   const s = (await listMyScopes()).find((x) => x.id === scopeId)
   return s
-    ? { deletedAt: s.deletedAt ?? null, purgeAfter: s.purgeAfter ?? null, compromiseRotation: s.compromiseRotation ?? null }
+    ? {
+        deletedAt: s.deletedAt ?? null, purgeAfter: s.purgeAfter ?? null, compromiseRotation: s.compromiseRotation ?? null,
+        rekeying: s.rekeying === true,
+      }
     : null
 }
 

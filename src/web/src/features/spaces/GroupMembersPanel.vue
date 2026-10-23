@@ -5,6 +5,7 @@
 // blind: only operational metadata (usernames/roles/grant-present) is shown; the add records a grant-less
 // membership, the key is delivered later by grant-delivery (cr-0076), no crypto here. Real names stay `@username`
 // — they're sealed under K_tenant, which a group owner needn't hold (the active key here is the group's K_SC).
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
@@ -78,6 +79,8 @@ const purgeAfter = ref<Date | null>(null)
 /** Owner rows only: a compromise rotation queued on this group that needs an owner
  *  (uc.spaces.complete-queued-rotation E2/E8) — read from the caller's own scope row, filled only for an owner. */
 const stuckRotation = ref<CompromiseRotation | null>(null)
+/** Owner-only: the group's last rotation is still fitting the new lock (ADR 0109) — adding waits per node meanwhile. */
+const rekeying = ref(false)
 const isPending = computed(() => purgeAfter.value !== null)
 const confirmingDelete = ref(false)
 const lifecycleBusy = ref(false)
@@ -98,6 +101,7 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     myUsername.value = me?.username ?? ''
     purgeAfter.value = lifecycle?.purgeAfter ?? null
     stuckRotation.value = lifecycle?.compromiseRotation ?? null
+    rekeying.value = lifecycle?.rekeying ?? false
     // The identity header's avatar: the group's icon opened on-device against our own grant (null → the initial).
     if (iconBytes) groupIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else groupIcon.clear()
@@ -236,6 +240,9 @@ async function removeMember(m: ScopeMember) {
   removing.value = true
   try {
     await rotateGroupForRemoval(props.scopeId, members.value, m.userId, revokeLinks.value)
+    // ADR 0109: the removal's rotation re-keys every node of the group, on this device, right away. One that stops
+    // (a closed tab, a conflict it gives up on) leaves the group re-keying, and an owner's worker resumes it.
+    await rekeyScope(props.scopeId).catch(() => {})
     // Shown without the removed member however the server lists them: the directory is display, not a key decision.
     members.value = (await listScopeMembers(props.scopeId)).filter((r) => r.userId !== m.userId)
     if (activeSpace.scopeId === props.scopeId) await refreshActiveScope()
@@ -446,6 +453,7 @@ async function onRestore() {
       <VeyqMessage v-if="renameError" tone="error">{{ renameError }}</VeyqMessage>
       <VeyqMessage v-if="iconError" tone="error">{{ iconError }}</VeyqMessage>
       <CompromiseRotationNotice v-if="isOwner" :scope-id="scopeId" :state="stuckRotation" @requeued="stuckRotation = $event" />
+      <VeyqMessage v-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

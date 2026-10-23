@@ -300,13 +300,14 @@ const en = {
       'Your keys are replaced and every other device is signed out. Below, each space shows how far its new lock reaches.',
     status: {
       secured: 'New lock',
+      rekeying: 'Fitting the new lock',
       waiting: 'Waiting for someone else',
       stalled: 'Nobody can do it',
       failed: 'Not secured',
     },
     statusHint: {
-      secured:
-        'New lock on the space itself. Folders and Memories that were already there keep their old keys, so the old key still reads what is added to them.',
+      secured: 'What is added here from now on is closed to the old key. Links made before stay open to it until you renew them.',
+      rekeying: 'The new lock is going in. Adding things here waits until it’s done.',
       failed: 'This space still has its old lock. Try replacing your keys again.',
     },
     queuedTitle: 'Shared spaces',
@@ -315,8 +316,8 @@ const en = {
         'Another owner of this space fits the new lock the next time they open veyq. Until then, the old key can still read what’s new here. And someone here has to confirm it’s really you before you’re back in.',
       stalled:
         'Nobody here can fit the new lock: no other owner is left who can. Make someone else an owner of this space. Until then, the old key can still read what’s new here.',
-      secured:
-        'New lock on the space itself; folders and Memories already there keep their old keys. Someone here still has to confirm it’s you.',
+      secured: 'New lock in. Someone here still has to confirm it’s you.',
+      rekeying: 'The new lock is going in. Someone here still has to confirm it’s you.',
       failed:
         'Fitting the new lock kept failing, so this space still has its old one — the old key can still read what’s new here. Start it again, and another owner takes it on.',
     },
@@ -1715,6 +1716,7 @@ const en = {
         illegal_scope: 'This link doesn’t allow moving it there.',
         stale_placement: 'Someone else moved or renamed it at the same time. The view has been reloaded — please try again.',
         stale_epoch: 'The space’s keys were renewed in the meantime. Reload the page and try again.',
+        node_rekey_pending: 'The space’s new lock is still going in. Try again in a moment.',
         share_not_contributable: 'This link no longer lets you change anything.',
         gone: 'It, or the place you chose, is no longer there.',
         rate_limited: 'Too many changes at once. Please wait a moment and try again.',
@@ -1958,6 +1960,7 @@ const en = {
       notContributable: 'This link only lets you look, not change anything.',
       rateLimited: 'Too many changes at once — please wait a moment and try again.',
       placementConflict: 'Someone else just changed this. Reload the page and try again.',
+      rekeyPending: 'This space’s new lock is still going in. Try again in a moment.',
       gone: 'This is no longer here. Reload the page.',
       createFailed: 'That did not work — please try again.',
       // the anonymous /s/ page (core/sharing/ShareTreePage.vue) at a folder
@@ -2265,13 +2268,14 @@ const de: typeof en = {
       'Deine Schlüssel sind ersetzt, alle anderen Geräte sind abgemeldet. Unten steht bei jedem Bereich, wie weit sein neues Schloss reicht.',
     status: {
       secured: 'Neues Schloss',
+      rekeying: 'Schloss wird eingebaut',
       waiting: 'Wartet auf jemand anderen',
       stalled: 'Niemand kann es tun',
       failed: 'Nicht gesichert',
     },
     statusHint: {
-      secured:
-        'Neues Schloss für den Bereich selbst. Ordner und Erinnerungen, die schon da waren, behalten ihre alten Schlüssel – der alte Schlüssel liest also, was dort dazukommt.',
+      secured: 'Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für ihn offen, bis du sie erneuerst.',
+      rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.',
       failed: 'Dieser Bereich hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
     queuedTitle: 'Geteilte Bereiche',
@@ -2280,8 +2284,8 @@ const de: typeof en = {
         'Eine andere besitzende Person dieses Bereichs baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
       stalled:
         'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Bereichs. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
-      secured:
-        'Neues Schloss für den Bereich selbst; Ordner und Erinnerungen, die schon da waren, behalten ihre alten Schlüssel. Jemand hier muss noch bestätigen, dass du es bist.',
+      secured: 'Neues Schloss drin. Jemand hier muss noch bestätigen, dass du es bist.',
+      rekeying: 'Das neue Schloss wird eingebaut. Jemand hier muss noch bestätigen, dass du es bist.',
       failed:
         'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Bereich noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
     },
@@ -3603,6 +3607,7 @@ const de: typeof en = {
         illegal_scope: 'Dieser Link erlaubt es nicht, es dorthin zu verschieben.',
         stale_placement: 'Jemand anderes hat es gleichzeitig verschoben oder umbenannt. Die Ansicht wurde neu geladen – bitte versuche es erneut.',
         stale_epoch: 'Die Schlüssel des Bereichs wurden inzwischen erneuert. Lade die Seite neu und versuche es erneut.',
+        node_rekey_pending: 'Das neue Schloss des Bereichs wird noch eingebaut. Versuch es gleich noch einmal.',
         share_not_contributable: 'Mit diesem Link lässt sich nichts mehr ändern.',
         gone: 'Es oder der gewählte Ort ist nicht mehr da.',
         rate_limited: 'Zu viele Änderungen auf einmal. Bitte warte kurz und versuche es erneut.',
@@ -3815,6 +3820,7 @@ const de: typeof en = {
       notContributable: 'Mit diesem Link kannst du nur ansehen, nichts ändern.',
       rateLimited: 'Zu viele Änderungen auf einmal — bitte kurz warten und erneut versuchen.',
       placementConflict: 'Jemand anderes hat das gerade geändert. Lade die Seite neu und versuche es erneut.',
+      rekeyPending: 'Das neue Schloss dieses Bereichs wird noch eingebaut. Versuch es gleich noch einmal.',
       gone: 'Das gibt es hier nicht mehr. Lade die Seite neu.',
       createFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
       loading: 'Dieser Ordner wird geöffnet …',

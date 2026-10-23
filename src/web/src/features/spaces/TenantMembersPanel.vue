@@ -26,7 +26,7 @@ import {
   type PendingMemberInvite,
   type ScopeMember,
 } from './members'
-import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares } from './scopes'
+import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { activeSpace, activeScopeKey, activeWriteKey } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -59,6 +59,8 @@ const tenantName = ref('')
 /** Owner rows only: a compromise rotation queued on the tenant root that needs an owner
  *  (uc.spaces.complete-queued-rotation E2/E8), from the switcher's own row of this tenant. */
 const stuckRotation = ref<CompromiseRotation | null>(null)
+/** Owner-only: the tenant's last rotation is still fitting the new lock (ADR 0109). */
+const rekeying = ref(false)
 const tenantIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
 const iconDialogOpen = ref(false)
 const iconBusy = ref(false)
@@ -97,6 +99,7 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     // unset / grant-less / unopenable → the initial shows). Every member reads it, not just the owner.
     tenantName.value = mine?.name ?? ''
     stuckRotation.value = mine?.compromiseRotation ?? null
+    rekeying.value = owner && activeSpace.scopeId ? ((await scopeLifecycle(activeSpace.scopeId).catch(() => null))?.rekeying ?? false) : false
     const iconBytes = mine ? await openMyTenantIcon(mine) : null
     if (iconBytes) tenantIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else tenantIcon.clear()
@@ -319,6 +322,7 @@ async function revoke(invite: PendingMemberInvite) {
         :state="stuckRotation"
         @requeued="stuckRotation = $event"
       />
+      <VeyqMessage v-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

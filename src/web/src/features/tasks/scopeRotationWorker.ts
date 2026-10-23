@@ -13,7 +13,8 @@
 import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
-import { commitRotation, isStaleEpoch } from '../spaces/scopes'
+import { commitRotation, isStaleEpoch, listMyScopes } from '../spaces/scopes'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { listScopeMembers } from '../spaces/members'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { SCOPE_ROTATION } from './capabilityTags'
@@ -26,6 +27,10 @@ import type { ClaimedJob } from '../../api/generated/tasks'
  * failed back for the right worker rather than left leased; one whose rotation stays `stale_epoch` is declined.
  */
 export async function runScopeRotationWorker(): Promise<number> {
+  // ADR 0109 point 7: a rotation is done only once every node of the scope is re-keyed. Any owner holding the current
+  // epoch finishes a re-key another device left unfinished (a closed tab, a crash) — the server derives `rekeying`
+  // from the node rows, so there is nothing to claim: resume it first, then take the queued jobs.
+  await resumeRekeys()
   let rotated = 0
   for (;;) {
     const job = await claimScopeRotation()
@@ -46,8 +51,18 @@ export async function runScopeRotationWorker(): Promise<number> {
       // excludes the member it removes by its own choice), this worker did not remove anyone and has nothing of its
       // own to exclude by, so a server that re-lists a cut member gets them re-granted and re-tagged. That holds
       // against an honest operator only — ADR 0024 § Guarantee names it — and is not closed here.
+      // A job whose rotation an earlier lease already committed (that worker stopped before its re-key finished)
+      // completes once the scope's nodes are re-keyed: re-key, then complete; only `rotation_not_committed` makes this
+      // lease commit its own rotation. A fresh job rotates, re-keys, completes. A re-key that does not finish leaves the
+      // job leased: the server refuses its completion (`rekey_incomplete`) until the re-key is done, and the next tick's
+      // resume pass continues it.
+      if (await scopeRekeying(job.scopeId)) {
+        if (!(await rekeyScope(job.scopeId)).done) continue
+        if (await completeOrUncommitted(job.jobId)) { rotated++; continue }
+      }
       const remaining = await listScopeMembers(job.scopeId)
       await commitRotation(job.scopeId, remaining)
+      if (!(await rekeyScope(job.scopeId)).done) continue
       await completeJob(job.jobId)
       // If the rotated group is the scope we're actively viewing, swap in the fresh epoch so our next write seals
       // under E_{n+1}, not the stale E_n (mirrors the synchronous remove flow, cr-0089).
@@ -68,6 +83,31 @@ export async function runScopeRotationWorker(): Promise<number> {
     }
   }
   return rotated
+}
+
+/** Re-key every scope this owner reads as `rekeying` (its row's derived flag, owner-only). One that fails stays so. */
+async function resumeRekeys(): Promise<void> {
+  const scopes = await listMyScopes().catch(() => [])
+  for (const s of scopes) {
+    if (s.rekeying !== true) continue
+    await rekeyScope(s.id).catch(() => {})
+  }
+}
+
+async function scopeRekeying(scopeId: string): Promise<boolean> {
+  const scopes = await listMyScopes()
+  return scopes.find((s) => s.id === scopeId)?.rekeying === true
+}
+
+/** Complete the job; false when this lease committed no rotation yet (`rotation_not_committed`). */
+async function completeOrUncommitted(jobId: string): Promise<boolean> {
+  try {
+    await completeJob(jobId)
+    return true
+  } catch (e) {
+    if (await isCodedError(e, HttpStatus.conflict, 'rotation_not_committed')) return false
+    throw e
+  }
 }
 
 /** The decline reason when a rotation was refused for a reason about this worker rather than the job, else null. */

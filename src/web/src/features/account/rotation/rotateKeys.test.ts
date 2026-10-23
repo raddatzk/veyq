@@ -45,6 +45,8 @@ vi.mock('../../../app/vault', () => ({
 vi.mock('../../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../memories/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
+// The re-key after a scope's rotation (ADR 0109) is `rekeyScope`'s own suite; here it always finishes.
+vi.mock('../../../core/node/rekey/rekeyScope', () => ({ rekeyScope: vi.fn(async () => ({ done: true, committed: 0 })) }))
 
 // The two Argon-bearing KEK derivations run for REAL but at a light cost. They stay **input-sensitive**, which
 // is what every refusal below depends on — a stub returning a constant would make "a wrong Secret Key is
