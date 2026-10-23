@@ -6,12 +6,12 @@
 // is the header's "Participants" action (owner decision 2026-10-14), which the host wires to `openPicker` (exposed) and
 // shows only where `canEdit` holds. The interface shows a guest NOTHING of this (the `participants` right is a
 // member's alone): the host passes `show` false and this renders no element at all.
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import VeyqAvatar from '../../../shared/ui/VeyqAvatar.vue'
 import VeyqAvatarGroup from '../../../shared/ui/VeyqAvatarGroup.vue'
-import VeyqPopover from '../../../shared/ui/VeyqPopover.vue'
+import VeyqHoverCard from '../../../shared/ui/VeyqHoverCard.vue'
 import MemoryParticipantsDialog from './MemoryParticipantsDialog.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { personHash } from '../../../core/node/location'
@@ -53,55 +53,45 @@ const shown = computed(() => (chips.value.length > SLOTS ? chips.value.slice(0, 
 const overflow = computed(() => (chips.value.length > SLOTS ? chips.value.length - (SLOTS - 1) : 0))
 const summary = computed(() => t('memory.participants.summary', { count: chips.value.length, names: chips.value.map((c) => c.name).join(', ') }))
 
-// The popover opens on hover / focus after a short intent delay and closes after a grace period, so crossing the gap
-// between the avatars and the list does not flicker it shut. It renders in place (not teleported) to keep the tab order.
-const pop = ref<InstanceType<typeof VeyqPopover> | null>(null)
+// The list is a hover card (the layer's `VeyqHoverCard`): it opens on hover or keyboard focus after a short intent delay
+// and closes after a grace period, so crossing the gap between the avatars and the list does not flicker it shut; a
+// tap or click toggles it. It renders in place (not teleported) to keep the tab order, and stays open while focus is
+// anywhere in this group, so a keyboard user can Tab from the avatars into the list.
 const trigger = ref<HTMLButtonElement | null>(null)
+const root = ref<HTMLElement | null>(null)
 const open = ref(false)
-let timer: ReturnType<typeof setTimeout> | undefined
 let openedAt = 0
-function clear() {
-  if (timer !== undefined) clearTimeout(timer)
-  timer = undefined
-}
-function openNow() {
-  clear()
-  if (open.value || !trigger.value) return
-  open.value = true
-  openedAt = Date.now()
-  // the popover reads `currentTarget` to tell a click on its trigger from an outside click (which dismisses it)
-  pop.value?.show({ currentTarget: trigger.value } as unknown as Event)
-}
+const cardOpen = computed({
+  get: () => open.value,
+  set: (next: boolean) => {
+    if (!next && root.value?.contains(document.activeElement)) return
+    if (next && !open.value) openedAt = Date.now()
+    open.value = next
+  },
+})
 function closeNow(refocus = false) {
-  clear()
   if (!open.value) return
   open.value = false
-  pop.value?.hide()
   if (refocus) trigger.value?.focus()
-}
-function openSoon() {
-  clear()
-  if (!open.value) timer = setTimeout(openNow, OPEN_DELAY_MS)
-}
-function closeSoon() {
-  clear()
-  if (open.value) timer = setTimeout(() => closeNow(), CLOSE_DELAY_MS)
 }
 /** A tap / click toggles - but not the click that follows the focus / hover that just opened it. */
 function onClick() {
   if (open.value && Date.now() - openedAt > 400) closeNow()
-  else openNow()
+  else {
+    openedAt = Date.now()
+    open.value = true
+  }
 }
 function onFocusOut(e: FocusEvent) {
   const next = e.relatedTarget as Node | null
-  if (!next || !(e.currentTarget as HTMLElement).contains(next)) closeSoon()
+  if (!next || !(e.currentTarget as HTMLElement).contains(next)) closeNow()
 }
-onBeforeUnmount(clear)
 </script>
 
 <template>
   <div
     v-if="visible"
+    ref="root"
     class="memory-participants"
     role="group"
     :aria-label="t('memory.participants.title')"
@@ -109,7 +99,9 @@ onBeforeUnmount(clear)
     @keydown.esc="closeNow(true)"
     @focusout="onFocusOut"
   >
-    <div v-if="chips.length" class="memory-participants-anchor" @mouseenter="openSoon" @mouseleave="closeSoon">
+    <div v-if="chips.length" class="memory-participants-anchor">
+      <VeyqHoverCard v-model:open="cardOpen" :open-delay="OPEN_DELAY_MS" :close-delay="CLOSE_DELAY_MS" in-place class="memory-participants-popover">
+        <template #trigger>
       <button
         ref="trigger"
         type="button"
@@ -119,14 +111,13 @@ onBeforeUnmount(clear)
         :aria-label="summary"
         data-testid="participants-group"
         @click="onClick"
-        @focus="openSoon"
       >
         <VeyqAvatarGroup>
           <PersonAvatar v-for="c in shown" :key="c.userId" :name="c.name" :user-id="c.former ? null : c.userId" :class="{ 'is-former': c.former }" data-testid="participant-avatar" />
           <VeyqAvatar v-if="overflow" :label="`+${overflow}`" data-testid="participant-overflow" />
         </VeyqAvatarGroup>
       </button>
-      <VeyqPopover ref="pop" in-place class="memory-participants-popover" @hide="open = false" @mouseenter="clear" @mouseleave="closeSoon">
+        </template>
         <ul class="memory-participants-list" data-testid="participants-list">
           <li v-for="c in chips" :key="c.userId">
             <span v-if="c.former" class="memory-participant-row is-former" data-testid="participant-former">
@@ -146,7 +137,7 @@ onBeforeUnmount(clear)
             </RouterLink>
           </li>
         </ul>
-      </VeyqPopover>
+      </VeyqHoverCard>
     </div>
     <span v-if="p.namesPending.value" class="memory-participants-muted" role="status">{{ t('people.loading') }}</span>
     <span v-else-if="p.loadFailed.value && p.ids.value.length > 0" class="memory-participants-muted">{{ t('memory.participants.loadError') }}</span>

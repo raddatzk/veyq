@@ -18,7 +18,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
-import VeyqTooltip from '../../../shared/ui/VeyqTooltip'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import { levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
 

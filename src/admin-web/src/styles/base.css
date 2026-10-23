@@ -48,6 +48,9 @@
   /* A toggle group: its track, and the picked option standing on it (lighter than the track in both modes). */
   --app-segment-track: #f1f5f9;
   --app-segment-thumb: #ffffff;
+  /* A tooltip's own dark fill (white text on it in both modes), and the shade behind a modal dialog. */
+  --app-tooltip: #334155;
+  --app-scrim: rgba(0, 0, 0, 0.4);
   --app-control-text: #334155;
   --app-backdrop-strong: #0f172a;
   --app-radius: 12px;
@@ -114,6 +117,8 @@
   --app-field: #0b0f14;
   --app-segment-track: #0b0f14;
   --app-segment-thumb: #2a313b;
+  --app-tooltip: #3f4652;
+  --app-scrim: rgba(0, 0, 0, 0.6);
   --app-control-text: #eef3f8;
   --app-backdrop-strong: #0b0f14;
   --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.26);

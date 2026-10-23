@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // One tab of a `VeyqTabList` (see `VeyqTabs`).
-import Tab from 'primevue/tab'
+import { TabsTrigger } from 'reka-ui'
 
 defineProps<{ value: string }>()
 </script>
 
 <template>
-  <Tab :value="value" class="veyq-tab">
+  <TabsTrigger :value="value" class="veyq-tab">
     <slot />
-  </Tab>
+  </TabsTrigger>
 </template>

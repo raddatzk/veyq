@@ -1,51 +1,68 @@
 <script setup lang="ts">
-// The app's two toast regions (ADR 0039, ADR 0107), mounted once in App.vue: the default one, top-right, for success
-// acknowledgements and errors, and the undo one, bottom-centre, whose card carries a "Rückgängig" action. What to show
-// comes through `toast.ts`; the timeout/restore live in useUndo/useToast at each call site.
-import Toast from 'primevue/toast'
+// The app's two toast regions (ADR 0039, ADR 0107), mounted once in App.vue, on Reka's Toast: the default one,
+// top-right, for success acknowledgements and errors, and the undo one, bottom-centre, whose card carries a
+// "Rückgängig" action. Each region is a live region a screen reader reads; a toast pauses while the pointer is on it.
+// What to show comes through `toast.ts`; the timeout/restore live in useUndo/useToast at each call site.
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ToastClose, ToastProvider, ToastRoot, ToastTitle, ToastViewport } from 'reka-ui'
 import VeyqIcon from './VeyqIcon.vue'
-import { UNDO_GROUP } from './toast'
+import { dropToast, toastQueue, type QueuedToast } from './toast'
+import type { VeyqIconName } from './icons'
 
 const { t } = useI18n()
 
-/** The extra field the undo entry rides on the message so this template can wire the action. */
-interface UndoMessage {
-  summary?: string
-  onUndo?: () => void
-}
+const plain = computed(() => toastQueue.filter((q) => !q.onUndo))
+const undo = computed(() => toastQueue.filter((q) => q.onUndo))
 
-const PT = {
-  message: { class: 'veyq-toast' },
-  messageText: { class: 'veyq-toast__text' },
-  closeButton: { class: 'veyq-toast__close' },
+const ICON: Record<QueuedToast['severity'], VeyqIconName> = { success: 'check', error: 'times-circle', info: 'info-circle' }
+
+function onOpen(toast: QueuedToast, open: boolean) {
+  if (!open) dropToast(toast.id)
+}
+function runUndo(toast: QueuedToast) {
+  toast.onUndo?.()
+  dropToast(toast.id)
 }
 </script>
 
 <template>
-  <Toast class="veyq-toaster" :pt="PT" />
-  <Toast :group="UNDO_GROUP" position="bottom-center" class="veyq-toaster veyq-toaster--undo">
-    <template #container="{ message, closeCallback }">
-      <div class="veyq-undo-toast" role="status">
-        <span class="veyq-undo-toast__text">{{ message.summary }}</span>
-        <button
-          type="button"
-          class="veyq-undo-toast__action"
-          @click="() => { (message as UndoMessage).onUndo?.(); closeCallback() }"
-        >
+  <ToastProvider :label="t('ui.notifications')" swipe-direction="right">
+    <ToastRoot
+      v-for="toast in plain"
+      :key="toast.id"
+      :duration="toast.life ?? Infinity"
+      :class="['veyq-toast', `veyq-toast--${toast.severity}`]"
+      @update:open="(open) => onOpen(toast, open)"
+    >
+      <div class="veyq-toast__content">
+        <VeyqIcon :name="ICON[toast.severity]" class="veyq-toast__icon" />
+        <div class="veyq-toast__text">
+          <ToastTitle class="veyq-toast__summary">{{ toast.summary }}</ToastTitle>
+        </div>
+        <ToastClose class="veyq-toast__close" :aria-label="t('common.close')"><VeyqIcon name="times" /></ToastClose>
+      </div>
+    </ToastRoot>
+    <ToastViewport class="veyq-toaster" :label="t('ui.notifications')" />
+  </ToastProvider>
+  <ToastProvider :label="t('ui.notifications')" swipe-direction="down">
+    <ToastRoot
+      v-for="toast in undo"
+      :key="toast.id"
+      :duration="toast.life ?? Infinity"
+      class="veyq-undo-toast-root"
+      @update:open="(open) => onOpen(toast, open)"
+    >
+      <div class="veyq-undo-toast">
+        <ToastTitle class="veyq-undo-toast__text">{{ toast.summary }}</ToastTitle>
+        <button type="button" class="veyq-undo-toast__action" @click="runUndo(toast)">
           {{ t('common.undo') }}
         </button>
-        <button
-          type="button"
-          class="veyq-undo-toast__close"
-          :aria-label="t('common.cancel')"
-          @click="closeCallback"
-        >
-          <VeyqIcon name="times" />
-        </button>
+        <ToastClose class="veyq-undo-toast__close" :aria-label="t('common.cancel')"><VeyqIcon name="times" /></ToastClose>
       </div>
-    </template>
-  </Toast>
+    </ToastRoot>
+    <ToastViewport class="veyq-toaster veyq-toaster--undo" :label="t('ui.notifications')" />
+  </ToastProvider>
 </template>
 
 <style scoped>

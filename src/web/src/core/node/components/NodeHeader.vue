@@ -12,7 +12,7 @@
 import { computed, useSlots } from 'vue'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
-import VeyqTooltip from '../../../shared/ui/VeyqTooltip'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqIconName } from '../../../shared/ui/icons'
 import { mergeHeaderActions, type CoreHeaderAction, type NodeHeaderAction } from '../nodeHeader'
 
