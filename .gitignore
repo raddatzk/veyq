@@ -294,6 +294,11 @@ gradle-app.setting
 # on one day, never committed — the conclusion goes into the docs, the readings do not.
 .run/measurements/
 
+# The profile driver's runs (`scripts/profile_hot_paths.py`, cr-profile-where-the-time-goes): CPU profiles, traces and JFR
+# recordings of a signed-in session, and the throwaway instance's home with its secrets. Never committed, never attached
+# to an issue — only the numbers move into docs.
+.run/profiles/
+
 # A `scripts/run_pipeline.py` run: each job's log and the run's summary.json. Local evidence of one run.
 .pipeline-out/
 

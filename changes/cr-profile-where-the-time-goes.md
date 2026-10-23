@@ -1,7 +1,7 @@
 ---
 id: cr-profile-where-the-time-goes
 title: Where does the time go? A profile of the client's and the server's hot paths, its method published in the Security area
-status: planned
+status: in-progress
 satisfies: ["uc.account.unlock", "uc.memory.upload", "uc.memory.gallery"]
 adrs: ["0017", "0105", "0040"]
 invariants:
@@ -49,10 +49,8 @@ client"*. That sentence is a claim nobody has profiled; this CR measures it.
 | Readings of the volume harness go to `.run/measurements/`, ignored by git | `.gitignore:295` |
 | Unexplained server reading: the app peaked at 0.91 GiB of its 1 GiB limit during a 1,000-photo upload, although bytes go direct to the store | `changes/cr-volume-measurement-cax.md` § Local pre-check |
 | Open measurement rows nearby: #261 (an upload's wire share; #220 waits on it), #260 and #221 (other browsers, after the V1 queue), #489 (gallery targets) | `docs/inbox.md` |
-
-Remembered, not measured — phase 1 measures it: the JFR event names that record the environment and the system
-properties (`jdk.InitialEnvironmentVariable`, `jdk.InitialSystemProperty`), and that Temurin's JRE ships the
-`jdk.jfr` module.
+| Temurin's JRE (21.0.12+8) ships `jdk.jfr` and `jdk.management.jfr` (measured in phase 1) | `java --list-modules` in a local app image |
+| The environment and the system properties are recorded by `jdk.InitialEnvironmentVariable` and `jdk.InitialSystemProperty`, and `<event>#enabled=false` in `-XX:StartFlightRecording:` switches each off on JDK 21 (measured in phase 1: a bare JVM in the JRE image, a canary variable found once in the recording without the two overrides, never with them) | `jfr summary`, `jfr print --events jdk.InitialEnvironmentVariable` |
 
 ## Decisions this CR takes
 
@@ -101,11 +99,19 @@ properties (`jdk.InitialEnvironmentVariable`, `jdk.InitialSystemProperty`), and 
 
 ## Phases
 
-- [ ] **1 driver and method**: the profile driver (Q2), JFR through `JAVA_TOOL_OPTIONS`, the remembered facts of
+- [x] **1 driver and method**: the profile driver (Q2), JFR through `JAVA_TOOL_OPTIONS`, the remembered facts of
   the substrate section measured. · Done when: S1 runs end to end once and writes its files to `.run/profiles/`;
   `git status` shows none of them. **Bite:** a JFR recording taken with the run's settings and a canary variable
   (`VEYQ_PROFILE_CANARY=<random>`) in the app's environment does not contain the canary; the same recording
   without the settings does.
+  *Landed 2026-10-23* (`scripts/profile_hot_paths.py`, `tests/e2e/profile/`): S1 ran end to end once (one run at
+  throttle 1 and one at 4, on a busy machine, `--ignore-load`, so not a reading). The bite is part of every run, not a
+  one-off: the run's recording held neither the canary nor any of the `.env`'s four secrets; the control recording
+  held the canary, and with it `MARIADB_PASSWORD` and `GARAGE_ADMIN_TOKEN` — the CR's concern, measured. Two things
+  phase 2 inherits: L1's overlay already passes the app's truststore through `JAVA_TOOL_OPTIONS`, so the recording is
+  appended to it, never set (setting it broke the store check with PKIX); and throttle 4 barely moved S1 (3.37 s →
+  3.52 s), which suggests Chromium's CPU throttle does not reach the Argon2id worker — read that before a throttle-4
+  number is taken as a slower device's.
 - [ ] **2 readings**: S1–S3 on both sides, three runs each at throttle 1 and 4; the crypto micro-reading
   (decision 3). · Done when: every scenario has a stage split and its top functions, and each hotspot found has
   the number that justifies it.
