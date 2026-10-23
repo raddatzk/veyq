@@ -238,4 +238,25 @@ None open at refine. Handed back if met: a server field for the sole-owner list 
 
 ## Retrospective
 
-_Filled by the implementer._
+- **`main` was red between the phase-2+3 merge (`25d0de37`) and the web phase (`6c86ad77`).** The contract had made
+  `nodeEpoch` required on twenty writes; for about two hours `src/web/`'s check was red on `main` (24 call sites) and every
+  sealed write from a web client built from `main` was a `400` against a backend built from `main`. The owner chose
+  "2+3 together, web quickly", and I offered that option without saying that a required client field breaks `main`, not only
+  the branch. Root cause: `changes/README.md` allowed a red *branch* after a contracts phase and said nothing about `main`.
+  **Next time:** a contract that makes a client-sent field required merges its server and client phases in one merge
+  (now bound in `changes/README.md`, *A contract that makes a client-sent field required lands on `main` together with
+  its client phase*).
+- **A CR text contradicted a pinned catalog test.** The phase-5 table's `rotation.factSignsOut` dropped the *Add a device*
+  action name that `i18n.test.ts` pins (inbox #248). The implement-time check caught it and the text kept the action's
+  name, but the refine had not run the catalog's own copy tests against its table. **Next time:** a refine that rewrites
+  catalog texts runs `npx vitest run src/i18n` against its proposed strings.
+- **The browser proof did not go through the worker path.** The instance from phase 1 had its tenant's only owner rotate,
+  so the tenant's queued rotation is stalled and nobody can complete it. The phase-4 pass therefore proved the re-key
+  through an account rotation's sole-member group, not through the worker; the worker's re-key and resume are proved by
+  unit tests only. `changes/README.md` already says a live proof names the instance state its screen needs. I did not
+  apply that rule when I seeded phase 1, so this is a real miss. **Next time:** before a phase's live proof, check that the
+  instance it reuses can still reach the state the proof needs; otherwise seed a fresh one.
+- **Process.** 1Password locked mid-run, and with the owner's "commit unsigned" the commits from `ebcb282c` to `dcf33fa7`
+  and their merges are unsigned; signing worked again from phase 4 on. The lock order changed (shares → the writer's own
+  rows → node), and `src/backend/CLAUDE.md` says such a change runs `scripts/run_backend_races_on_mariadb.py`. Following the
+  owner's V1 rule (heavy suites at V1's end), neither the races nor L1, web-e2e or fuzz were run.
