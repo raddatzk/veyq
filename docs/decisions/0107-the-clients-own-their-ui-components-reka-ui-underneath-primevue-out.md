@@ -91,7 +91,9 @@ component that cites "behaviour changed on purpose" means one of them:
   only what renders the toast changes.
 - **The CSP's stated reason for `style-src 'unsafe-inline'` goes away** ([cc.security.csp](../crosscutting/cc.security.csp.md)):
   it names PrimeVue's and `@primeuix`'s runtime `<style>` tags. Whether the remaining `:style` bindings still need
-  it is a measurement after the swap, and tightening the policy is a change of its own.
+  it is a measurement after the swap, and tightening the policy is a change of its own. Measured and tightened
+  2026-10-23 (inbox #523): the bindings go through the CSSOM, and `style-src` is `'self'` plus the hashes of reka-ui's
+  fixed `<style>` texts.
 - **Guards that read PrimeVue move with it**: `scripts/validate_web_contrast.py` pairs read `--p-*` variables, and
   the stylesheet-anchor guard sees every `.p-*` rule as anchored only while PrimeVue renders that class.
 - **The e2e suites have not run against the layer yet.** Their selectors moved with the layer's classes and roles;

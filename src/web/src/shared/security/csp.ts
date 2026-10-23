@@ -8,8 +8,10 @@
 // Notes on the chosen directives:
 // - script-src 'self': the entry is a hashed same-origin module; the app has NO inline script, NO eval/Function,
 //   and NO WebAssembly (Argon2id is pure-JS @noble), so a strict script-src holds with no unsafe- escapes.
-// - style-src needs 'unsafe-inline': the app uses :style bindings, which are not nonce-able (tightening it is
-//   inbox #523). Style injection is far lower-risk than script, so this is an accepted gap.
+// - style-src 'self' with no 'unsafe-inline' (inbox #523): the built CSS is same-origin files, and Vue applies :style
+//   bindings through the CSSOM, which style-src does not govern. The one <style> element a component we use renders
+//   is allowed by its hash (REKA_STYLE_HASHES). The dev server adds a nonce, because Vite injects every
+//   stylesheet as a <style> element there (`devStyleNonce`).
 // - img-src data: + blob: — favicon SVG / QR data URLs, and decrypted media object URLs. media-src blob: — same.
 // - worker-src 'self': every worker — the Argon2 worker, the media pixel-stage worker, the gallery's listing opener and
 //   pdf.js' — is a same-origin module worker (no blob: worker); `verify:csp` asserts the emitted policy says so.
@@ -27,7 +29,14 @@ export interface CspOptions {
   breachOrigin: string | null
   /** Dev only: also allow the Vite HMR websocket (`ws:`). Never set for a production build. */
   dev?: boolean
+  /** Dev only: the nonce Vite puts on the <style> elements it injects (`html.cspNonce`, new per dev-server start). */
+  devStyleNonce?: string
 }
+
+/** The fixed <style> elements the reka-ui components we use render, by hash, so style-src needs no 'unsafe-inline':
+ *  SelectViewport's (under VeyqSelect), which hides the list's scrollbar. csp.test.ts recomputes the set from the
+ *  installed reka-ui over every component this client imports, so an upgrade or a new import cannot slip by. */
+export const REKA_STYLE_HASHES: readonly string[] = ["'sha256-60LHlRjW/B3CtzIoE/Lf1/NEDvko9efWMFaGVhHu/cs='"]
 
 /** The emitted policy's file name inside `dist`. The backend's app shell reads it by the same name
  *  (`AppShell.POLICY_FILE`) and refuses to boot without it, which is what catches the two drifting apart. */
@@ -39,7 +48,10 @@ export const CSP_POLICY_FILE = 'content-security-policy.txt'
  * appends the origin of each one in use to `img-src` / `connect-src` on every response (ADR 0069, ADR 0088 decision 7).
  * Only the dev server, which serves the app itself, passes their origins here (`vite.config.ts`).
  */
-export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false }: CspOptions): string {
+export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false, devStyleNonce }: CspOptions): string {
+  const styleSrc = ["'self'", ...REKA_STYLE_HASHES]
+  if (devStyleNonce) styleSrc.push(`'nonce-${devStyleNonce}'`) // Vite's injected stylesheets — dev server only
+
   const imgSrc = ["'self'", 'data:', 'blob:']
   if (tileOrigin) imgSrc.push(tileOrigin)
 
@@ -56,7 +68,7 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false
     'frame-ancestors': ["'none'"],
     'script-src': ["'self'"],
     'worker-src': ["'self'"],
-    'style-src': ["'self'", "'unsafe-inline'"],
+    'style-src': styleSrc,
     'img-src': imgSrc,
     'media-src': ["'self'", 'blob:'],
     'font-src': ["'self'"],

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -37,13 +38,18 @@ const smokeHost = process.env.VEYQ_SMOKE_HOST
 // Server Owner's settings, and the backend appends the origins of those in use per response (ADR 0088 decision 7). The
 // dev server serves the app itself, so its header allows the reference providers a new instance is seeded with; a dev
 // instance pointed at other services edits the three DEV_* origins (mapDefaults.ts).
+// The dev server injects every stylesheet as a <style> element, which `style-src` without 'unsafe-inline' refuses, so in
+// dev only Vite stamps them with a nonce (`html.cspNonce`) drawn fresh per start and the header names it (inbox #523).
+// The build loads its CSS as files and carries no nonce.
 function cspPlugin(dev: boolean): Plugin {
+  const devStyleNonce = dev ? randomBytes(18).toString('base64') : undefined
   const csp = dev
-    ? buildCsp({ tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, dev })
+    ? buildCsp({ tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, dev, devStyleNonce })
     : buildCsp({ tileOrigin: null, geocoderOrigin: null, breachOrigin: null })
   return {
     name: 'veyq-csp',
-    config: () => (dev ? { server: { headers: { 'Content-Security-Policy': csp } } } : {}),
+    config: () =>
+      dev ? { html: { cspNonce: devStyleNonce }, server: { headers: { 'Content-Security-Policy': csp } } } : {},
     generateBundle() {
       if (dev) return
       this.emitFile({ type: 'asset', fileName: CSP_POLICY_FILE, source: `${csp}\n` })

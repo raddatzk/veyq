@@ -1,7 +1,8 @@
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { ADMIN_CSP } from './src/shared/security/csp'
+import { adminCsp } from './src/shared/security/csp'
 
 // The Server-Owner admin surface (ADR 0065). Deliberately much smaller than `src/web/`'s config: no map providers,
 // no media Service Worker, no dev seed-credential endpoint — this app talks to exactly one origin (its own,
@@ -14,44 +15,52 @@ import { ADMIN_CSP } from './src/shared/security/csp'
 const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8090'
 const port = Number(process.env.VITE_ADMIN_PORT) || 5174
 
-// The CSP lives in src/shared/security/csp.ts, where it is tested; this only delivers it (meta tag + dev header).
+// The CSP lives in src/shared/security/csp.ts, where it is tested; this only delivers it (meta tag + dev header). The dev
+// server injects every stylesheet as a <style> element, so there Vite stamps them with a nonce drawn fresh per start
+// (`html.cspNonce`) and both the header and the <meta> name it — a <meta> without it would intersect the header and
+// refuse them again. The build loads its CSS as files and carries no nonce.
 
-export default defineConfig(({ command }) => ({
-  plugins: [
-    vue(),
-    {
-      name: 'veyq-admin-csp',
-      config: () => (command === 'serve' ? { server: { headers: { 'Content-Security-Policy': ADMIN_CSP } } } : {}),
-      transformIndexHtml: (html: string) => ({
-        html,
-        tags: [
-          {
-            tag: 'meta',
-            attrs: { 'http-equiv': 'Content-Security-Policy', content: ADMIN_CSP },
-            injectTo: 'head-prepend' as const,
-          },
-        ],
-      }),
+export default defineConfig(({ command }) => {
+  const devStyleNonce = command === 'serve' ? randomBytes(18).toString('base64') : undefined
+  const csp = adminCsp(devStyleNonce)
+  return {
+    plugins: [
+      vue(),
+      {
+        name: 'veyq-admin-csp',
+        config: () =>
+          command === 'serve' ? { html: { cspNonce: devStyleNonce }, server: { headers: { 'Content-Security-Policy': csp } } } : {},
+        transformIndexHtml: (html: string) => ({
+          html,
+          tags: [
+            {
+              tag: 'meta',
+              attrs: { 'http-equiv': 'Content-Security-Policy', content: csp },
+              injectTo: 'head-prepend' as const,
+            },
+          ],
+        }),
+      },
+    ],
+    test: {
+      // The network net for every test — see src/test/setup.ts.
+      setupFiles: ['./src/test/setup.ts'],
     },
-  ],
-  test: {
-    // The network net for every test — see src/test/setup.ts.
-    setupFiles: ['./src/test/setup.ts'],
-  },
-  build: {
-    // The minifier drops the bundled dependencies' license comments; Vite writes their notices out instead (as src/web/ does).
-    license: { fileName: 'third-party-licenses.txt' },
-    rollupOptions: {
-      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)) },
+    build: {
+      // The minifier drops the bundled dependencies' license comments; Vite writes their notices out instead (as src/web/ does).
+      license: { fileName: 'third-party-licenses.txt' },
+      rollupOptions: {
+        input: { main: fileURLToPath(new URL('./index.html', import.meta.url)) },
+      },
     },
-  },
-  server: {
-    host: '127.0.0.1',
-    port,
-    proxy: {
-      // The Host is forwarded unchanged (`changeOrigin: false`): the backend resolves the tenant from it, and
-      // the Server-Owner endpoints are tenant-independent, so either way the header must not be rewritten.
-      '/api': { target: apiTarget, changeOrigin: false },
+    server: {
+      host: '127.0.0.1',
+      port,
+      proxy: {
+        // The Host is forwarded unchanged (`changeOrigin: false`): the backend resolves the tenant from it, and
+        // the Server-Owner endpoints are tenant-independent, so either way the header must not be rewritten.
+        '/api': { target: apiTarget, changeOrigin: false },
+      },
     },
-  },
-}))
+  }
+})
