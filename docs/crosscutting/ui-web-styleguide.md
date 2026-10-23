@@ -265,8 +265,9 @@ Owner 2026-10-23; the same rule holds for `src/admin-web/`'s texts.
   Keep it, in a clause.
 - **The exception: what the reader should keep safe gets enough explanation that they do.** How much depends on what
   a loss costs. A Secret Key, a recovery code or an Emergency Kit cannot be replaced, so the text says so plainly. The
-  config-secret key costs work rather than data: without it, media are unreachable until the store credentials are
-  entered again, and so is every other sealed secret (ADR 0089 decision 4, ADR 0050). So its panel says what the key
+  config-secret key costs work rather than data: without it, media on a store of the Server Owner's own are unreachable until its
+  credentials are entered again, and so is every other sealed secret; the bundled store reads its deployment's hint and is
+  untouched (ADR 0089 decisions 3 and 4, ADR 0050). So its panel says what the key
   is, what its status means and what a loss would mean, without alarm.
 
 **Deleting an i18n key needs a grep — nothing else catches it.** A missing `vue-i18n` key resolves at *runtime*
