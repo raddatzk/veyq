@@ -45,7 +45,8 @@ export async function newDevice(browser: Browser): Promise<Device> {
   return { context, page: await context.newPage(), confinement }
 }
 
-// PrimeVue's Password field adds its placeholder to the accessible name, so the label is matched as the name's start.
+// The password field's accessible name is its label's text (the UI layer names the input by it, so its reveal toggle
+// adds nothing); the label is matched as the name's start, because a label may carry a hint after the word.
 export const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
 
 /** A new device of the tenant owner: email, password and Secret Key, then the shared space's toolbar. */

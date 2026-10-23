@@ -31,7 +31,8 @@ const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/_
 // Text inside the fixture's EXIF and XMP (`strings` on the file): sealed with the photo (its bytes, wrappedExif).
 const PHOTO_TEXT = ['Marienplatz at golden hour', '(c) 2021 A. Photographer']
 
-// PrimeVue's Password field adds its placeholder to the accessible name, so the label is matched as the name's start.
+// The password field's accessible name is its label's text (the UI layer names the input by it, so its reveal toggle
+// adds nothing); the label is matched as the name's start, because a label may carry a hint after the word.
 const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
 
 const stamp = randomBytes(3).toString('hex')

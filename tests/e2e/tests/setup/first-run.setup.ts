@@ -17,8 +17,8 @@ import { stack } from '../../src/stack'
 
 test.describe.configure({ mode: 'serial' })
 
-// PrimeVue's Password field adds its placeholder to the accessible name ("Password Enter a password"), so the label
-// is matched as the name's start, not as the whole of it.
+// The password field's accessible name is its label's text (the UI layer names the input by it, so its reveal toggle
+// adds nothing); the label is matched as the name's start, because a label may carry a hint after the word.
 const password = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
 
 let context: BrowserContext
