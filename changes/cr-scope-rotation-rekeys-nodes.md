@@ -10,7 +10,7 @@ invariants:
   - after a rotation's re-key no write lands under a node key from before it (layer 1, the server's two 409s; layer 2, the device floor)
   - a rotation reads secured only when no live or trashed node of the scope lags the current epoch, derived by the server from its rows
   - core never calls an application; each application re-seals its own fields through a registry hook (web) and a seam (backend), fail closed
-  - no text on the panel or the site claims more than is built; texts say what happens and what it costs, never that it is secure (owner 2026-10-23)
+  - no text on the panel or the site claims more than is built; every text follows ui-web-styleguide § Copy (owner 2026-10-23)
 ---
 
 ## Goal
@@ -104,8 +104,10 @@ Each row hands over the command that finds the sites; run it at implement time.
 
 ## Texts
 
-The owner's copy direction (2026-10-23): short; say what happens and what it costs; never reassure that something
-is secure. The lock metaphor stays (the sidebar's *Needs a new lock* and the owner pages use it).
+Every text below follows [`docs/crosscutting/ui-web-styleguide.md` § Copy: short, and it says what happens](../docs/crosscutting/ui-web-styleguide.md#copy-short-and-it-says-what-happens)
+(owner 2026-10-23): what happens and what it costs, usually one sentence; no reassurance; a consequence the reader
+cannot see (links stay open, what exists stays readable) kept in a clause; the Emergency Kit, which only the reader
+holds, gets enough to keep it. The lock metaphor stays (the sidebar's *Needs a new lock* and the owner pages use it).
 
 ### Phase 1 — true for today (before the re-key exists)
 
@@ -139,7 +141,7 @@ party holds*), linking ADR 0109 as decided, not built.
 | `factNotRepair` | It can’t be undone. What is there now stays readable to the old key; only what is added afterwards is closed to it. | Es lässt sich nicht rückgängig machen. Was jetzt da ist, bleibt für den alten Schlüssel lesbar; nur was danach dazukommt, ist für ihn zu. |
 | `factLinks` (new) | Links made before stay open to the old key until you renew them. | Vorher erstellte Links bleiben für den alten Schlüssel offen, bis du sie erneuerst. |
 | `soleOwner` | You are the only owner of these spaces. Make someone else an owner first, or they keep the old lock: | In diesen Bereichen bist du die einzige besitzende Person. Mach vorher jemand anderen dazu, sonst behalten sie das alte Schloss: |
-| `factNeedsKit` | You need your Emergency Kit. | Du brauchst dein Notfall-Kit. |
+| `factNeedsKit` | You need your Emergency Kit. Without it, your keys can’t be replaced — keep it where only you can reach it. | Du brauchst dein Notfall-Kit. Ohne es lassen sich deine Schlüssel nicht ersetzen – bewahr es so auf, dass nur du drankommst. |
 | `gateNotCold` | This device unlocked without your Secret Key, so enter it here. | Dieses Gerät wurde ohne deinen Secret Key entsperrt, gib ihn deshalb hier ein. |
 | `confirmBody` | Every space gets a new lock and every other device is signed out. This can’t be undone. | Jeder Bereich bekommt ein neues Schloss, und alle anderen Geräte werden abgemeldet. Das lässt sich nicht rückgängig machen. |
 | `doneNotRepair` | Your keys are replaced. Below, each space shows whether its new lock is in. | Deine Schlüssel sind ersetzt. Unten steht bei jedem Bereich, ob sein neues Schloss drin ist. |
