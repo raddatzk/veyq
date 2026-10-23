@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // A trail of places from `home` to the current one (ADR 0107). An entry with a `url` is a real link
-// (cr-own-ui-components-on-reka decision 5): a plain click runs its `command` instead of following the link, a
+// (ADR 0107 § Behaviour changed on purpose): a plain click runs its `command` instead of following the link, a
 // modified click (new tab, new window) follows it, so a copied or middle-clicked crumb lands where it says. The `item`
 // slot draws an entry itself (a dialog's in-place trail draws buttons). Sheets reach it by `veyq-breadcrumb`,
 // `veyq-breadcrumb__list` and `veyq-breadcrumb__link` (styled in `layer.css`).

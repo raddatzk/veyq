@@ -7,22 +7,24 @@ found by walking the directory the code surfaces live in — a third one is in s
 application's own sheet lives (`src/web/src/features/memories/memories.css`, inbox #513; a sheet that moves out of
 `src/styles/` must not move out of this guard) — names at least one class that the package's own markup
 applies. The anchor compound is a selector's first compound, the part before any descendant/child/sibling
-combinator: in `.memory-card .p-card-body` it is `.memory-card`, in `.veyq-danger-action.p-button` it is
-both classes together. It is the element the rule is *written for*. A rule whose anchor names only classes
+combinator: in `.memory-card .veyq-card-frame__body` it is `.memory-card`, in `.veyq-danger-action.veyq-button` it
+is both classes together. It is the element the rule is *written for*. A rule whose anchor names only classes
 no markup ever applies cannot match anything, in any state, on any surface.
 
 **Why the ANCHOR and not every class in the selector** — this is the whole design, and it is what makes the
-guard possible at all. Our sheets legitimately reach *into* a dependency's DOM (`.memory-card .p-card-body`)
-and legitimately compound with it (`.app-breadcrumb.p-breadcrumb`, `.mobile-nav-dialog.p-dialog`), and those
-vendor class names are applied by PrimeVue at runtime, never by our markup. Judging every class would
+guard possible at all. A sheet may legitimately reach *into* a dependency's DOM and compound with it — the clients'
+sheets did so with every component of the library they used until ADR 0107 (`.memory-card .p-card-body`), and a map or
+PDF library renders classes of its own — and such vendor class names are applied by the dependency at runtime, never
+by our markup. Judging every class would
 therefore need a list of the dependency's class names — and the only honest source for that list is
 `node_modules`, which **the trust-chain job does not have**: `.github/workflows/trust-chain.yml` runs
 `checkout` + a venv + `pip install pyyaml` and nothing else, on purpose, because the whole run is seconds.
 A predicate harvesting vendor names would be green on a developer's machine and red in CI — the exact
 failure inbox #140 refused, displaced one step. Anchoring removes the question instead of answering it:
 **no rule in either package anchors on vendor classes alone**, because a vendor override is always scoped
-by a project class. Measured 2026-09-21 — 0 vendor-only anchors out of 564 (web) and 70 (admin-web), against
-2083 and 1951 vendor class names harvested from `node_modules` purely to check this claim. Re-run it by
+by a project class. Measured 2026-09-21, with that component library still in place — 0 vendor-only anchors out of
+564 (web) and 70 (admin-web), against 2083 and 1951 vendor class names harvested from `node_modules` purely to check
+this claim. Re-run it by
 intersecting each anchor compound with the names in `node_modules`; it is the one assumption that, if it
 ever stopped holding, would start costing this guard false positives rather than misses. So there is no
 vendor list here, and none is needed.
@@ -67,7 +69,7 @@ lines across both packages), which is what made this guard green on arrival and 
       *Scoping by class-name prefixes derived from the markup* (judge a class only if some rendered class
       shares its first hyphen-segment) looks equivalent and is not: measured, it let the bare prefix `p` in
       — from `:class="{ 'is-active': themePreference === p }"`, where `p` is a loop variable, and from a
-      `p-btn` string in a test — which pulled all 36 PrimeVue overrides into scope and made the predicate
+      `p-btn` string in a test — which pulled all 36 overrides of the then component library into scope and made the predicate
       red on arrival with nothing wrong.
 
 Its own source is not in what it scans (the corpus is the two packages' `src/`), so the usual trap — a

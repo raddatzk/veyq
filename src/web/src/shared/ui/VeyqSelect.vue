@@ -35,6 +35,7 @@ const picked = computed(() => props.options.find((o) => o.value === model.value)
     <SelectTrigger :id="inputId" v-bind="$attrs" class="veyq-select">
       <span :class="['veyq-select__label', { 'veyq-select__label--placeholder': !picked }]">
         <slot v-if="$slots.value && picked" name="value" :option="picked" />
+        <!-- the placeholder is our text, not SelectValue's prop: a default slot replaces Reka's placeholder too -->
         <SelectValue v-else>{{ picked ? picked.label : placeholder }}</SelectValue>
       </span>
       <SelectIcon class="veyq-select__dropdown"><VeyqIcon name="chevron-down" /></SelectIcon>

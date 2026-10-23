@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // A modal dialog (ADR 0107), on Reka's Dialog: focus moves in and stays in, Escape and the close button close it, and
 // focus returns to what had it before. A click outside never closes it. `closable: false` hides the close button and
-// `closeOnEscape: false` ignores Escape, so a busy dialog cannot be closed mid-write. `position="bottom"` is the
-// mobile sheet. A dialog does not move: there is no dragging (cr-own-ui-components-on-reka decision 5). The caller's
-// classes, style and attributes land on the dialog box; sheets reach the parts by `veyq-dialog__header`, `__title`,
+// `closeOnEscape: false` ignores Escape, so a busy dialog cannot be closed mid-write. `position="bottom"` is the mobile
+// sheet. A dialog does not move: there is no dragging (ADR 0107 § Behaviour changed on purpose). The caller's classes,
+// style and attributes land on the dialog box; sheets reach the parts by `veyq-dialog__header`, `__title`,
 // `__header-actions`, `__close` and `__content` (styled in `layer.css`). On opening, focus goes to the field marked
-// `autofocus`, else to the first focusable part (the close button), as the dialog before the layer did; `show` fires once it
-// is open and focused.
+// `autofocus`, else to the first focusable part (the close button), as the dialog before the layer did; `show` fires
+// once it is open and focused.
 import { nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
