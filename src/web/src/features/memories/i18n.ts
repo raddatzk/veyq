@@ -92,7 +92,7 @@ const en = {
       autoOptInHint: 'from where your photos were taken',
       consentTitle: 'Enable maps for locations?',
       consentBody:
-        'To place a Memory on a map, tiles load from a third-party map provider and the framed point is sent to a third-party geocoder for a name — both client-direct, never through the veyq server, which stays blind. You can turn this off anytime.',
+        'To place a Memory on a map, tiles load from a third-party map provider and the framed point is sent to a third-party geocoder for a name — both straight from your device. You can turn this off anytime.',
       consentEnable: 'Enable maps',
       mapsNotOffered: 'This server shows no maps.',
       nameOnly: 'Name only — no position',
@@ -366,7 +366,7 @@ const de: typeof en = {
       autoOptInHint: 'aus dem Standort deiner Fotos',
       consentTitle: 'Karten für Orte aktivieren?',
       consentBody:
-        'Um eine Erinnerung auf einer Karte zu platzieren, werden Kacheln von einem Drittanbieter geladen und der eingerahmte Punkt wird für einen Namen an einen Drittanbieter-Geocoder gesendet – beides direkt vom Gerät, nie über den veyq-Server, der blind bleibt. Du kannst das jederzeit deaktivieren.',
+        'Um eine Erinnerung auf einer Karte zu platzieren, werden Kacheln von einem Drittanbieter geladen und der eingerahmte Punkt wird für einen Namen an einen Drittanbieter-Geocoder gesendet – beides direkt von deinem Gerät. Du kannst das jederzeit deaktivieren.',
       consentEnable: 'Karten aktivieren',
       mapsNotOffered: 'Dieser Server zeigt keine Karten.',
       nameOnly: 'Nur ein Name – ohne Position',
