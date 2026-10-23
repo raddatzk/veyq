@@ -46,6 +46,7 @@ function fakeBlobStore(window = Number.POSITIVE_INFINITY) {
   const declared: BlobUploadRequestItem[] = []
   const events: string[] = []
   const inFlight = { now: 0, max: 0 }
+  const putAnswers: Response[] = []
   let n = 0
   const putsOf = (uploadId: string, from: number, chunkCount: number): PresignedUrl[] =>
     Array.from({ length: Math.max(0, Math.min(from + window, chunkCount) - from) }, (_, k) => ({ index: from + k, url: `mem://${uploadId}/${from + k}` }))
@@ -79,18 +80,21 @@ function fakeBlobStore(window = Number.POSITIVE_INFINITY) {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
       events.push(`put:${url.split('/').pop()}`)
-      if (new Headers(init.headers).get('Content-Type') !== 'application/octet-stream') return { ok: false, status: 403 } as Response
+      if (new Headers(init.headers).get('Content-Type') !== 'application/octet-stream') return new Response(null, { status: 403 })
       inFlight.max = Math.max(inFlight.max, ++inFlight.now)
       await new Promise((r) => setTimeout(r, 2))
       inFlight.now--
       objects.set(url, new Uint8Array(init.body as Uint8Array))
-      return { ok: true, status: 200 } as Response
+      // What the store answers a PUT: 200 and an empty body.
+      const answer = new Response('', { status: 200, headers: { 'Content-Length': '0' } })
+      putAnswers.push(answer)
+      return answer
     }
     const body = objects.get(url)
     if (!body) return { ok: false, status: 404 } as Response
     return { ok: true, status: 200, arrayBuffer: async () => body.buffer } as unknown as Response
   }))
-  return { declared, events, inFlight, objects }
+  return { declared, events, inFlight, objects, putAnswers }
 }
 
 describe('planBlob', () => {
@@ -132,6 +136,16 @@ describe('reserveAndPump over the authed control plane', () => {
     expect(store.objects.get('mem://up-0/0')!.length).toBe(CHUNK_SIZE + v1.FRAME_OVERHEAD)
     expect(await openBlob(SCOPE_ID, key, plans[0])).toEqual(data)
     expect(await openBlob(SCOPE_ID, key, plans[1])).toEqual(small)
+  })
+
+  it('reads every PUT\'s empty answer to its end, so the browser does not report a stored chunk as an aborted request', async () => {
+    // Chromium cancels the load of an empty body nobody reads and reports the PUT `net::ERR_ABORTED` although the
+    // store answered 200 — 1,163 of 1,176 PUTs of a 50-photo upload in the V1 heavy stage (ADR 0105 § Targets).
+    const store = fakeBlobStore(2)
+    const plan = planBlob(SCOPE_ID, OWNER, v1.randomBytes(32), new Blob([new Uint8Array(3 * CHUNK_SIZE)]))
+    await reserveAndPump([plan], (d) => authedReserve(SCOPE_ID, d), authedWindow(SCOPE_ID))
+    expect(store.putAnswers).toHaveLength(3)
+    expect(store.putAnswers.map((r) => r.bodyUsed)).toEqual([true, true, true])
   })
 
   it('a pre-aborted signal throws AbortError before anything is reserved', async () => {

@@ -201,16 +201,16 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       // A presigned PUT signs `content-type: application/octet-stream`, so the store refuses any other type —
       // and a missing header too (ADR 0013 §6). Modelled here so every upload test in this file proves it.
       if (new Headers(init.headers).get('Content-Type') !== 'application/octet-stream') {
-        return { ok: false, status: 403 } as Response
+        return new Response(null, { status: 403 })
       }
       const index = Number(url.split('/').pop())
       events.push(`put:${index}`)
-      if (forbidden.delete(index)) return { ok: false, status: 403 } as Response
+      if (forbidden.delete(index)) return new Response(null, { status: 403 })
       inFlight.max = Math.max(inFlight.max, ++inFlight.now)
       if (opts.putDelayMs !== undefined) await new Promise((r) => setTimeout(r, opts.putDelayMs))
       inFlight.now--
       objects.set(url, new Uint8Array(init.body as Uint8Array))
-      return { ok: true, status: 200 } as Response
+      return new Response('', { status: 200 }) // the store's answer to a PUT: 200, an empty body
     }
     const body = objects.get(url)
     if (!body) return { ok: false, status: 404 } as Response
