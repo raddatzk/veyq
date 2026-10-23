@@ -14,8 +14,8 @@
 // src/web/'s own (src/web/src/i18n/index.ts and src/web/src/features/depot/i18n.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
-import { createFolder, pickFiles } from '../../src/depot'
-import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { createFolder, downloadButton, pickFiles } from '../../src/depot'
+import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -24,7 +24,7 @@ const folder = `Belege ${stamp}`
 const pdfName = `Mietvertrag ${stamp}.pdf`
 
 let member: Device
-const consoleErrors: string[] = []
+let pageConsole: ConsoleErrors
 
 /** A one-page PDF 1.4 with `line` in Helvetica: the objects, then an xref table whose offsets are counted, not guessed. */
 function onePagePdf(line: string): Uint8Array {
@@ -84,13 +84,12 @@ async function openPdf(page: Page, colorScheme: 'light' | 'dark'): Promise<Locat
 
 test.beforeAll(async ({ browser }) => {
   member = await newDevice(browser)
-  member.page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
-  member.page.on('pageerror', (e) => consoleErrors.push(String(e)))
+  pageConsole = watchConsole(member.page)
 })
 
 test.afterEach(() => {
   member?.confinement.assertConfined()
-  expect(consoleErrors, 'the console is free of errors').toEqual([])
+  expect(pageConsole.errors, 'the console is free of errors').toEqual([])
 })
 
 test.afterAll(async () => {
@@ -103,8 +102,12 @@ test(
   async () => {
     const { page } = member
     await signInOwner(member)
+    pageConsole.clear()
     await createFolder(page, folder)
     await pickFiles(page, [{ name: pdfName, bytes: onePagePdf(`Probe ${stamp}`) }])
+    // Arrived before the page is left: `openPdf` opens a new document, which would cut the upload off mid-way (its
+    // `POST …/nodes` was cut 8–13 ms after the pick in lane L1, 2026-10-23, so the file never existed).
+    await expect(downloadButton(page, pdfName)).toBeEnabled({ timeout: 60_000 })
 
     for (const colorScheme of ['light', 'dark'] as const) {
       const layer = await openPdf(page, colorScheme)
