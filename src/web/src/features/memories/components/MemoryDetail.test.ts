@@ -359,7 +359,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     // switch to the Chapters tab (the gallery is the default tab)
     const chaptersTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().includes(t('memory.chapters')))
     expect(chaptersTab).toBeTruthy()
-    await chaptersTab!.trigger('click')
+    await chaptersTab!.trigger('mousedown') // Reka's tabs switch on the left button's press, not on `click`
     await flushPromises()
 
     // the chapter shows as a MemoryCard (not a chip, cr-0062), open-only (no favorite pin)

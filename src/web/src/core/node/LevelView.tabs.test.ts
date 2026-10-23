@@ -3,7 +3,7 @@
 // the rendered tab buttons, against a stubbed registry (as `LevelView.test.ts`): kinds are made-up tokens, tab labels are real
 // catalog keys. The tabs filter by the KIND's application; the folders are shown in every tab.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../applications/registry').Registry }))
 vi.mock('../applications/registry', async (importOriginal) => {
@@ -39,15 +39,17 @@ const TRIPS = node('Trips', FOLDER_KIND)
 const SUB = node('Sub', FOLDER_KIND, 'Trips')
 
 const PLUGINS = { plugins: [realI18n()] }
-function mountLevel(tree: TreeNode[], guest = false) {
+function mountLevel(tree: TreeNode[], guest = false, attachTo?: HTMLElement) {
   const level = childrenOf(tree, TRIPS.id)
   return mount(LevelView, {
     props: { folder: TRIPS, level, access: guest ? guestAccessOf(ShareRole.Read) : memberAccessOf({}), tree: memberTreeOf(() => tree) },
     global: PLUGINS,
+    attachTo,
   })
 }
 type Level = ReturnType<typeof mountLevel>
 
+// A pointer pick is the `mousedown` of a tab: Reka's tabs switch on the left button's press, not on `click`.
 const tabButtons = (w: Level) => w.findAll('[role="tab"]')
 const tabNamed = (w: Level, label: string) => tabButtons(w).find((b) => b.text() === label)!
 const selected = (w: Level) => tabButtons(w).filter((b) => b.attributes('aria-selected') === 'true').map((b) => b.text())
@@ -84,13 +86,13 @@ describe('LevelView application tabs', () => {
 
   it('a click on an application tab filters the list to that application\'s nodes, keeps the sub-folders and drops the unsupported row', async () => {
     const w = mountLevel(TREE)
-    await tabNamed(w, t(LABEL_B)).trigger('click')
+    await tabNamed(w, t(LABEL_B)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['Sub', 'b1'])
     expect(w.find('.is-unsupported').exists()).toBe(false)
     expect(selected(w)).toEqual([t(LABEL_B)])
-    await tabNamed(w, t(LABEL_A)).trigger('click')
+    await tabNamed(w, t(LABEL_A)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['Sub', 'a1'])
-    await tabNamed(w, t('node.tabAll')).trigger('click')
+    await tabNamed(w, t('node.tabAll')).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['Sub', 'a1', 'b1', 'x1'])
   })
 
@@ -98,14 +100,14 @@ describe('LevelView application tabs', () => {
     const tree = [...TREE, node('Zed', FOLDER_KIND, 'Trips'), node('Mid', FOLDER_KIND, 'Trips')]
     const w = mountLevel(tree)
     for (const label of [t('node.tabAll'), t(LABEL_A), t(LABEL_B)]) {
-      await tabNamed(w, label).trigger('click')
+      await tabNamed(w, label).trigger('mousedown')
       expect(titlesOf(w).slice(0, 3), label).toEqual(['Mid', 'Sub', 'Zed'])
     }
   })
 
   it('persists the selection: a remount shows it, and the preference is in storage', async () => {
     const first = mountLevel(TREE)
-    await tabNamed(first, t(LABEL_B)).trigger('click')
+    await tabNamed(first, t(LABEL_B)).trigger('mousedown')
     expect(localStorage.getItem(levelTabStorageKey()!)).toBe('BETA')
     first.unmount()
     const second = mountLevel(TREE)
@@ -150,19 +152,28 @@ describe('LevelView application tabs', () => {
   })
 
   it('moves between tabs with the arrow keys (roving tabindex) and selects with Enter', async () => {
-    const w = mountLevel(TREE)
+    // attached, so focus moves for real: the bar is ONE tab stop, and tabbing into it lands on the picked tab
+    const w = mountLevel(TREE, false, document.body)
     const all = tabNamed(w, t('node.tabAll'))
+    const list = w.find('[role="tablist"]')
+    await flushPromises() // the bar counts its tabs as they mount
+    expect(list.attributes('tabindex')).toBe('0')
+    await list.trigger('focus')
+    expect(document.activeElement).toBe(all.element)
     expect(all.attributes('tabindex')).toBe('0')
     expect(tabNamed(w, t(LABEL_A)).attributes('tabindex')).toBe('-1')
     await all.trigger('keydown', { code: 'ArrowRight', key: 'ArrowRight' })
+    await flushPromises()
+    expect(document.activeElement).toBe(tabNamed(w, t(LABEL_A)).element)
     await tabNamed(w, t(LABEL_A)).trigger('keydown', { code: 'Enter', key: 'Enter' })
     expect(titlesOf(w)).toEqual(['Sub', 'a1'])
+    w.unmount()
   })
 
   it('a guest gets the same bar and the same filter (share = member view)', async () => {
     const w = mountLevel(TREE, true)
     expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
-    await tabNamed(w, t(LABEL_A)).trigger('click')
+    await tabNamed(w, t(LABEL_A)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['Sub', 'a1'])
   })
 
@@ -174,7 +185,7 @@ describe('LevelView application tabs', () => {
     holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('p1', 'ALPHA_PART', 'Trips'), node('b1', 'BETA', 'Trips')])
     expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
-    await tabNamed(w, t(LABEL_A)).trigger('click')
+    await tabNamed(w, t(LABEL_A)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['a1', 'p1'])
   })
 
@@ -192,7 +203,7 @@ describe('LevelView application tabs', () => {
     holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel(TREE)
     expect(w.findAll('.view-mode-button')).toHaveLength(3)
-    await tabNamed(w, t(LABEL_B)).trigger('click')
+    await tabNamed(w, t(LABEL_B)).trigger('mousedown')
     expect(w.findAll('.view-mode-button')).toHaveLength(2)
   })
 })
@@ -209,7 +220,7 @@ describe('LevelView application tabs: the level action does not depend on the ta
     })
     holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')])
-    await tabNamed(w, t(LABEL_B)).trigger('click')
+    await tabNamed(w, t(LABEL_B)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['b1'])
     const items = await openNewMenu(w)
     expect(isDisabled(items.find((i) => i.textContent?.trim() === t('node.rename'))!), 'enabled while the other application\'s tab is shown').toBe(false)
@@ -232,12 +243,12 @@ describe('LevelView application tabs: an empty tab', () => {
     })
     const w = mountLevel([TRIPS, SUB])
     expect(tabButtons(w)).toHaveLength(3) // the viewer may add to both, so both tabs are offered although empty
-    await tabNamed(w, t(LABEL_A)).trigger('click')
+    await tabNamed(w, t(LABEL_A)).trigger('mousedown')
     expect(w.find('.veyq-empty').text()).toBe(t('memory.memoryEmpty'))
     expect(titlesOf(w)).toEqual(['Sub'])
-    await tabNamed(w, t(LABEL_B)).trigger('click')
+    await tabNamed(w, t(LABEL_B)).trigger('mousedown')
     expect(w.find('.veyq-empty').text()).toBe(t('node.tabEmpty'))
-    await tabNamed(w, t('node.tabAll')).trigger('click')
+    await tabNamed(w, t('node.tabAll')).trigger('mousedown')
     expect(w.find('.veyq-empty').exists(), 'under All the folder is something').toBe(false)
   })
 })

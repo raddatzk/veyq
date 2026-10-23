@@ -97,21 +97,16 @@ div.veyq-node-host
                   path
                   path
                   path
-    div.p-component.p-tabs.veyq-level-tabs.veyq-tabs
-      div.p-tablist.veyq-tabs__bar
-        div.p-tablist-content.p-tablist-viewport
-          div.p-tablist-tab-list.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
-            button.p-tab.p-tab-active.veyq-tab [role="tab"]
-              "All"
-            button.p-tab.veyq-tab [role="tab"]
-              "Memories"
-            button.p-tab.veyq-tab [role="tab"]
-              "Depot"
-            button.p-tab.veyq-tab [role="tab"]
-              "Drop boxes"
-            span.p-tablist-active-bar.veyq-tabs__ink [role="presentation"]
-        button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
-          svg.p-icon
-            path
+    div.veyq-level-tabs.veyq-tabs
+      div.veyq-tabs__bar
+        div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+          button.veyq-tab [role="tab"]
+            "All"
+          button.veyq-tab [role="tab"]
+            "Memories"
+          button.veyq-tab [role="tab"]
+            "Depot"
+          button.veyq-tab [role="tab"]
+            "Drop boxes"
     p.veyq-empty.veyq-empty-inline
       "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files, Upload folder…)."

@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import VeyqTooltip from './VeyqTooltip'
+import VeyqTooltip from './VeyqTooltip.vue'
 
 describe('VeyqTooltip', () => {
   it('renders the wrapped element itself, nothing around it', () => {
