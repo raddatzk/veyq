@@ -85,7 +85,7 @@ class ShareFilesHandler(
      */
     fun complete(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, uploadId: String,
-        expectedBlobId: String?, seen: ClientSeen?,
+        expectedBlobId: String?, nodeEpoch: Int, seen: ClientSeen?,
     ): ShareFileCompleteOutcome {
         // Attaching creates the attachment row, so it spends the per-share upload budget the start spends (ADR 0051).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
@@ -102,7 +102,7 @@ class ShareFilesHandler(
         }
         if (!guestWrites.supports(target.kind)) return ShareFileCompleteOutcome.NotContributable
         if (blocks.contentView(gated.scopeId).nodeBlocked(target.nodeId)) return ShareFileCompleteOutcome.Completed(CompleteFileOutcome.Blocked)
-        val item = DepotUploadCompletion.item(target.nodeId, uploadId, expectedBlobId)
+        val item = DepotUploadCompletion.item(target.nodeId, uploadId, expectedBlobId, nodeEpoch)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
             attached = { fileId -> guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, fileId, null) },

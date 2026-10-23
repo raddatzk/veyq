@@ -74,7 +74,7 @@ class ShareFileCompleteRaceSliceTest {
 
     @Test
     fun aCompletionIntoAFileAMemberMovesOutOfTheSubtreeMeanwhileIsRefused() = raceAgainst("move") { t ->
-        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.file, placementTo(t.away), null, null, null))
+        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.file, placementTo(t.away), null, null, null, null))
     }
 
     @Test
@@ -119,7 +119,7 @@ class ShareFileCompleteRaceSliceTest {
 
     /** The guest's completion into the file, as the completion's answer. */
     private fun complete(t: Tree, uploadId: String): CompleteFileOutcome {
-        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, seen = null)
+        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, nodeEpoch = 0, seen = null)
         return (o as ShareFileCompleteOutcome.Completed).outcome
     }
 

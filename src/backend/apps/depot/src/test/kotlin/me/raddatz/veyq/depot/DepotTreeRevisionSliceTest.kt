@@ -145,7 +145,7 @@ class DepotTreeRevisionSliceTest {
         blob.stage(fakeStore, storageKey(uploadId))
         val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"$expectedField}""")
+            .body("""{"nodeEpoch":0,"uploadId":"$uploadId"$expectedField}""")
             .`when`().post("/api/scopes/$scopeId/files/$file/content").then()
     }
 
@@ -158,7 +158,7 @@ class DepotTreeRevisionSliceTest {
         blob.stage(fakeStore, storageKey(uploadId))
         val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"$expectedField}""")
+            .body("""{"contributorToken":"${link.token}","nodeEpoch":0,"uploadId":"$uploadId"$expectedField}""")
             .`when`().post("/api/shares/${link.shareId}/files/$file/content").then()
     }
 

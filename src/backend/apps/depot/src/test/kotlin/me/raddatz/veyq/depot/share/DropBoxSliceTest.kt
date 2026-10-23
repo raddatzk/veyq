@@ -339,7 +339,7 @@ class DropBoxSliceTest {
         val uploadId = guestStart(link, file, blob).statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
         blob.stage(fakeStore, tx { UploadSessionEntity.findById(uploadId)!!.storageKey })
-        given().contentType(ContentType.JSON).body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"}""")
+        given().contentType(ContentType.JSON).body("""{"contributorToken":"${link.token}","nodeEpoch":0,"uploadId":"$uploadId"}""")
             .`when`().post("/api/shares/${link.shareId}/files/$file/content").then().statusCode(200)
         return file
     }
@@ -351,12 +351,12 @@ class DropBoxSliceTest {
 
     private fun memberCreate(t: Tree, parent: String, kind: String): ValidatableResponse =
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$parent","nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"epoch":0,"wrappedContentKey":"a21lbQ=="}""")
+            .body("""{"parentId":"$parent","parentEpoch":0,"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"epoch":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then()
 
     private fun memberPlace(t: Tree, node: String, to: String, version: Long): ValidatableResponse =
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$to","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
+            .body("""{"parentId":"$to","parentEpoch":0,"encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/$node").then()
 
     private fun share(userId: String, nodeId: String, role: String): ValidatableResponse {

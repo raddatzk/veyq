@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.quota.StorageQuota
+import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
@@ -60,6 +61,28 @@ class ShareFilesSliceTest {
         memberUpload(userId, scopeId, file)
         memberUpload(userId, scopeId, outside)
         return Tree(userId, scopeId, tenantId, folder, file, outside)
+    }
+
+    @Test
+    fun aGuestCompletionStatesTheFileNodesEpochAndARefusalLeavesTheUploadOpen() {
+        // ADR 0109 point 6, a guest's completion as a member's: judged under the node's lock, after the link's.
+        val t = tree()
+        val link = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+        val before = blobOf(t.file)
+        val upload = guestStartStaged(link, t.file)
+        tx {
+            NodeEntity.findById(t.file)!!.epoch = 1
+            ScopeEntity.findById(t.scopeId)!!.currentEpoch = 2
+        }
+
+        completeShare(link, t.file, upload, expected = before, nodeEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
+        completeShare(link, t.file, upload, expected = before, nodeEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        assertEquals(before, blobOf(t.file), "a refused completion replaces nothing")
+        sessionKey(upload) // still open
+
+        tx { NodeEntity.findById(t.file)!!.epoch = 2 }
+        completeShare(link, t.file, upload, expected = before, nodeEpoch = 2).statusCode(200)
+        assertEquals(attachmentIdentity(t.file), identityOf(link))
     }
 
     @Test
@@ -196,7 +219,7 @@ class ShareFilesSliceTest {
 
         // A member's replace moves it back to the member, whose id never reaches the guest either.
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"${memberStart(t.userId, t.scopeId, t.file)}","expectedBlobId":"$guestBlob"}""")
+            .body("""{"nodeEpoch":0,"uploadId":"${memberStart(t.userId, t.scopeId, t.file)}","expectedBlobId":"$guestBlob"}""")
             .`when`().post("/api/scopes/${t.scopeId}/files/${t.file}/content").then().statusCode(200)
         assertEquals(t.userId to null, uploaderOf(t.file), "the member's replace clears the identity")
         memberList(t).body("items.find { it.nodeId == '${t.file}' }.uploaderKey", equalTo("user:${t.userId}"))
@@ -232,7 +255,7 @@ class ShareFilesSliceTest {
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val membersFile = seedNode(scopeId, DepotNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"${memberStart(userId, scopeId, membersFile, meta = MEMBER_META)}"}""")
+            .body("""{"nodeEpoch":0,"uploadId":"${memberStart(userId, scopeId, membersFile, meta = MEMBER_META)}"}""")
             .`when`().post("/api/scopes/$scopeId/files/$membersFile/content").then().statusCode(200)
         val link = GuestTreeShare.seed(userId, scopeId, folder, ShareEntity.READ_WRITE)
         val guestsFile = UUID.randomUUID().toString()
@@ -431,7 +454,7 @@ class ShareFilesSliceTest {
 
     private fun memberUpload(userId: String, scopeId: String, node: String) {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"${memberStart(userId, scopeId, node)}"}""")
+            .body("""{"nodeEpoch":0,"uploadId":"${memberStart(userId, scopeId, node)}"}""")
             .`when`().post("/api/scopes/$scopeId/files/$node/content").then().statusCode(200)
     }
 
@@ -455,11 +478,12 @@ class ShareFilesSliceTest {
 
     private fun completeShare(
         link: GuestTreeShare.Link, node: String, uploadId: String, expected: String? = null, legacyMeta: String? = null,
+        nodeEpoch: Int = 0,
     ): ValidatableResponse {
         // `legacyMeta`: the field the contract dropped (inbox #397), sent anyway to prove nothing reads it.
         val extra = (expected?.let { ""","expectedBlobId":"$it"""" } ?: "") + (legacyMeta?.let { ""","wrappedMeta":"$it"""" } ?: "")
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"$extra}""")
+            .body("""{"contributorToken":"${link.token}","nodeEpoch":$nodeEpoch,"uploadId":"$uploadId"$extra}""")
             .`when`().post("/api/shares/${link.shareId}/files/$node/content").then()
     }
 

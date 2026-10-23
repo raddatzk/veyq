@@ -35,6 +35,10 @@ sealed interface CompleteFileOutcome {
     object NoUpload : CompleteFileOutcome, HttpFailure by httpFailure("upload_not_found", NOT_FOUND)
     /** The session was not started for this node in the role `FILE_CONTENT` (ADR 0072). */
     object UploadMismatch : CompleteFileOutcome, HttpFailure by httpFailure("upload_mismatch", UNPROCESSABLE)
+    /** `nodeEpoch` is not the file node's stored epoch (ADR 0109 point 6) — nothing attached; the caller re-reads. */
+    object StaleEpoch : CompleteFileOutcome, HttpFailure by Failures.staleEpoch
+    /** The file node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing attached; retry. */
+    object RekeyPending : CompleteFileOutcome, HttpFailure by Failures.nodeRekeyPending
     /** The stored chunks failed declare-then-verify; the objects are on the reclaim list. */
     object Budget : CompleteFileOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)
 
@@ -75,14 +79,16 @@ class FilesHandler(
      * Memories' completion, `ModuleCompositionTest.filesCompletionRouteNeverReachesMemoriesCompletion`). Core's attach re-checks the node
      * live and of kind `FILE` under the scope lock; this read only decides which answer a plain mistake gets.
      */
-    fun complete(userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?): CompleteFileOutcome {
+    fun complete(
+        userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?, nodeEpoch: Int,
+    ): CompleteFileOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteFileOutcome.NoScope, CompleteFileOutcome.Suspended, CompleteFileOutcome.Deleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return CompleteFileOutcome.NoNode
         if (node.kind != DepotNodeKinds.FILE) return CompleteFileOutcome.IllegalTarget
         if (blocks.contentView(scopeId).nodeBlocked(nodeId)) return CompleteFileOutcome.Blocked
 
-        val item = DepotUploadCompletion.item(nodeId, uploadId, expectedBlobId)
+        val item = DepotUploadCompletion.item(nodeId, uploadId, expectedBlobId, nodeEpoch)
         val result = completions.complete(scopeId, listOf(item), UploadOpener.Member(userId)).single()
         return completedOutcome(store, scopeId, nodeId, result)
     }
@@ -111,5 +117,7 @@ internal fun completedOutcome(store: FilesStore, scopeId: String, nodeId: String
         "upload_not_found" -> CompleteFileOutcome.NoUpload
         "upload_mismatch" -> CompleteFileOutcome.UploadMismatch
         "budget_exceeded" -> CompleteFileOutcome.Budget
+        DepotUploadCompletion.STALE_EPOCH -> CompleteFileOutcome.StaleEpoch
+        DepotUploadCompletion.NODE_REKEY_PENDING -> CompleteFileOutcome.RekeyPending
         else -> error("DepotUploadCompletion answered a code the Depot contract does not name: ${result.error}")
     }

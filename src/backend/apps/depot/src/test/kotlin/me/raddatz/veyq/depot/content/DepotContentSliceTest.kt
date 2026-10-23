@@ -58,6 +58,25 @@ class DepotContentSliceTest {
     @Inject lateinit var subtreePurge: NodeSubtreePurge
 
     @Test
+    fun aCompletionStatesTheFileNodesEpochAndARefusalLeavesTheUploadOpen() {
+        // ADR 0109 point 6: the content blob's key is wrapped under the file node's key. One upload, three completions on
+        // the same predicate — the refusals attach nothing and keep the session, so the control completes that upload.
+        val (userId, scopeId) = seedMemberScope()
+        val file = seedNode(scopeId, DepotNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val upload = start(userId, scopeId, file, TestBlob.SMALL)
+        epochs(scopeId, file, stored = 1, current = 2) // a rotation the re-key has not brought to the node yet
+
+        complete(userId, scopeId, file, upload, nodeEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
+        complete(userId, scopeId, file, upload, nodeEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        assertNull(attachedBlob(file), "a refused completion attaches nothing")
+        sessionKey(upload) // the session is still open: the refusal rolled its spend back
+
+        epochs(scopeId, file, stored = 2, current = 2) // the re-key reached the node
+        val blobId = complete(userId, scopeId, file, upload, nodeEpoch = 2).statusCode(200).extract().path<String>("blobId")
+        assertEquals(blobId, attachedBlob(file))
+    }
+
+    @Test
     fun aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly() {
         val (userId, scopeId, tenantId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
@@ -228,7 +247,7 @@ class DepotContentSliceTest {
             assertFalse(refused.contains("c2VjcmV0") || refused.contains("uploadId"), "nothing echoed: $refused")
         }
         // control: a well-formed body reaches the handler, which finds no such upload
-        post("""{"uploadId":"${UUID.randomUUID()}"}""").statusCode(404).body("code", equalTo("upload_not_found"))
+        post("""{"nodeEpoch":0,"uploadId":"${UUID.randomUUID()}"}""").statusCode(404).body("code", equalTo("upload_not_found"))
     }
 
     @Test
@@ -410,11 +429,19 @@ class DepotContentSliceTest {
         return uploadId
     }
 
-    private fun complete(userId: String, scopeId: String, node: String, uploadId: String, expected: String? = null): ValidatableResponse {
+    private fun complete(
+        userId: String, scopeId: String, node: String, uploadId: String, expected: String? = null, nodeEpoch: Int = 0,
+    ): ValidatableResponse {
         val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"$expectedField}""")
+            .body("""{"nodeEpoch":$nodeEpoch,"uploadId":"$uploadId"$expectedField}""")
             .`when`().post("/api/scopes/$scopeId/files/$node/content").then()
+    }
+
+    /** The file node's stored epoch and the scope's current one, as a rotation and a re-key leave them (ADR 0109). */
+    private fun epochs(scopeId: String, node: String, stored: Int, current: Int) = QuarkusTransaction.requiringNew().run {
+        NodeEntity.findById(node)!!.epoch = stored
+        ScopeEntity.findById(scopeId)!!.currentEpoch = current
     }
 
     private fun list(userId: String, scopeId: String, parentId: String?): ValidatableResponse {

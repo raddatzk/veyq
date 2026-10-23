@@ -130,14 +130,14 @@ class DepotNodeSliceTest {
     }
 
     private fun create(userId: String, scopeId: String, parent: String?, kind: String): ValidatableResponse {
-        val parentField = parent?.let { "\"parentId\":\"$it\"," } ?: ""
+        val parentField = parent?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{$parentField"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes").then()
     }
 
     private fun place(userId: String, scopeId: String, node: String, to: String?, name: String, version: Long): ValidatableResponse {
-        val parentField = to?.let { "\"parentId\":\"$it\"," } ?: ""
+        val parentField = to?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{$parentField"encryptedName":"$name","slugToken":"${slug()}","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementRevision":$version}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$node").then()

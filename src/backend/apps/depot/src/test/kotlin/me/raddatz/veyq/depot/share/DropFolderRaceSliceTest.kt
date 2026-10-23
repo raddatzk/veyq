@@ -75,7 +75,7 @@ class DropFolderRaceSliceTest {
             val t = tree()
             val folder = (ensure(t.link) as DropFolderOutcome.Folder).folder.nodeId
             val answer = whileUncommitted(
-                change = { assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, folder, placementTo(t.other), null, null, null)) },
+                change = { assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, folder, placementTo(t.other), null, null, null, null)) },
                 overlapping = { GuestTreeShare.create(t.link, folder, DepotNodeKinds.FILE).extract().statusCode() },
             )
             assertEquals(403, answer, "round $round: the guest's create after the move out")

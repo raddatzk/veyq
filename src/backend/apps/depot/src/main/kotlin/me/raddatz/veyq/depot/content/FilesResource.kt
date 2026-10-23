@@ -3,6 +3,7 @@ package me.raddatz.veyq.depot.content
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.depot.generated.api.FilesApi
 import me.raddatz.veyq.depot.generated.model.FileBlobRef
 import me.raddatz.veyq.depot.generated.model.FileCompleteRequest
@@ -37,6 +38,7 @@ class FilesResource(
             handler.complete(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
                 fileCompleteRequest.uploadId.toString(), fileCompleteRequest.expectedBlobId?.toString(),
+                fileCompleteRequest.nodeEpoch.validated(),
             ),
         )
 

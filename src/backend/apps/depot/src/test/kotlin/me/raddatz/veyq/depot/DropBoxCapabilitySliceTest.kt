@@ -88,7 +88,7 @@ class DropBoxCapabilitySliceTest {
         userId: String, scopeId: String, parent: String?, kind: String,
         nodeId: String = UUID.randomUUID().toString(), slug: String = slug(),
     ): ValidatableResponse {
-        val parentField = parent?.let { "\"parentId\":\"$it\"," } ?: ""
+        val parentField = parent?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{$parentField"nodeId":"$nodeId","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes").then()

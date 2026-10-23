@@ -56,7 +56,7 @@ class ShareSwitchGuestGateDepotSliceTest {
         Path("listShareFiles") { id -> given().`when`().get("/api/shares/$id/files") },
         Path("completeShareFile") { id ->
             given().contentType(ContentType.JSON)
-                .body("""{"contributorToken":"$token","uploadId":"${TestIds.uuid()}"}""")
+                .body("""{"contributorToken":"$token","nodeEpoch":0,"uploadId":"${TestIds.uuid()}"}""")
                 .`when`().post("/api/shares/$id/files/$file/content")
         },
         Path("ensureShareDropFolder") { id ->

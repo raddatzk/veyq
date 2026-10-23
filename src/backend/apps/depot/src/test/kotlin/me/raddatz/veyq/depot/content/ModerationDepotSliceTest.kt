@@ -123,7 +123,7 @@ class ModerationDepotSliceTest {
     private fun complete(userId: String, scopeId: String, node: String, uploadId: String, expected: String? = null): ValidatableResponse {
         val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"$expectedField}""")
+            .body("""{"nodeEpoch":0,"uploadId":"$uploadId"$expectedField}""")
             .`when`().post("/api/scopes/$scopeId/files/$node/content").then()
     }
 

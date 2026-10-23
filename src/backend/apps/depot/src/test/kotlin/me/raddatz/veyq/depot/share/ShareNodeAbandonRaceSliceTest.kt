@@ -128,7 +128,7 @@ class ShareNodeAbandonRaceSliceTest {
     }
 
     private fun complete(t: Tree, uploadId: String): CompleteFileOutcome {
-        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, seen = null)
+        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, nodeEpoch = 0, seen = null)
         return (o as ShareFileCompleteOutcome.Completed).outcome
     }
 
