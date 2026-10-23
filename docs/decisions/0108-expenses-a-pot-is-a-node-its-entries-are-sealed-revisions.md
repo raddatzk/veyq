@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); not built, out of V1
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); not built; on the V1 line (owner 2026-10-23)
 - Date: 2026-10-23
 
 ## Context

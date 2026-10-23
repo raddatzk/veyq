@@ -1,6 +1,6 @@
 # Application: Expenses
 
-> **Refined, not built, out of V1.** Shared expense tracking in the shape of Splid, as the third application on the
+> **Refined, not built, on the V1 line** (owner 2026-10-23). Shared expense tracking in the shape of Splid, as the third application on the
 > platform. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what the operator sees — is
 > [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this page is the domain.
 > No use-case exists yet: the first CR writes them.
