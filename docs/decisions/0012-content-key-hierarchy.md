@@ -62,11 +62,13 @@ sharing **cryptographically** enforced:
   child's). Least-privilege is **crypto-enforced**, not server-gated.
 
 **Rotation / revocation.** Removing a share record is instant (server-side, no keys), and it is the whole
-revocation of a link: a `K_node`, like every node key, **never re-keys**
-([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-Decision 4). The one key that rotates is `K_SC`, **forward into a new epoch** — re-wrap the new epoch to the
-remaining members, new scope-root entries seal under it, nothing existing is re-encrypted (the epoch chain,
-[ADR 0024](0024-scope-key-rotation.md)). Already-read content cannot be retracted — a stated limitation.
+revocation of a link: a link never re-keys on its own; a re-issue mints a new one
+([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)). `K_SC` rotates **forward into a new epoch** —
+re-wrap the new epoch to the remaining members (the epoch chain, [ADR 0024](0024-scope-key-rotation.md)) — and every
+rotation **re-keys every node below it**: each `K_node` is replaced, everything sealed under it re-sealed, each
+`K_blob` re-wrapped, no blob re-encrypted ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)). A node
+key never re-keys otherwise. Already-read content, and what existed at the rotation, cannot be retracted — a stated
+limitation.
 
 **Operator-blind, unchanged.** The server stores only ciphertext content + the opaque wraps (each node key under
 its parent's key, share wraps), node ids/parents/kinds/ordering/timestamps, and the blinded slug/dedup tokens. It never

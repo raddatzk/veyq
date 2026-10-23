@@ -30,7 +30,8 @@ Memory, an expense and a file side by side).
    write) and the slug key (`HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`) derive from the parent's content
    key, `K_SC` at the root.
    Whoever holds a folder's key reads every name and opens every key below it. The slug key is stable per parent key
-   below the root; at the scope root it is `K_SC` at the entry's epoch (`tree.ts:87,97`), so uniqueness there holds
+   below the root (between rotations: a rotation's re-key recomputes every token under the new key,
+   [ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)); at the scope root it is `K_SC` at the entry's epoch (`tree.ts:87,97`), so uniqueness there holds
    within an epoch, exactly as today (stated, not fixed).
 3. **Move is O(1).** One request: new parent, the key re-wrapped under the new parent's key, the name re-sealed
    under a field key derived from it, a new slug token. Each node carries a `placement_revision`; move and rename state the revision they were built
@@ -40,16 +41,22 @@ Memory, an expense and a file side by side).
    same parent). Seals bind
    (scope, node, epoch, placement revision) ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 1); parents stay
    unbound (Decision 4) — the new parent's key is the binding.
-4. **No per-node epochs, no root rotation.** A keyed folder, like `K_node`, never re-keys
-   ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context). Revocation stays layer 1:
-   server-side, re-issue never revive. Only `K_SC` rotates. The `epoch` of a node matters only for **entries at the scope root**:
-   they are sealed and re-sealed at the **current** epoch and the server refuses any other (`409 stale_epoch` on
-   create, rename and move whose destination is the root). Off the root an epoch above the current one is refused at
+4. **No per-node epochs; node keys re-key with the scope, never on their own.** A keyed folder, like `K_node`, has
+   no rotation of its own: revoking a link stays layer 1, server-side, re-issue never revive
+   ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)). Only `K_SC` rotates, and every rotation
+   replaces every node key of the scope ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)), so a
+   node's `epoch` is the epoch its key was minted at, and every write sealed under a node's key states it (ADR 0108
+   point 6). At the **scope root** the entries are sealed and re-sealed at the **current** epoch and the server
+   refuses any other (`409 stale_epoch` on create, rename and move whose destination is the root). Off the root an epoch above the current one is refused at
    any destination (`NodesHandler.sealableOffRoot`), a move out of the root stores the epoch it states, and a move
    between non-root parents keeps the stored one.
-5. **Folders inherit the `K_node` residual, accepted for parity.** A former guest or removed member who kept a
-   folder's key reads everything later created under it, and a group-member removal re-keys no folder. Today that
-   reach is one Memory; it widens to a folder subtree. Honest-server revocation is the cut, as ADR 0075 states.
+5. **Folders inherit the `K_node` residual, accepted for parity, up to the next rotation.** A former guest, or a
+   member removed without a rotation (the tenant's routine removal, [ADR 0025](0025-forward-secrecy-policy-per-scope.md)),
+   who kept a folder's key reads everything later created under it until the scope next rotates, which re-keys the
+   folder ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)); a group-member removal rotates, so the
+   removed member's reach ends there, except through a link they could rebuild, until it is re-issued. Honest-server
+   revocation is the cut in between, as ADR 0075 states. Until `changes/cr-scope-rotation-rekeys-nodes.md` lands, no
+   rotation re-keys a node, and the reach lasts (inbox #518).
 6. **Tree operations for a guest are core operations behind `ShareGuestGate`; content operations are the
    application's.** Create, move, rename and delete of nodes carry no application semantics, so core serves them
    (a guest variant of the node operations, authorised by the gate instead of a member session) and checks the
@@ -95,10 +102,12 @@ Memory, an expense and a file side by side).
    back — accepted (owner 2026-10-16): it is a name with nothing behind it that the guest could already rename away, and
    the link rule keeps it from ending anybody's link. `ShareNodeAbandonCoreSliceTest` pins it, so changing it is a
    decision. A guest's create states the epoch it sealed with, and
-   the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
-   scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
-   `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
-   current epoch, which left a name unopenable whenever that differed from the one the guest sealed with).
+   the server checks it as a member's placement off the scope root (a guest never targets the scope root): any epoch
+   but the scope's current one is `409 stale_epoch` and the guest re-reads — the `node-name` and `content-key` seals bind
+   it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen current epoch, which
+   left a name unopenable whenever that differed from the one the guest sealed with). It used to store an epoch below
+   the current one as sent; a node's epoch is now its key's ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md)
+   point 6), and a node born below it would wait for a re-key that already ran.
    A guest's placement states no epoch: the node keeps its own. Finer rights ("not the cover", "not the date") come later through
    a policy seam that asks the application per node and operation, never a role registry in core.
 7. **One key, many wraps.** A Memory inside a shared folder may also be shared alone; its share is another wrap
@@ -195,7 +204,9 @@ its own reasons).
 
 - **Names under `K_SC`, keys per folder.** A folder guest would see keys but no names.
 - **Per-node epoch chains with folder rotation.** Forward secrecy per folder, at the price of an epoch chain on
-  every node and an `O(subtree)` rotation; Memories has never needed it, and parity is the goal.
+  every node and an `O(subtree)` rotation; Memories has never needed it, and parity is the goal. A scope rotation's
+  re-key replaces each node key and re-seals what is under it instead of chaining it
+  ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md) § Alternatives rejected).
 - **A directory kind per application.** Every application would rebuild keyed directories.
 - **A `ROOT` node per scope, or one root node per application** (`MemoriesFolder`, a Depot drive) under the group.
   It would give each application a clean subtree but forbids mixing kinds by topic and needs a migration of every

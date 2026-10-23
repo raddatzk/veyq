@@ -1,0 +1,23 @@
+useCase: uc.spaces.rekey-after-rotation
+feature: spaces
+title: Re-key a space's nodes after a rotation
+status: planned
+# Refined 2026-10-23 (inbox #518, ADR 0108); built by changes/cr-scope-rotation-rekeys-nodes.md, whose phases turn
+# each gap below into refs. The property has several triggers (a group removal, a queued rotation, an account's own
+# personal scope), so it owns its criteria rather than any one trigger's use-case (changes/README.md § coverage).
+acceptanceCriteria:
+  - id: every-node-rekeyed
+    text: After a rotation every live and trashed node of the scope carries the new epoch, a fresh key, and every field that was sealed under its old key re-sealed under the new one; a medium added afterwards to a folder or Memory that existed before opens with no key from before the rotation.
+  - id: blobs-rewrapped-not-reencrypted
+    text: A re-key re-wraps each K_blob and writes or reads no store object.
+  - id: writes-wait-per-node
+    text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a re-keyed node takes writes at once.
+  - id: resumable
+    text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any owner holding it; a queued rotation completes only once no node lags, and reads secured only then.
+  - id: links-follow-and-stay-marked
+    text: A link from before shows what is added after the re-key and stays marked reissueRequired; its re-issue's key does not open what the old recovery copy's key reaches.
+  - id: drop-key-replaced
+    text: A node's drop key is replaced and its guest identities' keys re-sealed to the new public key; an upload after the re-key does not open with the drop private key from before.
+gaps:
+  web: "No re-key exists: a rotation moves K_SC only (scopes.ts commitRotation); built by cr-scope-rotation-rekeys-nodes."
+  backend: "No node row is written by a rotation (ScopesStore.rotate) and no in-place write exists for blob wraps, drop keys, EXIF, share identities or share wraps; built by cr-scope-rotation-rekeys-nodes."

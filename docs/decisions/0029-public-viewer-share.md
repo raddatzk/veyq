@@ -64,8 +64,9 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
      lets the removal, or any owner of the scope on its own, turn off every link of the scope). Re-activation, which transfers ownership to the
      re-activating member, stays for a share no departed member could hold, and is gated like creation: the
      instance capability for the share's role still applies. This deactivation is
-     the **honest-server forward-secrecy layer for a public link**: because `K_node` is stable and never re-keyed
-     (Consequences — *scope rotation does not revoke a share*), a link **cannot be rotated away**, so the
+     the **honest-server forward-secrecy layer for a public link**: a scope rotation re-keys the node and re-wraps
+     the new key under the link's own `K_share`, which any member of before can rebuild from its recovery copy
+     ([ADR 0108](0108-a-scope-rotation-re-keys-every-node-below-it.md) point 4): a link **cannot be rotated away**, so the
      server-side soft-revoke *is* the revocation. It composes with, and is independent of, the scope-key rotation
      that member-removal also triggers for a **group** ([ADR 0024](0024-scope-key-rotation.md)); the **tenant**,
      which revokes by ACL rather than rotation ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), relies on
