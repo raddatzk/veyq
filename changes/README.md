@@ -440,6 +440,27 @@ The bar is judgement, not ceremony: a decision that binds this CR's work, on a s
 ADR it cites for context, and never a second copy of the ADR's reasoning — a pointer, or the sentence stays as
 it is and takes its chances.
 
+### A library swap inventories what the library does unasked, one Defaults row per component
+
+Locators find what *reaches into* a library: its imports, its classes, its variables. They cannot find what the
+library *does on its own* that the screens rely on, and in a swap that is where the work hides.
+cr-own-ui-components-on-reka counted every PrimeVue import, `.p-*` class and `--p-*` read, and still met each of the
+following only in a browser pass or a red test run:
+- the date picker opened on focus on every date field, not only the Memory's;
+- the dialog focused the field marked `autofocus`;
+- a typed date outside min/max was refused;
+- the select showed its placeholder;
+- a `<label>` handed its click to the first labelable element inside it (the new calendar button, which then closed
+  the calendar the focus had just opened);
+- a tab switched on `click`, where Reka switches on the press — 27 tests went red, and one had been asserting an
+  absence on the wrong tab all along.
+
+So a CR that replaces a component library carries, per component, a **Defaults** row measured at refine against the
+running app: where focus goes on open, what opens on focus, what a typed or picked value outside the bounds does,
+what the empty state shows, what a wrapping label does, and which event (press, click, pointer enter) drives it. The
+row is what the new component must keep or what § Decisions lists as changed on purpose — the screens' behaviour is
+the contract, and the old library's defaults were part of it without anyone writing them down.
+
 ### When a CR sorts the code into kinds, every kind gets a locator — including the ones it spares
 
 A sweep-shaped CR almost always opens by classifying: *"three mechanisms exist and only one is wrong"*, *"four
