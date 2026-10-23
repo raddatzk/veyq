@@ -1,8 +1,8 @@
 /* The layer's own look (ADR 0107 decision 4): the components in `shared/ui/` styled on the app's `--app-*` roles, no
-   theme preset and nothing injected at runtime. The measures are the ones the screens had under PrimeVue's Aura
-   preset; every colour is a role `scripts/validate_web_contrast.py` checks in both modes. It loads after the app's
-   sheets (`plugin.ts`, imported after `style.css` in `main.ts`), where PrimeVue's runtime styles sat, so an app rule
-   that adjusts a layer component wins by specificity, as it did. */
+   theme preset and nothing injected at runtime. The measures are the ones the screens had before the layer was our
+   own (Aura's); every colour is a role `scripts/validate_web_contrast.py` checks in both modes. It loads after the
+   app's sheets (`main.ts` imports it after `style.css`), so an app rule that adjusts a layer component wins by
+   specificity, never by order. */
 
 /* ── Icon ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .veyq-icon {

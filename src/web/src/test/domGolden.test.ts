@@ -25,10 +25,10 @@ describe('serializeDom', () => {
     expect(serializeDom(dom('<div class="alpha mid zeta-renamed"></div>'))).not.toBe(a)
   })
 
-  it('keeps role, aria-label, aria-pressed and disabled; drops style, id, data-v-*, PrimeVue markers', () => {
+  it('keeps role, aria-label, aria-pressed and disabled; drops style, id, data-v-*, library markers', () => {
     const line = serializeDom(
       dom(
-        '<button id="pv_id_7" style="color: red" data-v-1a2b3c="" data-pc-name="button" data-p-disabled="false" ' +
+        '<button id="reka-tabs-v-0-trigger-a" style="color: red" data-v-1a2b3c="" data-state="active" data-reka-collection-item="" ' +
           'type="button" role="switch" aria-label="Say &quot;hi&quot;" aria-pressed="true" disabled="disabled"></button>',
       ),
     )

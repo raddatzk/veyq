@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { addApplicationMessages, i18n, SUPPORTED_LOCALES } from './index'
 import { memoriesMessages } from '../features/memories/i18n'
 
-// A list (`primevue.monthNames`, inbox #434) is ONE key: the source reads it whole through `tm`, never by index.
+// A list (inbox #434) is ONE key: the source reads it whole through `tm`, never by index.
 function flatten(o: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(o).flatMap(([k, v]) =>
     v && typeof v === 'object' && !Array.isArray(v) ? flatten(v as Record<string, unknown>, `${prefix}${k}.`) : [`${prefix}${k}`],

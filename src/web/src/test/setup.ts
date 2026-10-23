@@ -1,13 +1,8 @@
-// Vitest global setup. Every mounted component gets the UI layer installed (`shared/ui/plugin`'s test twin): its
-// components work, and `useToast` (cr-0157/ADR 0039) finds the toast channel it injects, without each test having to
-// register it (tests that stub the shared `useToast` composable are unaffected).
-import { config, enableAutoUnmount } from '@vue/test-utils'
+// Vitest global setup.
+import { enableAutoUnmount } from '@vue/test-utils'
 import { beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
-import { uiTestPlugin } from '../shared/ui/plugin'
 import { registerApplicationMessages } from '../applicationMessages'
-
-config.global.plugins.push(uiTestPlugin)
 
 // The applications' strings (inbox #513): core's catalog holds core's namespaces only, and each application's arrive
 // through the composition root's catalog half, as in `main.ts` — for EVERY test file, the node-environment suites too
@@ -35,7 +30,7 @@ beforeAll(async () => {
 
 // Unmount every wrapper after each test. A component left mounted keeps its library timers alive past the file's
 // teardown, and one that lands after vitest has deleted the DOM globals throws an unhandled error that fails the
-// whole run while every test is green (PrimeVue TabList's ink-bar timer did, under load). Unmounting clears the
+// whole run while every test is green (a library tab row's ink-bar timer did, under load). Unmounting clears the
 // refs those timers read, so they return without touching the DOM. Proven by `autoUnmount.test.ts`.
 enableAutoUnmount(afterEach)
 

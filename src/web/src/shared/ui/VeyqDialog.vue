@@ -5,7 +5,7 @@
 // mobile sheet. A dialog does not move: there is no dragging (cr-own-ui-components-on-reka decision 5). The caller's
 // classes, style and attributes land on the dialog box; sheets reach the parts by `veyq-dialog__header`, `__title`,
 // `__header-actions`, `__close` and `__content` (styled in `layer.css`). On opening, focus goes to the field marked
-// `autofocus`, else to the first focusable part (the close button), as the PrimeVue dialog did; `show` fires once it
+// `autofocus`, else to the first focusable part (the close button), as the dialog before the layer did; `show` fires once it
 // is open and focused.
 import { nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'

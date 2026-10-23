@@ -8,8 +8,8 @@
 // Notes on the chosen directives:
 // - script-src 'self': the entry is a hashed same-origin module; the app has NO inline script, NO eval/Function,
 //   and NO WebAssembly (Argon2id is pure-JS @noble), so a strict script-src holds with no unsafe- escapes.
-// - style-src needs 'unsafe-inline': PrimeVue/@primeuix inject runtime <style> tags + the app uses :style
-//   bindings; neither is nonce-able. Style injection is far lower-risk than script, so this is an accepted gap.
+// - style-src needs 'unsafe-inline': the app uses :style bindings, which are not nonce-able (tightening it is
+//   inbox #523). Style injection is far lower-risk than script, so this is an accepted gap.
 // - img-src data: + blob: — favicon SVG / QR data URLs, and decrypted media object URLs. media-src blob: — same.
 // - worker-src 'self': every worker — the Argon2 worker, the media pixel-stage worker, the gallery's listing opener and
 //   pdf.js' — is a same-origin module worker (no blob: worker); `verify:csp` asserts the emitted policy says so.

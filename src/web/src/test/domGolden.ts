@@ -6,7 +6,7 @@
 // that order IS what the user sees.
 //
 // **What it drops, and why it is an allowlist.** Everything else: inline `style`, `id`, Vue's `data-v-*` scope
-// attributes, PrimeVue's generated ids and `data-pc-*`/`data-p-*` markers, comments (`<!--v-if-->`), whitespace-only
+// attributes, a library's generated ids and state markers (Reka's `data-state`, `data-reka-*`), comments (`<!--v-if-->`), whitespace-only
 // text. An allowlist rather than a blocklist, because the next library upgrade adds attributes nobody listed — a
 // blocklist would turn each of them into a snapshot diff nobody can judge, an allowlist ignores them by construction.
 //

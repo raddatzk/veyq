@@ -104,10 +104,6 @@ PAIRS = [
     ("muted text on page background", "var(--app-muted)", "var(--app-bg)", TEXT),
     ("muted text on surface-muted (.veyq-badge)", "var(--app-muted)", "var(--app-surface-muted)", TEXT),
     ("muted text on a hovered row", "var(--app-muted)", "var(--app-hover)", TEXT),
-    # PrimeVue's own muted text (inbox #395), still painted by its overlays (the dialog's close button, a select's
-    # placeholder): Aura's surface-500 `#64748b` was 4.48:1 on the page background, so the block routes it onto --app-muted.
-    ("PrimeVue muted text on page background", "var(--p-text-muted-color)", "var(--app-bg)", TEXT),
-    ("PrimeVue muted text on surface", "var(--p-text-muted-color)", "var(--app-surface)", TEXT),
     ("secondary outlined/text label on page background", "var(--app-muted)", "var(--app-bg)", TEXT),
     ("secondary outlined/text label on its hover", "var(--app-muted)", "var(--app-hover)", TEXT),
     ("accent text / link on surface", "var(--app-accent)", "var(--app-surface)", TEXT),

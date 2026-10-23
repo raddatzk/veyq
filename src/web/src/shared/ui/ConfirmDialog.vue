@@ -3,8 +3,8 @@
 // App.vue beside the toasts, and driven by `shared/state/useConfirm`. It is `DeleteNodeDialog.vue`'s footer
 // verbatim (styleguide § Buttons & dialog actions: one `.veyq-dialog-action-row`, cancel secondary-outlined on
 // the left, the destructive primary a filled `variant="danger"` with an explicit label on the right), which is
-// the whole reason this is an own component rather than PrimeVue's `ConfirmationService`: that service would
-// have to be re-templated through its `#container` slot to reach this same shape anyway.
+// the whole reason this is an own component rather than a library's confirmation service: one would have to be
+// re-templated through its slots to reach this same shape anyway.
 //
 // It renders and answers — it never runs the action. The busy state belongs to the row button that opened it
 // (Decision 5), so there is no `:loading` here and nothing to disable: the dialog is gone before the mutation
