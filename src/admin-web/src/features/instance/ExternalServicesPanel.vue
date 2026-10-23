@@ -8,9 +8,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { clearExternalService, listExternalServices, setExternalService, type InstanceExternalService } from './externalServices'
 import { capabilityError, inLocale, type CapabilityLocale } from './capabilities'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -63,7 +63,7 @@ async function remove(s: InstanceExternalService) {
     header: t('services.removeTitle', { title: title(s) }),
     message: t('services.removeBody'),
     acceptLabel: t('services.remove'),
-    acceptIcon: 'pi pi-times',
+    acceptIcon: 'times',
   })
   if (!accepted) return
   error.value = ''
@@ -91,11 +91,11 @@ async function remove(s: InstanceExternalService) {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('services.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('capabilities.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('services.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('capabilities.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('services.loadFailed') }}</VeyqMessage>
 
       <template v-else>
-        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
         <ul class="service-list">
           <li v-for="s in services" :key="s.id" class="service" :data-id="s.id">
             <div class="service__head">
@@ -106,21 +106,20 @@ async function remove(s: InstanceExternalService) {
               <code class="service__id">{{ s.id }}</code>
             </div>
             <label :for="`service-url-${s.id}`">{{ t('services.url') }}</label>
-            <InputText :id="`service-url-${s.id}`" v-model="urls[s.id]" class="service__url" :disabled="busy !== null" />
+            <VeyqInput :id="`service-url-${s.id}`" v-model="urls[s.id]" class="service__url" :disabled="busy !== null" />
             <template v-if="s.takesAttribution">
               <label :for="`service-attribution-${s.id}`">{{ t('services.attribution') }}</label>
-              <InputText :id="`service-attribution-${s.id}`" v-model="attributions[s.id]" class="service__attribution" :disabled="busy !== null" />
+              <VeyqInput :id="`service-attribution-${s.id}`" v-model="attributions[s.id]" class="service__attribution" :disabled="busy !== null" />
             </template>
             <div class="service__actions">
-              <Button type="button" class="service__save" :label="t('services.save')" icon="pi pi-check" size="small" :loading="busy === s.id" :disabled="busy !== null" @click="save(s)" />
-              <Button
+              <VeyqButton class="service__save" :label="t('services.save')" icon="check" size="small" :loading="busy === s.id" :disabled="busy !== null" @click="save(s)" />
+              <VeyqButton
                 v-if="s.url"
-                type="button"
                 class="service__remove"
                 :label="t('services.remove')"
-                icon="pi pi-times"
-                severity="secondary"
-                outlined
+                icon="times"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 :disabled="busy !== null"
                 @click="remove(s)"

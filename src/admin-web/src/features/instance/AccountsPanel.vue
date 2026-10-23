@@ -12,9 +12,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   addressConfirmed,
   AccountErasureRequester,
@@ -106,8 +106,8 @@ const requestedLine = (row: PendingAccountErasure) =>
         </div>
       </div>
 
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-      <Message v-else-if="notice" severity="success" :closable="false">{{ notice }}</Message>
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+      <VeyqMessage v-else-if="notice" tone="success">{{ notice }}</VeyqMessage>
 
       <form class="veyq-form account-erase" @submit.prevent="erase">
         <ul class="settings-muted account-erase__consequences">
@@ -120,21 +120,21 @@ const requestedLine = (row: PendingAccountErasure) =>
         </ul>
         <label>
           {{ t('accounts.address') }}
-          <InputText v-model="address" class="account-erase__address" type="email" autocomplete="off" spellcheck="false" />
+          <VeyqInput v-model="address" class="account-erase__address" type="email" autocomplete="off" spellcheck="false" />
         </label>
         <label>
           {{ t('accounts.addressAgain') }}
-          <InputText v-model="again" class="account-erase__again" type="email" autocomplete="off" spellcheck="false" />
+          <VeyqInput v-model="again" class="account-erase__again" type="email" autocomplete="off" spellcheck="false" />
         </label>
         <div class="veyq-dialog-action-row">
-          <Button type="submit" :label="t('accounts.erase')" icon="pi pi-user-minus" severity="danger" :loading="busy" :disabled="!armed" />
+          <VeyqButton type="submit" :label="t('accounts.erase')" icon="user-minus" variant="danger" :loading="busy" :disabled="!armed" />
         </div>
       </form>
 
       <h3 class="account-erasures__title">{{ t('accounts.pendingTitle') }}</h3>
       <p v-if="loading" class="settings-muted">{{ t('accounts.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('accounts.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('accounts.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('accounts.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('accounts.loadFailed') }}</VeyqMessage>
       <p v-else-if="!erasures?.length" class="settings-muted">{{ t('accounts.pendingNone') }}</p>
       <ul v-else class="account-erasures">
         <li v-for="row in erasures" :key="row.address" class="account-erasures__row">
@@ -142,7 +142,7 @@ const requestedLine = (row: PendingAccountErasure) =>
             <strong>{{ row.address }}</strong>
             <small class="settings-muted">{{ requestedLine(row) }} · {{ t('accounts.due', { date: at(row.dueAt) }) }}</small>
           </div>
-          <Button type="button" :label="t('accounts.stop')" icon="pi pi-undo" severity="secondary" outlined @click="stop(row)" />
+          <VeyqButton :label="t('accounts.stop')" icon="undo" variant="secondary" appearance="outlined" @click="stop(row)" />
         </li>
       </ul>
     </section>

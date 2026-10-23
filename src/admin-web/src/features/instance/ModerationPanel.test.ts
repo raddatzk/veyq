@@ -46,23 +46,24 @@ import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
-  Message: {
-    props: ['severity', 'closable'],
+  VeyqMessage: {
+    // `closable` typed Boolean: the notice passes it bare, which an untyped prop would read as ''.
+    props: { tone: String, closable: Boolean },
     emits: ['close'],
-    template: '<div class="msg" :data-severity="severity"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
+    template: '<div class="msg" :data-severity="tone"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
   },
-  InputText: {
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Select: {
+  VeyqSelect: {
     props: ['modelValue', 'options'],
     emits: ['update:modelValue'],
     template:
       '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
   },
-  Button: {
+  VeyqButton: {
     props: ['label', 'disabled', 'type'],
     emits: ['click'],
     template: '<button :type="type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',

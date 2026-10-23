@@ -35,15 +35,15 @@ function order(over: Partial<AuthorityOrder> = {}): AuthorityOrder {
 }
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-severity="tone"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input class="input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Select: { props: ['modelValue', 'options'], template: '<select class="select" />' },
-  Textarea: { props: ['modelValue'], template: '<textarea class="textarea" :value="modelValue" />' },
-  Button: {
+  VeyqSelect: { props: ['modelValue', 'options'], template: '<select class="select" />' },
+  VeyqTextarea: { props: ['modelValue'], template: '<textarea class="textarea" :value="modelValue" />' },
+  VeyqButton: {
     props: ['label', 'type'],
     emits: ['click'],
     template: '<button :type="type || \'button\'" :class="$attrs.class" @click="$emit(\'click\', $event)">{{ label }}</button>',

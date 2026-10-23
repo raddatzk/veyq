@@ -8,9 +8,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   DEFAULT_DAYS, getGuestWriteRecord, MAX_DAYS, MIN_DAYS, needsReason, parseRetentionDays, setGuestWriteRecord,
   type InstanceGuestWriteRecord,
@@ -75,22 +75,22 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('guestWriteRecord.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('release.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('guestWriteRecord.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('release.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('guestWriteRecord.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="state">
         <p class="settings-muted switch-hint">{{ t('guestWriteRecord.switchHint') }}</p>
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-        <Message v-else-if="saved" severity="success" :closable="false">{{ t('guestWriteRecord.saved') }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+        <VeyqMessage v-else-if="saved" tone="success">{{ t('guestWriteRecord.saved') }}</VeyqMessage>
         <label>
           <span>{{ t('guestWriteRecord.days', { min: MIN_DAYS, max: MAX_DAYS }) }}</span>
-          <InputText v-model="days" class="retention-days" inputmode="numeric" autocomplete="off" />
+          <VeyqInput v-model="days" class="retention-days" inputmode="numeric" autocomplete="off" />
           <small class="settings-muted">{{ state.chosen ? t('guestWriteRecord.chosen') : t('guestWriteRecord.default', { days: DEFAULT_DAYS }) }}</small>
         </label>
-        <Message v-if="reasonOwed" severity="warn" :closable="false" class="reason-owed">{{ t('guestWriteRecord.reasonOwed') }}</Message>
+        <VeyqMessage v-if="reasonOwed" tone="warn" class="reason-owed">{{ t('guestWriteRecord.reasonOwed') }}</VeyqMessage>
         <p class="settings-muted">{{ t('guestWriteRecord.effect') }}</p>
         <div>
-          <Button type="button" class="retention-save" :label="t('guestWriteRecord.save')" icon="pi pi-check" :loading="saving" @click="save" />
+          <VeyqButton class="retention-save" :label="t('guestWriteRecord.save')" icon="check" :loading="saving" @click="save" />
         </div>
       </template>
     </section>

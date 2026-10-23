@@ -6,11 +6,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { createServerOwner, prepareServerOwner, type PreparedServerOwner } from '../features/setup/setupServer'
 import OperatorDuties from '../features/instance/OperatorDuties.vue'
 import { decodeHttpError } from '../shared/httpError'
@@ -98,35 +98,33 @@ function finish() {
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ informing ? t('setup.dutiesTitle') : secretKey ? t('setup.kitTitle') : t('setup.title') }}</template>
-    <template #content>
+    <template #default>
       <template v-if="!secretKey">
         <p class="veyq-form-copy">{{ t('setup.sub') }}</p>
         <form class="veyq-form" @submit.prevent="submit">
           <label>
             {{ t('common.email') }}
-            <InputText v-model="email" type="email" autocomplete="username" required autofocus />
+            <VeyqInput v-model="email" type="email" autocomplete="username" required autofocus />
           </label>
           <label>
             {{ t('common.password') }}
-            <Password
+            <VeyqPassword
               v-model="password"
               input-id="setup-password"
-              :input-props="{ autocomplete: 'new-password' }"
+              autocomplete="new-password"
               required
-              :feedback="false"
-              toggle-mask
               fluid
               @blur="checkBreaches"
             />
           </label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
           <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="setup" :disabled="busy" />
-          <Button
+          <VeyqButton
             type="submit"
             :label="busy ? t('setup.submitting') : t('setup.submit')"
-            icon="pi pi-server"
+            icon="server"
             :loading="busy"
             :disabled="password.length < MIN_PASSWORD_LENGTH"
           />
@@ -137,11 +135,11 @@ function finish() {
         <EmergencyKitSave :email="kitEmail" :secret-key="secretKey!" v-model="kitReady">
           <p class="veyq-form-copy">{{ t('setup.kitSub') }}</p>
         </EmergencyKitSave>
-        <Button
+        <VeyqButton
           type="button"
           class="setup-kit-continue"
           :label="t('setup.submit')"
-          icon="pi pi-arrow-right"
+          icon="arrow-right"
           :disabled="!kitReady"
           @click="toDuties"
         />
@@ -149,18 +147,18 @@ function finish() {
 
       <template v-else>
         <OperatorDuties />
-        <Button
+        <VeyqButton
           type="button"
           class="setup-create"
           :label="creating ? t('setup.creating') : t('setup.kitProceed')"
-          icon="pi pi-arrow-right"
+          icon="arrow-right"
           :loading="creating"
           :disabled="creating"
           @click="proceed"
         />
       </template>
 
-      <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
     </template>
-  </Card>
+  </VeyqCard>
 </template>

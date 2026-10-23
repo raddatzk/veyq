@@ -120,21 +120,21 @@ const i18n = createI18n({
 })
 
 const stubs = {
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   // `emits` is load-bearing: without it the parent's @click ALSO arrives as a native fallthrough listener, so
   // one trigger runs the handler twice. That was invisible while confirmation was `window.confirm` (both runs
   // got the same answer) and is not once a declined `ask()` is answered only ONCE — the second run would then
   // read the default "yes" and perform the very mutation the case asserts was refused.
   // `disabled` is carried so the delete gate's disarmed state is observable, not only its refused submit.
-  Button: { props: ['label', 'icon', 'ariaLabel', 'disabled'], emits: ['click'], template: '<button :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>' },
-  // `severity` and the close button are carried so the standing statement report's tone and dismissal are observable.
-  Message: {
-    props: ['severity', 'closable'],
+  VeyqButton: { props: ['label', 'icon', 'ariaLabel', 'disabled'], emits: ['click'], template: '<button :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>' },
+  // `tone` and the close button are carried so the standing statement report's tone and dismissal are observable.
+  VeyqMessage: {
+    props: { tone: String, closable: Boolean }, // Boolean: the notice passes a bare `closable`
     emits: ['close'],
-    template: '<div class="msg" :data-severity="severity"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
+    template: '<div class="msg" :data-tone="tone"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
   },
   // a native checkbox, so `setValue` and `disabled` read as on the page; the class falls through onto it
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue', 'disabled', 'inputId'],
     emits: ['update:modelValue'],
     template: '<input type="checkbox" :id="inputId" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
@@ -734,7 +734,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     const w = await suspendOverContent({ statementDelivery: { outcome: 'NOT_ALL_REACHED', notReached: ['a@live.example', 'b@live.example'] } })
     const report = w.find('.statement-delivery')
     expect(report.exists()).toBe(true)
-    expect(report.attributes('data-severity')).toBe('warn')
+    expect(report.attributes('data-tone')).toBe('warn')
     expect(report.find('.statement-delivery__what').text()).toBe('Not mailed to a@live.example, b@live.example')
     expect(report.find('.statement-delivery__ground').text()).toBe('A breach of the terms')
     expect(report.find('.statement-delivery__provision').text()).toBe('Space terms, clause 4')
@@ -773,7 +773,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await submitDelete(w)
     await flushPromises()
     let report = w.find('.statement-delivery')
-    expect(report.attributes('data-severity')).toBe('warn')
+    expect(report.attributes('data-tone')).toBe('warn')
     expect(report.find('.statement-delivery__what').text()).toBe('Cannot say')
     expect(report.find('.statement-delivery__facts').text()).toBe('what was found')
     expect(toastSuccess).not.toHaveBeenCalled()
@@ -788,7 +788,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await submitDelete(second)
     await flushPromises()
     report = second.find('.statement-delivery')
-    expect(report.attributes('data-severity')).toBe('info')
+    expect(report.attributes('data-tone')).toBe('info')
     expect(report.find('.statement-delivery__what').text()).toBe('Nobody to tell')
   })
 

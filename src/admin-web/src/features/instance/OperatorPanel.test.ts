@@ -18,26 +18,31 @@ import { confirmOperatorNotification, getOperator, setOperator, type InstanceOpe
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
+const selectStub = {
+  props: ['modelValue', 'options'],
+  emits: ['update:modelValue'],
+  template:
+    '<select class="select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
+}
+
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-severity="tone"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Textarea: {
+  VeyqTextarea: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<textarea :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  // Honours option-value / option-label as PrimeVue does, so a panel that sent the label would send it here too.
-  Select: {
-    props: ['modelValue', 'options', 'optionValue', 'optionLabel'],
-    emits: ['update:modelValue'],
-    template:
-      '<select class="select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o[optionValue]" :value="o[optionValue]">{{ o[optionLabel] }}</option></select>',
-  },
-  Button: {
+  // Each option carries its value and shows its label, as the layer's select does, so a panel that sent the label
+  // would send it here too.
+  VeyqSelect: selectStub,
+  // The country field, for the cases that only need a country set; the case about the country itself drives the real one.
+  VeyqCombobox: selectStub,
+  VeyqButton: {
     props: ['label', 'disabled', 'type'],
     emits: ['click'],
     template: '<button :type="type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
@@ -54,9 +59,13 @@ function operator(over: Partial<InstanceOperator> = {}): InstanceOperator {
 }
 
 
-async function mountPanel() {
+async function mountPanel({ realCombobox = false } = {}) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
-  const wrapper = mount(OperatorPanel, { global: { plugins: [router, i18n], stubs } })
+  const { VeyqCombobox: _stubbed, ...withoutCombobox } = stubs
+  // The real combobox portals its list to document.body, so it is mounted there and its options are read from it.
+  const wrapper = realCombobox
+    ? mount(OperatorPanel, { attachTo: document.body, global: { plugins: [router, i18n], stubs: withoutCombobox } })
+    : mount(OperatorPanel, { global: { plugins: [router, i18n], stubs } })
   await flushPromises()
   return wrapper
 }
@@ -142,23 +151,34 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
     i18n.global.locale.value = 'de'
     vi.mocked(getOperator).mockResolvedValue(operator())
     vi.mocked(setOperator).mockImplementation(async (u) => operator({ recipients: u.recipients ?? [] }))
-    const w = await mountPanel()
+    const w = await mountPanel({ realCombobox: true })
     await w.find('.operator-add-recipient').trigger('click')
     const row = w.find('[data-testid="operator-recipient"]')
-    const names = row.findAll('.operator-recipient__country option').map((o) => o.text())
+    const country = row.find('.operator-recipient__country .veyq-combobox__input')
+    const shown = () => [...document.querySelectorAll('.veyq-combobox__list .veyq-select__option')]
+    // the whole list, opened from the field
+    await row.find('.operator-recipient__country .veyq-combobox__trigger').trigger('click')
+    await flushPromises()
+    const names = shown().map((o) => o.textContent?.trim())
     expect(names).toContain('Deutschland')
     expect(names).not.toContain('Germany') // the German console names it in German
+    // typing narrows it to the names that match
+    ;(country.element as HTMLInputElement).value = 'deutsch'
+    await country.trigger('input')
+    await flushPromises()
+    expect(shown().map((o) => o.textContent?.trim())).toEqual(['Deutschland'])
     await row.find('.operator-recipient__name').setValue('Example Hosting GmbH')
     await row.find('.operator-recipient__kind').setValue('HOSTING')
     // pick the option the reader sees as "Deutschland": whatever value it carries is what goes out
-    const picked = row.findAll('.operator-recipient__country option').find((o) => o.text() === 'Deutschland')!
-    await row.find('.operator-recipient__country').setValue((picked.element as HTMLOptionElement).value)
+    ;(shown().find((o) => o.textContent?.trim() === 'Deutschland') as HTMLElement).click()
+    await flushPromises()
     await w.find('.operator-save').trigger('click')
     await flushPromises()
     expect(vi.mocked(setOperator).mock.lastCall![0].recipients)
       .toEqual([{ name: 'Example Hosting GmbH', kind: 'HOSTING', description: null, country: 'DE' }])
     // the saved code reads back as the same choice
-    expect((w.find('.operator-recipient__country').element as HTMLSelectElement).value).toBe('DE')
+    expect((row.find('.operator-recipient__country .veyq-combobox__input').element as HTMLInputElement).value).toBe('Deutschland')
+    w.unmount()
   })
 
   it('what a recipient does is a kind from the list; only Other asks for words, and only Other sends them', async () => {

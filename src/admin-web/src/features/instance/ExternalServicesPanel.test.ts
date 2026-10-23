@@ -14,9 +14,9 @@ import ExternalServicesPanel from './ExternalServicesPanel.vue'
 import { clearExternalService, listExternalServices, setExternalService, type InstanceExternalService } from './externalServices'
 
 const stubs = {
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Button: { props: ['label', 'disabled'], emits: ['click'], template: '<button type="button" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
-  InputText: {
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: { props: ['label', 'disabled'], emits: ['click'], template: '<button type="button" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',

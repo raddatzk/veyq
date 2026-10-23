@@ -16,11 +16,11 @@ import { clearTokens, session, setTokens } from '../app/session'
 import { httpError } from '../test/httpError'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  Button: true,
-  InputText: true,
-  Password: true,
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
+  VeyqButton: true,
+  VeyqInput: true,
+  VeyqPassword: true,
 }
 
 function mountLogin() {
@@ -52,13 +52,13 @@ describe('a 401 the rotation could not cure (inbox #449)', () => {
     await flushPromises()
 
     const shown = mountLogin()
-    expect(shown.find('.msg[data-severity="warn"]').text()).toBe(
+    expect(shown.find('.msg[data-tone="warn"]').text()).toBe(
       'Your session has ended. Sign in again — what you just did was not applied.',
     )
     shown.unmount()
 
     const again = mountLogin()
-    expect(again.find('.msg[data-severity="warn"]').exists()).toBe(false)
+    expect(again.find('.msg[data-tone="warn"]').exists()).toBe(false)
   })
 
   it('leaves everything alone for any other failure', async () => {

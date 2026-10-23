@@ -15,7 +15,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { getInstanceRelease } from './release'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { handle401 } from '../../shared/handle401'
@@ -44,8 +44,8 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('release.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('release.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('release.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('release.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('release.loadFailed') }}</VeyqMessage>
 
       <template v-else>
         <!-- A published build: the version, stated plainly. It is the string an operator pins and rolls back to,
@@ -55,7 +55,7 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
           <strong class="release-value">{{ release }}</strong>
         </div>
         <!-- A1 — absence is a first-class answer, not an empty field. -->
-        <Message v-else severity="warn" :closable="false">{{ t('release.unstamped') }}</Message>
+        <VeyqMessage v-else tone="warn">{{ t('release.unstamped') }}</VeyqMessage>
       </template>
     </section>
   </section>

@@ -1,15 +1,12 @@
 import { createApp } from 'vue'
-import PrimeVue from 'primevue/config'
-import ToastService from 'primevue/toastservice'
-import Aura from '@primeuix/themes/aura'
 import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import { boot } from './app/boot'
 import { initializeTheme } from './shared/state/systemTheme'
-import { syncPrimeVueLocale } from './app/primeVueLocale'
 import './style.css'
-import 'primeicons/primeicons.css'
+// The UI layer's own sheet (ADR 0107), after the console's: a sheet that styles a layer part compounds with its class.
+import './shared/ui/layer.css'
 
 async function bootstrap() {
   // Follow the OS colour scheme before the first paint — applied after mount it is a flash of the wrong mode.
@@ -19,11 +16,8 @@ async function bootstrap() {
   await boot()
 
   const app = createApp(App)
-    .use(PrimeVue, { theme: { preset: Aura, options: { darkModeSelector: '.veyq-dark' } } })
-    .use(ToastService)
     .use(i18n)
     .use(router)
-  syncPrimeVueLocale(app)
 
   router.isReady().then(() => app.mount('#app'))
 }

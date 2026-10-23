@@ -35,7 +35,7 @@ export default defineConfig(({ command }) => ({
     },
   ],
   test: {
-    // Provide the PrimeVue toast service to every mounted component — see src/test/setup.ts.
+    // The network net for every test — see src/test/setup.ts.
     setupFiles: ['./src/test/setup.ts'],
   },
   build: {

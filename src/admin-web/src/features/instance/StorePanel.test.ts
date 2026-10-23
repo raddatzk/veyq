@@ -33,18 +33,18 @@ import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  Select: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-severity="tone"><slot /></div>' },
+  VeyqSelect: {
     props: ['modelValue', 'options', 'disabled'],
     template:
       '<select class="select" :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
   },
-  Button: {
+  VeyqButton: {
     props: ['type', 'label', 'disabled'],
     emits: ['click'], // declared, or the listener also falls through to the native button and fires twice
     template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
   },
-  InputText: {
+  VeyqInput: {
     props: ['modelValue', 'disabled', 'name', 'placeholder'],
     template:
       '<input :name="name" :value="modelValue" :disabled="disabled" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" />',

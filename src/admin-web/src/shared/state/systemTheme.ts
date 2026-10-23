@@ -6,7 +6,7 @@
 // localStorage key and no switcher — only the media query.
 //
 // Both halves of the port are load-bearing. `.veyq-dark` on <html> is what `styles/dark.css` wraps every rule
-// in AND what PrimeVue's `darkModeSelector` keys off (`main.ts`), so without this module both were configured
+// in AND what `base.css`'s dark roles sit under (`:root.veyq-dark`), so without this module both were written
 // and unreachable: the surface stayed light on a dark-preferring OS. The favicon is the same `data:` SVG swap
 // web does — allowed here because `vite.config.ts`'s CSP carries `img-src 'self' data:`, one policy string
 // serving both the dev header and the built <meta>.

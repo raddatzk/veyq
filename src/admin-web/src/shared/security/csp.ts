@@ -2,7 +2,7 @@
 // it ships inside the static build with no server needed (self-hostable by default), and mirrors it onto the dev
 // server as a real header so dev == prod. Strictly tighter than src/web/'s: this app loads NO third-party origin but
 // one — no tiles, no geocoder, no fonts — so `default-src 'self'` needs no escape hatches beyond the two the
-// toolchain forces (inline styles from the PrimeVue theme, and `blob:` for the Emergency Kit PDF the browser
+// toolchain forces (inline styles from the app's :style bindings, and `blob:` for the Emergency Kit PDF the browser
 // hands to the operator to save).
 //
 // frame-ancestors is deliberately ABSENT: a <meta> policy ignores it, so writing it here only reads as a

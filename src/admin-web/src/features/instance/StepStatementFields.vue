@@ -8,7 +8,7 @@
 // effort (`statementMailNotSetUp`): a failed read says nothing, and the step's answer still reports what the mail reached.
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { GROUNDS, type StepStatementDraft } from './stepStatement'
 import { statementMailNotSetUp } from './instanceMail'
 
@@ -24,15 +24,15 @@ onMounted(async () => { noMail.value = await statementMailNotSetUp() })
     <strong>{{ t('moderation.steps.statement.title') }}</strong>
     <p class="settings-muted">{{ t('moderation.steps.statement.copy') }}</p>
     <label :for="`${idPrefix}-ground`">{{ t('moderation.steps.statement.ground') }}</label>
-    <select :id="`${idPrefix}-ground`" v-model="draft.ground" class="p-inputtext step-statement__ground" :disabled="disabled">
+    <select :id="`${idPrefix}-ground`" v-model="draft.ground" class="veyq-input step-statement__ground" :disabled="disabled">
       <option v-for="g in GROUNDS" :key="g" :value="g">{{ t(`moderation.steps.categories.${g}`) }}</option>
     </select>
     <label :for="`${idPrefix}-provision`">{{ t('moderation.steps.statement.provision') }}</label>
-    <input :id="`${idPrefix}-provision`" v-model="draft.provision" type="text" class="p-inputtext step-statement__provision" maxlength="200" :disabled="disabled" />
+    <input :id="`${idPrefix}-provision`" v-model="draft.provision" type="text" class="veyq-input step-statement__provision" maxlength="200" :disabled="disabled" />
     <small class="settings-muted">{{ t('moderation.steps.statement.provisionHint') }}</small>
     <label :for="`${idPrefix}-facts`">{{ t('moderation.steps.statement.facts') }}</label>
-    <textarea :id="`${idPrefix}-facts`" v-model="draft.facts" class="p-inputtext step-statement__facts" rows="4" maxlength="4000" :disabled="disabled" />
+    <textarea :id="`${idPrefix}-facts`" v-model="draft.facts" class="veyq-input step-statement__facts" rows="4" maxlength="4000" :disabled="disabled" />
     <small class="settings-muted">{{ t('moderation.steps.statement.factsHint') }}</small>
-    <Message v-if="noMail" severity="warn" :closable="false" class="step-statement__no-mail">{{ t('moderation.steps.statement.noMail') }}</Message>
+    <VeyqMessage v-if="noMail" tone="warn" class="step-statement__no-mail">{{ t('moderation.steps.statement.noMail') }}</VeyqMessage>
   </div>
 </template>

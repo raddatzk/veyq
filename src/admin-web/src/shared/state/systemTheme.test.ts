@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The theme this surface can actually reach. `darkModeSelector: '.veyq-dark'` and a 467-line `dark.css` were
 // both shipped and both unreachable until this module existed, so the cases below assert the class itself —
-// the one thing PrimeVue and the stylesheet agree on — and never the module's internals.
+// the one thing every stylesheet keys off — and never the module's internals.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { initializeTheme } from './systemTheme'
 

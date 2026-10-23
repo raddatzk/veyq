@@ -25,21 +25,21 @@ import type { PreparedServerOwner } from '../features/setup/setupServer'
 import { httpError } from '../test/httpError'
 import { pwnedCount } from '../shared/pwned'
 
-// PrimeVue's real components need the plugin's config injection, which this file has no reason to install.
+// The layer's components are stubbed to bare elements, so a test drives plain inputs and buttons.
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label', 'loading', 'disabled'], template: '<button class="btn" :disabled="disabled">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label', 'loading', 'disabled'], template: '<button class="btn" :disabled="disabled">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },

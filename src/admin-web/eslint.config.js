@@ -91,6 +91,29 @@ export default defineConfigWithVueTs(
       ],
     },
   },
+  {
+    // The component libraries live behind `src/shared/ui/` (ADR 0107 decision 2): no view, composable or test imports
+    // one, so the next time a library has to go, the change stays in one directory. The console's own block, written
+    // as src/web/'s (which joins its other `no-restricted-imports` blocks; this config has no other). Its limit: an
+    // import the layer re-exports is not seen, and nothing stops the layer from re-exporting a library wholesale
+    // (ADR 0107 decision 3 forbids it; review holds it).
+    name: 'veyq-admin/ui-through-the-layer',
+    files: ['src/**/*.{ts,mts,vue}'],
+    ignores: ['src/shared/ui/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(primevue|@primevue|@primeuix|primeicons|reka-ui|@lucide/vue)(/|$)',
+              message: 'A component library is reached through the layer in src/shared/ui/ (ADR 0107): import its Veyq* component instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Argon2id only through @veyq/crypto/argonWorker — the rule, its exemptions and its limit live with the crypto
   // package (eslint-argon-door.js), written once for the three configs that include it.
   argonThroughTheWorker,

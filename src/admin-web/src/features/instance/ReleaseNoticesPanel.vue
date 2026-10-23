@@ -12,10 +12,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   getReleaseNotices, InstanceReleaseNoticeKindEnum, isUrgent, noticeDay, noticesMailedTo, setReleaseCheck, UPGRADE_PAGE,
   type InstanceReleaseNotice, type InstanceReleaseNotices,
@@ -103,15 +103,15 @@ const others = computed(() => state.value?.notices.filter((n) => !isUrgent(n)) ?
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('releaseCheck.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('release.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('releaseCheck.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('release.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('releaseCheck.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="state">
-        <Message v-for="n in urgent" :key="n.id" severity="error" :closable="false" class="notice notice--urgent">
+        <VeyqMessage v-for="n in urgent" :key="n.id" tone="error" class="notice notice--urgent">
           <strong>{{ t('releaseCheck.urgent') }}</strong> {{ line(n) }}
-        </Message>
+        </VeyqMessage>
 
-        <Message v-if="!state.releaseLine" severity="info" :closable="false">{{ t('releaseCheck.noReleaseLine') }}</Message>
+        <VeyqMessage v-if="!state.releaseLine" tone="info">{{ t('releaseCheck.noReleaseLine') }}</VeyqMessage>
         <ul v-if="others.length" class="notice-list">
           <li v-for="n in others" :key="n.id" class="notice" :data-kind="n.kind">{{ line(n) }}</li>
         </ul>
@@ -119,9 +119,9 @@ const others = computed(() => state.value?.notices.filter((n) => !isUrgent(n)) ?
         <p v-if="state.notices.length" class="settings-muted"><a :href="UPGRADE_PAGE" target="_blank" rel="noopener">{{ t('releaseCheck.upgradeLink') }}</a></p>
 
         <h3>{{ t('releaseCheck.checkTitle') }}</h3>
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
         <div class="check-toggle">
-          <Checkbox v-model="enabled" input-id="release-check-enabled" binary />
+          <VeyqCheckbox v-model="enabled" input-id="release-check-enabled" />
           <label for="release-check-enabled">{{ t('releaseCheck.enabled') }}</label>
         </div>
         <p class="settings-muted check-state">
@@ -131,15 +131,15 @@ const others = computed(() => state.value?.notices.filter((n) => !isUrgent(n)) ?
         </p>
         <p v-if="mailLine" class="settings-muted check-mail" :data-mailed="mailLine.mailed">
           {{ mailLine.text }}
-          <Button v-if="!mailLine.mailed" type="button" link class="check-mail-open" :label="t('releaseCheck.openMail')" @click="emit('openMail')" />
+          <VeyqButton v-if="!mailLine.mailed" appearance="link" class="check-mail-open" :label="t('releaseCheck.openMail')" @click="emit('openMail')" />
         </p>
         <label>
           <span>{{ t('releaseCheck.source') }}</span>
-          <InputText v-model="source" class="check-source" :placeholder="t('releaseCheck.sourcePlaceholder')" autocomplete="off" />
+          <VeyqInput v-model="source" class="check-source" :placeholder="t('releaseCheck.sourcePlaceholder')" autocomplete="off" />
           <small class="settings-muted">{{ t('releaseCheck.sourceHint') }}</small>
         </label>
         <div>
-          <Button type="button" class="check-save" :label="t('releaseCheck.save')" icon="pi pi-check" :loading="saving" @click="save" />
+          <VeyqButton class="check-save" :label="t('releaseCheck.save')" icon="check" :loading="saving" @click="save" />
         </div>
       </template>
     </section>

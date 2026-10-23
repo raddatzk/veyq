@@ -15,10 +15,12 @@
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Select from 'primevue/select'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import type { VeyqIconName } from '../../shared/ui/icons'
 import {
   BUNDLED_STORE_UPDATE,
   checkInstanceStore,
@@ -200,11 +202,11 @@ function discard() {
 const lastCheck = computed<InstanceStoreCheck | null>(() => (pending.value ? pending.value.lastCheck : store.value?.lastCheck) ?? null)
 const busy = computed(() => saving.value || checking.value || discarding.value)
 
-const OUTCOME_ICON = {
-  [InstanceStoreCheckStepOutcomeEnum.Passed]: 'pi pi-check-circle',
-  [InstanceStoreCheckStepOutcomeEnum.Failed]: 'pi pi-times-circle',
-  [InstanceStoreCheckStepOutcomeEnum.Skipped]: 'pi pi-minus-circle',
-} as const
+const OUTCOME_ICON: Record<InstanceStoreCheckStepOutcomeEnum, VeyqIconName> = {
+  [InstanceStoreCheckStepOutcomeEnum.Passed]: 'check-circle',
+  [InstanceStoreCheckStepOutcomeEnum.Failed]: 'times-circle',
+  [InstanceStoreCheckStepOutcomeEnum.Skipped]: 'minus-circle',
+}
 </script>
 
 <template>
@@ -218,60 +220,58 @@ const OUTCOME_ICON = {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('store.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('store.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('store.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('store.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('store.loadFailed') }}</VeyqMessage>
 
       <form v-else-if="store" class="veyq-form" @submit.prevent="save">
-        <Message v-if="unreadable.length" severity="warn" :closable="false" class="store-unreadable">
+        <VeyqMessage v-if="unreadable.length" tone="warn" class="store-unreadable">
           {{ t('store.unreadable', { secrets: unreadableNames }) }}
-        </Message>
-        <Message v-if="fixed" severity="info" :closable="false">{{ t('store.fixed') }}</Message>
-        <Message v-if="pending" severity="warn" :closable="false" class="store-pending">
+        </VeyqMessage>
+        <VeyqMessage v-if="fixed" tone="info">{{ t('store.fixed') }}</VeyqMessage>
+        <VeyqMessage v-if="pending" tone="warn" class="store-pending">
           {{ setting ? t('store.pendingNote') : t('store.pendingFirst') }}
-        </Message>
+        </VeyqMessage>
 
         <label>
           {{ t('store.source') }}
-          <Select
+          <VeyqSelect
             v-model="source"
             :options="sources"
-            option-label="label"
-            option-value="value"
             :disabled="busy || fixed"
             input-id="store-source"
             class="store-source"
           />
         </label>
 
-        <Message v-if="isBundled" severity="secondary" :closable="false">{{ t('store.bundledNote') }}</Message>
+        <VeyqMessage v-if="isBundled" tone="secondary">{{ t('store.bundledNote') }}</VeyqMessage>
 
         <template v-else>
           <label>
             {{ t('store.endpoint') }}
-            <InputText v-model="form.endpoint" autocomplete="off" name="endpoint" :disabled="busy || fixed" />
+            <VeyqInput v-model="form.endpoint" autocomplete="off" name="endpoint" :disabled="busy || fixed" />
             <small class="settings-muted">{{ t('store.endpointHint') }}</small>
           </label>
           <label>
             {{ t('store.publicEndpoint') }}
-            <InputText v-model="form.publicEndpoint" autocomplete="off" name="publicEndpoint" :disabled="busy" />
+            <VeyqInput v-model="form.publicEndpoint" autocomplete="off" name="publicEndpoint" :disabled="busy" />
             <small class="settings-muted">{{ t('store.publicEndpointHint') }}</small>
           </label>
           <label>
             {{ t('store.bucket') }}
-            <InputText v-model="form.bucket" autocomplete="off" name="bucket" :disabled="busy || fixed" />
+            <VeyqInput v-model="form.bucket" autocomplete="off" name="bucket" :disabled="busy || fixed" />
             <small class="settings-muted">{{ isGarage ? t('store.bucketHintGarage') : t('store.bucketHintS3') }}</small>
           </label>
           <label>
             {{ t('store.region') }}
-            <InputText v-model="form.region" autocomplete="off" name="region" :disabled="busy" />
+            <VeyqInput v-model="form.region" autocomplete="off" name="region" :disabled="busy" />
           </label>
           <label>
             {{ t('store.accessKey') }}
-            <InputText v-model="form.accessKey" autocomplete="off" name="accessKey" :disabled="busy" />
+            <VeyqInput v-model="form.accessKey" autocomplete="off" name="accessKey" :disabled="busy" />
           </label>
           <label>
             {{ t('store.secretKey') }}
-            <InputText
+            <VeyqInput
               v-model="form.secretKey"
               type="password"
               autocomplete="new-password"
@@ -285,11 +285,11 @@ const OUTCOME_ICON = {
           <template v-if="isGarage">
             <label>
               {{ t('store.garageAdminEndpoint') }}
-              <InputText v-model="form.garageAdminEndpoint" autocomplete="off" name="garageAdminEndpoint" :disabled="busy" />
+              <VeyqInput v-model="form.garageAdminEndpoint" autocomplete="off" name="garageAdminEndpoint" :disabled="busy" />
             </label>
             <label>
               {{ t('store.garageAdminToken') }}
-              <InputText
+              <VeyqInput
                 v-model="form.garageAdminToken"
                 type="password"
                 autocomplete="new-password"
@@ -302,32 +302,30 @@ const OUTCOME_ICON = {
           </template>
         </template>
 
-        <Message v-if="error" severity="error" :closable="false" class="store-error">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="error" class="store-error">{{ error }}</VeyqMessage>
         <div class="veyq-dialog-action-row">
-          <Button
-            type="button"
+          <VeyqButton
             :label="t('store.check')"
-            icon="pi pi-check-circle"
-            severity="secondary"
-            outlined
+            icon="check-circle"
+            variant="secondary"
+            appearance="outlined"
             :loading="checking"
             :disabled="(!setting && !pending) || saving || discarding"
             class="store-check"
             @click="check"
           />
-          <Button
+          <VeyqButton
             v-if="pending"
-            type="button"
             :label="t('store.discard')"
-            icon="pi pi-undo"
-            severity="secondary"
-            text
+            icon="undo"
+            variant="secondary"
+            appearance="text"
             :loading="discarding"
             :disabled="saving || checking"
             class="store-discard"
             @click="discard"
           />
-          <Button type="submit" :label="t('store.save')" icon="pi pi-save" :loading="saving" :disabled="!canSave || checking || discarding" class="store-save" />
+          <VeyqButton type="submit" :label="t('store.save')" icon="save" :loading="saving" :disabled="!canSave || checking || discarding" class="store-save" />
         </div>
       </form>
     </section>
@@ -336,15 +334,15 @@ const OUTCOME_ICON = {
       <h3>{{ pending ? t('store.checkTitlePending') : t('store.checkTitle') }}</h3>
       <!-- With the hint and nothing saved, the server is about to set the bundled store itself: only the seconds before
            its boot worker adopts it (ADR 0089 decision 3). -->
-      <Message v-if="!setting && !pending" severity="info" :closable="false" class="store-not-set">
+      <VeyqMessage v-if="!setting && !pending" tone="info" class="store-not-set">
         {{ store.bundledAvailable ? t('store.adopting') : t('store.notSet') }}
-      </Message>
+      </VeyqMessage>
       <!-- A first setting has no store in use beside it, so its texts say what a first one means. -->
-      <Message v-else-if="!lastCheck" severity="warn" :closable="false" class="store-unchecked">
+      <VeyqMessage v-else-if="!lastCheck" tone="warn" class="store-unchecked">
         {{ pending ? (setting ? t('store.pendingUnchecked') : t('store.pendingFirstUnchecked')) : t('store.unchecked') }}
-      </Message>
+      </VeyqMessage>
       <template v-else>
-        <Message :severity="lastCheck.passed ? 'success' : 'error'" :closable="false" class="store-verdict">
+        <VeyqMessage :tone="lastCheck.passed ? 'success' : 'error'" class="store-verdict">
           {{
             pending
               ? setting
@@ -354,10 +352,10 @@ const OUTCOME_ICON = {
                 ? t('store.checkPassed')
                 : t('store.checkFailedAt')
           }}
-        </Message>
+        </VeyqMessage>
         <ol class="store-steps">
           <li v-for="s in lastCheck.steps" :key="s.step" :class="`store-step store-step--${s.outcome.toLowerCase()}`" :data-step="s.step">
-            <span :class="OUTCOME_ICON[s.outcome]" aria-hidden="true" />
+            <VeyqIcon :name="OUTCOME_ICON[s.outcome]" />
             <span>
               <strong>{{ t(`store.step.${s.step}`) }}</strong> — {{ t(`store.outcome.${s.outcome}`) }}
               <small v-if="s.detail" class="settings-muted store-step__detail">{{ s.detail }}</small>
@@ -394,13 +392,13 @@ const OUTCOME_ICON = {
 .store-step__detail {
   display: block;
 }
-.store-step--passed .pi {
+.store-step--passed .veyq-icon {
   color: var(--app-success, #2e7d32);
 }
-.store-step--failed .pi {
+.store-step--failed .veyq-icon {
   color: var(--app-danger, #c62828);
 }
-.store-step--skipped .pi {
+.store-step--skipped .veyq-icon {
   color: var(--app-muted);
 }
 </style>

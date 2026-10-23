@@ -18,10 +18,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Select from 'primevue/select'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
 import {
   appointModerator, blockSignIn, declineProposal, getModeration, getModerationSteps, liftSignInBlock, ModeratorState,
   ProposalStep, removeModerator, rotateModerationKey, RotationReason,
@@ -108,7 +108,7 @@ async function remove(m: InstanceModerator) {
     header: t('moderation.removeTitle', { address: m.address }),
     message: t('moderation.removeBody'),
     acceptLabel: t('moderation.remove'),
-    acceptIcon: 'pi pi-user-minus',
+    acceptIcon: 'user-minus',
   })
   if (accepted) await act(() => removeModerator(m.accountId))
 }
@@ -118,7 +118,7 @@ async function rotate() {
     header: t('moderation.rotateTitle'),
     message: t('moderation.rotateBody'),
     acceptLabel: t('moderation.rotate'),
-    acceptIcon: 'pi pi-refresh',
+    acceptIcon: 'refresh',
   })
   if (accepted) await act(() => rotateModerationKey(reason.value, moderation.value ?? undefined))
 }
@@ -200,7 +200,7 @@ async function block(p: OpenModerationProposal) {
     header: t('moderation.steps.blockTitle', { address: p.address }),
     message: t('moderation.steps.blockBody'),
     acceptLabel: t('moderation.steps.block'),
-    acceptIcon: 'pi pi-ban',
+    acceptIcon: 'ban',
   })
   const address = p.address
   if (!accepted) return
@@ -218,7 +218,7 @@ async function decline(p: OpenModerationProposal) {
     header: t('moderation.steps.declineTitle'),
     message: t('moderation.steps.declineBody', { target: targetOf(p) }),
     acceptLabel: t('moderation.steps.decline'),
-    acceptIcon: 'pi pi-times',
+    acceptIcon: 'times',
   })
   if (accepted) await actOnSteps(() => declineProposal(p.id))
 }
@@ -247,22 +247,22 @@ const at = (d: Date) => d.toLocaleString(locale.value)
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('moderation.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('moderation.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('moderation.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('moderation.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('moderation.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="moderation">
-        <Message v-if="error" severity="error" :closable="false" class="mod-error">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="error" class="mod-error">{{ error }}</VeyqMessage>
         <StatementDeliveryNotice v-if="report" :key="report.statement.statementId" :report="report" @dismiss="report = null" />
 
         <template v-if="!moderation.enabled">
-          <Message severity="warn" :closable="false" class="mod-off">{{ t('moderation.off') }}</Message>
+          <VeyqMessage tone="warn" class="mod-off">{{ t('moderation.off') }}</VeyqMessage>
         </template>
 
         <template v-else>
           <template v-if="moderation.rotationDueSince">
-            <Message severity="warn" :closable="false" class="mod-due">{{ t('moderation.rotationDue', { since: dueSince }) }}</Message>
+            <VeyqMessage tone="warn" class="mod-due">{{ t('moderation.rotationDue', { since: dueSince }) }}</VeyqMessage>
             <div>
-              <Button type="button" class="mod-due__rotate" :label="t('moderation.rotate')" icon="pi pi-refresh" :loading="busy" @click="rotate" />
+              <VeyqButton class="mod-due__rotate" :label="t('moderation.rotate')" icon="refresh" :loading="busy" @click="rotate" />
             </div>
           </template>
           <p class="settings-muted mod-epoch">{{ t('moderation.epoch', { epoch: moderation.currentEpoch ?? 0 }) }}</p>
@@ -278,12 +278,11 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                 {{ m.addressConfirmed ? t('moderation.addressConfirmed') : t('moderation.addressUnconfirmed') }}
               </small>
               <div>
-                <Button
-                  type="button"
+                <VeyqButton
                   class="mod-remove"
-                  severity="danger"
-                  text
-                  icon="pi pi-user-minus"
+                  variant="danger"
+                  appearance="text"
+                  icon="user-minus"
                   :label="t('moderation.remove')"
                   :disabled="busy"
                   @click="remove(m)"
@@ -296,11 +295,11 @@ const at = (d: Date) => d.toLocaleString(locale.value)
             <h3>{{ t('moderation.appointTitle') }}</h3>
             <label>
               <span>{{ t('moderation.address') }}</span>
-              <InputText v-model="address" class="mod-address" type="email" autocomplete="off" :disabled="busy" />
+              <VeyqInput v-model="address" class="mod-address" type="email" autocomplete="off" :disabled="busy" />
             </label>
             <small class="settings-muted">{{ t('moderation.appointHint') }}</small>
             <div>
-              <Button type="submit" class="mod-appoint__submit" :label="t('moderation.appoint')" icon="pi pi-user-plus" :disabled="busy || !address.trim()" />
+              <VeyqButton type="submit" class="mod-appoint__submit" :label="t('moderation.appoint')" icon="user-plus" :disabled="busy || !address.trim()" />
             </div>
           </form>
 
@@ -309,17 +308,15 @@ const at = (d: Date) => d.toLocaleString(locale.value)
             <p class="settings-muted">{{ t('moderation.rotateHint') }}</p>
             <label>
               <span>{{ t('moderation.reason') }}</span>
-              <Select
+              <VeyqSelect
                 v-model="reason"
                 :options="reasons"
-                option-label="label"
-                option-value="value"
                 :disabled="busy"
                 class="mod-reason"
               />
             </label>
             <div>
-              <Button type="button" class="mod-rotate__submit" :label="t('moderation.rotate')" icon="pi pi-refresh" :loading="busy" @click="rotate" />
+              <VeyqButton class="mod-rotate__submit" :label="t('moderation.rotate')" icon="refresh" :loading="busy" @click="rotate" />
             </div>
           </div>
         </template>
@@ -340,33 +337,30 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                 <span class="mod-proposal__target">{{ targetOf(p) }}</span>
                 <small class="settings-muted mod-proposal__when">{{ t('moderation.steps.proposedAt', { at: at(p.proposedAt), caseId: p.caseId }) }}</small>
                 <div class="veyq-dialog-action-row">
-                  <Button
+                  <VeyqButton
                     v-if="p.step === ProposalStep.MemberSignIn && p.address"
-                    type="button"
                     class="mod-proposal__block"
-                    severity="danger"
-                    outlined
-                    icon="pi pi-ban"
+                    variant="danger"
+                    appearance="outlined"
+                    icon="ban"
                     :label="t('moderation.steps.block')"
                     :disabled="busy || blocking === p.id"
                     @click="startBlock(p)"
                   />
-                  <Button
+                  <VeyqButton
                     v-else-if="p.step === ProposalStep.TenantOffline && p.tenantId"
-                    type="button"
                     class="mod-proposal__tenant"
-                    outlined
-                    icon="pi pi-server"
+                    appearance="outlined"
+                    icon="server"
                     :label="t('moderation.steps.openTenant')"
                     :disabled="busy"
                     @click="emit('openTenant', p.tenantId)"
                   />
-                  <Button
-                    type="button"
+                  <VeyqButton
                     class="mod-proposal__decline"
-                    severity="secondary"
-                    text
-                    icon="pi pi-times"
+                    variant="secondary"
+                    appearance="text"
+                    icon="times"
                     :label="t('moderation.steps.decline')"
                     :disabled="busy"
                     @click="decline(p)"
@@ -375,16 +369,15 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                 <template v-if="blocking === p.id">
                   <StepStatementFields v-model="draft" :id-prefix="`mod-statement-${p.id}`" :disabled="busy" />
                   <div class="veyq-dialog-action-row">
-                    <Button
-                      type="button"
+                    <VeyqButton
                       class="mod-proposal__send"
-                      severity="danger"
-                      icon="pi pi-ban"
+                      variant="danger"
+                      icon="ban"
                       :label="t('moderation.steps.statement.send')"
                       :loading="busy"
                       @click="block(p)"
                     />
-                    <Button type="button" severity="secondary" text :label="t('moderation.steps.statement.cancel')" :disabled="busy" @click="blocking = null" />
+                    <VeyqButton variant="secondary" appearance="text" :label="t('moderation.steps.statement.cancel')" :disabled="busy" @click="blocking = null" />
                   </div>
                 </template>
               </li>
@@ -405,11 +398,10 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                     : t('moderation.steps.blockedNoCase', { at: at(b.blockedAt) }) }}
                 </small>
                 <div>
-                  <Button
-                    type="button"
+                  <VeyqButton
                     class="mod-block__lift"
-                    text
-                    icon="pi pi-unlock"
+                    appearance="text"
+                    icon="unlock"
                     :label="t('moderation.steps.lift')"
                     :disabled="busy"
                     @click="lift(b)"

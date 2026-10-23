@@ -22,7 +22,7 @@
     color: var(--app-warning-text);
   }
 
-  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
+  .tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:focus-visible {
     outline-color: var(--app-focus);
   }
 }

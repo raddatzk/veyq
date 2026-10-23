@@ -5,8 +5,8 @@
 // contact. Not a toast: it stays until the Server Owner dismisses it.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage, { type VeyqMessageTone } from '../../shared/ui/VeyqMessage.vue'
 import { StatementOutcome, type StatementReport } from './statementDelivery'
 import { copyText } from '../../shared/inviteLink'
 
@@ -15,7 +15,7 @@ const emit = defineEmits<{ dismiss: [] }>()
 const { t } = useI18n()
 
 const outcome = computed(() => props.report.delivery.outcome)
-const severity = computed(() => (outcome.value === StatementOutcome.NobodyToTell ? 'info' : 'warn'))
+const tone = computed<VeyqMessageTone>(() => (outcome.value === StatementOutcome.NobodyToTell ? 'info' : 'warn'))
 const what = computed(() =>
   outcome.value === StatementOutcome.NotAllReached
     ? t('moderation.steps.delivery.notReached', { addresses: props.report.delivery.notReached.join(', ') })
@@ -37,7 +37,7 @@ async function copy() {
 </script>
 
 <template>
-  <Message :severity="severity" :closable="true" class="statement-delivery" :data-outcome="outcome" @close="emit('dismiss')">
+  <VeyqMessage :tone="tone" closable class="statement-delivery" :data-outcome="outcome" @close="emit('dismiss')">
     <div class="statement-delivery__body">
       <p class="statement-delivery__what">{{ what }}</p>
       <dl class="statement-delivery__words">
@@ -53,18 +53,17 @@ async function copy() {
         </template>
       </dl>
       <div>
-        <Button
-          type="button"
+        <VeyqButton
           class="statement-delivery__copy"
           size="small"
-          outlined
-          :icon="copied ? 'pi pi-check' : 'pi pi-copy'"
+          appearance="outlined"
+          :icon="copied ? 'check' : 'copy'"
           :label="copied ? t('moderation.steps.delivery.copied') : t('moderation.steps.delivery.copy')"
           @click="copy"
         />
       </div>
     </div>
-  </Message>
+  </VeyqMessage>
 </template>
 
 <style scoped>

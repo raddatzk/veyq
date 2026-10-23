@@ -16,7 +16,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { getInstanceStoreProvisioning, InstanceStoreProvisioningStateEnum } from './storeProvisioning'
 import type { InstanceStoreProvisioning } from './storeProvisioning'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -58,11 +58,11 @@ const shown = computed(() => (state.value ? RENDER[state.value] : null))
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('store.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('store.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('store.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('store.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('store.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="shown">
-        <Message :severity="shown.severity" :closable="false">{{ t(shown.key) }}</Message>
+        <VeyqMessage :tone="shown.severity">{{ t(shown.key) }}</VeyqMessage>
         <!-- The state code itself, verbatim: it is what an operator quotes in a bug report, and it is the
              string the API answers with. -->
         <p class="settings-muted">
