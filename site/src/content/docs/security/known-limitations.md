@@ -296,6 +296,10 @@ can retract content a recipient already downloaded and decrypted; rotation prote
 - **Layer 2 is a per-scope policy.** Groups rotate on removal; the **tenant** uses layer 1 alone by default and
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
+- **A rotation re-keys no node yet.** It moves `K_SC` only, so what is added inside a folder, Memory or chapter that
+  existed before it seals under node keys the excluded party holds, and with a dump they read it; only a new entry at
+  the scope's root is out of their reach. [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)
+  decides that every rotation re-keys every node below the scope key; it is not built yet.
 - **A scope rotation does not revoke a share.** A shared `K_node` is wrapped independently of the scope key, so links
   are revoked separately ([above](#departed-members-and-the-links-they-could-copy)).
 - **Account-key rotation after a compromise is forward secrecy, not repair.** What was already read stays read.

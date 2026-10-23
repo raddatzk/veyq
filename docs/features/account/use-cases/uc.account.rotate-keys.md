@@ -18,7 +18,10 @@
   Master-Key-sealed blob is re-sealed and the caller's item marks are re-tagged; the Secret-Key proof key is
   unchanged. Self-served scopes sit at a new
   epoch granted to the new identity; every shared scope carries a queued rotation for another owner of it to
-  complete. Every other session is revoked. **What the old identity already read is not retracted.**
+  complete. Every other session is revoked. **What the old identity already read is not retracted.** A new epoch
+  re-keys no node yet ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) decides
+  it, not built): what is added inside a folder, Memory or chapter that existed before still seals under node keys
+  the old identity holds.
 
 ## Main flow
 
@@ -51,7 +54,8 @@
    who ever pinned this account sees **changed**, and every automated wrap to it declines
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
 6. **Re-key what this account can re-key alone.** For each scope where the holder is the only member — the
-   personal scope — the client mints the next epoch, chain-links it and grants it to the **new** identity.
+   personal scope — the client mints the next epoch, chain-links it and grants it to the **new** identity. That moves
+   `K_SC` only; every node keeps its key until ADR 0109's re-key is built.
 7. **Queue what it must not re-key alone.** For every shared scope, a `SCOPE_ROTATION` job is originated, and the
    rotator is excluded from every live rotation job of that scope. It is completed by **another owner** of the
    scope, never by the rotator: a rotator who could drive their own re-grant would let an attacker holding the old
@@ -69,7 +73,8 @@
    *secured* (the rotation landed, or the holder's own grant is already behind, so the old identity holds no grant
    to the current epoch) or *failed* (the job dead-lettered — E3). Until it is *secured*, the old key still reads
    what is new in that space, and for each such scope the holder is outside it until someone there accepts the new
-   key.
+   key. *Secured* reaches the scope's root only: inside a folder, Memory or chapter that existed before, the old key
+   still reads what is added (ADR 0109, not built), and the result screen says so.
 
 ```mermaid
 ---
@@ -169,8 +174,9 @@ sequenceDiagram
 
 ## User impact
 
-If someone got into your account, you can replace your keys so that their device is shut out of everything from then
-on.
+If someone got into your account, you can replace your keys so that their device is signed out and shut out of each
+space's own new key; what is added inside folders and Memories that already existed stays in its reach until node keys
+are replaced too.
 
 ## Related
 
