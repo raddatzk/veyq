@@ -1,7 +1,6 @@
 # ADR 0110 — A node header shows its actions by priority, as many as fit, and the rest in one menu
 
-- Status: Accepted (owner design 2026-10-23, inbox #529), built by `changes/cr-node-header-actions-by-priority.md`; until
-  it lands, what § Context measured holds.
+- Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23).
 - Date: 2026-10-23
 
 ## Context

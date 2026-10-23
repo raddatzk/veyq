@@ -19,7 +19,7 @@
 ## Main flow
 
 1. The reporter selects up to 100 items and chooses **Report**: in a level's selection bar, in a row's or the header's
-   actions, in Memories' lightbox for one medium, or — a guest of an upload link — on the link's page. The client
+   ⋯ menu (never a button there, ADR 0110), in Memories' lightbox for one medium, or — a guest of an upload link — on the link's page. The client
    reads the published key (`getModerationKey`, unauthenticated); while no epoch exists the action is not shown. For
    one node the dialog asks **what is reported**: *it and everything in it*, or *only its name* (A8).
 2. The dialog asks for a **category** (child sexual abuse material, terrorist content, a threat to life or safety, other

@@ -495,7 +495,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
   on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
-  drop box's name, its share and delete; inbox #385 (b)) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
+  drop box's name, its share, and its delete in the header's ⋯ menu; inbox #385 (b), ADR 0110) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names them so too, made safe by core's `archiveName`), opens a folder
