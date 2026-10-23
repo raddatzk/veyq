@@ -181,13 +181,19 @@ here; the server is blind.
   (`ShareView.memory.test.ts` records every export of the cache and the directory). Draw a person with `core/people/PersonAvatar.vue`
   (`:user-id`), never a bare `VeyqAvatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
   `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
-  **One header for every node (inbox #406).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
-  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
-  node's own page), an optional `subtitle` and `meta` slot, and the actions on the right. The application only feeds data: its action list
+  **One header for every node (inbox #406, [ADR 0110](../../docs/decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
+  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button) beside the title (`level` 1 on a
+  node's own page; two lines at most, the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions — at the right
+  end of the title row, on a phone (≤540 px) in a row of their own. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
-  `disabled`, `pressed`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
-  (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four. Core owns the look, the wrap
-  (the title row wraps, so every action is visible at every width), the keyboard (real labelled buttons) and the dark mode (tokens). Core's
+  `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
+  (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four; and its kind's priority, `order` (the
+  ids first as buttons, core's included; an unlisted one follows, never vanishes). **As many as fit are buttons, the rest one ⋯ menu:** core
+  measures the row (on mount and on each resize, `fitHeaderActions` the pure count; unmeasured, as in every unit test, each action that may be a
+  button is one) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
+  a separator, into one `VeyqMenu` (`actionMenuItems`, `core/node/actionMenu.ts`, the entries the level rows share). Delete and report are never
+  buttons. Core owns the look, the fit, the keyboard (real labelled buttons, the layer's menu) and the dark mode (tokens). Tests reach the two
+  halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). Core's
   own actions (the favorite heart of every node, `core/favorites`) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
   merged by `mergeHeaderActions`), gated by a core rights function, with no change to any application.
 

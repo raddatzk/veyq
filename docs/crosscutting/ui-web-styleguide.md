@@ -143,7 +143,10 @@ or a one-off `1rem` label sitting in them.
   `.veyq-create-card` (Memories' chapter card wears it too) and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
   twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid (in Memories' own `memories.css`). Creation lives in the level toolbar's "New" menu
   (`.veyq-new-menu-button`), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
-  (core's `NodeHeader`: leading visual, title, subtitle, actions on the right; tokens only, the icon tile has its dark twin).
+  (core's `NodeHeader`, [ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md): the
+  leading visual beside a name of at most two lines, then subtitle and meta; as many actions as fit are buttons in the kind's
+  priority and the rest one ⋯ menu, delete and report always in it — no action is hidden by a width rule; tokens only, the
+  icon tile has its dark twin).
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.

@@ -19,9 +19,9 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 ## Main flow — name the participants
 
-1. With a Memory open, a member chooses **Participants**, an action button in the header's action bar beside share,
-   rename, move and delete (core's `NodeHeader`, a `NodeHeaderAction` with `pi-users`; owner decision 2026-10-14 —
-   it used to be a link in the line under the title). Its right is `memoryRights` `participants`, true for a
+1. With a Memory open, a member chooses **Participants**, an action of the header beside share, rename and move — a
+   button where the row has room, else an entry of its ⋯ menu (core's `NodeHeader`, a `NodeHeaderAction` with `users`;
+   owner decision 2026-10-14 — it used to be a link in the line under the title; ADR 0110). Its right is `memoryRights` `participants`, true for a
    member only and fail-closed, so a guest gets the same header without it.
 2. The dialog lists the members of the Memory's scope — tenant members for a tenant Memory, group members for a group
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
