@@ -23,6 +23,7 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:argon-worker && npm run verify:media-worker && npm run verify:pdf-worker && npm run verify:listing-worker"
   },
   "dependencies": {
+    "@internationalized/date": "^3.12.4",
     "@lucide/vue": "^1.61.0",
     "@primeuix/themes": "^2.0.3",
     "@veyq/crypto": "*",
