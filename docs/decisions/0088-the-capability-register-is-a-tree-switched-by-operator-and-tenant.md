@@ -137,7 +137,8 @@ core/
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
 *+ depot/                          → node kind FILE, blob role FILE_CONTENT
   *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
-*+ expenses/   [concept]           → its node kind;  *+ public-shares/… inherit
+*+ expenses/   [refined, ADR 0108] → node kind EXPENSES_POT;  *+ public-shares/… inherit
+  *+  exchange-rates               → external (exchange-rate provider), no opt-in; CSP connect-src
 *+ inventory/  [concept]           → its node kinds; *+ public-shares/… inherit; *+ reminders-push inherits core.push
 ```
 

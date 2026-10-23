@@ -42,7 +42,7 @@
 ## Quality notes
 
 - **A share is the member's view with functions removed** (inbox #401): the file's page is one component for a member
-  and a guest; a guest never renames, deletes or shares (no guest page offers any of the three; whether a guest may delete content of its own is inbox #467), and moves a file only where it lies
+  and a guest; a guest never renames, deletes or shares (no guest page offers any of the three; a guest deletes no node that holds anything, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6), and moves a file only where it lies
   in a folder of a folder link, never the link's root.
 - **Operator-blind.** The server sees the file's id, kind, sealed size and the link's role — never a name, a type or a
   key; every seal is bound to the file node (ADR 0072), so a blob listed for another node opens nothing.

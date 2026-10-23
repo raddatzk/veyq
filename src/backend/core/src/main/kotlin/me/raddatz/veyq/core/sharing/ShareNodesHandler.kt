@@ -96,7 +96,7 @@ sealed interface AbandonShareNodeOutcome {
  * subtree, and move or rename one (one placement write). Core's, because they carry no application semantics: behind
  * [ShareGuestGate] instead of a member session, then [NodesHandler]'s principal-free operations with the share's
  * [SubtreeBoundary]. The server checks structure only and opens nothing. **No guest delete of anything that holds
- * something** (whether a guest deletes content of its own is inbox #467's question). What a guest may take back is an
+ * something** (ADR 0080 decision 6, owner 2026-10-17). What a guest may take back is an
  * **empty upload placeholder its own identity named** ([abandon]): the node it created for an upload that was then
  * refused (a full link) or given up, erased at once so nothing of it is kept.
  *

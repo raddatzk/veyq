@@ -66,7 +66,7 @@ only when the user writes. This is the convention the sealed `wrappedMeta` blobs
 application.
 
 **8. No activation step, but an application can be switched off.** Every application is available everywhere
-and created on demand inside a scope: many Memories, many expense groups, one inventory, one file tree per scope.
+and created on demand inside a scope: many Memories, many Expenses Pots, one inventory, one file tree per scope.
 Nobody "turns an application on", so there is no "activated but empty" state. What the operator (for the
 instance) and a tenant owner (for their tenant) can do is switch an application, or one of its functions,
 **off** through the capability register ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)).
