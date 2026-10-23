@@ -1,16 +1,20 @@
 <script setup lang="ts" generic="T extends string | number">
-// A drop-down to pick one of several options (ADR 0107). Each option is `{ label, value }`. The `value` slot draws the
-// picked option in the closed field, the `option` slot each entry of the list; both get `{ option }` (`value` gets
-// `null` while nothing is picked). `inputId` is the control's id, for a `<label for>`. Sheets reach it by
-// `veyq-select`, its list by `veyq-select__list` and an entry by `veyq-select__option`.
+// A drop-down to pick one of several options (ADR 0107), on Reka's Select: the field is a button that opens the list,
+// arrow keys move, typing jumps to an option, Enter picks, Escape closes and focus returns to the field. Each option
+// is `{ label, value }`. The `value` slot draws the picked option in the closed field, the `option` slot each entry of
+// the list; both get `{ option }` (`value` gets `null` while nothing is picked). `inputId` is the field's id, for a
+// `<label for>`. Sheets reach it by `veyq-select`, its list by `veyq-select__list` and an entry by
+// `veyq-select__option` (styled in `layer.css`).
 import { computed } from 'vue'
-import Select from 'primevue/select'
+import { SelectContent, SelectIcon, SelectItem, SelectItemText, SelectPortal, SelectRoot, SelectTrigger, SelectValue, SelectViewport } from 'reka-ui'
+import VeyqIcon from './VeyqIcon.vue'
 
 export interface VeyqSelectOption<V> {
   label: string
   value: V
 }
 
+defineOptions({ inheritAttrs: false })
 const model = defineModel<T | null | undefined>()
 const props = defineProps<{
   options: VeyqSelectOption<T>[]
@@ -24,26 +28,26 @@ defineSlots<{
 }>()
 
 const picked = computed(() => props.options.find((o) => o.value === model.value) ?? null)
-
-const PT = {
-  overlay: { class: 'veyq-select__list' },
-  option: { class: 'veyq-select__option' },
-}
 </script>
 
 <template>
-  <Select
-    v-model="model"
-    class="veyq-select"
-    :options="options"
-    option-label="label"
-    option-value="value"
-    :placeholder="placeholder"
-    :input-id="inputId"
-    :disabled="disabled"
-    :pt="PT"
-  >
-    <template v-if="$slots.value" #value><slot name="value" :option="picked" /></template>
-    <template v-if="$slots.option" #option="{ option }"><slot name="option" :option="option as VeyqSelectOption<T>" /></template>
-  </Select>
+  <SelectRoot :model-value="model ?? undefined" :disabled="disabled" @update:model-value="(v) => (model = v as T)">
+    <SelectTrigger :id="inputId" v-bind="$attrs" class="veyq-select">
+      <span :class="['veyq-select__label', { 'veyq-select__label--placeholder': !picked }]">
+        <slot v-if="$slots.value && picked" name="value" :option="picked" />
+        <SelectValue v-else>{{ picked ? picked.label : placeholder }}</SelectValue>
+      </span>
+      <SelectIcon class="veyq-select__dropdown"><VeyqIcon name="chevron-down" /></SelectIcon>
+    </SelectTrigger>
+    <SelectPortal>
+      <SelectContent class="veyq-select__list" position="popper" :side-offset="2" :collision-padding="8">
+        <SelectViewport class="veyq-select__viewport">
+          <SelectItem v-for="o in options" :key="String(o.value)" :value="o.value" class="veyq-select__option">
+            <slot v-if="$slots.option" name="option" :option="o" />
+            <SelectItemText v-else>{{ o.label }}</SelectItemText>
+          </SelectItem>
+        </SelectViewport>
+      </SelectContent>
+    </SelectPortal>
+  </SelectRoot>
 </template>

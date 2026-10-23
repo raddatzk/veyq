@@ -76,6 +76,7 @@ async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { person
 const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.participants.title', 'memory.banner.add', 'node.rename', 'node.move.action', 'node.delete'] as const
 const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
   HEADER.filter((key) => w.find(`.veyq-node-header-actions button[aria-label="${t(key)}"]`).exists())
+// a tab is picked by `mousedown` below: Reka's tabs switch on the left button's press, not on `click`
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
 const disabled = (w: Awaited<ReturnType<typeof mountDetail>>, selector: string) => w.find(selector).attributes('disabled') !== undefined
 
@@ -89,7 +90,7 @@ describe('MemoryDetail follows rights', () => {
     expect(disabled(w, '.memory-date-chip')).toBe(false)
     expect(disabled(w, '.memory-location-chip')).toBe(false)
     expect(getItemFavorites, 'the marks of this Memory are read').toHaveBeenCalled()
-    await w.findAll('[role="tab"]')[1].trigger('click')
+    await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
     expect(w.find('.memory-create-card-memory').text()).toBe(t('memory.addChapter'))
   })
@@ -206,8 +207,9 @@ describe('MemoryDetail follows rights', () => {
     const w = await mountDetail(memberMemoryRights({ readonly: true }))
     expect(header(w)).toEqual(['share.share', 'share.uploadRequest'])
     expect(disabled(w, '.memory-date-chip')).toBe(true)
-    await w.findAll('[role="tab"]')[1].trigger('click')
+    await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
+    expect(w.find('.memory-card-grid').exists(), 'control: the chapters grid renders').toBe(true)
     expect(w.find('.memory-create-card-memory').exists()).toBe(false)
   })
 
@@ -222,7 +224,7 @@ describe('MemoryDetail follows rights', () => {
 
   it('a chapter offers no "Add chapter" (a chapter lives only directly in a Memory)', async () => {
     const w = await mountDetail(memberMemoryRights({}, CHAPTER_KIND), CHAPTER_KIND)
-    await w.findAll('[role="tab"]')[1].trigger('click')
+    await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
     expect(w.find('.memory-card-grid').exists(), 'control: the chapters grid renders').toBe(true)
     expect(w.find('.memory-create-card-memory').exists()).toBe(false)

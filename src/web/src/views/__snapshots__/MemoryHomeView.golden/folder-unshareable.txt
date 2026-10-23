@@ -96,20 +96,15 @@ div.veyq-node-host
                   path
                   path
                   path
-    div.p-component.p-tabs.veyq-level-tabs.veyq-tabs
-      div.p-tablist.veyq-tabs__bar
-        div.p-tablist-content.p-tablist-viewport
-          div.p-tablist-tab-list.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
-            button.p-tab.p-tab-active.veyq-tab [role="tab"]
-              "All"
-            button.p-tab.veyq-tab [role="tab"]
-              "Memories"
-            button.p-tab.veyq-tab [role="tab"]
-              "Depot"
-            span.p-tablist-active-bar.veyq-tabs__ink [role="presentation"]
-        button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
-          svg.p-icon
-            path
+    div.veyq-level-tabs.veyq-tabs
+      div.veyq-tabs__bar
+        div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+          button.veyq-tab [role="tab"]
+            "All"
+          button.veyq-tab [role="tab"]
+            "Memories"
+          button.veyq-tab [role="tab"]
+            "Depot"
     ul.veyq-level-list
       li.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Rome"]

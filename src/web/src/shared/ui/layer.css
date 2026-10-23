@@ -836,3 +836,498 @@
   font-size: 0.75rem;
   font-weight: 600;
 }
+
+/* ── Dialog ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-dialog__mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: var(--app-scrim);
+}
+
+.veyq-dialog__frame {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.veyq-dialog__frame--bottom {
+  align-items: flex-end;
+}
+
+.veyq-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90%;
+  border: 1px solid var(--app-line);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  pointer-events: auto;
+  outline: 0;
+}
+
+.veyq-dialog--bottom {
+  margin: 1rem;
+}
+
+.veyq-dialog__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.veyq-dialog__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.veyq-dialog__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.veyq-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.veyq-dialog__close:hover {
+  background: var(--app-hover);
+}
+
+.veyq-dialog__close:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-dialog__content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 0 1.25rem 1.25rem;
+}
+
+/* ── Menu ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-menu {
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 12.5rem;
+  padding: 0.25rem;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  outline: 0;
+}
+
+.veyq-menu__item {
+  border-radius: 4px;
+  color: var(--app-control-text);
+  outline: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.veyq-menu__item[data-highlighted],
+.veyq-menu__item[data-state='open'] {
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+}
+
+.veyq-menu__item[data-disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.veyq-menu__item-content {
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.veyq-menu__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.veyq-menu__item-label {
+  line-height: 1;
+}
+
+.veyq-menu__item-icon {
+  color: var(--app-control-line);
+}
+
+.veyq-menu__item[data-highlighted] .veyq-menu__item-icon {
+  color: var(--app-muted);
+}
+
+.veyq-menu__submenu-icon {
+  margin-left: auto;
+  color: var(--app-control-line);
+  font-size: 0.875rem;
+}
+
+.veyq-menu__separator {
+  border-block-start: 1px solid var(--app-line);
+}
+
+/* ── Popover, hover card ──────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-popover,
+.veyq-hover-card {
+  z-index: 1200;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  outline: 0;
+}
+
+.veyq-popover__content {
+  padding: 0.75rem;
+}
+
+/* ── Select ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--app-control-line);
+  border-radius: 6px;
+  background: var(--app-field);
+  color: var(--app-control-text);
+  font-family: inherit;
+  font-size: 1rem;
+  text-align: start;
+  box-shadow: var(--app-shadow-sm);
+  cursor: pointer;
+  outline-color: transparent;
+  transition:
+    border-color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-select:not([data-disabled]):hover {
+  border-color: var(--app-muted);
+}
+
+.veyq-select:focus-visible,
+.veyq-select[data-state='open'] {
+  border-color: var(--app-focus);
+  outline: 0;
+}
+
+.veyq-select[data-disabled] {
+  background: var(--app-surface-muted);
+  color: var(--app-muted);
+  cursor: default;
+}
+
+.veyq-select__label {
+  display: block;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-select__label--placeholder,
+.veyq-select [data-placeholder] {
+  color: var(--app-muted);
+}
+
+.veyq-select__dropdown {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  color: var(--app-control-line);
+}
+
+.veyq-select__list {
+  z-index: 1200;
+  min-width: var(--reka-select-trigger-width);
+  max-height: min(14rem, var(--reka-select-content-available-height));
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.veyq-select__viewport {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.25rem;
+}
+
+.veyq-select__option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  color: var(--app-control-text);
+  cursor: pointer;
+  outline: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.veyq-select__option[data-highlighted] {
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+}
+
+.veyq-select__option[data-state='checked'] {
+  background: var(--app-success-soft);
+  color: var(--app-primary);
+}
+
+.veyq-select__option[data-disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+.veyq-tabs__bar {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+}
+
+.veyq-tabs__list {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  border-style: solid;
+  border-width: 0 0 1px;
+  border-color: var(--app-line);
+  background: var(--app-surface);
+}
+
+.veyq-tab {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 -1px;
+  padding: 1rem 1.125rem;
+  border-style: solid;
+  border-width: 0 0 1px;
+  border-color: var(--app-line);
+  background: transparent;
+  color: var(--app-muted);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  outline-color: transparent;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    outline-color 0.2s;
+}
+
+.veyq-tab:not([aria-selected='true']):not([data-disabled]):hover {
+  color: var(--app-control-text);
+}
+
+.veyq-tab[aria-selected='true'] {
+  border-color: var(--app-line);
+  color: var(--app-primary);
+}
+
+.veyq-tab:focus-visible {
+  z-index: 1;
+  outline: 1px solid var(--app-focus);
+  outline-offset: -1px;
+}
+
+.veyq-tabs__ink {
+  position: absolute;
+  bottom: 0;
+  left: var(--reka-tabs-indicator-position);
+  z-index: 1;
+  display: block;
+  width: var(--reka-tabs-indicator-size);
+  height: 1px;
+  background: var(--app-primary);
+  transition: 250ms cubic-bezier(0.35, 0, 0.25, 1);
+}
+
+.veyq-tab-panels {
+  padding: 0.875rem 1.125rem 1.125rem;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  outline: 0;
+}
+
+.veyq-tab-panel {
+  outline: 0;
+}
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-tooltip {
+  z-index: 1300;
+  max-width: 12.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--app-tooltip);
+  color: var(--app-on-strong);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  font-size: 1rem;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.veyq-tooltip__arrow {
+  fill: var(--app-tooltip);
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-toaster {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  width: 25rem;
+  max-width: calc(100vw - 40px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  outline: 0;
+}
+
+.veyq-toaster--undo {
+  top: auto;
+  right: auto;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.veyq-toast {
+  margin: 0 0 1rem;
+  border: 1px solid var(--veyq-toast-line);
+  border-radius: 6px;
+  background: var(--veyq-toast-bg);
+  color: var(--veyq-toast-text);
+  box-shadow: 0 4px 8px 0 color-mix(in srgb, var(--veyq-toast-text), transparent 96%);
+  backdrop-filter: blur(1.5px);
+}
+
+.veyq-toast--success {
+  --veyq-toast-bg: var(--app-success-soft);
+  --veyq-toast-line: var(--app-success-line);
+  --veyq-toast-text: var(--app-success-text);
+}
+
+.veyq-toast--error {
+  --veyq-toast-bg: var(--app-danger-soft);
+  --veyq-toast-line: var(--app-danger-line);
+  --veyq-toast-text: var(--app-danger);
+}
+
+.veyq-toast--info {
+  --veyq-toast-bg: var(--app-info-soft);
+  --veyq-toast-line: var(--app-info-line);
+  --veyq-toast-text: var(--app-info);
+}
+
+.veyq-toast__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.75rem;
+}
+
+.veyq-toast__icon {
+  flex-shrink: 0;
+  font-size: 1.125rem;
+}
+
+.veyq-toast__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.veyq-toast__summary {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.veyq-toast__close {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.veyq-toast__close:hover {
+  background: color-mix(in srgb, var(--veyq-toast-text), transparent 88%);
+}
+
+.veyq-toast__close:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}

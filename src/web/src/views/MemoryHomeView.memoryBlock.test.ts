@@ -193,7 +193,7 @@ describe('a member with a Memory open, live', () => {
     const listed = store.api.listNodeMedia.mock.calls.length
     expect(listed, 'control: the gallery listed once on open').toBeGreaterThan(0)
     const tabs = () => w.findAll('.memory-tabs [role="tab"]')
-    await tabs()[1].trigger('click') // the member moves off the gallery tab: a reset would take them back
+    await tabs()[1].trigger('mousedown') // the member moves off the gallery tab (a Reka tab switches on the press): a reset would take them back
     await flushPromises()
     expect(tabs()[1].attributes('aria-selected')).toBe('true')
     change([tripsRow, romeRow, otherRow]) // a peer's new folder: the tree is re-read and re-opened

@@ -83,6 +83,7 @@ const checkbox = (w: Level, name: string) => w.find(`input[type="checkbox"][aria
 const checked = (w: Level) =>
   w.findAll('input[type="checkbox"]').filter((c) => (c.element as HTMLInputElement).checked).map((c) => c.attributes('aria-label'))
 const count = (w: Level) => w.find('.veyq-level-selection-count').text()
+// a tab is picked on the left button's press (Reka's tabs switch on `mousedown`, not on `click`)
 const tab = (w: Level, label: string) => w.findAll('[role="tab"]').find((b) => b.text() === label)!
 async function choose(w: Level, ...names: string[]) {
   for (const name of names) await checkbox(w, name).setValue(!(checkbox(w, name).element as HTMLInputElement).checked)
@@ -134,7 +135,7 @@ describe('LevelView: Select', () => {
     const w = mountLevel()
     await startSelecting(w)
     await choose(w, 'a1', 'b1')
-    await tab(w, t(LABEL_A)).trigger('click')
+    await tab(w, t(LABEL_A)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['Sub', 'a1', 'a2'])
     expect(checked(w)).toEqual(['a1'])
     expect(count(w)).toBe(t('node.select.countHidden', { count: 2, hidden: 1 }))
@@ -142,7 +143,7 @@ describe('LevelView: Select', () => {
     expect(count(w)).toBe(t('node.select.countHidden', { count: 4, hidden: 1 }))
     await w.find('.veyq-select-none').trigger('click')
     expect(count(w), 'None leaves the hidden part').toBe(t('node.select.countHidden', { count: 1, hidden: 1 }))
-    await tab(w, t('node.tabAll')).trigger('click')
+    await tab(w, t('node.tabAll')).trigger('mousedown')
     expect(checked(w)).toEqual(['b1'])
     expect(count(w)).toBe(t('node.select.count', { count: 1 }))
   })
@@ -243,7 +244,7 @@ describe('LevelView: what the selection may do', () => {
     const w = mountLevel()
     await startSelecting(w)
     await choose(w, 'b1')
-    await tab(w, t(LABEL_A)).trigger('click')
+    await tab(w, t(LABEL_A)).trigger('mousedown')
     await choose(w, 'a1')
     await w.find('.veyq-select-move').trigger('click')
     expect((w.emitted('moveNodes')![0][0] as TreeNode[]).map((n) => n.id).sort()).toEqual(['a1', 'b1'])

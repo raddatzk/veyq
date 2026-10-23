@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { useViewMode, setViewMode } from '../../shared/state/useViewMode'
 import { effectiveViewMode, type LevelViewOption } from './levelViews'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
-import VeyqTooltip from '../../shared/ui/VeyqTooltip'
+import VeyqTooltip from '../../shared/ui/VeyqTooltip.vue'
 
 const props = defineProps<{ views: readonly LevelViewOption[] }>()
 

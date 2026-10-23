@@ -58,6 +58,12 @@ const en = {
   ui: {
     showPassword: 'Show password',
     hidePassword: 'Hide password',
+    notifications: 'Notifications',
+    chooseDate: 'Choose date',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
+    firstDayOfWeek: '0',
+    dateSegment: { day: 'Day', month: 'Month', year: 'Year', empty: 'Empty' },
   },
   // PrimeVue's own texts (inbox #434): `app/primeVueLocale.ts` writes them into PrimeVue's config, at start and on
   // every language change. Only the keys a component the app renders reads - that file says which and why.
@@ -2040,6 +2046,12 @@ const de: typeof en = {
   ui: {
     showPassword: 'Passwort anzeigen',
     hidePassword: 'Passwort verbergen',
+    notifications: 'Benachrichtigungen',
+    chooseDate: 'Datum wählen',
+    prevMonth: 'Vorheriger Monat',
+    nextMonth: 'Nächster Monat',
+    firstDayOfWeek: '1',
+    dateSegment: { day: 'Tag', month: 'Monat', year: 'Jahr', empty: 'Leer' },
   },
   primevue: {
     passwordPrompt: 'Passwort eingeben',

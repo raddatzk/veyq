@@ -1,9 +1,8 @@
 // The transient-feedback channel's door into the layer (ADR 0039, ADR 0107): `shared/state/useToast` says WHAT to
-// show, this hands it to what draws the toasts (`VeyqToaster`, mounted once in App.vue). Nothing else adds a toast.
-import type { ToastMessageOptions } from 'primevue/toast'
-import { useToast as useLibraryToast } from 'primevue/usetoast'
+// show, this queues it for what draws the toasts (`VeyqToaster`, mounted once in App.vue). Nothing else adds a toast.
+import { reactive } from 'vue'
 
-/** The group whose templated surface in `VeyqToaster` renders the undo action. */
+/** The group whose surface in `VeyqToaster` renders the undo action. */
 export const UNDO_GROUP = 'undo'
 
 export interface ToastEntry {
@@ -15,23 +14,31 @@ export interface ToastEntry {
   onUndo?: () => void
 }
 
+export interface QueuedToast extends ToastEntry {
+  id: number
+}
+
 export interface ToastChannel {
   add: (entry: ToastEntry) => void
   removeUndo: () => void
 }
 
-/** The channel, for the component being set up (it injects the toaster's service). */
+/** What `VeyqToaster` draws, in the order they arrived. */
+export const toastQueue = reactive<QueuedToast[]>([])
+let nextId = 0
+
+/** A toast is gone: closed, timed out or replaced. */
+export function dropToast(id: number): void {
+  const at = toastQueue.findIndex((t) => t.id === id)
+  if (at >= 0) toastQueue.splice(at, 1)
+}
+
+/** The channel. A function, as the library's was, so a caller sets it up once and keeps the handle. */
 export function useToastChannel(): ToastChannel {
-  const toast = useLibraryToast()
-  function add({ severity, summary, life, onUndo }: ToastEntry): void {
-    if (!onUndo) {
-      toast.add({ severity, summary, life })
-      return
-    }
-    // `onUndo` rides along on the message so `VeyqToaster`'s template can wire the action to it; it is not part of
-    // the library's options, and extra keys survive at runtime.
-    const message: ToastMessageOptions & { onUndo: () => void } = { severity, summary, life, group: UNDO_GROUP, closable: false, onUndo }
-    toast.add(message)
+  return {
+    add: (entry) => void toastQueue.push({ ...entry, id: ++nextId }),
+    removeUndo: () => {
+      for (const t of toastQueue.filter((q) => q.onUndo)) dropToast(t.id)
+    },
   }
-  return { add, removeUndo: () => toast.removeGroup(UNDO_GROUP) }
 }

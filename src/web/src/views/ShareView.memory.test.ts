@@ -163,9 +163,9 @@ async function mountPage(h: PublicShareHead) {
 type Page = Awaited<ReturnType<typeof mountPage>>
 const tiles = (w: Page) => w.findAll('[data-media-id]').map((e) => e.attributes('data-media-id')).sort()
 const uploadButton = (w: Page) => w.find(`[aria-label="${t('media.upload')}"]`)
-/** A real click on a rendered element (its default action runs too). */
+/** A real click on a rendered element (its default action runs too): press, release, click - a Reka tab switches on the press. */
 function click(el: Element) {
-  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  for (const type of ['mousedown', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }))
 }
 async function openChapter(w: Page) {
   click(w.findAll('[role="tab"]').find((b) => b.text().startsWith(t('memory.chapters')))!.element)

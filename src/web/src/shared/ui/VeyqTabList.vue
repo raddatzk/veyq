@@ -1,18 +1,15 @@
 <script setup lang="ts">
 // The row of tabs of a `VeyqTabs` (see there). `ariaLabel` names the row for a screen reader.
-import TabList from 'primevue/tablist'
+import { TabsIndicator, TabsList } from 'reka-ui'
 
-const props = defineProps<{ ariaLabel?: string }>()
-
-const PT = {
-  root: { class: 'veyq-tabs__bar' },
-  tabList: { class: 'veyq-tabs__list', 'aria-label': props.ariaLabel },
-  activeBar: { class: 'veyq-tabs__ink' },
-}
+defineProps<{ ariaLabel?: string }>()
 </script>
 
 <template>
-  <TabList :pt="PT">
-    <slot />
-  </TabList>
+  <div class="veyq-tabs__bar">
+    <TabsList class="veyq-tabs__list" :aria-label="ariaLabel">
+      <slot />
+      <TabsIndicator class="veyq-tabs__ink" />
+    </TabsList>
+  </div>
 </template>

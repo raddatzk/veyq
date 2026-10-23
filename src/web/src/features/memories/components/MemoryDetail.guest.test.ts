@@ -183,9 +183,9 @@ function expectGuestOnly(w: Page) {
   expect(loadItemFavoritesFor).not.toHaveBeenCalled()
 }
 
-/** A real click on a rendered element (its default action runs too). */
+/** A real click on a rendered element (its default action runs too): press, release, click - a Reka tab switches on the press. */
 function click(el: Element) {
-  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  for (const type of ['mousedown', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }))
 }
 
 describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () => {

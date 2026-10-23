@@ -87,9 +87,13 @@ PAIRS = [
     ("toggle-group option on its track", "var(--app-muted)", "var(--app-segment-track)", TEXT),
     ("toggle-group picked option", "var(--app-text)", "var(--app-segment-thumb)", TEXT),
     ("avatar initial", "var(--app-control-text)", "var(--app-line)", TEXT),
-    # Still PrimeVue's (the overlays, until they move onto the layer): the routing block in `:root`.
-    *[(f"toast {sev}", f"var(--p-toast-{sev}-color)", f"var(--p-toast-{sev}-background)", TEXT)
-      for sev in ("error", "warn", "success", "info")],
+    ("toast error", "var(--app-danger)", "var(--app-danger-soft)", TEXT),
+    ("toast success", "var(--app-success-text)", "var(--app-success-soft)", TEXT),
+    ("toast info", "var(--app-info)", "var(--app-info-soft)", TEXT),
+    ("tooltip text", "var(--app-on-strong)", "var(--app-tooltip)", TEXT),
+    ("menu / select entry on its highlight", "var(--app-text)", "var(--app-surface-muted)", TEXT),
+    ("picked select option", "var(--app-primary)", "var(--app-success-soft)", TEXT),
+    ("tab label on the tab bar", "var(--app-muted)", "var(--app-surface)", TEXT),
     ("on-fill on accent (badges, share submit)", "var(--app-on-fill)", "var(--app-accent)", TEXT),
     ("on-fill on success (date picker selection)", "var(--app-on-fill)", "var(--app-success)", TEXT),
     ("on-fill on danger (.veyq-dialog-button-danger)", "var(--app-on-fill)", "var(--app-danger)", TEXT),

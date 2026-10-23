@@ -170,11 +170,14 @@ describe('MemoryParticipants: the popover', () => {
   it('opens on hover after the intent delay, not at once, and stays through the close grace period', async () => {
     vi.useFakeTimers()
     const w = await mountRow({ ids: [A, B] })
-    await w.get('.memory-participants-anchor').trigger('mouseenter')
+    // the hover card's trigger is the avatar button, and it follows the pointer (a mouse's, not a touch's)
+    await group(w).trigger('pointerenter', { pointerType: 'mouse' })
     expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
     await vi.advanceTimersByTimeAsync(200)
     expect(w.find('[data-testid="participants-list"]').exists()).toBe(true)
-    await w.get('.memory-participants-anchor').trigger('mouseleave')
+    await group(w).trigger('pointerleave', { pointerType: 'mouse' })
+    // ... and moves on, away from the card: an open card closes once the pointer leaves the corridor to it
+    document.body.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: 500, clientY: 500 }))
     await vi.advanceTimersByTimeAsync(100)
     expect(w.find('[data-testid="participants-list"]').exists()).toBe(true) // inside the grace period: no flicker
     await vi.advanceTimersByTimeAsync(400)
