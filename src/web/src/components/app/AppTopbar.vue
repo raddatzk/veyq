@@ -27,16 +27,13 @@ const router = useRouter()
 // `AppShell.slots.test.ts`).
 const trayItems = registry.slotItems('topbarTray')
 
-const home = computed<VeyqMenuItem>(() => ({
-  label: breadcrumb.trail[0]?.name,
-  command: () => void router.push({ hash: breadcrumb.trail[0]?.hash ?? '#~me' }),
-}))
-const items = computed<VeyqMenuItem[]>(() =>
-  breadcrumb.trail.slice(1).map((crumb) => ({
-    label: crumb.name,
-    command: () => void router.push({ hash: crumb.hash }),
-  })),
-)
+// Every crumb is a real link to its place (`VeyqBreadcrumb` runs the push on a plain click and lets a modified one
+// open the link elsewhere).
+function crumb(label: string | undefined, hash: string): VeyqMenuItem {
+  return { label, url: router.resolve({ hash }).href, command: () => void router.push({ hash }) }
+}
+const home = computed<VeyqMenuItem>(() => crumb(breadcrumb.trail[0]?.name, breadcrumb.trail[0]?.hash ?? '#~me'))
+const items = computed<VeyqMenuItem[]>(() => breadcrumb.trail.slice(1).map((c) => crumb(c.name, c.hash)))
 </script>
 
 <template>

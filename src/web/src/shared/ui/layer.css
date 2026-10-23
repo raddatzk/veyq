@@ -1,0 +1,838 @@
+/* The layer's own look (ADR 0107 decision 4): the components in `shared/ui/` styled on the app's `--app-*` roles, no
+   theme preset and nothing injected at runtime. The measures are the ones the screens had under PrimeVue's Aura
+   preset; every colour is a role `scripts/validate_web_contrast.py` checks in both modes. It loads after the app's
+   sheets (`plugin.ts`, imported after `style.css` in `main.ts`), where PrimeVue's runtime styles sat, so an app rule
+   that adjusts a layer component wins by specificity, as it did. */
+
+/* ── Icon ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-icon {
+  display: inline-block;
+  line-height: 1;
+  vertical-align: -0.125em;
+}
+
+.veyq-icon__svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+  stroke-width: 2;
+}
+
+.veyq-icon--spin {
+  animation: veyq-spin 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veyq-icon--spin {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}
+
+@keyframes veyq-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Button ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-button {
+  --veyq-button-bg: var(--app-primary);
+  --veyq-button-line: var(--app-primary);
+  --veyq-button-text: var(--app-on-fill);
+  --veyq-button-hover-bg: var(--app-primary-hover);
+  --veyq-button-hover-line: var(--app-primary-hover);
+  --veyq-button-active-bg: var(--app-primary-active);
+  --veyq-button-active-line: var(--app-primary-active);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--veyq-button-line);
+  border-radius: 6px;
+  background: var(--veyq-button-bg);
+  color: var(--veyq-button-text);
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-size: 1rem;
+  line-height: normal;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  outline-color: transparent;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-button:not(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--veyq-button-hover-line);
+  background: var(--veyq-button-hover-bg);
+}
+
+.veyq-button:not(:disabled, [aria-disabled='true']):active {
+  border-color: var(--veyq-button-active-line);
+  background: var(--veyq-button-active-bg);
+}
+
+.veyq-button:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-button:disabled,
+.veyq-button[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.veyq-button__label {
+  font-weight: 500;
+}
+
+.veyq-button__icon--right {
+  order: 1;
+}
+
+.veyq-button--icon-only {
+  width: 2.5rem;
+  padding-inline: 0;
+  gap: 0;
+}
+
+.veyq-button--small {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.875rem;
+}
+
+.veyq-button--small.veyq-button--icon-only {
+  width: 2rem;
+  padding-inline: 0;
+}
+
+.veyq-button--secondary {
+  --veyq-button-bg: var(--app-surface-muted);
+  --veyq-button-line: var(--app-surface-muted);
+  --veyq-button-text: var(--app-control-text);
+  --veyq-button-hover-bg: var(--app-line);
+  --veyq-button-hover-line: var(--app-line);
+  --veyq-button-active-bg: color-mix(in srgb, var(--app-line) 60%, var(--app-control-line));
+  --veyq-button-active-line: color-mix(in srgb, var(--app-line) 60%, var(--app-control-line));
+}
+
+.veyq-button--danger {
+  --veyq-button-bg: var(--app-danger);
+  --veyq-button-line: var(--app-danger);
+  --veyq-button-text: var(--app-on-fill);
+  --veyq-button-hover-bg: var(--app-danger-strong);
+  --veyq-button-hover-line: var(--app-danger-strong);
+  --veyq-button-active-bg: var(--app-danger-strong);
+  --veyq-button-active-line: var(--app-danger-strong);
+}
+
+.veyq-button--warn {
+  --veyq-button-bg: var(--app-warning);
+  --veyq-button-line: var(--app-warning);
+  --veyq-button-text: var(--app-backdrop-strong);
+  --veyq-button-hover-bg: color-mix(in srgb, var(--app-warning) 86%, var(--app-backdrop-strong));
+  --veyq-button-hover-line: color-mix(in srgb, var(--app-warning) 86%, var(--app-backdrop-strong));
+  --veyq-button-active-bg: color-mix(in srgb, var(--app-warning) 76%, var(--app-backdrop-strong));
+  --veyq-button-active-line: color-mix(in srgb, var(--app-warning) 76%, var(--app-backdrop-strong));
+}
+
+/* Outlined and text: no fill, the variant's colour as the label. */
+.veyq-button--outlined,
+.veyq-button--text {
+  --veyq-button-bg: transparent;
+  --veyq-button-text: var(--app-primary);
+  --veyq-button-line: var(--app-success-line);
+  --veyq-button-hover-bg: var(--app-success-soft);
+  --veyq-button-hover-line: var(--app-success-line);
+  --veyq-button-active-bg: color-mix(in srgb, var(--app-success-soft) 60%, var(--app-success-line));
+  --veyq-button-active-line: var(--app-success-line);
+}
+
+.veyq-button--outlined.veyq-button--secondary,
+.veyq-button--text.veyq-button--secondary {
+  --veyq-button-text: var(--app-muted);
+  --veyq-button-line: var(--app-line);
+  --veyq-button-hover-bg: var(--app-hover);
+  --veyq-button-hover-line: var(--app-line);
+  --veyq-button-active-bg: var(--app-surface-muted);
+  --veyq-button-active-line: var(--app-line);
+}
+
+.veyq-button--outlined.veyq-button--danger,
+.veyq-button--text.veyq-button--danger {
+  --veyq-button-text: var(--app-danger);
+  --veyq-button-line: var(--app-danger-line);
+  --veyq-button-hover-bg: var(--app-danger-soft);
+  --veyq-button-hover-line: var(--app-danger-line);
+  --veyq-button-active-bg: color-mix(in srgb, var(--app-danger-soft) 60%, var(--app-danger-line));
+  --veyq-button-active-line: var(--app-danger-line);
+}
+
+.veyq-button--outlined.veyq-button--warn,
+.veyq-button--text.veyq-button--warn {
+  --veyq-button-text: var(--app-warning-text);
+  --veyq-button-line: var(--app-warning-line);
+  --veyq-button-hover-bg: var(--app-warning-soft);
+  --veyq-button-hover-line: var(--app-warning-line);
+  --veyq-button-active-bg: color-mix(in srgb, var(--app-warning-soft) 60%, var(--app-warning-line));
+  --veyq-button-active-line: var(--app-warning-line);
+}
+
+.veyq-button--text {
+  --veyq-button-line: transparent;
+  --veyq-button-hover-line: transparent;
+  --veyq-button-active-line: transparent;
+}
+
+.veyq-button--text.veyq-button--secondary,
+.veyq-button--text.veyq-button--danger,
+.veyq-button--text.veyq-button--warn {
+  --veyq-button-line: transparent;
+  --veyq-button-hover-line: transparent;
+  --veyq-button-active-line: transparent;
+}
+
+/* ── Text field ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--app-control-line);
+  border-radius: 6px;
+  background: var(--app-field);
+  color: var(--app-control-text);
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-size: 1rem;
+  box-shadow: var(--app-shadow-sm);
+  outline-color: transparent;
+  appearance: none;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-input:enabled:hover {
+  border-color: var(--app-muted);
+}
+
+.veyq-input:enabled:focus {
+  border-color: var(--app-focus);
+  outline: 0;
+}
+
+.veyq-input::placeholder {
+  color: var(--app-muted);
+}
+
+.veyq-input:disabled {
+  background: var(--app-surface-muted);
+  color: var(--app-muted);
+}
+
+.veyq-input--invalid {
+  border-color: var(--app-danger);
+}
+
+.veyq-input--fluid {
+  width: 100%;
+}
+
+/* ── Password ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-password {
+  position: relative;
+  display: inline-flex;
+}
+
+.veyq-password--fluid {
+  display: flex;
+  width: 100%;
+}
+
+.veyq-password__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline-end: 2.5rem;
+}
+
+.veyq-password__toggle {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 0.45rem;
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-top: -0.8rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-control-line);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.veyq-password__toggle:hover:not(:disabled) {
+  color: var(--app-control-text);
+}
+
+.veyq-password__toggle:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 1px;
+}
+
+/* ── Search field ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-search-field {
+  position: relative;
+  display: block;
+}
+
+.veyq-search-field__icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 0.75rem;
+  z-index: 1;
+  margin-top: -0.5em;
+  color: var(--app-control-line);
+}
+
+.veyq-search-field__input {
+  width: 100%;
+  padding-inline-start: 2.5rem;
+}
+
+/* ── Message ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-message {
+  display: grid;
+  grid-template-rows: 1fr;
+  border-radius: 6px;
+  outline: 1px solid var(--veyq-message-line);
+  background: var(--veyq-message-bg);
+  color: var(--veyq-message-text);
+  box-shadow: 0 4px 8px 0 color-mix(in srgb, var(--veyq-message-text), transparent 96%);
+  animation: veyq-message-enter 0.3s ease-out;
+}
+
+.veyq-message--error {
+  --veyq-message-bg: var(--app-danger-soft);
+  --veyq-message-line: var(--app-danger-line);
+  --veyq-message-text: var(--app-danger);
+}
+
+.veyq-message--warn {
+  --veyq-message-bg: var(--app-warning-soft);
+  --veyq-message-line: var(--app-warning-line);
+  --veyq-message-text: var(--app-warning-text);
+}
+
+.veyq-message--success {
+  --veyq-message-bg: var(--app-success-soft);
+  --veyq-message-line: var(--app-success-line);
+  --veyq-message-text: var(--app-success-text);
+}
+
+.veyq-message--info {
+  --veyq-message-bg: var(--app-info-soft);
+  --veyq-message-line: var(--app-info-line);
+  --veyq-message-text: var(--app-info);
+}
+
+.veyq-message__wrapper {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.veyq-message__content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.veyq-message__text {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+@keyframes veyq-message-enter {
+  from {
+    opacity: 0;
+    grid-template-rows: 0fr;
+  }
+  to {
+    opacity: 1;
+    grid-template-rows: 1fr;
+  }
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-card-frame {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.veyq-card-frame__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+}
+
+.veyq-card-frame__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.veyq-card-frame__title {
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+/* ── Spinner ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-spinner {
+  position: relative;
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto;
+}
+
+.veyq-spinner__spin {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: auto;
+  transform-origin: center center;
+  animation: veyq-spinner-rotate 2s linear infinite;
+}
+
+.veyq-spinner__circle {
+  stroke: var(--app-danger);
+  stroke-dasharray: 89, 200;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  animation:
+    veyq-spinner-dash 1.5s ease-in-out infinite,
+    veyq-spinner-color 6s ease-in-out infinite;
+}
+
+@keyframes veyq-spinner-rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes veyq-spinner-dash {
+  0% {
+    stroke-dasharray: 1, 200;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 89, 200;
+    stroke-dashoffset: -35px;
+  }
+  100% {
+    stroke-dasharray: 89, 200;
+    stroke-dashoffset: -124px;
+  }
+}
+
+@keyframes veyq-spinner-color {
+  100%,
+  0% {
+    stroke: var(--app-danger);
+  }
+  40% {
+    stroke: var(--app-info);
+  }
+  66% {
+    stroke: var(--app-success);
+  }
+  80%,
+  90% {
+    stroke: var(--app-warning);
+  }
+}
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-breadcrumb {
+  overflow-x: auto;
+  padding: 1rem;
+  background: var(--app-surface);
+}
+
+.veyq-breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
+.veyq-breadcrumb__list {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.veyq-breadcrumb__separator {
+  display: flex;
+  align-items: center;
+  color: var(--app-control-line);
+  font-size: 0.875rem;
+}
+
+.veyq-breadcrumb__link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  color: var(--app-muted);
+  text-decoration: none;
+  outline-color: transparent;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-breadcrumb__link:hover {
+  color: var(--app-control-text);
+}
+
+.veyq-breadcrumb__link:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-breadcrumb__link[href] {
+  cursor: pointer;
+}
+
+.veyq-breadcrumb__icon {
+  color: var(--app-control-line);
+}
+
+/* ── Avatar ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--app-line);
+  color: var(--app-control-text);
+  font-size: 1rem;
+}
+
+.veyq-avatar--large {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.5rem;
+}
+
+.veyq-avatar--xlarge {
+  width: 4rem;
+  height: 4rem;
+  font-size: 2rem;
+}
+
+.veyq-avatar--image {
+  background: transparent;
+}
+
+.veyq-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.veyq-avatar-group {
+  display: flex;
+  align-items: center;
+}
+
+.veyq-avatar-group .veyq-avatar {
+  border: 2px solid var(--app-surface);
+}
+
+.veyq-avatar-group .veyq-avatar + .veyq-avatar {
+  margin-inline-start: -0.75rem;
+}
+
+/* ── Checkbox ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-checkbox {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  vertical-align: bottom;
+  cursor: pointer;
+  user-select: none;
+}
+
+.veyq-checkbox__box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid var(--app-control-line);
+  border-radius: 4px;
+  background: var(--app-field);
+  color: var(--app-on-fill);
+  box-shadow: var(--app-shadow-sm);
+  outline-color: transparent;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s,
+    outline-color 0.2s;
+}
+
+.veyq-checkbox__indicator {
+  display: flex;
+}
+
+.veyq-checkbox__icon {
+  font-size: 0.875rem;
+}
+
+.veyq-checkbox:not(:disabled):hover .veyq-checkbox__box {
+  border-color: var(--app-muted);
+}
+
+.veyq-checkbox[data-state='checked'] .veyq-checkbox__box {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+}
+
+.veyq-checkbox[data-state='checked']:not(:disabled):hover .veyq-checkbox__box {
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+}
+
+.veyq-checkbox:focus-visible {
+  outline: 0;
+}
+
+.veyq-checkbox:focus-visible .veyq-checkbox__box {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-checkbox:disabled {
+  cursor: default;
+}
+
+.veyq-checkbox:disabled .veyq-checkbox__box {
+  border-color: var(--app-control-line);
+  background: var(--app-line);
+  color: var(--app-muted);
+}
+
+/* ── Switch ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-switch {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 30px;
+  background: var(--app-control-line);
+  box-shadow: var(--app-shadow-sm);
+  cursor: pointer;
+  outline-color: transparent;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-switch:not(:disabled):hover {
+  background: var(--app-muted);
+}
+
+.veyq-switch[data-state='checked'] {
+  background: var(--app-primary);
+}
+
+.veyq-switch[data-state='checked']:not(:disabled):hover {
+  background: var(--app-primary-hover);
+}
+
+.veyq-switch:focus-visible {
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-switch:disabled {
+  background: var(--app-line);
+  cursor: default;
+}
+
+.veyq-switch__handle {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.5rem;
+  border-radius: 50%;
+  background: var(--app-on-strong);
+  transition:
+    inset-inline-start 0.2s,
+    background 0.2s;
+}
+
+.veyq-switch[data-state='checked'] .veyq-switch__handle {
+  inset-inline-start: calc(2.5rem - 1rem - 0.25rem - 2px);
+  background: var(--app-surface);
+}
+
+.veyq-switch:disabled .veyq-switch__handle {
+  background: var(--app-muted);
+}
+
+/* ── Toggle group ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-toggle-group {
+  display: inline-flex;
+  border-radius: 6px;
+  outline-color: transparent;
+  vertical-align: bottom;
+  user-select: none;
+}
+
+.veyq-toggle-group__item {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  padding: 0.25rem;
+  border: 1px solid var(--app-segment-track);
+  border-width: 1px 1px 1px 0;
+  border-radius: 0;
+  background: var(--app-segment-track);
+  color: var(--app-muted);
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  outline-color: transparent;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s,
+    outline-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-toggle-group__item:first-child {
+  border-inline-start-width: 1px;
+  border-start-start-radius: 6px;
+  border-end-start-radius: 6px;
+}
+
+.veyq-toggle-group__item:last-child {
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+}
+
+.veyq-toggle-group__item:not(:disabled):not([data-state='on']):hover {
+  color: var(--app-control-text);
+}
+
+.veyq-toggle-group__item[data-state='on'] {
+  color: var(--app-text);
+}
+
+.veyq-toggle-group__item:focus-visible {
+  z-index: 1;
+  outline: 1px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-toggle-group__item:disabled {
+  border-color: var(--app-line);
+  background: var(--app-line);
+  color: var(--app-muted);
+  cursor: default;
+}
+
+.veyq-toggle-group__content {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  background: transparent;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
+}
+
+.veyq-toggle-group__item[data-state='on'] .veyq-toggle-group__content {
+  background: var(--app-segment-thumb);
+  box-shadow: var(--app-shadow-sm);
+}
+
+/* ── Progress ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+.veyq-progress {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  height: 1.25rem;
+  border-radius: 6px;
+  background: var(--app-line);
+}
+
+.veyq-progress__value {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+  background: var(--app-primary);
+  transition: width 1s ease-in-out;
+}
+
+.veyq-progress__label {
+  color: var(--app-on-fill);
+  font-size: 0.75rem;
+  font-weight: 600;
+}

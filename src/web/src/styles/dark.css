@@ -1,4 +1,4 @@
-/* Nothing checks that a light rule keeps its dark twin here: deleting `.veyq-folder-card > .pi` below left the
+/* Nothing checks that a light rule keeps its dark twin here: deleting `.veyq-folder-card > .veyq-icon` below left the
    stylesheet-anchor guard, the level-view golden and `LevelView.test.ts` green (measured, cr-files-application P4d;
    the golden pins the DOM, never computed CSS). A move or rename of a light rule carries its twins by hand, and
    compares the dark rule set before and after. */
@@ -50,9 +50,9 @@
   }
 
   .sidebar-tenant-avatar,
-  .sidebar-nav-link > .pi,
+  .sidebar-nav-link > .veyq-icon,
   .sidebar-scope-icon,
-  .veyq-create-card .pi {
+  .veyq-create-card .veyq-icon {
     background: var(--app-accent-soft);
     color: var(--app-accent);
   }
@@ -62,12 +62,12 @@
     color: var(--app-on-fill);
   }
 
-  .sidebar-scope-icon.pi-users {
+  .sidebar-scope-icon[data-icon='users'] {
     background: var(--app-warning-soft);
     color: var(--app-warning-text);
   }
 
-  .sidebar-scope-icon.pi-user {
+  .sidebar-scope-icon[data-icon='user'] {
     background: var(--app-success-soft);
     color: var(--app-success-text);
   }

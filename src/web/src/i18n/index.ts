@@ -54,6 +54,11 @@ const en = {
     importNoRoom: 'There is not enough storage space for this import ({size}). Free some space, or ask whoever runs your space.',
     importChecksum: 'A file in the download does not match its checksum; the download is damaged.',
   },
+  // The UI layer's own texts (`shared/ui/`, ADR 0107): what its components say, read where they render.
+  ui: {
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
+  },
   // PrimeVue's own texts (inbox #434): `app/primeVueLocale.ts` writes them into PrimeVue's config, at start and on
   // every language change. Only the keys a component the app renders reads - that file says which and why.
   primevue: {
@@ -2031,6 +2036,10 @@ const de: typeof en = {
     importQuota: 'Für diesen Import ist nicht genug Speicherplatz vorhanden.',
     importNoRoom: 'Für diesen Import ist nicht genug Speicherplatz vorhanden ({size}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.',
     importChecksum: 'Eine Datei im Download passt nicht zu ihrer Prüfsumme; der Download ist beschädigt.',
+  },
+  ui: {
+    showPassword: 'Passwort anzeigen',
+    hidePassword: 'Passwort verbergen',
   },
   primevue: {
     passwordPrompt: 'Passwort eingeben',

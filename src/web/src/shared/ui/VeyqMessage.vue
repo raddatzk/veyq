@@ -1,22 +1,19 @@
 <script setup lang="ts">
 // An inline message: an error, a warning, a success or a note beside the thing it is about (ADR 0107). It is never
-// closed by the user here; it goes when its condition does. Sheets reach it by `veyq-message`,
-// `veyq-message--<tone>` and `veyq-message__text`.
-import Message from 'primevue/message'
-
+// closed by the user here; it goes when its condition does. A screen reader announces it when it appears
+// (`role="alert"`). Sheets reach it by `veyq-message`, `veyq-message--<tone>` and `veyq-message__text` (styled in
+// `layer.css`).
 export type VeyqMessageTone = 'info' | 'success' | 'warn' | 'error'
 
-const props = defineProps<{ tone: VeyqMessageTone }>()
-
-const PT = {
-  content: { class: 'veyq-message__content' },
-  icon: { class: 'veyq-message__icon' },
-  text: { class: 'veyq-message__text' },
-}
+defineProps<{ tone: VeyqMessageTone }>()
 </script>
 
 <template>
-  <Message :severity="props.tone" :closable="false" :class="['veyq-message', `veyq-message--${props.tone}`]" :pt="PT">
-    <slot />
-  </Message>
+  <div :class="['veyq-message', `veyq-message--${tone}`]" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="veyq-message__wrapper">
+      <div class="veyq-message__content">
+        <div class="veyq-message__text"><slot /></div>
+      </div>
+    </div>
+  </div>
 </template>

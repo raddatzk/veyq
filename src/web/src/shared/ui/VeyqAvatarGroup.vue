@@ -1,10 +1,9 @@
 <script setup lang="ts">
-// Avatars drawn overlapping, as one group (ADR 0107).
-import AvatarGroup from 'primevue/avatargroup'
+// Avatars drawn overlapping, as one group (ADR 0107). Styled in `layer.css`.
 </script>
 
 <template>
-  <AvatarGroup class="veyq-avatar-group">
+  <div class="veyq-avatar-group">
     <slot />
-  </AvatarGroup>
+  </div>
 </template>
