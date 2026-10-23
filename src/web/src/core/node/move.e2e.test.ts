@@ -108,10 +108,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
     const inB = await readsUnder(bId)
     expect(byId(inB, nId).placementRevision).toBe(byId(before, nId).placementRevision + 1)
     // a second move built on the placement the first one superseded is refused by the server's compare-and-set
-    // (sent once, unretried: the revision stated is the stale one)
+    // (sent once, unretried: the revision stated is the stale one). Whole otherwise: a placement to a parent node states
+    // that parent's epoch (ADR 0109 point 6), and one without it is refused as incomplete (400) before the revision is read.
     const stale = await failure(contentApi().updateNode({
       scopeId, nodeId: nId,
-      updateNodeRequest: { parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: filler(), slugToken: filler(), epoch: epochs.current, placementRevision: byId(before, nId).placementRevision },
+      updateNodeRequest: {
+        parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: filler(), slugToken: filler(), epoch: byId(inB, nId).epoch,
+        parentEpoch: byId(inB, aId).epoch, placementRevision: byId(before, nId).placementRevision,
+      },
     }))
     expect(await decodeHttpError(stale)).toEqual({ status: 409, code: 'stale_placement' })
     await moveNode(scopeId, epochs, inB, nId, null) // to the scope root: sealed under K_SC at the current epoch
