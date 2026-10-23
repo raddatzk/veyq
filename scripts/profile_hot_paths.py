@@ -31,6 +31,14 @@ harness, which `cr-volume-measurement-cax` deletes.
     its environment. One recording spans boot, bootstrap and every run; each run's window (`<stem>.window.json`, epoch
     milliseconds) cuts it to the same moment. And MariaDB's statement counters around each run, against an idle drift
     measured before the first, beside the API requests the page made in the window: statements per request.
+  - **Failed requests.** The page records every request of the window that got no answer and every answer of 400 or
+    more (`<stem>.window.json`'s `failedRequests` and `httpErrors`); the driver judges them (`request_failures`): an
+    error answer, a request that failed in the network and a `net::ERR_ABORTED` each refuse the run. The aborted ones
+    are also named apart, in the refusal and as `abortedRequests` in server.json, because they are the ones to tell
+    apart when reading why: the collection run's F7 (S2's store PUTs, a listing GET) was Chromium reporting an answer
+    whose empty body the page never read as `ERR_ABORTED` — a product defect, fixed in the client — so an abort is a
+    finding, not noise. Whether a deliberate abort (a superseded listing the page cancels) may ever pass is the owner's
+    call; `ABORTED_REFUSES` is the one place it is taken.
   - **The recording's own control** (the bite, every run): after the runs the app stops (JFR dumps on exit) and the
     recording must contain neither the canary nor any secret of the instance's `.env`; then the app is recreated with
     the same recording minus the two `#enabled=false` and stopped again, and THAT recording must contain the canary.
@@ -107,6 +115,12 @@ CANARY_VAR = "VEYQ_PROFILE_CANARY"
 SECRET_NAME = re.compile(r"(PASSWORD|SECRET|TOKEN|KEY)")
 STATUS_VARS = ("Questions", "Com_select", "Com_insert", "Com_update", "Com_delete", "Com_stmt_execute", "Com_commit")
 STATEMENTS = ("Com_select", "Com_insert", "Com_update", "Com_delete", "Com_stmt_execute")
+# Whether a request Chromium reports `net::ERR_ABORTED` refuses a run like any other failed request: yes, strict. The
+# collection run's aborts (2026-10-23, F7) were the client leaving an empty answer's body unread — a defect — so an abort
+# is ADR 0105's "failed request" until the owner decides that a deliberate one (a superseded GET the page cancels) may
+# pass. Either way it is recorded apart (`abortedRequests` in server.json). The one place to change it.
+ABORTED_REFUSES = True
+ABORTED = "net::ERR_ABORTED"
 
 
 class Refused(Exception):
@@ -278,6 +292,20 @@ def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, thro
     return {"stem": stem, **json.loads(window.read_text(encoding="utf-8"))}
 
 
+def request_failures(window: dict, aborted_refuses: bool = ABORTED_REFUSES) -> tuple[list[str], list[str]]:
+    """The window's requests that refuse the run, and its aborted ones, recorded beside it.
+
+    An answer of 400 or more refuses, and so does a request that failed in the network (a refused connection, a name
+    that did not resolve, a TLS failure). A `net::ERR_ABORTED` refuses only when [aborted_refuses] says so
+    (`ABORTED_REFUSES`). A window written before `httpErrors` existed has none."""
+    failed = list(window.get("failedRequests", []))
+    aborted = [r for r in failed if r.rstrip().endswith(ABORTED)]
+    refusing = [r for r in failed if r not in aborted] + list(window.get("httpErrors", []))
+    if aborted_refuses:
+        refusing += aborted
+    return refusing, aborted
+
+
 def client_files_clean(workdir: Path, stem: str, owner: dict) -> None:
     needles = {"password": owner["password"], "Secret Key": owner["secretKey"]}
     for suffix in (".cpuprofile", ".trace.json", ".window.json"):
@@ -390,6 +418,11 @@ def main() -> int:
                     window = browser_run(installed.compose, workdir, scenario, run, throttle)
                     c1 = counters(installed.compose)
                     client_files_clean(workdir, window["stem"], owner)
+                    refusing, aborted = request_failures(window)
+                    if refusing:
+                        raise Refused(f"{window['stem']}: {len(refusing)} request(s) of the window failed, "
+                                      f"{len(aborted)} of them {ABORTED} - "
+                                      + "; ".join(refusing[:5]) + (" ..." if len(refusing) > 5 else ""))
                     secs = (window["endedAt"] - window["startedAt"]) / 1000
                     count = statements(c0, c1)
                     api = len(window["apiRequests"])
@@ -397,9 +430,11 @@ def main() -> int:
                     server["runs"].append({"stem": window["stem"], "startedAt": window["startedAt"],
                                            "endedAt": window["endedAt"], "statements": count, "apiRequests": api,
                                            "statementsPerRequest": estimate,
+                                           "abortedRequests": len(aborted),
                                            "counters": {n: c1[n] - c0[n] for n in STATUS_VARS}})
                     say(f"{window['stem']}: {window['operationMs']:.0f} ms, {api} API request(s), {count} statement(s)"
-                        + (f" ≈ {estimate:.1f} per request" if estimate is not None else ""))
+                        + (f" ≈ {estimate:.1f} per request" if estimate is not None else "")
+                        + (f"; {len(aborted)} aborted request(s), recorded ({ABORTED})" if aborted else ""))
         (workdir / "server.json").write_text(json.dumps(server, indent=2), encoding="utf-8")
 
         say("\n== the recording: the app stops, JFR dumps")

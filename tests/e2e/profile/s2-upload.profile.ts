@@ -34,10 +34,10 @@ test('S2 upload: 50 phone-sized photos into one Chapter', async ({ browser }) =>
   await page.getByRole('button', { name: 'Upload', exact: true }).click()
   const picker = await chooser
 
-  const reading = await profiled(browser, page, cdp, async () => {
+  await profiled(browser, page, cdp, async () => {
     await picker.setFiles(files)
     await uploadsSettled(page, COUNT, 30 * 60_000)
   })
-  expect(reading.failedRequests, 'every request of the window reached the instance').toEqual([])
+  // Its failed requests and error answers are the driver's to judge (`profile_hot_paths.py` `request_failures`).
   await context.close()
 })
