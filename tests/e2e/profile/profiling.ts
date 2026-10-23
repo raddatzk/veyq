@@ -8,7 +8,7 @@
 // snapshot or a screenshot of an opened space holds what was decrypted in it). They are still the files of a signed-in
 // session — their URLs name the account's objects — so they stay in the run directory under `.run/profiles/`, which git
 // ignores, and the driver checks each for the account's password and Secret Key before it accepts the run.
-import type { Browser, CDPSession, Page } from '@playwright/test'
+import { expect, type Browser, type BrowserContext, type CDPSession, type Page } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 
 export const OUT = process.env.VEYQ_PROFILE_OUT ?? '/out'
@@ -54,6 +54,17 @@ interface ApiRequest {
   transfer: number
 }
 
+/**
+ * One request of the window to the object store, by origin and path: a presigned URL, told apart by its `X-Amz-` query,
+ * which is dropped (it is the signature). The store is another origin without `Timing-Allow-Origin`, so Resource Timing
+ * gives its start and duration, never its size: the wire's share of an upload is read from these intervals (#261).
+ */
+interface StoreRequest {
+  url: string
+  start: number
+  duration: number
+}
+
 export interface Window {
   scenario: string
   run: number
@@ -65,6 +76,7 @@ export interface Window {
   /** The operation's time as the page's clock saw it, from the action that starts it to the state that ends it. */
   operationMs: number
   apiRequests: ApiRequest[]
+  storeRequests: StoreRequest[]
   failedRequests: string[]
   metrics: Record<string, number>
 }
@@ -103,11 +115,16 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
 
   const { metrics } = await cdp.send('Performance.getMetrics')
-  const apiRequests = await page.evaluate(([from, to]) =>
-    (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
-      .filter((e) => e.startTime >= from && e.startTime <= to && new URL(e.name).pathname.startsWith('/api/'))
-      .map((e) => ({ path: new URL(e.name).pathname, start: e.startTime - from, duration: e.duration, transfer: e.transferSize })),
-  [t0, t1] as const)
+  const { apiRequests, storeRequests } = await page.evaluate(([from, to]) => {
+    const inWindow = (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+      .filter((e) => e.startTime >= from && e.startTime <= to)
+    const api = inWindow.filter((e) => new URL(e.name).origin === location.origin && new URL(e.name).pathname.startsWith('/api/'))
+    const store = inWindow.filter((e) => /[?&]X-Amz-/i.test(new URL(e.name).search))
+    return {
+      apiRequests: api.map((e) => ({ path: new URL(e.name).pathname, start: e.startTime - from, duration: e.duration, transfer: e.transferSize })),
+      storeRequests: store.map((e) => ({ url: `${new URL(e.name).origin}${new URL(e.name).pathname}`, start: e.startTime - from, duration: e.duration })),
+    }
+  }, [t0, t1] as const)
 
   const window: Window = {
     scenario, run, throttle,
@@ -115,9 +132,67 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     startedAt, endedAt,
     operationMs: t1 - t0,
     apiRequests,
+    storeRequests,
     failedRequests: failed,
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))
   return window
+}
+
+/**
+ * Resource Timing's buffer raised in every document of the context before its own scripts: the default keeps 250
+ * entries, and an upload of 50 photos or a Chapter of 1,000 thumbnails makes far more requests than that — the ones past
+ * the buffer would be missing from the window without a trace of it.
+ */
+export const raiseResourceBuffer = (context: BrowserContext) =>
+  context.addInitScript(() => performance.setResourceTimingBufferSize(200_000))
+
+/** A new device signs in at the tenant's root with both secrets and waits for the space's toolbar (outside any window). */
+export async function signIn(page: Page, { owner, tenantDomain }: Instance): Promise<void> {
+  await page.goto(`https://${tenantDomain}/`)
+  await page.getByLabel('Email', { exact: true }).fill(owner.email)
+  await page.getByRole('textbox', { name: /^Password\b/ }).fill(owner.password)
+  await page.locator('#unlock-secret-key').fill(owner.secretKey)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 5 * 60_000 })
+}
+
+/**
+ * A new Memory at the space's root with one Chapter in it, the Memory's Chapters tab left open. Labels are src/web's
+ * own (en): the level's New menu, `memory.addChapter`, the node dialog's `node.nameLabel` and `common.create`.
+ */
+export async function memoryWithChapter(page: Page, memory: string, chapter: string): Promise<void> {
+  await page.getByRole('button', { name: 'New', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'New Memory' }).click()
+  const createMemory = page.getByRole('dialog', { name: 'Create a Memory' })
+  await createMemory.getByLabel('Name').fill(memory)
+  await createMemory.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(createMemory).toBeHidden()
+  await page.getByRole('button', { name: memory, exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: memory })).toBeVisible()
+  await page.getByRole('tab', { name: /^Chapters/ }).click()
+  await page.getByRole('button', { name: 'Add chapter' }).click()
+  const createChapter = page.getByRole('dialog', { name: 'Create a chapter' })
+  await createChapter.getByLabel('Name').fill(chapter)
+  await createChapter.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(createChapter).toBeHidden()
+  await expect(chapterCard(page, chapter)).toBeVisible()
+}
+
+/** A Chapter's card in its Memory's Chapters tab (`MemoryCard`'s main button carries the name among its text). */
+export const chapterCard = (page: Page, chapter: string) => page.locator('.memory-card-main', { hasText: chapter })
+
+/**
+ * Every upload into the open gallery settled: the header counts `count` items and no upload tile is left (a member's
+ * tile flips to the listed thumbnail once its file is done, `MemoryDetail.vue` `onFileDone`). A failed tile ends the
+ * wait at once, naming the file. Polled every 250 ms in the page, so the wait costs the page no protocol round trip.
+ */
+export async function uploadsSettled(page: Page, count: number, timeout: number): Promise<void> {
+  await page.waitForFunction((n) => {
+    const failed = document.querySelector('.gallery-tile-optimistic.is-failed')
+    if (failed) throw new Error(`an upload failed: ${failed.getAttribute('aria-label') ?? '?'}`)
+    const header = document.querySelector('.veyq-node-header-subtitle')?.textContent?.replace(/[,.\s]/g, '')
+    return header === `${n}items` && document.querySelectorAll('.gallery-tile-optimistic:not(.is-done)').length === 0
+  }, count, { polling: 250, timeout })
 }
