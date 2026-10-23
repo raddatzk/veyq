@@ -620,7 +620,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists); null on success.
+          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `stale_epoch` / `node_rekey_pending` = the target node was re-keyed since, or is being re-keyed, mid-batch — ADR 0109 point 6, the item stored nothing and its uploads stay open); null on success.
           maxLength: 64
           example: null
     ErrorResponse:

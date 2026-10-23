@@ -1461,7 +1461,7 @@ components:
           items: { $ref: "#/components/schemas/RekeyBlob" }
         shares:
           type: array
-          description: Every live share rooted on the node (a deleted or tombstoned link carries no wrap).
+          description: Every share rooted on the node that is not deleted — revoked ones too, which may be re-activated.
           items: { $ref: "#/components/schemas/RekeyShare" }
         identities:
           type: array
@@ -1484,9 +1484,24 @@ components:
 
     RekeyShare:
       type: object
-      required: [shareId, role, sealedShareKey]
+      required: [shareId, role, sealedShareKey, hasWrap, hasDropPublicKey]
       properties:
-        shareId: { type: string, format: uuid, example: 2c1f2d3e-4a5b-6c7c-3f0e-2a9b1d4a6e8b, x-veyq-visibility: id }
+        hasWrap:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The link carries a `wrap` of the node's key (READ, READ_WRITE); the re-key stages its new one.
+          example: true
+        hasDropPublicKey:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The link carries the node's drop public key (WRITE_ONLY); the re-key stages the new one, sealed under `K_share`.
+          example: false
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
         role:
           x-veyq-visibility: enum
           type: string
@@ -1510,7 +1525,12 @@ components:
       required: [identityId, shareId]
       properties:
         identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
-        shareId: { type: string, format: uuid, example: 2c1f2d3e-4a5b-6c7c-3f0e-2a9b1d4a6e8b, x-veyq-visibility: id }
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
         wrappedIdentityKey:
           type: [string, "null"]
           description: The identity's `K_up` sealed to the node's drop public key (`upload-identity-key`), when it has one.
@@ -1612,18 +1632,25 @@ components:
     RekeyShareWrap:
       type: object
       description: >
-        A share's new `wrap` — the node's new key under the share's unchanged `K_share` — and, for a share carrying the
-        node's drop public key, the new one sealed under `K_share` (ADR 0109 points 4 and 5).
-      required: [shareId, wrap]
+        A share's new `wrap` — the node's new key under the share's unchanged `K_share`, for every link that carries one
+        (a WRITE_ONLY link carries none) — and, for a share carrying the node's drop public key, the new one sealed under
+        `K_share` (ADR 0109 points 4 and 5).
+      required: [shareId]
       properties:
-        shareId: { type: string, format: uuid, example: 2c1f2d3e-4a5b-6c7c-3f0e-2a9b1d4a6e8b, x-veyq-visibility: id }
-        wrap:
+        shareId:
+          x-veyq-visibility: id
           type: string
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]{43}")'
+        wrap:
+          type: [string, "null"]
           contentEncoding: base64
-          minLength: 1
           maxLength: 256
           example: d3JhcA==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedDropPublicKey:
           type: [string, "null"]
           contentEncoding: base64

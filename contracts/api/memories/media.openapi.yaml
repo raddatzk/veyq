@@ -1425,6 +1425,23 @@ components:
       required: [bucketId, sealedName]
       properties:
         bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          minLength: 43
+          maxLength: 43
+          description: >
+            Set on a READ_WRITE contributor's primary bucket only: its name is a copy of that guest's display name
+            (`share-identity-name`, bound to this share and `identityId`) under the share ROOT's key, not this node's — the
+            re-keyer re-seals it under the share root's new key. Null for every other bucket (`bucket-name` under this
+            node's key).
+          example: null
+        identityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: With `shareId`, the contributor identity whose name the bucket copies.
+          example: null
         sealedName:
           type: string
           contentEncoding: base64
