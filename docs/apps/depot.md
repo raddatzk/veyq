@@ -263,7 +263,8 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     `color: transparent`, `user-select: text`, `font-size`/`transform` from the custom properties pdf.js sets, the selection
     colour from `--app-accent`; the stylesheet pdf.js ships is not imported, so no `new` CSS file and no origin). The
     `.pdf-text-end` element pdf.js' own viewer appends keeps a drag from selecting the whole page (`.pdf-text-selecting`,
-    toggled on `pointerdown`/`pointerup`). `style-src 'self' 'unsafe-inline'` carries what pdf.js sets through the CSSOM.
+    toggled on `pointerdown`/`pointerup`). What pdf.js sets through the CSSOM is outside `style-src`, which has no
+    `'unsafe-inline'` ([cc.security.csp](../crosscutting/cc.security.csp.md), measured with a PDF open 2026-10-23).
   - **What a PDF can never do here.** No `<iframe>`/`<object>`/`<embed>`, no link, button or form element is ever in the
     page: there is **no annotation layer** (a link in a PDF is ink on a canvas, not an element — it cannot navigate the
     app or open a URL; annotations that carry an appearance are drawn into the page), and the text layer is `<span>`s

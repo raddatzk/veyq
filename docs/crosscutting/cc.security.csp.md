@@ -40,27 +40,38 @@ app's own provider config ([`src/web/vite.config.ts`](../../src/web/vite.config.
   Service Worker under the policy. The shell refuses to start when `index.html` is present but the emitted
   policy is missing, or when `index.html` still carries a CSP `<meta>`.
 - **In dev** the Vite dev server sends the same policy as a header, so dev and production match and violations
-  surface while developing. Dev additionally allows `ws:` for HMR.
+  surface while developing. Dev differs in two sources: `ws:` for HMR, and a style nonce. Vite injects every
+  stylesheet as a `<style>` element, so it stamps them with a nonce drawn fresh at each dev-server start
+  (`html.cspNonce`) and the header names it; the build loads its CSS as files and carries no nonce.
 
 The policy:
 
 ```
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
-script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline';
+script-src 'self'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
 img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
 connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>]; form-action 'self'
 ```
 
 The bracketed origins are appended by the backend on every response; the built policy names none of them.
+`<reka-style-hashes>` is one `'sha256-…'` per fixed `<style>` text a reka-ui component the client uses renders
+(below).
 
 Why each non-obvious source is there:
 
 - **`script-src 'self'`, with no `unsafe-*`.** The entry is a hashed same-origin module. The app has no inline
   script, no `eval`/`Function` and no WebAssembly (Argon2id is pure-JS `@noble`), so scripts stay strictly
   same-origin.
-- **`style-src 'unsafe-inline'`.** The app uses `:style` bindings, which cannot carry a nonce (no component library
-  injects a `<style>` tag any more, ADR 0107; tightening the directive is inbox #523). Style injection is far
-  lower-risk than script, so this is an accepted gap.
+- **`style-src 'self'` and hashes, no `'unsafe-inline'`** (inbox #523). The built CSS is same-origin files. Vue applies
+  `:style` bindings, `v-show` and Leaflet's and pdf.js's positioning through the CSSOM (`el.style.x = …`), which
+  `style-src` does not govern; what it governs is a `<style>` element and a `style="…"` attribute parsed from markup,
+  and the app has neither (no static `style=` in a template, `v-html` gets the escape-first markdown, which writes
+  none). The one `<style>` a component we use renders is reka-ui's `SelectViewport`, a fixed rule that hides its
+  list's scrollbar; a fixed text is allowed by its hash (`REKA_STYLE_HASHES` in `csp.ts`). pdf.js loads a PDF's fonts
+  through the FontFace API, and the Emergency Kit's jsPDF draws text and a QR image only, so html2canvas (which would
+  inject a `<style>` into a frame) is never loaded. Measured in a browser on 2026-10-23 (§ *Verification*). An
+  injected `<style>` or `style=` attribute is now refused (`style-src-elem` / `style-src-attr`), so injected markup can
+  no longer restyle the page, for example lay a fake control over a real one.
 - **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
   only works in a header, which is one reason the policy is not a `<meta>`.
 - **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: the
@@ -112,8 +123,8 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
 - **No script, no navigation:** a PDF's JavaScript is never run (no scripting manager, no sandbox file) and there is no
   annotation layer, so a link in a PDF is pixels, not an element; the text layer that makes the text selectable is `<span>`s
   only (no `<a>`, no handler), so a link's text can be copied and never followed; the page holds no frame, object, embed,
-  link or form control for a PDF to use. The text layer is built by pdf.js through the DOM and CSSOM (`style-src 'self'
-  'unsafe-inline'` already allows it), its rules are in our own stylesheet, and it adds no origin.
+  link or form control for a PDF to use. The text layer is built by pdf.js through the DOM and CSSOM (which
+  `style-src` does not govern), its rules are in our own stylesheet, and it adds no origin.
 - **A password** typed for a protected PDF goes to pdf.js (`onPassword`) in the worker and nowhere else: never stored,
   logged or sent.
 - **Bounded:** 64 MiB per file, 1000 pages, 32 M pixels per decoded image, 16 M pixels per page canvas; destroyed (document
@@ -149,7 +160,12 @@ every header of the admin origin.
 
 - **The policy stays a `<meta>`.** Its one source is
   [`src/admin-web/src/shared/security/csp.ts`](../../src/admin-web/src/shared/security/csp.ts), and
-  `src/admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
+  `src/admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It
+  follows web's `style-src` rule (no `'unsafe-inline'`; reka's fixed `<style>` texts by hash, here `SelectViewport`'s
+  and `ComboboxViewport`'s; on the dev server a nonce, which both the header and the dev page's `<meta>` carry,
+  because a `<meta>` without it would intersect the header and refuse Vite's styles again). It names `worker-src
+  'self'` although `script-src 'self'` already covers the Argon2 worker by fallback, so no edit of `script-src` can
+  widen what may run as a worker. It is
   stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API's
   default origin in `connect-src`. A `<meta>` built into a static file cannot follow the Server Owner's setting, so
   the console's own first-run check reaches only that default origin: a mirror elsewhere reads there as "could not
@@ -187,8 +203,14 @@ every header of the admin origin.
   - no `unsafe` on script;
   - `object-src 'none'`;
   - no third-party origin baked in when providers are unset;
-  - `ws:` in dev only;
+  - `ws:` and the style nonce in dev only;
+  - `style-src` exactly `'self'` plus the reka hashes, no `'unsafe-inline'` in dev or production;
+  - the hashes equal exactly those of the fixed `<style>` texts the reka-ui components the client imports render,
+    recomputed from the installed reka-ui by following its own imports, so an upgrade that changes a text or a new
+    import of a styling component turns it red;
   - `frame-ancestors 'none'` in dev and production alike.
+  Bitten 2026-10-23: the old `style-src 'self' 'unsafe-inline'`, an emptied hash list and a probe component importing
+  `ScrollAreaViewport` each turn it red.
 - [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`npm run verify:pdf-worker`,
   in `npm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
   (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
@@ -217,8 +239,31 @@ every header of the admin origin.
   the screens reached, so only its script's response headers were checked. The Kubernetes path itself (a real
   Gateway and a store on its own host) is shown only through the jar in `store-origin` mode, never on a cluster.
 - [`src/admin-web/src/shared/security/csp.test.ts`](../../src/admin-web/src/shared/security/csp.test.ts) pins admin-web's
-  policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
-  third-party origin anywhere, no `frame-ancestors`.
+  policy the same way: same-origin scripts, `worker-src` exactly `'self'`, `style-src` exactly `'self'` plus its reka
+  hashes (recomputed as web's are; the nonce in dev only), `connect-src` exactly `'self'` + the HIBP origin, no other
+  third-party origin anywhere, no `frame-ancestors`. Bitten 2026-10-23 with the old `style-src` and without
+  `worker-src`.
+- **Without `'unsafe-inline'`, measured in a browser on 2026-10-23** (inbox #523, #527), a document-level
+  `securitypolicyviolation` listener and the console read on every screen:
+  - web, the dev server and the built app behind the backend's own app shell (`dist` in `META-INF/resources`, one origin
+    in front of shell and store as compose's proxy does): sign-in, all thirteen settings sections, a Memory created
+    and opened, the report dialog's select (reka's `<style>` applied through its hash, its scrollbar hidden), the
+    location editor and the level's map with tiles and a marker, the share dialog, a PDF uploaded and opened in Depot
+    (worker started, a font loaded through FontFace, pages and text layer drawn) and an Emergency Kit made and saved
+    through the email change's real flow in the build (jsPDF's chunk, a `blob:` download, no `<style>`, no frame).
+    No violation from any of them;
+  - admin-web, the dev server and the image built from `src/admin-web/Dockerfile` against a fresh instance: first-run
+    setup with its Emergency Kit download, sign-in, the operator panel's country combobox and the store panel's select.
+    No violation;
+  - the control: an injected `<style>` and a `style="…"` attribute are refused on both.
+  The console also showed, once, a `blob:` worker refused under `worker-src 'self'` in the built web app, as two
+  earlier sessions had seen on the web and admin dev servers (#527). No code in either built bundle, their workers,
+  `sw.js` or `@veyq/crypto` creates one (pdf.js wraps its worker in a `blob:` only for a cross-origin `workerSrc`, and
+  ours is same-origin), and none of page load, sign-in, the settings, the PDF, the map, the kit download or the
+  browser tooling's actions reproduced it alone; every worker the app starts loaded same-origin. It is refused as it
+  should be and breaks nothing, and its source stays unlocated. The 400 seen at the same time is the cold start's
+  session restore: `POST /api/token/refresh` with no refresh cookie answers `invalid_request` by contract
+  (`auth.openapi.yaml`), with a stale one 401, on both clients.
 - The admin origin's headers (§ *admin-web*) have no CI test: no workflow starts the admin container. Checked
   once on 2026-09-27 (cr-admin-origin-hsts), without nginx:
   - the entrypoint hook, run against the template, renders the HSTS directive for the switch unset, empty and
