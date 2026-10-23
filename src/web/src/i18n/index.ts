@@ -297,15 +297,16 @@ const en = {
     errorNoFloor: 'This account has no password sign-in to check against, so its keys can’t be replaced here.',
     errorFailed: 'Your keys could not be replaced. Nothing was changed — please try again.',
     doneNotRepair:
-      'Your keys are replaced. From now on the old device is shut out — but what it already saw, it still has.',
+      'Your keys are replaced and every other device is signed out. Below, each space shows how far its new lock reaches.',
     status: {
-      secured: 'Secured',
+      secured: 'New lock',
       waiting: 'Waiting for someone else',
       stalled: 'Nobody can do it',
       failed: 'Not secured',
     },
     statusHint: {
-      secured: 'This space has a new lock and only your new keys open it.',
+      secured:
+        'New lock on the space itself. Folders and Memories that were already there keep their old keys, so the old key still reads what is added to them.',
       failed: 'This space still has its old lock. Try replacing your keys again.',
     },
     queuedTitle: 'Shared spaces',
@@ -315,7 +316,7 @@ const en = {
       stalled:
         'Nobody here can fit the new lock: no other owner is left who can. Make someone else an owner of this space. Until then, the old key can still read what’s new here.',
       secured:
-        'This space has a new lock the old key can’t open. Someone here still has to confirm it’s really you before you’re back in.',
+        'New lock on the space itself; folders and Memories already there keep their old keys. Someone here still has to confirm it’s you.',
       failed:
         'Fitting the new lock kept failing, so this space still has its old one — the old key can still read what’s new here. Start it again, and another owner takes it on.',
     },
@@ -2261,15 +2262,16 @@ const de: typeof en = {
       'Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lassen sich die Schlüssel hier nicht ersetzen.',
     errorFailed: 'Deine Schlüssel konnten nicht ersetzt werden. Es wurde nichts geändert — bitte versuche es erneut.',
     doneNotRepair:
-      'Deine Schlüssel sind ersetzt. Ab jetzt ist das alte Gerät ausgesperrt — was es schon gesehen hat, hat es aber weiterhin.',
+      'Deine Schlüssel sind ersetzt, alle anderen Geräte sind abgemeldet. Unten steht bei jedem Bereich, wie weit sein neues Schloss reicht.',
     status: {
-      secured: 'Gesichert',
+      secured: 'Neues Schloss',
       waiting: 'Wartet auf jemand anderen',
       stalled: 'Niemand kann es tun',
       failed: 'Nicht gesichert',
     },
     statusHint: {
-      secured: 'Dieser Bereich hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
+      secured:
+        'Neues Schloss für den Bereich selbst. Ordner und Erinnerungen, die schon da waren, behalten ihre alten Schlüssel – der alte Schlüssel liest also, was dort dazukommt.',
       failed: 'Dieser Bereich hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
     queuedTitle: 'Geteilte Bereiche',
@@ -2279,7 +2281,7 @@ const de: typeof en = {
       stalled:
         'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Bereichs. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
       secured:
-        'Dieser Bereich hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+        'Neues Schloss für den Bereich selbst; Ordner und Erinnerungen, die schon da waren, behalten ihre alten Schlüssel. Jemand hier muss noch bestätigen, dass du es bist.',
       failed:
         'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Bereich noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
     },

@@ -78,7 +78,10 @@ no content re-sealed and no media re-encrypted
 ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md)). ADR 0024
 rejected full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but
 unopened) and a flat set of independent epoch keys (each new member would need one wrap per epoch; the backward
-chain makes it one).
+chain makes it one). The cost of that today: a rotation re-keys no node yet, so what is added inside a folder or
+Memory that existed before the rotation seals under keys the excluded party holds; only a new entry at the scope's
+root is out of their reach. [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) decides that every
+rotation re-keys every node below the scope key; it is not built yet.
 
 **But removal is still `O(N)`, so whether it rotates is a per-scope policy.** A new epoch must be wrapped to
 every remaining member's identity, because nobody holding only the old epoch can derive the new one. That is a

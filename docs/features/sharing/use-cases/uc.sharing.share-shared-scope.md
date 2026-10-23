@@ -31,14 +31,16 @@ create-gate (scope) and a member-removal hook are new.
 3. **Follows new content automatically.** Because `K_node` is **stable and never re-keyed**
    ([ADR 0024](../../../decisions/0024-scope-key-rotation.md): no content re-encryption), photos a member adds to
    the shared Memory **after** a scope-key rotation seal under the **same** `K_node` — so the existing share shows
-   them, the URL never changes, and no re-wrap is needed.
+   them, the URL never changes, and no re-wrap is needed. That holds today because a rotation re-keys no node;
+   [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) decides that it will, re-wrapping each share to the new key,
+   and is not built yet.
 
 ## Alternate / exception flows
 
 - **A1 — member removed → their shares deactivate.** Removing a member from the scope **soft-revokes every share
   that member created there** (`enabled = false`): the resolve + gated blob endpoint `404`. This is the
-  **honest-server forward-secrecy layer** for a public link — since `K_node` cannot be rotated away, the server-side
-  deactivation *is* the revocation. It runs alongside (and independently of) the group scope-key rotation the
+  **honest-server forward-secrecy layer** for a public link — since a rotation re-keys no node today (ADR 0109, not built), the
+  server-side deactivation *is* the revocation. It runs alongside (and independently of) the group scope-key rotation the
   removal also triggers ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); for a **tenant** (ACL-revoke,
   no rotation — [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)) it is the *only* forward
   layer for the link.
