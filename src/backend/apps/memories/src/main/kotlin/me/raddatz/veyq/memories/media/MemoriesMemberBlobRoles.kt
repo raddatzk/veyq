@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.MemberBlobRoles
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import jakarta.enterprise.context.ApplicationScoped
 
 /**
@@ -11,4 +12,6 @@ import jakarta.enterprise.context.ApplicationScoped
 @ApplicationScoped
 class MemoriesMemberBlobRoles : MemberBlobRoles {
     override fun roles(): Set<String> = MemoryBlobRoles.MEMBER
+
+    override fun application(): String = CapabilityIds.MEMORIES
 }

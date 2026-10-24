@@ -86,7 +86,7 @@ paths:
         "409": { $ref: "#/components/responses/BannerConflict" }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The node is no MEMORY or CHAPTER (`illegal_target`), an upload was not started as this node's banner or poster (`upload_mismatch`), or `shared` / `posterShared` names no blob this node holds (`shared_source_invalid`).
+          description: The node is no MEMORY or CHAPTER (`illegal_target`), an upload was not started as this node's banner or poster (`upload_mismatch`), or `shared` / `posterShared` names no blob this node holds (`shared_source_invalid`), or Memories is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 
@@ -144,7 +144,7 @@ paths:
         "409": { $ref: "#/components/responses/BannerConflict" }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The node is no MEMORY or CHAPTER (`illegal_target`).
+          description: The node is no MEMORY or CHAPTER (`illegal_target`), or Memories is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 

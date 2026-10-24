@@ -58,6 +58,19 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    fun anApplicationsOwnEntryIsAnAncestorOfItsChildrenAtBothLevels() {
+        // uc.platform.switch-application-off: an application's one-segment id is its switch, and every id under it is
+        // off with it — the AND along the path takes the root in like any prefix that is an entry.
+        assertFalse(registry(CapabilityIds.MEMORIES).isActive(CapabilityIds.MEMORIES_PLACES, null))
+        assertTrue(registry(CapabilityIds.DEPOT).isActive(CapabilityIds.MEMORIES_PLACES, null), "control: another application's switch")
+        val tenantOff = tenantRegistry(emptySet(), CapabilityIds.MEMORIES)
+        assertFalse(tenantOff.isActive(CapabilityIds.MEMORIES_MAP, "t1"))
+        assertTrue(tenantOff.isActive(CapabilityIds.MEMORIES_MAP, "t2"), "control: only the tenant that switched it")
+        // E3: off for the instance and on for the tenant is off — a tenant only narrows
+        assertFalse(tenantRegistry(setOf(CapabilityIds.MEMORIES)).isActive(CapabilityIds.MEMORIES, "t1"))
+    }
+
+    @Test
     fun offSwitchesNameEverySwitchOnThePathRootFirstInstanceBeforeTenantAndAreEmptyExactlyWhenActive() {
         val registry = tenantRegistry(setOf(PUBLIC_SHARES, PUBLIC_SHARES_CONTRIBUTE), PUBLIC_SHARES, REMEMBER_DEVICE)
         assertEquals(

@@ -48,7 +48,7 @@ import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { copyHeaderActions } from '../../../core/export/copyActions'
 import { reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
-import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
+import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { formatBytes } from '../../../shared/formatBytes'
@@ -278,7 +278,7 @@ function onPicked(e: Event) {
 // --- what the status menu cannot explain: why this file's replace did not go through ------------------------------------
 
 type Notice = { key: string; item: UploadItem<FileUploadResult, FileJobExtra>; text: string; replaceAnyway: boolean }
-const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
+const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED, APPLICATION_OFF])
 function noticeText(code: string, name: string): string {
   if (guest && code === QUOTA_EXCEEDED) return t('depot.guest.linkFull', { name })
   return t(`depot.errors.${code}`, { name })

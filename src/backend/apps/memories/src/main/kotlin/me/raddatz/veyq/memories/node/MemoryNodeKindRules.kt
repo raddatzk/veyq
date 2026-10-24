@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.node
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import jakarta.enterprise.context.ApplicationScoped
 
 /** The node kinds Memories owns (ADR 0079 Decision 3) — the values of `veyq_node.kind` core does not interpret. */
@@ -39,4 +40,7 @@ class MemoryNodeKindRules : NodeKindRules {
 
     /** A Memory and a Chapter carry a cover (inbox #411: core's `COVER` slot, since #341). */
     override fun takesCover(kind: String): Boolean = handles(kind)
+
+    /** Both kinds are Memories': switched off, neither is written (uc.platform.switch-application-off). */
+    override fun applicationOf(kind: String): String? = if (handles(kind)) CapabilityIds.MEMORIES else null
 }

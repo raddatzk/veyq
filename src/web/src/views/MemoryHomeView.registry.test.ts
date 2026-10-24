@@ -64,7 +64,7 @@ import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { capabilityState } from '../shared/state/capabilities'
-import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX, DEPOT, MEMORIES } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { targetOf, type Access, type TreeSource } from '../core/access'
@@ -114,7 +114,7 @@ beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(loadStatements).mockResolvedValue(undefined)
   holder.reg = fullRegistry()
-  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+  capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   treeStore.nodes = [
     node({ id: 'mem', kind: MEMORY_KIND, name: 'Mem' }),
     node({ id: 'chap', kind: CHAPTER_KIND, name: 'Chap', parentId: 'mem' }),
@@ -202,7 +202,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     expect(w.find('.share').exists()).toBe(false)
     holder.reg = fullRegistry()
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|true')
-    capabilityState.ids = [] // control: the instance's switch alone takes it away too
+    capabilityState.ids = [MEMORIES, DEPOT] // control: the instance's switch alone takes it away too
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
   })
 

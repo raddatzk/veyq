@@ -32,8 +32,8 @@ what this instance can do, what version it speaks, and which optional features t
 - [uc.platform.copy-node](use-cases/uc.platform.copy-node.md) — **built (web)** (inbox #423, ADR 0082 decision 11: a
   member copies a node and its subtree within a space; the client re-creates it through the export/import hooks and uploads
   every file again, so the server never learns it is a copy.)
-- [uc.platform.switch-application-off](use-cases/uc.platform.switch-application-off.md) — **planned**
-  (`changes/cr-application-switches.md`, inbox #532: an application switched off for the instance or a tenant is
+- [uc.platform.switch-application-off](use-cases/uc.platform.switch-application-off.md) — **built**
+  (an application switched off for the instance or a tenant is
   read-only — every write refused, every read, download and removal kept.)
 
 ## Enablers

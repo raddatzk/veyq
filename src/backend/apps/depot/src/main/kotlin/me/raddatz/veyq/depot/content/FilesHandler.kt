@@ -1,5 +1,7 @@
 package me.raddatz.veyq.depot.content
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadOpener
@@ -71,6 +73,7 @@ class FilesHandler(
     private val completions: UploadCompletions,
     private val store: FilesStore,
     private val blocks: ModerationBlocks,
+    private val applications: ApplicationSwitch,
 ) {
     /**
      * `completeFile`: the upload [uploadId] becomes the blob of the file [nodeId], replacing [expectedBlobId] (null:
@@ -84,6 +87,7 @@ class FilesHandler(
     ): CompleteFileOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteFileOutcome.NoScope, CompleteFileOutcome.Suspended, CompleteFileOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.DEPOT, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val node = nodes.findInScope(scopeId, nodeId) ?: return CompleteFileOutcome.NoNode
         if (node.kind != DepotNodeKinds.FILE) return CompleteFileOutcome.IllegalTarget
         if (blocks.contentView(scopeId).nodeBlocked(nodeId)) return CompleteFileOutcome.Blocked

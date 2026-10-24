@@ -43,7 +43,11 @@ At refine (2026-10-23) the seam existed **only uncommitted** in that CR's worktr
 (`core/node/rekey/NodeRekeyParticipant.kt`: `part`, `commit(scopeId, nodeId, staged): Verdict` with
 `APPLIED/MISSING/STALE`, core rolling back on anything but `APPLIED`), no participant existed, `rekeyContent` and the
 guard did not exist. **And `cr-application-switches` has landed** (`test -f changes/cr-application-switches.md && echo "switch CR still
-open"`); its seam (`applicationOf`, `ApplicationSwitch.requireWritable`) is planned there too. Every sentence below that
+open"`); it landed 2026-10-24 and its seam is built: core's `ApplicationSwitch` (`requireWritable(application, scopeId)`
+by name in each write handler, after its gate), `NodeKindRules.applicationOf(kind)`, `MemberBlobRoles.application()`, the
+`ApplicationSwitchSweepTest` (red on an application's write operation that is neither refused off nor exempt with its
+reason), the catalog guard's "every application has its own entry", and on the web `registry.registerApplication` and
+`MemberAccess.applicationsOff` — `docs/apps/README.md` § Rules lists what a new application adds. Every sentence below that
 leans on that CR's plan carries **"(planned in
 cr-scope-rotation-rekeys-nodes)"**; the first implementer re-reads each against the merged tree
 (`grep -n "planned in cr-scope-rotation" changes/cr-expenses-ledger.md`) and says what moved.
@@ -175,7 +179,8 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    guest reads; the guest gate and the guest-write record per revision; the subtree and scope erasers and the writer
    column's account-erasure class; the re-key participant (decision 0, planned in cr-scope-rotation-rekeys-nodes);
    `ReportableItems` and the hold contributor; `NodeItemsRevisionBumpsTest` learns the writers; the `expenses` entry
-   and every Expenses write asking `ApplicationSwitch` (planned in cr-application-switches), under its sweep.
+   and every Expenses write asking `ApplicationSwitch.requireWritable` (built by cr-application-switches), under
+   `ApplicationSwitchSweepTest`.
    **Done when:**
    `./gradlew check` green; every guard of the baseline still `0`; slice tests, each negative anchored on its status and
    code with a positive control on the same predicate: a stale append lands nothing of its batch (control: the fresh one

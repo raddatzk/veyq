@@ -358,7 +358,8 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
     private companion object {
         const val PACKAGE = "me.raddatz.veyq.core.platform.capabilities"
         const val CORE_ROOT = "core."
-        val ID = Regex("^[a-z0-9]+(\\.[a-z0-9-]+)+$")
+        /** A dotted path under a root; one segment is an application's own switch (`memories`, ADR 0079 decision 8). */
+        val ID = Regex("^[a-z0-9]+(\\.[a-z0-9-]+)*$")
         val TEXT_FIELDS = listOf("title", "purpose", "whenOff")
         val LANGUAGES = listOf("en", "de")
         val LEVELS = setOf("instance", "tenant")

@@ -1,0 +1,175 @@
+div.veyq-node-host
+  div.application-off-banner.veyq-message.veyq-message--warn [role="alert"]
+    div.veyq-message__wrapper
+      div.veyq-message__content
+        div.veyq-message__text
+          "Memories is switched off here. You can still open and download what’s here, so save what you want to keep."
+  div.veyq-level-view
+    div.veyq-level-toolbar
+      button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button
+        span.veyq-button__icon.veyq-icon
+          svg.lucide.lucide-plus.veyq-icon__svg
+            path
+            path
+        span.veyq-button__label
+          "New"
+      button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small
+        span.veyq-button__icon.veyq-icon
+          svg.lucide.lucide-trash.lucide-trash-2.veyq-icon__svg
+            path
+            path
+            path
+            path
+            path
+        span.veyq-button__label
+          "Trash"
+      button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-select-button [aria-pressed="false"]
+        span.veyq-button__icon.veyq-icon
+          svg.lucide.lucide-check-square-2.lucide-square-check.veyq-icon__svg
+            rect
+            path
+        span.veyq-button__label
+          "Select"
+      div.view-mode-toggle [role="group"] [aria-label="View"]
+        button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
+          span.veyq-icon
+            svg.lucide.lucide-layout-grid.veyq-icon__svg
+              rect
+              rect
+              rect
+              rect
+        button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+          span.veyq-icon
+            svg.lucide.lucide-menu.veyq-icon__svg
+              path
+              path
+              path
+        button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
+          span.veyq-icon
+            svg.lucide.lucide-map.veyq-icon__svg
+              path
+              path
+              path
+    header.has-leading.veyq-node-header
+      div.veyq-node-header-leading
+        span.veyq-icon.veyq-node-header-icon
+          svg.lucide.lucide-folder.veyq-icon__svg
+            path
+      div.veyq-node-header-body
+        div.veyq-node-header-titlerow
+          h1.veyq-node-header-title
+            "Trips"
+          div.veyq-node-header-actions
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-heart.veyq-icon__svg
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-share-2.veyq-icon__svg
+                  circle
+                  circle
+                  circle
+                  line
+                  line
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-download.veyq-icon__svg
+                  path
+                  path
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-image.veyq-icon__svg
+                  rect
+                  circle
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-pencil.veyq-icon__svg
+                  path
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Move to…"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-file-output.veyq-icon__svg
+                  path
+                  path
+                  path
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Copy to…"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-copy.veyq-icon__svg
+                  rect
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-more.veyq-prime-icon-button [aria-label="More actions for “Trips”"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                  circle
+                  circle
+                  circle
+    div.veyq-level-tabs.veyq-tabs
+      div.veyq-tabs__bar
+        div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+          button.veyq-tab [role="tab"]
+            "All"
+          button.veyq-tab [role="tab"]
+            "Memories"
+          button.veyq-tab [role="tab"]
+            "Depot"
+          button.veyq-tab [role="tab"]
+            "Drop boxes"
+    ul.veyq-level-list
+      li.is-folder.is-grid.veyq-level-item
+        button.veyq-level-item-main [aria-label="Rome"]
+          span.veyq-level-item-visual
+            span.veyq-icon.veyq-level-item-icon
+              svg.lucide.lucide-folder.veyq-icon__svg
+                path
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Rome"
+            small.veyq-level-item-meta
+              "Folder"
+        span.veyq-level-item-actions
+          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.veyq-button__icon.veyq-icon
+              svg.lucide.lucide-heart.veyq-icon__svg
+                path
+          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
+            span.veyq-button__icon.veyq-icon
+              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                circle
+                circle
+                circle
+      li.has-cover.is-grid.veyq-level-item
+        button.veyq-level-item-main [aria-label="Italy"]
+          span.veyq-level-item-visual
+            span.memory-cover-image
+              span.memory-cover-image-ph.veyq-icon
+                svg.lucide.lucide-images.veyq-icon__svg
+                  path
+                  path
+                  circle
+                  rect
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Italy"
+            small.veyq-level-item-meta
+              "Memory"
+              "·"
+              span.veyq-level-item-detail
+                "05/01/2024 – 05/10/2024"
+              "·"
+              span.veyq-level-item-detail
+                "p-1"
+        span.veyq-level-item-actions
+          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.veyq-button__icon.veyq-icon
+              svg.lucide.lucide-heart.veyq-icon__svg
+                path
+          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
+            span.veyq-button__icon.veyq-icon
+              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                circle
+                circle
+                circle

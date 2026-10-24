@@ -20,6 +20,7 @@
 // the one page core renders by claim (every other guest page is the member's views, inbox #401).
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
+import { DEPOT } from '../platform/capabilities'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
@@ -142,4 +143,6 @@ export function registerDepot(registry: Registry): void {
   // name in the path (`#reisen/report`), a folder of the same name needs the trailing slash (`#reisen/report/`). Declared,
   // not defaulted, so the registry knows it was chosen — and no second application can choose it too.
   registry.claimNoRouteSegment([FILE_KIND, DROPBOX_KIND])
+  // Its kinds are the Depot application's, switched as one by its register entry (uc.platform.switch-application-off).
+  registry.registerApplication({ id: DEPOT, name: 'depot.title', kinds: [FILE_KIND, DROPBOX_KIND] })
 }

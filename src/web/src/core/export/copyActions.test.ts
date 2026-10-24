@@ -21,6 +21,7 @@ beforeAll(() => {
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', shareable: false, exportContent: hooks.exportContent, importStreams: true })
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file', shareable: false })
+    registry.registerApplication({ id: 'cp', name: 'cp.name', kinds: ['CP_STREAMS'] })
   }
 })
 
@@ -40,6 +41,14 @@ describe('canCopy', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY']) {
       for (const kind of [FOLDER_KIND, 'CP_STREAMS']) expect(canCopy(guestAccessOf(role), { kind }), `${role} ${kind}`).toBe(false)
     }
+  })
+
+  it('not of a node whose application is switched off (a copy creates one, uc.platform.switch-application-off)', () => {
+    const offs = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)), applicationsOff: new Set(['cp']) })
+    expect(canCopy(unlocked, { kind: 'CP_STREAMS' })).toBe(true) // control: its application on, it copies
+    expect(canCopy(offs, { kind: 'CP_STREAMS' })).toBe(false)
+    expect(canCopy(offs, { kind: 'CP_AS_FOLDER' })).toBe(true) // a kind no application named
+    expect(canCopy(offs, { kind: FOLDER_KIND })).toBe(true) // core's own kind is no application's
   })
 
   it('not with locked keys, nor while the scope is pending deletion (a copy writes), nor without a node', () => {

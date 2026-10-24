@@ -2109,6 +2109,15 @@ that tells someone something writes a row per recipient kind (member, guest, rep
 that reaches them (in the app — on which screen —, by mail — from which address the server holds in the clear —, or
 none), and the measures or steps the duty does NOT reach (the Server Owner's own steps carried no statement here).
 
+### A refine that promises a viewer sees a switched state names what that viewer's client is handed
+
+`cr-application-switches` promised that "a `READ_WRITE` link guest sees it read-only" with an application off, and no
+sentence asked how the guest's page would know: a link's resolve carries no tenant setting and the tenant's capability
+set is members-only. The question reached the owner in the middle of the implementation and moved the decision twice
+(no new field, the links keep serving, the members get a banner, the guest learns it from the refused write). So
+before a refine promises a viewer a state, it greps what that viewer's client is given — its resolve, its manifest,
+its access — and either names the field that carries the state or writes "not told" into the decision.
+
 ### A switch that holds back a side effect names where it is entered before the effect fires
 
 `cr-authority-orders-and-art18-reports` decided the authority's deferral as "a row on the statement", and a statement

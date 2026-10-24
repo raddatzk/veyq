@@ -1,6 +1,6 @@
 {
   "registry": "platform-capabilities",
-  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core`, or an application's own name, `memories`; ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5) vs external-service (an outside service the browser calls: active only while the Server Owner configured its address, PUT /api/instance/external-services/{capabilityId}, and its switches are on; both deliveries carry the address as `serviceUrl`, and the served CSP names its origin only then, ADR 0088 decision 7). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core`, or an application's own name, `memories`; ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An application's own name is an entry too, the one id of one segment: its switch, which makes the application read-only while it is off (ADR 0079 decision 8, uc.platform.switch-application-off), and an ancestor of every id under it. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, ADR 0032 §5) vs external-service (an outside service the browser calls: active only while the Server Owner configured its address, PUT /api/instance/external-services/{capabilityId}, and its switches are on; both deliveries carry the address as `serviceUrl`, and the served CSP names its origin only then, ADR 0088 decision 7). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
   "capabilities": {
     "core.public-shares": {
       "title": {
@@ -196,6 +196,24 @@
       "levels": ["instance"],
       "description": "The k-anonymity range check of a chosen password (security-model.md § the breached-password check): the browser fetches <serviceUrl><first five hex of SHA-1> and compares the suffixes locally. Instance-only, because the join and recover screens run it before sign-in. Active only while a URL is configured (veyq_external_service) and the entry is on; the served CSP names its origin in connect-src only then."
     },
+    "memories": {
+      "title": {
+        "en": "Memories",
+        "de": "Erinnerungen"
+      },
+      "purpose": {
+        "en": "Members keep photos and videos in Memories, with chapters, and share them. Place names and maps belong to it.",
+        "de": "Mitglieder bewahren Fotos und Videos in Erinnerungen auf, mit Kapiteln, und teilen sie. Ortsnamen und Karten gehören dazu."
+      },
+      "whenOff": {
+        "en": "Nothing new can be added to Memories or changed in them. Everything there can still be opened and downloaded.",
+        "de": "In Erinnerungen kann nichts Neues dazukommen und nichts geändert werden. Alles darin lässt sich weiter öffnen und herunterladen."
+      },
+      "serves": ["uc.platform.switch-application-off"],
+      "source": "operator-policy",
+      "levels": ["instance", "tenant"],
+      "description": "The Memories application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a MEMORY or CHAPTER node created, updated, given a cover or a banner, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one, and every non-GET operation of contracts/api/memories/ but the named exemptions (deleteMedia, restoreMedia, deleteShareMedia, deleteBucket, purgeMedia, putItemFavorites, stageMediaRekey). Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. memories.places and memories.map are off with it (the AND along the path)."
+    },
     "memories.places": {
       "title": {
         "en": "Place names",
@@ -231,6 +249,24 @@
       "source": "external-service",
       "levels": ["instance", "tenant"],
       "description": "The map tiles (ADR 0018): a {z}/{x}/{y} URL template loaded as images. Active only while a URL is configured and the entry is on at both levels; the served CSP names its origin in img-src while it is on at the instance level. Independent of memories.places."
+    },
+    "depot": {
+      "title": {
+        "en": "Depot",
+        "de": "Depot"
+      },
+      "purpose": {
+        "en": "Members keep documents and any other file in their spaces, and collect files from others in drop boxes.",
+        "de": "Mitglieder bewahren Dokumente und jede andere Datei in ihren Bereichen auf und sammeln in Briefkästen Dateien von anderen."
+      },
+      "whenOff": {
+        "en": "No files can be added or changed. Everything there can still be opened and downloaded.",
+        "de": "Dateien können weder dazukommen noch geändert werden. Alles lässt sich weiter öffnen und herunterladen."
+      },
+      "serves": ["uc.platform.switch-application-off"],
+      "source": "operator-policy",
+      "levels": ["instance", "tenant"],
+      "description": "The Depot application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a FILE or DEPOT_DROPBOX node created, updated, given a cover, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one (a drop box's included), and every non-GET operation of contracts/api/depot/. Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. The drop box's own creation switch stays core.public-shares.drop-box."
     }
   }
 }

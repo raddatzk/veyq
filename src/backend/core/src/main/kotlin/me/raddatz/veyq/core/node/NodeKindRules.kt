@@ -46,11 +46,24 @@ interface NodeKindRules {
      */
     fun capabilityToCreate(kind: String): String? = null
 
+    /**
+     * The application a node of [kind] — one this implementation [handles] — belongs to: its register entry
+     * (`contracts/platform/capabilities.json`, the application's own one-segment id), or null for core's own kind, the
+     * default. The seam an application switch is asked through ([me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch],
+     * uc.platform.switch-application-off): core asks it by the node's kind and names no application. Unlike
+     * [capabilityToCreate], it reaches what exists: off, every write of a node of the kind is refused.
+     */
+    fun applicationOf(kind: String): String? = null
+
     companion object {
         /** The capability the one rule of [rules] that handles [kind] says its creation needs; none or several → null
          *  (such a kind is refused by [parentAllows] anyway). */
         fun capabilityToCreate(rules: List<NodeKindRules>, kind: String): String? =
             rules.filter { it.handles(kind) }.singleOrNull()?.capabilityToCreate(kind)
+
+        /** The application the one rule of [rules] that handles [kind] names; none or several → null. */
+        fun applicationOf(rules: List<NodeKindRules>, kind: String): String? =
+            rules.filter { it.handles(kind) }.singleOrNull()?.applicationOf(kind)
 
         /** Whether the one rule of [rules] that handles [kind] says it takes a cover; none or several → false. */
         fun takesCover(rules: List<NodeKindRules>, kind: String): Boolean =

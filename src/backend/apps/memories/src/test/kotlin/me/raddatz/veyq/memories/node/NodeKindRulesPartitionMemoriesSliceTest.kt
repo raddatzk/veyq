@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.node
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
@@ -82,7 +83,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Test
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
-        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, blocks, gate)
+        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, ApplicationSwitch(capabilities, mutableListOf()), blocks, gate)
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 

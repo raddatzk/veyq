@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -177,11 +179,13 @@ class MediaHandler(
     private val access: ScopeAccess,
     private val itemsRevisions: NodeItemsRevisions,
     private val blocks: ModerationBlocks,
+    private val applications: ApplicationSwitch,
 ) {
     /** The member's `completeMedia`: the access check, then core's dispatcher, attributing each item to [userId]. */
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteOutcome.NoScope, CompleteOutcome.Suspended, CompleteOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         return CompleteOutcome.Results(completions.complete(scopeId, items, UploadOpener.Member(userId)))
     }
 
@@ -245,6 +249,7 @@ class MediaHandler(
     fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaRevision: Long, nodeEpoch: Int): MetaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))) {
             is MediaStore.SetMetaResult.Written -> MetaOutcome.Found(r.wrappedMeta)
             MediaStore.SetMetaResult.Missing -> MetaOutcome.NoMedia
@@ -307,6 +312,7 @@ class MediaHandler(
     ): CreateBucketOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateBucketOutcome.NoNode, CreateBucketOutcome.Suspended, CreateBucketOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         if (store.findNode(scopeId, nodeId) == null) return CreateBucketOutcome.NoNode
         val ownerKey = if (parentBucketId != null) {
             val parent = store.findBucket(scopeId, nodeId, parentBucketId) ?: return CreateBucketOutcome.Forbidden
@@ -339,6 +345,7 @@ class MediaHandler(
     fun renameBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String, nodeEpoch: Int): RenameBucketOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RenameBucketOutcome.NoBucket, RenameBucketOutcome.Suspended, RenameBucketOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         // ADR 0061: the bucket lookup is keyed on (scope, node, bucket) and never touches the node row, so the
         // node gate every sibling op passes through has to be spelled out here — else a trashed subtree's
         // buckets stay writable while everything else about it is hidden.
@@ -375,6 +382,7 @@ class MediaHandler(
     fun moveMedia(userId: String, scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): MoveMediaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MoveMediaOutcome.NoNode, MoveMediaOutcome.Suspended, MoveMediaOutcome.Deleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         if (store.findNode(scopeId, nodeId) == null) return MoveMediaOutcome.NoNode
         val ok = store.moveMedia(scopeId, nodeId, mediaIds, targetBucketId)
         return if (ok) MoveMediaOutcome.Done else MoveMediaOutcome.Forbidden

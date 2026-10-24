@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.banner
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -87,6 +89,7 @@ class MemoryBannerHandler(
     private val blobs: BlobUploadStore,
     private val uploads: BlobUploadHandler,
     private val store: MemoryBannerStore,
+    private val applications: ApplicationSwitch,
 ) {
     /**
      * Make [uploadId] - or [shared], a new row on an object the node already stores (ADR 0013 § 5) - the banner of
@@ -106,6 +109,7 @@ class MemoryBannerHandler(
         }
         access.check(userId, scopeId, WRITE)
             .refusal(MemoryBannerOutcome.NotFound, MemoryBannerOutcome.Suspended, MemoryBannerOutcome.ScopeDeleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val node = nodes.findInScope(scopeId, nodeId) ?: return MemoryBannerOutcome.NotFound
         if (node.kind !in MemoryBanner.KINDS) return MemoryBannerOutcome.IllegalTarget
         val opener = UploadOpener.Member(userId)
@@ -145,6 +149,7 @@ class MemoryBannerHandler(
     ): MemoryBannerOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MemoryBannerOutcome.NotFound, MemoryBannerOutcome.Suspended, MemoryBannerOutcome.ScopeDeleting)?.let { return it }
+        applications.requireWritable(CapabilityIds.MEMORIES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val node = nodes.findInScope(scopeId, nodeId) ?: return MemoryBannerOutcome.NotFound
         if (node.kind !in MemoryBanner.KINDS) return MemoryBannerOutcome.IllegalTarget
         return store.remove(scopeId, node.id, blobId, posterBlobId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))

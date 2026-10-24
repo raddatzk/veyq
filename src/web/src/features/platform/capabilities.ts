@@ -32,6 +32,13 @@ export const CORE_DEVICE_LINKING = 'core.device-linking'
  *  Server Owner configured its address, which the entry carries as `serviceUrl`. */
 export const CORE_BREACHED_PASSWORD = 'core.breached-password'
 
+/** The Memories application itself (ADR 0079 decision 8, uc.platform.switch-application-off): off, it is read-only, and
+ *  every `memories.*` id is off with it. */
+export const MEMORIES = 'memories'
+
+/** The Depot application itself: off, it is read-only (uc.platform.switch-application-off). */
+export const DEPOT = 'depot'
+
 /** Place names from a geocoder, an outside service; its address is the entry's `serviceUrl` (ADR 0016). */
 export const MEMORIES_PLACES = 'memories.places'
 

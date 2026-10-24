@@ -46,12 +46,14 @@ beforeEach(() => {
 
 describe('Access: the two shapes', () => {
   it('a member carries its scope, its keys, its pending deletion and the instance\'s sharing switches — nothing of a link', () => {
-    const a = memberAccess({ scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true })
-    expect(a).toEqual({ mode: 'member', scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true })
+    const off = new Set(['memories'])
+    const a = memberAccess({ scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true, applicationsOff: off })
+    expect(a).toEqual({ mode: 'member', scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true, applicationsOff: off })
     // One boolean per register leaf (ADR 0088), each from one manifest id: no field is an AND of two.
     expectTypeOf<MemberAccess>().toEqualTypeOf<{
       readonly mode: 'member'; readonly scopeId: string; readonly epochs: EpochKeys | null; readonly readonly: boolean
       readonly publicShares: boolean; readonly publicSharesContribute: boolean; readonly publicSharesDropBox: boolean
+      readonly applicationsOff: ReadonlySet<string>
     }>()
   })
 

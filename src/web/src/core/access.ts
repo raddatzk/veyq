@@ -49,6 +49,11 @@ export interface MemberAccess {
   readonly publicSharesContribute: boolean
   /** The instance offers WRITE_ONLY (drop-box) public links and the drop-box node (`core.public-shares.drop-box`). */
   readonly publicSharesDropBox: boolean
+  /** The applications switched off for this tenant (uc.platform.switch-application-off): each registered application's
+   *  id (`registry.applications()`) whose register entry is absent from the effective set — one `hasCapability` each,
+   *  filled by the host. Off, an application is read-only: its rights function offers no write but a delete to the trash
+   *  and its restore, and core offers no cover or copy of its nodes ({@link applicationWritable}). */
+  readonly applicationsOff: ReadonlySet<string>
 }
 
 /** A guest of a public share link. Built by the share page after its gates (`guestAccess`, core/sharing/guestAccess.ts);
@@ -139,6 +144,15 @@ export function targetOf(tree: TreeSource, node: { id: string; kind: NodeKind } 
     // marker — so the root is asked first); a parent the tree does not serve is unknown, never the scope root.
     parentKind: node.id === tree.rootId ? undefined : parentId === null ? null : (tree.node(parentId)?.kind ?? undefined),
   }
+}
+
+/** Whether a node of `kind` takes writes for `access`: false for a member while the kind's application is switched off
+ *  (`MemberAccess.applicationsOff`); true for core's own kinds and a kind nobody named. A guest's page is not told the
+ *  switch (the link's resolve carries no tenant setting), so it is true for a guest: the server refuses the write. */
+export function applicationWritable(access: Access, kind: NodeKind | null): boolean {
+  if (access.mode !== 'member' || kind === null) return true
+  const application = registry.applicationOf(kind)
+  return application === null || !access.applicationsOff.has(application)
 }
 
 /** The member's `Access`, from what the host already knows (see `MemberAccess` for each field). */

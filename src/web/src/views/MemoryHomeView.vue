@@ -64,7 +64,7 @@ const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 const offerUndo = useTrashUndo()
-const { hasCapability } = useCapabilities()
+const { hasCapability, isSwitchedOff } = useCapabilities()
 
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
 // its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
@@ -154,6 +154,9 @@ const kindShareable = computed(() => {
 // Who looks: the member (see the header). A pending deletion (cr-0090) takes every write away — the server refuses them
 // during the grace window (uc.spaces.scope-access); a guest's identity folder in a drop box (ADR 0080 decision 11,
 // `TreeNode.shareIdentityId`) takes placement away, which the rights functions read from the tree.
+// The applications switched off for this tenant (uc.platform.switch-application-off): one manifest id each — the server
+// ANDs the instance's and the tenant's switches; each is named once in the banner above every page of the space.
+const applicationsOff = computed(() => registry.applications().filter((a) => isSwitchedOff(a.id)))
 const access = computed(() =>
   memberAccess({
     scopeId: activeSpace.scopeId ?? '',
@@ -163,6 +166,7 @@ const access = computed(() =>
     publicShares: hasCapability(CORE_PUBLIC_SHARES),
     publicSharesContribute: hasCapability(CORE_PUBLIC_SHARES_CONTRIBUTE),
     publicSharesDropBox: hasCapability(CORE_PUBLIC_SHARES_DROP_BOX),
+    applicationsOff: new Set(applicationsOff.value.map((a) => a.id)),
   }),
 )
 const tree = memberTreeSource({
@@ -401,6 +405,9 @@ async function onDeleteDone() {
     <template v-else>
       <VeyqMessage v-if="isPendingDeletion" tone="warn" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
+      </VeyqMessage>
+      <VeyqMessage v-for="app in applicationsOff" :key="app.id" tone="warn" class="application-off-banner">
+        {{ t('applications.switchedOff', { application: t(app.name) }) }}
       </VeyqMessage>
       <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
       <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason; a member

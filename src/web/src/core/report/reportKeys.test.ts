@@ -31,7 +31,7 @@ function node(id: string, parentId: string | null, entryKey: Uint8Array, key: Ui
 }
 
 const nodes = [node(ROOT, null, K_SC, K_ROOT, 'Familie'), node(CHILD, ROOT, K_ROOT, K_CHILD, 'Sommer', true)]
-const access = memberAccess({ scopeId: SCOPE, epochs, readonly: false, publicShares: true, publicSharesContribute: true, publicSharesDropBox: true })
+const access = memberAccess({ scopeId: SCOPE, epochs, readonly: false, publicShares: true, publicSharesContribute: true, publicSharesDropBox: true, applicationsOff: new Set() })
 const tree = memberTreeSource({ nodes: () => nodes, scopeId: () => SCOPE, epochs: () => epochs, scope: () => '' })
 const nameOf = (n: TreeNode, key: Uint8Array) =>
   new TextDecoder().decode(v1.openFieldWith(

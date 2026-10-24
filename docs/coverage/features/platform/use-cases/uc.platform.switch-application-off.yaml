@@ -1,22 +1,42 @@
 useCase: uc.platform.switch-application-off
 feature: platform
 title: An application switched off is read-only
-status: planned
-# Refined 2026-10-23 (owner: an application off is read-only; ADR 0079 decision 8, ADR 0088 decision 5); built by
-# changes/cr-application-switches.md, whose phases turn each gap below into refs.
+# Built 2026-10-24 (owner: an application off is a reversible read-only window; ADR 0079 decision 8, ADR 0088 decision 5).
+# The server's seam is core's ApplicationSwitch, asked by kind (NodeKindRules.applicationOf) and by name (each application's
+# write handlers); the web's is the registry's applicationOf and MemberAccess.applicationsOff.
 acceptanceCriteria:
   - id: each-application-is-an-entry
-    text: "memories, depot and expenses are entries of the capability register, switchable by the Server Owner for the instance and by a tenant owner for the tenant, each with its title, purpose and whenOff text in EN and DE; their children are off with them."
+    text: "Every application the backend composes (memories and depot today) is an entry of the capability register of its own, switchable by the Server Owner for the instance and by a tenant owner for the tenant, with its title, purpose and whenOff text in EN and DE; its children are off with it, and off for the instance is off for every tenant."
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.anApplicationsOwnEntryIsAnAncestorOfItsChildrenAtBothLevels, CapabilityRegistryTest.theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords]
+        integration: [ApplicationSwitchSweepTest.everyWriteOfEveryApplicationIsGatedOrExemptWithAReason, MemoriesSwitchedOffSliceTest.offForTheInstanceAndOnForTheTenantIsOff]
+      web:
+        unit: [src/features/platform/capabilities.test.ts, src/shared/state/useCapabilities.test.ts]
   - id: every-write-is-refused
-    text: "With an application off, every write of it answers 422 capability_disabled - a node of its kinds created, renamed, moved, given a cover, copied or imported, its records and blobs written, a link rooted on one of its nodes created, reactivated or given a write role, a guest's write through any link - and a sweep derived from the generated APIs holds that no write operation of an application is left out."
+    text: "With an application off, every write of it answers 422 capability_disabled - a node of its kinds created, renamed, moved or given a cover, an upload for one started or completed, a link rooted on one created, reactivated, re-issued or given a write role, a guest's write through any link - and a sweep derived from the generated APIs holds that no write operation of an application is left out."
+    coverage:
+      backend:
+        integration: [ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen, MemoriesSwitchedOffSliceTest.offAMemoryIsNotRenamedNoMediumCompletesAndNoGuestUploads_onEachLands, MemoriesSwitchedOffSliceTest.offNoLinkIsMadeOnAMemoryButAFolderTakesOne, DepotSwitchedOffSliceTest.offAFileIsNotCompletedAndItsDownloadPresigns_onTheCompletionLands, DepotSwitchedOffSliceTest.offADropBoxGuestGetsNoFolder_onItDoes]
   - id: reads-downloads-and-removals-stay
-    text: "With an application off, its nodes and records open, read and download for members and through existing links, and a member deletes one to the trash and restores it; restored, it is read-only like the rest. A member's own item marks (putItemFavorites) are still taken."
+    text: "With an application off, its nodes and records open, read and download for members and through the links that exist, and a member deletes one to the trash and restores it; restored, it is read-only like the rest. A member's own item marks (putItemFavorites) are still taken."
+    coverage:
+      backend:
+        integration: [MemoriesSwitchedOffSliceTest.offWhatExistsListsDownloadsGoesToTheTrashAndBackTakesAHeartAndIsServedThroughItsLink, DepotSwitchedOffSliceTest.offAFileIsNotCompletedAndItsDownloadPresigns_onTheCompletionLands, ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen]
+      web:
+        unit: [src/features/memories/rights.test.ts, src/features/depot/rights.test.ts]
   - id: rekey-erasure-and-measures-run
-    text: "With an application off, a rotation's re-key, an erasure and a moderation measure reach its nodes as always."
+    text: "With an application off, a rotation's re-key and the purge reach its nodes as always; an erasure and a moderation measure run their own paths, which never ask the switch."
+    coverage:
+      backend:
+        integration: [MediaNodeRekeySliceTest.aRekeyLandsWhileMemoriesIsSwitchedOff, ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen]
   - id: the-client-removes-every-write
-    text: "With an application off, the client offers none of its kinds to create and removes every write function from its nodes, and says in one line that it is switched off here and what is there can still be opened and downloaded."
+    text: "With an application off, a member's client offers none of its kinds to create, removes every write function from its nodes but the delete, offers no cover or copy of them, and shows one banner at the top of veyq that it is switched off here and what is there can still be opened and downloaded; an upload the server refuses for it (a guest's included) fails at once, with no retry, saying so."
+    coverage:
+      web:
+        unit: [src/core/blob/applicationOff.test.ts, src/core/blob/queue.test.ts, src/features/memories/components/OptimisticTile.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/views/LevelNewMenu.entries.test.ts, src/core/node/cover/rights.test.ts, src/core/export/copyActions.test.ts, src/core/applications/registry.test.ts, src/views/MemoryHomeView.golden.test.ts]
   - id: on-again-nothing-lost
     text: "Switched on again, every write is accepted and nothing stored was lost."
-gaps:
-  web: "No application has an entry in contracts/platform/capabilities.json, so the client has none to read; built by cr-application-switches."
-  backend: "Only DEPOT_DROPBOX is gated (NodeKindRules.capabilityToCreate); no application write is refused by an application switch; built by cr-application-switches."
+    coverage:
+      backend:
+        integration: [MemoriesSwitchedOffSliceTest.offAMemoryIsNotRenamedNoMediumCompletesAndNoGuestUploads_onEachLands, DepotSwitchedOffSliceTest.offADropBoxGuestGetsNoFolder_onItDoes]

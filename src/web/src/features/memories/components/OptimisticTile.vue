@@ -13,6 +13,7 @@
 import { useI18n } from 'vue-i18n'
 import type { OptimisticTileVM } from '../useOptimisticTiles'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import { APPLICATION_OFF } from '../../../core/blob/queue'
 
 const props = defineProps<{
   tile: OptimisticTileVM
@@ -33,6 +34,8 @@ const statusLabel = () => t(`media.uploadStatus.${props.tile.status}`)
 // instead of the progress ring — the local preview IS the session-only own-view.
 const isDoneDeletable = () => props.deletable === true && props.tile.status === 'done'
 const isLinkFull = () => props.link === true && props.tile.status === 'failed' && props.tile.error === 'quota_exceeded'
+// Memories is switched off here (uc.platform.switch-application-off): the server refused the start; no retry helps.
+const isSwitchedOff = () => props.tile.status === 'failed' && props.tile.error === APPLICATION_OFF
 </script>
 
 <template>
@@ -64,6 +67,10 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
     <div v-else-if="isLinkFull()" class="upload-tile-state upload-tile-failed">
       <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
       <span class="upload-tile-failed-label">{{ t('media.uploadTileLinkFull') }}</span>
+    </div>
+    <div v-else-if="isSwitchedOff()" class="upload-tile-state upload-tile-failed">
+      <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
+      <span class="upload-tile-failed-label">{{ t('media.uploadTileSwitchedOff') }}</span>
     </div>
     <div v-else-if="tile.status === 'failed'" class="upload-tile-state upload-tile-failed">
       <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />

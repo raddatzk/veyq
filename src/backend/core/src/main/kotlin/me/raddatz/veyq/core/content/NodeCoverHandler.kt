@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -68,6 +69,7 @@ class NodeCoverHandler(
     private val store: NodeCoverStore,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val kindRules: MutableList<NodeKindRules>,
+    private val applications: ApplicationSwitch,
 ) {
     /**
      * Make [uploadId] - or, in its place, a new row on an object the node already stores ([shared], ADR 0013 § 5) - the
@@ -85,6 +87,8 @@ class NodeCoverHandler(
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return NodeCoverOutcome.NotFound
         if (!NodeKindRules.takesCover(kindRules, node.kind)) return NodeCoverOutcome.IllegalTarget
+        // A switched-off application's node gets no new cover (uc.platform.switch-application-off).
+        applications.requireKindWritable(node.kind, scopeId)
         val editor = PrincipalKey.User(userId)
         if (shared != null) {
             return store.setShared(scopeId, node.id, node.kind, shared, userId, expectedBlobId, wrappedMeta, metaRevision, nodeEpoch, editor)
@@ -107,7 +111,9 @@ class NodeCoverHandler(
     ): NodeCoverOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
-        if (nodes.findInScope(scopeId, nodeId) == null) return NodeCoverOutcome.NotFound
+        val node = nodes.findInScope(scopeId, nodeId) ?: return NodeCoverOutcome.NotFound
+        // Removing a cover re-seals the node's meta: a write like any other (uc.platform.switch-application-off).
+        applications.requireKindWritable(node.kind, scopeId)
         return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))
     }
 }

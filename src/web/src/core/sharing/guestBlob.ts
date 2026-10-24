@@ -7,7 +7,7 @@
 // window here (inbox #376) — Memories' wire is pinned byte for byte by its characterisation test
 // (`features/memories/uploadWire.characterisation.test.ts`), which held unchanged across the merge.
 import { publicSharesApi } from '../../api/client'
-import { windowPuts } from '../blob/transport'
+import { applicationOffAsCode, windowPuts } from '../blob/transport'
 import { readScheduler, type Presigned, type ReadOpts } from '../blob/readScheduler'
 import type { BlobDeclare, ReservedUpload, WindowFn } from '../blob/types'
 import { activeReview } from './review'
@@ -24,7 +24,7 @@ export async function guestReserve(t: GuestUploadTarget, declares: BlobDeclare[]
     shareId: t.shareId,
     shareBlobUploadsRequest: { contributorToken: t.contributorToken, nodeId: t.nodeId, items: declares },
     xSharePassword: t.pwToken,
-  })
+  }).catch(applicationOffAsCode)
   if (started.results.length !== declares.length) throw new Error('upload_failed')
   return started.results.map((r) => {
     if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')

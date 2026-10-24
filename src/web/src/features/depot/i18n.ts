@@ -129,6 +129,7 @@ const en = {
       illegal_structure: '“{name}” was not uploaded: a file cannot be stored here.',
       stale_file: '“{name}” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.',
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
+      capability_disabled: '“{name}” was not uploaded: Depot is switched off here.',
       failed: '“{name}” could not be uploaded.',
     },
     // A guest's words in Depot's rows on a shared folder (levelRows.ts, F2): no trash to point at, a link has
@@ -313,6 +314,7 @@ const de: typeof en = {
       illegal_structure: '„{name}“ wurde nicht hochgeladen: Hier kann keine Datei liegen.',
       stale_file: '„{name}“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an.',
       quota_exceeded: '„{name}“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist.',
+      capability_disabled: '„{name}“ wurde nicht hochgeladen: Depot ist hier abgeschaltet.',
       failed: '„{name}“ konnte nicht hochgeladen werden.',
     },
     guest: {

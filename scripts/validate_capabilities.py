@@ -20,7 +20,12 @@ And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
               first application entries (`memories.places`, `memories.map`) came with cr-external-services-as-settings.
     - parent — every id of three or more segments has its parent (the id minus its last segment) as a catalog
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing
-              has nothing to AND with. A root (`core`) is not an entry, so a two-segment id has no parent to need.
+              has nothing to AND with. `core` is no entry, so a two-segment core id has no parent to need.
+    - application — every application in `ROOTS` has its own name as an entry, and a one-segment id is exactly
+              that: the application's switch (ADR 0079 decision 8, uc.platform.switch-application-off). Off, the
+              application is read-only, and the server's AND takes the root in like any other prefix that is an entry,
+              so `memories.places` is off with `memories`. An application with no entry could not be switched off,
+              and the next one would arrive without it: this rule is what makes it add one.
 
 And it checks every entry names who may switch it (`levels`, ADR 0088 decisions 2 and 12): a list holding
 `instance` (the Server Owner always may) and `tenant` where a tenant owner may narrow it for their tenant, nothing else
@@ -80,7 +85,7 @@ CATALOG = ROOT / "contracts" / "platform" / "capabilities.json"
 FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
 
-ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)+$")
+ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)*$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
 KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service"}
 # Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
@@ -114,12 +119,18 @@ caps = catalog.get("capabilities", {})
 if not caps:
     errors.append(f"{CATALOG.relative_to(ROOT)}: no capabilities defined")
 
+for app in sorted(ROOTS - {"core"} - set(caps)):
+    errors.append(f"application '{app}' has no entry of its own, so it cannot be switched off (ADR 0079 decision 8, "
+                  f"uc.platform.switch-application-off)")
+
 for cid, entry in caps.items():
     if not ID_RE.match(cid):
         errors.append(f"capability id '{cid}' is not a lowercase-dotted token")
     segments = cid.split(".")
     if segments[0] not in ROOTS:
         errors.append(f"{cid}: root segment '{segments[0]}' is not one of {sorted(ROOTS)} (ADR 0088 decision 1)")
+    if len(segments) == 1 and cid not in ROOTS - {"core"}:
+        errors.append(f"{cid}: a one-segment id is an application's own switch, and '{cid}' is no application (ADR 0079 decision 8)")
     if len(segments) >= 3:
         parent = ".".join(segments[:-1])
         if parent not in caps:

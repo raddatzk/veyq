@@ -10,6 +10,7 @@
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, RightsTarget, MemberAccess } from '../../core/access'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
+import { MEMORIES } from '../platform/capabilities'
 
 export interface MemoryRights {
   /** Open what lies below: a Memory from a level, a chapter from a Memory (the Chapters tab). */
@@ -92,7 +93,11 @@ export function memoryRights(access: Access, at: RightsTarget): MemoryRights {
 }
 
 function memberRights(access: MemberAccess, at: RightsTarget): MemoryRights {
-  const write = !access.readonly
+  // Memories switched off is read-only (uc.platform.switch-application-off): no write, no new link — but a delete to the
+  // trash and its restore stay, as do reading, downloading and the member's own marks (the server's exemptions).
+  const on = !access.applicationsOff.has(MEMORIES)
+  const remove = !access.readonly
+  const write = remove && on
   if (isLevel(at.kind)) {
     // A guest's identity folder (Depot's drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
     return { ...NO_MEMORY_RIGHTS, navigate: true, createMemory: write && !at.inIdentityFolder }
@@ -105,20 +110,20 @@ function memberRights(access: MemberAccess, at: RightsTarget): MemoryRights {
     mark: true,
     // Listing and copying links is a read: a pending deletion keeps them (a new link is refused server-side). Each right
     // reads ONE register leaf: the server ANDs the path, so `publicSharesDropBox` is already off when public shares are.
-    share: access.publicShares && at.shareable,
-    shareContribute: access.publicSharesContribute && at.shareable,
-    shareUpload: access.publicSharesDropBox && at.shareable,
+    share: on && access.publicShares && at.shareable,
+    shareContribute: on && access.publicSharesContribute && at.shareable,
+    shareUpload: on && access.publicSharesDropBox && at.shareable,
     // The media trash and the organizer are views first; their writes are refused during a pending deletion.
     mediaTrash: true,
     buckets: true,
     upload: write,
-    deleteMedia: write ? 'any' : 'none',
+    deleteMedia: remove ? 'any' : 'none',
     createChapter: write && at.kind === MEMORY_KIND,
     editMeta: write,
     setCover: write,
     setBanner: write,
     rename: write,
-    deleteNode: write,
+    deleteNode: remove,
     move: write,
     participants: at.kind === MEMORY_KIND,
   }

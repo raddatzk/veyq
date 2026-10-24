@@ -39,7 +39,7 @@ import type { LevelNotice, LevelRow, LevelRowAction, LevelRowDetail, LevelRowSou
 import type { TreeNode } from '../../core/node/tree'
 import { collidingSibling, nameTakenMessage } from '../../core/node/siblingCollision'
 import { useTrashUndo } from '../../core/node/trashUndo'
-import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../core/blob/queue'
+import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../core/blob/queue'
 import { activeSpace } from '../../app/activeSpace'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { useToast } from '../../shared/state/useToast'
@@ -337,7 +337,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
 
   // --- what the status menu cannot explain: this level's files that were not (fully) uploaded -----------------------
 
-  const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
+  const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED, APPLICATION_OFF])
   /** Why a file was not uploaded, in this session's words: a guest's link has a limit of its own and no trash to point at. */
   function noticeText(code: string, name: string): string {
     if (guest && code === QUOTA_EXCEEDED) return t('depot.guest.linkFull', { name })
