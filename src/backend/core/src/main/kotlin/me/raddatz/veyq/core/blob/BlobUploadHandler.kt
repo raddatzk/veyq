@@ -8,9 +8,12 @@ import me.raddatz.veyq.core.blobstore.StoreReclaimStore
 import me.raddatz.veyq.core.blobstore.presignGets
 import me.raddatz.veyq.core.blobstore.presignPuts
 import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitchedOff
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
@@ -74,6 +77,8 @@ class BlobUploadHandler(
     /** The roles the applications attach a member's upload in (see [MemberBlobRoles]); none → no member start.
      *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
     @All private val memberRoles: MutableList<MemberBlobRoles>,
+    private val applications: ApplicationSwitch,
+    private val nodes: NodesStore,
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
@@ -86,7 +91,20 @@ class BlobUploadHandler(
         // reservation until the stale-session purge (inbox #366). Refused whole, as a guest's start refuses a role its
         // target's application does not take — and only past the access check, so a non-member still learns its 404.
         if (declares.any { !MemberBlobRoles.admits(memberRoles, it.role) }) return StartOutcome.InvalidRequest
+        declares.forEach { requireWritable(scopeId, it) }
         return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), link = null, declares, domain))
+    }
+
+    /**
+     * An upload for a switched-off application is not started (uc.platform.switch-application-off), and none is reserved:
+     * refused whole, as the role check above. Asked twice, because a member's start names no node: by its role, while
+     * every application declaring it is off ([MemberBlobRoles.application]), and by its owner where that is a node of the
+     * scope (a cover's, a file's content) — its kind's application. Its completion is refused again by the application.
+     */
+    private fun requireWritable(scopeId: String, declare: UploadDeclare) {
+        val owners = memberRoles.filter { declare.role in it.roles() }.map { it.application() }
+        if (owners.isNotEmpty() && owners.all { it != null && !applications.isWritable(it, scopeId) }) throw ApplicationSwitchedOff()
+        nodes.findInScope(scopeId, declare.ownerId)?.let { applications.requireKindWritable(it.kind, scopeId) }
     }
 
     /**

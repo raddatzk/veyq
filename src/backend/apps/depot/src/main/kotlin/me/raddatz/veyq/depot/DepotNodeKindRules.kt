@@ -51,11 +51,14 @@ class DepotNodeKindRules : NodeKindRules {
     /**
      * A new drop box needs the drop-box links (#440 gap 2): it exists to carry a `WRITE_ONLY` link, so with
      * `core.public-shares.drop-box` off — or its parent, by the AND along the path — none is created (`capability_disabled`).
-     * A core id, because Depot has no catalog entry of its own yet: the CR that adds the first `<application>.*` entries
-     * re-points it. A file needs none.
+     * A core id: the link role is core's, and Depot's own entry ([applicationOf]) is its switch as a whole, not this
+     * leaf. A file needs none.
      */
     override fun capabilityToCreate(kind: String): String? =
         if (kind == DepotNodeKinds.DROPBOX) CapabilityIds.PUBLIC_SHARES_DROP_BOX else null
+
+    /** Both kinds are Depot's: switched off, neither is written (uc.platform.switch-application-off). */
+    override fun applicationOf(kind: String): String? = if (handles(kind)) CapabilityIds.DEPOT else null
 }
 
 /**

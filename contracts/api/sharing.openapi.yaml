@@ -1032,8 +1032,8 @@ paths:
             Illegal structure (`illegal_structure` — the parent is missing, trashed, or outside the share's subtree, or
             the kind's placement rule refuses it there), or the owner of the parent's kind does not let a READ_WRITE
             guest create that kind in it, or — for a WRITE_ONLY link — the owner of the root's kind does not let its
-            guest create that kind (`illegal_scope`), or the application of the kind or of the parent is switched off for
-            the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
+            guest create that kind (`illegal_scope`), or the kind's application is switched off for the instance or the
+            tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":

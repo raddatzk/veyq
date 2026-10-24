@@ -21,6 +21,11 @@ interface MemberBlobRoles {
     /** The roles a member's upload start may carry for this application. */
     fun roles(): Set<String>
 
+    /** The application whose writes these roles are — its register entry (`memories`) — or null for core's own (a
+     *  cover). Core's member start refuses a role while every application declaring it is switched off
+     *  (uc.platform.switch-application-off): a union, so one still on keeps the role open. */
+    fun application(): String? = null
+
     companion object {
         /** Whether some implementation of [declared] attaches a member's upload in [role]; none → no. */
         fun admits(declared: List<MemberBlobRoles>, role: String): Boolean = declared.any { role in it.roles() }

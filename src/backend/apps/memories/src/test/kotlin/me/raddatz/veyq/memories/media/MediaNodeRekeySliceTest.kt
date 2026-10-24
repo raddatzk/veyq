@@ -13,6 +13,8 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -93,6 +95,27 @@ class MediaNodeRekeySliceTest {
         // an open gallery's next poll carries both live rows' new wraps: the commit moved the item revision
         given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/nodes/${w.memory}/media")
             .then().statusCode(200).body("media.find { it.mediaId == '${w.live}' }.wrappedBlobKey", equalTo(newWrap(w.liveBlobs[0])))
+    }
+
+    /**
+     * A rotation's re-key reaches a switched-off Memories (uc.platform.switch-application-off E1): it is the security of
+     * what exists, so neither the stage nor the commit asks the switch — while the same tenant's meta write is refused
+     * (the predicate the re-key is held against).
+     */
+    @Test
+    fun aRekeyLandsWhileMemoriesIsSwitchedOff() {
+        val w = world()
+        val tenantId = QuarkusTransaction.requiringNew().call { ScopeEntity.findById(w.scopeId)!!.tenantId }
+        val rekeyId = UUID.randomUUID()
+        TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.MEMORIES) {
+            given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON)
+                .body("""{"wrappedMeta":"$NEW_META_A","metaRevision":0,"nodeEpoch":0}""")
+                .`when`().put("/api/scopes/${w.scopeId}/media/${w.live}/meta")
+                .then().statusCode(422).body("code", equalTo("capability_disabled"))
+            stageAll(w, rekeyId)
+            commit(w, rekeyId).statusCode(204)
+        }
+        QuarkusTransaction.requiringNew().run { assertEquals(1, NodeEntity.findById(w.memory)!!.epoch) }
     }
 
     @Test

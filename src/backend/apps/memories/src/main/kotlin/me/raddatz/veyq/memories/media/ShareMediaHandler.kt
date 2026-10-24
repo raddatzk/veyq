@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.core.blob.UploadCompletions
@@ -110,6 +112,7 @@ class ShareMediaHandler(
     private val items: NodeItemsRevisions,
     private val tags: ShareMediaTags,
     private val epochs: NodeEpochGate,
+    private val applications: ApplicationSwitch,
 ) {
 
     /**
@@ -232,6 +235,7 @@ class ShareMediaHandler(
             ShareWriteGate.RateLimited -> return ShareMediaCompleteOutcome.RateLimited
             ShareWriteGate.NotContributable -> return ShareMediaCompleteOutcome.NotContributable
         }
+        applications.requireWritable(CapabilityIds.MEMORIES, gated.scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val target = when (val t = gate.target(gated, nodeId)) {
             is ShareWriteTarget.Node -> t
             ShareWriteTarget.NotFound -> return ShareMediaCompleteOutcome.NodeNotFound

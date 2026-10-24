@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.admin.tenant.TenantTermsHandler
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.blobstore.BlobStore
@@ -286,6 +287,7 @@ class SharingHandler(
     private val gate: ShareGuestGate,
     private val rateLimiter: ShareRateLimiter,
     private val capabilities: CapabilityRegistry,
+    private val applications: ApplicationSwitch,
     private val scopes: ScopesStore,
     private val tenantTerms: TenantTermsHandler,
     private val access: ScopeAccess,
@@ -332,6 +334,9 @@ class SharingHandler(
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), node.scopeId)) {
             return CreateShareOutcome.CapabilityDisabled
         }
+        // No new link onto a node of a switched-off application (uc.platform.switch-application-off); the links that
+        // exist keep serving it, read-only.
+        if (!applications.isKindWritable(node.kind, node.scopeId)) return CreateShareOutcome.CapabilityDisabled
         // The tenant's link requirements (ADR 0088 decision 8): a new link is made now.
         linkRefusal(node.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
             return if (it === Failures.linkPasswordRequired) CreateShareOutcome.LinkPasswordRequired else CreateShareOutcome.LinkExpiryRequired
@@ -483,6 +488,13 @@ class SharingHandler(
         if (role != null && role != share.role && !capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(role), share.scopeId)) {
             return UpdateShareOutcome.CapabilityDisabled
         }
+        // Nor into a write role on a switched-off application's node (uc.platform.switch-application-off): READ_WRITE is the
+        // one role an edit can change into (WRITE_ONLY is not editable in place).
+        if (role == ShareEntity.READ_WRITE && role != share.role &&
+            !applications.isKindWritable(store.findNode(share.nodeId)?.kind.orEmpty(), share.scopeId)
+        ) {
+            return UpdateShareOutcome.CapabilityDisabled
+        }
         // The link requirements (ADR 0088 decision 8) on the link as the edit leaves it: the password tri-state (null
         // keeps the stored one) and the end date, a full replace, measured from the link's own start.
         val keepsPassword = when (passwordRequired) {
@@ -541,6 +553,8 @@ class SharingHandler(
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(share.role), share.scopeId)) return ReactivateShareOutcome.CapabilityDisabled
+        // A reactivation publishes the link again: not onto a switched-off application's node.
+        if (!applications.isKindWritable(store.findNode(share.nodeId)?.kind.orEmpty(), share.scopeId)) return ReactivateShareOutcome.CapabilityDisabled
         // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
@@ -594,6 +608,8 @@ class SharingHandler(
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(old.role), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
+        // A re-issue publishes a new link: not onto a switched-off application's node.
+        if (!applications.isKindWritable(store.findNode(old.nodeId)?.kind.orEmpty(), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
         if (blocks.shareBlockedItself(old.id)) return ReissueShareOutcome.Blocked
         // A re-issue makes a new link now, so it meets the requirements as a new one does.
         linkRefusal(old.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
@@ -777,6 +793,8 @@ class SharingHandler(
             ShareWriteTarget.NotContributable -> return ShareUploadOutcome.NotContributable
         }
         val writes = writesFor(target.kind) ?: return ShareUploadOutcome.NotContributable
+        // No upload starts for a switched-off application's node (uc.platform.switch-application-off) — before the budget.
+        applications.requireKindWritable(target.kind, gated.scopeId)
         // A link whose usage no single application measures is never admitted (fail closed, [UploadAdmission]); the
         // reservation asks again under the tenant lock, and refuses there too.
         if (quota.admissionFor(target.kind) == null) return ShareUploadOutcome.NotContributable

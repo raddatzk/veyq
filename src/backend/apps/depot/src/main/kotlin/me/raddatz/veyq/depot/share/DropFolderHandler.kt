@@ -1,5 +1,7 @@
 package me.raddatz.veyq.depot.share
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
@@ -36,6 +38,7 @@ sealed interface DropFolderOutcome {
 class DropFolderHandler(
     private val gate: ShareGuestGate,
     private val folders: IdentityFolders,
+    private val applications: ApplicationSwitch,
 ) {
     fun ensure(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, encryptedName: String,
@@ -49,6 +52,7 @@ class DropFolderHandler(
             ShareWriteGate.RateLimited -> return DropFolderOutcome.RateLimited
             ShareWriteGate.NotContributable -> return DropFolderOutcome.NotContributable
         }
+        applications.requireWritable(CapabilityIds.DEPOT, gated.scopeId) // switched off, read-only (uc.platform.switch-application-off)
         if (gated.rootKind != DepotNodeKinds.DROPBOX) return DropFolderOutcome.NotContributable
         return when (val o = folders.ensure(gated, nodeId, encryptedName, slugToken, epoch, wrappedContentKey, seen)) {
             is IdentityFolderOutcome.Folder -> DropFolderOutcome.Folder(o)

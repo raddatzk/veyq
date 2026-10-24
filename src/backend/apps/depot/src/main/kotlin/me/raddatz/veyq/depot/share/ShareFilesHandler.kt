@@ -1,5 +1,7 @@
 package me.raddatz.veyq.depot.share
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
@@ -59,6 +61,7 @@ class ShareFilesHandler(
     private val store: FilesStore,
     private val blocks: ModerationBlocks,
     private val guestWriteRecords: GuestWriteRecords,
+    private val applications: ApplicationSwitch,
 ) {
 
     /** The live files of the share's live subtree, each with its blob or null. A `WRITE_ONLY` link sees nothing. */
@@ -95,6 +98,7 @@ class ShareFilesHandler(
             ShareWriteGate.RateLimited -> return ShareFileCompleteOutcome.RateLimited
             ShareWriteGate.NotContributable -> return ShareFileCompleteOutcome.NotContributable
         }
+        applications.requireWritable(CapabilityIds.DEPOT, gated.scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val target = when (val t = gate.target(gated, nodeId)) {
             is ShareWriteTarget.Node -> t
             ShareWriteTarget.NotFound -> return ShareFileCompleteOutcome.NodeNotFound

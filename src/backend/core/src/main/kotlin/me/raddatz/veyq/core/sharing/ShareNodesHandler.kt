@@ -47,10 +47,9 @@ sealed interface CreateShareNodeOutcome {
     object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
     /** The parent is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing stored. */
     object RekeyPending : CreateShareNodeOutcome, HttpFailure by Failures.nodeRekeyPending
-    /** Creating the kind needs a capability that is switched off ([me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
-     *  asked by `createInScope` for a guest as for a member). Unreachable today: no kind a guest may create names one.
-     *  So `createShareNode`'s contract names no `422 capability_disabled` yet: it joins the contract, with a test that
-     *  reaches it, in the first change that lets a guest create a kind whose rule names a capability. */
+    /** The kind's application is switched off, or creating the kind needs a capability that is
+     *  ([me.raddatz.veyq.core.node.NodeKindRules.applicationOf], [me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
+     *  asked by `createInScope` for a guest as for a member, uc.platform.switch-application-off). */
     object CapabilityDisabled : CreateShareNodeOutcome, HttpFailure by Failures.capabilityDisabled
 }
 
