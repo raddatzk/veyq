@@ -549,12 +549,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-
+      # No `labels:` on either build step, and no metadata step feeding one: a passed label overrides the Dockerfile's,
+      # and metadata-action's would name the branch (`main`, `pr-12`) as the image's version and the bare SHA as its
+      # revision. The identity labels are the target stage's own, from the stamps below (validate_release_identity.py
+      # assertion 12).
       - name: Build image
         id: image
         if: matrix.image != 'veyq-tools'
@@ -566,7 +564,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: ${{ github.event_name == 'workflow_dispatch' }}
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:build-${{ github.sha }}-${{ matrix.arch }}
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VEYQ_VERSION=${{ needs.version.outputs.version }}
             VEYQ_REVISION=sha-${{ github.sha }}
@@ -590,7 +587,6 @@ jobs:
           push: ${{ github.event_name == 'workflow_dispatch' }}
           load: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:build-${{ github.sha }}-${{ matrix.arch }}
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VEYQ_VERSION=${{ needs.version.outputs.version }}
             VEYQ_REVISION=sha-${{ github.sha }}
