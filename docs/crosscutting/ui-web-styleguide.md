@@ -312,7 +312,8 @@ Owner 2026-10-24.
 - **Sections are `h2`, and a head inside a section is one level deeper.** Never skip a level. A component used at
   two depths takes its level from its host, as `SpaceMap` does with `headingLevel`.
 - **A dialog's title heads the dialog,** not the page under it.
-- **Open:** the space's top level has no `h1` yet. It has no node to name.
+- **The space's top level has the space's name as its `h1`** (owner 2026-10-24): it has no node to name, so the space
+  is its subject. Being built with `cr-node-header-layout-by-fit`; until that lands, the top level has no `h1`.
 
 ## Checklist before finishing web UI work
 
