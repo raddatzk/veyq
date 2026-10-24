@@ -117,7 +117,9 @@ paths:
             (`core.public-shares` for READ, `core.public-shares.contribute` for READ_WRITE,
             `core.public-shares.drop-box` for WRITE_ONLY) is not active instance-wide: its own entry is switched
             off, or `core.public-shares` above it is (the AND along the path, ADR 0088). It is checked first, before
-            any scope check, so it reads as instance policy, not a scope error (ADR 0032). `illegal_scope` — the
+            any scope check, so it reads as instance policy, not a scope error (ADR 0032); and the same code once the
+            node is resolved, when its kind's application is switched off for the instance or the tenant (its register
+            entry, `memories` or `depot`, uc.platform.switch-application-off). `illegal_scope` — the
             node's kind may not be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
             application as that application declares — Files: a `FILE` with READ or READ_WRITE, never WRITE_ONLY; a kind
             nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`. Two more, from the requirements on `core.public-shares` in effect for the node's tenant
@@ -253,8 +255,9 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
         "422":
           description: >
-            The instance capability this share's role needs is disabled (ADR 0032) — the same check
-            `createShare` runs, since a re-activation publishes the link again.
+            The instance capability this share's role needs is disabled (ADR 0032), or the root's application is
+            switched off (uc.platform.switch-application-off) — the same checks `createShare` runs, since a
+            re-activation publishes the link again.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -342,8 +345,8 @@ paths:
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
-            The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
-            re-issue publishes a link, so it checks what `createShare` checks, the requirements included
+            The instance capability the share's role needs is disabled, or the root's application is switched off
+            (`capability_disabled`, ADR 0032, uc.platform.switch-application-off) — a re-issue publishes a link, so it checks what `createShare` checks, the requirements included
             (`link_password_required`, `link_expiry_required`, as `createShare`; the new link is made now).
             `date_time_out_of_range` = a date-time outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00) — a bound no date-time schema states.
           content:
@@ -515,7 +518,8 @@ paths:
             (`ShareRoots`, ADR 0080); the write-only drop-box is a separate action and its role is not editable in
             place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
             READ_WRITE while `core.public-shares.contribute` or its parent is off, ADR 0088): the change would publish
-            a link of that role, so it checks what `createShare` checks. A request that names the share's current
+            a link of that role, so it checks what `createShare` checks; and a change into READ_WRITE on a root whose
+            kind's application is switched off (uc.platform.switch-application-off). A request that names the share's current
             role changes no role and is not refused for it. `link_password_required` — the update would leave the link
             without a password while every link needs one; `link_expiry_required` — the end date it sets (a full
             replace) is absent or more than `linkMaxDays` days after the link was made (ADR 0088 decision 8).
@@ -879,6 +883,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
         "429":
           description: Too many uploads for this share in the current window (per-share rate limit).
           content:
@@ -1027,7 +1032,8 @@ paths:
             Illegal structure (`illegal_structure` — the parent is missing, trashed, or outside the share's subtree, or
             the kind's placement rule refuses it there), or the owner of the parent's kind does not let a READ_WRITE
             guest create that kind in it, or — for a WRITE_ONLY link — the owner of the root's kind does not let its
-            guest create that kind (`illegal_scope`).
+            guest create that kind (`illegal_scope`), or the application of the kind or of the parent is switched off for
+            the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":
@@ -1116,7 +1122,8 @@ paths:
             one (only a member moves out of a drop box), the destination is missing, trashed,
             outside the share's subtree, the node itself or inside its subtree, or the kind's placement rule refuses
             it there), or an owner of the containers on either side does not let a READ_WRITE guest move or rename
-            that kind (`illegal_scope`).
+            that kind (`illegal_scope`), or the node's application is switched off for the instance or the tenant
+            (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":

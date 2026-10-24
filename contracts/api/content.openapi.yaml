@@ -103,11 +103,13 @@ paths:
         "422":
           description: >
             Unprocessable. Two codes: `illegal_structure` — the kind's placement rule refuses the parent, the kind is
-            one no application claims, an unknown/foreign parent, or a cycle; `capability_disabled` — creating this
-            kind needs a capability that is not active instance-wide. The kind's application names that capability
-            (`NodeKindRules`, default none): Depot's drop box (`DEPOT_DROPBOX`) needs `core.public-shares.drop-box`, and so, by the AND
-            along the path, `core.public-shares` (ADR 0032, ADR 0088). Only creation is refused: an existing node of
-            the kind stays (a feature switch refuses only what is new, ADR 0088 decision 5).
+            one no application claims, an unknown/foreign parent, or a cycle; `capability_disabled` — the kind's
+            application is switched off for the instance or the tenant (its register entry, `memories` or `depot`,
+            uc.platform.switch-application-off), or creating this kind needs a capability that is not active. The kind's
+            application names both (`NodeKindRules`): Depot's drop box (`DEPOT_DROPBOX`) also needs
+            `core.public-shares.drop-box`, and so, by the AND along the path, `core.public-shares` (ADR 0032, ADR 0088).
+            The drop-box switch refuses only creation: an existing node of the kind stays (a feature switch refuses only
+            what is new, ADR 0088 decision 5); an application switched off refuses every write of its nodes.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
     get:
@@ -264,7 +266,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: d3JhcHBlZC1tZXRh, metaRevision: 4 } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: Illegal structure (the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree).
+          description: Illegal structure (`illegal_structure`; the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree), or the node's application is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
     delete:
@@ -375,7 +377,7 @@ paths:
         "409": { $ref: "#/components/responses/CoverConflict" }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The node's kind takes no cover (`illegal_target`), the upload was not started as this node's cover (`upload_mismatch`), or `shared` names no blob this node holds (`shared_source_invalid`).
+          description: The node's kind takes no cover (`illegal_target`), the upload was not started as this node's cover (`upload_mismatch`), `shared` names no blob this node holds (`shared_source_invalid`), or the node's application is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 
@@ -433,6 +435,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "#/components/responses/CoverConflict" }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/restore:
     post:

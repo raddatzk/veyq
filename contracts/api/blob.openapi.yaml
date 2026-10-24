@@ -85,6 +85,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
         "503":
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
