@@ -56,10 +56,16 @@ class PotRekeySliceTest {
         val refused = UUID.randomUUID()
         stageWraps(w, refused).statusCode(204)
         // A part that names a body, written past the wire (whose stage has no body field): the commit refuses it whole.
+        // Staged with that revision's wrap in one put — a put replaces an item's earlier values — so every wrap is
+        // there and only the body field can refuse it.
         val ref = before.first()
+        val item = "${ref.entryId}:${ref.revision}"
         stage.put(
             refused.toString(), w.scopeId, w.pot, PotRekeyRows.PART,
-            mapOf(NodeRekeyStage.Key("${ref.entryId}:${ref.revision}", "revision.sealedBody") to NodeRekeyStage.Value(body('Z'), null)),
+            mapOf(
+                NodeRekeyStage.Key(item, PotRekeyRows.WRAP) to NodeRekeyStage.Value(newWrap(ref.entryId, ref.revision), null),
+                NodeRekeyStage.Key(item, "revision.sealedBody") to NodeRekeyStage.Value(body('Z'), null),
+            ),
         )
         commit(w, refused).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals(before, rows(w), "nothing landed: no wrap, no body")
