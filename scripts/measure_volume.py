@@ -384,7 +384,9 @@ def invites_raised(inst: Instance):
     """The invite limit raised for the member seeder, and put back as it was on every way out — a red seeder, an
     exception, Ctrl-C, the SIGTERM `main` turns into an exit. The seeder sends an invite per member, and the default of
     20 per tenant per hour stopped `seed members --target 1000` at member 22 with a 429 (heavy stage H1, 2026-10-24).
-    The raise sits inside the `try`: a raise that wrote the override and then failed to start the app is put back too."""
+    The raise sits inside the `try`: a raise that wrote the override and then failed to start the app is put back too.
+    The put-back restarts the app, so it runs only once the seeder's whole process tree is gone (`run_seeder` ends it
+    before it returns or raises, H1b)."""
     before = override_invite_limit(inst)
     try:
         invite_limit(inst, SEEDING_INVITE_LIMIT)
@@ -1057,8 +1059,69 @@ def judge(directory: Path) -> dict:
 # ---------------------------------------------------------------- main
 
 
+SEEDER_GRACE = 10.0  # seconds a seeder's process tree has to end on SIGTERM before it is killed
+SEEDER_KILL_WAIT = 5.0  # seconds to see it gone after the SIGKILL, then the caller goes on regardless
+
+
+def _group_alive(proc: subprocess.Popen) -> bool:
+    """Whether any member of the child's process group is left. Darwin answers EPERM, not ESRCH, while the group holds
+    only zombies not yet reaped (measured 2026-10-24: for ~10 ms after the SIGTERM, then ESRCH). A zombie sends
+    nothing, but it is counted as left all the same: the wait ends on ESRCH, the one answer that means none is."""
+    proc.poll()  # reaps the direct child, so a dead one stops counting as the group's member
+    try:
+        os.killpg(proc.pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _group_gone_within(proc: subprocess.Popen, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while _group_alive(proc):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def stop_group(proc: subprocess.Popen) -> None:
+    """End the child's whole process group and wait for it, bounded: SIGTERM, `SEEDER_GRACE`, SIGKILL,
+    `SEEDER_KILL_WAIT`. The seeder is `npx` -> `tsx` -> node, and killing `npx` alone (what `subprocess.run` does when
+    its wait is interrupted) left the node grandchild sending requests for ~5 s after `invites_raised` had put the limit
+    back, into the app's restart, as 502s (heavy stage H1b, 2026-10-24). SIGTERM and SIGINT are held while it waits, so
+    a second one cannot cut the wait short; they arrive once it is over."""
+    held = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM, signal.SIGINT})
+    try:
+        if not _group_alive(proc):
+            return
+        for sig, wait in ((signal.SIGTERM, SEEDER_GRACE), (signal.SIGKILL, SEEDER_KILL_WAIT)):
+            try:
+                os.killpg(proc.pid, sig)
+            except ProcessLookupError:
+                return
+            except PermissionError:
+                pass  # the members are exiting already (see `_group_alive`); the wait sees them gone
+            if _group_gone_within(proc, wait):
+                return
+        say(f"seeder: process group {proc.pid} still alive {SEEDER_GRACE + SEEDER_KILL_WAIT:.0f} s after SIGTERM; going on")
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, held)
+
+
+def run_child(cmd: list[str], **kw: Any) -> int:
+    """`cmd` in a process group of its own, its exit code; on every way out — its own exit, an exception, Ctrl-C, the
+    SIGTERM `main` turns into an exit — nothing it started outlives the call (`stop_group`)."""
+    proc = subprocess.Popen(cmd, start_new_session=True, **kw)
+    try:
+        return proc.wait()
+    finally:
+        stop_group(proc)
+
+
 def run_seeder(inst: Instance, seed_args: list[str]) -> int:
-    return subprocess.run(["npx", "tsx", "scripts/seed-volume.mts", *seed_args], cwd=WEB, env=inst.env()).returncode
+    return run_child(["npx", "tsx", "scripts/seed-volume.mts", *seed_args], cwd=WEB, env=inst.env())
 
 
 def seed(inst: Instance, seed_args: list[str]) -> int:
