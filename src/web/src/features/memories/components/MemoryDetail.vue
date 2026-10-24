@@ -600,11 +600,11 @@ watch(
          the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
     <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :actions="headerActions" :core-actions="coreActions" :order="MEMORY_HEADER_ORDER">
-      <template #leading>
+      <template #leading="{ compact }">
         <button
           type="button"
           class="memory-cover-preview"
-          :class="{ 'is-empty': !coverSrc }"
+          :class="{ 'is-empty': !coverSrc, 'is-compact': compact }"
           :disabled="!memoryKey || !can.setCover"
           :aria-label="storedCover ? t('node.cover.change') : t('node.cover.set')"
           :title="storedCover ? t('node.cover.change') : t('node.cover.set')"
@@ -1049,11 +1049,13 @@ watch(
 }
 /* The Memory cover (cr-0072): a 16:9 tile showing the chosen, cropped cover (or the placeholder). It IS the
    "set/edit cover" button — clicking it opens the crop dialog. A hint label sits over it (always when empty,
-   on hover once a cover is set). */
+   on hover once a cover is set). Its wide width is the node header's `--veyq-node-header-leading-wide`, which core reads
+   to pick the header's layout (ADR 0110 decision 8): one number, no import of this application into core. */
 .memory-cover-preview {
+  --veyq-node-header-leading-wide: 180px;
   position: relative;
   flex: 0 0 auto;
-  width: 180px;
+  width: var(--veyq-node-header-leading-wide);
   aspect-ratio: 16 / 9;
   padding: 0;
   overflow: hidden;
@@ -1090,19 +1092,18 @@ watch(
 .memory-cover-preview-hint .veyq-icon {
   font-size: 0.85rem;
 }
-/* On a phone the cover is a small tile beside the name (ADR 0110 decision 1); the hint over an empty cover is its icon alone
-   there — the words stay the button's accessible name and tooltip. */
-@container memory-detail-surface (max-width: 460px) {
-  .memory-cover-preview {
-    width: 64px;
-  }
-  .memory-cover-preview-hint {
-    inset-block-start: 0;
-    padding: 0;
-  }
-  .memory-cover-preview-hint > span {
-    display: none;
-  }
+/* On a compact header (the slot's `compact`, core's answer from the header's width) the cover is a 64 × 36 px tile beside the
+   name (ADR 0110 decision 1); the hint over an empty cover is its icon alone there — the words stay the button's
+   accessible name and tooltip. */
+.memory-cover-preview.is-compact {
+  width: 64px;
+}
+.memory-cover-preview.is-compact .memory-cover-preview-hint {
+  inset-block-start: 0;
+  padding: 0;
+}
+.memory-cover-preview.is-compact .memory-cover-preview-hint > span {
+  display: none;
 }
 
 /* Date + location under the title, side by side (cr-0067/0069). A light metadata row rather than bordered pills:

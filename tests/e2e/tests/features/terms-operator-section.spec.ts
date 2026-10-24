@@ -19,6 +19,7 @@ import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { confineToInstance } from '../../src/egress'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -86,7 +87,7 @@ test(
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(dialog).toBeHidden()
     await page.getByRole('button', { name: sharedFolder, exact: true }).click()
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     await page.getByRole('dialog', { name: 'Share this folder' }).getByRole('button', { name: 'New share' }).click()
     await page.getByRole('dialog', { name: 'New share' }).getByRole('button', { name: 'Create link' }).click()
     const linkView = page.getByRole('dialog', { name: 'Share this folder' })

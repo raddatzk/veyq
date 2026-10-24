@@ -22,6 +22,7 @@ import { recordTyped } from '../../src/canaries'
 import { deputy as deputyAccount, instance, newDevice, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { awaitMails, mailsTo } from '../../src/mail'
 import { stack } from '../../src/stack'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -121,7 +122,7 @@ test(
     await (await chooser).setFiles({ name: recordTyped(photoName), mimeType: 'image/jpeg', buffer: readFileSync(PHOTO) })
     await expectDecodedPhoto(page)
 
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     const manage = page.getByRole('dialog', { name: 'Share this Memory' })
     await manage.getByRole('button', { name: 'New share' }).click()
     const createShare = page.getByRole('dialog', { name: 'New share' })

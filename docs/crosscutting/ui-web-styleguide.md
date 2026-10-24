@@ -144,9 +144,12 @@ or a one-off `1rem` label sitting in them.
   twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid (in Memories' own `memories.css`). Creation lives in the level toolbar's "New" menu
   (`.veyq-new-menu-button`), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
   (core's `NodeHeader`, [ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md): the
-  leading visual beside a name of at most two lines, then subtitle and meta; as many actions as fit are buttons in the kind's
-  priority and the rest one ⋯ menu, delete and report always in it — no action is hidden by a width rule; tokens only, the
-  icon tile has its dark twin).
+  leading visual beside the name, then subtitle and meta, in one of two layouts the header picks by its own width — wide: the
+  full leading visual, the name in one line and the actions in its row, the name first down to the kind's first two actions,
+  then shortened with an ellipsis; compact (`.is-compact`): a small leading visual, the name in two lines at most, the actions
+  in a row of their own; as many actions as fit are buttons in the kind's priority and the rest one ⋯ menu, delete and report
+  always in it — no action is hidden by a width rule, and no viewport query places the header; tokens only, the icon tile has
+  its dark twin).
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
@@ -313,7 +316,7 @@ Owner 2026-10-24.
   two depths takes its level from its host, as `SpaceMap` does with `headingLevel`.
 - **A dialog's title heads the dialog,** not the page under it.
 - **The space's top level has the space's name as its `h1`** (owner 2026-10-24): it has no node to name, so the space
-  is its subject. Being built with `cr-node-header-layout-by-fit`; until that lands, the top level has no `h1`.
+  is its subject — `LevelView`'s `spaceName`, core's `NodeHeader` with no actions.
 
 ## Checklist before finishing web UI work
 

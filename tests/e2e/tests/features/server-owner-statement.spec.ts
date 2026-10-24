@@ -24,6 +24,7 @@ import { recordTyped } from '../../src/canaries'
 import { instance, newDevice, passwordField, tenantOrigin, type Device } from '../../src/devices'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -143,7 +144,7 @@ test(
   await m.getByRole('button', { name: 'Upload', exact: true }).click()
   await (await chooser).setFiles({ name: recordTyped(photoName), mimeType: 'image/jpeg', buffer: readFileSync(PHOTO) })
   await expectDecodedPhoto(m)
-  await m.getByRole('button', { name: 'Share', exact: true }).click()
+  await headerAction(m, 'Share')
   const manage = m.getByRole('dialog', { name: 'Share this Memory' })
   await manage.getByRole('button', { name: 'New share' }).click()
   const createShare = m.getByRole('dialog', { name: 'New share' })

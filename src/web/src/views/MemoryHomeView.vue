@@ -233,7 +233,8 @@ const { ticks: liveTick } = useLevelLive({
 const deleteTarget = ref<TreeNode | null>(null)
 
 // The breadcrumb root label reflects the **active** scope (the tenant's name vs. Personal), not the URL token —
-// a no-grant member sees `Personal` at the token-less `/` because the tenant home fell back to Personal.
+// a no-grant member sees `Personal` at the token-less `/` because the tenant home fell back to Personal. It is also the
+// space's name, the `h1` of its top level (`LevelView`'s `spaceName`, styleguide § Heading levels).
 const tenants = ref<MyTenant[]>([])
 async function loadTenants() {
   try {
@@ -444,6 +445,7 @@ async function onDeleteDone() {
         :access="access"
         :tree="tree"
         :folder-name="currentFolderName"
+        :space-name="rootLabel"
         :live-tick="liveTick"
         @open-node="openNode"
         @create="startCreate"

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { toast } from '../../src/toast'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -111,7 +112,7 @@ test(
     }
 
     await page.getByRole('button', { name: folderBefore, exact: true }).click()
-    await page.getByRole('button', { name: 'Rename', exact: true }).click()
+    await headerAction(page, 'Rename')
     const rename = page.getByRole('dialog', { name: 'Rename' })
     await rename.getByLabel('Name').fill(recordTyped(folderAfter))
     await rename.getByRole('button', { name: 'Save', exact: true }).click()
@@ -123,7 +124,7 @@ test(
     await expect(page.getByRole('heading', { name: folderAfter })).toBeVisible({ timeout: 60_000 })
 
     // Moved into the other folder: its name is sealed again under the destination's key.
-    await page.getByRole('button', { name: 'Move to…', exact: true }).click()
+    await headerAction(page, 'Move to…')
     const move = page.getByRole('dialog', { name: `Move “${folderAfter}”` })
     await move.getByRole('button', { name: destination, exact: true }).click()
     await move.getByRole('button', { name: 'Move here' }).click()
@@ -208,7 +209,7 @@ test(
   async () => {
     const { page } = writer
     await openMemory(page)
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     await page.getByRole('dialog', { name: 'Share this Memory' }).getByRole('button', { name: 'New share' }).click()
     const create = page.getByRole('dialog', { name: 'New share' })
     await create.getByLabel('Name').fill(recordTyped(shareLabel))
@@ -229,7 +230,7 @@ test(
 
     for (const device of [writer, second]) {
       await openMemory(device.page)
-      await device.page.getByRole('button', { name: 'Share', exact: true }).click()
+      await headerAction(device.page, 'Share')
       const list = device.page.getByRole('dialog', { name: 'Share this Memory' })
       await expect(list.getByText(shareLabel, { exact: true })).toBeVisible({ timeout: 60_000 })
       await list.getByRole('button', { name: 'Edit', exact: true }).first().click()

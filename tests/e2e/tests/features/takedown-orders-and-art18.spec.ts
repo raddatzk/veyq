@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { deputy as deputyAccount, instance, newDevice, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { stack } from '../../src/stack'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -107,7 +108,7 @@ test(
       await expect(create).toBeHidden()
       await page.getByRole('button', { name, exact: true }).click()
       await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-      await page.getByRole('button', { name: 'Share', exact: true }).click()
+      await headerAction(page, 'Share')
       const manage = page.getByRole('dialog', { name: 'Share this Memory' })
       await manage.getByRole('button', { name: 'New share' }).click()
       const createShare = page.getByRole('dialog', { name: 'New share' })

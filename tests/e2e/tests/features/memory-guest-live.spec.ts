@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, signInOwner, type Device } from '../../src/devices'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -68,7 +69,7 @@ test(
     await upload(page, photos[0])
     await expect(page.getByRole('button', { name: 'Open item 1' })).toBeVisible({ timeout: 60_000 })
 
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     await page.getByRole('dialog', { name: 'Share this Memory' }).getByRole('button', { name: 'New share' }).click()
     const create = page.getByRole('dialog', { name: 'New share' })
     await create.getByLabel('Name').fill(recordTyped(shareLabel))

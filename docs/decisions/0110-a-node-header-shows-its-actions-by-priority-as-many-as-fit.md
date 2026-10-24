@@ -1,9 +1,8 @@
 # ADR 0110 — A node header shows its actions by priority, as many as fit, and the rest in one menu
 
 - Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23);
-  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) are built by
-  `changes/cr-node-header-layout-by-fit.md` — until it lands, a 540 px viewport query places the actions and a 460 px
-  container query sizes the Memory's cover (§ Context, last paragraph).
+  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) built by cr-node-header-layout-by-fit
+  (2026-10-24).
 - Date: 2026-10-23
 
 ## Context
@@ -67,16 +66,20 @@ on a desktop the title and the actions are always one row*.
    1.15 rem name of the other kinds), the floor's two buttons and the ⋯, with their gaps, fit in one row; otherwise
    compact. Cover size, name lines and where the actions sit all follow this one answer, so a big cover can no longer
    sit beside a name in a narrow header. Its inputs are the header's width (which its layout does not change) and fixed
-   sizes — never the name's text or the layout in force — so it cannot flip back and forth. From the sizes measured
-   2026-10-23 it switches at a header width of 541 px for a Memory and 403 px for a folder, a file and a drop box (449 px for a folder
-   with a cover): a 375 px phone is compact for every kind.
+   sizes — never the name's text or the layout in force — so it cannot flip back and forth. Measured 2026-10-24 (Chrome,
+   viewport without the sidebar, every pixel from 300 to 1400 px and back): wide from a header of 542 px for a Memory
+   (viewport 574 px), 404 px for a folder, a file and a drop box (436 px) and 450 px for a folder with a cover (482 px),
+   one switch each way and the same in the dark theme: a 375 px phone is compact for every kind.
 
 ## Consequences
 
 - The header and the level rows split their actions by two rules: the header by its measured width, a row by its fixed
   two `first` actions. They share the menu's entries (label, icon, disabled, danger) and nothing else.
-- On a wide screen a Memory with a short name shows 10 of its 11 other actions (measured 2026-10-23 at 1280 px with
-  "Rom 2026"); with a long name it shows its floor, favorite and upload, and the name ends in an ellipsis on one line.
+- On a wide screen a Memory with a short name shows 10 of its 11 other actions (measured 2026-10-23 and again 2026-10-24
+  at 1280 px with "Rom 2026"); with a long name it shows its floor, favorite and upload, and the name ends in an ellipsis
+  on one line (a 92-character name, measured 2026-10-24: 2 buttons at 574, 768 and 1280 px, 587 of its 1504 px shown).
+  Just above the switch a Memory with a short name shows 2 (574 px) and a folder with a cover 2 (482 px): the wide
+  layout's row is as short as it gets there.
 - A long name costs the wide header its buttons before it costs the name its text — the owner's priority. A guest's
   floor is whatever the guest's first two actions are; a guest with fewer than two has no floor to keep.
 - The rule "every action is visible at every width" is retired in `ui.css`, `src/web/CLAUDE.md` and the styleguide; the

@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { toast } from '../../src/toast'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -93,7 +94,7 @@ test(
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('button', { name: memberFolder, exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     const share = page.getByRole('dialog', { name: 'Share this folder' })
     await share.getByRole('button', { name: 'New share' }).click()
     const createShare = page.getByRole('dialog', { name: 'New share' })

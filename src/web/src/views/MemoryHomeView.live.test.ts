@@ -427,7 +427,8 @@ describe("an opened node's page, live", () => {
     const w = await openFile(world())
     await w.vm.$router.push({ name: 'home', hash: '#~me/nowhere' })
     await settle(0)
-    expect(fileTitle(w).exists()).toBe(false)
+    // The scope root's header names the space, not the file.
+    expect(fileTitle(w).text()).toBe(t('shell.personal'))
     expect(titlesOf(w)).toEqual(['Trips'])
     w.unmount()
   })

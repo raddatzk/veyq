@@ -441,7 +441,9 @@ describe('MemoryHomeView sharing a folder', () => {
 
   it('offers no share at the scope root (no node to share, no overview card)', async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.veyq-node-header').exists()).toBe(false)
+    // The header names the space (its top level's h1) and acts on nothing: the space is no node.
+    expect(w.get('.veyq-node-header-title').text()).toBe(t('shell.personal'))
+    expect(w.find('.veyq-node-header-actions').exists()).toBe(false)
     expect(w.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
   })
 
@@ -484,7 +486,7 @@ describe('MemoryHomeView resolving the fragment grammar', () => {
     const old = await mountAt('#~me/trips/italy')
     expect(old.find('.detail-stub').exists()).toBe(false)
     expect(titlesOf(old)).toContain('Solo') // collapsed to the scope root
-    expect(old.find('.veyq-node-header').exists()).toBe(false)
+    expect(old.get('.veyq-node-header-title').text()).toBe(t('shell.personal'))
   })
 
   it('a slug shared by a file and a folder: the file without the slash, the folder with it or with a child behind it', async () => {
@@ -502,7 +504,7 @@ describe('MemoryHomeView resolving the fragment grammar', () => {
   it('a folder called "Memories" lives at `memories-2`; the bare application segment opens nothing', async () => {
     expect((await mountAt('#~me/memories-2/')).find('.veyq-node-header-title').text()).toBe('Memories')
     const bare = await mountAt('#~me/memories/')
-    expect(bare.find('.veyq-node-header').exists(), 'collapsed to the scope root').toBe(false)
+    expect(bare.get('.veyq-node-header-title').text(), 'collapsed to the scope root').toBe(t('shell.personal'))
     expect(titlesOf(bare)).toContain('Solo')
   })
 

@@ -6,7 +6,8 @@
 // **As many actions as fit are buttons, the rest one menu** (ADR 0110): the page that draws the header names its kind's
 // priority as an id list (`order`), core measures the row and {@link fitHeaderActions} says how many of the actions that
 // may be buttons are; the rest, and every {@link isMenuOnly} action (delete, report) after a separator, are entries of
-// one ⋯ menu. No action is lost at any width.
+// one ⋯ menu. No action is lost at any width. Which of its two layouts the header takes is {@link headerLayout}'s answer,
+// from the header's own width and fixed sizes; on a wide header the name comes first, down to {@link headerFloor}.
 //
 // **An action is already a rights answer.** The caller builds the list from its fail-closed rights function
 // (`core/access.ts`, `../rights.ts`): an action it was not granted is `shown: false` or simply left out, and the
@@ -101,17 +102,61 @@ export interface HeaderFit {
   moreWidth: number
   /** A menu-only action exists, so the ⋯ is drawn whatever fits. */
   menuOnly: boolean
+  /** The buttons kept whatever the room (a wide header's floor, {@link headerFloor}); default none. */
+  floor?: number
 }
 
 /** How many of the actions that may be buttons are buttons: all of them when they fit and no menu-only action needs the
- *  ⋯; otherwise the ⋯ is reserved first and as many as fit beside it are (none at all in a row too narrow for one).
- *  Unmeasured — no width yet, as in a unit test or a hidden tab — every one is a button (ADR 0110). */
+ *  ⋯; otherwise the ⋯ is reserved first and as many as fit beside it are (none at all in a row too narrow for one), but
+ *  never fewer than the `floor`. Unmeasured — no width yet, as in a unit test or a hidden tab — every one is a button
+ *  (ADR 0110). */
 export function fitHeaderActions(f: HeaderFit): number {
   if (!(f.rowWidth > 0) || !(f.buttonWidth > 0)) return f.count
+  const floor = Math.max(0, Math.min(f.floor ?? 0, f.count))
   // A hundredth of a pixel of slack: a measured width is fractional, and a row exactly as wide as its buttons fits them.
   const room = f.rowWidth + 0.01
   if (!f.menuOnly && f.count * f.buttonWidth + Math.max(0, f.count - 1) * f.gap <= room) return f.count
-  return Math.max(0, Math.min(f.count, Math.floor((room - f.moreWidth) / (f.buttonWidth + f.gap))))
+  return Math.max(floor, Math.min(f.count, Math.floor((room - f.moreWidth) / (f.buttonWidth + f.gap))))
+}
+
+/** A wide header's floor (ADR 0110 decision 3): the kind's first two shown actions that may be buttons stay buttons
+ *  however long the name; a guest with fewer has that many. */
+export function headerFloor(count: number): number {
+  return Math.max(0, Math.min(2, count))
+}
+
+/** The node header's two layouts (ADR 0110 decision 1): `compact` — a small leading visual, the name in two lines, the
+ *  actions in a row of their own — or `wide` — the full leading visual, the name in one line and the actions in its row. */
+export type HeaderLayout = 'wide' | 'compact'
+
+/** What {@link headerLayout} weighs, in CSS pixels: the header's width and sizes that no layout changes. It takes no name
+ *  width and no current layout, so the answer cannot depend on either. */
+export interface HeaderLayoutInput {
+  /** The header's own width; 0 (or less) is unmeasured. */
+  headerWidth: number
+  /** The leading visual's WIDE width (0 without one) and the gap between it and the name. */
+  leadingWide: number
+  leadingGap: number
+  /** The name's minimum on a wide header, and the gap between the name and the actions. */
+  nameMin: number
+  rowGap: number
+  /** The floor's buttons ({@link headerFloor}), and whether the ⋯ is drawn beside them (more actions, or a menu-only one). */
+  floor: number
+  more: boolean
+  buttonWidth: number
+  /** The gap between two buttons, and between the last button and the ⋯. */
+  gap: number
+  moreWidth: number
+}
+
+/** Wide while the wide leading visual, the name's minimum, the floor's buttons and the ⋯, with their gaps, fit in one row
+ *  of the header's width; otherwise compact (ADR 0110 decision 8). Unmeasured it is wide, the markup every unit test has. */
+export function headerLayout(l: HeaderLayoutInput): HeaderLayout {
+  if (!(l.headerWidth > 0)) return 'wide'
+  const items = l.floor + (l.more ? 1 : 0)
+  const actions = items > 0 ? l.rowGap + l.floor * l.buttonWidth + (l.more ? l.moreWidth : 0) + (items - 1) * l.gap : 0
+  const need = (l.leadingWide > 0 ? l.leadingWide + l.leadingGap : 0) + l.nameMin + actions
+  return need <= l.headerWidth + 0.01 ? 'wide' : 'compact'
 }
 
 /** The four actions every container-like node shares, in their fixed order: share, rename, move, delete. */
