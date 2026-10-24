@@ -40,6 +40,7 @@ export async function runScopeRotationWorker(): Promise<number> {
       await failJob(job.jobId, 'not-scope-rotation')
       continue
     }
+    const stopRenewing = renewLeaseWhileWorking(job.jobId)
     try {
       // The directory AFTER the cut (the ex-member's membership is already deleted server-side), so the rotation
       // re-grants exactly the surviving set — coalesced removals collapse into one forward-secure rotation.
@@ -80,9 +81,30 @@ export async function runScopeRotationWorker(): Promise<number> {
       const refusal = await workerRefusal(e)
       if (refusal) await declineJob(job.jobId, refusal)
       else await failJob(job.jobId, 'rotate-failed')
+    } finally {
+      stopRenewing()
     }
   }
   return rotated
+}
+
+/**
+ * How often the lease of a job this worker holds is renewed while it works on it (ADR 0021 §6: long jobs heartbeat).
+ * Bound to the server's lease, `veyq.tasks.lease.ttl` (PT2M): four renewals fit in one lease, so a hidden tab whose
+ * timers the browser throttles to one a minute still keeps it. What the short lease buys is the takeover: a tab that
+ * closes, reloads or navigates mid-job renews nothing, and the scope's other owners — or this owner's next page —
+ * claim the job once its lease runs out, within two minutes instead of five (proof run 2026-10-24, N1b).
+ */
+export const LEASE_RENEW_MS = 30_000
+
+/** Renew `jobId`'s lease every {@link LEASE_RENEW_MS} until the returned stop is called. A renewal the server refuses
+ *  (`not_lease_holder`: the lease ran out and another worker took the job) changes nothing here — the guarded commit
+ *  and completion decide, as they do for any lost lease. */
+function renewLeaseWhileWorking(jobId: string): () => void {
+  const timer = setInterval(() => {
+    void withRefresh(() => tasksApi().heartbeatTask({ jobId })).catch(() => {})
+  }, LEASE_RENEW_MS)
+  return () => clearInterval(timer)
 }
 
 /** Re-key every scope this owner reads as `rekeying` (its row's derived flag, owner-only). One that fails stays so. */
