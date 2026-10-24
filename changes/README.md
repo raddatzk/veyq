@@ -1503,6 +1503,10 @@ the same state on both sides of the comparison.
 
 Generalised: when a gate is noisy, find out **what** differs before deciding what to ignore. An exclusion is a
 permanent hole in the shape of today's confusion, and it reports green from inside the hole.
+The reverse case is as real: the profile driver of cr-profile-where-the-time-goes refused every upload run on a strict
+"no failed request" rule, and the 1,163 `net::ERR_ABORTED` store PUTs it refused on looked like Chromium noise. They
+were the client never reading an empty answer body (heavy-stage finding F7), the same defect that held the gallery's
+volume reading at `carries: false`; an exclusion would have hidden it from both.
 
 ### An exit code from a chain is not the command's exit code
 
@@ -2104,6 +2108,15 @@ stored only sealed, so only the deciding moderator's browser can supply it — a
 that tells someone something writes a row per recipient kind (member, guest, reporter, Server Owner) with the channel
 that reaches them (in the app — on which screen —, by mail — from which address the server holds in the clear —, or
 none), and the measures or steps the duty does NOT reach (the Server Owner's own steps carried no statement here).
+
+### A refine that promises a viewer sees a switched state names what that viewer's client is handed
+
+`cr-application-switches` promised that "a `READ_WRITE` link guest sees it read-only" with an application off, and no
+sentence asked how the guest's page would know: a link's resolve carries no tenant setting and the tenant's capability
+set is members-only. The question reached the owner in the middle of the implementation and moved the decision twice
+(no new field, the links keep serving, the members get a banner, the guest learns it from the refused write). So
+before a refine promises a viewer a state, it greps what that viewer's client is given — its resolve, its manifest,
+its access — and either names the field that carries the state or writes "not told" into the decision.
 
 ### A switch that holds back a side effect names where it is entered before the effect fires
 

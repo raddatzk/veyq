@@ -67,7 +67,7 @@ import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 import { capabilityState } from '../shared/state/capabilities'
-import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX, DEPOT, MEMORIES } from '../features/platform/capabilities'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../test/i18n'
@@ -139,7 +139,7 @@ beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockImplementation((id) => id === uid('Solo')) // one favourite, so both pin states show
   treeStore.nodes = TREE.map((n) => ({ ...n }))
-  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+  capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   activeSpace.deletedAt = null
   activeSpace.purgeAfter = null
 })
@@ -190,7 +190,7 @@ describe('the Memories level view (golden)', () => {
   })
 
   it('inside a folder, sharing off: the overview card keeps rename and delete, no share', async () => {
-    capabilityState.ids = []
+    capabilityState.ids = [MEMORIES, DEPOT]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-unshareable'))
   })
 
@@ -201,8 +201,13 @@ describe('the Memories level view (golden)', () => {
 
   it('pending deletion with sharing off: the overview card has no actions row at all', async () => {
     pendingDeletion()
-    capabilityState.ids = []
+    capabilityState.ids = [MEMORIES, DEPOT]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-readonly-unshareable'))
+  })
+
+  it('Memories switched off for the tenant: the banner names it, no new Memory, the Memory keeps no write (uc.platform.switch-application-off)', async () => {
+    capabilityState.ids = [DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+    await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-memories-off'))
   })
 
   it('an empty folder: both empty states beside the create cards', async () => {

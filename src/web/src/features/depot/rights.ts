@@ -6,6 +6,7 @@
 import { FOLDER_KIND } from '../../core/node/kind'
 import { folderRights, type Access, type RightsTarget, type MemberAccess } from '../../core/access'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
+import { DEPOT } from '../platform/capabilities'
 
 export interface DepotRights {
   /** Download a file of the level, open a drop box or one of its guests' folders. */
@@ -59,7 +60,11 @@ export function depotRights(access: Access, at: RightsTarget): DepotRights {
 }
 
 function memberRights(access: MemberAccess, at: RightsTarget): DepotRights {
-  const write = !access.readonly
+  // Depot switched off is read-only (uc.platform.switch-application-off): no upload, replace, rename, move or new link —
+  // but a delete to the trash and its restore stay, as does downloading (the server's exemptions).
+  const on = !access.applicationsOff.has(DEPOT)
+  const remove = !access.readonly
+  const write = remove && on
   // Nothing is placed in a guest's identity folder (a server placement rule), but a member removes what a guest sent,
   // file by file (inbox #391), and moves it out (a move out of a drop box is a member's, inbox #377 (a); the move dialog
   // offers no identity folder as a destination).
@@ -71,7 +76,7 @@ function memberRights(access: MemberAccess, at: RightsTarget): DepotRights {
       upload: place,
       replace: place,
       rename: place,
-      deleteFile: write,
+      deleteFile: remove,
       createDropBox: place && access.publicSharesDropBox,
       moveFile: write,
     }
@@ -86,9 +91,9 @@ function memberRights(access: MemberAccess, at: RightsTarget): DepotRights {
       download: true,
       replace: place,
       rename: place,
-      share: access.publicShares && shareable,
-      shareContribute: access.publicSharesContribute && shareable,
-      deleteNode: write,
+      share: on && access.publicShares && shareable,
+      shareContribute: on && access.publicSharesContribute && shareable,
+      deleteNode: remove,
       moveNode: write,
     }
   }
@@ -99,9 +104,9 @@ function memberRights(access: MemberAccess, at: RightsTarget): DepotRights {
     return {
       ...NO_DEPOT_RIGHTS,
       download: true,
-      share: access.publicSharesDropBox && at.shareable,
-      deleteFile: write,
-      deleteNode: write,
+      share: on && access.publicSharesDropBox && at.shareable,
+      deleteFile: remove,
+      deleteNode: remove,
       moveFile: write,
       moveNode: write,
     }

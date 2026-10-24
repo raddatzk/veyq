@@ -186,7 +186,8 @@ paths:
         "422":
           description: >
             The node is not a `FILE` (`illegal_target`), or the upload was not started for this node in the role
-            `FILE_CONTENT` (`upload_mismatch`: its wrap would not open here).
+            `FILE_CONTENT` (`upload_mismatch`: its wrap would not open here), or Depot is switched off for the instance
+            or the tenant (`capability_disabled`, uc.platform.switch-application-off; nothing of the upload is kept).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
         "451":
@@ -311,7 +312,7 @@ paths:
               example: { code: stale_file, currentBlobId: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The upload was not started for this node in the role `FILE_CONTENT` (`upload_mismatch`).
+          description: The upload was not started for this node in the role `FILE_CONTENT` (`upload_mismatch`), or Depot is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off; nothing of the upload is kept).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
         "429":
@@ -430,6 +431,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
         "429":
           description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
           content:

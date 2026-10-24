@@ -34,6 +34,16 @@ describe('OptimisticTile — a refused link upload', () => {
     return w.find('.upload-tile-retry').trigger('click').then(() => expect(w.emitted('retry')).toEqual([['f-1']]))
   })
 
+  // uc.platform.switch-application-off: the start was refused because Memories is off here — said, with no retry
+  it('says Memories is switched off here and shows no retry on capability_disabled, member and guest alike', () => {
+    for (const link of [true, false]) {
+      const w = mountTile('capability_disabled', link)
+      expect(w.text()).toContain(t('media.uploadTileSwitchedOff'))
+      expect(w.text()).not.toContain(t('media.uploadTileFailed'))
+      expect(w.find('.upload-tile-retry').exists()).toBe(false)
+    }
+  })
+
   it('never names the link on a tile that is not a link upload', () => {
     const w = mountTile('quota_exceeded', false)
     expect(w.text()).not.toContain(t('media.uploadTileLinkFull'))

@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import io.quarkus.arc.All
@@ -104,7 +105,9 @@ sealed interface ListTrashOutcome {
  * a parent that is missing, trashed or in another scope refuses every kind; where a kind may live is the one
  * [NodeKindRules] that handles it (core's `FOLDER`, an application's own kinds — ADR 0079), none or several →
  * `illegal_structure`; no cycle on move; slug unique per parent. Whether a kind may be created at all on this instance
- * is the same rule's [NodeKindRules.capabilityToCreate], asked of [capabilities] (`capability_disabled`).
+ * is the same rule's [NodeKindRules.capabilityToCreate], asked of [capabilities] (`capability_disabled`); whether a node
+ * of the kind takes writes at all is its application's switch, asked of [applications] by the kind on every create and
+ * update (uc.platform.switch-application-off). A delete and a restore never ask it: what exists stays removable.
  */
 @ApplicationScoped
 class NodesHandler(
@@ -113,6 +116,7 @@ class NodesHandler(
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val kindRules: MutableList<NodeKindRules>,
     private val capabilities: CapabilityRegistry,
+    private val applications: ApplicationSwitch,
     private val blocks: ModerationBlocks,
     private val gate: NodeEpochGate,
 ) {
@@ -204,6 +208,9 @@ class NodesHandler(
         // guest's create alike (both reach this) — after the placement rule, so a misplaced node answers as it always
         // did. Only creation: a node of the kind that exists is moved and renamed as before (decision 5).
         NodeKindRules.capabilityToCreate(kindRules, kind)?.let { if (!capabilities.isActiveInScope(it, scopeId)) return CreateNodeOutcome.CapabilityDisabled }
+        // An application switched off takes no new node of its kinds (uc.platform.switch-application-off) — a copy and an
+        // import are creates too, so they stop here as well.
+        if (!applications.isKindWritable(kind, scopeId)) return CreateNodeOutcome.CapabilityDisabled
         store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
         // The entry is sealed under the parent's key: the parent's epoch as the writer read it, under the parent's row
         // lock (ADR 0109 point 6) — after the scope lock, as every writer and the re-key's commit take them.
@@ -336,6 +343,9 @@ class NodesHandler(
         malformed(scopeId, placement, wrappedMeta, metaRevision, nodeEpoch, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
+        // A node of a switched-off application is neither renamed, moved nor re-sealed (uc.platform.switch-application-off);
+        // nothing is written yet, so the throw stores nothing. The re-key's commit is its own path and never reaches this.
+        applications.requireKindWritable(node.kind, scopeId)
 
         var write: NodesStore.Placement? = null
         val claims = mutableListOf<NodesStore.EpochClaim>()

@@ -126,7 +126,7 @@ import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { FILE_KIND } from '../features/depot/kinds'
 import { capabilityState } from '../shared/state/capabilities'
-import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX, DEPOT, MEMORIES } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew, hasNewMenu, newMenuLabels } from '../test/newMenu'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../test/levelRows'
@@ -173,7 +173,7 @@ beforeEach(() => {
   stubApi(filesApi, { listFiles: { items: [] } })
   vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))
-  capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+  capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
 })
 
 describe('MemoryHomeView over the real registry', () => {
@@ -323,7 +323,7 @@ describe('MemoryHomeView over the real registry', () => {
   })
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {
-    capabilityState.ids = []
+    capabilityState.ids = [MEMORIES, DEPOT]
     const w = await mountAt('#~me/trips/memories/italy')
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
   })
@@ -448,7 +448,7 @@ describe('MemoryHomeView sharing a folder', () => {
   })
 
   it('hides the folder share when the instance turns public links off', async () => {
-    capabilityState.ids = []
+    capabilityState.ids = [MEMORIES, DEPOT]
     const w = await mountAt('#~me/trips')
     expect(shareButton(w).exists()).toBe(false)
     expect(w.find(`.veyq-node-header button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card renders').toBe(true)

@@ -58,9 +58,11 @@ instance and tenant layers.
    what is **new**. An **application switch** (`memories`, `depot`, `expenses`, the application's own node of the tree)
    is the one feature switch that reaches what exists: it makes the application read-only, every write refused and
    every read, download and removal kept ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
-   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path.
-   What exists stays readable and shareable, so there is no "activated but empty" state machine, and the gate sits
-   at creation instead of on every endpoint (the cost ADR 0079 named).
+   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path, and its
+   one-segment id is the only one a root may be (`core` is no entry). Its members see a banner, and its links keep
+   serving what exists (owner 2026-10-24).
+   What exists stays readable, so there is no "activated but empty" state machine, and the gate sits on the
+   application's writes, never on its reads.
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a
    blob role the server sees. The operator then learns *that* a Memory has a track, never where. This is the same
    kind of metadata as `CHAPTER`.
@@ -129,7 +131,7 @@ core/
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares (#435), search, live-collab, notifications   [later]
-*+ memories/                       → node kinds MEMORY / CHAPTER
+*+ memories                        → off = read-only: every write of its kinds and operations (built)
   *+  chapters                     → node kind CHAPTER
   *+  journal             [planned]→ a server-visible kind or blob role
   *+  gpx                 [planned]→ a server-visible blob role
@@ -138,7 +140,7 @@ core/
   *+  map                          → external (map tiles); CSP img-src
   *+  public-shares / contribute / drop-box   → inherit core.public-shares
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
-*+ depot/                          → node kind FILE, blob role FILE_CONTENT
+*+ depot                           → off = read-only: node kinds FILE / DEPOT_DROPBOX, blob role FILE_CONTENT (built)
   *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
 *+ expenses/   [refined, ADR 0108] → node kind EXPENSES_POT;  *+ public-shares/… inherit
   *+  exchange-rates               → external (exchange-rate provider), no opt-in; CSP connect-src
@@ -176,9 +178,16 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Consequences
 
-- **Built today** (measured: `contracts/platform/capabilities.json`): seven `core.*` entries - `core.public-shares`
-  with `.contribute` and `.drop-box`, `core.group-space`, `core.remember-device` with `.passwordless`, and
-  `core.device-linking`. The server computes the AND along the path (`CapabilityRegistry`); each client reads one leaf.
+- **Built today** is the catalog (`contracts/platform/capabilities.json`), never a list here. The server computes the
+  AND along the path (`CapabilityRegistry`, every prefix that is an entry, an application's one-segment id included);
+  each client reads one leaf.
+- **An application switch is built** (decision 5, measured: `ApplicationSwitch`): `memories` and `depot` are entries of
+  their own, and every application must have one (`validate_capabilities.py`). Off, core refuses a write of a node by
+  its kind (`NodeKindRules.applicationOf`: create, update, cover, a link created, reactivated, re-issued or turned
+  `READ_WRITE`, an upload's start), each application's write handlers by name, and `ApplicationSwitchSweepTest` derives
+  every write operation of every application and holds each to refused or exempt with its reason. The web reads it as
+  `MemberAccess.applicationsOff` through the registry's `applicationOf`, and the host shows one banner per application
+  off. A guest's page is not told; its write is refused by the server.
 - **The instance-wide switch is built** (decision 12, measured: `InstanceResource.listInstanceCapabilities` /
   `setInstanceCapability`, `StoredCapabilitySwitches`, `src/admin-web/src/cli/commands.ts`). The Server Owner switches an
   entry in admin-web's Server → Capabilities panel or with `veyq-admin capabilities list | off <id> | on <id>`,

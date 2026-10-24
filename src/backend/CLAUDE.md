@@ -12,7 +12,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
   configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list.
-  **What no guard derives, a new application adds by hand**, and forgetting it turns nothing red: its node kinds and
+  **What no guard derives, a new application adds by hand**, and forgetting it turns nothing red: its kinds'
+  `NodeKindRules.applicationOf` and its member roles' `MemberBlobRoles.application` (else core never refuses a write of
+  its nodes while it is switched off; its own handlers' `ApplicationSwitch.requireWritable` IS held, by
+  `ApplicationSwitchSweepTest`, [docs/apps/README.md](../../docs/apps/README.md) § Rules); its node kinds and
   blob roles to `validate_kernel_imports_no_slices.py`'s lists (and its web kinds to
   `validate_web_core_imports_no_applications.py`'s `KIND`), and its seam anchors to `ModuleCompositionTest` — Depot's tokens
   were missing from the kind lists (all of them on the backend, `DEPOT_DROPBOX` on the web) until its CR closed. Its

@@ -1381,6 +1381,10 @@ const en = {
     // language label to the theme block's wording for no reason.
     systemDefault: 'System',
   },
+  applications: {
+    // uc.platform.switch-application-off: the banner above every page of a space while an application is switched off.
+    switchedOff: '{application} is switched off here. You can still open and download what’s here, so save what you want to keep.',
+  },
   groups: {
     createTitle: 'New group',
     nameLabel: 'Group name',
@@ -3297,6 +3301,9 @@ const de: typeof en = {
     themeLight: 'Hell',
     themeDark: 'Dunkel',
     systemDefault: 'System',
+  },
+  applications: {
+    switchedOff: '{application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst.',
   },
   groups: {
     createTitle: 'Neue Gruppe',

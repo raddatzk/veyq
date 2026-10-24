@@ -43,8 +43,14 @@ media tables. What is built and what is open: the ADR's Consequences.
   ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A function
   off: none of it new. The application off: read-only — every write of it refused, every read, download and removal
   kept ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,
-  [uc.platform.switch-application-off](../features/platform/use-cases/uc.platform.switch-application-off.md); not built
-  yet, `cr-application-switches`).
+  [uc.platform.switch-application-off](../features/platform/use-cases/uc.platform.switch-application-off.md)). A new
+  application takes part by: its own entry in `contracts/platform/capabilities.json`, its name as the id
+  (`validate_capabilities.py` is red without one); its kinds' `NodeKindRules.applicationOf` and its member roles'
+  `MemberBlobRoles.application`, so core refuses its node writes by kind; each of its write handlers calling
+  `ApplicationSwitch.requireWritable` right after its gate (`ApplicationSwitchSweepTest` is red on a write operation that
+  neither answers `capability_disabled` off nor is exempt with its reason); and on the web
+  `registry.registerApplication` with its kinds and its rights function reading `access.applicationsOff`. Nothing
+  names the kinds' application for `applicationOf` but the application itself: a kind left out is never switched.
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so Depot needed no new seal purpose

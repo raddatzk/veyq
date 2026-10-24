@@ -283,6 +283,8 @@ here; the server is blind.
   composed from what the viewer may create (`node.levelEmptyNew`), or `node.levelEmpty` - no create tile.
 
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
+`registerApplication({ id, name, kinds })` once — its register id (its switch), its name's i18n key and the kinds it owns, which
+`applicationOf(kind)` answers to core;
   `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` - the i18n key core's delete dialog
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence - `nounWithArticle`, the noun core's
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named ...", else "an item") - `emptyInTrash`, the note core's
@@ -358,7 +360,7 @@ here; the server is blind.
   Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
-  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088) or a share guest
+  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088 — and `applicationsOff`, the ids of `registry.applications()` the read set lacks (`isSwitchedOff`, never an unread set): an application's rights function then drops every write but the delete, and core asks `applicationWritable(access, kind)` for its own actions on the kind, uc.platform.switch-application-off) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
   component) — and `tree`, a `TreeSource` (`node`,

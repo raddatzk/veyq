@@ -404,8 +404,7 @@ acceptanceCriteria:
         reason: >-
           Mounted for real and scrolled in happy-dom, which lays nothing out: the scroll container's and the grid's boxes
           are given by hand, and the bound is asserted on a 2,000-tile grid (bitten: mounting every row turns four cases
-          red). No real browser has scrolled it yet; the DOM bound under 3,000 nodes at 1,000 / 3,000 / 10,000 photos is
-          measured by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage against ADR 0105's targets — not yet run.
+          red). In a real browser the DOM stayed under 1,100 nodes at 1,000 / 3,000 / 10,000 photos, read by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage (2026-10-24): every ADR 0105 target met at 1,000, 3,000 and 10,000 photos, a local reading that is no coverage.
   - id: thumbnails-open-near-the-viewport
     text: >-
       A thumbnail is fetched and opened only for a tile some owner wants — a grid's window, announced nearest to the
@@ -425,7 +424,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           Proven on a fake decrypt in happy-dom (bitten: ignoring the order, keeping an unwanted read, and not revoking
-          each turn a case red). *Viewport complete* and *end complete* in a real browser are measured by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage against ADR 0105's targets — not yet run.
+          each turn a case red). *Viewport complete* and *end complete* in a real browser were read by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage (2026-10-24): every ADR 0105 target met at 1,000, 3,000 and 10,000 photos, a local reading that is no coverage.
   - id: the-listing-opens-once-off-the-main-thread
     text: >-
       Every listed seal of an open Memory — a media's listed tier and its original's blob meta — is opened once per seal
@@ -445,7 +444,7 @@ acceptanceCriteria:
           No Worker runs in the unit environment: the Worker's handler is driven directly and the front door against a
           stub Worker running the real handler (bitten: keys kept after close, no page-thread fall-back, the memo off).
           `verify:listing-worker` proves the build emits and references the chunk; that a browser runs it, and what it
-          takes off the main thread at 10,000 photos, is measured by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage against ADR 0105's targets — not yet run.
+          takes off the main thread at 10,000 photos, was read by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage (2026-10-24): every ADR 0105 target met at 1,000, 3,000 and 10,000 photos, a local reading that is no coverage.
   - id: the-grid-is-one-tab-stop-with-arrow-keys
     text: >-
       The grid is a WAI-ARIA grid with the whole list's row count, each mounted row its index and each tile a cell; the
@@ -463,8 +462,8 @@ acceptanceCriteria:
         reason: >-
           Keys pressed on the rendered grid in happy-dom, which has no tab navigation: "Tab leaves the grid" is asserted
           as the tab order holding one tile's controls (bitten: dropping the roving tab stop turns two cases red). No
-          screen reader has read the grid yet, and the browser walk (`tests/e2e/tests/features/gallery-keyboard.spec.ts`) is
-          written, not run — both wait for the V1 heavy stage.
+          screen reader has read the grid yet; the browser walk (`tests/e2e/tests/features/gallery-keyboard.spec.ts`) is
+          green in local runs of lane L1, whose `stack` refs ADR 0040 admits only after a CI run.
   - id: focus-returns-from-the-lightbox
     text: >-
       The lightbox takes the focus while it is open, so the arrow keys are its own; closing it scrolls the item it showed
@@ -478,7 +477,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           Opened, paged and closed by keys on the real detail in happy-dom (bitten: skipping the focus return turns it
-          red); its browser walk is written in `tests/e2e/tests/features/gallery-keyboard.spec.ts`, not run.
+          red); its browser walk, `tests/e2e/tests/features/gallery-keyboard.spec.ts`, is green in local runs of lane L1 only.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
@@ -493,10 +492,9 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/features/depot-download.spec.ts`,
     `tests/e2e/tests/features/video-playback.spec.ts`, `tests/e2e/tests/features/gallery-keyboard.spec.ts` — the windowed grid's
-    keyboard walk and its window, written with ADR 0105 and not yet run; `tests/e2e/tests/features/memories-styles.spec.ts` —
+    keyboard walk and its window, written with ADR 0105; `tests/e2e/tests/features/memories-styles.spec.ts` —
     `lightbox-preview` as far as the lightbox's look: its buttons, its details pane wide and narrow, light and dark, read
-    as computed styles after inbox #517 moved its rules from core's `styles/media.css` into Memories' own sheet, written
-    and not yet run)
+    as computed styles after inbox #517 moved its rules from core's `styles/media.css` into Memories' own sheet)
     drives `thumbnail-grid`, `download-stable-name` (the lightbox saves the original under its sealed name, byte for
     byte, through the Service Worker's download route, after a reload), `lightbox-video-playback` and
     `sw-range-streaming` (a WebM uploaded, reloaded, played from `/__media/<handle>`: every answer the Service Worker's

@@ -18,7 +18,7 @@ environment that the recording must not contain. Then it is set up by the e2e bo
 `scenarios` projects (first run, the tenant, its owner active, one Memory with one photo) — and not by the volume
 harness, which `cr-volume-measurement-cax` deletes.
 
-**The method (decision 2).**
+**The method.**
   - **Client.** Chromium through Playwright, in the Playwright image the overlay pins, on the instance's networks
     (`tests/e2e/profile/`). Per run, a fresh context; what the operation needs typed is typed first, then the CPU
     profile of the main thread (CDP `Profiler`, 100 µs), a performance trace of every thread (the workers included) and
@@ -57,16 +57,18 @@ client files are checked for that owner's password and Secret Key before a run i
 are of the JVM's threads only (the database and the store are other containers, seen through the statement counters
 and the request times). The statement counters are MariaDB's GLOBAL ones, so a background job inside a window counts;
 the idle drift is subtracted as an estimate, never attributed. The CPU throttle is Chromium's emulation, not a slower
-device.
+device, and it reaches the page's main thread only, never a worker: at the V1 heavy stage the Argon2id worker took
+5,354 ms at throttle 1 and 5,413 ms at 4 while the main thread rose ×4.5, so a throttle-4 number is a slower main
+thread, and a worker's share of it runs at desktop speed.
 
-**The scenarios** (decision 1; `--scenario` takes several, comma-separated, run one after another on ONE instance, so
-their readings share its seed — the CR's Q3):
+**The scenarios** (`--scenario` takes several, comma-separated, run one after another on ONE instance, so their
+readings share its seed):
   - `s1` unlock: a new device signs in and opens the space (`s1-unlock.profile.ts`).
   - `s2` upload: 50 phone-sized photos into one Chapter, a fresh Memory per run (`s2-upload.profile.ts`); the window's
     store requests are the wire (#261).
   - `s3` open a 1,000-photo Chapter (`s3-open-chapter.profile.ts`), seeded once before its first run by
     `s3-seed.profile.ts` through the browser, unprofiled.
-  - `crypto`: decision 3's micro-reading, AES-256-GCM through `@noble/ciphers` against WebCrypto over 4 MB and 64 MB
+  - `crypto`: the crypto micro-reading, AES-256-GCM through `@noble/ciphers` against WebCrypto over 4 MB and 64 MB
     (`crypto-aead.profile.ts`, its numbers in `<stem>.crypto.json`).
   The photos S2 and S3 upload are synthetic: ffmpeg's `testsrc2` with temporal noise, rendered on this host into the run
   directory's `fixtures/` before the first run (`render_photos`), so ffmpeg must be on the PATH for those two.
@@ -366,9 +368,9 @@ def main() -> int:
     parser.add_argument("--admin", required=True, help="the candidate admin image")
     parser.add_argument("--scenario", type=lambda s: s.split(","), default=["s1"],
                         help=f"scenarios, comma-separated, run in this order on one instance: {', '.join(SCENARIOS)}")
-    parser.add_argument("--runs", type=int, default=3, help="runs per throttle (decision 2: 3)")
+    parser.add_argument("--runs", type=int, default=3, help="runs per throttle")
     parser.add_argument("--throttles", type=lambda s: [int(x) for x in s.split(",")], default=[1, 4],
-                        help="CPU throttle rates, comma-separated (decision 2: 1,4)")
+                        help="CPU throttle rates, comma-separated")
     parser.add_argument("--keep", action="store_true", help="leave the instance running (no teardown)")
     parser.add_argument("--ignore-load", action="store_true",
                         help="profile on a busy machine anyway; the run is marked quiet: false")

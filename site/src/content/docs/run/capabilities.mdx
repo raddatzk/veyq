@@ -8,6 +8,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
+  - docs/features/platform/use-cases/uc.platform.switch-application-off.md
   - contracts/platform/capabilities.json
 ---
 
@@ -35,8 +36,8 @@ roles, not by you. A capability decides whether the thing is offered to anyone. 
 its id out of the list it publishes before sign-in (`GET /api/setup`), so the web client hides the feature, and the
 server refuses the action with `422 capability_disabled`, so a client that ignores the list is refused all the same.
 
-**The entries form a tree.** An id is a dotted path under a root: `core` for the platform, and later an
-application's own name. An entry is active only when it and every entry above it are on: the server ANDs along the
+**The entries form a tree.** An id is a dotted path under a root: `core` for the platform, and an application's own
+name (`memories`, `depot`), which is an entry itself: the switch of that application as a whole. An entry is active only when it and every entry above it are on: the server ANDs along the
 path, and no client works it out itself. Switching a parent off therefore switches its children off. A child keeps
 its own switch while that happens: a child you switched off yourself stays off when its parent comes back on, and a
 child you left on comes back with it.
@@ -200,6 +201,13 @@ switch refuses only what is new.
   `core.public-shares` stops every kind, its two children only their own. Nothing is deleted, so switching back on
   brings every link back as it was. A download or upload address the server signed just before stays usable until it
   expires, ten minutes by default, as after a member turns a link off.
+- **An application switch acts at once, and makes the application read-only.** With `memories` or `depot` off,
+  nothing of that application can be added or changed: no new Memory or file, no upload, rename, move, cover or new
+  link, and a guest's upload through a link that exists is refused. Everything in it still opens and downloads, for
+  members and through the links that exist, and members can still delete to the trash and restore. A rotation of keys
+  and a moderation measure still reach it. Every member of the tenant sees a banner saying the application is switched
+  off here, so they have time to save what they want to keep. The application's own entries below it
+  (`memories.places`, `memories.map`) are off with it. Nothing is deleted: switched back on, everything is as before.
 - **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
   existing group stays fully usable.
 
@@ -224,7 +232,6 @@ names what the server would see in order to refuse it: a switch exists only wher
 
 | Entry | What the server would see |
 |---|---|
-| `memories` | the Memory and Chapter node kinds |
 | `memories.chapters` | the Chapter node kind |
 | `memories.journal` (planned) | a node kind or blob role the server would then see |
 | `memories.gpx` (planned) | a blob role for tracks: the server would learn *that* a Memory has a track, never where |
@@ -232,9 +239,8 @@ names what the server would see in order to refuse it: a switch exists only wher
 | `memories.public-shares`, `.contribute`, `.drop-box` | inherit from `core.public-shares`, so core switches every application's links off at once |
 | `memories.public-shares.download-originals` | the original file's blob role. Waits on a measurement: if guests stream video from the original, this switch would also stop their video playback |
 
-**Depot.** `depot` would gate its file node kind and the file content's blob role. Its own `public-shares`,
-`.contribute` and `.drop-box` would inherit from core, and its drop box would also gate creating a drop box, which
-`core.public-shares.drop-box` does for the whole instance today.
+**Depot.** Its own `public-shares`, `.contribute` and `.drop-box` would inherit from core, and its drop box would also
+gate creating a drop box, which `core.public-shares.drop-box` does for the whole instance today.
 
 **Beyond the entries.**
 

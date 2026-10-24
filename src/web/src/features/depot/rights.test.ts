@@ -7,12 +7,14 @@ import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, RightsTarget } from '../../core/access'
 import { memberAccessOf, guestAccessOf } from '../../test/models'
+import { DEPOT, MEMORIES } from '../platform/capabilities'
 
 const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind === DROPBOX_KIND || kind === FOLDER_KIND || kind === FILE_KIND, ...o })
 const grants = (...keys: (keyof DepotRights)[]): DepotRights => ({ ...NO_DEPOT_RIGHTS, ...Object.fromEntries(keys.map((k) => [k, true])) })
 
 const member = memberAccessOf()
 const pending = memberAccessOf({ readonly: true })
+const depotOff = memberAccessOf({ applicationsOff: new Set([DEPOT]) })
 const READ = guestAccessOf('READ')
 const RW = guestAccessOf('READ_WRITE')
 const WO = guestAccessOf('WRITE_ONLY')
@@ -42,6 +44,11 @@ const rows: [string, Access, RightsTarget, DepotRights][] = [
   ['member on an opened file the registry will not share', member, at(FILE_KIND, { shareable: false }), grants('download', 'replace', 'rename', 'deleteNode', 'moveNode')],
   ['member on an opened file, pending deletion: download and its links (a read)', pending, at(FILE_KIND), grants('download', 'share', 'shareContribute')],
   ['member on a guest\'s file in an identity folder: download, delete, move out; no replace, rename, share', member, at(FILE_KIND, { inIdentityFolder: true }), grants('download', 'deleteNode', 'moveNode')],
+  // --- member, Depot switched off (uc.platform.switch-application-off): read-only, but a delete and its restore stay ---
+  ['member in a folder, Depot off: download and delete a file only', depotOff, at(FOLDER_KIND), grants('download', 'deleteFile')],
+  ['member on a drop box, Depot off: download, delete; no link, no move', depotOff, at(DROPBOX_KIND), grants('download', 'deleteFile', 'deleteNode')],
+  ['member on an opened file, Depot off: download and delete it; no replace, rename, move or link', depotOff, at(FILE_KIND), grants('download', 'deleteNode')],
+  ['member on an opened file, Memories off: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([MEMORIES]) }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
   ['member on another application\'s kind', member, at('MEMORY'), grants()],
   // --- guest READ ---
   ['READ guest in a folder', READ, at(FOLDER_KIND), grants('download')],

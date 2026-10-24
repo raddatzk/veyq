@@ -100,6 +100,12 @@ member list's one query per member and missing ETag (458 SELECTs, 42 ms at 445);
 while a phone uploads — the CAX run should watch the app there first.
 
 **For this CR's run.**
+- *Two N+1 shapes are decided here* (inbox #537): opening a 1,000-photo Chapter sends ≈ 116 SQL statements a request,
+  and `GET /api/scopes/{id}/members` at 1,000 members 1,012 SELECTs. Locally both meet their targets; on the CAX a
+  round trip costs more, so this run's server leg says whether either needs a fix.
+- *The app's memory while a phone uploads is not its heap*: the profile's upload of 50 photos on the local production
+  recipe (2026-10-24, JFR) peaked at 171 MB of Java heap of a 616 MB maximum and 609 MB resident, with the JVM's own
+  CPU at 0.3 % on average. What fills the container at 1,000 photos stays this run's to watch.
 - *Phase 2's member axis* runs to 1,000 as planned: the identity-pin store (built 2026-10-19, #491, ADR 0104) keeps a pin
   per entry, and its live proof seeded this harness's member stage to 1,000 on a local production-recipe instance (999
   members granted; the profile stage was stopped at 722 on the owner's word).
@@ -181,7 +187,7 @@ owner's to give with the server.
 - [ ] **4 record**: decision 4's three places; the verdict compared with the local pre-check in one sentence in the
   retrospective (how far the local run was off is worth knowing for the next one). · Done when: the site check and
   the trust-chain guards green.
-- [ ] **5 remove** (not before #489's reading at the V1 heavy stage — it measures with this harness): delete the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
+- [ ] **5 remove** (#489's reading, the harness's last use outside this CR, was taken at the V1 heavy stage on 2026-10-24): delete the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
   `scripts/measure_volume.py`, `scripts/measure_volume_selftest.py`, `tests/e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
   `npm run check` in `src/web/` green; the owner confirms the server is gone.

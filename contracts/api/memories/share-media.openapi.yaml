@@ -187,6 +187,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_rekey_pending } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
 
   /api/shares/{shareId}/media/{mediaId}:
     delete:
