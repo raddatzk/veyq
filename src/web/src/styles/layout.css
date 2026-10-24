@@ -518,7 +518,14 @@
 
 @media (max-width: 1020px) {
   .app-shell {
-    --app-sticky-top: calc(72px + 3rem + 1px); /* the compact header: its two rows and its border */
+    /* The compact header's two rows and its border, the one source of both the header's height and the sticky offset
+       below it: the rows below set their heights from these, and 720px narrows only the tenant row's token, so the
+       offset follows (2026-10-24: the offset was a literal 72px + 3rem + 1px while the phone's row was 64px, so a
+       Memory's tab row stuck 8px below the header). Pinned by `components/app/stickyTopStyle.test.ts`. */
+    --app-compact-tenant-row: 72px;
+    --app-compact-topbar-row: 3rem;
+    --app-compact-header-border: 1px;
+    --app-sticky-top: calc(var(--app-compact-tenant-row) + var(--app-compact-topbar-row) + var(--app-compact-header-border));
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }
@@ -530,11 +537,11 @@
     top: 0;
     z-index: 30;
     display: grid;
-    grid-template-rows: 72px 3rem;
+    grid-template-rows: var(--app-compact-tenant-row) var(--app-compact-topbar-row);
     width: 100%;
     max-width: 100vw;
     overflow: visible;
-    border-bottom: 1px solid var(--app-line);
+    border-bottom: var(--app-compact-header-border) solid var(--app-line);
     background: var(--app-chrome-pattern);
     box-shadow: var(--app-shadow-sm);
     backdrop-filter: blur(22px);
@@ -550,8 +557,8 @@
     flex-direction: row;
     align-items: center;
     gap: 0.65rem;
-    height: 72px;
-    min-height: 72px;
+    height: var(--app-compact-tenant-row);
+    min-height: var(--app-compact-tenant-row);
     padding: 0.55rem 1rem;
     border-right: 0;
     border-bottom: 1px solid var(--app-line);
@@ -799,9 +806,9 @@
     align-items: center;
     gap: 0.65rem;
     width: 100%;
-    height: 3rem;
-    min-height: 3rem;
-    max-height: 3rem;
+    height: var(--app-compact-topbar-row);
+    min-height: var(--app-compact-topbar-row);
+    max-height: var(--app-compact-topbar-row);
     box-sizing: border-box;
     padding: 0.2rem 1rem;
     border-bottom: 1px solid var(--app-line);
@@ -830,6 +837,9 @@
 }
 
 @media (max-width: 720px) {
+  .app-shell {
+    --app-compact-tenant-row: 64px; /* the header's rows and the sticky offset both follow */
+  }
 
   .public-shell {
     align-items: start;
@@ -840,8 +850,6 @@
   .workspace-topbar {
     position: relative;
     top: auto;
-    height: auto;
-    min-height: auto;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 0.45rem;
@@ -869,14 +877,8 @@
   }
 
   .tenant-sidebar {
-    height: 64px;
-    min-height: 64px;
     gap: 0.45rem;
     padding: 0.45rem 0.65rem;
-  }
-
-  .app-compact-header {
-    grid-template-rows: auto auto;
   }
 
   .sidebar-brand,
