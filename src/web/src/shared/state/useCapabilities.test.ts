@@ -44,6 +44,16 @@ describe('useCapabilities', () => {
     expect(hasCapability('core.public-shares')).toBe(true)
   })
 
+  it('isSwitchedOff is true only for an id a read set lacks — not before discovery (uc.platform.switch-application-off)', () => {
+    const { isSwitchedOff } = useCapabilities()
+    expect(isSwitchedOff('memories')).toBe(false) // nothing read yet: not off, no banner says so
+    setCapabilities(status({ capabilities: [{ id: 'memories' }, { id: 'depot' }] }))
+    expect(isSwitchedOff('memories')).toBe(false)
+    setTenantCapabilities([{ id: 'depot' }])
+    expect(isSwitchedOff('memories')).toBe(true) // the tenant switched it off
+    expect(isSwitchedOff('depot')).toBe(false)
+  })
+
   it('incompatibility is null when the major matches, and before discovery; build never gates', () => {
     const { incompatibility } = useCapabilities()
     expect(incompatibility()).toBeNull() // not discovered

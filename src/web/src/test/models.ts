@@ -95,11 +95,11 @@ export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
 })
 
 /** A member's `Access` (core/access.ts): an unlocked scope, not pending deletion, every public-share leaf on (READ,
- *  contribute, drop box) — a test passes only what it is about. */
+ *  contribute, drop box), no application switched off — a test passes only what it is about. */
 export const memberAccessOf = (o: Partial<Omit<MemberAccess, 'mode'>> = {}): MemberAccess =>
   memberAccess({
     scopeId: 'scope-1', epochs: null, readonly: false,
-    publicShares: true, publicSharesContribute: true, publicSharesDropBox: true,
+    publicShares: true, publicSharesContribute: true, publicSharesDropBox: true, applicationsOff: new Set(),
     ...o,
   })
 

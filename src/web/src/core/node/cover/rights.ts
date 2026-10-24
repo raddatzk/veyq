@@ -10,9 +10,10 @@
 //   nothing can be sealed, so nothing is offered.
 // - **A kind that opted in.** The kind's descriptor says `cover`; a kind no application registered (the unsupported row) or
 //   one that did not opt in has none. The server's `NodeKindRules.takesCover` is the authority and refuses the rest.
+// - **Not while the node's application is switched off** (uc.platform.switch-application-off): its nodes are read-only.
 // - **Not in a guest's identity folder.** Those folders belong to the drop box's guests, and a member only deletes or moves
 //   them out (ADR 0080 decision 11).
-import type { Access, RightsTarget } from '../../access'
+import { applicationWritable, type Access, type RightsTarget } from '../../access'
 import { registry } from '../../applications/registry'
 
 export interface CoverRights {
@@ -26,6 +27,8 @@ const NONE: CoverRights = Object.freeze({ setCover: false })
 export function coverRights(access: Access, at: Pick<RightsTarget, 'kind' | 'inIdentityFolder'>): CoverRights {
   if (access.mode !== 'member' || access.readonly || !access.epochs) return NONE
   if (!at.kind || at.inIdentityFolder) return NONE
+  // A node of a switched-off application takes no cover (uc.platform.switch-application-off).
+  if (!applicationWritable(access, at.kind)) return NONE
   const info = registry.kind(at.kind)
   return info.supported && info.cover ? { setCover: true } : NONE
 }

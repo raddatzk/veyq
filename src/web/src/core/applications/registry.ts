@@ -65,6 +65,13 @@
 // `assertRotationHooks()` before it touches anything and refuses to start when no registered application carries the
 // hook (a composition root that registered nothing is that case too).
 //
+// **Applications (`registerApplication`; uc.platform.switch-application-off).** An application names itself once: its id —
+// its own entry of the capability register (`memories`), which the Server Owner and a tenant owner switch off — the kinds
+// it owns, and its name as an i18n key of its own namespace. Core asks `applicationOf(kind)` for a node's application and
+// reads `Access.applicationsOff` with it, so core names no application and an application switched off is read-only
+// wherever core draws an action of its nodes (a cover, a copy); the host's banner names it by `applications()`. A kind no
+// application named belongs to none and is never switched off (core's FOLDER). An id or a kind named twice throws.
+//
 // **Route slugs (`claimRouteSlug`, `claimNoRouteSegment`; inbox #328, ADR 0015).** A node's place is a path in the URL
 // `#fragment` (`core/node/location.ts`); every application but one puts its slug before the name of its nodes
 // (`#foo/memories/rom`) so a path says what kind of thing it opens. An application claims its slug once for the kinds it
@@ -481,7 +488,22 @@ export interface LifecycleHooks {
   onMasterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
 }
 
+/** An application of this build, as `registerApplication` named it. */
+export interface ApplicationInfo {
+  /** Its own entry of the capability register (`memories`): its switch, ADR 0079 decision 8. */
+  id: string
+  /** The i18n key, of the application's own namespace, of its name (`memory.memories`). */
+  name: string
+}
+
 export interface Registry {
+  /** Name an application: its register id, its name's i18n key and the node kinds it owns (see the header). Throws on an
+   *  id named before, on an empty `kinds`, on FOLDER and on a kind another application already owns. */
+  registerApplication(info: ApplicationInfo & { kinds: readonly NodeKind[] }): void
+  /** The applications named, in registration order. */
+  applications(): readonly ApplicationInfo[]
+  /** The id of the application that owns `kind`, or null: core's FOLDER, a kind nobody named. */
+  applicationOf(kind: NodeKind): string | null
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
@@ -581,6 +603,8 @@ export function createRegistry(): Registry {
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
+  const applications: ApplicationInfo[] = []
+  const applicationOfKind = new Map<NodeKind, string>()
   // The unified list's row sources and tabs (inbox #407), in registration order.
   const listEntries: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[] = []
   const tabEntries: LevelTabSpec[] = []
@@ -611,6 +635,18 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
+    registerApplication({ id, name, kinds: owned }) {
+      if (applications.some((a) => a.id === id)) throw new Error(`application ${id} is already registered`)
+      if (owned.length === 0) throw new Error(`application ${id} names no node kind`)
+      for (const k of owned) {
+        if (k === FOLDER_KIND) throw new Error("FOLDER is the platform's: no application owns it")
+        if (applicationOfKind.has(k)) throw new Error(`node kind ${k} already belongs to ${applicationOfKind.get(k)}`)
+      }
+      applications.push({ id, name })
+      for (const k of owned) applicationOfKind.set(k, id)
+    },
+    applications: () => applications.map((a) => ({ ...a })),
+    applicationOf: (kind) => applicationOfKind.get(kind) ?? null,
     claimShareBody(kind, component) {
       if (kind === FOLDER_KIND || shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
       shareBodies.set(kind, component)

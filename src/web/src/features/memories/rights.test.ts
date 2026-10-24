@@ -7,6 +7,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, RightsTarget } from '../../core/access'
 import { memberAccessOf, guestAccessOf } from '../../test/models'
+import { DEPOT, MEMORIES } from '../platform/capabilities'
 
 const FILE = 'FILE'
 const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind !== null, ...o })
@@ -15,6 +16,7 @@ const grants = (g: Grant): MemoryRights => ({ ...NO_MEMORY_RIGHTS, ...g })
 
 const member = memberAccessOf()
 const pending = memberAccessOf({ readonly: true })
+const memoriesOff = memberAccessOf({ applicationsOff: new Set([MEMORIES]) })
 const READ = guestAccessOf('READ')
 const RW = guestAccessOf('READ_WRITE')
 const WO = guestAccessOf('WRITE_ONLY')
@@ -41,6 +43,15 @@ const rows: [string, Access, RightsTarget, Grant][] = [
   ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareContribute: false, shareUpload: false }],
   ['member, pending deletion, on a Memory: reads, links, marks only', pending, at(MEMORY_KIND), {
     navigate: true, download: true, mark: true, share: true, shareContribute: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
+  }],
+  // --- member, Memories switched off (uc.platform.switch-application-off): read-only, but a delete and its restore stay ---
+  ['member, Memories off, in a folder: no new Memory', memoriesOff, at(FOLDER_KIND), { navigate: true }],
+  ['member, Memories off, on a Memory: reads, downloads, marks, trash and delete; no write, no new link', memoriesOff, at(MEMORY_KIND), {
+    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true, deleteMedia: 'any', deleteNode: true,
+  }],
+  ['member, Depot off, on a Memory: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([DEPOT]) }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true }],
+  ['member, Memories off and pending deletion: no delete either', memberAccessOf({ readonly: true, applicationsOff: new Set([MEMORIES]) }), at(MEMORY_KIND), {
+    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true,
   }],
   ['member on another application\'s kind', member, at(FILE), {}],
   ['member on an unknown kind', member, at('ZULU'), {}],

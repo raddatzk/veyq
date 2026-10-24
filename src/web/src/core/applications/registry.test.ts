@@ -294,6 +294,30 @@ describe('registry: lifecycle hooks', () => {
 })
 
 // Inbox #328: an application claims its URL route slug once (ADR 0015); Depot declares it has none.
+describe('registry: applications (uc.platform.switch-application-off)', () => {
+  it('names each application once with its kinds; a kind answers its application, a folder and a stranger none', () => {
+    const r = createRegistry()
+    r.registerApplication({ id: 'memories', name: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] })
+    r.registerApplication({ id: 'depot', name: 'depot.title', kinds: ['FILE', 'DEPOT_DROPBOX'] })
+    expect(r.applications()).toEqual([{ id: 'memories', name: 'memory.memories' }, { id: 'depot', name: 'depot.title' }])
+    expect(r.applicationOf(CHAPTER_KIND)).toBe('memories')
+    expect(r.applicationOf('DEPOT_DROPBOX')).toBe('depot')
+    expect(r.applicationOf(FOLDER_KIND)).toBeNull()
+    expect(r.applicationOf('NOBODY')).toBeNull()
+  })
+
+  it('refuses an id twice, a kind twice, FOLDER and no kind at all — and keeps nothing of a refused one', () => {
+    const r = createRegistry()
+    r.registerApplication({ id: 'memories', name: 'memory.memories', kinds: [MEMORY_KIND] })
+    expect(() => r.registerApplication({ id: 'memories', name: 'x', kinds: ['OTHER'] })).toThrow(/already registered/)
+    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: ['OTHER', MEMORY_KIND] })).toThrow(/already belongs to memories/)
+    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: [FOLDER_KIND] })).toThrow(/platform/)
+    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: [] })).toThrow(/names no node kind/)
+    expect(r.applicationOf('OTHER')).toBeNull()
+    expect(r.applications().map((a) => a.id)).toEqual(['memories'])
+  })
+})
+
 describe('registry: route slugs', () => {
   it('maps the claimed kinds to their application\'s slug and group, a folder and the rest to none', () => {
     const r = createRegistry()

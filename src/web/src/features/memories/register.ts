@@ -12,6 +12,7 @@
 // `topbarTray` list.
 import { rekeyMemoryContent } from './rekey'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
+import { MEMORIES } from '../platform/capabilities'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, LevelMenuEntry, Registry } from '../../core/applications/registry'
 import { MEMORY_VIEWS } from './memoryViews'
@@ -83,6 +84,8 @@ export function registerMemories(registry: Registry): void {
   // extend that (`…/rom/tag-1`). The slug is reserved in the unprefixed namespace: a folder called "Memories" is
   // `memories-2` (`core/node/location.ts`, inbox #328).
   registry.claimRouteSlug(MEMORIES_ROUTE_SLUG, [MEMORY_KIND, CHAPTER_KIND])
+  // Its kinds are the Memories application's, switched as one by its register entry (uc.platform.switch-application-off).
+  registry.registerApplication({ id: MEMORIES, name: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] })
   // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
   // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a
   // guest through core's share page (inbox #401).

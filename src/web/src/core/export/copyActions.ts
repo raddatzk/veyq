@@ -4,7 +4,7 @@
 // member flow (ADR 0082 decision 5, as the import), so a share guest - whatever the role - is never offered one.
 import { registry } from '../applications/registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
-import type { Access } from '../access'
+import { applicationWritable, type Access } from '../access'
 import type { CoreHeaderAction } from '../node/nodeHeader'
 import type { CoreRowAction } from '../node/levelRow'
 
@@ -22,7 +22,8 @@ export function copiesKind(kind: NodeKind): boolean {
  *  of a kind this build copies. The original needs only to be read; where the copy may go is the dialog's question. */
 export function canCopy(access: Access, node: { kind: NodeKind } | null): boolean {
   if (!node || access.mode !== 'member' || access.epochs === null || access.readonly) return false
-  return copiesKind(node.kind)
+  // A copy creates a node of the kind: not while its application is switched off (uc.platform.switch-application-off).
+  return copiesKind(node.kind) && applicationWritable(access, node.kind)
 }
 
 function action(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onCopy: () => void): (CoreRowAction & CoreHeaderAction)[] {

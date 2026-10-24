@@ -15,6 +15,16 @@ export function useCapabilities() {
   }
 
   /**
+   * True when a set was read — the open tenant's, else the instance's — and it lacks [id]: an entry switched off, as an
+   * application's is (uc.platform.switch-application-off). Not yet discovered is not off: a banner saying an
+   * application is switched off would then be false, and the server refuses what is off either way.
+   */
+  function isSwitchedOff(id: string): boolean {
+    const ids = capabilityState.tenantIds ?? capabilityState.ids
+    return ids !== null && !ids.includes(id)
+  }
+
+  /**
    * The requirement values in effect on capability [id] (ADR 0088 decision 8) — the open tenant's once loaded, else the
    * instance's — or undefined when the entry is not served. A requirement constrains a form (a password a link must
    * carry); it never hides an affordance, so it is read by the form it constrains, and the server enforces it anyway.
@@ -36,7 +46,7 @@ export function useCapabilities() {
     return null
   }
 
-  return { capabilityState, hasCapability, capabilityValues, incompatibility }
+  return { capabilityState, hasCapability, isSwitchedOff, capabilityValues, incompatibility }
 }
 
 /** Record the open tenant's effective set after sign-in, or forget it (`null`: sign-out, or no tenant's set could be

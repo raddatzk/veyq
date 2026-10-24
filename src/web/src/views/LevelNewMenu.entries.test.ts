@@ -41,6 +41,11 @@ describe('the applications\' "New" menu entries', () => {
     expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'create:DEPOT_DROPBOX', 'depot.upload', 'depot.uploadFolder'])
   })
 
+  it('an application switched off offers none of its entries; the other application\'s stay (uc.platform.switch-application-off)', () => {
+    expect(shown(ctx(memberAccessOf({ applicationsOff: new Set(['memories']) })))).toEqual(['create:DEPOT_DROPBOX', 'depot.upload', 'depot.uploadFolder'])
+    expect(shown(ctx(memberAccessOf({ applicationsOff: new Set(['depot']) })))).toEqual(['create:MEMORY'])
+  })
+
   it('a pending deletion writes nothing: no entry', () => {
     expect(shown(ctx(memberAccessOf({ readonly: true })))).toEqual([])
   })

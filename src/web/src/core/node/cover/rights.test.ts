@@ -27,6 +27,14 @@ describe('coverRights', () => {
     expect(coverRights(writer, at(FOLDER_KIND, true)).setCover).toBe(false)
   })
 
+  it('not on a node of an application switched off (uc.platform.switch-application-off); its neighbours keep theirs', () => {
+    const memoriesOff = memberAccessOf({ epochs: EPOCHS, applicationsOff: new Set(['memories']) })
+    expect(coverRights(memoriesOff, at('MEMORY')).setCover).toBe(false)
+    expect(coverRights(memoriesOff, at('CHAPTER')).setCover).toBe(false)
+    expect(coverRights(memoriesOff, at(FOLDER_KIND)).setCover).toBe(true) // core's own kind is no application's
+    expect(coverRights(memoriesOff, at('DEPOT_DROPBOX')).setCover).toBe(true) // another application's switch
+  })
+
   it.each([ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly, 'FUTURE_ROLE'])('a %s guest sets no cover, on any kind', (role) => {
     for (const kind of [FOLDER_KIND, 'MEMORY', 'DEPOT_DROPBOX']) {
       expect(coverRights(guestAccessOf(role), at(kind)).setCover, `${role} ${kind}`).toBe(false)
