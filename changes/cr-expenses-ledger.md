@@ -193,7 +193,9 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    from the append → `NodeItemsRevisionBumpsTest` red; drop the table from the subtree eraser →
    `validate_node_subtree_erasure.py` red; drop the wrap column from the participant → `validate_node_rekey_arity.py`
    red.
-3. **Web: the domain, no screen.** In `features/expenses/domain/`: the format v1 codec (pad, seal under `K_rev`, wrap,
+3. **Web: the domain, no screen.** ✅ **Built 2026-10-25** (§ Retrospective), with the reads and writes against the API and the
+   web wiring phase 1 handed over (the `generate:api` entry, the guard's three hand lists, a catalog of the default
+   categories). In `features/expenses/domain/`: the format v1 codec (pad, seal under `K_rev`, wrap,
    open, validate against the schema), allocation and rounding with `BigInt` fractions, balances, settle-up, overviews,
    the heads and the ledger check (ADR 0108 decision 5, with the erasure rule). **Done when:** `npm run check` green;
    unit tests run `contracts/expenses/v1-vectors.json` through the real code; the ledger check is bitten through the
@@ -203,10 +205,10 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    rounding: replace one `BigInt` division by a float one → a vector red.
 4. **Web: the Pot.** The registration (`KindDescriptor` with `createDialog`/`createEntry`, `list.rows` with decision 8's
    detail, `detail`, `shareDialog` offering `READ`/`READ_WRITE`, `contentSchema`/`exportContent`/`importContent`/
-   `validateContent`, `rekeyContent` (planned in cr-scope-rotation-rekeys-nodes)); the guard's three hand lists; the
+   `validateContent`, `rekeyContent` (planned in cr-scope-rotation-rekeys-nodes)); the
    Pot page on core's existing pieces — `VeyqTabs` for Entries / Balances / Overview, the entry editor (splits, line
    items, a typed rate), People, Settings, History, Deleted entries, the ledger notice; rights as a pure function over
-   `Access` like `depotRights`; the live list on `itemsLive.ts`; reports (decision 7); the `expenses` i18n namespace, EN
+   `Access` like `depotRights`; the live list on `itemsLive.ts`; reports (decision 7); the rest of the `expenses` i18n namespace (phase 3 holds the categories), EN
    and DE. Site: `applications/index.mdx` (EN+DE) names three applications; new Use pages `expenses/index.mdx`,
    `expenses/record-an-expense`, `expenses/settle-up`, `expenses/share-a-pot` in EN and DE, each with `sources:`
    back-linked from the use-cases. **Done when:** `npm run check` green; `site` `npm run check` green; a **browser pass**
@@ -307,3 +309,47 @@ was written: the CR asks none, though the append's lock order is new (a candidat
   refuse a guest's append (the contract names no `451`); the guest's first page digests the whole Pot per read (no tag
   cache, as `ShareMediaTags` has). The verification metadata was not regenerated from a cold Gradle home: the module's
   plugins and dependencies are Depot's, and a warm `check` is green — remembered, not measured.
+
+**Phase 3 (2026-10-25), built on `main` `df96b676` (phases 1 and 2 in).** `features/expenses/domain/`: `format.ts` (the v1
+types and a reader held to the schema, whose patterns `format.test.ts` reads from the schema file), `money.ts` (`BigInt`
+fractions, the conversion, the largest-remainder allocation), `codec.ts` (pad, seal under `K_rev`, wrap, open, the re-key's
+re-wrap), `revisions.ts`, `heads.ts` (the heads and the ledger check), `ledger.ts` (effects, the unbalanced-entry rule,
+balances, settle-up, overviews), `categories.ts`, and `potApi.ts` — the reads and writes the phase list did not name and the
+orchestrator's brief did: the member's paged conditional read on core's `readItemPages`, the guest's tagged read, the batch
+append on both paths (`409 stale_revision` → `StaleRevisionError` with the stale records) and the member's erasure.
+Measured: `npm run check` 0 in `src/web` (4867 tests); every quick `scripts/validate_*.py` 0, and
+`validate_guard_gaps.py --force` 0 (91 cases; the web guard's hand lists changed); every vector case runs through
+the real code (15 conversions, 10 roundings, both Pots' entries, balances and settle-up); `src/packages/crypto` and
+`src/admin-web` untouched, so neither their check nor the mutation gate ran.
+
+- **The web wiring landed here, not in phase 4.** The reads and writes need the generated client; its `generate:api` line
+  makes `validate_web_core_imports_no_applications.py` red without `OWNERS`, and `OWNERS` needs a catalog. So the line,
+  `OWNERS`, `KIND` (`EXPENSES_POT`) and `I18N_NAMESPACES` (`expenses`) came with a catalog of the seven default categories
+  (`features/expenses/i18n.ts`, added by `applicationMessages.ts`), which `categoryLabel` reads — the catalog's reverse
+  guard (`i18n.test.ts`) is red on a key no source uses, so the catalog holds nothing phase 4's screens alone would read.
+  Guard bitten by hand: a core file naming `'EXPENSES_POT'`, one quoting `'expenses.category.food'`, one importing
+  `features/expenses/kinds`, and an Expenses file importing Depot's each red; restored. Nothing registers the application
+  yet (`applications.ts` untouched).
+- **Reader rules the schema leaves open, decided here:** an entry naming someone who is no participant of the Pot is
+  invalid (`unknown-participant`: it has no place in the join order the rounding breaks ties by); a record whose latest
+  revision does not open counts nowhere — no fallback to an earlier one, which would count what the server chose to serve;
+  an erasure covers a missing revision only as a revision that opened to `kind: "erasure"` (the server's `erasure` flag is
+  not read); and the ledger check also marks a hole in a record's revisions `1..latest`, which the named-head check misses
+  once the revision naming the dropped one is dropped too (bitten: without the rule, a test that drops both is green).
+- **The write path refuses before sealing** (`PotWriteRefused`, nothing sent): every money problem `entryProblem` names,
+  two revisions of one record in a batch, an erasure through the append, a participant whose `joined` moved, a
+  deactivation or an erasure while the balance is not settled.
+- **Bites, each red and restored** (a script applying one sabotage, running the suite, restoring): the conversion's
+  rounding as a float division → the `9007199254740991` vector red; the allocation's division as a float one → **no vector
+  red**, only `money.test.ts`' own exactness case past 2^53 (the vectors carry no rounding case past the float range — a
+  candidate for a vector, a contracts change not made here); ties broken in reverse → 16 red; truncation for the half rule →
+  17 red; payers' or items' sums unchecked → the invalid-entry cases and the write-path refusal red; no re-pick in the
+  settle-up → the "settle-up" vector red; the equal tip ignored → "Bar" and the trip's balances red; any record's erasure
+  covering → the "another record's erasure" case red; the server's flag covering → the forged-erasure case red; no digest
+  compare → the swapped-body case red; no named-head check → three red; the wrap bound to another entry → 33 red; a re-key
+  that draws a new `K_rev` → the re-key cases red; a write that names no heads → eight red; an unsettled erasure sent → red.
+- **For phase 4:** amounts are `bigint` in minor units of the base currency; the Pot's base currency (`BaseCurrency`, with
+  its minor-unit digits) comes from its sealed meta, whose shape no contract holds yet — phase 4 defines it. A member's
+  write key comes from core's `nodeKeyForWrite` (the floor). `rewrapRevisionKey` and `revisionKeyOf` are the cores of
+  `rekeyContent` and of the report's keys. `core/export/ImportSubtreeDialog.test.ts` and `importHardening.test.ts` use
+  `expenses` as an UNKNOWN application id: once phase 4 registers Expenses they need another id.
