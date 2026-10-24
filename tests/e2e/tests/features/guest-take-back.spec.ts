@@ -13,6 +13,7 @@ import { test, expect, type Page, type Request } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -39,7 +40,7 @@ async function setLinkLimit(page: Page, gib: string): Promise<void> {
   await expect(storageLimit(page)).toBeVisible({ timeout: 60_000 })
   await storageLimit(page).fill(gib)
   await page.getByRole('button', { name: 'Save storage settings' }).click()
-  await expect(page.getByText('Storage settings saved.')).toBeVisible()
+  await expect(toast(page, 'Storage settings saved.')).toBeVisible()
 }
 
 /** The member's view of the shared folder, read fresh from the server: a new document, opened from the space. */

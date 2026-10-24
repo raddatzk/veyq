@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { createFolder, downloadButton, pickFiles, sha256 } from '../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -286,7 +287,7 @@ async function downloadAsZip(page: Page, name: string, summary: RegExp): Promise
   expect(download.suggestedFilename(), 'the saved file is named after the node').toBe(`${name}.zip`)
   expect(await download.failure()).toBeNull()
   const zip = readFileSync(await download.path())
-  await expect(page.getByText('Download saved', { exact: true })).toBeVisible({ timeout: 60_000 })
+  await expect(toast(page, 'Download saved')).toBeVisible({ timeout: 60_000 })
   await expect(dialog).toBeHidden()
   return zip
 }
@@ -466,7 +467,7 @@ test(
     await expect(dialog.getByRole('button', { name: 'Upload as a file', exact: true })).toBeVisible()
     await expect(dialog.getByText('You become the owner of everything imported.', { exact: false })).toBeVisible()
     await dialog.getByRole('button', { name: 'Import', exact: true }).click()
-    await expect(page.getByText(`Imported “${memoryName}”`, { exact: true })).toBeVisible({ timeout: 90_000 })
+    await expect(toast(page, `Imported “${memoryName}”`)).toBeVisible({ timeout: 90_000 })
     await expect(dialog).toBeHidden()
 
     // A new document: the imported Memory as the server serves it.
@@ -536,7 +537,7 @@ test(
     await expect(dialog.getByTestId('import-summary')).toHaveText(importSummary(tree, 7, treeTarget), { timeout: 60_000 })
     await recordProgress(page)
     await dialog.getByRole('button', { name: 'Import', exact: true }).click()
-    await expect(page.getByText(`Imported “${tree}”`, { exact: true })).toBeVisible({ timeout: 90_000 })
+    await expect(toast(page, `Imported “${tree}”`)).toBeVisible({ timeout: 90_000 })
     await expect(dialog).toBeHidden()
     const { values, statuses } = await progressOf(page, 'import-dialog')
     expectProgressMoved(values, 'the import')

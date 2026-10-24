@@ -22,6 +22,7 @@ import { recordTyped } from '../../src/canaries'
 import { instance, newDevice, passwordField, type Device } from '../../src/devices'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -230,7 +231,7 @@ test(
     await page.getByRole('switch', { name: /^Use STARTTLS/ }).uncheck()
     await page.getByRole('switch', { name: /^Send invitations by email/ }).check()
     await page.getByRole('button', { name: 'Save email settings' }).click()
-    await expect(page.getByText('Email settings saved.')).toBeVisible()
+    await expect(toast(page, 'Email settings saved.')).toBeVisible()
     await expect(page.getByText('Ready to send email — new member invitations will be emailed from your server.')).toBeVisible()
 
     await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Members', exact: true }).click()
@@ -261,10 +262,10 @@ test(
     const rowA = memberRow(page, handles.a)
     await expect(rowB).toContainText('MEMBER', { timeout: 30_000 })
     await rowB.getByRole('button', { name: 'Make co-owner' }).click()
-    await expect(page.getByText('They own this space now too.')).toBeVisible()
+    await expect(toast(page, 'They own this space now too.')).toBeVisible()
     await expect(rowB).toContainText('OWNER')
     await rowB.getByRole('button', { name: 'Remove co-owner' }).click()
-    await expect(page.getByText('They are a member of this space again.')).toBeVisible()
+    await expect(toast(page, 'They are a member of this space again.')).toBeVisible()
     await expect(rowB.getByRole('button', { name: 'Make co-owner' })).toBeVisible()
     await rowA.getByRole('button', { name: 'Remove co-owner' }).click()
     await expect(page.getByText('A shared space needs at least one owner.')).toBeVisible()
