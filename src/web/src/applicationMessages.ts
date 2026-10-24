@@ -10,8 +10,10 @@
 import { addApplicationMessages } from './i18n'
 import { memoriesMessages } from './features/memories/i18n'
 import { depotMessages } from './features/depot/i18n'
+import { expensesMessages } from './features/expenses/i18n'
 
 export function registerApplicationMessages(): void {
   addApplicationMessages('memories', memoriesMessages)
   addApplicationMessages('depot', depotMessages)
+  addApplicationMessages('expenses', expensesMessages)
 }

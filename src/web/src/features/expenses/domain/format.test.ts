@@ -1,0 +1,109 @@
+// The v1 reader held to contracts/expenses/entry.v1.schema.json: its patterns and enums ARE the schema's (read from the
+// file, so a schema change that this reader does not follow is red here), every vector body reads, and each rule the
+// schema states refuses a body that breaks it — beside a control that differs in that rule alone.
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { CURRENCY, DATE, DEFAULT_CATEGORIES, DIGEST, MAX_HEADS, RATE, UUID, decodeRevisionBody, encodeRevisionBody, readRevisionBody, RevisionFormatInvalid, type RevisionBody } from './format'
+import { expensesMessages } from '../i18n'
+
+const contracts = resolve(__dirname, '../../../../../../contracts/expenses')
+const schema = JSON.parse(readFileSync(resolve(contracts, 'entry.v1.schema.json'), 'utf8'))
+const vectors = JSON.parse(readFileSync(resolve(contracts, 'v1-vectors.json'), 'utf8')) as { pots: { participants: { id: string; name: string; joined: number }[]; entries: { body: object }[] }[] }
+const defs = schema.$defs
+
+describe('the reader is the schema', () => {
+  it('uses the schema\'s own patterns', () => {
+    expect(UUID.source).toBe(defs.uuid.pattern)
+    expect(DIGEST.source).toBe(defs.head.properties.digest.pattern)
+    expect(CURRENCY.source).toBe(defs.currency.pattern)
+    expect(DATE.source).toBe(defs.date.pattern)
+    expect(RATE.source).toBe(defs.rate.pattern)
+    expect(MAX_HEADS).toBe(schema.properties.heads.maxItems)
+  })
+
+  it('knows the schema\'s kinds and default categories, and the catalog names each category in both languages', () => {
+    expect(schema.properties.kind.enum).toEqual(['expense', 'refund', 'transfer', 'participant', 'deleted', 'erasure'])
+    expect([...DEFAULT_CATEGORIES]).toEqual(defs.category.anyOf[0].enum)
+    for (const locale of ['en', 'de'] as const) expect(Object.keys(expensesMessages[locale].expenses.category)).toEqual([...DEFAULT_CATEGORIES])
+  })
+})
+
+const P = '0e000000-0000-4000-8000-000000000001'
+const Q = '0e000000-0000-4000-8000-000000000002'
+const head = { entryId: P, revision: 1, digest: 'A'.repeat(43) }
+const expense = {
+  v: 1, heads: [head], kind: 'expense', title: 'Taxi', date: '2026-07-04', category: 'transport', currency: 'EUR', minorUnits: 2, rate: '1', amount: 1000,
+  payers: [{ participant: P, amount: 1000 }], allocation: { mode: 'equal', participants: [P, Q] }, receipts: [],
+}
+
+describe('reading a body', () => {
+  it('reads every body of the vectors, and every participant as a record', () => {
+    let n = 0
+    for (const pot of vectors.pots) {
+      for (const e of pot.entries) expect(() => readRevisionBody({ v: 1, heads: [], ...e.body }), String(n++)).not.toThrow()
+      for (const p of pot.participants) expect(readRevisionBody({ v: 1, heads: [], kind: 'participant', name: p.name, active: true, joined: p.joined }).kind).toBe('participant')
+    }
+    expect(n).toBeGreaterThan(10)
+  })
+
+  it('drops a field it does not know (additive under v: 1) and round-trips through the bytes', () => {
+    const body = readRevisionBody({ ...expense, later: 'field', allocation: { ...expense.allocation, extra: 1 } })
+    expect(body).not.toHaveProperty('later')
+    expect(body.kind === 'expense' && body.allocation).not.toHaveProperty('extra')
+    expect(decodeRevisionBody(encodeRevisionBody(body))).toEqual(body)
+  })
+
+  const refused: [string, unknown, string][] = [
+    ['another version', { ...expense, v: 2 }, '/v'],
+    ['no heads', { ...expense, heads: undefined }, '/heads'],
+    ['more heads than the schema allows', { ...expense, heads: Array.from({ length: MAX_HEADS + 1 }, () => head) }, '/heads'],
+    ['a head with a short digest', { ...expense, heads: [{ ...head, digest: 'A'.repeat(42) }] }, '/heads/0/digest'],
+    ['an unknown kind', { ...expense, kind: 'loan' }, '/kind'],
+    ['a zero amount', { ...expense, amount: 0 }, '/amount'],
+    ['an amount past the safe integers', { ...expense, amount: 2 ** 53 }, '/amount'],
+    ['a fractional amount', { ...expense, amount: 10.5 }, '/amount'],
+    ['a rate of zero', { ...expense, rate: '0' }, '/rate'],
+    ['a rate as a number', { ...expense, rate: 1 }, '/rate'],
+    ['a lowercase currency', { ...expense, currency: 'eur' }, '/currency'],
+    ['five minor digits', { ...expense, minorUnits: 5 }, '/minorUnits'],
+    ['a 13th month', { ...expense, date: '2026-13-01' }, '/date'],
+    ['an empty title', { ...expense, title: '' }, '/title'],
+    ['an unknown category', { ...expense, category: 'fun' }, '/category'],
+    ['an uppercase uuid', { ...expense, payers: [{ participant: P.toUpperCase(), amount: 1000 }] }, '/payers/0/participant'],
+    ['no payers', { ...expense, payers: [] }, '/payers'],
+    ['a beneficiary twice in an equal split', { ...expense, allocation: { mode: 'equal', participants: [P, P] } }, '/allocation/participants'],
+    ['an unknown allocation mode', { ...expense, allocation: { mode: 'random' } }, '/allocation/mode'],
+    ['line items without their rest', { ...expense, allocation: { mode: 'items', items: [{ label: 'x', amount: 1, participants: [P] }] } }, '/allocation/rest'],
+    ['zero shares', { ...expense, allocation: { mode: 'shares', shares: [{ participant: P, shares: 0 }] } }, '/allocation/shares/0/shares'],
+    ['a receipt twice', { ...expense, receipts: [P, P] }, '/receipts'],
+    ['a participant without a join time', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true }, '/joined'],
+    ['a participant with a 101-character name', { v: 1, heads: [], kind: 'participant', name: 'x'.repeat(101), active: true, joined: 1 }, '/name'],
+    ['an erasure without its join time', { v: 1, heads: [], kind: 'erasure' }, '/joined'],
+    ['not an object', [expense], ''],
+  ]
+
+  it.each(refused)('refuses %s', (_, body, path) => {
+    let thrown: unknown
+    try {
+      readRevisionBody(body)
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown).toBeInstanceOf(RevisionFormatInvalid)
+    expect((thrown as RevisionFormatInvalid).path).toBe(path)
+  })
+
+  it('counts a name in code points, as the schema does: a 100-emoji name reads', () => {
+    expect(readRevisionBody({ v: 1, heads: [], kind: 'participant', name: '😀'.repeat(100), active: true, joined: 1 }).kind).toBe('participant')
+  })
+
+  it('refuses bytes that are not UTF-8 JSON', () => {
+    expect(() => decodeRevisionBody(new Uint8Array([0xff, 0xfe]))).toThrow(RevisionFormatInvalid)
+    expect(() => decodeRevisionBody(new TextEncoder().encode('{"v":1'))).toThrow(RevisionFormatInvalid)
+  })
+
+  it('a writer never encodes a body its reader would refuse', () => {
+    expect(() => encodeRevisionBody({ ...expense, amount: 0 } as unknown as RevisionBody)).toThrow(RevisionFormatInvalid)
+  })
+})

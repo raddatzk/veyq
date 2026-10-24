@@ -76,7 +76,7 @@ describe('web message catalog — the two languages', () => {
     const [en, ...others] = SUPPORTED_LOCALES.map(flat)
     expect(en.length).toBeGreaterThan(1000) // the whole catalog, not core's half alone
     for (const keys of others) expect(keys).toEqual(en)
-    for (const ns of ['memory', 'media', 'depot']) expect(en.some((k) => k.startsWith(`${ns}.`)), ns).toBe(true)
+    for (const ns of ['memory', 'media', 'depot', 'expenses']) expect(en.some((k) => k.startsWith(`${ns}.`)), ns).toBe(true)
   })
 
   it('refuses an application catalog that names a namespace someone already holds, and adds nothing', () => {

@@ -145,7 +145,9 @@ here; the server is blind.
   wrap and digest, ADR 0093 § 9).
 - **Core and application ([ADR 0079](../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
   The applications are `src/features/memories/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
-  the level list, upload, download, the drop box — [docs/apps/depot.md](../../docs/apps/depot.md)) — the guard's `APPLICATIONS`, keyed by owner;
+  the level list, upload, download, the drop box — [docs/apps/depot.md](../../docs/apps/depot.md)) and `src/features/expenses/` (Expenses: the
+  `EXPENSES_POT` kind — so far its domain alone, `domain/`: the entry codec, the ledger's arithmetic and check, the reads
+  and writes; no registration and no screen yet, so `applications.ts` does not register it) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
@@ -155,11 +157,11 @@ here; the server is blind.
   (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
   application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an
   application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/item-favorites`,
-  `generated/share-media` (Memories) and `generated/depot` (Depot); so their
+  `generated/share-media` (Memories), `generated/depot` (Depot) and `generated/expenses` (Expenses); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
-  `'CHAPTER'` / `'FILE'` / `'DEPOT_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application),
-  or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'depot.…'` (the guard's `I18N_NAMESPACES`;
+  `'CHAPTER'` / `'FILE'` / `'DEPOT_DROPBOX'` / `'EXPENSES_POT'` (a hand list: a new kind is added to the guard's `KIND` with its application),
+  or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'depot.…'` / `'expenses.…'` (the guard's `I18N_NAMESPACES`;
   core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The catalogs sit where they belong: core's names no application namespace, an application's exactly its own, and no application reads another's keys. `src/applicationMessages.ts` (the composition root's catalog half) may import an application's catalog and nothing else of it; `main.ts` calls `registerApplicationMessages()` then `registerApplications()`, and `src/test/setup.ts` calls the first statically for every test file, node environment included. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.

@@ -3,7 +3,7 @@
 another (ADR 0079, web phase).
 
 **What it asserts.** The applications are the directories of `APPLICATIONS` below (today `src/web/src/features/memories`,
-Memories', and `src/web/src/features/depot`, Depot's), each keyed by its owner name — the directory its specs live in under
+Memories', `src/web/src/features/depot`, Depot's, and `src/web/src/features/expenses`, Expenses'), each keyed by its owner name — the directory its specs live in under
 `contracts/api/<owner>/`, the owner rule `buildSrc`'s `SpecSets` builds by (inbox #344) — and named for it: the
 directory is `src/web/src/features/<owner>`, derived from `OWNERS`, never listed (inbox #324 moved `features/memory` there),
 so a directory named otherwise is a missing one — **plus every generated API
@@ -12,7 +12,8 @@ own `contracts/api/<owner>/`. Core is everything else under `src/web/src` — by
 the day it appears. The client half is **derived**, never listed: each `openapi-generator-cli generate` step of
 `src/web/package.json`'s `generate:api` script is read for its `-i` (spec) and `-o` (output directory), and an output
 whose spec lies in an application's directory is that application's (today `api/generated/item-favorites`,
-`api/generated/media` and `api/generated/share-media`, all Memories'; the node pins' `api/generated/favorites` is core's), so a new application client is covered the day
+`api/generated/media` and `api/generated/share-media`, all Memories', `api/generated/depot` and `api/generated/expenses`;
+the node pins' `api/generated/favorites` is core's), so a new application client is covered the day
 its line lands. Core's own clients (`blob`, `content`, …) stay core's: importing them is the point of generating them.
 Dependencies run application → core, never back, and never application → application. Six rules:
 - **import** (core): no core file names an application by an import specifier — `from '…'` (so also
@@ -29,15 +30,16 @@ Dependencies run application → core, never back, and never application → app
 - **glob** (core): no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rules above,
   and ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind** (core): no file names an application's node kind — `NodeKind.Memory`, `NodeKind.Chapter`,
-  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'`, `'FILE'` or `'DEPOT_DROPBOX'`. The shell asks a registry what to render for a kind; it does
+  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'`, `'FILE'`, `'DEPOT_DROPBOX'` or `'EXPENSES_POT'`. The shell asks a registry what to render for a kind; it does
   not know which kinds the applications have. Since the contract's `NodeKind` opened to a bounded token
   (cr-platform-contract-split slice 4) the generated client has no `NodeKind` enum and core types a kind as a string
   with a `FOLDER_KIND` constant (`core/node/kind.ts`), so a literal is the spelling left; the enum spelling stays
   matched for a client generated from an older contract. Each application's constants live in the application
-  (`features/memories/kinds.ts`, `features/depot/kinds.ts`), which the import rule already keeps from core. The kinds
+  (`features/memories/kinds.ts`, `features/depot/kinds.ts`, `features/expenses/kinds.ts`), which the import rule already
+  keeps from core. The kinds
   are listed here by hand (a kind is a value, not a path): a new application adds its kinds to `KIND`.
 - **i18n** (core): no file names a message key of an application's i18n namespace — a quoted `'memory.…'`,
-  `'media.…'` (Memories') or `'depot.…'` (Depot's) — `I18N_NAMESPACES`, by hand like `KIND`. All namespaces end up in
+  `'media.…'` (Memories'), `'depot.…'` (Depot's) or `'expenses.…'` (Expenses') — `I18N_NAMESPACES`, by hand like `KIND`. All namespaces end up in
   ONE vue-i18n instance at runtime, so a key resolves wherever its file lives, and nothing but this rule keeps core's
   strings from borrowing an application's: core serves every application's nodes, and a core dialog that read
   `memory.deleteMemoryTitle` titled a Depot drop box "Delete Memory" (inbox #375). A kind's own noun reaches core
@@ -111,7 +113,7 @@ PACKAGE = WEB / "package.json"
 GENERATE_SCRIPT = "generate:api"
 # Every application by its owner name — the directory of its specs (`contracts/api/<owner>/`) and its backend module
 # (`:apps:<owner>`). The one place to change when an application is added or renamed.
-OWNERS = ("memories", "depot")
+OWNERS = ("memories", "depot", "expenses")
 # Its directory relative to src/web/src is DERIVED from the owner name, never listed: `features/<owner>`, as the backend
 # derives `:apps:<owner>` (ADR 0079). A web directory named otherwise is a missing one, and a missing one is red.
 APPLICATIONS: dict[str, tuple[str, ...]] = {owner: ("features", owner) for owner in OWNERS}
@@ -128,14 +130,15 @@ RULE_CATALOG_ROOT = "catalog-root"
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
 GLOB = re.compile(r"\bimport\.meta\.glob(?:Eager)?\b")
-# The applications' kinds — Memories' MEMORY and CHAPTER, Depot's FILE. Built from parts so this file never spells a
+# The applications' kinds — Memories' MEMORY and CHAPTER, Depot's FILE and DEPOT_DROPBOX, Expenses' EXPENSES_POT. Built from parts so this file never spells a
 # kind literal it forbids.
-KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "DEPOT_DROP" + "BOX)['\"]")
+KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "DEPOT_DROP" + "BOX|" + "EXPENSES_" + "POT)['\"]")
 # Each application's top-level i18n namespaces — the blocks of its own catalog (`APPLICATION_CATALOG`), keyed like
 # `APPLICATIONS`.
 I18N_NAMESPACES: dict[str, tuple[str, ...]] = {
     "memories": ("memory", "media"),
     "depot": ("depot",),
+    "expenses": ("expenses",),
 }
 CATALOG = ("i18n", "index.ts")  # core's catalog, relative to src/web/src
 
