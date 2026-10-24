@@ -104,7 +104,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or no `EXPENSES_POT` of that id in it, or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable, uc.spaces.scope-access); `node_not_found` — no `EXPENSES_POT` of that id in it."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
     post:
@@ -160,7 +160,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or no live `EXPENSES_POT` of that id in it (trashed included), or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable, uc.spaces.scope-access); `node_not_found` — no live `EXPENSES_POT` of that id in it (a trashed one included)."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
@@ -231,7 +231,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, no live `EXPENSES_POT` of that id in it, or no record of that id in the Pot; or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable, uc.spaces.scope-access); `node_not_found` — no live `EXPENSES_POT` of that id in it, or no record of that id in the Pot."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
@@ -287,7 +287,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
-          description: No such scope or Pot in it, or the caller holds no grant for the scope.
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it; `node_not_found` — no `EXPENSES_POT` of that id in it."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
   /api/scopes/{scopeId}/pots/{nodeId}/rekey/{rekeyId}:
@@ -330,7 +330,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
-          description: No such scope or Pot in it, or the caller holds no grant for the scope.
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it; `node_not_found` — no `EXPENSES_POT` of that id in it."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":

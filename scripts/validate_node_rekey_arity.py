@@ -41,7 +41,10 @@ BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 # Columns sealed under another key than a node's — the re-key leaves them, and why.
 EXCLUSIONS = {
-    "BlobEntity.wrapped_meta": "`blob-meta` under the blob's own K_blob, which a re-key keeps (ADR 0109 point 3); write-once",
+    "PotRevisionEntity.sealed_body": "an Expenses revision's body under its own random K_rev (`expense-entry`), never "
+                                     "a node key: a re-key re-wraps K_rev (`wrapped_revision_key`) and leaves every "
+                                     "body and its digest byte-identical (ADR 0108 decision 4)",
+    "BlobEntity.wrapped_meta":"`blob-meta` under the blob's own K_blob, which a re-key keeps (ADR 0109 point 3); write-once",
     "UploadSessionEntity.wrapped_blob_key": "an open upload's wrap lands only through a completion that states the node's "
                                             "epoch, refused `stale_epoch` once the node was re-keyed (ADR 0109 point 6)",
     "UploadSessionEntity.wrapped_meta": "`blob-meta` under K_blob, as BlobEntity.wrapped_meta",

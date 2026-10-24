@@ -149,6 +149,7 @@ class ModuleCompositionTest {
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.core.") }, "core's own implementations are collected: $union")
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.memories.") }, "Memories' implementations are collected: $union")
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.depot.") }, "Depot's implementations are collected: $union")
+        assertTrue(union.any { it.startsWith("me.raddatz.veyq.expenses.") }, "Expenses' implementations are collected: $union")
     }
 
     @Test
@@ -159,7 +160,7 @@ class ModuleCompositionTest {
         val routes = compiled.filter { it.isInterface && it.isAnnotationPresent(Path::class.java) }
         val unserved = routes.filter { api -> deployed.none { api.isAssignableFrom(it) } }.map { it.name }
         assertEquals(emptyList<String>(), unserved, "a generated API no deployed resource implements answers 404")
-        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.depot.generated.api")) {
+        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.depot.generated.api", "me.raddatz.veyq.expenses.generated.api")) {
             assertTrue(routes.any { it.packageName == pkg }, "the walk saw $pkg: ${routes.map { it.name }}")
         }
     }
@@ -176,7 +177,8 @@ class ModuleCompositionTest {
     fun theRulesOfCoreAndEveryApplicationPartitionTheKinds() {
         val file = "FILE"
         val dropBox = "DEPOT_DROPBOX"
-        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox)
+        val pot = "EXPENSES_POT"
+        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox, pot)
         for (kind in kinds) {
             val claiming = kindRules.filter { it.handles(kind) }.map(::beanClass)
             assertEquals(1, claiming.size, "node kind $kind must be handled by exactly one NodeKindRules: $claiming")
@@ -185,7 +187,15 @@ class ModuleCompositionTest {
         assertTrue(beanClass(kindRules.single { it.handles("MEMORY") }).startsWith("me.raddatz.veyq.memories."), "MEMORY is Memories'")
 
         assertEquals("me.raddatz.veyq.depot.DepotNodeKindRules", beanClass(kindRules.single { it.handles(dropBox) }), "DEPOT_DROPBOX is Depot's")
+        assertEquals("me.raddatz.veyq.expenses.ExpensesNodeKindRules", beanClass(kindRules.single { it.handles(pot) }), "EXPENSES_POT is Expenses'")
+        assertEquals("expenses", NodeKindRules.applicationOf(kindRules, pot), "a Pot is switched with Expenses")
+        assertTrue(NodeKindRules.parentAllows(kindRules, pot, ParentSlot.Node(NodeEntity.FOLDER)), "control: a Pot in a folder")
+        assertFalse(NodeKindRules.parentAllows(kindRules, pot, ParentSlot.Node("MEMORY")), "a Pot in a Memory")
+        // CR decision 6: a Pot is shared to read or to write, never WRITE_ONLY — one answer across every application
+        assertEquals(setOf("READ", "READ_WRITE"), ShareRoots.roles(shareRoots, pot), "a Pot's share roles")
         for (child in kinds) {
+            // ADR 0108 decision 3: a Pot's entries are records, never child nodes
+            assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(pot)), "a $child inside a Pot")
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(file)), "a $child inside a file")
             // ADR 0080 decision 11: nothing is placed into a drop box — its identity folders are core's own placement
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(dropBox)), "a $child placed in a drop box")
@@ -208,7 +218,7 @@ class ModuleCompositionTest {
         for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "DEPOT_DROPBOX")) {
             assertTrue(NodeKindRules.takesCover(kindRules, kind), "$kind takes a cover")
         }
-        for (kind in listOf("FILE", "NOT_A_KIND")) {
+        for (kind in listOf("FILE", "EXPENSES_POT", "NOT_A_KIND")) {
             assertFalse(NodeKindRules.takesCover(kindRules, kind), "$kind takes none")
         }
     }
@@ -226,7 +236,7 @@ class ModuleCompositionTest {
         fun creates(kind: String) = GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, GuestNodeOp.CreateChild(kind))
         assertTrue(creates(NodeEntity.FOLDER), "a folder")
         assertTrue(creates("FILE"), "a file")
-        for (kind in listOf("MEMORY", "CHAPTER", "DEPOT_DROPBOX", "NOT_A_KIND")) assertFalse(creates(kind), "a guest creates a $kind in a folder")
+        for (kind in listOf("MEMORY", "CHAPTER", "DEPOT_DROPBOX", "EXPENSES_POT", "NOT_A_KIND")) assertFalse(creates(kind), "a guest creates a $kind in a folder")
         for (op in listOf(GuestNodeOp.MoveChildOut("MEMORY"), GuestNodeOp.MoveChildIn("MEMORY"), GuestNodeOp.RenameChild("DEPOT_DROPBOX"))) {
             assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, op), "unchanged: $op")
         }

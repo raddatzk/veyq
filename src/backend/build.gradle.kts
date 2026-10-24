@@ -1,5 +1,5 @@
 // The root `src/backend/` — the composition (ADR 0079): the Quarkus application whose `quarkusBuild` produces the one
-// fast-jar the Dockerfile copies. The modules it depends on (`:core`, `:apps:memories`, `:apps:depot`, settings.gradle.kts) land in
+// fast-jar the Dockerfile copies. The modules it depends on (`:core`, `:apps:memories`, `:apps:depot`, `:apps:expenses`, settings.gradle.kts) land in
 // that fast-jar's `quarkus-app/lib/main`, never deployed on their own. The root holds no main code of its own: its
 // `src/main/resources` carries the profile files beside their anchor, and its tests are the genuinely whole-app ones —
 // they sweep or probe every module at once (`OperatorBlindProbeTest`, the posture sweeps, the entity sweep, the module
@@ -31,6 +31,8 @@ dependencies {
     implementation(project(":apps:memories"))
     // The Depot application (`apps/depot/build.gradle.kts`): its code (a skeleton: the `FILE` kind's placement rule).
     implementation(project(":apps:depot"))
+    // The Expenses application (`apps/expenses/build.gradle.kts`): a Pot, its sealed revisions and their migration.
+    implementation(project(":apps:expenses"))
 
     // The test helpers every module's tests use: `:core`'s test fixtures (`core/build.gradle.kts`).
     testImplementation(testFixtures(project(":core")))

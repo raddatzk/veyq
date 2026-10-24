@@ -68,6 +68,15 @@ EXEMPT = {
         "tenant's deletion record (`TENANT_OFFLINE`, `TENANT_DELETED`), and a pending tenant can be neither suspended "
         "(`TenantStore.suspend` moves ACTIVE only) nor deleted over content"
     ),
+    ("PotRevisionStore", "erase"): (
+        "a participant's erasure deletes its record's EARLIER revisions and stores the erasure revision in the same "
+        "transaction (ADR 0108 decision 3): the item a measure stands on is the entry (`PotReportableItems`), and it "
+        "still exists afterwards — the Pot's erasers end the measure when its last revision goes"
+    ),
+    ("ExpensesErasures", "reapplyRecord"): (
+        "the ledger's re-application of that erasure after a restore: it deletes only revisions below the erasure "
+        "revision, so the entry stays an item, as for `PotRevisionStore.erase`"
+    ),
 }
 
 

@@ -67,6 +67,7 @@ COPY src/backend/buildSrc ./buildSrc
 COPY src/backend/core/build.gradle.kts src/backend/core/pitest.scope.json ./core/
 COPY src/backend/apps/memories/build.gradle.kts ./apps/memories/
 COPY src/backend/apps/depot/build.gradle.kts ./apps/depot/
+COPY src/backend/apps/expenses/build.gradle.kts ./apps/expenses/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 
@@ -89,6 +90,7 @@ COPY src/backend/src ./src
 COPY src/backend/core/src ./core/src
 COPY src/backend/apps/memories/src ./apps/memories/src
 COPY src/backend/apps/depot/src ./apps/depot/src
+COPY src/backend/apps/expenses/src ./apps/expenses/src
 # The license texts buildSrc's ThirdPartyLicenses appends to the backend's notices; `quarkusBuild` runs it after itself.
 COPY src/backend/licenses ./licenses
 COPY --from=frontend-build /repo/src/web/dist ./src/main/resources/META-INF/resources

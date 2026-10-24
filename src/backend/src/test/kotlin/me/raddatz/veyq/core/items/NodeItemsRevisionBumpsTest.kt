@@ -14,9 +14,10 @@ import org.junit.jupiter.api.Test
  * Every write of an application's item rows moves the node's item-list revision (ADR 0033, inbox #410), and a write
  * that forgets is a change the live list never learns of: no request fails and no page shows it, until a user wonders
  * why a peer's upload needs a reload. The per-path slice tests (`MediaSliceTest`, `MediaTrashSliceTest`) pin the
- * sites that exist; this pins the **set** for Memories' media, reading the sources, on the day someone adds a writer
- * of media rows that is not classified here, or deletes a bump from one that is. The scan is Memories-shaped because
- * Memories is the primitive's only user; an application that adopts it adds its own writers to [bumping].
+ * sites that exist; this pins the **set** for Memories' media and Expenses' Pot revisions, reading the sources, on the
+ * day someone adds a writer of those rows that is not classified here, or deletes a bump from one that is. An
+ * application that adopts the primitive adds its entity to [writes], its module to [listModules] and its writers to
+ * [bumping].
  *
  * Four rules, each over the main sources of every backend project:
  *  1. each [bumping] function (a store's public write) contains a call to core's `items.bump(`;
@@ -32,17 +33,24 @@ class NodeItemsRevisionBumpsTest {
 
     private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
-    /** Rows of the gallery a list shows. */
+    /** Rows of a list: a Memory's gallery, a Pot's revisions (cr-expenses-ledger). */
     private val writes = Regex(
-        """MediaEntity\(\)|MediaEntity\.(update|delete|deleteById)\(|\.deletedAt = |\.bucketId = """,
+        """MediaEntity\(\)|MediaEntity\.(update|delete|deleteById)\(|\.deletedAt = |\.bucketId = |""" +
+            """PotRevisionEntity\(\)|PotRevisionEntity\.(update|delete|deleteById)\(""",
     )
 
     private val store = "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaStore.kt"
+    private val potStore = "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotRevisionStore.kt"
+
+    /** The application modules whose item rows the scan reads. */
+    private val listModules = listOf("apps/memories/", "apps/expenses/")
 
     /** file (relative to `src/backend/`) -> the functions that write, each of which must bump. */
     private val bumping = mapOf(
         store to setOf("attach", "trashMedia", "restoreMedia", "setMeta", "deleteBucketReparent", "moveMedia"),
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaShareGuestWrites.kt" to setOf("deleteOwn"),
+        potStore to setOf("append", "erase"),
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/ExpensesErasures.kt" to setOf("reapplyRecord"),
     )
 
     /** Public functions of a bumping file that write media rows and bump nothing, and why. */
@@ -55,6 +63,8 @@ class NodeItemsRevisionBumpsTest {
     /** Writers that move no revision on their own, and why. */
     private val exempt = mapOf(
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt" to "erases the scope's media with the scope (and its counters, in core's node eraser)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotScopeEraser.kt" to "erases the scope's Pot revisions with the scope (and its counters, in core's node eraser)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotNodeSubtreeEraser.kt" to "erases a purged Pot's revisions: the Pot is in the trash, so no open list watches it, and its counters go with it (core's phase 300)",
     )
 
     /** The only files that may name the counters' entity: core's items package, and the scope eraser that deletes by node. */
@@ -90,8 +100,8 @@ class NodeItemsRevisionBumpsTest {
     fun noOtherFileWritesMediaRows() {
         val strangers = mainSources()
             .filter { rel -> rel !in bumping && rel !in exempt }
-            .filter { rel -> rel.startsWith("apps/memories/") && writes.containsMatchIn(root.resolve(rel).readText()) }
-        assertEquals(emptyList<String>(), strangers, "these write media rows and are neither bumping nor exempt (with a reason) - ADR 0033")
+            .filter { rel -> listModules.any { rel.startsWith(it) } && writes.containsMatchIn(root.resolve(rel).readText()) }
+        assertEquals(emptyList<String>(), strangers, "these write list rows and are neither bumping nor exempt (with a reason) - ADR 0033")
     }
 
     @Test
@@ -107,7 +117,9 @@ class NodeItemsRevisionBumpsTest {
     fun theScanSeesWhatItClaimsToGuard() {
         val sources = mainSources()
         for (file in bumping.keys + exempt.keys + counterWriters) assertTrue(file in sources, "$file is not a main source any more - update this test")
-        assertTrue(writes.containsMatchIn(root.resolve(store).readText()), "$store matches no write marker - has the marker list gone stale?")
+        for (file in listOf(store, potStore)) {
+            assertTrue(writes.containsMatchIn(root.resolve(file).readText()), "$file matches no write marker - has the marker list gone stale?")
+        }
     }
 
     private fun mainSources(): List<String> {

@@ -111,7 +111,7 @@ components:
     ApplicationSwitchedOff:
       description: >
         Unprocessable: the application this write belongs to is switched off for the instance or for the tenant
-        (`capability_disabled`; its register entry, `memories` or `depot`, uc.platform.switch-application-off). Off, an
+        (`capability_disabled`; its register entry, `memories`, `depot` or `expenses`, uc.platform.switch-application-off). Off, an
         application is read-only: nothing of it is written, while everything of it still opens, downloads, goes to the
         trash and comes back (ADR 0088 decision 5). Nothing is stored.
       content:

@@ -81,6 +81,7 @@ class EveryStoredTimeHasAReaderTest {
             // --- content + blobs
             "veyq_node.created_at" to "served: NodeSummary.createdAt, the order equal-named siblings take (ADR 0015)",
             "veyq_node.deleted_at" to "NodeSubtreePurge's cutoff; the trash list's order",
+            "veyq_expenses_revision.created_at" to "served: PotRevision.createdAt / SharePotRevision.createdAt, a Pot's history (ADR 0108 decision 6)",
             "veyq_node_rekey_stage.created_at" to "NodeRekeyStage.put deletes every stage older than a day (ADR 0109: an abandoned stage expires)",
             "veyq_upload_session.last_window_at" to "BlobUploadStore purges a session with no window inside the retention",
             "veyq_store_setting.checked_at" to "InstanceResource serves it as the last check's checkedAt",

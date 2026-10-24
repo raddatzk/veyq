@@ -71,6 +71,9 @@ class OperatorBlindProbeTest {
     private val slug get() = "c2x1Zy" + UUID.randomUUID().toString().replace("-", "").take(20)
     private val someId = "00000000-0000-4000-8000-000000000001"
 
+    /** A sealed Pot revision body of the smallest size class (744 base64 characters, 512 bytes of padded plaintext). */
+    private val potBody = "A".repeat(744)
+
     /** Every operation the gate guards, and the request that reaches it. */
     private val probes: Map<String, Probe> = mapOf(
         // --- content ---
@@ -175,6 +178,28 @@ class OperatorBlindProbeTest {
             Call("POST", "/api/scopes/${s.scopeId}/files/${s.nodeId}/content", """{"uploadId":"${s.uploadId}","nodeEpoch":0}""")
         },
         "listFiles" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/files") },
+        // --- Expenses (the world's node is a Memory, so the control's call answers `404 node_not_found` — no Pot of
+        // that id, past the gate, whose non-member answer is `scope_not_found`) ---
+        "listPotRevisions" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/revisions") },
+        "appendPotRevisions" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/revisions",
+                """{"nodeEpoch":0,"revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"tombstone":false,"sealedBody":"$potBody","wrappedRevisionKey":"$B64"}]}""",
+            )
+        },
+        "erasePotRecord" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/erasures",
+                """{"nodeEpoch":0,"entryId":"${UUID.randomUUID()}","revision":2,"sealedBody":"$potBody","wrappedRevisionKey":"$B64"}""",
+            )
+        },
+        "listPotRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/rekey") },
+        "stagePotRekey" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/rekey/${UUID.randomUUID()}",
+                """{"fromEpoch":0,"revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"wrappedRevisionKey":"$B64"}]}""",
+            )
+        },
         // --- scopes ---
         "listScopeMembers" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/members") },
         "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost",${TestAdmission.json()}}""") },
@@ -286,6 +311,7 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
+            "listSharePotRevisions", "appendSharePotRevisions",
             "reportInShare", "getShareOrderNotice",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
@@ -362,7 +388,7 @@ class OperatorBlindProbeTest {
             "getModerationCaseExport",
             // the review reads (cr-moderation-review-and-measures decision 6): a case's held snapshot, read from the hold —
             // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
-            "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles",
+            "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles", "listCasePotRevisions",
         )
         reason(
             "moderator route before the key: the caller's own appointment, its address confirmation, its own grants and " +
