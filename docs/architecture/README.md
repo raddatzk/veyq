@@ -294,7 +294,19 @@ is claimed as coverage.
 **Deliberately unstated:** there is no latency, throughput or availability target. Under self-hosting nobody
 stands behind one — an operator has no service agreement with themselves, and neither their hardware nor their
 connection is ours to promise. veyq's load model is a household, and the expensive paths (crypto, derivatives)
-run on the client. If a target is ever needed, it becomes an ADR — not a line in this table.
+run on the client. If a target is ever needed, it becomes an ADR — not a line in this table (the gallery's are
+[ADR 0105](../decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)'s).
+
+**How performance is read instead: a profile, never a target.** `scripts/profile_hot_paths.py` (with
+`tests/e2e/profile/`) boots the release candidate's images in the production recipe on one quiet machine and profiles
+three hot paths, unlock, an upload of 50 phone-sized photos and opening a 1,000-photo Chapter, on both sides: Chromium's
+CPU profile of the main thread and a trace of every thread, three runs each at CPU throttle 1 and 4, and the server
+under JFR with its environment and system-property events off, beside the SQL statements per request. Nothing it
+records can turn red; a hotspot it finds becomes an inbox row with its number. Its first reading (2026-10-23/24) bore out
+the sentence above: the server's JVM averaged under 1 % CPU, unlock waits on the Argon2id worker by design, and the
+client's largest avoidable cost is sealing an upload's blobs in pure JS on the main thread (inbox #536). The method,
+how its files are handled and the reading's limits are published in the Security area,
+[How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
 ## 11. Risks and Technical Debt
 

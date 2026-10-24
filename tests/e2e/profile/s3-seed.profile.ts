@@ -1,6 +1,6 @@
-// S3's seed (cr-profile-where-the-time-goes, decision 1): a Chapter of 1,000 photos, uploaded once per profile run
+// S3's seed (cr-profile-where-the-time-goes): a Chapter of 1,000 photos, uploaded once per profile run
 // before S3's first run and never profiled. Through the browser like any member's upload, so the seed comes from the
-// e2e bootstrap's own instance and owner and not from the volume harness (the CR's Q2: `cr-volume-measurement-cax`
+// e2e bootstrap's own instance and owner and not from the volume harness (`cr-volume-measurement-cax`
 // deletes that harness). The photos are synthetic, rendered by `scripts/profile_hot_paths.py` into `fixtures/s3/`
 // smaller than S2's, since what S3 reads is the grid and its thumbnails, not the originals. The names it made go to
 // `s3-seed.json`, where S3 reads which Chapter to open.

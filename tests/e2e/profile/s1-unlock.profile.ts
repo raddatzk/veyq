@@ -1,4 +1,4 @@
-// S1 unlock (cr-profile-where-the-time-goes, decision 1): a new device signs in with email, password and Secret Key at
+// S1 unlock (cr-profile-where-the-time-goes): a new device signs in with email, password and Secret Key at
 // the tenant's root and opens the shared space. The window runs from the click on "Sign in" to the space's toolbar;
 // the three values are typed before it opens. Expected: Argon2id dominates by design (ADR 0017's parameters) — the
 // question is what else costs anything.

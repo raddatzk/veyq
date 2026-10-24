@@ -1,4 +1,4 @@
-// The crypto micro-reading (cr-profile-where-the-time-goes, decision 3): AES-256-GCM over 4 MB and 64 MB through
+// The crypto micro-reading (cr-profile-where-the-time-goes): AES-256-GCM over 4 MB and 64 MB through
 // `@noble/ciphers` — the pure-JS AEAD the v1 suite seals content with (`src/packages/crypto/src/primitives.ts`) — against
 // WebCrypto's in the same browser, with the same key, nonce and AAD, each sealed whole and as the chunk frames a blob is
 // stored as (256 KiB of plaintext per frame, its own nonce, AAD = u32be(index) ‖ u32be(total); ADR 0013 §3). Both

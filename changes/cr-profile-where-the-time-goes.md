@@ -112,11 +112,19 @@ client"*. That sentence is a claim nobody has profiled; this CR measures it.
   appended to it, never set (setting it broke the store check with PKIX); and throttle 4 barely moved S1 (3.37 s →
   3.52 s), which suggests Chromium's CPU throttle does not reach the Argon2id worker — read that before a throttle-4
   number is taken as a slower device's.
-- [ ] **2 readings**: S1–S3 on both sides, three runs each at throttle 1 and 4; the crypto micro-reading
+- [x] **2 readings**: S1–S3 on both sides, three runs each at throttle 1 and 4; the crypto micro-reading
   (decision 3). · Done when: every scenario has a stage split and its top functions, and each hotspot found has
   the number that justifies it.
-- [ ] **3 record**: decision 5's places; #261 deleted (Q1), #220's row given S2's wire share. · Done when: the site check and every
+  *Taken at the V1 heavy stage*: S1, S3 and the crypto reading in the collection run (2026-10-23, `87266fe3`), S2's six
+  runs with the JFR bite and `meta.json` in fix round 1 (2026-10-24, `d4eab6be`), once F7 no longer made the strict
+  request check refuse it. The server side was read from the two recordings at phase 3 (`jfr summary`, `jfr view
+  hot-methods`, `jfr view cpu-load`, `jdk.GCHeapSummary`): the JVM averaged 0.3–0.6 % user CPU, its top method held
+  under 4 % of 223–276 execution samples, the heap peaked at 171–173 MB of 616 MB. Hotspots: #536 (sealing), #537 (two
+  N+1 shapes); readings without a row: the throttle (ADR 0105 § Targets), S1's idle main thread, the wire share (#220).
+- [x] **3 record**: decision 5's places; #261 deleted (Q1), #220's row given S2's wire share. · Done when: the site check and every
   `scripts/validate_*.py` except `validate_guard_gaps.py` green.
+  *Done 2026-10-24*: architecture §10's paragraph, the Security page's Profiling rows, its subsection and § Re-run it,
+  ADR 0105 § Targets' throttle sentence, inbox #536–#538, #220 given 9.5 %, #261 and #526 deleted.
 
 ## Definition of done
 
@@ -125,4 +133,18 @@ are handled and what the reading showed; no profile file in git; no product file
 
 ## Retrospective
 
-_Filled at implementation._
+- **Chromium's CPU throttle does not reach workers, and the method assumed it did.** Decision 2 took "throttle 4" as a
+  slower device; phase 1 saw S1 barely move and the collection run measured it (the Argon2id worker 5,354 vs 5,413 ms,
+  the main thread ×4.5). Root cause: an emulation was read as the thing it emulates without one control run. Moved to
+  ADR 0105 § Targets, the driver's limits and the Security page. Next time: a refine that leans on an emulation names
+  the control that shows what it does not reach.
+- **A JFR recording leaks the environment unless its two events are off.** The control recording held the canary, the
+  database password and the store's admin token (phase 1). The CR had named the risk from the recipe, which is why the
+  bite existed from the first run; it lives on in the driver's per-run bite and on the Security page.
+- **A strict "no failed request" check exposed F7.** The driver refused S2 because Chromium reported unread empty bodies
+  as `ERR_ABORTED`; excluding aborts as noise would have hidden a product defect that also held #489 at
+  `carries: false`. Kept in the driver's docstring and in `changes/README.md` § A false positive in a measurement is
+  explained, not excluded.
+- **Process:** phase 2 was run inside the heavy stage's collect-only run, so its server half (the JFR reading) was taken
+  at phase 3 from files left on disk, not in the run. Next time: a phase's Done-when names who reads which file, so a
+  run that only collects does not leave a reading unowned.
