@@ -38,7 +38,12 @@ class InstanceReleaseSliceTest {
      * value and not about a coincidence.
      */
     class Stamped : QuarkusTestProfile {
-        override fun getConfigOverrides() = mapOf("veyq.release.version" to STAMPED_RELEASE)
+        // The check's rhythm at lane L1's 5 s, so its back-off has ticks to skip ([ReleaseCheckStampedSliceTest]):
+        // at the daily default every tick asks. The %test scheduler is halted, so no tick fires on its own.
+        override fun getConfigOverrides() = mapOf(
+            "veyq.release.version" to STAMPED_RELEASE,
+            "veyq.release-check.every" to "5s",
+        )
     }
 
     @BeforeEach

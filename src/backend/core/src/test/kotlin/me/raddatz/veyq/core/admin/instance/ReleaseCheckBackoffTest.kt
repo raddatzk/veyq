@@ -52,6 +52,17 @@ class ReleaseCheckBackoffTest {
     }
 
     @Test
+    fun theSameSettingReadAnewIsNoChange() {
+        // Each tick reads the setting from the database into a new value: equal, never the same instance.
+        val backoff = ReleaseCheckBackoff(Duration.ofSeconds(5))
+        val fresh = { true to String("https://releases.mirror.example/veyq".toCharArray()) }
+        assertEquals("1101000100000001", (1..16).joinToString("") {
+            val setting = fresh()
+            if (backoff.due(setting)) "1".also { backoff.failed(setting) } else "0"
+        })
+    }
+
+    @Test
     fun aSourceJustPointedElsewhereIsReadAtTheNextTick() {
         val backoff = ReleaseCheckBackoff(Duration.ofSeconds(5))
         asked(backoff, 30) // deep in back-off on the unreachable default source
