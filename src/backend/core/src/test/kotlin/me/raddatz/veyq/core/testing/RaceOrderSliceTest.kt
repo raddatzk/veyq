@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 
 /**
  * The race harness's own proof (inbox #512): [whileUncommitted] counts a round only when its order was forced — the
@@ -55,6 +58,31 @@ class RaceOrderSliceTest {
         val id = seed()
         val seen = whileUncommitted({ bumpHere(id) }, { value(id) })
         assertEquals(0, seen, "round $round: a read inside the hold sees the state before the change")
+    }
+
+    /**
+     * [awaitWaiters] sees a side that reaches the held row only after its first read — the shape of every hold that
+     * starts a side and then waits for it (an HTTP request takes its lock tens of ms in). Red on MariaDB at a 10 ms
+     * poll: InnoDB refreshes its lock tables only when they went unread for 0.1 s, so the poll read its first, empty
+     * snapshot until the side's 1205 ended it ("it locked none of them"); `AwaitWaitersCadenceTest` holds the cadence.
+     */
+    @Test
+    fun aSideThatWaitsAfterTheFirstReadIsSeen() {
+        val id = seed()
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            lateinit var side: Future<*>
+            QuarkusTransaction.requiringNew().run {
+                bumpHere(id)
+                em.flush()
+                side = pool.submit { Thread.sleep(3 * INNODB_LOCK_CACHE_IDLE_MS); bump(id) } // reaches the row late
+                awaitWaiters(1) { side.isDone }
+            }
+            side.get(OVERLAP_BOUND_S, TimeUnit.SECONDS)
+            assertEquals(2, value(id), "the waiting write followed the held one")
+        } finally {
+            pool.shutdownNow()
+        }
     }
 
     @Test

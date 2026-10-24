@@ -146,14 +146,17 @@ fun holdForOverlap(finished: () -> Boolean = { false }): Overlap {
  * [AssertionError] when [finishedUnwaited] says a side finished first: while the holder still holds its rows, a side
  * that ends never needed them — the finding, when the race means that side to lock one of them (a writer that skips a
  * lock of the one order), not an order the hold failed to force.
+ *
+ * Each read comes after a pause ([waitPollPauseMs]): on MariaDB one past [INNODB_LOCK_CACHE_IDLE_MS], because InnoDB
+ * serves its lock tables from a cache that a read refreshes only when nothing read it for that long — a 10 ms poll
+ * kept it frozen at the first read, from before the sides reached their locks, for as long as the hold lasted.
  */
 fun awaitWaiters(count: Int, finishedUnwaited: () -> Boolean = { false }): String {
     val session = Arc.container().instance(EntityManager::class.java).get().unwrap(Session::class.java)
-    val deadline = System.nanoTime() + OVERLAP_BOUND_S * 1_000_000_000
-    var seen = emptyList<String>()
-    while (System.nanoTime() < deadline) {
-        seen = session.doReturningWork { connection ->
-            when (val kind = ConfigProvider.getConfig().getValue("quarkus.datasource.db-kind", String::class.java)) {
+    val kind = ConfigProvider.getConfig().getValue("quarkus.datasource.db-kind", String::class.java)
+    return pollWaiters(count, waitPollPauseMs(kind), finishedUnwaited) {
+        session.doReturningWork { connection ->
+            when (kind) {
                 "h2" -> connection.createStatement().use { st ->
                     st.executeQuery(
                         "SELECT SESSION_ID, LEFT(EXECUTING_STATEMENT, 160) FROM INFORMATION_SCHEMA.SESSIONS WHERE BLOCKER_ID = SESSION_ID()",
@@ -170,9 +173,45 @@ fun awaitWaiters(count: Int, finishedUnwaited: () -> Boolean = { false }): Strin
                 else -> throw AssertionError("awaitWaiters has no wait evidence for db-kind $kind")
             }
         }
+    }
+}
+
+/**
+ * How long InnoDB keeps serving `INNODB_TRX` / `INNODB_LOCK_WAITS` from its cache after the last read of it: a read
+ * refreshes the cache only when nothing has read it for longer than this (`CACHE_MIN_IDLE_TIME_NS`, 0.1 s, in
+ * `storage/innobase/trx/trx0i_s.cc` of MariaDB 11.4, so that the tables one SELECT joins read one version). Every read
+ * moves that mark, so a poll faster than this reads the snapshot of its first read forever — which is how
+ * `awaitWaiters` once never saw a side that waited 50 s on the holder (1205 at `NodeEpochGate.lockNode`, heavy-stage
+ * proof 2026-10-24). [holdForOverlap] reads once, after a 300 ms hold, so its read is always fresh.
+ */
+const val INNODB_LOCK_CACHE_IDLE_MS = 100L
+
+/** The pause before each read of [awaitWaiters]: H2's `SESSIONS` is live, so a short one; InnoDB's lock cache must
+ *  have gone unread past [INNODB_LOCK_CACHE_IDLE_MS] for the read to be a fresh one — twice it, so the read's own time
+ *  never brings the next one inside the window. */
+fun waitPollPauseMs(dbKind: String): Long = if (dbKind == "mariadb") 2 * INNODB_LOCK_CACHE_IDLE_MS else 10L
+
+/**
+ * [awaitWaiters]' loop, apart from the engine: pause [pauseMs], [read] the waiters, until [count] are seen
+ * ([OrderNotForced] past [OVERLAP_BOUND_S]) or [finishedUnwaited] says a side ended first. The pause comes BEFORE every
+ * read, the first included: a read within the idle window of an earlier one — the previous round's — would serve that
+ * round's snapshot, whose waiter on a pooled connection of the same id reads as one on this holder.
+ */
+fun pollWaiters(
+    count: Int,
+    pauseMs: Long,
+    finishedUnwaited: () -> Boolean,
+    sleep: (Long) -> Unit = Thread::sleep,
+    nanoTime: () -> Long = System::nanoTime,
+    read: () -> List<String>,
+): String {
+    val deadline = nanoTime() + OVERLAP_BOUND_S * 1_000_000_000
+    var seen = emptyList<String>()
+    while (nanoTime() < deadline) {
+        sleep(pauseMs)
+        seen = read()
         if (seen.size >= count) return seen.joinToString("; ")
         if (finishedUnwaited()) throw AssertionError("a side finished without waiting on the holder, which still holds its rows: it locked none of them")
-        Thread.sleep(10)
     }
     throw OrderNotForced("$count side(s) should wait on the holder, ${seen.size} did: ${seen.ifEmpty { listOf("none") }}")
 }
