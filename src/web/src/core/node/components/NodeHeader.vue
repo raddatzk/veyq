@@ -8,17 +8,25 @@
 // `shown` is not rendered (fail closed is the caller's rights function), and a guest sees this very header with fewer
 // actions (inbox #401).
 //
+// **Two layouts, picked by the header's own width** (ADR 0110 decisions 1 and 8): `headerLayout` answers `wide` while the
+// leading visual's wide width, the name's minimum, the floor's buttons and the ⋯ fit in one row, else `compact`. Its inputs
+// are the header's width and sizes no layout changes — the leading visual's `--veyq-node-header-leading-wide` and the
+// header's `--veyq-node-header-name-min` (registered lengths, `styles/ui.css`), the gaps, one button — never the name or
+// the layout in force, so it cannot flip. The answer is the header's `is-compact` class and the `leading` slot's
+// `compact`, so an application's leading visual sizes itself from it without core importing the application.
+//
 // **As many as fit, the rest in one menu** (ADR 0110): the actions that may be buttons are buttons in `order` as far as
 // the row has room — measured on mount and on every resize, `fitHeaderActions` — and the rest are entries of one ⋯ menu,
 // whose last group is the menu-only actions (report, then delete) behind a separator. Unmeasured (no `ResizeObserver`, a
-// width of 0: a unit test, a hidden tab) every action that may be a button is one. Where the row is depends on the width
-// (`ui.css`): on a phone the actions have a row of their own, the whole header wide — the title row then draws no box of
-// its own (`display: contents`) and the actions' box is the room; wider, they sit at the right end of the title row and
-// the room is that row less the title's `flex-basis` (its minimum) and the gap, both read from the computed style.
+// width of 0: a unit test, a hidden tab) the header is wide and every action that may be a button is one. Compact, the
+// actions have a row of their own, the whole header wide — the title row then draws no box of its own (`display:
+// contents`) and the actions' box is the room. Wide, the name comes first: the room is the title row less the name's
+// natural width (its `scrollWidth`, one line) and the gap, but never less than the floor's (`headerFloor`, the kind's
+// first two), and the name is shortened only below that.
 //
 // The title is its page's one `h1` (owner 2026-10-24, `docs/crosscutting/ui-web-styleguide.md` § Heading levels): every
 // header opens the page of the node it names — a Memory's, a file's, a drop box's, and a folder's level view.
-import { computed, onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -27,7 +35,16 @@ import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqIconName } from '../../../shared/ui/icons'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import { actionMenuItems } from '../actionMenu'
-import { fitHeaderActions, mergeHeaderActions, orderHeaderActions, partitionHeaderActions, type CoreHeaderAction, type NodeHeaderAction } from '../nodeHeader'
+import {
+  fitHeaderActions,
+  headerFloor,
+  headerLayout,
+  mergeHeaderActions,
+  orderHeaderActions,
+  partitionHeaderActions,
+  type CoreHeaderAction,
+  type NodeHeaderAction,
+} from '../nodeHeader'
 
 const props = withDefaults(
   defineProps<{
@@ -48,9 +65,14 @@ const { t } = useI18n()
 const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(props.coreActions, props.actions).filter((a) => a.shown !== false), props.order)))
 const hasLeading = computed(() => !!slots.leading || !!props.icon)
 
-// What the fit weighs, measured from the rendered row (all zero until measured).
+const floor = computed(() => headerFloor(parts.value.buttons.length))
+
+// The layout answer (wide until measured) and what the fit weighs, measured from the rendered row (all zero until measured).
+const compact = ref(false)
 const measured = ref({ rowWidth: 0, buttonWidth: 0, gap: 0, moreWidth: 0 })
-const fit = computed(() => fitHeaderActions({ count: parts.value.buttons.length, menuOnly: parts.value.menuOnly.length > 0, ...measured.value }))
+const fit = computed(() =>
+  fitHeaderActions({ count: parts.value.buttons.length, menuOnly: parts.value.menuOnly.length > 0, floor: compact.value ? 0 : floor.value, ...measured.value }),
+)
 const buttons = computed(() => parts.value.buttons.slice(0, fit.value))
 const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([parts.value.buttons.slice(fit.value), parts.value.menuOnly], 'veyq-node-header'))
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
@@ -61,41 +83,72 @@ const titleEl = ref<HTMLElement | null>(null)
 const actionsEl = ref<HTMLElement | null>(null)
 
 const px = (v: string) => Number.parseFloat(v) || 0
-function measure() {
+async function measure() {
+  const head = header.value
   const row = titleRow.value
-  const actions = actionsEl.value
   const title = titleEl.value
-  if (!row || !actions || !title) return
+  if (!head || !row || !title) return
+  const actions = actionsEl.value
   // One button stands for all (icon-only, one size); the ⋯ is the same kind of button, so it stands in where none is drawn.
-  const button = actions.querySelector<HTMLElement>('.veyq-node-header-action') ?? actions.querySelector<HTMLElement>('.veyq-node-header-more')
-  const more = actions.querySelector<HTMLElement>('.veyq-node-header-more') ?? button
-  const rowStyle = getComputedStyle(row)
-  // Layout widths (`clientWidth`, `offsetWidth`), whole pixels: 0 without a layout, which is what unmeasured means — and a
-  // suite that stubs `getBoundingClientRect` for a gallery's geometry does not turn it into a measured header.
-  const rowWidth = rowStyle.display === 'contents' ? actions.clientWidth : row.clientWidth - px(getComputedStyle(title).flexBasis) - px(rowStyle.columnGap)
-  measured.value = {
-    rowWidth: Math.max(0, rowWidth),
-    buttonWidth: button?.offsetWidth ?? 0,
-    gap: px(getComputedStyle(actions).columnGap),
-    moreWidth: more?.offsetWidth ?? 0,
+  const button = actions?.querySelector<HTMLElement>('.veyq-node-header-action') ?? actions?.querySelector<HTMLElement>('.veyq-node-header-more') ?? null
+  const more = actions?.querySelector<HTMLElement>('.veyq-node-header-more') ?? button
+  const headStyle = getComputedStyle(head)
+  const rowGap = px(getComputedStyle(row).columnGap)
+  const gap = actions ? px(getComputedStyle(actions).columnGap) : 0
+  // Layout widths (`clientWidth`, `offsetWidth`, `scrollWidth`), whole pixels: 0 without a layout, which is what unmeasured
+  // means — and a suite that stubs `getBoundingClientRect` for a gallery's geometry does not turn it into a measured header.
+  const buttonWidth = button?.offsetWidth ?? 0
+  const moreWidth = more?.offsetWidth ?? 0
+  // The leading visual's WIDE width, whatever size it has now: reading its current box would flip the answer back (64 px).
+  const visual = head.querySelector('.veyq-node-header-leading')?.firstElementChild
+  const leadingWide = visual ? px(getComputedStyle(visual).getPropertyValue('--veyq-node-header-leading-wide')) : 0
+  const layoutMore = parts.value.buttons.length > floor.value || parts.value.menuOnly.length > 0
+  const layout = headerLayout({
+    headerWidth: head.clientWidth,
+    leadingWide,
+    leadingGap: px(headStyle.columnGap),
+    nameMin: px(headStyle.getPropertyValue('--veyq-node-header-name-min')),
+    rowGap,
+    floor: floor.value,
+    more: layoutMore,
+    buttonWidth,
+    gap,
+    moreWidth,
+  })
+  // The layout first, then the fit of that layout's row, in the same frame (a microtask, before the paint).
+  if (compact.value !== (layout === 'compact')) {
+    compact.value = layout === 'compact'
+    await nextTick()
   }
+  if (!actions) return
+  // Wide, the room is never less than the floor's (its buttons and the ⋯ beside them): a long name is shortened instead. A
+  // pixel of slack on the name: `scrollWidth` rounds the text's width, and a button that overflows it would shorten the name.
+  const floorItems = floor.value + (layoutMore ? 1 : 0)
+  const floorWidth = floor.value * buttonWidth + (layoutMore ? moreWidth : 0) + Math.max(0, floorItems - 1) * gap
+  const rowWidth = compact.value ? actions.clientWidth : Math.max(floorWidth, row.clientWidth - (title.scrollWidth + 1) - rowGap)
+  measured.value = { rowWidth: Math.max(0, rowWidth), buttonWidth, gap, moreWidth }
 }
 
-// Measured before the first paint (a mount runs before it), then again on every change of the header's size, one
-// measurement per frame; the header's width does not depend on how many buttons it draws, so this settles.
+// Measured before the first paint (a mount runs before it), then again on every change of the header's or the name's size
+// and on a new name, one measurement per frame. The header's width is the only input of the layout; the name's box changes
+// with a rename or a late web font, which moves the wide row's fit. Neither depends on how many buttons are drawn, so this
+// settles.
 let observer: ResizeObserver | null = null
 let frame = 0
-onMounted(() => {
-  measure()
-  if (typeof ResizeObserver === 'undefined' || !header.value) return
-  observer = new ResizeObserver(() => {
-    if (frame) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      measure()
-    })
+function schedule() {
+  if (frame || typeof requestAnimationFrame === 'undefined') return
+  frame = requestAnimationFrame(() => {
+    frame = 0
+    void measure()
   })
+}
+watch(() => props.title, schedule)
+onMounted(() => {
+  void measure()
+  if (typeof ResizeObserver === 'undefined' || !header.value) return
+  observer = new ResizeObserver(schedule)
   observer.observe(header.value)
+  if (titleEl.value) observer.observe(titleEl.value)
 })
 onBeforeUnmount(() => {
   observer?.disconnect()
@@ -104,9 +157,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!slots.leading, 'has-leading': hasLeading }">
+  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!slots.leading, 'has-leading': hasLeading, 'is-compact': compact }">
     <div v-if="hasLeading" class="veyq-node-header-leading">
-      <slot name="leading"><VeyqIcon v-if="icon" :name="icon" class="veyq-node-header-icon" /></slot>
+      <slot name="leading" :compact="compact"><VeyqIcon v-if="icon" :name="icon" class="veyq-node-header-icon" /></slot>
     </div>
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">

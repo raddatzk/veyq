@@ -4,7 +4,7 @@
 // disabled one does not fire, core's own actions are merged around the application's, the kind's `order` comes first, and
 // delete and report are never buttons but the ⋯ menu's last entries. Unmeasured (no layout here) every other action is a
 // button; a measured row moves what does not fit into the menu (the count itself is `../nodeHeader.test.ts`'s).
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import NodeHeader from './NodeHeader.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -132,6 +132,116 @@ describe('NodeHeader', () => {
     expect(entries[1].getAttribute('aria-disabled')).toBe('true')
     entries[1].querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
     expect(off).not.toHaveBeenCalled()
+  })
+
+  describe('the layout, by the header\'s own width (ADR 0110 decision 8)', () => {
+    // The sizes the answer reads, as the sheet gives them (no stylesheet is loaded here): a 192 px name minimum, 16 px gaps
+    // beside the name, 7 px between buttons, a Memory-like 180 px leading visual. 41 px buttons: the floor's two and the ⋯
+    // need 16 + 82 + 41 + 14 = 153 px, so the switch is at 180 + 16 + 192 + 153 = 541 px.
+    let sheet: HTMLStyleElement
+    beforeEach(() => {
+      sheet = document.createElement('style')
+      sheet.textContent = `
+        .veyq-node-header { --veyq-node-header-name-min: 192px; column-gap: 16px }
+        .veyq-node-header-titlerow { column-gap: 16px }
+        .veyq-node-header-actions { column-gap: 7px }
+        .lead { --veyq-node-header-leading-wide: 180px }`
+      document.head.appendChild(sheet)
+    })
+    afterEach(() => sheet.remove())
+
+    /** Layout widths as a browser would give them: the header `width` wide, its title row the rest beside the leading
+     *  visual, the name `nameWidth` long, and the leading visual 64 px wide while the header is compact, 180 px wide. */
+    function layoutWidths(width: number, nameWidth: (title: HTMLElement) => number = () => 80) {
+      const compactNow = (el: HTMLElement) => !!el.closest('.veyq-node-header')?.classList.contains('is-compact')
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('veyq-node-header')) return width
+        if (this.classList.contains('veyq-node-header-titlerow')) return width - 180 - 16
+        if (this.classList.contains('veyq-node-header-actions')) return width
+        return 0
+      })
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('lead')) return compactNow(this) ? 64 : 180
+        return this.matches('.veyq-node-header-action, .veyq-node-header-more') ? 41 : 0
+      })
+      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains('veyq-node-header-title') ? nameWidth(this) : 0
+      })
+    }
+    const memoryActions = () => ['favorite', 'upload', 'share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy'].map((id) => act(id))
+    const leading = { leading: '<span class="lead" :class="{ small: params.compact }" :data-compact="String(params.compact)"></span>' }
+    const mountMemory = (title: string) => mountHeader({ title, actions: [...memoryActions(), act('delete', { severity: 'danger' })] }, leading)
+
+    it('compact below the switch, wide at it: the header\'s class and the leading slot\'s `compact` follow the answer', async () => {
+      layoutWidths(540)
+      const narrow = mountMemory('Rom 2026')
+      await flushPromises()
+      expect(narrow.find('.veyq-node-header').classes()).toContain('is-compact')
+      expect(narrow.find('.lead').attributes('data-compact')).toBe('true')
+      vi.restoreAllMocks()
+      layoutWidths(541)
+      const wide = mountMemory('Rom 2026')
+      await flushPromises()
+      expect(wide.find('.veyq-node-header').classes()).not.toContain('is-compact')
+      expect(wide.find('.lead').attributes('data-compact')).toBe('false')
+    })
+
+    it('a short and a very long name at the same width get the same layout', async () => {
+      for (const width of [540, 541, 900]) {
+        layoutWidths(width, (t) => (t.textContent!.length > 20 ? 2000 : 80))
+        const short = mountMemory('Rom 2026')
+        const long = mountMemory('Sommerurlaub an der Algarve mit der ganzen Familie und den Nachbarn 2025')
+        await flushPromises()
+        expect(long.find('.veyq-node-header').classes().includes('is-compact'), `${width} px`).toBe(short.find('.veyq-node-header').classes().includes('is-compact'))
+        vi.restoreAllMocks()
+      }
+    })
+
+    it('wide, the name comes first: a long one leaves the floor\'s two buttons, a short one as many as fit', async () => {
+      layoutWidths(900, (t) => (t.textContent!.length > 20 ? 2000 : 80))
+      const long = mountMemory('Sommerurlaub an der Algarve mit der ganzen Familie und den Nachbarn 2025')
+      const short = mountMemory('Rom 2026')
+      await flushPromises()
+      expect(headerButtonIds(long)).toEqual(['favorite', 'upload'])
+      // The title row is 900 - 196 = 704 px, less the name (80 + 1) and the gap: 607 px for k buttons and the ⋯ (48k + 41).
+      expect(headerButtonIds(short)).toHaveLength(11)
+      expect(await headerMenuIds(long)).toEqual(['share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy', 'delete'])
+    })
+
+    it('compact, the actions\' own row holds as many as fit; no floor there', async () => {
+      layoutWidths(300)
+      const w = mountMemory('Rom 2026')
+      await flushPromises()
+      // A 300 px row: the ⋯ (41) and five 48 px buttons.
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+    })
+
+    it('never flips: every re-measure keeps the answer although the leading visual is 64 px while compact', async () => {
+      // A width where a 64 px leading visual would fit wide and the 180 px one does not: a measure that read the leading's
+      // current box would answer wide, then compact, then wide…
+      let resized: (() => void) | null = null
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: () => void) {
+          resized = cb
+        }
+        observe() {}
+        disconnect() {}
+      })
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+        cb(0)
+        return 0
+      })
+      layoutWidths(480)
+      const w = mountMemory('Rom 2026')
+      const seen: boolean[] = []
+      for (let i = 0; i < 4; i++) {
+        await flushPromises()
+        seen.push(w.find('.veyq-node-header').classes().includes('is-compact'))
+        resized!()
+      }
+      vi.unstubAllGlobals()
+      expect(seen).toEqual([true, true, true, true])
+    })
   })
 
   it('core\'s own actions sit before or after the application\'s, gated like any other', () => {
