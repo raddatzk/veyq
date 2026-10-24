@@ -142,9 +142,12 @@ fun holdForOverlap(finished: () -> Boolean = { false }): Overlap {
  * own record, as [holdForOverlap] reads it for one (`INNODB_LOCK_WAITS` on MariaDB, `SESSIONS.BLOCKER_ID` on H2; H2's
  * blocker-less unique-key retry is not counted) — and return that evidence. For a hold that forces more than one side
  * into the order a race means, one after another: [holdForOverlap] answers for "some side waits", which a side that
- * already waited answers again. Throws [OrderNotForced] when fewer than [count] wait within [OVERLAP_BOUND_S].
+ * already waited answers again. Throws [OrderNotForced] when fewer than [count] wait within [OVERLAP_BOUND_S], and an
+ * [AssertionError] when [finishedUnwaited] says a side finished first: while the holder still holds its rows, a side
+ * that ends never needed them — the finding, when the race means that side to lock one of them (a writer that skips a
+ * lock of the one order), not an order the hold failed to force.
  */
-fun awaitWaiters(count: Int): String {
+fun awaitWaiters(count: Int, finishedUnwaited: () -> Boolean = { false }): String {
     val session = Arc.container().instance(EntityManager::class.java).get().unwrap(Session::class.java)
     val deadline = System.nanoTime() + OVERLAP_BOUND_S * 1_000_000_000
     var seen = emptyList<String>()
@@ -168,6 +171,7 @@ fun awaitWaiters(count: Int): String {
             }
         }
         if (seen.size >= count) return seen.joinToString("; ")
+        if (finishedUnwaited()) throw AssertionError("a side finished without waiting on the holder, which still holds its rows: it locked none of them")
         Thread.sleep(10)
     }
     throw OrderNotForced("$count side(s) should wait on the holder, ${seen.size} did: ${seen.ifEmpty { listOf("none") }}")
