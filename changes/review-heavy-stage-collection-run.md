@@ -50,7 +50,7 @@ Each step's log lies beside its results file. MS Defender ran without exclusions
 
 ## Owner questions
 
-- **Q1 (F6):** keep the boot's silent refresh 400 as designed (recommended), or remove it in the product? Two ways to remove it: a local "refresh is possible" mark, which costs one sign-in after the upgrade, or a non-error answer for "no session", which is a contract change and its own CR.
+- **Q1 (F6):** moved to inbox #535 (owner 2026-10-24: 401 with its own code).
 - **Q2:** moved to inbox #534 (owner 2026-10-24: inbox, on the V1 line).
 
 ## Readings that need a decision

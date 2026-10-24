@@ -8,8 +8,8 @@ When a topic is refined, its ideas move into durable state under [`features/`](f
 > **A done row is deleted** (owner 2026-10-19), like a CR when it is done: what it taught lives in the ADRs,
 > features and coverage it changed, and its history in git (`git log -S'| <n> |' -- docs/inbox.md`). A row that is
 > built but still owes a measurement or a proof is not done. **Row numbers stay reserved and are never reused** — a
-> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 534** —
-> the next row is 535; raise this line with every new row.
+> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 535** —
+> the next row is 536; raise this line with every new row.
 >
 > An open row holds its title, tags, status, the next step and the links that matter — no history. Its status names
 > where it stands against V1: **V1** (on the V1 line), **end of V1** (needs a remote or a release, done at the very
@@ -141,6 +141,7 @@ other, so when scope shrinks the copy is corrected in the same pass, not filed.
 
 | id | topic | tags | status |
 |----|-------|------|--------|
+| 535 | **A refresh with no session answers `400 invalid_request`; it should be `401` with its own code** | contracts, backend, web, account | **inbox · V1** (owner 2026-10-24: 401 with its own code) — every web boot asks `POST /api/token/refresh` silently, because the client cannot see its `HttpOnly` cookie (`src/web/src/app/sessionRefresh.ts`). With neither a cookie nor a body token, `TokenResource.refreshSession` answers `400 invalid_request`; with a token it rejects it answers `401 refresh_rejected`. Both mean the request holds no valid credential, which is what 401 is for (RFC 9110), so the no-session case becomes `401` with its own code (e.g. `no_session`), kept apart from `refresh_rejected` so a log tells a signed-out boot from a rejected token (ADR 0004's clone case). Change: the declared responses in `contracts/api/auth.openapi.yaml`, the one line in `TokenResource`, and the exemption `tests/e2e/src/signedOutBoot.json` narrowed to the new answer. The client already treats 400 and 401 alike. Not a goal: the console line — Chromium logs every answer ≥ 400 as *Failed to load resource*, so it stays (heavy-stage collection run 2026-10-23, F6). Source: `changes/review-heavy-stage-collection-run.md` Q1. |
 | 534 | **A placement's `parentEpoch` is a rule only in prose: the contract does not require it beside `parentId`** | contracts, backend, web, crypto | **inbox · V1** (owner 2026-10-24) — since [ADR 0109](decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 6 the server refuses a placement under a node that names no `parentEpoch` (`400`, `IncompletePlacement`), but `UpdateNodeRequest` and `CreateNodeRequest` say so only in their descriptions, so the generated client types do not flag a missing one: it surfaces at run time (heavy-stage collection run 2026-10-23, F3: `move.e2e` sent none). Making it a schema rule (`dependentRequired`) first needs two things: a shape check in the server that refuses a missing `parentEpoch` before any state check (otherwise api-fuzz reads the state answer as a schema-violating request accepted, ST201), and a decision on `parentId == scopeId`, which the server reads as the scope's root although the root is no node with an epoch of its own — recommended: a root placement is `parentId: null`, and `parentId == scopeId` is refused (one form per meaning, [ADR 0086](decisions/0086-one-word-per-meaning.md)). Source: `changes/review-heavy-stage-collection-run.md` Q2. |
 
 
