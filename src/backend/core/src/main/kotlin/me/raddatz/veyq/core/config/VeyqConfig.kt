@@ -720,7 +720,11 @@ interface VeyqConfig {
         fun grantDelivery(): GrantDelivery
 
         interface Lease {
-            /** Lease TTL granted on job claim and on each heartbeat (application.properties says why it is short). */
+            /**
+             * Lease TTL granted on job claim and on each heartbeat: 2 min, which a worker renews every 30 s while it
+             * works. Below about 60 s the renewal no longer holds it; a stopped worker's job frees only by expiry
+             * (ADR 0021 §6; application.properties says why it is short).
+             */
             @WithDefault("PT2M")
             fun ttl(): Duration
         }

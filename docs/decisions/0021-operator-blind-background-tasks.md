@@ -50,8 +50,15 @@ result**.
    (`PRF(K_SC-derived, type)`) are a documented **seam** for future low-footprint, ambiguous-processing types,
    where correlation would not already reveal the kind.
 6. **Lease = at-least-once + idempotent.** An atomic claim (`WHERE status='pending'`, MariaDB `SKIP LOCKED`) sets
-   an opaque `leaseHolder` + `leaseExpiry`. The job carries a **TTL**; long jobs **heartbeat** to extend it. A
-   crashed worker's lease **expires → lazy reclaim** (the claim query treats `leased ∧ expiry<now` as free).
+   an opaque `leaseHolder` + `leaseExpiry`. The job carries a **TTL**; long jobs **heartbeat** to extend it. The TTL
+   is `veyq.tasks.lease.ttl`, **2 min** by default, and a worker renews it every **30 s** while it works (the web's
+   `LEASE_RENEW_MS`), so a hidden tab whose timers the browser throttles to one a minute still keeps it. A Server
+   Owner who sets the lease below about **60 s** defeats the renewal: such a tab loses a job it is still working on.
+   A worker that stops — a tab closed, reloaded or navigated away — frees its job only when the lease runs out. By
+   owner decision (2026-10-24) there is **no release endpoint** called on `pagehide`, and a holder does **not take
+   over its own** still-valid lease: the same user's next page claims the job like any other worker, after the
+   expiry. A crashed worker's lease **expires → lazy reclaim** (the claim query treats `leased ∧ expiry<now` as
+   free).
    `attempts` + a max → **dead-letter** (`failed`, surfaced). Exactly-once is not attempted; effects and the
    `jobId`-keyed result post are idempotent. **Every claimed job has a holder, and only the holder acts on it:**
    heartbeat, complete, fail and decline all require the current lease (`409 not_lease_holder` otherwise), and

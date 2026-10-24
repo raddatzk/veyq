@@ -182,8 +182,8 @@ here; the server is blind.
   (`:user-id`), never a bare `VeyqAvatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
   `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
   **One header for every node (inbox #406, [ADR 0110](../../docs/decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
-  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button) beside the title (`level` 1 on a
-  node's own page; two lines at most, the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions — at the right
+  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button) beside the title (the page's one `h1`,
+  a folder's level view included — styleguide § Heading levels; two lines at most, the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions — at the right
   end of the title row, on a phone (≤540 px) in a row of their own. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
   `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions

@@ -106,4 +106,16 @@ describe('SpaceMap', () => {
     expect(wrapper.text()).toContain(t('memory.map.empty'))
     expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
   })
+
+  it('heads its panel one level below its host: h2 under a folder\'s h1, h3 under a person\'s Memories', async () => {
+    setMapsConsent(false)
+    const level = mountMap([])
+    const person = mount(SpaceMap, { props: { pins: [], headingLevel: 3 }, global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+
+    expect(level.get('h2.space-map-panel-title').text()).toBe(t('memory.place.consentTitle'))
+    expect(level.find('h3').exists()).toBe(false)
+    expect(person.get('h3.space-map-panel-title').text()).toBe(t('memory.place.consentTitle'))
+    expect(person.find('h2').exists()).toBe(false)
+  })
 })

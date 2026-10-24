@@ -303,6 +303,17 @@ Visible focus states, accessible names, predictable keyboard behaviour. No hover
 essential actions. Text must not overflow on mobile — prefer existing responsive `.veyq-*` behaviour
 before component-specific media queries.
 
+### Heading levels
+
+Owner 2026-10-24.
+
+- **A page has exactly one `h1`, its subject.** A node's page names the node in core's `NodeHeader`: a Memory, a
+  file, a drop box, and a folder's level view.
+- **Sections are `h2`, and a head inside a section is one level deeper.** Never skip a level. A component used at
+  two depths takes its level from its host, as `SpaceMap` does with `headingLevel`.
+- **A dialog's title heads the dialog,** not the page under it.
+- **Open:** the space's top level has no `h1` yet. It has no node to name.
+
 ## Checklist before finishing web UI work
 
 - Reused a `.veyq-*` class and `--app-*` token before adding local styles / raw colors.
@@ -313,6 +324,7 @@ before component-specific media queries.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Copy is short, says what happens, and does not reassure; only what the reader should keep safe gets an
   explanation, sized to what its loss costs (§ *Copy*).
+- One `h1` per page, its subject; sections `h2`, no skipped level (§ *Heading levels*).
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.
 - Confirmed a destructive action through `useConfirm` (or an existing inline/dedicated form) — never

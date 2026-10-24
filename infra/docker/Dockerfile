@@ -104,10 +104,6 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # The LAST stage on purpose: a build with no `--target` (`docker build -f infra/docker/Dockerfile .`) builds the last
 # stage, so it builds what the release publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
 FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm
-ARG VEYQ_VERSION=""
-ARG VEYQ_REVISION=""
-ENV VEYQ_VERSION="${VEYQ_VERSION}"
-ENV VEYQ_REVISION="${VEYQ_REVISION}"
 WORKDIR /work/
 # curl: container healthcheck only. No ffmpeg — the operator-blind backend never transcodes (thumbnails and
 # previews are client-generated blobs), so no server-side media binary is ever invoked.
@@ -165,6 +161,22 @@ COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarku
 # its own in lib/main, which is what lets a recipient replace it.
 COPY LICENSE NOTICE /usr/share/licenses/veyq/
 COPY --from=backend-build-jvm /repo/src/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
+# The two stamps, after the last layer on purpose: a stamp declared before a RUN enters its cache key, which re-ran the
+# `apt-get` layer above at every commit (measured in the heavy stage's round 2, 2026-10-24). Nothing above reads them.
+# The labels are the image's identity as `docker inspect` shows it, set here only: no build step passes a label, and
+# every OCI key a base image lends (Ubuntu's `version` 22.04) is overwritten. A label is config, never a cached layer,
+# so it names the commit built whatever the cache held (validate_release_identity.py assertion 12, measured by
+# scripts/image_identity_cache_proof.py).
+ARG VEYQ_VERSION=""
+ARG VEYQ_REVISION=""
+ENV VEYQ_VERSION="${VEYQ_VERSION}"
+ENV VEYQ_REVISION="${VEYQ_REVISION}"
+LABEL org.opencontainers.image.title="veyq" \
+      org.opencontainers.image.description="veyq application server" \
+      org.opencontainers.image.version="${VEYQ_VERSION}" \
+      org.opencontainers.image.revision="${VEYQ_REVISION}" \
+      org.opencontainers.image.source="https://github.com/raddatzk/veyq" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 USER 10001
 # The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
 # exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin

@@ -98,13 +98,22 @@ RUN printf '{"type":"module"}\n' > /usr/local/lib/veyq-admin/package.json \
     && chmod +x /usr/local/bin/veyq-admin
 
 # Same build-args the app image takes (ADR 0057), so `docker inspect` names the release this container came
-# from — the two images ship as one release and must be identifiable as such.
+# from — the two images ship as one release and must be identifiable as such. After the last layer on purpose: a
+# stamp declared earlier would enter every later RUN's cache key and rebuild them per commit. The labels are set here
+# only (no build step passes one), and every OCI key the nginx base lends is overwritten — its `licenses`
+# (Apache-2.0), `source`, `url` and `created` speak for nginx, not for this image. A label is config, never a cached
+# layer, so it names the commit built whatever the cache held: a fully cached build keeps the cache's `Created`
+# time, never its labels (validate_release_identity.py assertion 12, measured by scripts/image_identity_cache_proof.py).
 ARG VEYQ_VERSION
 ARG VEYQ_REVISION
 LABEL org.opencontainers.image.title="veyq-admin" \
       org.opencontainers.image.description="veyq Server-Owner administration surface" \
       org.opencontainers.image.version="${VEYQ_VERSION}" \
-      org.opencontainers.image.revision="${VEYQ_REVISION}"
+      org.opencontainers.image.revision="${VEYQ_REVISION}" \
+      org.opencontainers.image.source="https://github.com/raddatzk/veyq" \
+      org.opencontainers.image.url="" \
+      org.opencontainers.image.created="" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 ENV VEYQ_VERSION=${VEYQ_VERSION}
 
 # Back to the base image's unprivileged user — the LAST instruction that changes who runs, on purpose (see the

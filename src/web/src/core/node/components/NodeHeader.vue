@@ -16,7 +16,8 @@
 // its own (`display: contents`) and the actions' box is the room; wider, they sit at the right end of the title row and
 // the room is that row less the title's `flex-basis` (its minimum) and the gap, both read from the computed style.
 //
-// `level` is the heading level of the title: a node's own page is the page's `h1`, a folder's header inside the level view `h2`.
+// The title is its page's one `h1` (owner 2026-10-24, `docs/crosscutting/ui-web-styleguide.md` § Heading levels): every
+// header opens the page of the node it names — a Memory's, a file's, a drop box's, and a folder's level view.
 import { computed, onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -39,9 +40,8 @@ const props = withDefaults(
     coreActions?: readonly CoreHeaderAction[]
     /** The kind's priority: the ids of the actions that come first, in that order (core's included); an unlisted one follows. */
     order?: readonly string[]
-    level?: 1 | 2
   }>(),
-  { icon: undefined, subtitle: undefined, actions: () => [], coreActions: () => [], order: () => [], level: 2 },
+  { icon: undefined, subtitle: undefined, actions: () => [], coreActions: () => [], order: () => [] },
 )
 const slots = useSlots()
 const { t } = useI18n()
@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
     </div>
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
-        <component :is="`h${level}`" ref="titleEl" class="veyq-node-header-title" :title="title">{{ title }}</component>
+        <h1 ref="titleEl" class="veyq-node-header-title" :title="title">{{ title }}</h1>
         <div v-if="parts.buttons.length || parts.menuOnly.length" ref="actionsEl" class="veyq-node-header-actions">
           <VeyqTooltip v-for="a in buttons" :key="a.id" :text="a.label">
             <VeyqButton

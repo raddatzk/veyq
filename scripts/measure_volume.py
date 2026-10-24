@@ -3,7 +3,8 @@
 
 TEMPORARY. `cr-volume-measurement-cax` runs it once more against a real CAX11, writes the sizing recommendation into the
 Run area and deletes it with the rest of the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
-`src/web/scripts/volumeHarness.mts`, `src/web/scripts/volumePrelude.mts`, `tests/e2e/measure/`, the bench files).
+`src/web/scripts/volumeHarness.mts`, `src/web/scripts/volumePrelude.mts`, `tests/e2e/measure/`, the bench files,
+`scripts/measure_volume_selftest.py`).
 
 **What it measures on.** A throwaway instance of the PRODUCTION recipe, never the dev stack: `boot` installs the
 candidate images the way lane L1 does — `scripts/run_stack_e2e.py`'s own stages (assets, release mirror, Pebble,
@@ -18,8 +19,8 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
 
     measure_volume.py --instance DIR fixtures                      the JPEG/WebP fixtures the seeders upload
     measure_volume.py --instance DIR boot --app IMG --admin IMG    a fresh instance (ports 80/443 must be free)
-    measure_volume.py --instance DIR seed <seed-volume args>       src/web/scripts/seed-volume.mts against it
-    measure_volume.py --instance DIR invite-limit <N|default>      the per-tenant invite limit while seeding members, app recreated
+    measure_volume.py --instance DIR seed <seed-volume args>       src/web/scripts/seed-volume.mts against it (`members`: limit raised)
+    measure_volume.py --instance DIR invite-limit <N|default>      the per-tenant invite limit, app recreated
     measure_volume.py --instance DIR server <axis>                 the server leg, with the sampler
     measure_volume.py --instance DIR browser <axis> [...]          the browser leg, tests/e2e/measure/volume.ts
     measure_volume.py --instance DIR scenario <idle|five|upload>   a household scenario, with the sampler
@@ -50,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import json
 import os
 import re
@@ -84,6 +86,7 @@ SMTP_FOR_APP = "mail.relay.test:1025"  # the overlay's Mailpit, as the app reach
 RECIPE = ("app", "mariadb", "garage", "traefik", "admin")
 DOUBLES = ("pebble", "mailpit", "release-mirror", "browser")
 INVITE_ENV = "VEYQ_RATELIMIT_INVITE_PER_TENANT_MAX_REQUESTS"
+SEEDING_INVITE_LIMIT = "100000"  # the member seeder's invites in one hour, a 1,000-member tenant several times over
 GIB = 1024 ** 3
 PROBE_IMAGE = "busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e"  # the recipe's own
 PROBE_LOOP = ('while :; do echo "$(date +%s) $(cut -d" " -f1-3 /proc/loadavg) '
@@ -367,6 +370,27 @@ def invite_limit(inst: Instance, limit: str) -> None:
     env = json.loads(inst.docker("inspect", inst.container("app")).stdout)[0]["Config"]["Env"]
     seen = [e for e in env if e.startswith(f"{INVITE_ENV}=")]
     say(f"invite limit: {seen[0] if seen else f'{INVITE_ENV} unset (the default, 20 per tenant per hour)'}; app healthy")
+
+
+def override_invite_limit(inst: Instance) -> str:
+    """The invite limit the instance's override file sets now, as `invite_limit` takes it (`default` when it sets none)."""
+    doc = yaml.safe_load((inst.home / "compose.override.yml").read_text(encoding="utf-8")) or {}
+    value = (((doc.get("services") or {}).get("app") or {}).get("environment") or {}).get(INVITE_ENV)
+    return "default" if value is None else str(value)
+
+
+@contextlib.contextmanager
+def invites_raised(inst: Instance):
+    """The invite limit raised for the member seeder, and put back as it was on every way out — a red seeder, an
+    exception, Ctrl-C, the SIGTERM `main` turns into an exit. The seeder sends an invite per member, and the default of
+    20 per tenant per hour stopped `seed members --target 1000` at member 22 with a 429 (heavy stage H1, 2026-10-24).
+    The raise sits inside the `try`: a raise that wrote the override and then failed to start the app is put back too."""
+    before = override_invite_limit(inst)
+    try:
+        invite_limit(inst, SEEDING_INVITE_LIMIT)
+        yield
+    finally:
+        invite_limit(inst, before)
 
 
 # ---------------------------------------------------------------- the sampler
@@ -898,12 +922,9 @@ def scenario(inst: Instance, name: str, minutes: float, items: int, count: int) 
 def stage(inst: Instance, axis: str, n: int, max_load: float, patience: float, browser: bool) -> Path:
     """Phase 8's unit: seed to N, then — on a quiet host, sampler running — the server leg and the browser leg."""
     if axis == "members":
-        invite_limit(inst, "100000")
-        try:
-            if seed(inst, ["members", "--target", str(n)]) != 0:
-                raise Refused("the member seeder did not reach its target")
-        finally:
-            invite_limit(inst, "default")  # restarted with the defaults before anything is measured
+        # `seed` raises the invite limit for it and puts it back, so the app restarts as it was before anything is measured.
+        if seed(inst, ["members", "--target", str(n)]) != 0:
+            raise Refused("the member seeder did not reach its target")
     else:
         args = {"photos": ["photos", "--target", str(n)], "bare": ["photos", "--bare", "--target", str(n)],
                 "tree": ["tree", "--target", str(n)], "wide": ["tree", "--wide", str(n)]}[axis]
@@ -1036,8 +1057,16 @@ def judge(directory: Path) -> dict:
 # ---------------------------------------------------------------- main
 
 
-def seed(inst: Instance, seed_args: list[str]) -> int:
+def run_seeder(inst: Instance, seed_args: list[str]) -> int:
     return subprocess.run(["npx", "tsx", "scripts/seed-volume.mts", *seed_args], cwd=WEB, env=inst.env()).returncode
+
+
+def seed(inst: Instance, seed_args: list[str]) -> int:
+    """src/web/scripts/seed-volume.mts against the instance; the member seeder under a raised invite limit."""
+    if seed_args[:1] == ["members"]:
+        with invites_raised(inst):
+            return run_seeder(inst, seed_args)
+    return run_seeder(inst, seed_args)
 
 
 def main() -> int:

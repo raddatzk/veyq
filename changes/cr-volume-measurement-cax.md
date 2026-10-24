@@ -182,7 +182,7 @@ owner's to give with the server.
   retrospective (how far the local run was off is worth knowing for the next one). · Done when: the site check and
   the trust-chain guards green.
 - [ ] **5 remove** (not before #489's reading at the V1 heavy stage — it measures with this harness): delete the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
-  `scripts/measure_volume.py`, `tests/e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
+  `scripts/measure_volume.py`, `scripts/measure_volume_selftest.py`, `tests/e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
   `npm run check` in `src/web/` green; the owner confirms the server is gone.
 

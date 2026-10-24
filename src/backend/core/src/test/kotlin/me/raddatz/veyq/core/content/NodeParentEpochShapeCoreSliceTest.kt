@@ -23,8 +23,9 @@ import org.junit.jupiter.api.Test
  * has, a trashed parent, a scope the caller is no member of. Answered after them (as it was), a request the contract
  * refuses reads to the API fuzzer as one accepted and then refused for the state (ST201).
  *
- * The control the root keeps: `parentId == scopeId` is the scope root's slot, which this server reads as the root and
- * which needs no `parentEpoch` — unchanged until the owner decides inbox #534's open question.
+ * The root has one form, a null or absent `parentId` (owner 2026-10-24, inbox #534; one form per meaning, ADR 0086).
+ * The path's `scopeId` as the parent — the root's stored slot, which this server once read as the root — is the same
+ * shape fault, with or without a `parentEpoch`, and answered before the same state answers.
  */
 @QuarkusTest
 class NodeParentEpochShapeCoreSliceTest {
@@ -45,11 +46,29 @@ class NodeParentEpochShapeCoreSliceTest {
         }
         assertEquals(0L, children(t.folder), "a refused create stores nothing")
 
-        // controls: with its parentEpoch the create lands; the root by a null and by its own slot needs none
+        // controls: with its parentEpoch the create lands; the root by a null needs none
         create(t.userId, t.scopeId, t.folder, parentEpoch = 0).statusCode(201)
         create(t.userId, t.scopeId, null, parentEpoch = null).statusCode(201)
-        create(t.userId, t.scopeId, t.scopeId, parentEpoch = null).statusCode(201)
         assertEquals(1L, children(t.folder))
+    }
+
+    @Test
+    fun aCreateNamingTheScopeAsItsParentIs400BeforeAnyStateAnswer() {
+        val t = tree()
+        val (stranger, _) = seedMemberScope()
+        val roots = roots(t.scopeId)
+        for ((caller, epoch) in listOf(
+            t.userId to null, // was 201: read as the root
+            t.userId to 0, // with a parentEpoch, as a parent node would carry
+            stranger to null, // was the non-member's 404
+        )) {
+            create(caller, t.scopeId, t.scopeId, parentEpoch = epoch).statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertEquals(roots, roots(t.scopeId), "a refused create stores nothing")
+
+        // control: the root by its one form
+        create(t.userId, t.scopeId, null, parentEpoch = null).statusCode(201)
+        assertEquals(roots + 1, roots(t.scopeId))
     }
 
     @Test
@@ -66,10 +85,29 @@ class NodeParentEpochShapeCoreSliceTest {
         }
         assertEquals(t.scopeId to 0L, placement(t.node), "a refused placement writes nothing")
 
-        // controls: with its parentEpoch the move lands; the root by its own slot needs none
+        // controls: with its parentEpoch the move lands; the root by a null needs none
         place(t.userId, t, t.folder, parentEpoch = 0, revision = 0).statusCode(204)
         assertEquals(t.folder to 1L, placement(t.node))
-        place(t.userId, t, t.scopeId, parentEpoch = null, revision = 1).statusCode(204)
+        place(t.userId, t, null, parentEpoch = null, revision = 1).statusCode(204)
+        assertEquals(t.scopeId to 2L, placement(t.node))
+    }
+
+    @Test
+    fun aPlacementNamingTheScopeAsItsParentIs400BeforeAnyStateAnswer() {
+        val t = tree()
+        val (stranger, _) = seedMemberScope()
+        place(t.userId, t, t.folder, parentEpoch = 0, revision = 0).statusCode(204) // off the root first
+        for ((caller, epoch) in listOf(
+            t.userId to null, // was 204: read as the root
+            t.userId to 0,
+            stranger to null, // was the non-member's 404
+        )) {
+            place(caller, t, t.scopeId, parentEpoch = epoch, revision = 1).statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertEquals(t.folder to 1L, placement(t.node), "a refused placement writes nothing")
+
+        // control: back to the root by its one form
+        place(t.userId, t, null, parentEpoch = null, revision = 1).statusCode(204)
         assertEquals(t.scopeId to 2L, placement(t.node))
     }
 
@@ -93,14 +131,19 @@ class NodeParentEpochShapeCoreSliceTest {
             .`when`().post("/api/scopes/$scopeId/nodes").then()
     }
 
-    private fun place(caller: String, t: Tree, to: String, parentEpoch: Int?, revision: Long = 0): ValidatableResponse {
+    /** [to] null: the scope root, `parentId` sent as null. */
+    private fun place(caller: String, t: Tree, to: String?, parentEpoch: Int?, revision: Long = 0): ValidatableResponse {
         val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
+        val parent = to?.let { "\"$it\"" } ?: "null"
         return given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$to",$epoch"encryptedName":"bW92ZWQ=","slugToken":"${slug()}","wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":$revision}""")
+            .body("""{"parentId":$parent,$epoch"encryptedName":"bW92ZWQ=","slugToken":"${slug()}","wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":$revision}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/${t.node}").then()
     }
 
     private fun children(parent: String): Long = QuarkusTransaction.requiringNew().call { NodeEntity.count("parentId", parent) }
+
+    /** The scope's root nodes: their stored slot is the scope id. */
+    private fun roots(scopeId: String): Long = children(scopeId)
 
     private fun placement(node: String): Pair<String, Long> =
         QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.let { it.parentId to it.placementRevision } }

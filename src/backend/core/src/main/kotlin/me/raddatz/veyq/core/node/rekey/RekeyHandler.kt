@@ -76,7 +76,13 @@ class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStor
         return RekeyOutcome.Staged
     }
 
+    /**
+     * The commit's own shape first, before any answer about the instance's state (inbox #534, as `NodesHandler`'s create
+     * and placement): a `parentId` without its `parentEpoch` (the contract's `dependentSchemas`), and the scope as the
+     * parent — the root's one form is null. [RekeyStore.commit] still refuses a `parentId` that is not the node's.
+     */
     fun commit(userId: String, scopeId: String, nodeId: String, rekeyId: String, c: RekeyCommit): RekeyOutcome {
+        if (c.parentId == scopeId || (c.parentId != null && c.parentEpoch == null)) return RekeyOutcome.InvalidRequest
         refusal(userId, scopeId, WRITE)?.let { return it }
         return store.commit(scopeId, nodeId, rekeyId, c)
     }

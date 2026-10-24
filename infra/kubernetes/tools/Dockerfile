@@ -28,12 +28,18 @@ COPY src/tools/instance_backup.py src/tools/instance_backup_selftest.py /opt/vey
 # major is entered from — the predecessor this release's own upgrade proof and chart check ran from
 # (`scripts/release_assets.py --major-entry`), empty when it lies in no previous major. Stamped here and only here.
 ARG VEYQ_VERSION=""
-ARG VEYQ_REVISION=""
 ARG VEYQ_MAJOR_ENTRY=""
 RUN python3 -c 'import json, os; json.dump({"release": os.environ["VEYQ_VERSION"], "majorEntry": os.environ["VEYQ_MAJOR_ENTRY"] or None}, open("/opt/veyq/release.json", "w")); print(open("/opt/veyq/release.json").read())'
+# The revision after the stamp's RUN, so it is not in that layer's cache key (the release is: the layer writes it). The
+# identity labels are set here only, over every OCI key the Ubuntu base lends (validate_release_identity.py
+# assertion 12, measured by scripts/image_identity_cache_proof.py).
+ARG VEYQ_REVISION=""
 LABEL org.opencontainers.image.title="veyq-tools" \
+      org.opencontainers.image.description="veyq backup gate and restore tool" \
       org.opencontainers.image.version="${VEYQ_VERSION}" \
-      org.opencontainers.image.revision="${VEYQ_REVISION}"
+      org.opencontainers.image.revision="${VEYQ_REVISION}" \
+      org.opencontainers.image.source="https://github.com/raddatzk/veyq" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 ENV VEYQ_VERSION=${VEYQ_VERSION} \
     VEYQ_REVISION=${VEYQ_REVISION} \
     PATH="/usr/local/bin:/usr/bin:/bin"

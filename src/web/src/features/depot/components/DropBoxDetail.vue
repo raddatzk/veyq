@@ -138,7 +138,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" :order="DROP_BOX_HEADER_ORDER">
+    <NodeHeader icon="inbox" :title="node.name" :actions="headerActions" :core-actions="coreActions" :order="DROP_BOX_HEADER_ORDER">
       <template v-if="nodeCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="nodeCover.url" :crop="nodeCover.crop" /></span>
       </template>

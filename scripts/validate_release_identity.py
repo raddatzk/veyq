@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Eleven things, in the order a release happens:
+**What it asserts.** Twelve things, in the order a release happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -33,6 +33,15 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      and every entry must receive `VEYQ_VERSION` from some step. The stage that compiles the web client is served to anyone before any
      login, so a stamp it could read is a release on the pre-auth surface (ADR 0057 §4); a stamp the target does not
      declare is one Docker drops without a word. Both found by stage, from the build matrix, never listed.
+ 12. **The image's labels name the build that made it.** Each published target stage sets
+     `org.opencontainers.image.version` and `.revision` from `${VEYQ_VERSION}` and `${VEYQ_REVISION}`, after it
+     declares both, and its `.title` is the matrix's image name; the `build` job stamps `VEYQ_REVISION` into every
+     entry; and no step of the file passes a label to a build (`labels:` on a build-push action, `--label` on a
+     `docker build`), because a passed label overrides the Dockerfile's. Its premise is BuildKit's: a `LABEL` is image
+     config, never a cached layer, so a fully cached build still carries the stamps it was given — measured
+     2026-10-24 on the admin image (round 2 of the heavy stage: every layer cached from 2026-10-23, `Created`
+     2026-10-23, `revision` the commit built), and re-measured on demand by `scripts/image_identity_cache_proof.py`,
+     which builds each target at two revisions on a warm cache and also refuses an OCI label the base image lends.
   9. **The publish waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
      its image build starts beside the tests instead of after them — which is sound only while nothing it builds is
      published before every stage is green. So every other job of the file is in the `publish` job's `needs:`, found
@@ -163,6 +172,14 @@ and a published image — a stage added to the file and forgotten there would be
 Assertion 10 came with lane L1's job (cr-stack-e2e phase 4), no incident: assertion 9 reads the jobs the file has, so
 deleting the lane — or renaming its job and dropping it from the publish's `needs:` in the same edit — was green there.
 Its limit is assertion 9's: it reads the file, and proves no run ever waited.
+
+Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
+The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
+Ubuntu base's `version` 22.04 and no revision; the admin image showed nginx's `licenses` (Apache-2.0), `source`,
+`url` and `created`; and on GitHub the `build` job passed metadata-action's labels, which name the branch (`main`)
+as the published image's version and override the Dockerfile's. Nothing reads these labels to decide anything (the
+instance reports `VEYQ_VERSION`, `veyqctl` deploys by digest), which is why it stayed unnoticed, and why this is an
+assertion here and not a gate somewhere else.
 
 Assertion 11 came with the GitHub Release (cr-veyqctl phase 5), and building it found a defect before any publish:
 the template was carried as `.env.example`, and GitHub renames a release asset whose name starts with a period (its
@@ -742,6 +759,100 @@ if workflow_doc:
                     f"compiles it into what the image serves, and the web client is served before any login — the "
                     f"precise release never goes there (ADR 0057 §4). An export names the major instead."
                 )
+
+
+# ---- 12. the image's labels name the build that made it --------------------------------------------------------
+
+LABEL_START = re.compile(r"^LABEL\s+(.*)$", re.IGNORECASE | re.DOTALL)
+# The two identity labels and the stamp each must come from.
+IDENTITY_LABELS = {"org.opencontainers.image.version": "VEYQ_VERSION", "org.opencontainers.image.revision": "VEYQ_REVISION"}
+
+
+def instructions(body: str) -> list[str]:
+    """The Dockerfile's instructions, one per entry: continuation lines joined, comment lines dropped (Docker drops a
+    comment line inside a continued instruction too)."""
+    out: list[str] = []
+    pending = ""
+    for line in body.splitlines():
+        if line.strip().startswith("#") or (not line.strip() and not pending):
+            continue
+        if line.rstrip().endswith("\\"):
+            pending += line.rstrip()[:-1] + " "
+            continue
+        out.append((pending + line).strip())
+        pending = ""
+    if pending:
+        out.append(pending.strip())
+    return out
+
+
+def stage_labels(body: str) -> dict[str | None, dict[str, tuple[str, frozenset[str]]]]:
+    """Per stage name: each label key the stage sets, with its raw value and the ARG names the stage had declared by
+    then (a stamp read before its stage declares it expands to nothing)."""
+    stages: dict[str | None, dict[str, tuple[str, frozenset[str]]]] = {None: {}}
+    current: str | None = None
+    declared: set[str] = set()
+    for instruction in instructions(body):
+        start = FROM_LINE.match(instruction)
+        if start:
+            current, declared = start.group(1), set()
+            stages[current] = {}
+            continue
+        arg = ARG_LINE.match(instruction)
+        if arg:
+            declared.update(token.split("=", 1)[0] for token in arg.group(1).split())
+            continue
+        label = LABEL_START.match(instruction)
+        if label:
+            for pair in shlex.split(label.group(1)):
+                key, _, value = pair.partition("=")
+                stages[current][key] = (value, frozenset(declared))
+    return stages
+
+
+labelled_targets = 0
+if workflow_doc:
+    for entry in entries:
+        dockerfile, target, image = ROOT / str(entry["dockerfile"]), str(entry.get("target") or ""), str(entry.get("image") or "")
+        if not dockerfile.is_file():
+            continue  # reported above
+        where = f"{dockerfile.relative_to(ROOT)}"
+        labels = stage_labels(dockerfile.read_text()).get(target)
+        if labels is None:
+            continue  # reported above
+        labelled_targets += 1
+        title = labels.get("org.opencontainers.image.title", ("", frozenset()))[0]
+        if title != image:
+            fail(f"`{where}`'s `{target}` stage labels its title `{title or '(none)'}`, not `{image}`, the image the "
+                 f"`{BUILD_JOB}` matrix publishes from it")
+        mine = stamps_for(image)
+        for key, stamp in IDENTITY_LABELS.items():
+            if stamp not in mine:
+                fail(f"no build step of the `{BUILD_JOB}` job stamps `{stamp}` into `{image}` — its `{key}` label "
+                     f"would name no build")
+            value, declared = labels.get(key, (None, frozenset()))
+            if value not in (f"${{{stamp}}}", f"${stamp}"):
+                fail(
+                    f"`{where}`'s `{target}` stage sets `{key}` to `{value if value is not None else '(nothing)'}`, "
+                    f"not `${{{stamp}}}` — `docker inspect` would then name a build this image is not (a base image "
+                    f"lends its own: Ubuntu's `version` is 22.04)"
+                )
+            elif stamp not in declared:
+                fail(f"`{where}`'s `{target}` stage sets `{key}` before it declares `ARG {stamp}`, so the label "
+                     f"expands to nothing")
+    # A label passed to the build overrides the Dockerfile's: the identity has one place, the target stage.
+    for job_name, job in (workflow_doc.get("jobs") or {}).items():
+        for step in job_steps(workflow_doc, job_name):
+            name = step.get("name") or step.get("id") or "?"
+            if "docker/build-push-action" in str(step.get("uses") or "") and (step.get("with") or {}).get("labels"):
+                fail(f"the `{job_name}` job's step `{name}` passes `labels:` to its build — a passed label overrides "
+                     f"the target stage's, and metadata-action's name the branch as the image's version")
+            for line in str(step.get("run") or "").replace("\\\n", " ").splitlines():
+                if re.search(r"\bdocker\b.*\bbuild\b", line) and re.search(r"(^|\s)--label(=|\s|$)", line):
+                    fail(f"the `{job_name}` job's step `{name}` passes `--label` to `docker build` — a passed label "
+                         f"overrides the target stage's")
+    if not labelled_targets:
+        fail(f"no published target stage was found to hold to its labels, so assertion 12 checked NOTHING")
 
 
 # ---- 3. a publish refuses to replace a release, and leaves one ref -------------------------------------------
@@ -1710,7 +1821,8 @@ if errors:
 print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
     f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
-    f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, a release "
+    f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, which label "
+    f"their version and revision from it with no build step overriding a label, a release "
     f"refuses a republish, creates its v{version_value}.<minor> ref and last its one GitHub Release in one call, signed by the pinned cosign {signing_cosign or '?'}, the publish waits on every one of the "
     f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the producer carries "
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
