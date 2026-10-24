@@ -109,6 +109,44 @@ class RekeyCoreSliceTest {
         assertEquals(1, row(w.child).epoch)
     }
 
+    /** The commit's own shape before any answer about the instance's state (inbox #534; the contract's
+     *  `dependentSchemas` on `CommitNodeRekeyRequest`): a `parentId` without its `parentEpoch`, and the path's `scopeId`
+     *  as the parent — the root has the one form null. Answered after them, a body the contract refuses would read to the
+     *  API fuzzer as one accepted and then refused for the state. */
+    @Test
+    fun aCommitWithAParentButNoParentEpochOrTheScopeAsItsParentIs400BeforeAnyStateAnswer() {
+        val w = world()
+        val (stranger, _) = seedMemberScope()
+        val nobody = UUID.randomUUID().toString()
+        for ((caller, node, body) in listOf(
+            // a parent without its epoch: as the owner (refused for it, as it was), on a node nobody has (was 404),
+            // with a node epoch not the stored one (was 409 stale_epoch), as a stranger (was the non-member's 404)
+            Triple(w.owner, w.child, childCommit(w, parentEpoch = null)),
+            Triple(w.owner, nobody, childCommit(w, parentEpoch = null)),
+            Triple(w.owner, w.child, childCommit(w, parentEpoch = null, nodeEpoch = 1)),
+            Triple(stranger, w.child, childCommit(w, parentEpoch = null)),
+            // the scope as the root's parent, with or without an epoch: as the owner (was 400 after the node's state),
+            // with a node epoch not the stored one (was 409 stale_epoch), as a stranger (was the non-member's 404)
+            Triple(w.owner, w.root, rootCommit(parentId = w.scopeId)),
+            Triple(w.owner, w.root, rootCommit(parentId = w.scopeId, parentEpoch = 1)),
+            Triple(w.owner, w.root, rootCommit(parentId = w.scopeId, nodeEpoch = 1)),
+            Triple(stranger, w.root, rootCommit(parentId = w.scopeId)),
+        )) {
+            given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body(body)
+                .`when`().post("/api/scopes/${w.scopeId}/rekey/nodes/$node/${UUID.randomUUID()}").then()
+                .statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertEquals(listOf(0, 0), listOf(row(w.root).epoch, row(w.child).epoch), "a refused commit writes nothing")
+
+        // controls, each answered for the state once the shape is right: the child with its parent's epoch waits for
+        // the parent; the root by its one form commits once staged
+        commitChild(w, UUID.randomUUID(), parentEpoch = 0).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        val rekeyId = UUID.randomUUID()
+        stageRootParts(w, rekeyId)
+        commitRoot(w, rekeyId).statusCode(204)
+        assertEquals(1, row(w.root).epoch)
+    }
+
     /** CR decision 2, fail closed: a row sealed under the node's key with no staged value refuses the whole commit —
      *  nothing written — and the same commit lands once it is staged. */
     @Test
@@ -337,15 +375,23 @@ class RekeyCoreSliceTest {
         ).statusCode(204)
     }
 
-    private fun commitRoot(w: World, rekeyId: UUID): ValidatableResponse = post(
-        w, "/rekey/nodes/${w.root}/$rekeyId",
-        """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"bmV3LXJvb3Qtd3JhcA=="}""",
-    )
+    private fun commitRoot(w: World, rekeyId: UUID): ValidatableResponse = post(w, "/rekey/nodes/${w.root}/$rekeyId", rootCommit())
 
-    private fun commitChild(w: World, rekeyId: UUID, placementRevision: Long = 0, parentEpoch: Int = 1): ValidatableResponse = post(
-        w, "/rekey/nodes/${w.child}/$rekeyId",
-        """{"nodeEpoch":0,"epoch":1,"parentId":"${w.root}","parentEpoch":$parentEpoch,"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"bmV3LWM=","slugToken":"${slug()}","wrappedContentKey":"bmV3LWMtd3JhcA=="}""",
-    )
+    private fun commitChild(w: World, rekeyId: UUID, placementRevision: Long = 0, parentEpoch: Int = 1): ValidatableResponse =
+        post(w, "/rekey/nodes/${w.child}/$rekeyId", childCommit(w, parentEpoch, placementRevision))
+
+    /** The root's commit body; [parentId] null leaves it out, as the root's one form. */
+    private fun rootCommit(parentId: String? = null, parentEpoch: Int? = null, nodeEpoch: Int = 0): String {
+        val parent = parentId?.let { "\"parentId\":\"$it\"," } ?: ""
+        val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
+        return """{$parent$epoch"nodeEpoch":$nodeEpoch,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"bmV3LXJvb3Qtd3JhcA=="}"""
+    }
+
+    /** The child's commit body under the root; [parentEpoch] null leaves it out. */
+    private fun childCommit(w: World, parentEpoch: Int?, placementRevision: Long = 0, nodeEpoch: Int = 0): String {
+        val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
+        return """{"nodeEpoch":$nodeEpoch,"epoch":1,"parentId":"${w.root}",$epoch"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"bmV3LWM=","slugToken":"${slug()}","wrappedContentKey":"bmV3LWMtd3JhcA=="}"""
+    }
 
     private fun create(w: World, parent: String, parentEpoch: Int): ValidatableResponse = post(
         w, "/nodes",
