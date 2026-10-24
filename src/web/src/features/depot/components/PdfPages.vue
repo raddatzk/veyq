@@ -36,7 +36,7 @@ const aspects = reactive<Record<number, number>>({})
 const failed = reactive<Record<number, boolean>>({})
 
 const pageNumbers = computed(() => Array.from({ length: props.doc.numPages }, (_, i) => i + 1))
-const fitWidth = computed(() => Math.max(1, Math.floor((containerWidth.value || FALLBACK_WIDTH) - 2)))
+const fitWidth = computed(() => Math.max(1, Math.floor(containerWidth.value || FALLBACK_WIDTH)))
 const cssWidth = computed(() => Math.round(fitWidth.value * zoom.value))
 const aspectOf = (n: number) => aspects[n] ?? aspects[1] ?? FALLBACK_ASPECT
 const pageStyle = (n: number) => ({ width: `${cssWidth.value}px`, height: `${Math.round(cssWidth.value * aspectOf(n))}px` })
@@ -186,14 +186,40 @@ function redrawNear(): void {
 // A new width (the window, full screen) or zoom redraws what is near; pages far away draw when they come near.
 watch(cssWidth, () => redrawNear())
 
+// --- the width the pages fit -----------------------------------------------------------------------------------------
+// F12 (heavy stage, 2026-10-24): the fit width was the scroller's `clientWidth` - 2, but `clientWidth` holds the scroller's
+// 0.5rem padding, so a fitted page was 14 px wider than the room inside it. The file page's `.veyq-section` grid sized its
+// column to that page (`.file-viewer` had no `min-width: 0`), the scroller widened by the 14 px, the observer measured the
+// wider box and fitted the page to it - 14 px per frame without end (51,304 px after a minute), each step a new render
+// and a rebuilt text layer. Three things now hold it, each on its own: the scroller's width never depends on its pages
+// (`contain: inline-size` below; `.file-viewer`'s `min-width: 0`), the fit width is the content box (the page fills the
+// room exactly, so a box sized by its content measures the same width again), and a widening that is only the zoomed
+// pages pushing their box out is not taken as room (`measure`). Pinned by `FileViewer.pdf.test.ts` § the fit width.
+
+/** The room for a page inside the scroller: its content box (client width less its padding), never its padding box. */
+function availableWidth(el: HTMLElement): number {
+  const style = getComputedStyle(el)
+  const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
+  return Math.max(0, el.clientWidth - padding)
+}
+
+function measure(): void {
+  const root = scroller.value
+  if (!root) return
+  const width = availableWidth(root)
+  // Zoomed in, the pages are wider than the room: a box that sizes to its content (no containment, an ancestor without
+  // `min-width: 0`) then widens to exactly their width. That width is the pages' own, not new room - taking it would fit
+  // the pages to it and zoom them again, without end.
+  if (containerWidth.value > 0 && width > containerWidth.value && Math.abs(width - cssWidth.value) < 1) return
+  containerWidth.value = width
+}
+
 onMounted(() => {
   const root = scroller.value
   if (root) {
-    containerWidth.value = root.clientWidth
+    measure()
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => {
-        containerWidth.value = root.clientWidth
-      })
+      resizeObserver = new ResizeObserver(() => measure())
       resizeObserver.observe(root)
     }
   }
@@ -319,6 +345,9 @@ function fit(): void {
   font-variant-numeric: tabular-nums;
 }
 .pdf-scroll {
+  /* Its width comes from the page around it, never from the pages in it (F12): the observer measures this box and sizes
+     the pages from it, so a box that grew with them would feed its own measure. */
+  contain: inline-size;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
