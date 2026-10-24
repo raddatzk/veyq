@@ -210,7 +210,7 @@ describe('pages are drawn lazily', () => {
     expect(fake.jobs.map((j) => j.page).sort()).toEqual([1, 2])
     expect(fake.doc.render).toHaveBeenCalledTimes(2)
     const first = fake.jobs.find((j) => j.page === 1)!
-    expect(first.cssWidth).toBe(798) // no layout here: the 800 px fallback minus the page's 2 px border allowance
+    expect(first.cssWidth).toBe(800) // no layout here: the 800 px fallback
     expect(first.pixelRatio).toBe(1)
     expect(first.canvas).toBe(w.findAll('canvas')[0].element)
   })
@@ -299,13 +299,13 @@ describe('the page indicator and the zoom controls', () => {
     await flushPromises()
     expect(w.find('.pdf-zoom-level').text()).toBe('125 %')
     expect(fake.doc.render).toHaveBeenCalledTimes(2)
-    expect(fake.jobs[1].cssWidth).toBe(998) // 798 x 1.25
-    expect(w.find('.pdf-page').attributes('style')).toContain('width: 998px')
+    expect(fake.jobs[1].cssWidth).toBe(1000) // 800 x 1.25
+    expect(w.find('.pdf-page').attributes('style')).toContain('width: 1000px')
     expect(fit.attributes('disabled')).toBeUndefined()
     await fit.trigger('click')
     await flushPromises()
     expect(w.find('.pdf-zoom-level').text()).toBe('100 %')
-    expect(fake.jobs[2].cssWidth).toBe(798)
+    expect(fake.jobs[2].cssWidth).toBe(800)
   })
 
   it('zoom out narrows them, and each end of the range disables its button', async () => {
@@ -326,7 +326,102 @@ describe('the page indicator and the zoom controls', () => {
     const { w } = await openReady(2)
     intersect(nearObserver(), { 1: true })
     await flushPromises()
-    expect(w.find('.pdf-page').attributes('style')).toContain('height: 399px') // 798 x (100 / 200)
+    expect(w.find('.pdf-page').attributes('style')).toContain('height: 400px') // 800 x (100 / 200)
+  })
+})
+
+// --- the fit width ---------------------------------------------------------------------------------------------------------
+// F12 (heavy stage, 2026-10-24): in the stack lane a fitted page grew 14 px per frame without end (1016 -> 1030 -> ... ->
+// 51,304 px after a minute), each step a new render and a rebuilt text layer. The fit width was the scroller's client width
+// less 2, but the client width holds the scroller's padding, so the page was wider than the room inside it; and the file
+// page's grid column sized itself to that page, so the scroller widened, and the observer fitted the page to the wider box.
+// The stylesheet now keeps the scroller's width off its pages (`contain: inline-size`, `.file-viewer`'s `min-width: 0`);
+// happy-dom lays nothing out, so those are pinned as text below, and the scroller here is modelled as the box that DID
+// size to its pages - which the measure itself must hold still in.
+describe('the fit width holds still', () => {
+  /** The scroller's border box when its pages fit: wider when a page is (a box sized by its content). */
+  let room: number
+  let resize: (() => void) | null
+  let sheet: HTMLStyleElement
+  beforeEach(() => {
+    room = 1000
+    resize = null
+    class FakeResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resize = () => callback([], this as unknown as ResizeObserver)
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() { resize = null }
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    // The scroller's padding as Depot's sheet gives it (0.5rem); happy-dom applies no component style, so it is set here.
+    sheet = document.createElement('style')
+    sheet.textContent = '.pdf-scroll { padding-left: 8px; padding-right: 8px; }'
+    document.head.append(sheet)
+    const owner = [HTMLElement.prototype, Element.prototype].find((p) => Object.getOwnPropertyDescriptor(p, 'clientWidth'))!
+    vi.spyOn(owner, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+      if (!this.classList.contains('pdf-scroll')) return 0
+      const widest = Math.max(0, ...[...this.querySelectorAll<HTMLElement>('.pdf-page')].map((p) => parseFloat(p.style.width) || 0))
+      return Math.max(room - 2, widest + 16) // the padding box: the border box less its 1 px border each side
+    })
+  })
+  afterEach(() => sheet.remove())
+
+  const pageWidth = (w: W) => parseFloat((w.find('.pdf-page').element as HTMLElement).style.width)
+  /** The observer fires after every layout, as a real one does after each change of the box. */
+  async function frames(n = 20): Promise<void> {
+    for (let i = 0; i < n; i++) {
+      resize?.()
+      await flushPromises()
+    }
+  }
+
+  it('fits a page to the room inside the scroller, which a box sized by its pages then measures again: it stops', async () => {
+    const { w, fake } = await openReady(3)
+    intersect(nearObserver(), { 1: true })
+    await frames()
+    expect(pageWidth(w)).toBe(982) // 1000 less the border (2) and the padding (16): the content box, not the padding box
+    const renders = fake.doc.render.mock.calls.length
+    await frames()
+    expect(pageWidth(w)).toBe(982)
+    expect(fake.doc.render).toHaveBeenCalledTimes(renders) // no new width, so no new drawing and no rebuilt text layer
+  })
+
+  it('zoomed in, the pages pushing their box out are not taken as new room; a wider window still is', async () => {
+    const { w, fake } = await openReady(3)
+    intersect(nearObserver(), { 1: true })
+    await frames()
+    const zoomIn = w.find(`button[aria-label="${t('depot.viewer.pdf.zoomIn')}"]`)
+    await zoomIn.trigger('click')
+    await zoomIn.trigger('click')
+    await frames()
+    expect(w.find('.pdf-zoom-level').text()).toBe('150 %')
+    expect(pageWidth(w)).toBe(1473) // 982 x 1.5, once
+    const renders = fake.doc.render.mock.calls.length
+    await frames()
+    expect(pageWidth(w)).toBe(1473)
+    expect(fake.doc.render).toHaveBeenCalledTimes(renders)
+    room = 1600 // the window widened: real room, taken once
+    await frames()
+    expect(pageWidth(w)).toBe(2373) // (1600 - 18) x 1.5
+    await frames()
+    expect(pageWidth(w)).toBe(2373)
+    await w.find(`button[aria-label="${t('depot.viewer.pdf.fitWidth')}"]`).trigger('click')
+    await frames()
+    expect(pageWidth(w)).toBe(1582)
+  })
+
+  it('keeps the scroller\'s width off its pages in the stylesheet: contained, inside a viewer that may shrink', () => {
+    const base = join(process.cwd(), 'src/features/depot/components')
+    const rule = (file: string, selector: string) => {
+      const src = readFileSync(join(base, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+      const m = new RegExp(`(^|\\n)${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(src)
+      expect(m, `${file} has a ${selector} rule`).not.toBeNull()
+      return m![2]
+    }
+    expect(rule('PdfPages.vue', '.pdf-scroll')).toMatch(/(^|\s)contain: inline-size;/)
+    expect(rule('FileViewer.vue', '.file-viewer')).toMatch(/(^|\s)min-width: 0;/)
   })
 })
 
@@ -499,7 +594,7 @@ describe('the text layer (select and copy)', () => {
     expect(fake.doc.render).toHaveBeenCalledTimes(2)
     const layers = fake.doc.render.mock.calls.filter((c) => c[4] instanceof HTMLElement)
     expect(layers).toHaveLength(2)
-    expect(layers[1][2]).toBe(998)
+    expect(layers[1][2]).toBe(1000)
     expect(layers[1][4]).toBe(hostOf(w, 1).element) // the same host, rebuilt (emptied first), not a second one on top
     expect(hostOf(w, 1).element.childElementCount).toBe(1)
   })

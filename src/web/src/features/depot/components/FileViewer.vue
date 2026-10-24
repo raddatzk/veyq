@@ -330,6 +330,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.5rem;
+  /* A grid item of the file page's `.veyq-section` (one implicit auto column): without this its minimum is its content's
+     width, so a PDF page or an unwrapped text line widened the section's column instead of scrolling inside the viewer
+     (F12: the PDF fit width then fed itself, 14 px per frame). */
+  min-width: 0;
   margin: 0 0 1rem;
 }
 .file-viewer-stage {

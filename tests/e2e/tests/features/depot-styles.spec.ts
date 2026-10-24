@@ -88,7 +88,9 @@ async function openPdf(page: Page, colorScheme: 'light' | 'dark'): Promise<Locat
  * While the viewer's width still changes, every new width re-lays the layer (`PdfPages.vue` redraws, and the engine's
  * `replaceChildren` empties the host first), so a span found a moment ago may be detached when its style is read — and
  * `getComputedStyle` on a detached element reads `''` for every property. The stack lane caught it 2026-10-24: the page went
- * 1016 → 1030 → 1044 px within 20 ms of the span being found, and all five values read `''`.
+ * 1016 → 1030 → 1044 px within 20 ms of the span being found, and all five values read `''`. That growth was a defect
+ * (F12: the fit width fed itself, 14 px a frame without end) and is fixed in `PdfPages.vue`; once the page is fitted the
+ * layer holds still, so this returns at once, and a viewer that re-lays without end times it out.
  */
 async function layerSettled(layer: Locator): Promise<void> {
   await expect.poll(() => layer.evaluate((el) => new Promise<boolean>((resolve) => {
