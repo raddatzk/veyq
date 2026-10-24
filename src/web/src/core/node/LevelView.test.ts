@@ -52,7 +52,7 @@ const TRIPS = node('Trips', FOLDER_KIND)
  *  is a guest's identity folder (what the member's tree answers); `publicShares`: the instance offers public links. */
 function mountLevel(
   tree: TreeNode[],
-  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicShares?: boolean; folderName?: string; liveTick?: number; unlocked?: boolean } = {},
+  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicShares?: boolean; folderName?: string; spaceName?: string; liveTick?: number; unlocked?: boolean } = {},
 ) {
   const folder = over.folder ?? null
   const source = memberTreeOf(() => tree)
@@ -62,6 +62,7 @@ function mountLevel(
       access: memberAccessOf({ readonly: over.pending ?? false, publicShares: over.publicShares ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
       tree: { ...source, inIdentityFolder: () => over.identityFolder ?? false },
       folderName: over.folderName,
+      spaceName: over.spaceName,
       liveTick: over.liveTick,
     },
     global: { plugins: [realI18n()] },
@@ -127,6 +128,20 @@ describe('LevelView: the one list', () => {
     }
     // The name the host resolved (a sealed name, unsealed) is the h1's text, not the node's raw one.
     expect(mountLevel(tree, { folder: TRIPS, folderName: 'Italy 2026' }).get('h1').text()).toBe('Italy 2026')
+  })
+
+  it('the space\'s top level has exactly one h1, the space\'s name; the headings below it start at h2', () => {
+    twoKinds()
+    const w = mountLevel([node('Trips', FOLDER_KIND), node('a1', 'ALPHA')], { spaceName: 'Familie Raddatz' })
+    const h1s = w.findAll('h1')
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0].text()).toBe('Familie Raddatz')
+    // The space is no node: its header offers nothing to act on.
+    expect(w.findAll('.veyq-node-header-actions')).toHaveLength(0)
+    expect(w.findAll('h3, h4, h5, h6')).toHaveLength(0)
+    // A folder's own name wins inside it; without a name the top level draws no header at all.
+    expect(mountLevel([TRIPS], { folder: TRIPS, spaceName: 'Familie Raddatz' }).get('h1').text()).toBe('Trips')
+    expect(mountLevel([TRIPS]).findAll('h1')).toHaveLength(0)
   })
 
   it('reads digits as numbers (Foto 2 before Foto 10) across kinds', () => {

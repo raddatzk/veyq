@@ -38,6 +38,11 @@ div.veyq-node-host
               path
               path
               path
+    header.veyq-node-header
+      div.veyq-node-header-body
+        div.veyq-node-header-titlerow
+          h1.veyq-node-header-title
+            "Personal"
     div.veyq-level-tabs.veyq-tabs
       div.veyq-tabs__bar
         div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]

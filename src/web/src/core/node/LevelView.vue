@@ -114,6 +114,9 @@ const props = defineProps<{
   /** The folder's name as its siblings tell it apart (`displayNamesOf`: a guest's folder `Anna (2)` beside `Anna`,
    *  inbox #393), when the host knows the siblings. Omitted: the folder's own name. */
   folderName?: string
+  /** The space's name (the tenant's, a group's, or Personal): the `h1` of its top level, where no folder is on screen and
+   *  so no node names the page (styleguide § Heading levels). A guest never stands there: a link is rooted at a node. */
+  spaceName?: string
   /** The host's live-refresh count (`useLevelLive`, inbox #408), handed to every row source as `LevelRowsContext.liveTick`. */
   liveTick?: number
 }>()
@@ -613,6 +616,8 @@ async function onDrop(e: DragEvent): Promise<void> {
         <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
       </template>
     </NodeHeader>
+    <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
+    <NodeHeader v-else-if="spaceName" :title="spaceName" />
 
     <!-- The application tabs (inbox #348): a filter over this folder's children, the folders in every tab; real buttons
          (`VeyqTab`), arrow keys move between them. -->
