@@ -15,8 +15,11 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Duration
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /**
@@ -349,6 +352,37 @@ class TasksSliceTest {
         given().header("Authorization", bearer(other)).contentType(ContentType.JSON).body("{}")
             .`when`().post("/api/tasks/$jobId/decline")
             .then().statusCode(409).body("code", equalTo("not_lease_holder"))
+    }
+
+    /**
+     * The lease a claim grants, and a heartbeat renews, is short: a worker that stops — a closed, reloaded or navigated
+     * tab — holds the job two minutes at most, and the scope's other owners take it then. The proof run of 2026-10-24
+     * (N1b) saw a re-key job sit leased for five minutes after its tab went away. The web worker renews every 30 s
+     * while it works (`LEASE_RENEW_MS`), so four renewals fit in one lease.
+     */
+    @Test
+    fun aLeaseLastsTwoMinutesAndAHeartbeatRenewsTwoMinutes() {
+        val scopeId = seedTenant()
+        val worker = seedUser()
+        seedGrantedMembership(worker, scopeId, "owner-grant")
+        val tag = "deadbeef"
+        val jobId = seedJob(scopeId, tag, JobEntity.PENDING, attempts = 0)
+
+        val claimedAt = Instant.now()
+        val leased = OffsetDateTime.parse(claim(worker, tag).then().statusCode(200).extract().path<String>("leaseExpiresAt"))
+        assertLeaseOfTwoMinutes(claimedAt, leased.toInstant())
+
+        val renewedAt = Instant.now()
+        val renewed = OffsetDateTime.parse(
+            given().header("Authorization", bearer(worker)).`when`().post("/api/tasks/$jobId/heartbeat")
+                .then().statusCode(200).extract().path<String>("leaseExpiresAt"),
+        )
+        assertLeaseOfTwoMinutes(renewedAt, renewed.toInstant())
+    }
+
+    private fun assertLeaseOfTwoMinutes(from: Instant, until: Instant) {
+        val seconds = Duration.between(from, until).seconds
+        assertTrue(seconds in 110..121, "a lease of two minutes, not $seconds s")
     }
 
     @Test

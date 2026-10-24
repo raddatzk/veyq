@@ -122,7 +122,7 @@ STATEMENTS = ("Com_select", "Com_insert", "Com_update", "Com_delete", "Com_stmt_
 # pass. Either way it is recorded apart (`abortedRequests` in server.json). The one place to change it.
 ABORTED_REFUSES = True
 ABORTED = "net::ERR_ABORTED"
-# The one answer of 400 or more that is no error: the signed-out boot's `POST /api/token/refresh` (400/401 by design,
+# The one answer of 400 or more that is no error: the signed-out boot's `POST /api/token/refresh` (401 by design,
 # src/web/src/app/sessionRefresh.ts). One definition, which tests/e2e/src/devices.ts `watchConsole` reads too.
 SIGNED_OUT_BOOT = json.loads((repo_layout.E2E_DIR / "src" / "signedOutBoot.json").read_text(encoding="utf-8"))
 
@@ -311,8 +311,8 @@ def request_failures(window: dict, aborted_refuses: bool = ABORTED_REFUSES) -> t
     """The window's requests that refuse the run, and its aborted ones, recorded beside it.
 
     An answer of 400 or more refuses, and so does a request that failed in the network (a refused connection, a name
-    that did not resolve, a TLS failure) — except the signed-out boot's refresh ([signed_out_boot]), which answers 400
-    or 401 by design. A `net::ERR_ABORTED` refuses only when [aborted_refuses] says so (`ABORTED_REFUSES`). A window
+    that did not resolve, a TLS failure) — except the signed-out boot's refresh ([signed_out_boot]), which answers 401 by
+    design. A `net::ERR_ABORTED` refuses only when [aborted_refuses] says so (`ABORTED_REFUSES`). A window
     written before `httpErrors` existed has none."""
     failed = list(window.get("failedRequests", []))
     aborted = [r for r in failed if r.rstrip().endswith(ABORTED)]

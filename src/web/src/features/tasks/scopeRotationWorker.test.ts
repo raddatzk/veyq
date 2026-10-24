@@ -19,7 +19,7 @@ vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 const { activeSpace } = vi.hoisted(() => ({ activeSpace: { scopeId: null as string | null } }))
 vi.mock('../../app/activeSpace', () => ({ activeSpace, refreshActiveScope: vi.fn() }))
 
-import { runScopeRotationWorker } from './scopeRotationWorker'
+import { runScopeRotationWorker, LEASE_RENEW_MS } from './scopeRotationWorker'
 import { SCOPE_ROTATION, GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
@@ -92,6 +92,54 @@ describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
     expect(await runScopeRotationWorker()).toBe(1)
     expect(commitRotation).not.toHaveBeenCalled()
     expect(completeTask).toHaveBeenCalledWith({ jobId: 'j1', completeRequest: {} })
+  })
+})
+
+describe('runScopeRotationWorker keeps the lease of the job it works on (ADR 0021 §6, N1b)', () => {
+  it('renews the lease while the job is in hand and stops once it lets the job go', async () => {
+    // A re-key that runs longer than a lease's worth of renewals: the server's lease is short (PT2M), so a worker
+    // that never renewed would lose a job it is still working on — and one that keeps renewing after it is done
+    // would hold a job nobody works on.
+    vi.useFakeTimers()
+    try {
+      let finishRekey = () => {}
+      vi.mocked(rekeyScope).mockImplementation(() => new Promise((resolve) => { finishRekey = () => resolve({ done: true, committed: 1 }) }))
+      const heartbeatTask = vi.fn<TasksApi['heartbeatTask']>().mockResolvedValue({ leaseExpiresAt: new Date() })
+      fakeApi(tasksApi, {
+        claimTask: vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 }).mockResolvedValueOnce(null),
+        completeTask: vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined),
+        heartbeatTask,
+      })
+      const run = runScopeRotationWorker()
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS * 4)
+      expect(heartbeatTask).toHaveBeenCalledTimes(4)
+      expect(heartbeatTask).toHaveBeenLastCalledWith({ jobId: 'j1' })
+
+      finishRekey()
+      expect(await run).toBe(1)
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS * 4)
+      expect(heartbeatTask).toHaveBeenCalledTimes(4) // the job is done: nothing renews it any more
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops renewing a job it fails back', async () => {
+    vi.useFakeTimers()
+    try {
+      const heartbeatTask = vi.fn<TasksApi['heartbeatTask']>().mockResolvedValue({ leaseExpiresAt: new Date() })
+      fakeApi(tasksApi, {
+        claimTask: vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 }).mockResolvedValueOnce(null),
+        failTask: vi.fn<TasksApi['failTask']>().mockResolvedValue({ status: 'pending', attempts: 1 }),
+        heartbeatTask,
+      })
+      vi.mocked(commitRotation).mockRejectedValueOnce(new Error('cannot open scope to rotate'))
+      expect(await runScopeRotationWorker()).toBe(0)
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS * 4)
+      expect(heartbeatTask).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

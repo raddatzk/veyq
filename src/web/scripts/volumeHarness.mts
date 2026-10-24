@@ -46,6 +46,8 @@ export type Place = { scopeId: string; nodeId: string; hash: string; name: strin
 export type Manifest = Partial<Record<'photos' | 'bare' | 'upload' | 'treeDeep' | 'wideDeep', Place>> & {
   tree?: { scopeId: string; folderName: string; hash: string }
   wide?: { scopeId: string; memoryName: string; hash: string }
+  /** `marks`: the Memory whose owner's mark set is full, and the one photo in it past the cap (unmarked, newest). */
+  marks?: Place & { marked: number; pastCap: string }
 }
 
 export function readJson<T>(name: string, fallback: T): T {

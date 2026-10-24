@@ -61,6 +61,22 @@ const banner = (page: Page) => page.getByTestId('memory-banner')
 const tabRow = (page: Page) => page.locator('.memory-tabs .veyq-tabs__bar')
 const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i })
 
+/**
+ * Scroll the page 1,200 px down with the tab row's block tall enough to stick in. Three items fill one gallery row, so
+ * the page scrolls about 18 px of its own and the row would never reach its sticky offset: the row's containing block
+ * (`.memory-tabs`, the row's parent) is made three viewports tall for the read, and the style is removed by the returned
+ * function. The scroll is asserted, so a page that did not move cannot pass as a row that stuck.
+ */
+async function scrollPastTheBanner(page: Page): Promise<() => Promise<void>> {
+  const style = await page.addStyleTag({ content: '.memory-tabs { min-height: 300vh }' })
+  await page.evaluate(() => window.scrollTo(0, 1200))
+  expect(await page.evaluate(() => window.scrollY), 'the page scrolled past the banner').toBeGreaterThan(1000)
+  return async () => {
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await style.evaluate((e) => (e as Element).remove())
+  }
+}
+
 test.beforeAll(async ({ browser }) => {
   member = await newDevice(browser)
   guest = await newDevice(browser)
@@ -136,17 +152,18 @@ test(
     expect(await banner(page).locator('img.banner-frame-media').getAttribute('style')).toBe(style)
 
     // the tab row sticks below the compact header while the banner scrolls away
-    await page.evaluate(() => window.scrollTo(0, 1200))
+    const back = await scrollPastTheBanner(page)
     const stuck = (await tabRow(page).boundingBox())!
     const header = (await page.locator('.app-compact-header').boundingBox())!
     expect(Math.abs(stuck.y - (header.y + header.height)), 'the tab row sits on the compact header').toBeLessThan(3)
     expect((await banner(page).boundingBox())!.y + phone.height, 'the banner scrolled away').toBeLessThan(header.y + header.height)
+    await back()
     await page.setViewportSize({ width: 1400, height: 900 })
-    await page.evaluate(() => window.scrollTo(0, 1200))
+    const backWide = await scrollPastTheBanner(page)
     const stuckWide = (await tabRow(page).boundingBox())!
     const topbar = (await page.locator('.workspace-topbar').boundingBox())!
     expect(Math.abs(stuckWide.y - (topbar.y + topbar.height)), 'the tab row sits on the top bar').toBeLessThan(3)
-    await page.evaluate(() => window.scrollTo(0, 0))
+    await backWide()
   },
 )
 
@@ -255,8 +272,9 @@ test(
     await expect(g.getByRole('heading', { level: 1, name: memoryName })).toBeVisible({ timeout: 60_000 })
     await expect(banner(g).getByRole('button', { name: 'Play the banner video' })).toBeVisible({ timeout: 60_000 })
     await expect(g.getByRole('button', { name: /banner/i }).filter({ hasNotText: 'Play' })).toHaveCount(0)
-    await g.evaluate(() => window.scrollTo(0, 1200))
+    const back = await scrollPastTheBanner(g)
     expect(Math.round((await tabRow(g).boundingBox())!.y), 'stuck at the top of a page without a top bar').toBe(0)
+    await back()
   },
 )
 

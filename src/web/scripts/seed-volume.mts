@@ -23,6 +23,7 @@
 //   seed-volume.mts tree --wide N             the 'Volume wide' group: one Memory holding N Chapters
 //   seed-volume.mts members --target N        the tenant, to exactly N members (owner included), each complete
 //   seed-volume.mts upload --count N          scenario: the first member uploads N phone-sized photos, one at a time
+//   seed-volume.mts marks --cap N             the 'Volume marks' Memory: N photos the owner has marked, one more unmarked
 //
 // Every seeder is told a target, counts what is there and fills the gap, so a stopped run resumes and the next stage
 // only adds.
@@ -48,6 +49,8 @@ import { registry } from '../src/core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from '../src/features/memories/kinds'
 import { createChapter, createMemory } from '../src/features/memories/memoryNodes'
 import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memories/media'
+import { ItemMarksTooMany, loadItemFavorites, saveItemFavorites } from '../src/features/memories/itemFavorites'
+import { keyAt } from '../src/features/spaces/epochs'
 import { runGrantDeliveryWorker } from '../src/features/tasks/grantDeliveryWorker'
 import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../src/features/account/profile/profile'
 import { httpStatus } from '../src/shared/httpError'
@@ -435,6 +438,114 @@ async function upload(count: number): Promise<void> {
   console.log(`upload: ${p.end()}; ~${(bytes / 1e6 / ((Date.now() - started) / 1000)).toFixed(1)} MB/s of plaintext`)
 }
 
+// --- marks (inbox #500) ---------------------------------------------------------------------------------------------
+//
+// One member's sealed mark set for one Memory, full: `cap` photos the owner has marked (ADR 0068 § 4, 12,284 — what the
+// self-tag and the ids of a 262,144-character blob hold) and one photo more, unmarked, which the browser pass marks to
+// read the refusal (tests/e2e/measure/passes.ts). The photos sit in the Memory itself, no Chapter. The set is written by
+// the client's own `saveItemFavorites` in one write — it seals, tags and cap-checks exactly as the heart does — and
+// read back by `loadItemFavorites`; the set one past the cap must be refused by that same code before any write, or
+// `cap` is not the cap and the browser pass could not see a refusal. The photo past the cap carries a capture time
+// newer than every other, so the newest-first gallery shows it first.
+
+const MARKS_MEMORY = 'Volume marks'
+const PAST_CAP_AT = Date.UTC(2026, 0, 1) // after every `captureAt(i)`, which ends in 2025
+
+async function ensureMemory(scope: OpenedScope, name: string): Promise<{ memoryId: string; key: Uint8Array; epoch: number; hash: string }> {
+  let tree = await listTree(scope.scopeId, scope.epochs)
+  let memory = childNamed(tree, null, MEMORY_KIND, name)
+  if (!memory) {
+    await createMemory(scope.scopeId, scope.epochs, name)
+    tree = await listTree(scope.scopeId, scope.epochs)
+    memory = childNamed(tree, null, MEMORY_KIND, name)!
+  }
+  return {
+    memoryId: memory.id,
+    key: nodeContentKey(scope.scopeId, scope.epochs, tree, memory.id)!,
+    epoch: memory.epoch,
+    hash: hashForNode(tree, memory.id, TENANT_SCOPE),
+  }
+}
+
+async function marks(cap: number, width: number): Promise<void> {
+  const a = accounts()
+  await signIn(a.owner)
+  const scope = await tenantScope()
+  const { memoryId, key, epoch, hash } = await ensureMemory(scope, MARKS_MEMORY)
+  // The key the gallery's heart seals under: the scope's base epoch (MemoryDetailHost.vue, itemFavorites.ts' header).
+  const scopeKey = keyAt(scope.epochs, 0)
+  const ids = async () => (await listMedia(scope.scopeId, memoryId)).map((m) => m.mediaId)
+  const own = async () => (await loadItemFavorites(scope.scopeId, memoryId, scopeKey)).find((m) => m.own)?.ids ?? new Set<string>()
+  const recorded = manifest().marks?.nodeId === memoryId ? manifest().marks : undefined
+  let pastCap = recorded?.pastCap ?? null
+
+  // 1 — `cap` photos besides the one past the cap.
+  let listed = await ids()
+  if (!pastCap && listed.length === cap + 1) {
+    // A run stopped between adding the photo past the cap and recording it: it is the one photo the full set lacks.
+    const mine = await own()
+    const unmarked = listed.filter((id) => !mine.has(id))
+    if (mine.size === cap && unmarked.length === 1) pastCap = unmarked[0]
+  }
+  const have = listed.filter((id) => id !== pastCap).length
+  console.log(`marks: '${MARKS_MEMORY}' holds ${listed.length}${pastCap ? ' (the photo past the cap among them)' : ''}, cap ${cap}`)
+  if (have > cap) die(`'${MARKS_MEMORY}' holds ${have} photos besides the one past the cap, more than the cap ${cap} — nothing removed`)
+  if (have < cap) {
+    const s = shapes('original')
+    const p = progress('marks', 'photos')
+    await pool(cap - have, width, async (k) => {
+      await addCopiedMedia(scope.scopeId, memoryId, key, photo(have + k, s, true), { nodeEpoch: epoch })
+      p.tick()
+    })
+    console.log(`marks: ${p.end()}`)
+    listed = await ids()
+  }
+  const toMark = listed.filter((id) => id !== pastCap)
+  if (toMark.length !== cap) die(`'${MARKS_MEMORY}' holds ${toMark.length} photos to mark, not the cap ${cap}`)
+
+  // 2 — the owner's set: every one of them, in one write by the client's own code.
+  let mine = await own()
+  if (mine.size !== cap || toMark.some((id) => !mine.has(id))) {
+    const started = Date.now()
+    await saveItemFavorites(scope.scopeId, memoryId, scopeKey, new Set(toMark))
+    console.log(`marks: ${cap} marks sealed and written in ${Date.now() - started} ms`)
+    mine = await own()
+  }
+  if (mine.size !== cap || toMark.some((id) => !mine.has(id))) die(`the owner's set reads back as ${mine.size} marks, not the ${cap} written`)
+
+  // 3 — one more is refused by that code before any write.
+  let refused = false
+  try {
+    await saveItemFavorites(scope.scopeId, memoryId, scopeKey, new Set([...toMark, crypto.randomUUID()]))
+  } catch (e) {
+    if (!(e instanceof ItemMarksTooMany)) throw e
+    refused = true
+  }
+  if (!refused) {
+    await saveItemFavorites(scope.scopeId, memoryId, scopeKey, new Set(toMark)) // the full set back
+    die(`the client wrote ${cap + 1} marks: ${cap} is not the cap, so the browser pass would see no refusal`)
+  }
+  if ((await own()).size !== cap) die('the refused set changed what the server holds: the refusal was not before the write')
+  console.log(`marks: ${cap + 1} marks refused by the client before any write (ItemMarksTooMany)`)
+
+  // 4 — the photo past the cap: unmarked, the newest of all.
+  if (!pastCap) {
+    const before = new Set(listed)
+    const source = photo(cap, shapes('original'), true)
+    await addCopiedMedia(scope.scopeId, memoryId, key, { ...source, meta: { ...source.meta, capturedAt: PAST_CAP_AT } }, { nodeEpoch: epoch })
+    const added = (await ids()).filter((id) => !before.has(id))
+    if (added.length !== 1) die(`adding the photo past the cap added ${added.length} photos`)
+    pastCap = added[0]
+  }
+  remember({ marks: { scopeId: scope.scopeId, nodeId: memoryId, hash, name: MARKS_MEMORY, marked: cap, pastCap } })
+  const now = await ids()
+  mine = await own()
+  if (now.length !== cap + 1 || mine.size !== cap || mine.has(pastCap) || !now.includes(pastCap)) {
+    die(`'${MARKS_MEMORY}' holds ${now.length} photos and the owner's set ${mine.size} marks; wanted ${cap + 1} and ${cap}, the photo past the cap unmarked`)
+  }
+  console.log(`marks: '${MARKS_MEMORY}' holds ${now.length} photos, the owner has marked ${mine.size}; the photo past the cap is ${pastCap}`)
+}
+
 // --- main -----------------------------------------------------------------------------------------------------------
 
 const { cmd, flags } = args()
@@ -448,7 +559,8 @@ try {
       break
     case 'members': await members(intFlag(flags, 'target')); break
     case 'upload': await upload(intFlag(flags, 'count')); break
-    default: die('usage: seed-volume.mts birth | photos --target N [--bare] | tree --target N | tree --wide N | members --target N | upload --count N')
+    case 'marks': await marks(intFlag(flags, 'cap'), flags.has('width') ? intFlag(flags, 'width') : 6); break
+    default: die('usage: seed-volume.mts birth | photos --target N [--bare] | tree --target N | tree --wide N | members --target N | upload --count N | marks --cap N')
   }
 } catch (e) {
   const response = (e as { response?: unknown } | null)?.response

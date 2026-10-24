@@ -13,7 +13,9 @@ import java.time.Duration
  * changes: [cap] is a day, so every tick still asks. A success starts over, and so does a change of the Server Owner's
  * setting (on or off, the source) — a source just pointed somewhere new is read at the next tick.
  *
- * In memory: a restart asks at its first tick, as the scheduler's first run after a start does anyway.
+ * In memory: a restart asks at its first tick, as the scheduler's first run after a start does anyway. So an app log
+ * that restarts the series at 5 s now and then is first read against the container's restarts: `measure_volume.py`
+ * restarts the app for each cold call, and the proof run of 2026-10-24 read its five restarts in 40 s as resets.
  */
 class ReleaseCheckBackoff(private val every: Duration, private val cap: Duration = Duration.ofDays(1)) {
     private var setting: Any? = null

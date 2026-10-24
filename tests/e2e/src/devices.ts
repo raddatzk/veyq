@@ -51,7 +51,7 @@ export const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Pas
 
 /**
  * The one answer of 400 or more that is no error (`signedOutBoot.json`, which scripts/profile_hot_paths.py reads too): a
- * document with no session asks `POST /api/token/refresh` once at its boot and is told 400 or 401 — the signed-out state.
+ * document with no session asks `POST /api/token/refresh` once at its boot and is told 401 — the signed-out state.
  */
 export const SIGNED_OUT_BOOT = JSON.parse(readFileSync(new URL('./signedOutBoot.json', import.meta.url), 'utf8')) as {
   method: string
@@ -76,7 +76,7 @@ function isSignedOutBoot(text: string, url: string): boolean {
  * out: the signed-out boot's refresh ([SIGNED_OUT_BOOT]; `src/web/src/app/sessionRefresh.ts` `rotateSession`), which
  * Chromium logs as a failed resource. A
  * scenario calls `clear()` after its sign-in too, so what it asserts is the console of the pages it reads, not of the
- * sign-in in front of them (lane L1, 2026-10-23: that 400 alone made memories-styles, memory-banner and depot-styles red).
+ * sign-in in front of them (lane L1, 2026-10-23: that answer alone, then a 400, made memories-styles, memory-banner and depot-styles red).
  */
 export interface ConsoleErrors {
   readonly errors: string[]

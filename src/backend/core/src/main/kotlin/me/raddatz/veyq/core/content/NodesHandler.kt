@@ -125,6 +125,9 @@ class NodesHandler(
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         parentEpoch: Int?,
     ): CreateNodeOutcome {
+        // The request's own shape first, as the boundary's validation is: a parent node without its `parentEpoch` is a
+        // 400 for anyone, before any answer about the instance's state (inbox #534; the contract's `dependentSchemas`).
+        if (namesAParentNodeWithoutItsEpoch(scopeId, parentSlotId, parentEpoch)) return CreateNodeOutcome.InvalidRequest
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
         // The member's create opens its own transaction: the loser of a concurrent create answers as its replay does.
@@ -270,7 +273,7 @@ class NodesHandler(
         wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?,
     ): UpdateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
-        malformed(placement, wrappedMeta, metaRevision, nodeEpoch)?.let { return it }
+        malformed(scopeId, placement, wrappedMeta, metaRevision, nodeEpoch)?.let { return it }
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
         return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))
@@ -278,14 +281,30 @@ class NodesHandler(
 
     /** [epochOptional]: only a bounded placement may leave the epoch out ([updateInScope]). */
     private fun malformed(
-        placement: PlacementRequest, wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?, epochOptional: Boolean = false,
+        scopeId: String, placement: PlacementRequest, wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?,
+        epochOptional: Boolean = false,
     ): UpdateNodeOutcome? = when {
         wrappedMeta != null && metaRevision == null -> UpdateNodeOutcome.MissingMetaRevision
         wrappedMeta != null && nodeEpoch == null -> UpdateNodeOutcome.IncompletePlacement
         placement.present && !(if (epochOptional) placement.completeWithoutEpoch else placement.complete) ->
             UpdateNodeOutcome.IncompletePlacement
+        namesAParentNodeWithoutItsEpoch(scopeId, placement.parentId, placement.parentEpoch) -> UpdateNodeOutcome.IncompletePlacement
         else -> null
     }
+
+    /**
+     * Whether a create or a placement names a parent node but not the epoch it read it at (ADR 0109 point 6) — a shape
+     * fault, so it is decided before anything is read: a missing, trashed or foreign parent, a scope the caller is no
+     * member of, would otherwise answer first, and a request the contract refuses (`dependentSchemas`, inbox #534) would
+     * read as one accepted and refused for the instance's state.
+     *
+     * `parentId == scopeId` is left out: it is the scope root's slot, which this server reads as the root
+     * ([NodesStore.parentSlot]) and which needs no `parentEpoch`. The contract names the root only by a null or absent
+     * `parentId`, so its rule covers this one form too; whether it is refused or kept as the root is the owner's open
+     * question of inbox #534, and until then this check does not change what it means.
+     */
+    private fun namesAParentNodeWithoutItsEpoch(scopeId: String, parentId: String?, parentEpoch: Int?): Boolean =
+        parentId != null && parentId != scopeId && parentEpoch == null
 
     /**
      * The principal-free half of [update]: everything after the caller's own gate (a member's [ScopeAccess], a guest's
@@ -314,7 +333,7 @@ class NodesHandler(
         scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
         wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?, editor: PrincipalKey, boundary: SubtreeBoundary? = null,
     ): UpdateNodeOutcome {
-        malformed(placement, wrappedMeta, metaRevision, nodeEpoch, epochOptional = boundary != null)?.let { return it }
+        malformed(scopeId, placement, wrappedMeta, metaRevision, nodeEpoch, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 

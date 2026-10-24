@@ -395,11 +395,31 @@ const bannerEditor = useBannerEditor({
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
- *  node's sealed meta, so they run only where the meta may be edited (`rights.editMeta`). */
-async function settle() {
-  if (!can.value.editMeta) return
-  await reconcileAuto()
-  await reconcileAutoLocation()
+ *  node's sealed meta, so they run only where the meta may be edited (`rights.editMeta`).
+ *  One settle at a time: an upload's last file both polls (`onFileDone`) and re-lists (`onComplete`), and each refresh
+ *  settles. Run side by side, both built their write on the same `metaRevision`, so the second was the server's
+ *  `409 stale_revision` (a console error) for a range the first had just written. A settle asked for while one runs runs
+ *  once after it, on the meta the first one patched in and on the list as it is then. */
+let settling: Promise<void> | null = null
+let settleAgain = false
+function settle(): Promise<void> {
+  if (settling) {
+    settleAgain = true
+    return settling
+  }
+  settling = (async () => {
+    try {
+      do {
+        settleAgain = false
+        if (!can.value.editMeta) return
+        await reconcileAuto()
+        await reconcileAutoLocation()
+      } while (settleAgain)
+    } finally {
+      settling = null
+    }
+  })()
+  return settling
 }
 
 // The Beiträge tab (the media organizer, MemoryBuckets.vue) — where a member creates sub-buckets and files their own

@@ -30,6 +30,7 @@ import {
 } from '../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { confineToInstance } from '../../src/egress'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -185,7 +186,7 @@ test(
     const download = await started
     expect(new URL(download.url()).pathname).toMatch(/^\/__download\/.+/)
     expect(await download.failure(), 'the browser marks the download failed').not.toBeNull()
-    await expect(page.getByText('The file could not be downloaded. Please try again.')).toBeVisible()
+    await expect(toast(page, 'The file could not be downloaded. Please try again.')).toBeVisible()
     expect(fetched, 'the store was reached, then cut off').toBeGreaterThan(6)
     await page.unrouteAll({ behavior: 'wait' })
   },

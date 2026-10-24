@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { recordTyped } from '../../src/canaries'
 import { createFolder, downloadButton, pickFiles, sha256 } from '../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -145,7 +146,7 @@ test(
     const ask = question(page, 'moves to the trash')
     await ask.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(downloadButton(page, name)).toHaveCount(0)
-    await expect(page.getByText(`“${name}” moved to the trash.`)).toBeVisible()
+    await expect(toast(page, `“${name}” moved to the trash.`)).toBeVisible()
     await page.getByRole('button', { name: 'Undo', exact: true }).click()
     await expect(downloadButton(page, name)).toBeVisible({ timeout: 60_000 })
 

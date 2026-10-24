@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { createFolder, downloadButton, pickFiles, sha256 } from '../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -214,16 +215,19 @@ async function openSpace(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
 }
 
-/** A row of the open level, opened by its name. */
-async function openRow(page: Page, name: string): Promise<void> {
+/**
+ * A row of the open level, opened by its name, and the heading it opens on: a node's own page (a Memory) names it at
+ * `h1`, a folder's header inside the level view at `h2` (`NodeHeader`'s `level`).
+ */
+async function openRow(page: Page, name: string, opens: 'memory' | 'folder'): Promise<void> {
   await page.getByRole('button', { name, exact: true }).click({ timeout: 60_000 })
-  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+  await expect(page.getByRole('heading', { level: opens === 'memory' ? 1 : 2, name })).toBeVisible()
 }
 
 /** A folder of the space's top level, read fresh: a new document. */
 async function openTopFolder(page: Page, name: string): Promise<void> {
   await openSpace(page)
-  await openRow(page, name)
+  await openRow(page, name, 'folder')
 }
 
 /**
@@ -283,7 +287,7 @@ async function downloadAsZip(page: Page, name: string, summary: RegExp): Promise
   expect(download.suggestedFilename(), 'the saved file is named after the node').toBe(`${name}.zip`)
   expect(await download.failure()).toBeNull()
   const zip = readFileSync(await download.path())
-  await expect(page.getByText('Download saved', { exact: true })).toBeVisible({ timeout: 60_000 })
+  await expect(toast(page, 'Download saved')).toBeVisible({ timeout: 60_000 })
   await expect(dialog).toBeHidden()
   return zip
 }
@@ -387,7 +391,7 @@ test(
     await create.getByLabel('Name').fill(recordTyped(memoryName))
     await create.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(create).toBeHidden()
-    await openRow(page, memoryName)
+    await openRow(page, memoryName, 'memory')
 
     const chooser = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: 'Upload', exact: true }).click()
@@ -463,12 +467,12 @@ test(
     await expect(dialog.getByRole('button', { name: 'Upload as a file', exact: true })).toBeVisible()
     await expect(dialog.getByText('You become the owner of everything imported.', { exact: false })).toBeVisible()
     await dialog.getByRole('button', { name: 'Import', exact: true }).click()
-    await expect(page.getByText(`Imported “${memoryName}”`, { exact: true })).toBeVisible({ timeout: 90_000 })
+    await expect(toast(page, `Imported “${memoryName}”`)).toBeVisible({ timeout: 90_000 })
     await expect(dialog).toBeHidden()
 
     // A new document: the imported Memory as the server serves it.
     await openTopFolder(page, memoryTarget)
-    await openRow(page, memoryName)
+    await openRow(page, memoryName, 'memory')
     await expect(page.getByText('2 items', { exact: true })).toBeVisible({ timeout: 60_000 })
     await expectCoverShown(page)
     const after = await photosAsShown(page)
@@ -533,7 +537,7 @@ test(
     await expect(dialog.getByTestId('import-summary')).toHaveText(importSummary(tree, 7, treeTarget), { timeout: 60_000 })
     await recordProgress(page)
     await dialog.getByRole('button', { name: 'Import', exact: true }).click()
-    await expect(page.getByText(`Imported “${tree}”`, { exact: true })).toBeVisible({ timeout: 90_000 })
+    await expect(toast(page, `Imported “${tree}”`)).toBeVisible({ timeout: 90_000 })
     await expect(dialog).toBeHidden()
     const { values, statuses } = await progressOf(page, 'import-dialog')
     expectProgressMoved(values, 'the import')
@@ -541,9 +545,9 @@ test(
 
     // The imported tree, read back by downloading it again: the same entries, the same bytes, the same manifest tree.
     await openTopFolder(page, treeTarget)
-    await openRow(page, tree)
-    await openRow(page, sub)
-    await openRow(page, subsub)
+    await openRow(page, tree, 'folder')
+    await openRow(page, sub, 'folder')
+    await openRow(page, subsub, 'folder')
     await expect(downloadButton(page, treeFiles.deepest.name)).toBeEnabled({ timeout: 60_000 })
     await withoutPicker(page)
     const started = page.waitForEvent('download')

@@ -26,6 +26,8 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
     measure_volume.py --instance DIR stage <axis> <N>              seed to N, then the server and the browser leg
     measure_volume.py --instance DIR sample --seconds S            the sampler alone
     measure_volume.py --instance DIR oom-bite                      the sampler's bite: a tiny memory limit, live
+    measure_volume.py --instance DIR pass marks [--cap 12284]      #500: the mark set seeded to its cap, then marked past it
+    measure_volume.py --instance DIR pass trust-reset [--min-pins N]  #491: the owner's pin store corrupted, then reset
     measure_volume.py --instance DIR status | teardown
     measure_volume.py judge <readings dir>                         Q1's rule over one stage's readings
 
@@ -47,6 +49,7 @@ in the Node client on this host: they include TLS and the loopback, not a real n
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -169,6 +172,13 @@ class Instance:
         out = self.docker("exec", self.container("mariadb"), "sh", "-c",
                           "mariadb -uroot -p\"$MARIADB_ROOT_PASSWORD\" -N -B -e \"SHOW GLOBAL STATUS LIKE 'Com_select'\"").stdout
         return int(out.split()[-1])
+
+    def sql(self, statements: str) -> list[list[str]]:
+        """SQL as root on the recipe's database, handed over on stdin with the container's own root password (neither
+        on this host's argv); the rows of every result, tab-split, no header."""
+        out = self.docker("exec", "-i", self.container("mariadb"), "sh", "-c",
+                          'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -N -B veyq', input=statements).stdout
+        return [line.split("\t") for line in out.splitlines() if line.strip()]
 
     def setup_status(self) -> int:
         """GET https://<domain>/api/setup over the pinned connection, trusting the run's Pebble root only."""
@@ -676,25 +686,114 @@ def server_leg(inst: Instance, axis: str, out: Path, calls: int = 5) -> dict:
 # ---------------------------------------------------------------- the browser leg
 
 
-def browser_leg(inst: Instance, spec: dict, out: Path) -> dict:
-    """tests/e2e/measure/volume.ts in the overlay's Playwright container, on the run's own networks and the outside cores.
-    `spec` is what the test reads (/out/browser-spec.json); it writes /out/browser-result.json."""
-    result = inst.dir / "browser-result.json"
+def playwright(inst: Instance, config: str, spec: dict, spec_name: str, result_name: str) -> tuple[int, dict]:
+    """A config under tests/e2e/measure/ in the overlay's Playwright container, on the run's own networks and the outside
+    cores. `spec` is what the test reads (/out/<spec_name>); it writes /out/<result_name>, which is returned."""
+    result = inst.dir / result_name
     if result.exists():
         result.unlink()
-    (inst.dir / "browser-spec.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
+    (inst.dir / spec_name).write_text(json.dumps(spec, indent=2), encoding="utf-8")
     name = f"veyq-vol-browser-{os.getpid()}-{int(time.time())}"
-    cmd = [*inst.compose, "--profile", "browser", "run", "--rm", "--name", name, "browser", "-c", "measure/playwright.config.ts"]
+    cmd = [*inst.compose, "--profile", "browser", "run", "--rm", "--name", name, "browser", "-c", config]
     try:
         status = subprocess.run(cmd, cwd=inst.dir, env=name_only_env()).returncode
     finally:  # a stopped driver must not leave a browser polling the instance (it would void the next reading)
         inst.docker("rm", "-f", name, check=False)
     if not result.is_file():
-        raise Refused(f"the browser leg wrote no result (playwright exited {status})")
-    reading = json.loads(result.read_text(encoding="utf-8"))
+        raise Refused(f"the browser wrote no {result_name} (playwright exited {status})")
+    return status, json.loads(result.read_text(encoding="utf-8"))
+
+
+def browser_leg(inst: Instance, spec: dict, out: Path) -> dict:
+    """tests/e2e/measure/volume.ts: what a big list costs the device that opens it."""
+    status, reading = playwright(inst, "measure/playwright.config.ts", spec, "browser-spec.json", "browser-result.json")
     reading["playwrightExit"] = status
     (out / f"browser-{spec['label']}.json").write_text(json.dumps(reading, indent=2), encoding="utf-8")
     return reading
+
+
+# ---------------------------------------------------------------- the heavy stage's passes (tests/e2e/measure/passes.ts)
+
+
+def owner_account(inst: Instance) -> dict:
+    accounts = json.loads((inst.dir / "accounts.json").read_text(encoding="utf-8"))
+    return accounts["owner"]
+
+
+def marks_pass(inst: Instance, cap: int, out: Path) -> bool:
+    """Inbox #500: the owner's mark set for one Memory seeded to `cap` by the client's own code, one photo more past it;
+    then an English and a German device mark that photo and must read the refusal, with no write leaving the page."""
+    if seed(inst, ["marks", "--cap", str(cap)]) != 0:
+        raise Refused("the marks seeder did not reach its cap")
+    place = json.loads((inst.dir / "manifest.json").read_text(encoding="utf-8"))["marks"]
+    owner = owner_account(inst)
+    spec = {"pass": "marks-cap", "domain": DOMAIN, "hash": place["hash"], "pastCap": place["pastCap"],
+            "marked": place["marked"], "account": {k: owner[k] for k in ("email", "password", "secretKey")}}
+    status, seen = playwright(inst, "measure/passes.config.ts", spec, "pass-spec.json", "pass-result.json")
+    verdict = {"pass": "marks-cap", "cap": cap, "memory": place["nodeId"], "pastCap": place["pastCap"],
+               "playwrightExit": status, "browser": seen, "green": status == 0 and seen.get("ok") is True}
+    (out / "pass-marks-cap.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+    say(json.dumps(verdict, indent=2))
+    return verdict["green"]
+
+
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+B64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+
+
+def pin_store(inst: Instance, account_id: str) -> dict:
+    """The account's pin store as the database holds it: the head's revision and blob, and how many entries."""
+    rows = inst.sql(f"SELECT revision, COALESCE(sealed_blob, '') FROM veyq_identity_pins WHERE account_id = '{account_id}';\n"
+                    f"SELECT COUNT(*) FROM veyq_identity_pin_entry WHERE account_id = '{account_id}';\n")
+    if len(rows) != 2:
+        raise Refused(f"no pin-store head for account {account_id} (rows: {rows})")
+    return {"revision": int(rows[0][0]), "blob": rows[0][1] if len(rows[0]) > 1 else "", "entries": int(rows[1][0])}
+
+
+def trust_reset_pass(inst: Instance, min_pins: int, out: Path) -> bool:
+    """Inbox #491: a trust reset leaves an empty store. The owner's sealed head gets one byte flipped in the database —
+    the stored object itself, so every device the server serves it to refuses it as unreadable, and its revision stays
+    the store's compare-and-set counter. A fresh device then starts the list over in Settings (passes.ts), and the
+    database must hold a new head one revision on and no entry at all."""
+    owner = owner_account(inst)
+    account_id = str(owner.get("userId") or "")
+    if not UUID.match(account_id):
+        raise Refused(f"accounts.json names no owner userId ({account_id!r}) — the instance was not born by `seed birth`")
+    before = pin_store(inst, account_id)
+    if before["entries"] < min_pins or not B64.match(before["blob"] or "-"):
+        raise Refused(f"the owner's store holds {before['entries']} entries (at least {min_pins} wanted) and a head of "
+                      f"{len(before['blob'])} characters — seed members first (`seed members --target N`)")
+    # A pass that stopped after the flip left the head flipped: flipping the same byte again would mend it.
+    marker = inst.dir / "trust-reset-flipped.json"
+    left = json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else {}
+    if left.get("blob") == before["blob"] and left.get("revision") == before["revision"]:
+        flipped = before["blob"]
+        say(f"trust-reset: the owner's head is still the one a stopped pass flipped (revision {before['revision']})")
+    else:
+        raw = bytearray(base64.b64decode(before["blob"]))
+        raw[len(raw) // 2] ^= 0x01  # inside the AEAD's ciphertext: the head no longer opens
+        flipped = base64.b64encode(bytes(raw)).decode("ascii")
+        changed = inst.sql(f"UPDATE veyq_identity_pins SET sealed_blob = '{flipped}' WHERE account_id = '{account_id}' "
+                           f"AND revision = {before['revision']} AND sealed_blob = '{before['blob']}';\nSELECT ROW_COUNT();\n")
+        if changed != [["1"]]:
+            raise Refused(f"the corruption changed {changed} rows, not one")
+        marker.write_text(json.dumps({"revision": before["revision"], "blob": flipped}), encoding="utf-8")
+        say(f"trust-reset: flipped byte {len(raw) // 2} of the owner's head (revision {before['revision']}, "
+            f"{before['entries']} entries)")
+    spec = {"pass": "trust-reset", "domain": DOMAIN, "account": {k: owner[k] for k in ("email", "password", "secretKey")}}
+    status, seen = playwright(inst, "measure/passes.config.ts", spec, "pass-spec.json", "pass-result.json")
+    after = pin_store(inst, account_id)
+    store = {
+        "revisionMovedByOne": after["revision"] == before["revision"] + 1,
+        "noEntryLeft": after["entries"] == 0,
+        "newHead": after["blob"] not in ("", flipped, before["blob"]),
+    }
+    verdict = {"pass": "trust-reset", "account": account_id, "before": {k: before[k] for k in ("revision", "entries")},
+               "after": {k: after[k] for k in ("revision", "entries")}, "store": store, "playwrightExit": status,
+               "browser": seen, "green": status == 0 and seen.get("ok") is True and all(store.values())}
+    (out / "pass-trust-reset.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+    say(json.dumps(verdict, indent=2))
+    return verdict["green"]
 
 
 def specs(inst: Instance, axis: str, items: int, runs: int, throttles: list[int], stall: int) -> list[dict]:
@@ -981,6 +1080,10 @@ def main() -> int:
     st.add_argument("--patience", type=float, default=60, help="minutes to wait for a quiet host")
     st.add_argument("--no-browser", action="store_true")
     sub.add_parser("oom-bite")
+    ps = sub.add_parser("pass", help="a heavy-stage browser pass, tests/e2e/measure/passes.ts")
+    ps.add_argument("name", choices=("marks", "trust-reset"))
+    ps.add_argument("--cap", type=int, default=12284, help="marks: the marks one set holds (ADR 0068 § 4)")
+    ps.add_argument("--min-pins", type=int, default=1, help="trust-reset: the entries the owner's store must hold first")
     sm = sub.add_parser("sample")
     sm.add_argument("--seconds", type=int, required=True)
     j = sub.add_parser("judge")
@@ -1046,6 +1149,12 @@ def main() -> int:
                 stage(inst, args.axis, args.n, args.max_load, args.patience, not args.no_browser)
             elif args.cmd == "oom-bite":
                 return 0 if oom_bite(inst) else 1
+            elif args.cmd == "pass":
+                out = readings_dir(f"pass-{args.name}")
+                green = (marks_pass(inst, args.cap, out) if args.name == "marks"
+                         else trust_reset_pass(inst, args.min_pins, out))
+                say(f"pass {args.name}: {'GREEN' if green else 'RED'}; readings in {out}")
+                return 0 if green else 1
             elif args.cmd == "sample":
                 out = readings_dir("sample")
                 sampler = Sampler(inst, out, local=not prefix).start()

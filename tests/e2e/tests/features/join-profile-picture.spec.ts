@@ -27,6 +27,7 @@ import { recordTyped } from '../../src/canaries'
 import { instance, newDevice, passwordField, type Device } from '../../src/devices'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -257,7 +258,7 @@ test(
     await page.getByRole('switch', { name: /^Use STARTTLS/ }).uncheck()
     await page.getByRole('switch', { name: /^Send invitations by email/ }).check()
     await page.getByRole('button', { name: 'Save email settings' }).click()
-    await expect(page.getByText('Email settings saved.')).toBeVisible()
+    await expect(toast(page, 'Email settings saved.')).toBeVisible()
     await expect(page.getByText('Ready to send email — new member invitations will be emailed from your server.')).toBeVisible()
 
     const fresh = freshOwner(`e2e.${stack().domain}`)

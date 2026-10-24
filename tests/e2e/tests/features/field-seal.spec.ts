@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { toast } from '../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -306,7 +307,7 @@ test(
     await dialog.getByTestId('profile-picture-use').click()
     await expect(page.getByText('New picture — saved with your profile.')).toBeVisible()
     await page.getByRole('button', { name: 'Save profile' }).click()
-    await expect(page.getByText('Profile updated.')).toBeVisible()
+    await expect(toast(page, 'Profile updated.')).toBeVisible()
 
     for (const device of [writer, second]) {
       const on = device.page
