@@ -16,6 +16,7 @@ import { recordTyped } from '../../src/canaries'
 import { awaitMails } from '../../src/mail'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { stack } from '../../src/stack'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -90,7 +91,7 @@ test(
     await expect(page.getByRole('button', { name: `Open ${fileName}`, exact: true })).toBeVisible({ timeout: 60_000 })
 
     // A view-only link on the folder, for the guest.
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     const share = page.getByRole('dialog', { name: 'Share this folder' })
     await share.getByRole('button', { name: 'New share' }).click()
     const createShare = page.getByRole('dialog', { name: 'New share' })

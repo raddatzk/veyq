@@ -1,9 +1,8 @@
 # ADR 0110 — A node header shows its actions by priority, as many as fit, and the rest in one menu
 
 - Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23);
-  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) are built by
-  `changes/cr-node-header-layout-by-fit.md` — until it lands, a 540 px viewport query places the actions and a 460 px
-  container query sizes the Memory's cover (§ Context, last paragraph).
+  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) built by cr-node-header-layout-by-fit
+  (2026-10-24).
 - Date: 2026-10-23
 
 ## Context

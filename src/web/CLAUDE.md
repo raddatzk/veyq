@@ -183,14 +183,20 @@ here; the server is blind.
   `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
   **One header for every node (inbox #406, [ADR 0110](../../docs/decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
   Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button) beside the title (the page's one `h1`,
-  a folder's level view included — styleguide § Heading levels; two lines at most, the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions — at the right
-  end of the title row, on a phone (≤540 px) in a row of their own. The application only feeds data: its action list
+  a folder's level view included, and a space's top level is headed by the space's name, `LevelView`'s `spaceName` — styleguide § Heading levels; the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions. **Two layouts,
+  picked by the header's own width** (`headerLayout`, `core/node/nodeHeader.ts`; no viewport query): **wide** while the leading visual's wide width,
+  the name's minimum (12rem), the floor's two buttons and the ⋯ fit in one row — the name ONE line at its natural width, the actions at the right end
+  of its row, yielding to the ⋯ down to the kind's first two shown actions (`headerFloor`), only then the name shortened with "…" — else **compact**
+  (`.is-compact`; the leading slot gets `compact`): a 64 px cover beside a name of two lines at most, the actions in a row of their own. The answer
+  reads sizes no layout changes — the leading visual's registered `--veyq-node-header-leading-wide` (core's icon tile and cover, Memories' cover set
+  it; core reads the number, never imports the application), `--veyq-node-header-name-min`, the column gaps — never the name or the layout in force,
+  so it cannot flip. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
   `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
   (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four; and its kind's priority, `order` (the
   ids first as buttons, core's included; an unlisted one follows, never vanishes). **As many as fit are buttons, the rest one ⋯ menu:** core
-  measures the row (on mount and on each resize, `fitHeaderActions` the pure count; unmeasured, as in every unit test, each action that may be a
-  button is one) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
+  measures the row (on mount, on each resize of the header or the name, `fitHeaderActions` the pure count; unmeasured, as in every unit test, the
+  header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
   a separator, into one `VeyqMenu` (`actionMenuItems`, `core/node/actionMenu.ts`, the entries the level rows share). Delete and report are never
   buttons. Core owns the look, the fit, the keyboard (real labelled buttons, the layer's menu) and the dark mode (tokens). Tests reach the two
   halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). Core's

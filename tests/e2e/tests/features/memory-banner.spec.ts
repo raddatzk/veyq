@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../src/devices'
+import { expectHeaderAction, headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -134,7 +135,7 @@ test(
   async () => {
     const { page } = member
     await page.setViewportSize({ width: 1400, height: 900 })
-    await page.getByRole('button', { name: 'Add banner', exact: true }).click()
+    await headerAction(page, 'Add banner')
     const dialog = bannerDialog(page)
     const chooser = page.waitForEvent('filechooser')
     await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
@@ -193,7 +194,7 @@ function watchSave(page: Page) {
 test('the gallery\'s portrait photo, uploaded again, shares its preview, fits with blurred sides, and switches to fill', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] }, async () => {
   const { page } = member
   await expect(page.getByRole('button', { name: 'Use as banner' }), 'the gallery offers no way in').toHaveCount(0)
-  await page.getByRole('button', { name: 'Change banner', exact: true }).click()
+  await headerAction(page, 'Change banner')
   const dialog = bannerDialog(page)
   const chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
@@ -207,7 +208,7 @@ test('the gallery\'s portrait photo, uploaded again, shares its preview, fits wi
   expect(save.writes.join(' '), 'the banner is a row on the stored object').toContain('"shared"')
   await expect(banner(page).locator('.banner-frame-backdrop')).toHaveAttribute('aria-hidden', 'true')
 
-  await page.getByRole('button', { name: 'Change banner', exact: true }).click()
+  await headerAction(page, 'Change banner')
   await bannerDialog(page).getByRole('button', { name: 'Fill' }).click()
   await bannerDialog(page).getByRole('button', { name: 'Save banner' }).click()
   await expect(bannerDialog(page)).toBeHidden({ timeout: 60_000 })
@@ -226,7 +227,7 @@ test(
     const media = ((await (await listing).json()) as { media: { blobId: string; derivatives: unknown[] }[] }).media
     const originals = new Set(media.map((m) => m.blobId))
 
-    await page.getByRole('button', { name: 'Change banner', exact: true }).click({ timeout: 60_000 })
+    await headerAction(page, 'Change banner', { timeout: 60_000 })
     const chooser = page.waitForEvent('filechooser')
     await bannerDialog(page).getByRole('button', { name: 'Choose an image or a video' }).click()
     await (await chooser).setFiles({ name: `Wellen ${stamp}.webm`, mimeType: 'video/webm', buffer: VIDEO })
@@ -265,7 +266,7 @@ test(
   { tag: ['@uc.memory.banner:members-only-write-guests-see'] },
   async () => {
     const { page } = member
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     const manage = page.getByRole('dialog', { name: 'Share this Memory' })
     await manage.getByRole('button', { name: 'New share' }).click()
     const createShare = page.getByRole('dialog', { name: 'New share' })
@@ -297,9 +298,9 @@ test(
 
 test('the banner is removed', { tag: ['@uc.memory.banner:one-write-for-slots-and-meta'] }, async () => {
   const { page } = member
-  await page.getByRole('button', { name: 'Change banner', exact: true }).click()
+  await headerAction(page, 'Change banner')
   await bannerDialog(page).getByRole('button', { name: 'Remove banner' }).click()
   await expect(bannerDialog(page)).toBeHidden({ timeout: 60_000 })
   await expect(banner(page)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Add banner', exact: true })).toBeVisible()
+  await expectHeaderAction(page, 'Add banner')
 })

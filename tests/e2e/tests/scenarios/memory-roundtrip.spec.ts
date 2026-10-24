@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { confineToInstance, type Confinement } from '../../src/egress'
 import { stack } from '../../src/stack'
+import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -130,7 +131,7 @@ test(
   { tag: '@uc.sharing.share-public-viewer:create-public-share' },
   async () => {
     const { page } = device
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await headerAction(page, 'Share')
     const manage = page.getByRole('dialog', { name: 'Share this Memory' })
     await manage.getByRole('button', { name: 'New share' }).click()
     const create = page.getByRole('dialog', { name: 'New share' })

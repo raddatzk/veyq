@@ -4,6 +4,7 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { recordTyped } from './canaries'
+import { headerAction } from './header'
 
 export const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
@@ -34,7 +35,7 @@ export const downloadButton = (page: Page, name: string) => page.getByRole('butt
 
 /** A link on the open folder: `View only` or `View + contribute`. Returns the link the dialog shows. */
 export async function shareOpenFolder(page: Page, label: string, role: 'View only' | 'View + contribute'): Promise<string> {
-  await page.getByRole('button', { name: 'Share', exact: true }).click()
+  await headerAction(page, 'Share')
   const share = page.getByRole('dialog', { name: 'Share this folder' })
   await share.getByRole('button', { name: 'New share' }).click()
   const create = page.getByRole('dialog', { name: 'New share' })
