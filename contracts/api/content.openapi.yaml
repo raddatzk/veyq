@@ -778,6 +778,16 @@ components:
     CreateNodeRequest:
       type: object
       required: [nodeId, kind, encryptedName, slugToken, wrappedContentKey]
+      # A create under a node states the epoch it read the parent at (ADR 0109 point 6; NodesHandler's shape check,
+      # inbox #534). `parentId`'s null is the scope root, which brings none, so only a string one brings it — hence
+      # `dependentSchemas`, not `dependentRequired` (which would fire on a null too), and `parentEpoch`'s own null
+      # counts as absent. The generators ignore the keyword (UpdateNodeRequest's note); Schemathesis reads it.
+      dependentSchemas:
+        parentId:
+          if: { properties: { parentId: { type: string } } }
+          then:
+            required: [parentEpoch]
+            properties: { parentEpoch: { type: integer } }
       properties:
         nodeId:
           x-veyq-visibility: id
@@ -850,9 +860,9 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            With `parentId`: the parent's epoch as the caller read it (`NodeSummary.epoch`) — the epoch of the key the
-            entry is sealed under (ADR 0109 point 6). Below the parent's stored epoch is `409 stale_epoch`; a parent not
-            re-keyed since the last rotation is `409 node_rekey_pending`.
+            Required with a non-null `parentId` (else `400 invalid_request`): the parent's epoch as the caller read it
+            (`NodeSummary.epoch`) — the epoch of the key the entry is sealed under (ADR 0109 point 6). Below the parent's
+            stored epoch is `409 stale_epoch`; a parent not re-keyed since the last rotation is `409 node_rekey_pending`.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
@@ -863,11 +873,13 @@ components:
         Partial update — a placement write (move or rename: `parentId`, `wrappedContentKey`, `encryptedName`,
         `slugToken`, `epoch`, `placementRevision`, all together), a reorder (`orderIndex`), a payload re-seal
         (`wrappedMeta` + `metaRevision`). Omitted fields are unchanged. The two groups are the schema's own rules
-        (inbox #507): any field of a placement — or a `parentId` that is not null — brings the other five with it, and a
-        `wrappedMeta` that is not null brings its `metaRevision` and its `nodeEpoch` (ADR 0109 point 6); a body short of
-        either is `400 invalid_request`.
+        (inbox #507): any field of a placement — or a `parentId` that is not null — brings the other five with it, a
+        `parentId` that is not null brings its `parentEpoch` too (inbox #534), and a `wrappedMeta` that is not null
+        brings its `metaRevision` and its `nodeEpoch` (ADR 0109 point 6); a body short of any is `400 invalid_request`,
+        decided before any answer about the instance's state.
       # A placement comes whole (NodesHandler.PlacementRequest.complete). `parentId` is not a key here: its null is the
-      # scope root and is sent alone by nobody, so only a non-null one brings the rest (dependentSchemas below). The
+      # scope root and is sent alone by nobody, so only a non-null one brings the rest (dependentSchemas below), and
+      # its `parentEpoch` (NodesHandler.namesAParentNodeWithoutItsEpoch, which runs before the access check). The
       # generators ignore both keywords (measured on openapi-generator 7.23.0: the Kotlin and TypeScript models are
       # the same as without them — a top-level `if` would not be: it turns a sibling-annotated `$ref` to the schema
       # into `Any`); Schemathesis reads them.
@@ -880,7 +892,10 @@ components:
       dependentSchemas:
         parentId:
           if: { properties: { parentId: { type: string } } }
-          then: { required: [encryptedName, slugToken, wrappedContentKey, epoch, placementRevision] }
+          # parentEpoch: the entry is sealed under the destination parent's key; its null counts as absent
+          then:
+            required: [encryptedName, slugToken, wrappedContentKey, epoch, placementRevision, parentEpoch]
+            properties: { parentEpoch: { type: integer } }
         wrappedMeta:
           if: { properties: { wrappedMeta: { type: string } } }
           # nodeEpoch: the payload is sealed under the node's own key (NodesHandler.malformed)
@@ -982,9 +997,9 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            Placement write to a parent node (`parentId` not null): the destination parent's epoch as the caller read
-            it — the entry is sealed under that parent's key (ADR 0109 point 6). Below its stored epoch is `409
-            stale_epoch`; a parent not re-keyed yet is `409 node_rekey_pending`.
+            Required with a non-null `parentId` (else `400 invalid_request`): the destination parent's epoch as the
+            caller read it — the entry is sealed under that parent's key (ADR 0109 point 6). Below its stored epoch is
+            `409 stale_epoch`; a parent not re-keyed yet is `409 node_rekey_pending`.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
