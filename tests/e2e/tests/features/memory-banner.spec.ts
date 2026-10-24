@@ -64,16 +64,26 @@ const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i 
 /**
  * Scroll the page 1,200 px down with the tab row's block tall enough to stick in. Three items fill one gallery row, so
  * the page scrolls about 18 px of its own and the row would never reach its sticky offset: the row's containing block
- * (`.memory-tabs`, the row's parent) is made three viewports tall for the read, and the style is removed by the returned
- * function. The scroll is asserted, so a page that did not move cannot pass as a row that stuck.
+ * (`.memory-tabs`, the row's parent) is made three viewports tall for the read, and the returned function puts its
+ * `min-height` back and scrolls to the top, so the next test meets the page as the product draws it.
+ *
+ * Through the CSSOM (`element.style`), never a `<style>` element: the instance's CSP has no `'unsafe-inline'` in
+ * `style-src`, so an injected `<style>` (`page.addStyleTag`) is refused and the row never had a block to stick in; the
+ * CSSOM is not governed by `style-src` (`src/web/src/shared/security/csp.ts`, which Vue's `:style` relies on too). The
+ * scroll is asserted, so a page that did not move cannot pass as a row that stuck.
  */
 async function scrollPastTheBanner(page: Page): Promise<() => Promise<void>> {
-  const style = await page.addStyleTag({ content: '.memory-tabs { min-height: 300vh }' })
+  const tabs = page.locator('.memory-tabs')
+  const before = await tabs.evaluate((e: HTMLElement) => {
+    const was = e.style.minHeight
+    e.style.minHeight = '300vh'
+    return was
+  })
   await page.evaluate(() => window.scrollTo(0, 1200))
   expect(await page.evaluate(() => window.scrollY), 'the page scrolled past the banner').toBeGreaterThan(1000)
   return async () => {
     await page.evaluate(() => window.scrollTo(0, 0))
-    await style.evaluate((e) => (e as Element).remove())
+    await tabs.evaluate((e: HTMLElement, was: string) => void (e.style.minHeight = was), before)
   }
 }
 

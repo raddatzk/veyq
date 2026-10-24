@@ -135,7 +135,7 @@ const heading = computed(() => (props.name ? t('memory.people.withName', { name:
     </div>
     <template v-else>
       <p v-if="rows.length === 0" class="person-memories-state" data-testid="person-memories-empty">{{ t('memory.people.empty') }}</p>
-      <SpaceMap v-else-if="mode === 'map'" :pins="pins" :covers="coverStore.covers.value" @open="onPinOpen" />
+      <SpaceMap v-else-if="mode === 'map'" :pins="pins" :covers="coverStore.covers.value" :heading-level="3" @open="onPinOpen" />
       <ul v-else class="person-memories-list veyq-level-list" :class="{ 'is-list': mode === 'list' }" data-testid="person-memories-list">
         <LevelRowItem v-for="r in rows" :key="r.m.ref" :row="r.row" :mode="itemMode" kind="MEMORY" />
       </ul>

@@ -25,7 +25,12 @@ import { createIconElement } from '../../../shared/ui/iconElement'
 // `covers` maps a node id → the node's chosen cover (a decrypted thumbnail URL + its crop, loaded by the host,
 // cr-0072); a pin with one shows that cropped cover via the shared `coverImageStyle` formula, the rest fall back to
 // the placeholder. Read-only here — the host owns the URLs' lifecycle.
-const props = defineProps<{ pins: LocatedPin[]; covers?: Map<string, LoadedCover> }>()
+// `headingLevel` is the level of the opt-in's and the empty state's heading: one below the head the map sits under, a
+// folder's `h1` in the level view (so `h2`) or the `h2` of a person's Memories (so `h3`).
+const props = withDefaults(defineProps<{ pins: LocatedPin[]; covers?: Map<string, LoadedCover>; headingLevel?: 2 | 3 }>(), {
+  covers: undefined,
+  headingLevel: 2,
+})
 const emit = defineEmits<{ open: [nodeId: string] }>()
 
 const { t, locale } = useI18n()
@@ -290,7 +295,7 @@ function enableMaps() {
     </div>
     <div v-else-if="!mapsAvailable" class="space-map-panel">
       <VeyqIcon name="map" class="space-map-panel-icon" />
-      <h3>{{ t('memory.place.consentTitle') }}</h3>
+      <component :is="`h${headingLevel}`" class="space-map-panel-title">{{ t('memory.place.consentTitle') }}</component>
       <p>{{ t('memory.place.consentBody') }}</p>
       <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
     </div>
@@ -298,7 +303,7 @@ function enableMaps() {
     <!-- consented but nothing located in this subtree yet -->
     <div v-else-if="pins.length === 0" class="space-map-panel">
       <VeyqIcon name="map-marker" class="space-map-panel-icon" />
-      <h3>{{ t('memory.map.empty') }}</h3>
+      <component :is="`h${headingLevel}`" class="space-map-panel-title">{{ t('memory.map.empty') }}</component>
       <p>{{ t('memory.map.emptyHint') }}</p>
     </div>
 
@@ -328,7 +333,7 @@ function enableMaps() {
   background: var(--app-control-bg);
   color: var(--app-muted);
 }
-.space-map-panel h3 {
+.space-map-panel-title {
   margin: 0;
   color: var(--app-text);
   font-size: 1.05rem;

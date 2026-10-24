@@ -599,7 +599,7 @@ watch(
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
-    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions" :core-actions="coreActions" :order="MEMORY_HEADER_ORDER">
+    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :actions="headerActions" :core-actions="coreActions" :order="MEMORY_HEADER_ORDER">
       <template #leading>
         <button
           type="button"
