@@ -34,10 +34,20 @@ import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION } from './capabilityTags'
 import { registry } from '../../core/applications/registry'
 import { memoriesLifecycle } from '../memories/lifecycle'
+import { MEMORY_KIND } from '../memories/kinds'
+import { rekeyMemoryContent } from '../memories/rekey'
 
 // A node-environment file is given no registry (`src/test/setup.ts`), and `rotateKeys` fails closed without a registered
 // `onMasterKeyRotated`; register the real Memories lifecycle, as the other node suites that rotate do (inbox #340).
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+// The worker's re-key (ADR 0109 point 7) fails closed too, on a kind nobody registered (`rekeyScope`: "no application
+// re-keys a node of kind MEMORY"), and this suite's group holds Memories once the covering rotation runs: register the
+// kind with Memories' real `rekeyContent`. Without it E's worker failed its job and completed none (heavy stage
+// 2026-10-23). The rest of the descriptor is the kind's identity only; `register.ts` is not imported here, as its
+// components need a window.
+beforeAll(() => {
+  registry.registerLifecycle('memories', memoriesLifecycle)
+  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: rekeyMemoryContent })
+})
 
 async function claimRotation() {
   return (await tasksApi().claimTask({ claimRequest: { capabilityTags: [SCOPE_ROTATION] } })) ?? null

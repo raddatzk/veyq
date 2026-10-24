@@ -864,7 +864,8 @@ components:
         `slugToken`, `epoch`, `placementRevision`, all together), a reorder (`orderIndex`), a payload re-seal
         (`wrappedMeta` + `metaRevision`). Omitted fields are unchanged. The two groups are the schema's own rules
         (inbox #507): any field of a placement — or a `parentId` that is not null — brings the other five with it, and a
-        `wrappedMeta` that is not null brings its `metaRevision`; a body short of either is `400 invalid_request`.
+        `wrappedMeta` that is not null brings its `metaRevision` and its `nodeEpoch` (ADR 0109 point 6); a body short of
+        either is `400 invalid_request`.
       # A placement comes whole (NodesHandler.PlacementRequest.complete). `parentId` is not a key here: its null is the
       # scope root and is sent alone by nobody, so only a non-null one brings the rest (dependentSchemas below). The
       # generators ignore both keywords (measured on openapi-generator 7.23.0: the Kotlin and TypeScript models are
@@ -882,7 +883,10 @@ components:
           then: { required: [encryptedName, slugToken, wrappedContentKey, epoch, placementRevision] }
         wrappedMeta:
           if: { properties: { wrappedMeta: { type: string } } }
-          then: { required: [metaRevision] }
+          # nodeEpoch: the payload is sealed under the node's own key (NodesHandler.malformed)
+          then:
+            required: [metaRevision, nodeEpoch]
+            properties: { nodeEpoch: { type: integer } }
       properties:
         encryptedName:
           type: string
@@ -990,8 +994,29 @@ components:
       description: >
         Make one upload session - or a new row on an object the node already stores (`shared`) - the node's cover, and
         re-seal the node's `wrappedMeta` with the cover that names it (see `setNodeCover`). Exactly one of `uploadId`
-        and `shared`, else `400 invalid_request`.
+        and `shared`, else `400 invalid_request` — the schema's own rule (inbox #507).
       required: [wrappedMeta, metaRevision, nodeEpoch]
+      # NodeCoverHandler.set: a null one counts as absent. Under `dependentSchemas` (on the required `wrappedMeta`),
+      # never at the top, where an `if` turns a sibling-annotated `$ref` to this schema into `Any`; there both generators
+      # ignore it (measured on openapi-generator 7.23.0, Kotlin and TypeScript).
+      dependentSchemas:
+        wrappedMeta:
+          if:
+            required: [uploadId]
+            properties: { uploadId: { type: string } }
+          then:
+            properties: { shared: { type: "null" } }
+          else:
+            required: [shared]
+            properties: { shared: { type: object } }
+      # Whole, because one built from the properties' examples carries both `uploadId` and `shared`, which this operation
+      # refuses — the API fuzzing sent it as valid (ST202, the V1 heavy stage 2026-10-23).
+      example:
+        nodeEpoch: 0
+        uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        expectedBlobId: null
+        wrappedMeta: d3JhcHBlZC1tZXRh
+        metaRevision: 3
       properties:
         nodeEpoch:
           x-veyq-visibility: structure
@@ -1524,7 +1549,7 @@ components:
       type: object
       required: [identityId, shareId]
       properties:
-        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
         shareId:
           x-veyq-visibility: id
           type: string
@@ -1663,7 +1688,7 @@ components:
       description: A guest identity's `K_up` re-sealed to the node's new drop public key, and a `READ_WRITE` guest's name re-sealed under the node's new key (ADR 0109 point 5).
       required: [identityId]
       properties:
-        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
         wrappedIdentityKey:
           type: [string, "null"]
           contentEncoding: base64

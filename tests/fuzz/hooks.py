@@ -20,6 +20,14 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
   **A body past the request limit is refused for its size** (inbox #508): the `413 ErrorResponse{code:
   request_too_large}` every operation with a body declares (`_common`'s `RequestTooLarge`) is a correct refusal of a
   negative case too — the server refuses such a body before it reads its shape, and the contract names the answer.
+  **A date-time no time column holds is refused for its range** (the V1 heavy stage, 2026-10-23): the `422
+  ErrorResponse{code: date_time_out_of_range}` every operation carrying a request date-time declares (inbox #509) is a
+  correct refusal of a negative case too. The server decides it while it binds the body (`StrictJsonTypes`), before
+  bean validation reads the shape, so a negated case whose generated filler also holds a well-formed date-time outside
+  1582-10-15..9999-12-31 or an offset past ±18:00 — RFC 3339 allows both, JSON Schema cannot bound them — is refused
+  for that value first: the same case with the date in range is the `400 invalid_request` (measured 2026-10-24 on
+  `PATCH /api/shares/{shareId}` and `POST /api/instance/moderation/orders`, the run's two ST201). A malformed date-time
+  is still the 400: only one that parsed reaches this answer.
 - **`refusal_echoes_nothing`** — no 4xx body carries a path, query or header value the request sent (six characters or
   more): the refused value is often ciphertext or an opaque id, and the operator-blind boundary applies to errors too
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
@@ -128,14 +136,22 @@ def _request_too_large(case: object, response: object) -> bool:
     return response.status_code == 413 and "413" in declared and _code(response) == "request_too_large"  # type: ignore[attr-defined]
 
 
+def _date_time_out_of_range(case: object, response: object) -> bool:
+    """The `422 ErrorResponse{code: date_time_out_of_range}` an operation carrying a request date-time declares (inbox
+    #509): a well-formed date-time no time column holds is refused while the body binds, before its shape is checked, so
+    a negated case that also carries one is refused for it — a refusal, and the one the contract names."""
+    declared = {str(k) for k in (case.operation.definition.raw.get("responses") or {})}  # type: ignore[attr-defined]
+    return response.status_code == 422 and "422" in declared and _code(response) == "date_time_out_of_range"  # type: ignore[attr-defined]
+
+
 @schemathesis.check
 def refusal_by_location(ctx, response, case):
     """A negated query, header or body answers 400 `invalid_request`; a negated path segment 400 or 404; a body past
-    the request limit its declared 413."""
+    the request limit its declared 413; one carrying a date-time no time column holds its declared 422."""
     meta = case.meta
     if meta is None or not meta.generation.mode.is_negative:
         return None
-    if _credential_refusal(case, response) or _request_too_large(case, response):
+    if _credential_refusal(case, response) or _request_too_large(case, response) or _date_time_out_of_range(case, response):
         return None
     statuses = ["400", "404"] if _negated(case, ParameterLocation.PATH) else ["400"]
     negative_data_rejection(_Context(ctx, statuses), response, case)

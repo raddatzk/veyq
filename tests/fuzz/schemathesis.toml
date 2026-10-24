@@ -29,10 +29,11 @@ bearer = "${VEYQ_FUZZ_TOKEN}"
 
 [checks.negative_data_rejection]
 # A refused request answers 400 or 404, or a negated credential the operation's 401/403, or a body past the instance's
-# request limit the `413 request_too_large` every operation with a body declares (inbox #508) — never Schemathesis'
-# default set (405, 406, 409, 415, 422, 428, 429, 5xx). Which status a location may answer is refusal_by_location's
-# rule (hooks.py); this is the union of what it allows.
-expected-statuses = ["400", "401", "403", "404", "413"]
+# request limit the `413 request_too_large` every operation with a body declares (inbox #508), or one carrying a
+# well-formed date-time no time column holds the `422 date_time_out_of_range` its operation declares (inbox #509) —
+# never the rest of Schemathesis' default set (405, 406, 409, 415, 428, 429, 5xx). Which status a location may answer,
+# and that a 422 is only that one, is refusal_by_location's rule (hooks.py); this is the union of what it allows.
+expected-statuses = ["400", "401", "403", "404", "413", "422"]
 
 [checks.positive_data_acceptance]
 # A request the contract allows is never refused for its shape: anything but `400` (and the shape statuses veyq never
