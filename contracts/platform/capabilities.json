@@ -267,6 +267,24 @@
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
       "description": "The Depot application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a FILE or DEPOT_DROPBOX node created, updated, given a cover, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one (a drop box's included), and every non-GET operation of contracts/api/depot/. Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. The drop box's own creation switch stays core.public-shares.drop-box."
+    },
+    "expenses": {
+      "title": {
+        "en": "Expenses",
+        "de": "Ausgaben"
+      },
+      "purpose": {
+        "en": "Members and their link guests record shared expenses in Pots and see who owes whom.",
+        "de": "Mitglieder und ihre Link-Gäste erfassen gemeinsame Ausgaben in Kassen und sehen, wer wem etwas schuldet."
+      },
+      "whenOff": {
+        "en": "No Pot can be created and no entry added or changed. Every Pot can still be opened and downloaded.",
+        "de": "Keine Kasse kann angelegt und kein Eintrag hinzugefügt oder geändert werden. Jede Kasse lässt sich weiter öffnen und herunterladen."
+      },
+      "serves": ["uc.platform.switch-application-off"],
+      "source": "operator-policy",
+      "levels": ["instance", "tenant"],
+      "description": "The Expenses application (ADR 0079 decision 8, ADR 0108). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — an EXPENSES_POT node created, updated, given a link or a write role, a member's or a guest's append of revisions (contracts/api/expenses/). Reads, downloads, a delete to the trash and its restore, the re-key, a participant's erasure and moderation measures stay."
     }
   }
 }

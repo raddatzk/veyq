@@ -254,6 +254,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      declared (ADR 0109 point 6). Before, the guard resolved top-level properties only, so a per-item epoch was invisible
   92 `commitNodeRekey`'s `409` no longer naming `node_rekey_pending` — rejected: an epoch declaration owes both of its
      refusals in the `409`, so a client meeting the one that means "retry" finds it documented
+  94 `appendPotRevisions`' per-item `revision` taken out of its item schema's `required` while the batch still declares
+     `revisions.revision` — rejected: `validate_write_concurrency` reads a batch's per-item revision declaration in the
+     array's item schema and holds it to the rules a top-level one meets. Before, a declared field had to be top-level,
+     so a batch whose every item is compare-and-set (cr-expenses-ledger's append) could not be declared at all
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1473,6 +1477,19 @@ def forge_batch_epoch_undeclared(root: pathlib.Path) -> str:
     return "completeMedia's items.nodeEpoch declaration dropped, the field kept (must be REJECTED)"
 
 
+def forge_batch_revision_not_required(root: pathlib.Path) -> str:
+    # The declaration stays; only the item schema's required set loses the field, so only the nested lookup sees it.
+    f = root / "contracts" / "api" / "expenses" / "expenses.openapi.yaml"
+    anchor = "    PotRevisionWrite:\n"
+    old = "      required: [entryId, revision, tombstone, sealedBody, wrappedRevisionKey]\n"
+    text = f.read_text() if f.is_file() else ""
+    head, sep, tail = text.partition(anchor)
+    if not sep or not tail.startswith("      type: object\n") or old not in tail.split("\n    PotErasureRequest:")[0]:
+        raise ForgeError("expenses.openapi.yaml: PotRevisionWrite's required set not found (moved or drifted?)")
+    f.write_text(head + sep + tail.replace(old, "      required: [entryId, tombstone, sealedBody, wrappedRevisionKey]\n", 1))
+    return "appendPotRevisions' per-item revision no longer required, still declared (must be REJECTED)"
+
+
 def forge_epoch_refusal_unnamed(root: pathlib.Path) -> str:
     # Only the retry code: stale_epoch stays named, so one named refusal must not cover the other.
     _in_operation(root, "content.openapi.yaml", "commitNodeRekey", "`node_rekey_pending` — the parent", "`node_rekey_p3nding` — the parent")
@@ -1652,6 +1669,7 @@ CASES = [
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
     ("91", WRITE_CONCURRENCY, forge_batch_epoch_undeclared, False),
     ("92", WRITE_CONCURRENCY, forge_epoch_refusal_unnamed, False),
+    ("94", WRITE_CONCURRENCY, forge_batch_revision_not_required, False),
     ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),

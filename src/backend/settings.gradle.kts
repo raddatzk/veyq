@@ -7,3 +7,5 @@ include(":core")
 include(":apps:memories")
 // The Depot application, the second (cr-files-application): the same direction — `:core` only, never another application.
 include(":apps:depot")
+// The Expenses application, the third (cr-expenses-ledger, ADR 0108): `:core` only, never another application.
+include(":apps:expenses")

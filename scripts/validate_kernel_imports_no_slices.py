@@ -19,7 +19,7 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
 - **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
-  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Depot's `FILE` and `DEPOT_DROPBOX`) are named only by that application's code, which answers
+  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Depot's `FILE` and `DEPOT_DROPBOX`, Expenses' `EXPENSES_POT`) are named only by that application's code, which answers
   for them through core's `NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds`, `GuestCreatableKinds`, `ShareGuestWrites`,
   `UploadCompletion` and `UploadAdmission` (the guest seams by declaring nothing: a kind no
   one declares allows a guest no tree operation). A
@@ -125,6 +125,7 @@ APPLICATION_KINDS = [
     "CHAPTER",
     "FILE",
     "DEPOT_DROPBOX",
+    "EXPENSES_POT",
 ]
 # The blob roles the applications own (cr-files-application P3-S2): the contract's `BlobRole` is an open token like the kind,
 # so core stores and compares a role and names none. Read by the same rule as the kinds.

@@ -173,7 +173,7 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    conformance test reads the vectors both ways); the contracts guards green; `OperatorBlindProbeTest` classifies every
    new operation; the predicted backend red is only `ModuleCompositionTest` (a generated API no resource implements) —
    run `./gradlew check` once to see it; web and admin-web unchanged and green.
-2. **Backend.** The module and its wiring; kind rules (decision 6); the revision table with `node_id`, `scope_id`, entry
+2. **Backend.** ✅ **Built 2026-10-24**, landed in one merge with phase 1's contracts (§ Retrospective). The module and its wiring; kind rules (decision 6); the revision table with `node_id`, `scope_id`, entry
    id, revision, tombstone, body, `K_rev` wrap, writer, size class, time; append with per-record CAS under the record
    rows' locks, then `items.bump`, then the position (docs/apps/README.md step 2's lock order); the erasure; member and
    guest reads; the guest gate and the guest-write record per revision; the subtree and scope erasers and the writer
@@ -256,3 +256,54 @@ stopped: the Pot's own categories are added and renamed, never removed, in the f
 ## Retrospective
 
 _Filled by the implementer._
+
+**Phase 1 (2026-10-24), built on `main` `01260a52`, not landed.** Entry checks re-run: both sibling CRs are gone from
+`changes/`, `NodeRekeyParticipant`, `rekeyContent` and `validate_node_rekey_arity.py` exist; the one thing that moved
+since the refine is the participant's extra `lockRows(scopeId, nodeId)` hook. Baselines on that commit: `./gradlew check`
+0, `npm run check` 0 in web, admin-web and `src/packages/crypto`, all 66 `scripts/validate_*.py` 0.
+
+- **The done-when's backend red was remembered, not measured, and it is wider.** A spec under `contracts/api/expenses/`
+  with no `:apps:expenses` fails Gradle while it configures (`buildSrc` `SpecSets.requireNoStray`), so `./gradlew check`
+  runs no task at all, `validate_backend_module_graph.py` rule (d) is red, and `OperatorBlindProbeTest` cannot classify
+  operations no module generates. So phase 1 split in two: the seals, the pad, the entry format, its vectors and the
+  export content (`61e56111`) are green alone; the spec and the guard change it needs (`17d70016`) merge with phase 2's
+  module, as § A contract that makes a client-sent field required argues for a contract no backend can build. Next
+  time: a contracts phase that opens an application's spec directory runs `./gradlew help` at refine.
+- **The `generate:api` entry is a web phase's, not phase 1's.** It generates, and `npm run check` is green with it
+  (measured), but `validate_web_core_imports_no_applications.py` derives every application's client from that script
+  and is red on an owner its `OWNERS` lacks — and `OWNERS` needs `features/expenses/` and its i18n catalog to exist.
+  So the entry, `OWNERS`, `KIND` and `I18N_NAMESPACES` land together, with the first web phase that holds the catalog.
+- **Two things the phase list did not name and the contract needed:** `listCasePotRevisions` (decision 7's case
+  resource implements a generated API, so its operation is the contract's), and `validate_write_concurrency.py` could
+  declare a revision only at the top level, not a batch's per-item one (it learned `revisions.revision`, bite case 94).
+
+**Phase 2 (2026-10-24), built on `main` `c6132ec7` plus phase 1's contracts branch, and landed with them in one merge
+(branch `worktree-agent-a02db9923432245a5`).**
+`:apps:expenses` (`b63ca326`, `e8decffa`): the kind rules, `veyq_expenses_revision`, the append, the erasure, both
+reads, the guest gate and record, the erasers, the re-key participant, the ITEM report with its hold and case review.
+Measured: `./gradlew check` 0; every quick `scripts/validate_*.py` 0; `validate_guard_gaps.py --force` 0; the three
+planned bites red and restored (bump dropped from `append` → `NodeItemsRevisionBumpsTest`; delete dropped from
+`PotNodeSubtreeEraser` → `validate_node_subtree_erasure.py`; wrap assignment dropped from the participant →
+`validate_node_rekey_arity.py`), and six slice-test bites, each red on its own test (no compare-and-set, no ledger line,
+`WRITE_ONLY` admitted, no switch, an `ITEM` hold copying nothing, the participant's field check gone). No MariaDB race
+was written: the CR asks none, though the append's lock order is new (a candidate for the V1 end-stage).
+
+- **The non-member's 404 is `scope_not_found`, a Pot of the wrong kind `node_not_found`** (Depot's pair). With one code
+  for both, `OperatorBlindProbeTest`'s control on the world's Memory answers exactly as the stranger and proves nothing.
+  The contract's 404 descriptions name both codes now.
+- **A participant's erasure writes an erasure-ledger line** (`EXPENSES_RECORD`, id `entryId:revision`, re-applied by
+  `ExpensesErasures`): a restored backup would bring the erased name back otherwise (ADR 0056 decision 8, GDPR Art. 17).
+  The phase list did not name it; the legal duty decides. The measure guard exempts the erasure and its re-application
+  with the reason (the entry stays an item); the re-key arity guard excludes `sealed_body` (under `K_rev`).
+- **The re-key bite, re-framed:** the stage's wire has no body field, so the bite writes a stage row of another field
+  through `NodeRekeyStage.put` — and `put` replaces every earlier value of the same item. Staged apart, it wiped that
+  revision's wrap and the bitten participant answered `rekey_parts_missing`, not `applied`; staged in one put, the
+  bitten commit lands (204) and the test is red on the field check alone. A commit moves the Pot's item revision once and
+  gives every revision that position, so an open list re-reads the new wraps.
+- **Without the compare-and-set a stale append is a `500`**, not a silent overwrite: `ux_expenses_revision_entry` is a
+  backstop under the node lock, not the answer.
+- **Open for later CRs, not built here:** a content block on an entry refuses nothing yet (no blob, and the list carries
+  no block mark; `cr-expenses-receipts` gives it something to refuse); a moderator's block of the Pot's node does not
+  refuse a guest's append (the contract names no `451`); the guest's first page digests the whole Pot per read (no tag
+  cache, as `ShareMediaTags` has). The verification metadata was not regenerated from a cold Gradle home: the module's
+  plugins and dependencies are Depot's, and a warm `check` is green — remembered, not measured.

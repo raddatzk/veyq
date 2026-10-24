@@ -105,6 +105,32 @@ class ApplicationSwitchSweepTest {
                 """{"contributorToken":"${c.readWrite.token}","uploadId":"${UUID.randomUUID()}","nodeEpoch":0}""", guest = true,
             )
         },
+        // --- Expenses (the world's node is a Memory: on, each answers `404 node_not_found` — no Pot, past the switch) ---
+        "appendPotRevisions" to { c ->
+            Call(
+                "POST", "/api/scopes/${c.s.scopeId}/pots/${c.s.nodeId}/revisions",
+                """{"nodeEpoch":0,"revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"tombstone":false,"sealedBody":"$POT_BODY","wrappedRevisionKey":"$B64"}]}""",
+            )
+        },
+        "erasePotRecord" to { c ->
+            Call(
+                "POST", "/api/scopes/${c.s.scopeId}/pots/${c.s.nodeId}/erasures",
+                """{"nodeEpoch":0,"entryId":"${UUID.randomUUID()}","revision":2,"sealedBody":"$POT_BODY","wrappedRevisionKey":"$B64"}""",
+            )
+        },
+        "stagePotRekey" to { c ->
+            Call(
+                "POST", "/api/scopes/${c.s.scopeId}/pots/${c.s.nodeId}/rekey/${UUID.randomUUID()}",
+                """{"fromEpoch":0,"revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"wrappedRevisionKey":"$B64"}]}""",
+            )
+        },
+        "appendSharePotRevisions" to { c ->
+            Call(
+                "POST", "/api/shares/${c.readWrite.shareId}/pots/${c.s.nodeId}/revisions",
+                """{"nodeEpoch":0,"contributorToken":"${c.readWrite.token}","revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"tombstone":false,"sealedBody":"$POT_BODY","wrappedRevisionKey":"$B64"}]}""",
+                guest = true,
+            )
+        },
         "ensureShareDropFolder" to { c ->
             Call(
                 "POST", "/api/shares/${c.writeOnly.shareId}/files/drop-folder",
@@ -125,11 +151,16 @@ class ApplicationSwitchSweepTest {
         reason("a guest takes back its own medium: a removal, which an application off never refuses", "deleteShareMedia")
         reason("the purge out of the trash: an erasure (E2)", "purgeMedia")
         reason(
+            "a participant's erasure: a removal — its name goes when a member says so, whether or not Expenses takes " +
+                "writes (E2, CR cr-expenses-ledger)",
+            "erasePotRecord",
+        )
+        reason(
             "a member's own marks on its items: the member's blob, which a Master-Key rotation re-tags through this same " +
                 "write and the server cannot tell from a new mark (E5, ADR 0068)",
             "putItemFavorites",
         )
-        reason("a rotation's re-key: the security of what exists (E1, ADR 0109)", "stageMediaRekey")
+        reason("a rotation's re-key: the security of what exists (E1, ADR 0109)", "stageMediaRekey", "stagePotRekey")
     }
 
     private fun applicationOperations(): Map<String, List<GeneratedApiOperations.Operation>> =
@@ -141,7 +172,7 @@ class ApplicationSwitchSweepTest {
         val byApp = applicationOperations()
         val ids = byApp.values.flatten().map { it.id }.toSet()
         assertAll(
-            Executable { assertTrue(byApp.keys.containsAll(listOf(CapabilityIds.MEMORIES, CapabilityIds.DEPOT)), "the applications were derived: ${byApp.keys}") },
+            Executable { assertTrue(byApp.keys.containsAll(listOf(CapabilityIds.MEMORIES, CapabilityIds.DEPOT, CapabilityIds.EXPENSES)), "the applications were derived: ${byApp.keys}") },
             Executable { assertTrue(byApp.keys.all { it in CapabilityIds.ADVERTISED }, "every application has its own register entry: ${byApp.keys}") },
             Executable {
                 assertTrue((ids - calls.keys).isEmpty(), "unclassified writes — have the application's handler ask ApplicationSwitch.requireWritable and probe it here, or exempt it with its reason: ${(ids - calls.keys).sorted()}")
@@ -219,5 +250,8 @@ class ApplicationSwitchSweepTest {
         const val SOME_ID = "00000000-0000-4000-8000-000000000001"
         const val CORE_API_PACKAGE = "me.raddatz.veyq.core.generated.api"
         val REFUSED: Pair<Int, String?> = 422 to "capability_disabled"
+
+        /** A sealed Pot revision body of the smallest size class (744 base64 characters). */
+        val POT_BODY = "A".repeat(744)
     }
 }

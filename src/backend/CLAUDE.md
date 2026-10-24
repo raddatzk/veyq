@@ -7,7 +7,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `src/backend/`, it checks every project: `:core` (`src/backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`src/backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
   `:apps:depot` (`src/backend/apps/depot`, the Depot application — the `FILE` and `DEPOT_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
-  Depot and run as `:apps:depot:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
+  Depot and run as `:apps:depot:test`), `:apps:expenses` (`src/backend/apps/expenses`, the Expenses application — the
+  `EXPENSES_POT` kind and a Pot's sealed revisions in `veyq_expenses_revision`, ADR 0108; its tests boot core plus Expenses
+  and run as `:apps:expenses:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
