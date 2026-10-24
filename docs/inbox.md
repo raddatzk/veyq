@@ -8,8 +8,8 @@ When a topic is refined, its ideas move into durable state under [`features/`](f
 > **A done row is deleted** (owner 2026-10-19), like a CR when it is done: what it taught lives in the ADRs,
 > features and coverage it changed, and its history in git (`git log -S'| <n> |' -- docs/inbox.md`). A row that is
 > built but still owes a measurement or a proof is not done. **Row numbers stay reserved and are never reused** — a
-> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 533** —
-> the next row is 534; raise this line with every new row.
+> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 534** —
+> the next row is 535; raise this line with every new row.
 >
 > An open row holds its title, tags, status, the next step and the links that matter — no history. Its status names
 > where it stands against V1: **V1** (on the V1 line), **end of V1** (needs a remote or a release, done at the very
@@ -141,6 +141,7 @@ other, so when scope shrinks the copy is corrected in the same pass, not filed.
 
 | id | topic | tags | status |
 |----|-------|------|--------|
+| 534 | **A placement's `parentEpoch` is a rule only in prose: the contract does not require it beside `parentId`** | contracts, backend, web, crypto | **inbox · V1** (owner 2026-10-24) — since [ADR 0109](decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 6 the server refuses a placement under a node that names no `parentEpoch` (`400`, `IncompletePlacement`), but `UpdateNodeRequest` and `CreateNodeRequest` say so only in their descriptions, so the generated client types do not flag a missing one: it surfaces at run time (heavy-stage collection run 2026-10-23, F3: `move.e2e` sent none). Making it a schema rule (`dependentRequired`) first needs two things: a shape check in the server that refuses a missing `parentEpoch` before any state check (otherwise api-fuzz reads the state answer as a schema-violating request accepted, ST201), and a decision on `parentId == scopeId`, which the server reads as the scope's root although the root is no node with an epoch of its own — recommended: a root placement is `parentId: null`, and `parentId == scopeId` is refused (one form per meaning, [ADR 0086](decisions/0086-one-word-per-meaning.md)). Source: `changes/review-heavy-stage-collection-run.md` Q2. |
 
 
 ## Product & strategy
