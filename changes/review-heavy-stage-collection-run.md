@@ -5,61 +5,62 @@ row, a CR, a fix, or a line in an existing row. The owner decided the run would 
 everything is reviewed together afterwards. A finding's place is decided in that review, not here. The file is
 deleted when its last item has moved.
 
-**Two runs so far, both gitignored and on this machine only:**
-- The collection run at `87266fe3`:
+**Three runs, all gitignored and on this machine only.** Each step's log lies beside its results file. MS Defender ran
+without exclusions in all three.
+- The collection run, at `87266fe3`:
   `.claude/worktrees/heavy-collection-997b57/.pipeline-out/heavy-collection-2026-10-23/results.md`.
-- The proof run of the first fix round at `d4eab6be`, landed as `bc64b3c9`:
+- The proof run of fix round 1, at `d4eab6be`, landed as `bc64b3c9`:
   `.claude/worktrees/heavy-fixes-integration/.pipeline-out/heavy-fixes-proof-2026-10-24/results.md`.
+- The proof run of fix round 2, at `51725e75`, landed as `e1af30b5`:
+  `.claude/worktrees/heavy-fixes-round2/.pipeline-out/heavy-fixes-round2-proof/results.md`.
 
-Each step's log lies beside its results file. MS Defender ran without exclusions in both runs.
+## Fixed and proven
 
-## Fixed and proven in the proof run (2026-10-24)
-
-| # | What | Proof |
+| # | What | Proven in |
 |---|---|---|
-| F1 | The `media-batch` deadlock: the attach restarts once when the primary appeared after its lock. The same inversion is closed in `moveMedia`, `deleteBucketReparent`, `createSubBucket` and `MediaNodeRekeyParticipant.lockRows` (order buckets → media → node). | The original race test is green on MariaDB; the full races run is green. The bite on MariaDB went 1213 → 500. **Two new forced tests are still red, see F1b.** |
-| F2 | `scopeRotation.e2e`'s suite registered no Memories re-key; the product was right. | web-e2e 27/27 |
-| F3 | `move.e2e` sent no `parentEpoch`; the server was right. | web-e2e 27/27 |
-| F4 | The cover/banner "exactly one of" rule is now in the schema. The re-key parts example used an unstorable UUID; a new rule in `validate_id_contract_format.py` catches it. The fuzz hook accepts the declared 422 `date_time_out_of_range`. | api-fuzz GREEN |
-| F5 | Was a race on a direct load, not scale: the tenant settings pages now wait for the tenant they belong to. At most 6 avatar requests run at once. | 1,000 rows in 1.09 s; a promotion; four deep links |
-| F6 | The 400 is the boot's silent token refresh, which is by design; the specs armed their console guard too early. One shared exemption (`tests/e2e/src/signedOutBoot.json`). **Owner question open, see Q1.** | the 400 is gone from the stack lane |
-| F7 | Chromium reported unread empty bodies (a PUT 200 with no content, a 304) as `ERR_ABORTED`. The client now reads them. | S2: 0 of 1,176 PUTs aborted; #489 `carries: true` at 1k/3k/10k |
-| F8 | A spec defect: `depot-styles` navigated away mid-upload. | `depot-styles` green, the text layer light and dark |
-| F9 | The release check backs off: 5 → 10 → … s, capped at a day. **The reset is open, see F9b.** | app log |
-| F10 | The upgrade record validator accepts the cover's `blobId`. | `--upgrade` GREEN (the predecessor already carried the fix) |
-| F11 | New, found from T3: every ZIP export without the save picker was cut off. The archive's exact length is now passed, and a SW-side failure now reaches the page. Protocol version 4 → 5. | `export-import`'s download passes |
-| T1–T9 | Spec isolation (an own tenant for `report-name`), the `instance-mail` console, the Reka and modal selectors, the profile driver's request rule, the seeder's 429 back-off, and the stack lane's after-browser checks running past a red browser stage. | T2, T4, T5, T7, T8, T9 green; T1, T3 and T6 now fail on something else, see L1–L3 |
-| N1, N2, N5–N9 | Run in the proof run: two-owner re-key, changed-key review, the #513 and #517 cascades, `REACHED`, S2 with JFR, and the after-browser checks. | green (N5 still has L4 open) |
-| R4 | #489 meets every ADR 0105 target at 1,000, 3,000 and 10,000 photos. | 18 runs |
+| F1, F1b | The `media-batch` deadlock is fixed: the attach restarts once when the primary appears after its lock. The same lock inversion is closed in `moveMedia`, `deleteBucketReparent`, `createSubBucket` and `MediaNodeRekeyParticipant.lockRows`, all now in the order buckets → media → node. The two forced tests that stayed red were the test helper: `awaitWaiters` read InnoDB's lock cache, which refreshes only after 100 ms without a read. | round 2: MariaDB races slice and full green, no 1205/1213; the F1 tests take 2.5 s instead of 60 s |
+| F2, F3 | Both were test defects. The suite registered no Memories re-key (F2), and the hand-built move body sent no `parentEpoch` (F3). | web-e2e 27/27 (rounds 1, 2) |
+| F4 | The contract was wrong in three places: the cover/banner "exactly one of" rule was missing, the re-key parts example used an unstorable UUID (now caught by a new rule in `validate_id_contract_format.py`), and the fuzz hook did not accept the declared 422. | api-fuzz GREEN (rounds 1, 2) |
+| F5 | Not caused by scale: a direct load raced the tenant. The tenant settings pages now wait for their tenant, and at most 6 avatar requests run at once. | round 1: 1,000 members in 1.09 s |
+| F6 | The 400 was the boot's silent token refresh. It now answers `401 no_session` (#535). The specs exempt exactly that answer (`tests/e2e/src/signedOutBoot.json`). | round 2 |
+| F7 | Chromium reported unread empty bodies (a PUT 200, a 304) as `ERR_ABORTED`. The client now reads them. | round 1: #489 `carries: true` |
+| F8, L2, L3, L4, L1 | F8 was a spec defect (navigating away mid-upload). L2 was a spec defect (h1 vs h2). L3 was Reka's doubled toast text; there is now a shared `toast()` helper, used by 11 reads. L4 was the product: `settle()` ran twice and wrote the auto date twice. L1 was the product: a menu pick ran its command before focus was back on the opener, which affects every menu → dialog path. | round 2 stack lane: 133 passed |
+| F9, F9b | The release check backs off. The resets were the harness restarting the app (`docker restart`), not a sign-in; regression tests with bites. | round 2: 11 resets, each after a start |
+| F10 | The upgrade record validator. | round 1 `--upgrade` |
+| F11 | The ZIP export's exact length is now passed, and a SW failure reaches the page (protocol 4 → 5). | rounds 1, 2: `export-import` 7/7 |
+| T1–T9 | Spec isolation, the `instance-mail` console, selectors, the profile driver's rule, the seeder's 429 back-off, and the after-browser checks running past a red browser stage. | rounds 1, 2 |
+| N1, N1b | The two-owner re-key works. The lease was 5 min with no heartbeat (a gap to ADR 0021 § 6). It is now 2 min, renewed every 30 s while the job is worked on. | round 2: a closed tab blocks the job for 2 min 19 s; a heartbeat at 30 s |
+| N2, N3, N4, N5–N9 | The changed-key review; the trust reset leaving an empty store (999 → 0 entries); the refusal of the 12,285th mark in EN and DE; the #513/#517 cascades; `REACHED`; S2 with JFR; the after-browser checks. | rounds 1, 2 |
+| #534 (part), #535 | #535 is fully built. #534 has the server's shape check and the schema rule; Q3 is still open. | round 2: api-fuzz, web-e2e |
+| R4 | #489 meets every ADR 0105 target at 1,000, 3,000 and 10,000 photos. | round 1 |
 
 ## Still open
 
 | # | Item | Where |
 |---|---|---|
-| F1b | Two of the new forced race tests are red on MariaDB, reproducibly: `aSecondFirstUploadThatWaitedForTheNodeLocksThePrimaryItMissed` (1205 lock-wait timeout at `NodeEpochGate.lockNode:56`) and `aSubBucketCreateThatWaitedForTheNodeRunsAgainWhenThePrimaryAppeared` ("it locked none of them"). Open whether the test's forcing or the product is wrong. | proof run `step1a-races-slice.log` 133–170, `step1c-races-full.log` 217–240 |
-| L1 | `depot-clicks`: after Escape in `FolderNameDialog`, the focus is not back on the New button. Possibly a product bug. | `.e2e-stack-out/20261024-031154/` |
-| L2 | `export-import`: the spec expects the folder heading at h1; the page has h2. A spec defect. | same |
-| L3 | `field-seal`: `getByText('Profile updated.')` hits both the toast and the live region (strict mode). A spec defect, and a pattern other specs may share. | same |
-| L4 | `memories-styles` (the lightbox): a console **409** on `…/scopes/{id}/nodes/{id}`. It took the 400's place: a write with a stale epoch? | same |
-| L5 | `memory-banner`: the tab bar sticks 454.7 px beside the compact header instead of to it. Possibly a product bug. | same |
-| F9b | The back-off resets to 5 s eight times in 9 minutes, mostly during browser sign-ins. What resets it is open. | proof run, the app log |
-| N1b | The re-key job sat LEASED for about 5 minutes on a closed tab's worker before the other owner's worker could take it (`attempts` 2). Open whether a 5-minute lease is the right length. | proof run, N1 |
-| N3 | #491's trust reset leaving an empty store: it needs a way to make the device refuse its store. | — |
-| N4 | #500, marking past 12,284: it needs a seeder for the sealed mark blob. | — |
-| N10 | #491's QR compare needs a camera: the owner's own pass on a phone after the V1 queue. | — |
+| L5 | `memory-banner`'s helper `scrollPastTheBanner` lengthens the page with `page.addStyleTag`, which the instance's CSP refuses (`style-src-elem` inline). Both sticky tests therefore never really ran. The spec needs a way the CSP allows, e.g. a fixture with enough content. The product's sticky offset is correct. | round 2, `step5-stack.log` 287–405 |
+| B1 | The admin image came entirely from the build cache of 2026-10-23, and its `VEYQ_REVISION` label does not name the commit it was built at. Open whether a cached build can carry a stale release identity (ADR 0057). | round 2, step 4 |
+| H1 | Harness note: `seed members --target 1000` on its own stops at member 22 with 429, because the invite limit defaults to 20 per hour. `stage members` raises the limit and resets it afterwards. Document it, or make `seed members` do the same. | round 2, step 6.2a |
+| C1 | `CommitNodeRekeyRequest` carries the same prose-only rule "with `parentId` …" that #534 turned into a schema rule. | round 2, the #534 agent |
+| N10 | #491's QR compare needs a camera: the owner's own pass on a phone, after the V1 queue. | — |
 
 ## Owner questions
 
-- **Q1 (F6):** moved to inbox #535 (owner 2026-10-24: 401 with its own code).
-- **Q2:** moved to inbox #534 (owner 2026-10-24: inbox, on the V1 line).
+- **Q1 (F6):** moved to inbox #535 (owner 2026-10-24: 401 with its own code). Built.
+- **Q2:** moved to inbox #534 (owner 2026-10-24: inbox, on the V1 line). Partly built.
+- **Q3 (#534, the root form):** today the server reads `parentId == scopeId` as the root, but it outputs the root as `null`, and the web client never sends `scopeId`. The shape check exempts that form for now, so the contract calls invalid what the server accepts. Recommended: refuse `parentId == scopeId`, so a root is only `null` (ADR 0086). That is one line in the server. Also: the generated TS types do not enforce `parentEpoch` (openapi-generator ignores `dependentSchemas`); catching it at typing time would need a typed client wrapper.
+- **Q4 (from L2):** a folder's page has no `h1`; its head is an `h2` (`NodeHeader.vue:19`). Give a folder page an `h1` for accessibility?
+- **Q5 (N1b):** keep 2 min as the default lease? A Server Owner who sets it below about 60 s defeats the renewal. Two optional extensions:
+  - a neutral release endpoint, called on `pagehide`;
+  - letting the same user take over their own still-valid lease at once. This changes ADR 0021's "one worker per job".
 
 ## Readings that need a decision
 
 | # | Reading | Run |
 |---|---|---|
 | R1 | AEAD: WebCrypto seals ≈ 18× (whole) to ≈ 35× (framed) faster than `@noble/ciphers`. S2 seals on the main thread; GHASH alone takes 1.9 s self time in a 50-photo upload. This is the biggest hotspot. | collection 4a.3, 4a.5 |
-| R2 | Chromium's CPU throttle does not reach workers; confirmed again (4.4 s vs 4.2 s). A throttle-4 number is a slower main thread, never a slower device. The profile method and ADR 0105's 4× targets must say so. | both |
-| R3 | S3 sends ≈ 116 SQL statements per request. And `GET …/members` at 1,000 members sends **1,012 SELECTs**. Both look like N+1. | collection 4a.4; proof run |
+| R2 | Chromium's CPU throttle does not reach workers (confirmed again). A throttle-4 number is a slower main thread, never a slower device. The profile method and ADR 0105's 4× targets must say so. | collection, round 1 |
+| R3 | S3 sends ≈ 116 SQL statements per request, and `GET …/members` at 1,000 members sends 1,012 SELECTs. Both look like N+1. | collection 4a.4; round 1 |
 | R5 | #491: a rotation on 999 pins sends 393,728 bytes (3.8 % of the body limit); one pin write is 597 bytes. | collection 4c.1, 4c.2 |
-| R6 | #261: the wire share is 9.5 % of an upload at throttle 1 and 3.5 % at throttle 4. Defender was at 86–88 % CPU during the run. | proof run S2 |
+| R6 | #261: the wire is 9.5 % of an upload at throttle 1 and 3.5 % at throttle 4. Defender was at 86–88 % CPU during the run. | round 1 S2 |
 | R7 | S1 unlock: 2.9–3.5 s; the main thread is ≈ 94 % idle while the Argon2id worker runs. | collection 4a.2 |
