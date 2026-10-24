@@ -156,5 +156,5 @@ gaps:
     tests/e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
     the affected member's reading and objection, and the other moderator's decision, and
     tests/e2e/tests/features/server-owner-statement.spec.ts the Server Owner's block over content and its REACHED answer
-    (written, not yet run: the heavy suites run at V1's end); stack refs are admitted only once a CI run executed lane L1
+    (green in local runs of the lane only); stack refs are admitted only once a CI run executed lane L1
     (ADR 0040).

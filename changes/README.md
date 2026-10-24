@@ -1503,6 +1503,10 @@ the same state on both sides of the comparison.
 
 Generalised: when a gate is noisy, find out **what** differs before deciding what to ignore. An exclusion is a
 permanent hole in the shape of today's confusion, and it reports green from inside the hole.
+The reverse case is as real: the profile driver of cr-profile-where-the-time-goes refused every upload run on a strict
+"no failed request" rule, and the 1,163 `net::ERR_ABORTED` store PUTs it refused on looked like Chromium noise. They
+were the client never reading an empty answer body (heavy-stage finding F7), the same defect that held the gallery's
+volume reading at `carries: false`; an exclusion would have hidden it from both.
 
 ### An exit code from a chain is not the command's exit code
 

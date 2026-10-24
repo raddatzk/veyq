@@ -22,6 +22,7 @@ fully cached build reports the cache's time, which is what heavy-stage finding B
 
 It tags `veyq-identity-proof/<image>:{a,b}` and removes the tags at the end; the layers stay in the build cache, which
 is what makes a re-run fast. Needs Docker and PyYAML; never pushes, never pulls more than the Dockerfiles' pinned bases.
+Run by hand, never in CI (owner 2026-10-24): it costs three builds per image, and assertion 12 already holds the rule.
 """
 from __future__ import annotations
 

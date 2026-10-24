@@ -1,4 +1,4 @@
-// S3 open a large Chapter (cr-profile-where-the-time-goes, decision 1): a new device opens the 1,000-photo Chapter
+// S3 open a large Chapter (cr-profile-where-the-time-goes): a new device opens the 1,000-photo Chapter
 // `s3-seed.profile.ts` made (ADR 0105's grid: the tiles near the viewport mounted, thumbnails read nearest first, every
 // listed seal opened once in the listing worker). The sign-in and the way to the Memory's Chapters tab happen before
 // the window; the window runs from the click on the Chapter's card to *viewport complete* — every tile inside the

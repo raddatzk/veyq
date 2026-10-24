@@ -1,8 +1,9 @@
 # ADR 0105 — A gallery renders what is near the viewport, and opens its listing off the main thread
 
 - Status: Accepted 2026-10-19 — decided by the owner (the keyboard model of decision 5, the targets below) and built
-  in the web client the same day. The targets are **to be measured** with the volume harness at the V1 heavy stage;
-  until that reading they are targets, not results.
+  in the web client the same day. The volume harness read the targets at the V1 heavy stage (2026-10-24) and every one
+  held, at 1,000, 3,000 and 10,000 photos, desktop and 4× ([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md)
+  § Quality notes holds the reading).
 - Date: 2026-10-19
 
 Provenance: **(M)** measured in the worktree `cr-gallery-virtualization` names — the command is in its grounding table;
@@ -64,12 +65,17 @@ On the volume harness's local recipe (two cores), Chromium; the reading is taken
   500 ms after it, under 5 s of long tasks in a scroll through the whole Chapter; 10,000 is reported, not judged.
 - Every stage: fewer than 3,000 DOM nodes at both moments, independent of the Chapter's size; no failed request.
 
+The 4× throttle is Chromium's emulation, and it slows the page's main thread only, never a worker: at the V1 heavy
+stage the Argon2id worker took 5,354 ms at throttle 1 and 5,413 ms at throttle 4 while the main thread rose ×4.5, and
+the listing worker took 271 ms at both. So a 4× number is a slower main thread, never a slower device: the listing
+worker's part of it runs at desktop speed, and what a real phone does is read on one.
+
 The judge that applies them is `scripts/measure_volume.py judge` while the harness exists.
 
 ## Consequences
 
 - The DOM size no longer grows with the Chapter, and the main thread no longer pays for crypto it does not show; the volume
-  harness measures both against § Targets at the V1 heavy stage (inbox #489).
+  harness measured both against § Targets at the V1 heavy stage, and both held (inbox #489).
 - Every view over the list — the gallery, the trash, the contributors' view, a guest's share — goes through the same
   windowing and the same opened listing; a new view over media that renders every item, or opens a meta on the page,
   is a defect against this record.

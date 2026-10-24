@@ -83,6 +83,6 @@ gaps:
     entry; both dialogs' progress bars are recorded moving; five altered downloads are refused with their reasons, a
     payload whose SHA-256 no longer matches stops the import with "N of M" and trashes what it made, and a ZIP without a
     manifest, like a download sent through "Upload as a file", is uploaded as a file. Not driven there: a multi-GB
-    export, the OS directory picker or a dropped directory, the quota refusal, other browsers. Written, not yet run: the
-    suite waits for the V1 heavy stage, and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.
+    export, the OS directory picker or a dropped directory, the quota refusal, other browsers. Green only in local runs of the
+    lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.
     On that run the file becomes a ref on the criteria its tests are tagged with, and this gap goes.

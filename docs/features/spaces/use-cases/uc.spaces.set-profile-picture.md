@@ -1,7 +1,7 @@
 # UC: Set your profile picture in a space
 
 - **ID:** uc.spaces.set-profile-picture
-- **Status:** built 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)): contract, `member-avatar` seal purpose, backend and web. Verified by unit and component tests (and the backend slice tests); **not verified in a real browser** - the crop, the WebP encode and the picture's drawing in the header, the popover and the profile page were never seen by eye.
+- **Status:** built 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)): contract, `member-avatar` seal purpose, backend and web. Verified by unit and component tests (and the backend slice tests), and driven in Chromium by lane L1, green in its local runs at the V1 heavy stage: `field-seal.spec.ts` picks, crops, saves and reads back a picture after a reload and on a second device, and `join-profile-picture.spec.ts` drives an owner's picker on the join page and the one-time finish-your-profile notice. Never seen by eye: the picture's drawing in the header, the popover and the profile page.
 - **Primary actor:** A member of a tenant space, giving themselves a face there.
 - **Secondary actor:** Every other member of the tenant, who only sees it.
 - **Goal:** Show a chosen picture instead of the letter wherever the member appears (profile page, participant

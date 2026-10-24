@@ -6,6 +6,7 @@ sources:
   - docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/ai/README.md
+  - docs/architecture/README.md
 ---
 
 veyq's code is written by an AI coding agent working under the owner's direction. The owner decides what is built
@@ -66,6 +67,41 @@ each one runs](#where-and-when-each-stage-runs) follows it.
 | **Upgrade proof** (`run_web_e2e.py --upgrade`) | Content sealed by the previous version opens after a restore onto this one, which migrates it. | The upgrade of a running instance; the shipped images. | Built; its CI job is off until the first release. |
 | **Stack lane L1** — the candidate, fresh (`scripts/run_stack_e2e.py`) | The two images that ship, installed the way a Server Owner installs them — `veyqctl install` from the candidate's own release files — with a real ACME certificate from a test CA, driven in Chromium: the domain says it is not set up, the Server Owner is created and its Emergency Kit read back, the bundled store connected and checked, the first tenant created; its owner accepts on the tenant's own domain and certificate, writes a Memory with a photo and shares it read-only; a second browser signs in with only the password and the Secret Key and sees the photo decrypted; an anonymous visitor opens the link. Then the first feature scenario: the Server Owner switches drop boxes, adding a device from another one, unlocking without a password and remembered devices off and on again in the console, and the web client loses and regains each of them; a trusted and a remembered device ask for the password and the Secret Key while their switch is off, delete or replace none of their keys on the server, and open as before once it is back on. Every text field and the profile picture written once — a folder renamed and moved, a Memory's date, a sub-bucket, a link's label and note, a guest's name, the member's own name and picture — and read back after a reload and on a second device. A guest's upload the link's limit refuses leaves no empty file behind, and the same guest cannot take back a member's empty folder. The Server Owner points the release check elsewhere and switches it off, and sets up instance mail against a test mailbox, confirming it with the code the instance mailed; then the check, pointed at a stand-in release mirror the run serves, finds the newer releases there: the console lists them with an unscheduled major apart as urgent, each is mailed once, the planned major's mail carries its date as a calendar file, and the check is switched off. Every test names the acceptance criterion it covers, and a check holds each name to a criterion that exists. No page request to any origin but the instance — the one breached-password query is answered locally. Afterwards every value the browser typed (the password, the Secret Key, the names, the photo's name and the text inside it) is searched for, and must be absent, in the instance's database, its bucket, every container log and every SQL statement the database received — the same sensors as the API end-to-end suites. A run that executes no test is red. | Only what the browser typed, not everything the page sealed (the API suites cover that half); no HTTP traffic recorded, so no capability token searched for here; one tenant, a few Memories, folders and links; no browser restart. The release notices come from a stand-in: the candidate of a push is a snapshot, and only a release-stamped build looks for releases, so the run stamps its own instance with the release it installed, has it look every few seconds rather than daily, and serves the newer releases itself; veyq's real GitHub Releases are never read. The certificate comes from a test CA that is told every challenge is valid. The images are local builds installed unsigned, so `veyqctl`'s signature check ([ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)) is not exercised here. | Built. |
 | **Stack lanes L2 and L3** — upgrade in place, backup import | The previous release upgraded in place with `veyqctl upgrade`; every archived backup of the major restored into the candidate with `veyqctl restore`. | Anything the scenarios do not do. | Designed ([ADR 0090](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md), ADR 0091); not built. |
+| **Profiling** (`scripts/profile_hot_paths.py`) | Unlike every stage above, nothing: it is a reading, and nothing in it can turn red because veyq got slower. It shows where the time goes inside three hot paths — unlock, an upload of 50 photos, opening a Chapter of 1,000 — on the client and on the server, on the candidate's two images in the production recipe, and each hotspot it finds becomes a tracked item with its number. | Other browsers, real phones, other machines and real content; [its limits](#profiling-its-files-and-its-reading) are below. | Built; read by hand. |
+
+### Profiling: its files and its reading
+
+**A profile file is a file of a signed-in session, so it never leaves the machine.** The browser's CPU profile and
+trace name the account's objects, and a heap snapshot would hold the decrypted content and the unwrapped keys of the
+session, so none is taken, on either side. On the server, Java Flight Recorder by default writes the process
+environment and the system properties into the recording, and the production recipe hands the app its database
+password and the store's admin token in its environment. The driver switches those two events off and proves it on
+every run: a random canary placed in the app's environment must be absent from the recording, and present in a control
+recording taken without the switch. On its first runs the control held the canary, and the database password and the
+store's admin token beside it, which is the reason for the switch. The files stay in the run's directory, which git
+ignores; they are never committed and never attached to an issue, and only numbers move into the docs. None of this
+touches operator-blindness: the server holds no content key a recording could leak.
+
+**What the first reading showed** (2026-10-23 and 2026-10-24, an Apple M4 Pro with 14 cores, Chromium 156, three runs
+per scenario at CPU throttle 1 and 4):
+
+- **Unlock** takes 2.9–3.5 s, and the page's main thread is about 94 % idle meanwhile: it waits on the Argon2id worker,
+  whose cost is the password hardening itself
+  ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
+- **An upload** of 50 photos of about 3.6 MB takes about 41 s, and the network is 9.5 % of it. The content encryption
+  runs in JavaScript on the main thread: its authentication step alone took 1.9 s. In the same browser, the browser's
+  own AES-256-GCM is about 18 times faster on a whole buffer and about 35 times on veyq's framed chunks, both matching
+  the published test vectors; moving bulk encryption there is tracked, and changes the cryptographic suite only through
+  an ADR.
+- **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
+  about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
+- **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.
+
+**Its limits.** One machine, which Microsoft Defender kept busy during several runs (each reading is marked); Chromium
+only; synthetic content; a loopback network through Docker's virtual machine. Chromium's CPU throttle slows the page's
+main thread and never a worker: the Argon2id worker took 5,354 ms at throttle 1 and 5,413 ms at throttle 4 while the
+main thread grew 4.5 times, so a throttle-4 number is a slower main thread, never a slower device. Java Flight Recorder
+samples only the server's own process, and the SQL counts are the database's global ones.
 
 ## Where and when each stage runs
 
@@ -92,6 +128,7 @@ Its stages start together; only lane L1 waits for another stage, the image build
 | Mutation | `mutation.yml` when a push or pull request to `main` changes the crypto package or web's sources, `mutation-backend.yml` when one changes a scoped backend file or its test; both when their own configuration changes, and by hand | 30 min per gate, an estimate | not timed as a whole; ADR 0045 puts an incremental run at 1–3 min |
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release | 15 min, an estimate | 3.5 min, run directly (2026-10-15) |
 | Stack lanes L2, L3 | no job | — | — |
+| Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24) |
 
 Per commit in CI, the longest of these paths is *estimated* at 20–25 minutes (ADR 0091); the first CI run replaces the
 estimate. Two other workflows check the repository without being a stage: CodeQL's static analysis (`codeql.yml`) and
@@ -166,5 +203,7 @@ the job that needs the local compose stack and reports it as not run). Stage by 
 `npm run check` in `src/web/`, `src/admin-web/` and `src/packages/crypto/`, the end-to-end suites with
 `python3 scripts/run_web_e2e.py` (Docker required), and lane L1 with
 `python3 scripts/run_stack_e2e.py --app <app image> --admin <admin image>` (Docker, the repository's `npm ci`, and
-ports 80 and 443 free). How to reproduce the security-specific checks, and what each pins,
+ports 80 and 443 free), and the profile with
+`python3 scripts/profile_hot_paths.py --app <app image> --admin <admin image>` (the same, ffmpeg on the path for the
+synthetic photos, and a machine whose one-minute load is at most 3). How to reproduce the security-specific checks, and what each pins,
 is on [Verify it yourself](/veyq/security/verify-it-yourself/).

@@ -1,5 +1,5 @@
-// What every scenario of the profile driver records around the operation it profiles (cr-profile-where-the-time-goes,
-// decision 2): Chromium's CPU profile of the page's main thread and a performance trace of every thread (the Argon2id
+// What every scenario of the profile driver records around the operation it profiles (cr-profile-where-the-time-goes):
+// Chromium's CPU profile of the page's main thread and a performance trace of every thread (the Argon2id
 // and listing workers are threads of their own, which only the trace sees), under the run's CPU throttle; the requests
 // the page made to the instance's API in the window, for the server's statements per request; and the window's
 // wall-clock edges, by which the driver cuts the server's JFR recording to the same moment.
