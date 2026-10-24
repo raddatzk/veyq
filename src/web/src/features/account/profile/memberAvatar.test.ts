@@ -9,7 +9,7 @@ import {
   sealAvatar, openAvatar, AVATAR_PADDED_LEN, AVATAR_ENCODED_BUDGET, AVATAR_SEALED_B64_LEN, AVATAR_EDGE,
 } from './memberAvatar'
 import { sealName } from './memberName'
-import { ICON_PADDED_LEN, padTo } from '../../spaces/spaceIcon'
+import { ICON_PADDED_LEN } from '../../spaces/spaceIcon'
 import { ICON_EDGE } from '../../spaces/spaceIconImage'
 
 const KEY = new Uint8Array(32).fill(7)
@@ -61,7 +61,7 @@ describe('member avatar (a field under K_tenant, purpose member-avatar)', () => 
   })
 
   it('a picture sealed with the old 8 KiB pad opens to null (the letter), never as a picture', () => {
-    const old = b64std(v1.sealField({ purpose: 'member-avatar', scopeId: AT.scopeId, userId: AT.userId }, KEY, padTo(new Uint8Array([1, 2, 3]), 8192)))
+    const old = b64std(v1.sealField({ purpose: 'member-avatar', scopeId: AT.scopeId, userId: AT.userId }, KEY, v1.padTo(new Uint8Array([1, 2, 3]), 8192)))
     expect(old.length).toBe(10984)
     expect(openAvatar(KEY, AT, old)).toBeNull()
     expect(openAvatar(KEY, AT, sealAvatar(KEY, AT, new Uint8Array([1, 2, 3])))).not.toBeNull() // control

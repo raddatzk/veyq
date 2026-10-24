@@ -48,7 +48,7 @@ purpose `member-avatar`** bound to `[scopeId, userId]`: a new entry in the `pack
 `field_seal` conformance vector in `contracts/crypto/vectors/v1.json`
 ([ADR 0072](0072-a-seal-binds-its-object.md)). `member-name` is **not reused**, so a blob sealed for one purpose can
 never be interpreted as the other. The plaintext is a **256 px WebP padded to a constant length** with the tenant icon's
-pad/unpad (`src/web/src/features/spaces/spaceIcon.ts`; the picture takes the icon's 16 KiB pad and 256 px edge, about 22 KB of
+pad/unpad (`@veyq/crypto`'s one pad, `src/packages/crypto/src/pad.ts`; the picture takes the icon's 16 KiB pad and 256 px edge, about 22 KB of
 base64; the largest place it is drawn is 128 px, the profile page, so it stays sharp on a 2x screen). `sealed_avatar` is a
 `TEXT` column and 21908 < 65532, so the raise needed no schema change. A picture sealed with the earlier 8 KiB pad is not
 one of ours: the client's `openAvatar` refuses any plaintext of another length and shows the letter, so the operator cannot tell

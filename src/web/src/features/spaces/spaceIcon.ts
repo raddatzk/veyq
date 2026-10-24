@@ -21,10 +21,8 @@ const ICON_KEY_INFO = v1.utf8('veyq/v1/space-icon-key')
  * and the `spaceIcon.test.ts` cap test pins them together. Changing it means changing all three.
  */
 export const ICON_PADDED_LEN = 16384
-/** The u32be length header prepended before the encoded bytes; the remainder of the pad is zero-filled. */
-const HEADER_LEN = 4
 /** The largest encoded image the pad can carry — the caller steps encode quality down until it fits. */
-export const ICON_ENCODED_BUDGET = ICON_PADDED_LEN - HEADER_LEN
+export const ICON_ENCODED_BUDGET = ICON_PADDED_LEN - v1.PAD_HEADER_LEN
 
 /**
  * Derive the icon-key `K_icon` from the key of the epoch the icon was sealed under (ADR 0027):
@@ -36,35 +34,12 @@ export function deriveSpaceIconKey(epochKey: Uint8Array): Uint8Array {
 }
 
 /**
- * Pad encoded image bytes to the constant plaintext: `u32be(len) || bytes || zero-fill` to {@link ICON_PADDED_LEN}.
- * Throws `icon_too_large` if the bytes exceed {@link ICON_ENCODED_BUDGET} — the caller must step quality down first.
+ * Pad encoded image bytes to the constant plaintext: `u32be(len) || bytes || zero-fill` to {@link ICON_PADDED_LEN}, with
+ * the one pad `@veyq/crypto` has (`padTo`). Throws `pad_too_large` if the bytes exceed {@link ICON_ENCODED_BUDGET} — the
+ * caller must step quality down first.
  */
 export function pad(bytes: Uint8Array): Uint8Array {
-  return padTo(bytes, ICON_PADDED_LEN)
-}
-
-/** The same `u32be(len) || bytes || zero-fill` pad at another constant length (the member avatar uses the icon's own, ADR 0084).
- *  Throws `icon_too_large` when the bytes do not fit `paddedLen - 4`. */
-export function padTo(bytes: Uint8Array, paddedLen: number): Uint8Array {
-  if (bytes.length > paddedLen - HEADER_LEN) throw new Error('icon_too_large')
-  const out = new Uint8Array(paddedLen)
-  new DataView(out.buffer).setUint32(0, bytes.length, false)
-  out.set(bytes, HEADER_LEN)
-  return out
-}
-
-/** The u32be length header's width: a pad at length `n` carries `n - PAD_HEADER_LEN` encoded bytes. */
-export const PAD_HEADER_LEN = HEADER_LEN
-
-/**
- * Recover the encoded bytes from a padded plaintext (the counterpart to {@link pad}). Throws `icon_malformed` on a
- * length header that overflows the pad — {@link openIcon} turns any failure into the initial (never a throw).
- */
-export function unpad(padded: Uint8Array): Uint8Array {
-  if (padded.length < HEADER_LEN) throw new Error('icon_malformed')
-  const len = new DataView(padded.buffer, padded.byteOffset, padded.byteLength).getUint32(0, false)
-  if (len > padded.length - HEADER_LEN) throw new Error('icon_malformed')
-  return padded.slice(HEADER_LEN, HEADER_LEN + len)
+  return v1.padTo(bytes, ICON_PADDED_LEN)
 }
 
 /**
@@ -83,7 +58,7 @@ export function sealIcon(iconKey: Uint8Array, address: IconAddress, encoded: Uin
  */
 export function openIcon(iconKey: Uint8Array, address: IconAddress, sealedIcon: string): Uint8Array | null {
   try {
-    return unpad(v1.open(iconContext(address), iconKey, fromB64std(sealedIcon)))
+    return v1.unpad(v1.open(iconContext(address), iconKey, fromB64std(sealedIcon)))
   } catch {
     return null
   }

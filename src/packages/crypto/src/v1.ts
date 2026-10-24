@@ -47,6 +47,7 @@ export {
   type BlobMeta,
   type OpenedBlobMeta,
 } from './blobMeta'
+export { padTo, padToClass, unpad, PadInvalid, PAD_HEADER_LEN } from './pad'
 export {
   REPORT,
   newReportKey,

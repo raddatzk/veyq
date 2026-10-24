@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/expenses/entry.v1.schema.json",
+  "title": "Expenses revision, format v1",
+  "description": "The plaintext of one revision of an Expenses record (ADR 0108 decisions 3-5, docs/apps/expenses.md): an expense, a refund, a transfer or a participant, a deletion of one of them, or a participant's erasure. Compact UTF-8 JSON, padded to the smallest size class that carries it (`u32be(len) || bytes || zeros` to 512, 2048, 8192 or 16384 bytes, `@veyq/crypto`'s `padToClass`) and sealed under the revision's own K_rev with the `expense-entry` field seal, bound to (scope, Pot node, entry id, revision); K_rev is wrapped under the Pot's key by `expense-entry-key` (contracts/crypto/vectors/v1.json). The server sees none of it. Readers ignore unknown fields: a field added later under `v: 1` is additive, and a change an older reader would misread is `v: 2`. Arithmetic (part of the version, ADR 0108 decision 9): amounts are integers in the minor unit of their currency (`minorUnits` digits, ISO 4217); a `rate` is a decimal string and every computation is exact. An entry's total converts once into the Pot's base currency, `round_half_away_from_zero(amount * rate * 10^(baseMinorUnits - minorUnits))`, and is then allocated in base minor units by weights: every person's exact share `T * w / sum(w)` rounded down, the units left over handed one each to the people with the largest cut-off remainders, ties by join order (largest remainder). The weights: payers' and receivers' amounts; for a split, 1 each (`equal`), the shares (`shares`) or the exact amounts (`exact`); for line items, each person's exact sum of the items they are on (an item's amount divided equally among its people) plus, for `rest: equal`, an equal part of `amount - sum(items)` among the people on the bill (for `rest: proportional` the sum alone: the rest follows the items). Join order is the participants' `joined`, then their id. A revision whose amounts do not add up (payers' or receivers' amounts not summing to `amount`, exact amounts not summing to it, line items above it, a beneficiary or payer named twice) is invalid: a reader counts it nowhere and shows it as invalid. contracts/expenses/v1-vectors.json pins every rule with worked cases.",
+  "type": "object",
+  "required": ["v", "kind", "heads"],
+  "properties": {
+    "v": { "const": 1, "description": "The format version (ADR 0079 decision 7); the rounding rule above is part of it." },
+    "kind": { "enum": ["expense", "refund", "transfer", "participant", "deleted", "erasure"] },
+    "heads": {
+      "type": "array",
+      "maxItems": 64,
+      "description": "The Pot's heads as this revision's writer read them (ADR 0108 decision 5): every revision of the Pot that no other revision it read names. A reader checks that each named revision is present and matches its digest; one missing is covered only by an erasure of its own record. Empty for the first revision of an empty Pot. A writer that read more than 64 heads names the 64 oldest by the time the server stored them; the next write names the rest.",
+      "items": { "$ref": "#/$defs/head" }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/expense" },
+    { "$ref": "#/$defs/refund" },
+    { "$ref": "#/$defs/transfer" },
+    { "$ref": "#/$defs/participant" },
+    { "$ref": "#/$defs/deleted" },
+    { "$ref": "#/$defs/erasure" }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "A canonical lowercase UUID, minted by the client (ADR 0072 decision 3)."
+    },
+    "head": {
+      "type": "object",
+      "required": ["entryId", "revision", "digest"],
+      "properties": {
+        "entryId": { "$ref": "#/$defs/uuid" },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "digest": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "SHA-256 of that revision's sealed body exactly as the server serves it (the decoded `expense-entry` envelope), 32 bytes in base64url without padding. A re-key re-wraps K_rev and leaves the body, so no digest moves."
+        }
+      }
+    },
+    "minor": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "An amount in the minor unit of its currency, a safe integer so every JSON reader reads it exactly."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 alphabetic code."
+    },
+    "minorUnits": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "The currency's minor-unit digits as the writer counted them (ISO 4217: the yen 0, the euro 2, the dinar 3). Sealed with the amounts, so no reader's currency table can move them."
+    },
+    "rate": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]{0,11}(?:\\.[0-9]{1,12})?|0\\.(?=[0-9]*[1-9])[0-9]{1,12})$",
+      "description": "What one major unit of the entry's currency is worth in major units of the Pot's base currency, as a decimal string greater than zero (`1` where the currency is the base). Fetched or typed (ADR 0108 decision 8); never moved by a later table."
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$",
+      "description": "The day the money moved, `YYYY-MM-DD`, as the writer entered it (no time zone)."
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "category": {
+      "description": "One of the default categories, whose ids the client translates (docs/apps/expenses.md § The Pot), or the id of one of the Pot's own, named in its sealed meta.",
+      "anyOf": [
+        { "enum": ["food", "groceries", "accommodation", "transport", "leisure", "household", "other"] },
+        { "$ref": "#/$defs/uuid" }
+      ]
+    },
+    "receipts": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "description": "The receipts this revision holds, by receipt id (ADR 0108 decision 7). A receipt no revision holds any more is erased after the trash retention. Empty until receipts exist.",
+      "items": { "$ref": "#/$defs/uuid" }
+    },
+    "contribution": {
+      "type": "object",
+      "required": ["participant", "amount"],
+      "properties": {
+        "participant": { "$ref": "#/$defs/uuid" },
+        "amount": { "$ref": "#/$defs/minor" }
+      }
+    },
+    "contributions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/contribution" }
+    },
+    "allocation": {
+      "description": "Who the amount is for (docs/apps/expenses.md § Entries).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode", "participants"],
+          "properties": {
+            "mode": { "const": "equal" },
+            "participants": { "type": "array", "minItems": 1, "maxItems": 200, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "shares"],
+          "properties": {
+            "mode": { "const": "shares" },
+            "shares": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "required": ["participant", "shares"],
+                "properties": {
+                  "participant": { "$ref": "#/$defs/uuid" },
+                  "shares": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "amounts"],
+          "properties": {
+            "mode": { "const": "exact" },
+            "amounts": { "$ref": "#/$defs/contributions", "description": "In the entry's currency; they sum to its `amount`." }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "items", "rest"],
+          "properties": {
+            "mode": { "const": "items" },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "required": ["label", "amount", "participants"],
+                "properties": {
+                  "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+                  "amount": { "$ref": "#/$defs/minor" },
+                  "participants": { "type": "array", "minItems": 1, "maxItems": 200, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } }
+                }
+              }
+            },
+            "rest": {
+              "enum": ["proportional", "equal"],
+              "description": "How `amount - sum(items)` (tip, service) is spread: in proportion to each person's items, or equally among the people on the bill."
+            }
+          }
+        }
+      ]
+    },
+    "expense": {
+      "description": "Money one or more payers paid for the beneficiaries.",
+      "type": "object",
+      "required": ["kind", "title", "date", "category", "currency", "minorUnits", "rate", "amount", "payers", "allocation", "receipts"],
+      "properties": {
+        "kind": { "const": "expense" },
+        "title": { "$ref": "#/$defs/title" },
+        "date": { "$ref": "#/$defs/date" },
+        "category": { "$ref": "#/$defs/category" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "minorUnits": { "$ref": "#/$defs/minorUnits" },
+        "rate": { "$ref": "#/$defs/rate" },
+        "amount": { "$ref": "#/$defs/minor" },
+        "payers": { "$ref": "#/$defs/contributions", "description": "Who paid how much, in the entry's currency; they sum to `amount`." },
+        "allocation": { "$ref": "#/$defs/allocation" },
+        "receipts": { "$ref": "#/$defs/receipts" }
+      }
+    },
+    "refund": {
+      "description": "Money one or more receivers received for the beneficiaries (a credit for a delayed flight): an expense with the signs turned, counted against its category.",
+      "type": "object",
+      "required": ["kind", "title", "date", "category", "currency", "minorUnits", "rate", "amount", "receivers", "allocation", "receipts"],
+      "properties": {
+        "kind": { "const": "refund" },
+        "title": { "$ref": "#/$defs/title" },
+        "date": { "$ref": "#/$defs/date" },
+        "category": { "$ref": "#/$defs/category" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "minorUnits": { "$ref": "#/$defs/minorUnits" },
+        "rate": { "$ref": "#/$defs/rate" },
+        "amount": { "$ref": "#/$defs/minor" },
+        "receivers": { "$ref": "#/$defs/contributions", "description": "Who received how much, in the entry's currency; they sum to `amount`." },
+        "allocation": { "$ref": "#/$defs/allocation" },
+        "refunds": { "$ref": "#/$defs/uuid", "description": "The expense this refunds, when the writer named one. Informational: it moves no amount." },
+        "receipts": { "$ref": "#/$defs/receipts" }
+      }
+    },
+    "transfer": {
+      "description": "Money one participant gave another (settling up). Not a cost: it has no category.",
+      "type": "object",
+      "required": ["kind", "date", "currency", "minorUnits", "rate", "amount", "from", "to", "receipts"],
+      "properties": {
+        "kind": { "const": "transfer" },
+        "title": { "$ref": "#/$defs/title" },
+        "date": { "$ref": "#/$defs/date" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "minorUnits": { "$ref": "#/$defs/minorUnits" },
+        "rate": { "$ref": "#/$defs/rate" },
+        "amount": { "$ref": "#/$defs/minor" },
+        "from": { "$ref": "#/$defs/uuid" },
+        "to": { "$ref": "#/$defs/uuid" },
+        "receipts": { "$ref": "#/$defs/receipts" }
+      }
+    },
+    "participant": {
+      "description": "A person of the Pot: only a name in this Pot, linked to no account (ADR 0108 decision 2). Entries name it by the record's entry id.",
+      "type": "object",
+      "required": ["kind", "name", "active", "joined"],
+      "properties": {
+        "kind": { "const": "participant" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "active": { "type": "boolean", "description": "False once a member deactivated it: entries keep the name; new entries and the overviews no longer offer it." },
+        "joined": { "$ref": "#/$defs/joined" }
+      }
+    },
+    "joined": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "When the participant was added, in milliseconds since the epoch by its first writer's clock, carried unchanged by every later revision of the record: with the record id it is the join order the rounding and the settle-up break ties by."
+    },
+    "deleted": {
+      "description": "An expense, refund or transfer deleted: it leaves the list and the balances and stays restorable (a later revision carrying its content again). The append marks it as a tombstone to the server.",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "deleted" }
+      }
+    },
+    "erasure": {
+      "description": "A participant deleted or removed by a member (ADR 0108 decision 3): written through the member-only erasure, after which the server holds no earlier revision of the record. It keeps the join order and no name.",
+      "type": "object",
+      "required": ["kind", "joined"],
+      "properties": {
+        "kind": { "const": "erasure" },
+        "joined": { "$ref": "#/$defs/joined" }
+      }
+    }
+  }
+}
