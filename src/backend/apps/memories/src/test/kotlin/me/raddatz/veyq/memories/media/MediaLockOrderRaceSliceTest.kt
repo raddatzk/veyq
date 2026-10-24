@@ -67,6 +67,7 @@ class MediaLockOrderRaceSliceTest {
     @Inject lateinit var store: MediaStore
     @Inject lateinit var items: NodeItemsRevisions
     @Inject lateinit var banners: MemoryBannerStore
+    @Inject lateinit var rekeyRows: MediaNodeRekeyParticipant
 
     /**
      * A trash's order (media → node) against a sub-bucket delete: the reparent must lock its media BEFORE the
@@ -136,6 +137,30 @@ class MediaLockOrderRaceSliceTest {
         }
         val f = bannerOnTwoObjects()
         assertEquals(MemoryBannerOutcome.Done, removeBanner(f), "control")
+    }
+
+    /**
+     * A sub-bucket delete's order (bucket → media) against a re-key's commit of the node, whose Memories rows
+     * ([MediaNodeRekeyParticipant.lockRows]) it locks before the node: the commit must lock the named buckets BEFORE the
+     * media. Taken the other way round, it held the delete's medium and waited for the bucket the delete held, which
+     * waited for that medium — a deadlock on both engines (explicit row locks), every round.
+     */
+    @Test
+    fun aSubBucketDeleteAndARekeyCommitOfItsNodeBothFinish() {
+        raceRounds { round ->
+            val f = fixture()
+            val (held, other) = between(
+                first = { BucketEntity.findById(f.subBucketId, LockModeType.PESSIMISTIC_WRITE) }, // deleteBucketReparent's first lock
+                second = { MediaEntity.find("bucketId = ?1 order by id", f.subBucketId).withLock(LockModeType.PESSIMISTIC_WRITE).list() }, // ...its second
+                other = { QuarkusTransaction.requiringNew().run { rekeyRows.lockRows(f.scopeId, f.nodeId) } },
+            )
+            assertNull(held, "round $round: the delete's side failed: $held")
+            assertNull(other, "round $round: the re-key's lock failed: $other")
+        }
+        val f = fixture()
+        QuarkusTransaction.requiringNew().run { rekeyRows.lockRows(f.scopeId, f.nodeId) }
+        store.deleteBucketReparent(f.subBucketId)
+        assertReparented(f, "control")
     }
 
     /**

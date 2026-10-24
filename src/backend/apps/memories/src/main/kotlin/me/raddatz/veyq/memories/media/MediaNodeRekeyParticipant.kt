@@ -168,11 +168,14 @@ class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRek
 
     override val part: String = MediaRekeyRows.PART
 
-    /** The media rows, then the bucket rows [commit] rewrites — each `FOR UPDATE`, before the node's lock. A medium or a
-     *  bucket inserted after this needs the node's lock first (the epoch gate), which the commit holds by then. */
+    /** The bucket rows, then the media rows [commit] rewrites — each `FOR UPDATE`, before the node's lock: buckets →
+     *  media → node, the one lock order of every Memories writer (`MediaStore.ensurePrimaryBucket`'s note). Media first,
+     *  it deadlocked against a sub-bucket delete, which holds its bucket and waits for that bucket's media
+     *  (`MediaLockOrderRaceSliceTest`). A medium or a bucket inserted after this needs the node's lock first (the epoch
+     *  gate), which the commit holds by then. */
     override fun lockRows(scopeId: String, nodeId: String) {
-        MediaRekeyRows.media(scopeId, nodeId, lock = true)
         MediaRekeyRows.buckets(scopeId, nodeId, lock = true)
+        MediaRekeyRows.media(scopeId, nodeId, lock = true)
     }
 
     override fun commit(scopeId: String, nodeId: String, staged: Map<Key, Value>): NodeRekeyParticipant.Verdict {
