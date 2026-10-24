@@ -5,14 +5,16 @@ row, a CR, a fix, or a line in an existing row. The owner decided the run would 
 everything is reviewed together afterwards. A finding's place is decided in that review, not here. The file is
 deleted when its last item has moved.
 
-**Three runs, all gitignored and on this machine only.** Each step's log lies beside its results file. MS Defender ran
-without exclusions in all three.
+**Four runs, all gitignored and on this machine only.** Each step's log lies beside its results file. MS Defender ran
+without exclusions in all four.
 - The collection run, at `87266fe3`:
   `.claude/worktrees/heavy-collection-997b57/.pipeline-out/heavy-collection-2026-10-23/results.md`.
 - The proof run of fix round 1, at `d4eab6be`, landed as `bc64b3c9`:
   `.claude/worktrees/heavy-fixes-integration/.pipeline-out/heavy-fixes-proof-2026-10-24/results.md`.
 - The proof run of fix round 2, at `51725e75`, landed as `e1af30b5`:
   `.claude/worktrees/heavy-fixes-round2/.pipeline-out/heavy-fixes-round2-proof/results.md`.
+- The proof run of fix round 3, at `bf5c386b`, landed as `b471733d`:
+  `.claude/worktrees/heavy-fixes-round3/.pipeline-out/heavy-fixes-round3-proof/results.md`.
 
 ## Fixed and proven
 
@@ -33,26 +35,31 @@ without exclusions in all three.
 | N2, N3, N4, N5–N9 | The changed-key review; the trust reset leaving an empty store (999 → 0 entries); the refusal of the 12,285th mark in EN and DE; the #513/#517 cascades; `REACHED`; S2 with JFR; the after-browser checks. | rounds 1, 2 |
 | #534 (part), #535 | #535 is fully built. #534 has the server's shape check and the schema rule; Q3 is still open. | round 2: api-fuzz, web-e2e |
 | R4 | #489 meets every ADR 0105 target at 1,000, 3,000 and 10,000 photos. | round 1 |
+| Q3, C1 | The root is only `parentId: null`; `parentId == scopeId` is refused with 400 before any state check (owner 2026-10-24). `CommitNodeRekeyRequest` has the schema rule and a shape check before the rights check. | round 3: api-fuzz GREEN, no ST201 on the three operations |
+| Q4 | Every `NodeHeader` title is its page's single `h1`, a folder page included; the styleguide has a section on heading levels (owner 2026-10-24). | round 3: `export-import` 7/7, eight folder-heading specs green |
+| B1 | The cache was not the cause (a label is image config, not a layer). But the app image set no revision label, the admin image carried nginx's, and `ci.yml` overwrote the labels with metadata-action's (version = branch). Each image now sets its own OCI labels; `validate_release_identity.py` assertion 12; `scripts/image_identity_cache_proof.py`. | round 3: the identity proof OK on a warm cache |
+| H1 | `seed members` raises the invite limit and restores the previous value on every exit path. | round 3: 1,000 members without a stop at 22; SIGTERM exits 143 and restores |
+| Q5 | 2 min lease, renewed every 30 s, no release endpoint and no self-takeover (owner 2026-10-24); in ADR 0021 § 6 and the config docs. | docs |
 
 ## Still open
 
 | # | Item | Where |
 |---|---|---|
-| L5 | `memory-banner`'s helper `scrollPastTheBanner` lengthens the page with `page.addStyleTag`, which the instance's CSP refuses (`style-src-elem` inline). Both sticky tests therefore never really ran. The spec needs a way the CSP allows, e.g. a fixture with enough content. The product's sticky offset is correct. | round 2, `step5-stack.log` 287–405 |
-| B1 | The admin image came entirely from the build cache of 2026-10-23, and its `VEYQ_REVISION` label does not name the commit it was built at. Open whether a cached build can carry a stale release identity (ADR 0057). | round 2, step 4 |
-| H1 | Harness note: `seed members --target 1000` on its own stops at member 22 with 429, because the invite limit defaults to 20 per hour. `stage members` raises the limit and resets it afterwards. Document it, or make `seed members` do the same. | round 2, step 6.2a |
-| C1 | `CommitNodeRekeyRequest` carries the same prose-only rule "with `parentId` …" that #534 turned into a schema rule. | round 2, the #534 agent |
+| L5 | Now a product finding: on a 390 px phone the sticky tab row sits 8 px below the compact header. `--app-sticky-top` is 121 px (`layout.css:521`), but below 720 px the tenant row is 64 px instead of 72 px. The scroll part of the spec now works through `element.style`. A fix is in progress. | round 3, `step4-stack.log` 287–391 |
+| H1b | After a SIGTERM the seeder's node child ran on for ~5 s past the restore of the invite limit (502s during the app's restart). The restore should wait for the child to exit. A fix is in progress. | round 3, step 5.3 |
 | N10 | #491's QR compare needs a camera: the owner's own pass on a phone, after the V1 queue. | — |
 
 ## Owner questions
 
 - **Q1 (F6):** moved to inbox #535 (owner 2026-10-24: 401 with its own code). Built.
 - **Q2:** moved to inbox #534 (owner 2026-10-24: inbox, on the V1 line). Partly built.
-- **Q3 (#534, the root form):** today the server reads `parentId == scopeId` as the root, but it outputs the root as `null`, and the web client never sends `scopeId`. The shape check exempts that form for now, so the contract calls invalid what the server accepts. Recommended: refuse `parentId == scopeId`, so a root is only `null` (ADR 0086). That is one line in the server. Also: the generated TS types do not enforce `parentEpoch` (openapi-generator ignores `dependentSchemas`); catching it at typing time would need a typed client wrapper.
-- **Q4 (from L2):** a folder's page has no `h1`; its head is an `h2` (`NodeHeader.vue:19`). Give a folder page an `h1` for accessibility?
-- **Q5 (N1b):** keep 2 min as the default lease? A Server Owner who sets it below about 60 s defeats the renewal. Two optional extensions:
+- **Q3 (#534, the root form): decided 2026-10-24, the root is only `null`; built.** Was: today the server reads `parentId == scopeId` as the root, but it outputs the root as `null`, and the web client never sends `scopeId`. The shape check exempts that form for now, so the contract calls invalid what the server accepts. Recommended: refuse `parentId == scopeId`, so a root is only `null` (ADR 0086). That is one line in the server. Also: the generated TS types do not enforce `parentEpoch` (openapi-generator ignores `dependentSchemas`); catching it at typing time would need a typed client wrapper.
+- **Q4 (from L2): decided 2026-10-24, a folder page gets an `h1`; built.** Was: a folder's page has no `h1`; its head is an `h2` (`NodeHeader.vue:19`). Give a folder page an `h1` for accessibility?
+- **Q5 (N1b): decided 2026-10-24, 2 min without the two extensions; documented.** Was: keep 2 min as the default lease? A Server Owner who sets it below about 60 s defeats the renewal. Two optional extensions:
   - a neutral release endpoint, called on `pagehide`;
   - letting the same user take over their own still-valid lease at once. This changes ADR 0021's "one worker per job".
+- **Q6 (from Q4):** the top level of a space has no `h1`, because no node is named there. Which subject heads it (e.g. the space's name) is a design decision; the styleguide marks it *Open*.
+- **Q7 (from B1):** run `scripts/image_identity_cache_proof.py` in the `build` job too? It costs three builds per image; assertion 12 already holds the rule. Recommended: no.
 
 ## Readings that need a decision
 
