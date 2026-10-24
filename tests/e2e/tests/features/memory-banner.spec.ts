@@ -281,7 +281,14 @@ test(
     await g.goto(shareLink)
     await expect(g.getByRole('heading', { level: 1, name: memoryName })).toBeVisible({ timeout: 60_000 })
     await expect(banner(g).getByRole('button', { name: 'Play the banner video' })).toBeVisible({ timeout: 60_000 })
-    await expect(g.getByRole('button', { name: /banner/i }).filter({ hasNotText: 'Play' })).toHaveCount(0)
+    // No banner write action for the guest: neither the header's "Add banner" / "Change banner" nor the dialog's
+    // "Remove banner". The one button named for the banner is the guest's own play button — its name is its aria-label
+    // (it has no text), so a text filter cannot tell it apart; the count and the name can.
+    for (const name of ['Add banner', 'Change banner', 'Remove banner']) {
+      await expect(g.getByRole('button', { name, exact: true }), `no "${name}" for a guest`).toHaveCount(0)
+    }
+    await expect(g.getByRole('button', { name: /banner/i })).toHaveCount(1)
+    await expect(g.getByRole('button', { name: /banner/i })).toHaveAccessibleName('Play the banner video')
     const back = await scrollPastTheBanner(g)
     expect(Math.round((await tabRow(g).boundingBox())!.y), 'stuck at the top of a page without a top bar').toBe(0)
     await back()

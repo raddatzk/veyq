@@ -79,7 +79,27 @@ async function openPdf(page: Page, colorScheme: 'light' | 'dark'): Promise<Locat
   const layer = page.locator('.pdf-page .pdf-text-layer').first()
   // pdf.js writes the text spans once the page is drawn and near the viewport.
   await expect(layer.locator('span').first()).toBeAttached({ timeout: 60_000 })
+  await layerSettled(layer)
   return layer
+}
+
+/**
+ * Waits until the text layer has stopped being rebuilt: the same width and the same spans over two animation frames.
+ * While the viewer's width still changes, every new width re-lays the layer (`PdfPages.vue` redraws, and the engine's
+ * `replaceChildren` empties the host first), so a span found a moment ago may be detached when its style is read — and
+ * `getComputedStyle` on a detached element reads `''` for every property. The stack lane caught it 2026-10-24: the page went
+ * 1016 → 1030 → 1044 px within 20 ms of the span being found, and all five values read `''`.
+ */
+async function layerSettled(layer: Locator): Promise<void> {
+  await expect.poll(() => layer.evaluate((el) => new Promise<boolean>((resolve) => {
+    const spans = () => [...el.querySelectorAll('span:not(.markedContent)')]
+    const shape = () => `${(el as HTMLElement).style.width}|${spans().length}`
+    const before = shape()
+    const first = spans()[0]
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      resolve(first !== undefined && first.isConnected && spans()[0] === first && shape() === before)
+    }))
+  })), { message: 'the text layer stops being re-laid', timeout: 60_000 }).toBe(true)
 }
 
 test.beforeAll(async ({ browser }) => {
