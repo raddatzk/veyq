@@ -14,6 +14,7 @@ import {
   clearUploads,
   useUploadQueue,
   isRetryable,
+  APPLICATION_OFF,
   QUOTA_EXCEEDED,
   type UploadJob,
   type UploadJobContext,
@@ -157,6 +158,19 @@ describe('core upload queue — failure and retry', () => {
     expect(run).toHaveBeenCalledOnce()
     expect(isRetryable(item)).toBe(false)
     expect(isRetryable({ error: 'chunk_put_failed:500' })).toBe(true)
+  })
+
+  // uc.platform.switch-application-off: an application switched off stays off a moment later too — no retry is made.
+  it('fails a capability_disabled job on its first attempt and makes no retry', async () => {
+    const run = vi.fn<Run>().mockRejectedValue(new Error(APPLICATION_OFF))
+    const { batches } = useUploadQueue()
+    enqueue([job('a', run)], { label: '1' })
+    const item = batches.value[0].files[0]
+
+    await vi.waitFor(() => expect(item.status).toBe('failed'))
+    expect(item.error).toBe('capability_disabled')
+    expect(run).toHaveBeenCalledOnce()
+    expect(isRetryable(item)).toBe(false)
   })
 
   it('fails a refusal its job declares final on the first attempt and marks the item not retryable', async () => {

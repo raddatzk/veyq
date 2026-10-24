@@ -9,7 +9,8 @@
 // application's, which calls in here; this module imports no application (`validate_web_core_imports_no_applications`).
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
-import { HttpStatus } from '../../shared/httpError'
+import { HttpStatus, isCodedError } from '../../shared/httpError'
+import { APPLICATION_OFF } from './queue'
 import { blobApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { PresignedUrl } from '../../api/generated/blob'
@@ -157,13 +158,20 @@ export async function reserveAndPump(
 export async function authedReserve(scopeId: string, declares: BlobDeclare[]): Promise<ReservedUpload[]> {
   const started = await withRefresh(() =>
     blobApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
-  )
+  ).catch(applicationOffAsCode)
   if (started.results.length !== declares.length) throw new Error('upload_failed')
   return started.results.map((r) => {
     if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
     if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
     return { uploadId: r.uploadId, puts: r.presignedPuts }
   })
+}
+
+/** A start its application's switch refused (`422 capability_disabled`, uc.platform.switch-application-off) rethrown as
+ *  the code the queue reads ([APPLICATION_OFF]); any other failure as it came. Member and guest starts alike. */
+export async function applicationOffAsCode(e: unknown): Promise<never> {
+  if (await isCodedError(e, HttpStatus.unprocessable, APPLICATION_OFF)) throw new Error(APPLICATION_OFF)
+  throw e
 }
 
 /** Sign an authed upload's next window (`presignBlobUploadWindows`). */

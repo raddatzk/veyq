@@ -100,9 +100,17 @@ const MAX_ATTEMPTS = 2 // one automatic retry on a transient failure
  */
 export const QUOTA_EXCEEDED = 'quota_exceeded'
 
-/** Whether a failed item is one a retry could help — every failure but [QUOTA_EXCEEDED] and a refusal its job declared
- *  final ({@link UploadJob.isFinal}). */
-export const isRetryable = (f: { error?: string; final?: boolean }): boolean => f.error !== QUOTA_EXCEEDED && !f.final
+/**
+ * The server refused the upload because its application is switched off here (`422 capability_disabled`,
+ * uc.platform.switch-application-off): no retry helps until someone switches it on, so it fails at once like
+ * [QUOTA_EXCEEDED]. The reserve functions turn the top-level refusal into this code; each surface words it.
+ */
+export const APPLICATION_OFF = 'capability_disabled'
+
+/** Whether a failed item is one a retry could help — every failure but [QUOTA_EXCEEDED], [APPLICATION_OFF] and a
+ *  refusal its job declared final ({@link UploadJob.isFinal}). */
+export const isRetryable = (f: { error?: string; final?: boolean }): boolean =>
+  f.error !== QUOTA_EXCEEDED && f.error !== APPLICATION_OFF && !f.final
 
 const batches = reactive<AnyBatch[]>([])
 /** The job behind each item, by item id — kept off the reactive item so the queue's state stays plain data. */
