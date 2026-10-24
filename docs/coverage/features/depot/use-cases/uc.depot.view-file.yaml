@@ -121,6 +121,6 @@ gaps:
     as far as the drawn page's text layer: a one-page PDF built in the spec is uploaded into a folder and opened, and the
     layer, a text span (transparent, selectable, the accent as its selection) and the end marker are read as computed
     styles in light and dark (inbox #517 moved those rules from core's `styles/pdf.css` into Depot's own
-    `features/depot/depot.css`); a drag that selects and copies is not driven there. Written, not yet run: the suite waits
-    for the V1 heavy stage, and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run
+    `features/depot/depot.css`); a drag that selects and copies is not driven there. Green only in local runs of the lane (the V1 heavy
+    stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed. On that run
     the file becomes a ref on the criterion its test is tagged with, and this gap goes.
