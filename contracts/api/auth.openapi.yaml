@@ -176,17 +176,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
         "400":
-          description: The request was malformed (missing token).
+          description: The request was malformed (a body that is no `RefreshRequest`, a token past its bound).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invalid_request }
         "401":
-          description: The refresh token is invalid, expired, or its family was revoked.
+          description: >
+            The request holds no valid credential (RFC 9110), under one of two codes, so a log tells a signed-out
+            boot from a rejected token (ADR 0004's clone case). `no_session`: neither a refresh cookie nor a body
+            token arrived — every web boot without a session asks, since the client cannot see its `HttpOnly`
+            cookie. `refresh_rejected`: a token arrived and is invalid, expired, or its family was revoked.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: refresh_rejected }
+              examples:
+                noSession:
+                  value: { code: no_session }
+                rejected:
+                  value: { code: refresh_rejected }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/token/adopt:
@@ -857,8 +865,8 @@ components:
           type: string
           description: >
             The opaque refresh token to rotate. **Optional**: the client sends the token in the httpOnly
-            cookie instead (an empty body). The server uses the cookie when present, else this field; one of
-            the two must be supplied. No current client uses this field.
+            cookie instead (an empty body). The server uses the cookie when present, else this field; with
+            neither it answers `401 no_session`. No current client uses this field.
           maxLength: 512
           example: cmVmcmVzaC10b2tlbi1vcGFxdWU
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512)'

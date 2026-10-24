@@ -378,10 +378,23 @@ class LoginSliceTest {
     }
 
     @Test
-    fun refreshWithNeitherCookieNorBodyTokenIs400() {
+    fun refreshWithNoCredentialIs401NoSessionAndARejectedTokenIs401RefreshRejected() {
+        // Neither a cookie nor a body token — every signed-out web boot — holds no credential: a 401 (RFC 9110), not a
+        // malformed request, under its own code (inbox #535).
         given().contentType(ContentType.JSON).body("{}")
             .`when`().post("/api/token/refresh")
-            .then().statusCode(400).body("code", equalTo("invalid_request"))
+            .then().statusCode(401).body("code", equalTo("no_session"))
+        // A token that arrived and is refused keeps its own code, so a log tells the two apart — by cookie and by body.
+        given().contentType(ContentType.JSON).cookie("veyq_refresh", "not-a-real-token").body("{}")
+            .`when`().post("/api/token/refresh")
+            .then().statusCode(401).body("code", equalTo("refresh_rejected"))
+        refresh("not-a-real-token").then().statusCode(401).body("code", equalTo("refresh_rejected"))
+    }
+
+    @Test
+    fun aMalformedRefreshRequestIsStill400() {
+        // The 400 stays the shape's: a token past its 512-character bound is refused before the handler.
+        refresh("x".repeat(513)).then().statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     @Test

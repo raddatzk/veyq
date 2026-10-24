@@ -76,11 +76,17 @@ acceptanceCriteria:
     text: Logout revokes the session family of the bearer access token (idempotent).
     coverage:
       backend: { integration: [LoginSliceTest.logoutRevokesFamily] }
+  - id: refresh-without-a-token-is-no-session
+    text: A refresh with neither a refresh cookie nor a body token holds no credential and is a 401 under its own code,
+      `no_session` — apart from a token that arrived and was refused, `refresh_rejected`, so a log tells a signed-out
+      boot from a rejected token (inbox #535).
+    coverage:
+      backend: { integration: [LoginSliceTest.refreshWithNoCredentialIs401NoSessionAndARejectedTokenIs401RefreshRejected] }
   - id: boundary-validation
     text: Malformed requests (missing/invalid email, non-base64 signature, missing or non-base64 nonce on verify,
-      missing refresh token) are rejected at the boundary (400).
+      a refresh token past its bound) are rejected at the boundary (400).
     coverage:
-      backend: { integration: [LoginSliceTest.malformedRequestsRejectedAtTheBoundary, LoginSliceTest.refreshWithNeitherCookieNorBodyTokenIs400] }
+      backend: { integration: [LoginSliceTest.malformedRequestsRejectedAtTheBoundary, LoginSliceTest.aMalformedRefreshRequestIsStill400] }
   - id: instance-salt-stable
     text: GET /api/setup carries a stable instance salt (consumed at registration and login).
     coverage:

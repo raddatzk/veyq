@@ -1,6 +1,6 @@
 {
-  "//": "The one answer of 400 or more that is no error: a document with no session asks this once at its boot and is told 400 or 401, the signed-out state (src/web/src/app/sessionRefresh.ts rotateSession). Read by tests/e2e/src/devices.ts (watchConsole) and scripts/profile_hot_paths.py (request_failures), so the two exempt the same request.",
+  "//": "The one answer of 400 or more that is no error: a document with no session asks this once at its boot and is told 401, the signed-out state (`no_session` with no cookie, `refresh_rejected` with a stale one; contracts/api/auth.openapi.yaml, src/web/src/app/sessionRefresh.ts rotateSession). A 400 here is a malformed request, so it is not exempt (inbox #535). Read by tests/e2e/src/devices.ts (watchConsole) and scripts/profile_hot_paths.py (request_failures), so the two exempt the same request.",
   "method": "POST",
   "path": "/api/token/refresh",
-  "statuses": [400, 401]
+  "statuses": [401]
 }
