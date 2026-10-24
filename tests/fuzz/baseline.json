@@ -21,16 +21,6 @@
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-19",
       "reason": "Accepted: the request body is optional (requestBody required: false) and Jackson reads a JSON null body as no body, so the case is the request without one, which the contract allows; the handler then answers the unknown job's 404. No contract declares a nullable body, and refusing a literal null would need a reader of its own for one operation."
-    },
-    {
-      "id": "74d7a3",
-      "operation": "POST /api/token/refresh",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Accepted by design: the refresh token travels in the cookie or the body, one of the two required — a rule across locations no schema states, declared as this operation's 400 (`missing token`); and no generated request carries a token the run holds."
     }
   ]
 }

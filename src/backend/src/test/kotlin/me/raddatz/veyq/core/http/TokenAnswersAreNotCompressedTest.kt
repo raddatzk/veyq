@@ -41,9 +41,9 @@ import kotlin.io.path.readText
  *     pass every other check vacuously), and not a list of ciphertext;
  *  2. each derived operation's generated interface method carries `@Uncompressed`, and no other does;
  *  3. on the wire, each derived operation — called with `Accept-Encoding: gzip`, on the port its channel answers on — is
- *     answered without a `Content-Encoding`. A refusal its method answers itself (`refreshSession`'s `400`) is the case
- *     that reaches the annotation; one refused before the method (a body bound and validated first) is never compressed
- *     anyway. The control: a member's media list — a method's own JSON answer — and a static file ARE gzip-encoded, so
+ *     answered without a `Content-Encoding`. A refusal its method answers itself (`refreshSession`'s `401 no_session`)
+ *     is the case that reaches the annotation; one refused before the method (a body bound and validated first) is
+ *     never compressed anyway. The control: a member's media list — a method's own JSON answer — and a static file ARE gzip-encoded, so
  *     a green here is not a server that compresses nothing.
  */
 @QuarkusTest

@@ -34,8 +34,11 @@ class TokenResource(private val sessions: SessionService, private val cookie: Se
 
     override fun refreshSession(refreshRequest: RefreshRequest): Response {
         val fromCookie = cookie.read(headers)
+        // Neither a cookie nor a body token: the request holds no credential, which is a 401 — under its own code, so
+        // a log tells every signed-out web boot (it asks because it cannot see its HttpOnly cookie) from a token this
+        // server refused, which is what ADR 0004's clone case is read from (inbox #535).
         val token = fromCookie?.token ?: refreshRequest.refreshToken
-            ?: return httpError(Failures.invalidRequest)
+            ?: return httpError(httpFailure("no_session", UNAUTHORIZED))
         val rotated = sessions.refresh(token)
             ?: return httpError(httpFailure("refresh_rejected", UNAUTHORIZED))
         return if (fromCookie != null) {

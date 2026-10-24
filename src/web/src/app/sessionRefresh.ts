@@ -47,8 +47,8 @@ export async function refreshSession(): Promise<void> {
 async function rotateSession(): Promise<void> {
   try {
     // refreshToken null → the httpOnly cookie carries it (remember me): send an empty body and the browser
-    // attaches the cookie. Otherwise send the in-memory body token. A boot with neither yields a 400/401 → the
-    // catch leaves a clean logged-out state. The new token comes back in the body (in-memory path) or a fresh
+    // attaches the cookie. Otherwise send the in-memory body token. A boot with neither yields a `401 no_session` →
+    // the catch leaves a clean logged-out state. The new token comes back in the body (in-memory path) or a fresh
     // cookie (remember path, body token absent → keep null).
     const pair = await tokenApi().refreshSession({
       refreshRequest: { refreshToken: session.refreshToken ?? undefined },

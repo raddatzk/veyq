@@ -261,9 +261,10 @@ every header of the admin origin.
   `sw.js` or `@veyq/crypto` creates one (pdf.js wraps its worker in a `blob:` only for a cross-origin `workerSrc`, and
   ours is same-origin), and none of page load, sign-in, the settings, the PDF, the map, the kit download or the
   browser tooling's actions reproduced it alone; every worker the app starts loaded same-origin. It is refused as it
-  should be and breaks nothing, and its source stays unlocated. The 400 seen at the same time is the cold start's
-  session restore: `POST /api/token/refresh` with no refresh cookie answers `invalid_request` by contract
-  (`auth.openapi.yaml`), with a stale one 401, on both clients.
+  should be and breaks nothing, and its source stays unlocated. The 400 seen at the same time was the cold start's
+  session restore: `POST /api/token/refresh` with no refresh cookie, which now answers `401 no_session` by contract
+  (`auth.openapi.yaml`, inbox #535; then `400 invalid_request`), with a stale one `401 refresh_rejected`, on both
+  clients.
 - The admin origin's headers (§ *admin-web*) have no CI test: no workflow starts the admin container. Checked
   once on 2026-09-27 (cr-admin-origin-hsts), without nginx:
   - the entrypoint hook, run against the template, renders the HSTS directive for the switch unset, empty and
