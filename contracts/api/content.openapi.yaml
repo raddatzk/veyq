@@ -47,7 +47,8 @@ paths:
             requiredWith: [parentId]
       summary: Create a node of any kind in the scope's tree.
       description: >
-        Adds a node under `parentId` (or the scope root if omitted). The client mints the node's id (`nodeId`,
+        Adds a node under `parentId` (or the scope root if null or omitted — the root's only form: a `parentId` equal
+        to the path's `scopeId` is `400 invalid_request`, inbox #534). The client mints the node's id (`nodeId`,
         [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and the
         `wrappedContentKey` (the node's content key under its parent's — every kind carries one, ADR 0080), each sealed bound to that id.
         The server stores it opaquely under exactly that id and enforces slug uniqueness per parent + the
@@ -77,7 +78,7 @@ paths:
               schema: { $ref: "#/components/schemas/NodeCreated" }
               example: { nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
         "400":
-          description: Malformed request (missing/invalid fields, or a `kind` outside the `NodeKind` token's shape).
+          description: Malformed request (missing/invalid fields, a `kind` outside the `NodeKind` token's shape, a `parentId` without its `parentEpoch`, or a `parentId` equal to the path's `scopeId`), decided before any answer about the instance's state.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -188,8 +189,8 @@ paths:
 
         **Placement** — move and rename are ONE request shape, a rename being a move to the same parent ([ADR
         0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision
-        3). It carries all of: the destination `parentId` (null/absent = the scope root; a rename sends the
-        current parent), the node's content key re-wrapped under the destination parent's key
+        3). It carries all of: the destination `parentId` (null/absent = the scope root, its only form — the path's
+        `scopeId` there is `400 invalid_request`; a rename sends the current parent), the node's content key re-wrapped under the destination parent's key
         (`wrappedContentKey`), the name re-sealed under a field key derived from that key (`encryptedName`), the slug token recomputed under
         it (`slugToken`), the `epoch` the entry was sealed at, and the `placementRevision` it was built on. Sending
         any of `encryptedName`, `slugToken`, `wrappedContentKey` or a `parentId` without the rest is `400
@@ -230,12 +231,13 @@ paths:
               slugToken: bmV3LXNsdWc=
               wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
               epoch: 0
+              parentEpoch: 0
               placementRevision: 2
       responses:
         "204":
           description: The node was updated.
         "400":
-          description: Malformed request, or an incomplete placement write (a name, slug, wrap or parent without the rest of it, or without its `placementRevision` and `epoch`).
+          description: Malformed request, or an incomplete placement write (a name, slug, wrap or parent without the rest of it, or without its `placementRevision` and `epoch`; a `parentId` without its `parentEpoch`, or equal to the path's `scopeId`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -703,7 +705,9 @@ paths:
         "204":
           description: The node is re-keyed; its epoch is the scope's current one.
         "400":
-          description: Malformed request (a missing field, a `parentId` that is not the node's parent).
+          description: >
+            Malformed request: a missing field, a `parentId` without its `parentEpoch` or equal to the path's `scopeId`
+            (both decided before any answer about the instance's state), or a `parentId` that is not the node's parent.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -781,7 +785,9 @@ components:
       # A create under a node states the epoch it read the parent at (ADR 0109 point 6; NodesHandler's shape check,
       # inbox #534). `parentId`'s null is the scope root, which brings none, so only a string one brings it — hence
       # `dependentSchemas`, not `dependentRequired` (which would fire on a null too), and `parentEpoch`'s own null
-      # counts as absent. The generators ignore the keyword (UpdateNodeRequest's note); Schemathesis reads it.
+      # counts as absent. The generators ignore the keyword (UpdateNodeRequest's note); Schemathesis reads it. The root
+      # has that one form: a string equal to the path's `scopeId` (the root's stored slot) is the same shape check's 400
+      # — a rule across the path and the body, so no schema keyword can say it.
       dependentSchemas:
         parentId:
           if: { properties: { parentId: { type: string } } }
@@ -800,7 +806,9 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: Parent node id, or null/absent for the scope root.
+          description: >
+            Parent node id, or null/absent for the scope root — the root's only form: the path's `scopeId` here is
+            `400 invalid_request` (inbox #534).
           example: null
         kind:
           $ref: "#/components/schemas/NodeKind"
@@ -879,7 +887,7 @@ components:
         decided before any answer about the instance's state.
       # A placement comes whole (NodesHandler.PlacementRequest.complete). `parentId` is not a key here: its null is the
       # scope root and is sent alone by nobody, so only a non-null one brings the rest (dependentSchemas below), and
-      # its `parentEpoch` (NodesHandler.namesAParentNodeWithoutItsEpoch, which runs before the access check). The
+      # its `parentEpoch` (NodesHandler.parentShapeFault, which runs before the access check). The
       # generators ignore both keywords (measured on openapi-generator 7.23.0: the Kotlin and TypeScript models are
       # the same as without them — a top-level `if` would not be: it turns a sibling-annotated `$ref` to the schema
       # into `Any`); Schemathesis reads them.
@@ -926,7 +934,9 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: Placement write — the destination parent; null/absent = the scope root. A rename sends the node's current parent.
+          description: >
+            Placement write — the destination parent; null/absent = the scope root, its only form (the path's
+            `scopeId` here is `400 invalid_request`, inbox #534). A rename sends the node's current parent.
           example: null
         wrappedContentKey:
           type: string
@@ -1721,6 +1731,18 @@ components:
       type: object
       description: The node's own re-keyed fields (`commitNodeRekey`); every list-shaped part is staged under the re-key id first.
       required: [nodeEpoch, epoch, placementRevision, metaRevision, encryptedName, slugToken, wrappedContentKey]
+      # Below the root the entry goes under the parent's current key, so a commit with a parent states the parent's
+      # epoch as read (top-down, ADR 0109 point 2; RekeyStore.commit) — CreateNodeRequest's rule (inbox #534): only a
+      # string `parentId` brings it, a null one is the root and brings none, and `parentEpoch`'s own null counts as
+      # absent. RekeyHandler.commit's shape check decides it before any answer about the instance's state, with the
+      # root's one form: a `parentId` equal to the path's `scopeId` is refused there too. The generators ignore the
+      # keyword (UpdateNodeRequest's note); Schemathesis reads it.
+      dependentSchemas:
+        parentId:
+          if: { properties: { parentId: { type: string } } }
+          then:
+            required: [parentEpoch]
+            properties: { parentEpoch: { type: integer } }
       properties:
         nodeEpoch:
           x-veyq-visibility: structure
@@ -1740,12 +1762,16 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: The node's parent as read; null/absent at the scope root. A parent that is not the node's is `400`.
+          description: >
+            The node's parent as read; null/absent at the scope root, its only form (the path's `scopeId` here is
+            `400 invalid_request`, inbox #534). A parent that is not the node's is `400`.
           example: null
         parentEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
-          description: With `parentId` — the parent's epoch as read; it must be the scope's current one (top-down), else `409 node_rekey_pending`.
+          description: >
+            Required with a non-null `parentId` (else `400 invalid_request`): the parent's epoch as read; it must be the
+            scope's current one (top-down), else `409 node_rekey_pending`.
           minimum: 0
           example: 1
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'

@@ -113,7 +113,12 @@ class NodesStore(private val gate: NodeEpochGate) {
             .createQuery("select r.revision from ScopeTreeRevisionEntity r where r.scopeId = ?1", Long::class.javaObjectType)
             .setParameter(1, scopeId).resultList.singleOrNull() ?: 0L
 
-    /** Resolve a parent slot within the scope: the scope id (root), a node in the same scope, or missing. */
+    /**
+     * Resolve a stored parent slot within the scope: the scope id (the root's slot), a node in the same scope, or
+     * missing. The scope id here is the slot a handler maps a null `parentId` to, never a wire value: the member's
+     * create and placement refuse it as a parent (`NodesHandler.parentShapeFault`), and a guest's lies outside every
+     * share's subtree.
+     */
     fun parentSlot(scopeId: String, parentSlot: String): ParentSlot {
         if (parentSlot == scopeId) return ParentSlot.Root
         val n = NodeEntity.findById(parentSlot)?.takeIf { it.deletedAt == null } ?: return ParentSlot.Missing

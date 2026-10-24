@@ -55,13 +55,14 @@ class NodeKindMatrixSliceTest {
         else -> false
     }
 
-    private data class Tree(val userId: String, val scopeId: String, val slots: Map<String, String>)
+    /** [slots]: the `parentId` each parent slot is named by on the wire — the scope root by null, its one form (inbox #534). */
+    private data class Tree(val userId: String, val scopeId: String, val slots: Map<String, String?>)
 
     /** A scope with one node of each kind at its root — seeded, not created, so no rule decides where they sit. */
     private fun tree(): Tree {
         val (userId, scopeId) = seedMemberScope()
-        val slots = mapOf(
-            "ROOT" to scopeId,
+        val slots = mapOf<String, String?>(
+            "ROOT" to null,
             "FOLDER" to seedNode(scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY),
             "MEMORY" to seedNode(scopeId, "MEMORY", wrappedContentKey = "aw=="),
             "CHAPTER" to seedNode(scopeId, "CHAPTER", wrappedContentKey = "aw=="),

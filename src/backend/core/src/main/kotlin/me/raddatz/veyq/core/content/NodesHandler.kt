@@ -125,9 +125,9 @@ class NodesHandler(
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         parentEpoch: Int?,
     ): CreateNodeOutcome {
-        // The request's own shape first, as the boundary's validation is: a parent node without its `parentEpoch` is a
-        // 400 for anyone, before any answer about the instance's state (inbox #534; the contract's `dependentSchemas`).
-        if (namesAParentNodeWithoutItsEpoch(scopeId, parentSlotId, parentEpoch)) return CreateNodeOutcome.InvalidRequest
+        // The request's own shape first, as the boundary's validation is: a parent node without its `parentEpoch`, or the
+        // scope as the parent, is a 400 for anyone, before any answer about the instance's state (inbox #534).
+        if (parentShapeFault(scopeId, parentSlotId, parentEpoch)) return CreateNodeOutcome.InvalidRequest
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
         // The member's create opens its own transaction: the loser of a concurrent create answers as its replay does.
@@ -193,7 +193,8 @@ class NodesHandler(
         // alike (this narrows ADR 0080 Decision 6's "at or below": a writer told to re-read never leaves a name
         // unopenable). Under the lock a rotation takes, so a rotation that committed first is seen.
         if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
-        val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
+        // null/absent → the scope root (slot = scope id); a member's create never names the slot itself (parentShapeFault)
+        val slot = parentSlotId ?: scopeId
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
         // The boundary before anything that answers by what lies outside it (a slug taken there).
@@ -288,23 +289,22 @@ class NodesHandler(
         wrappedMeta != null && nodeEpoch == null -> UpdateNodeOutcome.IncompletePlacement
         placement.present && !(if (epochOptional) placement.completeWithoutEpoch else placement.complete) ->
             UpdateNodeOutcome.IncompletePlacement
-        namesAParentNodeWithoutItsEpoch(scopeId, placement.parentId, placement.parentEpoch) -> UpdateNodeOutcome.IncompletePlacement
+        parentShapeFault(scopeId, placement.parentId, placement.parentEpoch) -> UpdateNodeOutcome.IncompletePlacement
         else -> null
     }
 
     /**
-     * Whether a create or a placement names a parent node but not the epoch it read it at (ADR 0109 point 6) — a shape
-     * fault, so it is decided before anything is read: a missing, trashed or foreign parent, a scope the caller is no
-     * member of, would otherwise answer first, and a request the contract refuses (`dependentSchemas`, inbox #534) would
-     * read as one accepted and refused for the instance's state.
+     * Whether a create's or a placement's parent is malformed (inbox #534) — a shape fault, so it is decided before
+     * anything is read: a missing, trashed or foreign parent, a scope the caller is no member of, would otherwise answer
+     * first, and a request the contract refuses would read as one accepted and refused for the instance's state.
      *
-     * `parentId == scopeId` is left out: it is the scope root's slot, which this server reads as the root
-     * ([NodesStore.parentSlot]) and which needs no `parentEpoch`. The contract names the root only by a null or absent
-     * `parentId`, so its rule covers this one form too; whether it is refused or kept as the root is the owner's open
-     * question of inbox #534, and until then this check does not change what it means.
+     * Two faults. A parent node without the epoch it was read at (ADR 0109 point 6; the contract's `dependentSchemas`).
+     * And the scope itself as the parent: the root has one form on the wire, a null or absent `parentId` (owner
+     * 2026-10-24; one form per meaning, ADR 0086). The scope id is only the root's stored slot ([NodesStore.parentSlot]),
+     * which the wire never names — a list serves it as null — so it is refused here, with or without a `parentEpoch`.
      */
-    private fun namesAParentNodeWithoutItsEpoch(scopeId: String, parentId: String?, parentEpoch: Int?): Boolean =
-        parentId != null && parentId != scopeId && parentEpoch == null
+    private fun parentShapeFault(scopeId: String, parentId: String?, parentEpoch: Int?): Boolean =
+        parentId == scopeId || (parentId != null && parentEpoch == null)
 
     /**
      * The principal-free half of [update]: everything after the caller's own gate (a member's [ScopeAccess], a guest's
