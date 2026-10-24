@@ -33,7 +33,7 @@ div.veyq-node-host
             path
       div.veyq-node-header-body
         div.veyq-node-header-titlerow
-          h2.veyq-node-header-title
+          h1.veyq-node-header-title
             "Trips"
           div.veyq-node-header-actions
             button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]

@@ -216,18 +216,18 @@ async function openSpace(page: Page): Promise<void> {
 }
 
 /**
- * A row of the open level, opened by its name, and the heading it opens on: a node's own page (a Memory) names it at
- * `h1`, a folder's header inside the level view at `h2` (`NodeHeader`'s `level`).
+ * A row of the open level, opened by its name, and the heading it opens on: the page's one `h1`, the node's name — a
+ * Memory's page and a folder's level view alike (`NodeHeader`, styleguide § Heading levels).
  */
-async function openRow(page: Page, name: string, opens: 'memory' | 'folder'): Promise<void> {
+async function openRow(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name, exact: true }).click({ timeout: 60_000 })
-  await expect(page.getByRole('heading', { level: opens === 'memory' ? 1 : 2, name })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
 /** A folder of the space's top level, read fresh: a new document. */
 async function openTopFolder(page: Page, name: string): Promise<void> {
   await openSpace(page)
-  await openRow(page, name, 'folder')
+  await openRow(page, name)
 }
 
 /**
@@ -391,7 +391,7 @@ test(
     await create.getByLabel('Name').fill(recordTyped(memoryName))
     await create.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(create).toBeHidden()
-    await openRow(page, memoryName, 'memory')
+    await openRow(page, memoryName)
 
     const chooser = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: 'Upload', exact: true }).click()
@@ -472,7 +472,7 @@ test(
 
     // A new document: the imported Memory as the server serves it.
     await openTopFolder(page, memoryTarget)
-    await openRow(page, memoryName, 'memory')
+    await openRow(page, memoryName)
     await expect(page.getByText('2 items', { exact: true })).toBeVisible({ timeout: 60_000 })
     await expectCoverShown(page)
     const after = await photosAsShown(page)
@@ -545,9 +545,9 @@ test(
 
     // The imported tree, read back by downloading it again: the same entries, the same bytes, the same manifest tree.
     await openTopFolder(page, treeTarget)
-    await openRow(page, tree, 'folder')
-    await openRow(page, sub, 'folder')
-    await openRow(page, subsub, 'folder')
+    await openRow(page, tree)
+    await openRow(page, sub)
+    await openRow(page, subsub)
     await expect(downloadButton(page, treeFiles.deepest.name)).toBeEnabled({ timeout: 60_000 })
     await withoutPicker(page)
     const started = page.waitForEvent('download')

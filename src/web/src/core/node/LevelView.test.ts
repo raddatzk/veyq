@@ -111,9 +111,22 @@ describe('LevelView: the one list', () => {
     // the folders by name, then a, b, c, d of two applications interleaved (case ignored); the tree's order decides nothing
     expect(titlesOf(w)).toEqual(['Alpha', 'Zed', 'alpha', 'Bravo', 'Charlie', 'delta'])
     expect(w.findAll('ul.veyq-level-list')).toHaveLength(1)
-    expect(w.findAll('h2'), 'no section headings: the folder header\'s own title is the only one').toHaveLength(1)
+    expect(w.findAll('h1, h2, h3, h4, h5, h6'), 'no section headings: the folder header\'s own title is the only one').toHaveLength(1)
     expect(w.findAll('li.veyq-level-item').map((li) => li.attributes('data-kind'))).toEqual([FOLDER_KIND, FOLDER_KIND, 'BETA', 'ALPHA', 'BETA', 'ALPHA'])
     expect(blocks(w)).toEqual(['overview', 'list'])
+  })
+
+  it('a folder\'s page has exactly one h1, the folder\'s name, for a member and a guest alike', () => {
+    twoKinds()
+    const tree = [TRIPS, node('Rome', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips')]
+    for (const w of [mountLevel(tree, { folder: TRIPS }), mountGuest(ShareRole.Read, tree)]) {
+      const h1s = w.findAll('h1')
+      expect(h1s).toHaveLength(1)
+      expect(h1s[0].text()).toBe('Trips')
+      expect(h1s[0].classes()).toContain('veyq-node-header-title')
+    }
+    // The name the host resolved (a sealed name, unsealed) is the h1's text, not the node's raw one.
+    expect(mountLevel(tree, { folder: TRIPS, folderName: 'Italy 2026' }).get('h1').text()).toBe('Italy 2026')
   })
 
   it('reads digits as numbers (Foto 2 before Foto 10) across kinds', () => {

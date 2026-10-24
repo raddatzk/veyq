@@ -26,15 +26,17 @@ const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction
 const labels = (w: ReturnType<typeof mountHeader>) => w.findAll('.veyq-node-header-action').map((b) => b.attributes('aria-label'))
 
 describe('NodeHeader', () => {
-  it('draws the title at the asked heading level, the subtitle and the kind icon', () => {
-    const w = mountHeader({ title: 'Trips', subtitle: '3 items', icon: 'folder', level: 1 })
+  it('draws the title as the page\'s one h1, the subtitle and the kind icon', () => {
+    const w = mountHeader({ title: 'Trips', subtitle: '3 items', icon: 'folder' })
+    // Every header opens its node's page, so its title is that page's h1 (styleguide § Heading levels).
+    expect(w.findAll('h1')).toHaveLength(1)
+    expect(w.findAll('h2, h3, h4, h5, h6')).toHaveLength(0)
     expect(w.find('h1.veyq-node-header-title').text()).toBe('Trips')
     // The name shows two lines at most (`ui.css`); the whole name stays in the DOM and is the title's tooltip.
     expect(w.find('h1.veyq-node-header-title').attributes('title')).toBe('Trips')
     expect(w.find('.veyq-node-header-subtitle').text()).toBe('3 items')
     expect(w.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
     expect(w.findComponent(VeyqIcon).props('name')).toBe('folder')
-    expect(mountHeader({ title: 'T' }).find('h2.veyq-node-header-title').exists()).toBe(true)
   })
 
   it('the leading slot replaces the icon (a cover), the meta slot sits under the name', () => {

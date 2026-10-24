@@ -306,7 +306,7 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" :order="FILE_HEADER_ORDER">
+    <NodeHeader icon="file" :title="node.name" :actions="headerActions" :core-actions="coreActions" :order="FILE_HEADER_ORDER">
       <template v-if="uploader" #meta>
         <p class="file-detail-uploader" data-testid="file-uploader">
           <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->
