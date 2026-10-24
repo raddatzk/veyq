@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // The entries of a `VeyqMenu` and of its submenus (see there).
+import { inject } from 'vue'
 import { DropdownMenuItem, DropdownMenuPortal, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from 'reka-ui'
 import VeyqIcon from './VeyqIcon.vue'
-import type { VeyqMenuItem } from './menu'
+import { MENU_PICK, type VeyqMenuItem } from './menu'
 
 defineProps<{ items: VeyqMenuItem[] }>()
+const pick = inject(MENU_PICK, (run: () => void) => run())
 </script>
 
 <template>
@@ -30,7 +32,7 @@ defineProps<{ items: VeyqMenuItem[] }>()
       v-else
       :class="['veyq-menu__item', item.class]"
       :disabled="item.disabled"
-      @select="(event: Event) => item.command?.(event)"
+      @select="(event: Event) => item.command && pick(() => item.command!(event))"
     >
       <div class="veyq-menu__item-content">
         <a v-if="item.url" class="veyq-menu__link" :href="item.url" :target="item.target">
