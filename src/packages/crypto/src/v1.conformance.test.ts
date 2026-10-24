@@ -604,6 +604,44 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.hkdfSha256(unhex(s.epoch_key), unhex(s.salt), unhex(s.info), s.length))).toBe(s.okm)
   })
 
+  // An Expenses revision (ADR 0108 decision 4): K_rev wrapped under the Pot's K_node (`expense-entry-key`), the body a
+  // field seal under that K_rev (`expense-entry`), padded to a size class. The two vectors are one chain, and what makes a
+  // re-key safe is that it is a chain: a new K_node re-wraps K_rev, and the body, its envelope and so its digest stay put.
+  describe('expenses revision (seal.sym[\'expense-entry-key\'] → field_seal[\'expense-entry\'])', () => {
+    const k = vectors.seal.sym['expense-entry-key'] as SymVector
+    const f = vectors.field_seal['expense-entry'] as FieldVector
+    const keyCtx = { purpose: 'expense-entry-key', ...k.context } as v1.SealContext
+    const bodyCtx = { purpose: 'expense-entry', ...k.context } as v1.FieldContext
+    it('the body is sealed under the K_rev the wrap carries, at the same address', () => {
+      expect(f.parent_key).toBe(k.plaintext)
+      expect(f.context).toEqual(k.context)
+    })
+    it('opens top-down: K_rev under the Pot\'s key, the body under K_rev', () => {
+      const kRev = v1.open(keyCtx, unhex(k.kek), unhex(k.blob))
+      expect(hex(v1.openField(bodyCtx, kRev, unhex(f.envelope)))).toBe(f.plaintext)
+    })
+    it('the Pot\'s key does not open the body: only K_rev does', () => {
+      expect(() => v1.openField(bodyCtx, unhex(k.kek), unhex(f.envelope))).toThrow(new v1.OpenRefused('expense-entry'))
+    })
+    it('a re-key re-wraps K_rev under a new node key and leaves the body\'s bytes, so its digest, as they were', () => {
+      const digest = createHash('sha256').update(unhex(f.envelope)).digest('hex')
+      const newNodeKey = unhex(k.kek).map((b) => b ^ 0x5a)
+      const kRev = v1.open(keyCtx, unhex(k.kek), unhex(k.blob))
+      const rewrapped = v1.seal(keyCtx, newNodeKey, kRev)
+      expect(() => v1.open(keyCtx, unhex(k.kek), rewrapped)).toThrow(new v1.OpenRefused('expense-entry-key'))
+      const reopened = v1.open(keyCtx, newNodeKey, rewrapped)
+      expect(hex(v1.openField(bodyCtx, reopened, unhex(f.envelope)))).toBe(f.plaintext)
+      expect(createHash('sha256').update(unhex(f.envelope)).digest('hex')).toBe(digest)
+    })
+    it('the plaintext is a format-v1 revision padded to the smallest size class', () => {
+      const padded = unhex(f.plaintext)
+      expect(padded.length).toBe(512)
+      const revision = JSON.parse(new TextDecoder().decode(v1.unpad(padded)))
+      expect(revision.v).toBe(1)
+      expect(hex(v1.padToClass(v1.unpad(padded), [512, 2048, 8192, 16384]))).toBe(f.plaintext)
+    })
+  })
+
   it('blinded slug token (AD-26)', () => {
     const s = vectors.slug_token
     expect(hex(v1.slugToken(unhex(s.contentKey), s.parentSlot, s.slug))).toBe(s.token)

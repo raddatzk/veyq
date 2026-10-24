@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { fromB64std } from '@veyq/crypto/base64'
-import { deriveSpaceIconKey, sealIcon, openIcon, pad, unpad, ICON_PADDED_LEN } from './spaceIcon'
+import { unpad } from '@veyq/crypto/v1'
+import { deriveSpaceIconKey, sealIcon, openIcon, pad, ICON_PADDED_LEN } from './spaceIcon'
 
 describe('space icon primitives (uc.spaces.set-space-icon)', () => {
   const key = new Uint8Array(32).fill(7)

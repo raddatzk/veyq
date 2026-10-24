@@ -103,6 +103,11 @@ export const SEAL_PURPOSES = {
   'report-share': [['itemKind', 'role'], ['itemId', 'id']],
   // The same for an upload link a WRITE_ONLY guest reports: addressed by the link's share id.
   'report-link': [['shareId', 'shareId']],
+  // An Expenses revision's own random key K_rev (ADR 0108 decision 4), wrapped under the Pot's K_node and bound to the
+  // revision it opens — the shape of a K_blob under its owner. A re-key after a rotation (ADR 0109) rewrites only this
+  // wrap: the body K_rev opens (`expense-entry`, below) and its digest stay byte-identical. A wrap served at another
+  // entry or revision, or in another Pot, does not open.
+  'expense-entry-key': [['scopeId', 'id'], ['nodeId', 'id'], ['entryId', 'id'], ['revision', 'uint']],
   // A statement of reasons' facts, sealed once by the moderator under the statement's fresh K_facts (ADR 0093 § 7,
   // ./report.ts) — every affected member opens this one copy with the key wrapped to them (`moderation-facts-key`).
   // K_facts is unique to the statement, and the seal still binds the case and the statement id the moderator's browser
@@ -116,7 +121,7 @@ export const SEAL_PURPOSES = {
  * drawn per write, where K_parent is the key the field's object hands its fields: the parent's key for a node's name
  * (the directory entry, ADR 0080 Decision 2), the node's own key for its meta, `K_node` or a guest's `K_up` for a
  * medium's tiers, a bucket's name and a guest's display name, `K_share` for a share's fields, `K_tenant` for a member's
- * name and picture. The AAD binds the object as it would for a plain seal (ADR 0072 Decision 1); the share's three
+ * name and picture, an Expenses revision's own `K_rev` for its body. The AAD binds the object as it would for a plain seal (ADR 0072 Decision 1); the share's three
  * fields stay purpose-only, because `K_share` — and so each `K_field` under it — is unique to one share (Decision 2).
  * `group-name` and `space-icon` are not here: they derive their key per (scope, epoch), not per write, because a pending
  * invitee is handed that key (`group-name-key`).
@@ -133,6 +138,11 @@ export const FIELD_PURPOSES = {
   'member-name': [['scopeId', 'id'], ['userId', 'id']],
   // A member's profile picture (ADR 0084): its own purpose, so a blob sealed for the name never opens as the picture.
   'member-avatar': [['scopeId', 'id'], ['userId', 'id']],
+  // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
+  // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
+  // body. It keeps the object binding though K_rev is unique to the revision (ADR 0072 Decision 2), so a body served as
+  // another entry's or another revision's does not open.
+  'expense-entry': [['scopeId', 'id'], ['nodeId', 'id'], ['entryId', 'id'], ['revision', 'uint']],
   'share-memory-name': [],
   'share-note': [],
   'share-name': [],

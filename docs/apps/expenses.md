@@ -57,7 +57,9 @@ PDFs). Three kinds:
   **in proportion to each person's items** (the default) or **equally among the people on the bill**, chosen per entry
   and sealed with it.
 
-**Rounding** is part of the entry format, so every device computes the same balance:
+**Rounding** is part of the entry format, so every device computes the same balance. The format is
+`contracts/expenses/entry.v1.schema.json`, and `contracts/expenses/v1-vectors.json` holds the cases every client must
+compute alike:
 
 - Amounts are integers in the currency's ISO 4217 minor unit (the yen has none, the dinar three); a rate is a decimal
   string, and all arithmetic is exact (`BigInt` fractions), never floating point.
@@ -68,6 +70,8 @@ PDFs). Three kinds:
   nobody is ever more than one cent off their share.
 - An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
   first and allocated as one, so rounding never accumulates across items.
+- An entry that does not add up (payers' amounts beside the total, exact amounts beside it, line items above it) is
+  not saved; one that arrives anyway counts nowhere and is shown as invalid.
 
 **Editing and deleting** are open to everyone who may write (ADR 0108 decision 6). Each change keeps the earlier
 version: an entry shows that it was edited, and its history what changed and when — and, for a member, who (the
@@ -84,7 +88,7 @@ An entry keeps the rate it was saved with; a later rate never changes it.
   refund, transfers included.
 - **Settle up**: transfers that bring every balance to zero, computed greedily — debtors and creditors each sorted by
   amount, largest first, ties by the order the people joined; the largest debtor pays the largest creditor the smaller
-  of the two amounts, until nothing is left. At most one transfer fewer than there are people, and the same on every
+  of the two amounts, both chosen again after every transfer, until nothing is left. At most one transfer fewer than there are people, and the same on every
   device; not always the fewest possible (finding those is NP-hard in general), which at the size of a trip does not
   matter. Recording one is a transfer entry.
 - **Overviews**: total cost per category, per person (what they paid and what their share was, side by side — either
