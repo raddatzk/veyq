@@ -53,6 +53,11 @@
   outside the file, overlapping entries, a declared size that is not the actual one, a field over the API's limit: refused
   before anything is written, with the reason (ADR 0082 decision 10).
 - **E7 — not enough room:** the preflight (`POST /api/tenants/{tenantId}/storage-fit`, any member, yes or no only) says no: the dialog says there is not enough storage space and offers no import. A question the server could not answer (a rate limit, an outage, an older server) never blocks: the upload that follows decides, and a full quota still ends the import with a rollback (E3).
+- **E9 — a download that fails while it is written** (the browser fails it, or the Service Worker's download route refuses
+  a stream that is not the announced length): the dialog says the download failed and offers **Save as ZIP…** again; it
+  never stays at "Writing the file…" and never reports the file saved. Without the file picker the browser's own download
+  is told the ZIP's exact length up front, its `Content-Length`, so it can show progress against the whole (ADR 0082, ADR
+  0047 § The download route; F11, unit-tested; the stack lane's `export-import` spec is its browser proof).
 
 ## What an import does not carry, by design
 

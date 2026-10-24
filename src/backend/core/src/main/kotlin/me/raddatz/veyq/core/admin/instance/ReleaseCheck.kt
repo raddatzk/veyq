@@ -16,8 +16,8 @@ sealed interface ReleaseCheckRun {
     /** The Server Owner switched the check off: no request was made. */
     data object Off : ReleaseCheckRun
 
-    /** The source could not be read or answered something malformed; nothing changed but the log. */
-    data class Failed(val reason: String) : ReleaseCheckRun
+    /** [source] could not be read or answered something malformed; nothing changed but the log. */
+    data class Failed(val reason: String, val source: String = "") : ReleaseCheckRun
 
     /** The source was read; [newNotices] notices were found for the first time, and [mailed] notices were mailed. */
     data class Checked(val newNotices: Int, val mailed: Int = 0) : ReleaseCheckRun
@@ -31,7 +31,8 @@ sealed interface ReleaseCheckRun {
  *
  * **Nothing waits on it.** It runs on the scheduler's own thread, never in a request or at startup; a failed run —
  * unreachable, slow past `veyq.release-check.timeout`, a status other than 200, an oversized or malformed answer — is
- * logged and the next run tries again (A2). Nothing it reads can make it act: a notice is all it ever writes.
+ * logged and a later run tries again (A2), failures in a row spacing the attempts out ([ReleaseCheckBackoff]). Nothing
+ * it reads can make it act: a notice is all it ever writes.
  *
  * **Who checks: a stamped release only.** An unstamped build (no `VEYQ_VERSION`) and a `-SNAPSHOT` are on no release
  * line, so [check] returns before it reads its own setting — every local image, `quarkusDev` run and test lane stays
@@ -46,11 +47,22 @@ class ReleaseCheck(
 ) {
     private val log = Logger.getLogger(ReleaseCheck::class.java)
     private val http = BoundedGet(config.releaseCheck().timeout())
+    private val backoff = ReleaseCheckBackoff(config.releaseCheck().every())
 
     @Scheduled(every = "{veyq.release-check.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     fun run() {
         try {
-            check(identity.version, Instant.now())
+            // A build on no release line reads no setting and asks nothing ([check]); only a stamped one backs off.
+            if (ReleaseVersion.parse(identity.version) == null) return
+            val setting = store.setting().let { it.enabled to it.source }
+            if (!backoff.due(setting)) return
+            when (val run = check(identity.version, Instant.now())) {
+                is ReleaseCheckRun.Failed -> log.warnf(
+                    "The release check could not read %s: %s. It tries again in %s.",
+                    run.source, run.reason, backoff.failed(setting),
+                )
+                else -> backoff.succeeded(setting)
+            }
         } catch (e: RuntimeException) {
             // A defect here must not reach the scheduler as an exception it reports on every tick; the next run retries.
             log.errorf(e, "The release check failed unexpectedly")
@@ -76,8 +88,8 @@ class ReleaseCheck(
                 .toSet()
             ReleaseNoticePolicy.notices(version, published, unscheduled, now.atZone(ZoneOffset.UTC).toLocalDate())
         } catch (e: ReleaseSourceException) {
-            log.warnf("The release check could not read %s: %s. It tries again at its next run.", sourceName(setting.source), e.message)
-            return ReleaseCheckRun.Failed(e.message ?: "unreadable")
+            // Logged by [run], which knows when it tries again; a direct call (a test) reads it off the result.
+            return ReleaseCheckRun.Failed(e.message ?: "unreadable", sourceName(setting.source))
         }
         val new = store.recordFound(found, now)
         store.recordSuccess(now)

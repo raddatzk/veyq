@@ -51,6 +51,16 @@ describe('fetchTree', () => {
     expect(sent[0].ifNoneMatch).toBe('"7"')
   })
 
+  it('reads a 304\'s empty body to its end, so the browser does not report an answered poll as an aborted request', async () => {
+    // Chromium cancels the load of an empty body nobody reads and reports the GET `net::ERR_ABORTED` although the
+    // server answered: every tree poll of a Memory read as a failed request in the V1 heavy stage (ADR 0105 § Targets).
+    const answer = notModified()
+    const drain = vi.spyOn(answer, 'arrayBuffer')
+    recordFetch(answer)
+    expect(await fetchTree(SCOPE, '"7"')).toBeNull()
+    expect(drain).toHaveBeenCalledTimes(1)
+  })
+
   it('a 200 to a conditional read carries the rows and the new tag', async () => {
     recordFetch(rows('"8"', []))
     expect(await fetchTree(SCOPE, '"7"')).toEqual({ rows: [], etag: '"8"' })

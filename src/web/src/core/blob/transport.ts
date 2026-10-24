@@ -378,6 +378,11 @@ const PUT_CONTENT_TYPE = 'application/octet-stream'
 
 async function putChunk(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<void> {
   const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
+  // The store's answer is empty (`200`, `Content-Length: 0`) and nothing here needs it — but Chromium cancels the load
+  // of an empty body nobody reads and reports the PUT `net::ERR_ABORTED` although the store took the chunk: 1,163 of
+  // 1,176 PUTs of a 50-photo upload in the V1 heavy stage. So it is read to its end; a failure to read an empty body
+  // says nothing about the PUT, whose status is already known.
+  await res.arrayBuffer().catch(() => undefined)
   if (!res.ok) throw new Error(`chunk_put_failed:${res.status}`)
 }
 

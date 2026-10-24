@@ -15,6 +15,18 @@ import me.raddatz.veyq.core.testing.assertWinnerAndLoser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
 import me.raddatz.veyq.core.testing.raceRounds
+import me.raddatz.veyq.core.testing.awaitWaiters
+import me.raddatz.veyq.core.testing.OVERLAP_BOUND_S
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
+import io.quarkus.arc.Arc
+import jakarta.persistence.EntityManager
+import java.time.Instant
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -146,6 +158,63 @@ class MediaCreateRaceSliceTest {
                 listOf(first, second).forEach {
                     assertEquals(primaries.single().id, MediaEntity.findById(it.mediaId)!!.bucketId, "round $round: ${it.mediaId}")
                 }
+            }
+        }
+    }
+
+    /**
+     * The deadlock the heavy stage's collection run measured on MariaDB (2026-10-23, at `NodeEpochGate.lockNode`), forced:
+     * a first upload of an uploader holds the node and creates the uploader's primary ([held], the first item of one
+     * batch); a second upload ([late]) found no primary to lock and waits for the node; a third ([locker], the second
+     * item of the first batch) finds the new primary, locks it and waits for the node. When the first commits, [late]
+     * gets the node and [locker] the primary. A [late] that went on would reference the primary from its medium's row
+     * (`fk_media_bucket`, a shared lock on MariaDB) while [locker] holds it and waits for the node [late] holds — one of
+     * them failed, a 500. Run again in the one lock order ([AttachResult.PrimaryAppeared]), [late] waits behind
+     * [locker] holding nothing, and both land in the one primary.
+     *
+     * Red only on MariaDB: H2 takes no lock for a foreign key, so there both orders finish. Forced, not likely: the
+     * first holds its commit until [late] waits on it, then until [locker] does too ([awaitWaiters]).
+     */
+    @Test
+    fun aSecondFirstUploadThatWaitedForTheNodeLocksThePrimaryItMissed() {
+        raceRounds { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val (late, locker) = startOne(userId, scopeId) to startOne(userId, scopeId)
+            val pool = Executors.newFixedThreadPool(3)
+            try {
+                val lateAnswer = AtomicReference<Future<Pair<Int, List<String?>>>>()
+                val lockerAnswer = AtomicReference<Future<Pair<Int, List<String?>>>>()
+                val held = pool.submit(
+                    Callable {
+                        QuarkusTransaction.requiringNew().run {
+                            NodeEpochGate.lockNode(memory) // the first upload's gate
+                            lateAnswer.set(pool.submit(Callable { complete(userId, scopeId, completeBody(memory, late)) }))
+                            awaitWaiters(1) // [late] found no primary and waits for the node
+                            BucketEntity().apply {
+                                id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = memory
+                                ownerKey = PrincipalKey.User(userId).format(); isPrimary = true; createdAt = Instant.now()
+                            }.persist() // the first upload's primary, as ensurePrimaryBucket creates it under the node
+                            Arc.container().instance(EntityManager::class.java).get().flush()
+                            lockerAnswer.set(pool.submit(Callable { complete(userId, scopeId, completeBody(memory, locker)) }))
+                            awaitWaiters(2) // [locker] waits too: on the new primary (MariaDB), on the node (H2)
+                        }
+                    },
+                )
+                held.get(OVERLAP_BOUND_S, TimeUnit.SECONDS)
+                val answers = listOf(lateAnswer.get().get(OVERLAP_BOUND_S, TimeUnit.SECONDS), lockerAnswer.get().get(OVERLAP_BOUND_S, TimeUnit.SECONDS))
+                assertEquals(listOf(200 to listOf<String?>(null), 200 to listOf<String?>(null)), answers, "round $round: both land")
+                QuarkusTransaction.requiringNew().run {
+                    val primaries = BucketEntity.list("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", memory, PrincipalKey.User(userId).format())
+                    assertEquals(1, primaries.size, "round $round: one primary")
+                    listOf(late, locker).forEach {
+                        assertEquals(primaries.single().id, MediaEntity.findById(it.mediaId)!!.bucketId, "round $round: ${it.mediaId}")
+                    }
+                }
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e // an OrderNotForced from the held side reaches raceRounds as itself
+            } finally {
+                pool.shutdownNow()
             }
         }
     }

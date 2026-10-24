@@ -75,6 +75,11 @@ test(
     await create.getByRole('button', { name: 'Create link' }).click()
     shareLink = await create.getByRole('textbox', { name: 'Public link' }).inputValue()
     await create.getByRole('button', { name: 'Done' }).click()
+    // Done goes back to the Memory's list of links, a modal of its own: closed, so the header's Upload is reachable again.
+    const links = page.getByRole('dialog', { name: 'Share this Memory' })
+    await expect(links).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(links).toBeHidden()
 
     // The visitor opens the link and keeps it open; every answer to its media polls is counted.
     const answers: number[] = []

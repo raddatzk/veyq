@@ -208,9 +208,10 @@ function navigateByLink(url: string): void {
  * Register a streamed download with the controlling SW, start it, and return the sink its bytes go into — or null when
  * no SW at our protocol version controls the page or it did not acknowledge in time (the caller then picks another
  * sink; nothing was written). The sink is credit-based: `write` resolves once the SW asked for the next chunk, so the
- * browser's own download speed is the backpressure. `close` ends the file cleanly and `abort` fails it (the browser
- * marks it failed — never a truncated file saved as whole). A write rejects with an `AbortError` when the browser
- * cancelled the download, and with an Error when the SW dropped it (never fetched, or the session ended). The SW sees
+ * browser's own download speed is the backpressure. `close` ends the file cleanly, resolving once the SW confirmed it,
+ * and `abort` fails it (the browser marks it failed — never a truncated file saved as whole). A write or the close
+ * rejects with an `AbortError` when the browser cancelled the download, and with an Error when the SW dropped it (never
+ * fetched, or the session ended) or refused the stream (`download_overrun`, `download_short`, `download_protocol`). The SW sees
  * only the handle, the size, the name and the plaintext — never a key or a token.
  */
 export async function registerDownload(meta: DownloadMeta, options: DownloadOptions = {}): Promise<ByteSink | null> {
@@ -226,6 +227,8 @@ export async function registerDownload(meta: DownloadMeta, options: DownloadOpti
   let failure: unknown = null
   let ended = false
   let waiter: { resolve: () => void; reject: (e: unknown) => void } | null = null
+  /** A close waiting for the SW to confirm the clean end. */
+  let closer: { resolve: () => void; reject: (e: unknown) => void } | null = null
   let onAck: (() => void) | null = null
   const timers: { keepalive?: ReturnType<typeof setInterval>; start?: ReturnType<typeof setTimeout> } = {}
 
@@ -241,7 +244,9 @@ export async function registerDownload(meta: DownloadMeta, options: DownloadOpti
     if (ended) return
     failure = e
     waiter?.reject(e)
+    closer?.reject(e)
     waiter = null
+    closer = null
     cleanup()
   }
   const post = (msg: PageToSwDownloadMessage, transfer: Transferable[] = []) => port.postMessage(msg, transfer)
@@ -255,8 +260,11 @@ export async function registerDownload(meta: DownloadMeta, options: DownloadOpti
       credits += 1
       waiter?.resolve()
       waiter = null
+    } else if (msg?.type === 'veyq-dl-done') {
+      closer?.resolve()
+      closer = null
     } else if (msg?.type === 'veyq-dl-cancel') fail(new DOMException('Download cancelled', 'AbortError'))
-    else if (msg?.type === 'veyq-dl-gone') fail(new Error(`download_${msg.reason}`))
+    else if (msg?.type === 'veyq-dl-gone' || msg?.type === 'veyq-dl-failed') fail(new Error(`download_${msg.reason}`))
   }
   port.start?.()
 
@@ -297,7 +305,11 @@ export async function registerDownload(meta: DownloadMeta, options: DownloadOpti
     },
     async close() {
       await credit()
+      // resolved once the SW confirms it closed the body with every byte; rejected when it refused the end (a short
+      // stream) - a close that resolved on posting would report a download the browser failed as saved (F11)
+      const confirmed = new Promise<void>((resolve, reject) => (closer = { resolve, reject }))
       post({ type: 'veyq-dl-end' })
+      await confirmed
       cleanup()
     },
     async abort() {

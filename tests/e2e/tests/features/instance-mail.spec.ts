@@ -17,8 +17,8 @@
 // (InstanceMailCopy). It starts from the instance the setup project left (the Server Owner exists); the first test
 // restores what it switches, and the last leaves the check switched off, as an offline run's must be (ADR 0097).
 import { test, expect, type Page } from '@playwright/test'
-import { recordTyped } from '../../src/canaries'
-import { instance, newDevice, passwordField, type Device } from '../../src/devices'
+import { openConsole } from '../../src/console'
+import { instance, newDevice, type Device } from '../../src/devices'
 import { attachmentText, awaitMails, mailsTo, type Mail } from '../../src/mail'
 import { stack } from '../../src/stack'
 
@@ -34,16 +34,12 @@ const CODE_MAIL = /^Confirm your veyq instance mail/
 let admin: Device
 
 /**
- * The console in a new document, signed in, at one Server section. admin-web keeps no session across a reload, so every
- * new document asks for the Server Owner's sign-in again — what is read after it was fetched from the server.
+ * The console in a new document, signed in, at one Server section — what is read after it was fetched from the server.
+ * The first document of the run's context asks for the Server Owner's sign-in; every later one opens signed in, since
+ * admin-web revives its session from the refresh cookie on a reload (`openConsole`).
  */
 async function openServerSection(page: Page, section: 'Release' | 'Mail'): Promise<void> {
-  const { owner } = instance()
-  await page.goto(stack().adminOrigin)
-  await page.getByLabel('Email', { exact: true }).fill(owner.email)
-  await passwordField(page).fill(recordTyped(owner.password))
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Server administration', level: 1 })).toBeVisible({ timeout: 60_000 })
+  await openConsole(page)
   await page.getByRole('button', { name: section, exact: true }).click()
 }
 

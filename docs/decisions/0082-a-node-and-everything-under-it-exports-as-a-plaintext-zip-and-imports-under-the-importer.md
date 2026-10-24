@@ -59,6 +59,10 @@ headers with the data-descriptor flag and a central directory at the end; the re
 end and reads entries with `Blob.slice`, so an import never holds the file in memory. Payload paths come from the manifest
 only, lie at or under their node's path, and are refused when a segment is not a safe name or the path reaches into
 `.veyq/`; each payload's `sha256` is verified while streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
+The archive's exact length is known before its first byte (every record's length follows from a name and a size, the
+manifest's from fixed-width hashes and time stamp, `zipLength`), and that length, never the payloads' sum, is what the
+save target is opened with: the Service Worker's download route serves it as the exact `Content-Length` and fails a
+stream that differs ([ADR 0047](0047-inline-video-playback-range-streaming.md) § The download route; F11, 2026-10-24).
 This layout is format `version` 2; version 1 kept the manifest at the root and every payload under `data/<node id>/`, and
 a reader reads both while a writer writes only 2.
 

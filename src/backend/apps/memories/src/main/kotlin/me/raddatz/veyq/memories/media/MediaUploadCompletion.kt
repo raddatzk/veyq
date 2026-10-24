@@ -93,8 +93,8 @@ class MediaUploadCompletion(
             original != null -> OriginalAttach.Upload(original, manifests[original.id])
             else -> OriginalAttach.Shared(scopeId, shared!!)
         }
-        return when (
-            val r = store.attach(
+        val attach = {
+            store.attach(
                 item.ownerId, source, item.nodeId,
                 derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
                 item.payloads[META],
@@ -105,12 +105,18 @@ class MediaUploadCompletion(
                 admitted,
                 attached,
             )
-        ) {
+        }
+        // Run again, once, when a concurrent first upload committed the uploader's primary while this one waited for the
+        // node: the run again locks it first, in the one lock order. This path holds no transaction of its own, so each
+        // run is its own transaction and the first one has ended (AttachResult.PrimaryAppeared).
+        return when (val r = attach().let { first -> if (first == AttachResult.PrimaryAppeared) attach() else first }) {
             is AttachResult.Attached -> CompleteItemResult(r.blobId, r.mediaId, null)
             AttachResult.NotAdmitted -> CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
             AttachResult.SharedSourceInvalid -> CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
             // ADR 0109 point 6: nothing stored, the item's uploads stay open for a retry under the node's current key.
             is AttachResult.EpochRefused -> CompleteItemResult(null, null, r.code)
+            // A primary is never deleted apart from its node, so a run that found it locked it first: twice is a defect.
+            AttachResult.PrimaryAppeared -> error("the uploader's primary appeared again after it was locked")
         }
     }
 

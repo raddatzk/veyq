@@ -13,7 +13,7 @@ import { registry } from '../applications/registry'
 import { createContentNode, deleteNode, type TreeNode } from '../node/tree'
 import type { ByteSink } from '../blob/stream'
 import type { EpochKeys } from '../../features/spaces/epochs'
-import { exportSubtree } from './exportSubtree'
+import { exportSubtree, prepareExport } from './exportSubtree'
 import { ImportFailed, importSubtree, openExport, planImport } from './importSubtree'
 import type { PayloadFile } from './hooks'
 import { ExportError, parseManifest, type ManifestNode, type ManifestPayload } from './manifest'
@@ -191,6 +191,43 @@ describe('download (format version 2: the archive reads as the tree)', () => {
   it('a node named like the manifest directory does not take it', async () => {
     const { archive } = await exported([node('v', null, 'FOLDER', '.VEYQ')], 'v')
     expect(await entriesOf(archive)).toEqual(['.VEYQ (2)/', '.veyq/manifest.json'])
+  })
+
+  // F11: the save target is opened with this number before a byte is written, and the SW route holds the stream to it as the
+  // exact Content-Length - the payloads' sum (`bytes`) left out every header, descriptor, the directory and the manifest.
+  it.each([
+    ['folders, files and a node left out', nodes, 'a'],
+    ['an empty folder', [node('e', null, 'FOLDER', 'Leer')], 'e'],
+    ['hostile and non-ASCII names', [
+      node('r', null, 'FOLDER', 'Grüße: 日本 😀'), node('al', 'r', ALBUM, 'Fotos é'), node('c', 'r', 'FOLDER', 'CON'), node('f1', 'r', FILE, 'naïve.txt'),
+    ], 'r'],
+  ])('announces the archive\'s exact length before writing it: %s', async (_label, tree, rootId) => {
+    const prepared = await prepareExport({ access, tree: sourceOf(tree), rootId, appVersion: 'test', now: () => new Date('2026-10-13T10:00:00Z') })
+    const m = memorySink()
+    await prepared.write(m.sink)
+    expect(m.state.closed).toBe(true)
+    expect(prepared.archiveBytes).toBe(m.blob().size)
+    expect(prepared.archiveBytes).toBeGreaterThan(prepared.bytes)
+  })
+
+  it('announces the same length when written again later, the manifest\'s time stamp and checksums filled in then', async () => {
+    let at = new Date('2026-10-13T10:00:00Z')
+    const prepared = await prepareExport({ access, tree: sourceOf(nodes), rootId: 'a', appVersion: 'test', now: () => at })
+    at = new Date('2031-01-01T23:59:59.999Z')
+    for (let i = 0; i < 2; i++) {
+      const m = memorySink()
+      await prepared.write(m.sink)
+      expect(m.blob().size).toBe(prepared.archiveBytes)
+    }
+  })
+
+  it('a manifest that would come out at another length than announced aborts the archive, never closes it', async () => {
+    let at = new Date('2026-10-13T10:00:00Z')
+    const prepared = await prepareExport({ access, tree: sourceOf(nodes), rootId: 'a', appVersion: 'test', now: () => at })
+    at = new Date('+010000-01-01T00:00:00Z') // a five-digit year: the one time stamp that is not 24 characters
+    const m = memorySink()
+    await expect(prepared.write(m.sink)).rejects.toMatchObject({ code: 'size_mismatch' })
+    expect(m.state).toEqual({ closed: false, aborted: true })
   })
 
   it('aborts the sink when a hook fails, never closing a half archive', async () => {

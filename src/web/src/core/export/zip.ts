@@ -49,6 +49,44 @@ export type ZipWriterOptions = {
   zip64At?: number
 }
 
+// The length of every record the writer emits, from what is known before a byte is written (a name's UTF-8 length, whether
+// the entry or an offset needs ZIP64). The writer allocates through these and {@link zipLength} adds them up, so the two
+// cannot drift: a save target that must be told the archive's exact length up front (the SW download route's
+// `Content-Length`, ADR 0047 § The download route) is given the number the writer then produces.
+const localFileHeaderLength = (nameLength: number, zip64: boolean) => 30 + nameLength + (zip64 ? 20 : 0)
+const localDirectoryHeaderLength = (nameLength: number) => 30 + nameLength
+const descriptorLength = (zip64: boolean) => (zip64 ? 24 : 16)
+/** usize+csize travel together in the ZIP64 extra, the offset alone. */
+const centralZip64Fields = (zip64: boolean, bigOffset: boolean) => (zip64 ? 2 : 0) + (bigOffset ? 1 : 0)
+const centralRecordLength = (nameLength: number, fields: number) => 46 + nameLength + (fields ? 4 + fields * 8 : 0)
+/** The ZIP64 end record (56) and its locator (20); the classic end record (22) always follows. */
+const ZIP64_END_LENGTH = 56 + 20
+const END_LENGTH = 22
+const endRecordsLength = (big: boolean) => (big ? ZIP64_END_LENGTH : 0) + END_LENGTH
+
+/** One entry of a planned archive, in the order it will be written: a file of `size` bytes, or a directory (`path/`). */
+export type ZipPlanEntry = { path: string; size: number } | { path: string; directory: true }
+
+/**
+ * The exact length in bytes of the archive a {@link ZipWriter} writes for `entries` (same order, same `zip64At`): local
+ * headers, the bytes, data descriptors, the central directory and the end records. Known before the first byte because
+ * every record's length depends only on a name's length and a size - the CRC and the time stamp are fixed-width.
+ */
+export function zipLength(entries: readonly ZipPlanEntry[], options: Pick<ZipWriterOptions, 'zip64At'> = {}): number {
+  const limit = options.zip64At ?? U32_MAX
+  let offset = 0
+  let directory = 0
+  for (const e of entries) {
+    const isDir = 'directory' in e
+    const nameLength = encoder.encode(isDir ? `${e.path}/` : e.path).length
+    const zip64 = !isDir && e.size >= limit
+    directory += centralRecordLength(nameLength, centralZip64Fields(zip64, offset >= limit))
+    offset += isDir ? localDirectoryHeaderLength(nameLength) : localFileHeaderLength(nameLength, zip64) + e.size + descriptorLength(zip64)
+  }
+  const big = entries.length >= U16_MAX || offset >= limit || directory >= limit
+  return offset + directory + endRecordsLength(big)
+}
+
 function dosStamp(d: Date): { date: number; time: number } {
   const year = Math.min(Math.max(d.getUTCFullYear(), 1980), 2107)
   return {
@@ -95,7 +133,7 @@ export class ZipWriter {
       e.setUint16(0, EXTRA_ZIP64, true)
       e.setUint16(2, 16, true)
     }
-    const head = new Uint8Array(30 + name.length + extra.length)
+    const head = new Uint8Array(localFileHeaderLength(name.length, zip64))
     const h = new DataView(head.buffer)
     h.setUint32(0, SIG_LOCAL, true)
     h.setUint16(4, zip64 ? VERSION_ZIP64 : VERSION_PLAIN, true)
@@ -124,7 +162,7 @@ export class ZipWriter {
     if (written !== size) throw new ZipError('size_mismatch', `${path} delivered ${written} bytes, declared ${size}`)
     const final = crc32Finish(crc)
 
-    const desc = new Uint8Array(zip64 ? 24 : 16)
+    const desc = new Uint8Array(descriptorLength(zip64))
     const d = new DataView(desc.buffer)
     d.setUint32(0, SIG_DESCRIPTOR, true)
     d.setUint32(4, final, true)
@@ -146,7 +184,7 @@ export class ZipWriter {
    */
   async addDirectory(path: string): Promise<void> {
     const name = this.claim(path, `${path}/`)
-    const head = new Uint8Array(30 + name.length)
+    const head = new Uint8Array(localDirectoryHeaderLength(name.length))
     const h = new DataView(head.buffer)
     h.setUint32(0, SIG_LOCAL, true)
     h.setUint16(4, VERSION_PLAIN, true)
@@ -186,7 +224,7 @@ export class ZipWriter {
     const cdStart = this.offset
     for (const e of this.entries) {
       const bigOffset = e.offset >= this.limit
-      const fields = (e.zip64 ? 2 : 0) + (bigOffset ? 1 : 0) // usize+csize travel together, the offset alone
+      const fields = centralZip64Fields(e.zip64, bigOffset)
       const extra = new Uint8Array(fields ? 4 + fields * 8 : 0)
       if (fields) {
         const x = new DataView(extra.buffer)
@@ -200,7 +238,7 @@ export class ZipWriter {
         }
         if (bigOffset) x.setBigUint64(at, BigInt(e.offset), true)
       }
-      const rec = new Uint8Array(46 + e.name.length + extra.length)
+      const rec = new Uint8Array(centralRecordLength(e.name.length, fields))
       const c = new DataView(rec.buffer)
       c.setUint32(0, SIG_CENTRAL, true)
       c.setUint16(4, fields ? VERSION_ZIP64 : VERSION_PLAIN, true)
@@ -224,7 +262,7 @@ export class ZipWriter {
     const count = this.entries.length
     const big = count >= U16_MAX || cdStart >= this.limit || cdSize >= this.limit
     if (big) {
-      const z = new Uint8Array(56 + 20)
+      const z = new Uint8Array(ZIP64_END_LENGTH)
       const v = new DataView(z.buffer)
       v.setUint32(0, SIG_EOCD64, true)
       v.setBigUint64(4, 44n, true)
@@ -239,7 +277,7 @@ export class ZipWriter {
       v.setUint32(72, 1, true)
       await this.put(z)
     }
-    const end = new Uint8Array(22)
+    const end = new Uint8Array(END_LENGTH)
     const v = new DataView(end.buffer)
     v.setUint32(0, SIG_EOCD, true)
     v.setUint16(8, big ? U16_MAX : count, true)

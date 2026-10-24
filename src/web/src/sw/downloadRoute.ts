@@ -4,10 +4,12 @@
 // SW answers that ONE navigation with an attachment whose body pulls the page's decrypted bytes over the port, one
 // credit at a time. A download is all-or-nothing as far as the SW can tell: a page that fails, a stream that ends short
 // of or runs past the registered size, or an ended session errors the body, so the browser marks the download failed
-// instead of saving a truncated file as if it were whole.
+// instead of saving a truncated file as if it were whole. And the page always learns how it ended: a clean end is
+// confirmed, a stream the SW refused is reported, a dropped one is told why (F11: a refusal it never heard of left the
+// page waiting for a credit for ever).
 //
 // Typechecks under the DOM lib like `mediaSw.ts` (see its header); uses only DOM-available types.
-import type { DownloadGone, PageToSwDownloadMessage, SwToPageDownloadMessage } from './protocol'
+import type { DownloadFailure, DownloadGone, PageToSwDownloadMessage, SwToPageDownloadMessage } from './protocol'
 
 /** How long a registered handle waits for its navigation. The page navigates right after the SW's ack, so this only
  *  bounds a handle whose navigation never came (a blocked download, a page that died) — it never lives on. */
@@ -98,28 +100,37 @@ export class DownloadSession {
 
   private onPage(msg: PageToSwDownloadMessage): void {
     if (this.finished || !msg || typeof msg !== 'object') return
-    if (msg.type === 'veyq-dl-error') return this.fail(new Error(msg.error))
+    // the page failed: it knows, so the body is only errored
+    if (msg.type === 'veyq-dl-error') return this.stop(new Error(msg.error))
     const controller = this.controller
     const pull = this.pendingPull
     // Bytes or an end without a credit is a page breaking the protocol: nothing it sends is trusted after that.
-    if (!controller || !pull) return this.fail(new Error('download_protocol'))
+    if (!controller || !pull) return this.refuse('protocol')
     this.pendingPull = null
     if (msg.type === 'veyq-dl-data') {
       const bytes = new Uint8Array(msg.bytes)
       this.sent += bytes.length
-      if (this.sent > this.size) return this.fail(new Error('download_overrun'))
+      if (this.sent > this.size) return this.refuse('overrun')
       controller.enqueue(bytes)
       pull()
     } else if (msg.type === 'veyq-dl-end') {
-      if (this.sent !== this.size) return this.fail(new Error('download_short'))
+      if (this.sent !== this.size) return this.refuse('short')
+      this.post({ type: 'veyq-dl-done' }) // before the port closes: the page's close() waits for it
       this.finish()
       controller.close()
       pull()
     }
   }
 
+  /** Refuse what the page sent: error the body and tell the page, whose write (or close) would else wait for ever. */
+  private refuse(reason: DownloadFailure): void {
+    if (this.finished) return
+    this.post({ type: 'veyq-dl-failed', reason })
+    this.stop(new Error(`download_${reason}`))
+  }
+
   /** Error the body (the browser fails the download) and release the port. Never a clean close. */
-  private fail(error: Error): void {
+  private stop(error: Error): void {
     if (this.finished) return
     const pull = this.pendingPull
     this.finish()
@@ -131,7 +142,7 @@ export class DownloadSession {
   drop(reason: DownloadGone['reason']): void {
     if (this.finished) return
     this.post({ type: 'veyq-dl-gone', reason })
-    this.fail(new Error(`download_${reason}`))
+    this.stop(new Error(`download_${reason}`))
   }
 
   private finish(): void {

@@ -63,13 +63,13 @@ test('S3 open a large Chapter: a new device opens 1,000 photos', async ({ browse
   await page.getByRole('tab', { name: /^Chapters/ }).click()
   await expect(chapterCard(page, seed.chapter)).toBeVisible()
 
-  const reading = await profiled(browser, page, cdp, async () => {
+  await profiled(browser, page, cdp, async () => {
     await armViewportComplete(page)
     await chapterCard(page, seed.chapter).click()
     await page.waitForFunction(() => (window as unknown as { __viewportComplete: Promise<number> }).__viewportComplete,
       undefined, { polling: 1000, timeout: 5 * 60_000 })
   })
-  expect(reading.failedRequests, 'every request of the window reached the instance').toEqual([])
+  // Its failed requests and error answers are the driver's to judge (`profile_hot_paths.py` `request_failures`).
   await expect(page.locator('.veyq-node-header-subtitle')).toHaveText(/^1,?000 items$/)
   await context.close()
 })

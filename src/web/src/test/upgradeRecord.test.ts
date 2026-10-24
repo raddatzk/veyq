@@ -1,5 +1,6 @@
 // The upgrade record's validator against the fixture `scripts/upgrade_proof_selftest.py` holds the orchestrator's to:
-// both must accept the fixture's record and refuse every edit it lists (src/web/src/test/upgradeRecord.ts).
+// both must accept the fixture's record and every edit it lists as accepted, and refuse every edit it lists as refused
+// (src/web/src/test/upgradeRecord.ts).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +9,7 @@ import { upgradeRecordProblems } from './upgradeRecord'
 type Edit = { why: string; path: (string | number)[]; value?: unknown; delete?: boolean }
 const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('./upgradeRecord.fixture.json', import.meta.url)), 'utf8')) as {
   record: unknown
+  accepted: Edit[]
   refused: Edit[]
 }
 
@@ -24,6 +26,10 @@ function edited(edit: Edit): unknown {
 describe('upgrade record validation', () => {
   it('accepts the fixture record', () => {
     expect(upgradeRecordProblems(fixture.record)).toEqual([])
+  })
+
+  it.each(fixture.accepted.map((edit) => [edit.why, edit] as const))('accepts %s', (_why, edit) => {
+    expect(upgradeRecordProblems(edited(edit))).toEqual([])
   })
 
   it.each(fixture.refused.map((edit) => [edit.why, edit] as const))('refuses %s', (_why, edit) => {

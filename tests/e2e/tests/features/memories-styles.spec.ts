@@ -23,7 +23,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
-import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -34,7 +34,7 @@ const photoName = `Leuchtturm bei Ebbe ${stamp}.jpg`
 const PHOTO = readFileSync(fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
 
 let member: Device
-const consoleErrors: string[] = []
+let pageConsole: ConsoleErrors
 
 /** The computed value of `property` on a throwaway element given `declarations` — what a rule saying the same resolves to. */
 async function probe(page: Page, declarations: string, property: string): Promise<string> {
@@ -71,13 +71,12 @@ async function scheme(page: Page, colorScheme: 'light' | 'dark'): Promise<void> 
 
 test.beforeAll(async ({ browser }) => {
   member = await newDevice(browser)
-  member.page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
-  member.page.on('pageerror', (e) => consoleErrors.push(String(e)))
+  pageConsole = watchConsole(member.page)
 })
 
 test.afterEach(() => {
   member?.confinement.assertConfined()
-  expect(consoleErrors, 'the console is free of errors').toEqual([])
+  expect(pageConsole.errors, 'the console is free of errors').toEqual([])
 })
 
 test.afterAll(async () => {
@@ -90,6 +89,7 @@ test(
   async () => {
     const { page } = member
     await signInOwner(member)
+    pageConsole.clear()
     await page.getByRole('button', { name: 'New', exact: true }).click()
     await page.getByRole('menuitem', { name: 'New Memory' }).click()
     const create = page.getByRole('dialog', { name: 'Create a Memory' })

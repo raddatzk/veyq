@@ -17,10 +17,10 @@ test('S1 unlock: a new device signs in and opens the space', async ({ browser })
   await page.getByRole('textbox', { name: /^Password\b/ }).fill(owner.password)
   await page.locator('#unlock-secret-key').fill(owner.secretKey)
 
-  const window = await profiled(browser, page, cdp, async () => {
+  await profiled(browser, page, cdp, async () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 5 * 60_000 })
   })
-  expect(window.failedRequests, 'every request of the window reached the instance').toEqual([])
+  // Its failed requests and error answers are the driver's to judge (`profile_hot_paths.py` `request_failures`).
   await context.close()
 })

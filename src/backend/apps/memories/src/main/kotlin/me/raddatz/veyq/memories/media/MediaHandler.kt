@@ -315,17 +315,24 @@ class MediaHandler(
         } else {
             PrincipalKey.User(userId).format()
         }
-        // The client-minted id (ADR 0072): the sealed name is bound to it.
-        return createOrConflict(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
-            when (val r = store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName, nodeEpoch, PrincipalKey.User(userId))) {
-                is MediaStore.CreateSubBucketResult.Created -> CreateBucketOutcome.Ok(r.bucket)
-                MediaStore.CreateSubBucketResult.IdTaken -> CreateBucketOutcome.IdTaken
-                is MediaStore.CreateSubBucketResult.EpochRefused -> when (r.code) {
-                    MediaStore.NODE_NOT_FOUND -> CreateBucketOutcome.NoNode
-                    else -> epochRefusal(r.code, CreateBucketOutcome.StaleEpoch, CreateBucketOutcome.RekeyPending)
+        // The client-minted id (ADR 0072): the sealed name is bound to it. Null: the owner's primary was committed while
+        // the create waited for the node (MediaStore.CreateSubBucketResult.PrimaryAppeared, nothing written) — run again,
+        // once, in a transaction of its own, which locks it first (the one lock order).
+        val create = {
+            createOrConflict<CreateBucketOutcome?>(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
+                when (val r = store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName, nodeEpoch, PrincipalKey.User(userId))) {
+                    is MediaStore.CreateSubBucketResult.Created -> CreateBucketOutcome.Ok(r.bucket)
+                    MediaStore.CreateSubBucketResult.PrimaryAppeared -> null
+                    MediaStore.CreateSubBucketResult.IdTaken -> CreateBucketOutcome.IdTaken
+                    is MediaStore.CreateSubBucketResult.EpochRefused -> when (r.code) {
+                        MediaStore.NODE_NOT_FOUND -> CreateBucketOutcome.NoNode
+                        else -> epochRefusal(r.code, CreateBucketOutcome.StaleEpoch, CreateBucketOutcome.RekeyPending)
+                    }
                 }
             }
         }
+        // A primary goes only with its node, so a run that found it locked it first: twice is a defect.
+        return create() ?: create() ?: error("the owner's primary appeared again after it was locked")
     }
 
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */
