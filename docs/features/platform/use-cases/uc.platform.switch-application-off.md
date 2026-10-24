@@ -44,7 +44,8 @@
   taken, because they are the member's own blob, not the application's content, and a Master-Key rotation re-tags
   them through the same write, which the server cannot tell from a new mark (owner 2026-10-23).
 - **E6 — a client that does not know the id** (older, or a native app), and **a guest's page**, which is not told it:
-  it hides nothing, and the server refuses its writes all the same.
+  it hides nothing, and the server refuses its writes all the same. The web client reads the refusal: an upload that
+  meets it fails at once, with no retry, and says the application is switched off here.
 
 ## Quality notes
 
@@ -68,3 +69,6 @@ they had already put into it.
 - **Decisions:** [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,
   [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decisions 2
   and 5.
+- **On the docs site:** [What your space offers](../../../../site/src/content/docs/space-owners/capabilities.mdx) (the
+  tenant owner's switch, EN and DE), [Applications](../../../../site/src/content/docs/applications/index.mdx) (what a
+  member sees, EN and DE) and [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx) (the Server Owner's).

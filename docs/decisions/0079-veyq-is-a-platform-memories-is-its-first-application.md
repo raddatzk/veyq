@@ -81,7 +81,8 @@ rotation re-tags through the same write, and so does a rotation's re-key, which 
 exists. While it is off, every member of the tenant sees a banner at the top of veyq that says so, so there is time to
 save what is in it, and the links that exist keep serving it, read-only (owner 2026-10-24). Switched on again,
 everything is as before; nothing was deleted. Off is a window, not an end: erasing an application's data after it is
-open (inbox #539). Not built yet: `cr-application-switches`.
+open (inbox #539). Built: core's `ApplicationSwitch`, asked by kind and by name, and its sweep over every application's
+operations ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) Consequences).
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new

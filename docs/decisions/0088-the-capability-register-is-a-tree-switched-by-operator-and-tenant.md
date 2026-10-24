@@ -131,7 +131,7 @@ core/
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares (#435), search, live-collab, notifications   [later]
-*+ memories/                       → node kinds MEMORY / CHAPTER
+*+ memories                        → off = read-only: every write of its kinds and operations (built)
   *+  chapters                     → node kind CHAPTER
   *+  journal             [planned]→ a server-visible kind or blob role
   *+  gpx                 [planned]→ a server-visible blob role
@@ -140,7 +140,7 @@ core/
   *+  map                          → external (map tiles); CSP img-src
   *+  public-shares / contribute / drop-box   → inherit core.public-shares
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
-*+ depot/                          → node kind FILE, blob role FILE_CONTENT
+*+ depot                           → off = read-only: node kinds FILE / DEPOT_DROPBOX, blob role FILE_CONTENT (built)
   *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
 *+ expenses/   [refined, ADR 0108] → node kind EXPENSES_POT;  *+ public-shares/… inherit
   *+  exchange-rates               → external (exchange-rate provider), no opt-in; CSP connect-src
@@ -178,9 +178,16 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Consequences
 
-- **Built today** (measured: `contracts/platform/capabilities.json`): seven `core.*` entries - `core.public-shares`
-  with `.contribute` and `.drop-box`, `core.group-space`, `core.remember-device` with `.passwordless`, and
-  `core.device-linking`. The server computes the AND along the path (`CapabilityRegistry`); each client reads one leaf.
+- **Built today** is the catalog (`contracts/platform/capabilities.json`), never a list here. The server computes the
+  AND along the path (`CapabilityRegistry`, every prefix that is an entry, an application's one-segment id included);
+  each client reads one leaf.
+- **An application switch is built** (decision 5, measured: `ApplicationSwitch`): `memories` and `depot` are entries of
+  their own, and every application must have one (`validate_capabilities.py`). Off, core refuses a write of a node by
+  its kind (`NodeKindRules.applicationOf`: create, update, cover, a link created, reactivated, re-issued or turned
+  `READ_WRITE`, an upload's start), each application's write handlers by name, and `ApplicationSwitchSweepTest` derives
+  every write operation of every application and holds each to refused or exempt with its reason. The web reads it as
+  `MemberAccess.applicationsOff` through the registry's `applicationOf`, and the host shows one banner per application
+  off. A guest's page is not told; its write is refused by the server.
 - **The instance-wide switch is built** (decision 12, measured: `InstanceResource.listInstanceCapabilities` /
   `setInstanceCapability`, `StoredCapabilitySwitches`, `src/admin-web/src/cli/commands.ts`). The Server Owner switches an
   entry in admin-web's Server → Capabilities panel or with `veyq-admin capabilities list | off <id> | on <id>`,
