@@ -39,14 +39,15 @@ without exclusions in all four.
 | Q4 | Every `NodeHeader` title is its page's single `h1`, a folder page included; the styleguide has a section on heading levels (owner 2026-10-24). | round 3: `export-import` 7/7, eight folder-heading specs green |
 | B1 | The cache was not the cause (a label is image config, not a layer). But the app image set no revision label, the admin image carried nginx's, and `ci.yml` overwrote the labels with metadata-action's (version = branch). Each image now sets its own OCI labels; `validate_release_identity.py` assertion 12; `scripts/image_identity_cache_proof.py`. | round 3: the identity proof OK on a warm cache |
 | H1 | `seed members` raises the invite limit and restores the previous value on every exit path. | round 3: 1,000 members without a stop at 22; SIGTERM exits 143 and restores |
+| L5 | The sticky offset now follows the compact header's own row tokens (it was 121 px against a 113 px header below 720 px). The spec lengthens the page through `element.style`; the guest check names the banner's write actions. | stack lane at `fe80db96` and `b2617981`: `memory-banner` 6/6 |
+| H1b | The seeder runs in its own process group, which is stopped before the invite limit returns. | `measure_volume_selftest.py` 11 ok, three mutations killed |
+| F12 | New, found by `depot-styles`' settled-layer wait: a PDF page grew without bound (≈ 868 px/s, 51,304 px after 60 s) since `26c82978` (2026-10-12, #412). The fit width counted the scroller's padding, `.file-viewer` had no `min-width: 0` in its grid, and the observer took its own widening back. All three fixed. | stack lane ×3 at `7125eecc`: 28/28 each |
 | Q5 | 2 min lease, renewed every 30 s, no release endpoint and no self-takeover (owner 2026-10-24); in ADR 0021 § 6 and the config docs. | docs |
 
 ## Still open
 
 | # | Item | Where |
 |---|---|---|
-| L5 | Now a product finding: on a 390 px phone the sticky tab row sits 8 px below the compact header. `--app-sticky-top` is 121 px (`layout.css:521`), but below 720 px the tenant row is 64 px instead of 72 px. The scroll part of the spec now works through `element.style`. A fix is in progress. | round 3, `step4-stack.log` 287–391 |
-| H1b | After a SIGTERM the seeder's node child ran on for ~5 s past the restore of the invite limit (502s during the app's restart). The restore should wait for the child to exit. A fix is in progress. | round 3, step 5.3 |
 | N10 | #491's QR compare needs a camera: the owner's own pass on a phone, after the V1 queue. | — |
 
 ## Owner questions
