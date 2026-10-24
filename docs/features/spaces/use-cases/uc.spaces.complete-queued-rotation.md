@@ -25,7 +25,9 @@
    rotation additionally excludes the rotator from **every** live rotation job of the scope, claimed or not.
 2. **An owner claims it.** The job is offered only to an owner of the scope who holds its grant and has not
    declined the job; a request that names several job kinds still gets a rotation job only on a scope the caller
-   owns. The claim is a lease: one holder at a time, with an expiry.
+   owns. The claim is a lease: one holder at a time, with an expiry two minutes out. The worker renews it every 30 s
+   while it works, so a worker that stops — its tab closed, reloaded or navigated away — frees the job for the
+   scope's owners within two minutes (`veyq.tasks.lease.ttl`).
 3. **The worker reads the directory after the claim.** Every event the job carries committed before the claim, so
    the member list it reads already reflects them. This ordering is the client's, and it is what makes step 1's
    "join only an unclaimed job" sufficient.

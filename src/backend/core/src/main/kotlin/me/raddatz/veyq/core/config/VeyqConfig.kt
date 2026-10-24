@@ -720,8 +720,8 @@ interface VeyqConfig {
         fun grantDelivery(): GrantDelivery
 
         interface Lease {
-            /** Lease TTL granted on job claim. */
-            @WithDefault("PT5M")
+            /** Lease TTL granted on job claim and on each heartbeat (application.properties says why it is short). */
+            @WithDefault("PT2M")
             fun ttl(): Duration
         }
 
