@@ -71,7 +71,7 @@ compute alike:
 - An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
   first and allocated as one, so rounding never accumulates across items.
 - An entry that does not add up (payers' amounts beside the total, exact amounts beside it, line items above it) is
-  not saved; one that arrives anyway counts nowhere and is shown as invalid.
+  not saved; one that arrives anyway counts nowhere and is shown as invalid (owner 2026-10-24).
 
 **Editing and deleting** are open to everyone who may write (ADR 0108 decision 6). Each change keeps the earlier
 version: an entry shows that it was edited, and its history what changed and when — and, for a member, who (the
