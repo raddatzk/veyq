@@ -1,0 +1,1081 @@
+openapi: 3.1.0
+info:
+  title: veyq Expenses API
+  version: 0.1.0
+  description: >
+    The **Expenses** application's own operations ([docs/apps/expenses.md](../../../docs/apps/expenses.md),
+    [ADR 0108](../../../docs/decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)): a **Pot** is a
+    node of kind `EXPENSES_POT`; its participants and entries are **records**, each a sequence of sealed **revisions** in
+    Expenses' own table, appended and never overwritten. Everything else a Pot needs is core's and is not repeated here:
+    the node itself (its sealed name, its key, its sealed meta — base currency and own categories — written with the
+    revision it read), its trash and purge, its share links and the guest identities, the re-key's core parts and its
+    commit.
+
+    **A revision** is `n + 1` of its record, taken only where `n` is the record's latest (`409 stale_revision`
+    otherwise, naming every stale record): nothing is overwritten, and two concurrent edits never lose one another. Its
+    body is the format of `contracts/expenses/entry.v1.schema.json`, padded to one of four size classes and sealed under
+    a key of its own, `K_rev` (field purpose `expense-entry`, bound to scope, node, entry and revision); `K_rev` is wrapped
+    under the Pot's key (`expense-entry-key`, the same binding) in a field of its own, which is all a re-key after a
+    rotation rewrites (ADR 0109): no body moves, so no digest a later revision's heads name moves either. A delete is a
+    revision marked as a tombstone; the one write that removes anything is a member's **erasure** of a participant's
+    record, after which the server holds none of that record's earlier revisions.
+
+    **The list** is core's revisioned-list primitive over the revisions (docs/apps/README.md § How an application
+    publishes a revisioned list): a member's read is a conditional-GET keyset delta; a guest's is paged by id and tagged
+    by a digest of what it serves (ADR 0081 decision 4). A member reads who wrote each revision; a guest's read has no
+    writer at all — its schema is its own, so nothing added to the member's reaches a link (inbox #190).
+
+    **Operator-blind:** per Pot the server sees the number of records and of revisions per record, every revision's
+    time, size class and writer (a member or a link identity), which revisions are tombstones and which records were
+    erased (ADR 0108 § Consequences) — never an amount, a participant, a category, a currency or a key.
+
+    **Guest operations** (tag `share-expenses`): a guest of a `READ` or `READ_WRITE` link on the Pot, or on a folder above
+    it, reads its revisions; a `READ_WRITE` guest appends revisions. A Pot is a share root with `READ` and `READ_WRITE`,
+    never `WRITE_ONLY` (`createShare` answers that `422 illegal_scope`). The link is core's; these operations sit under
+    its `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an active share — its role's
+    instance capability on too, ADR 0088 decision 5 → the password → the mode → the guest's token), then do Expenses'
+    work ([ADR 0079](../../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) § Application
+    guest operations). A guest's revision is a guest write like any other: recorded by core's guest-write record, one
+    per revision, and reportable with a hold copy (ADR 0093). There is no guest erasure: the operation exists on the
+    member path only.
+
+tags:
+  - name: expenses
+    description: >
+      A member's Pots under a scope: read a Pot's revisions, append revisions, erase a participant's record, and the
+      Pot's part of a re-key. One tag = one resource interface rooted at `/api/scopes/{scopeId}/pots`.
+  - name: share-expenses
+    description: >
+      A guest's Pots on a public share link — read a Pot's revisions, append revisions (unauthenticated). One tag = one
+      resource interface owning the `/api/shares/{shareId}/pots` subtree: longer than core's `sharing` root `/api/shares`,
+      so these routes reach this resource and every other `/api/shares` route stays core's.
+  - name: case-expenses
+    description: >
+      A moderator's review of a case's Pot revisions (uc.moderation.review-a-case), behind core's moderation gate. Its own
+      tag so its resource owns `/api/moderation/cases/{caseId}/pots`: longer than core's moderation root
+      `/api/moderation`, so this route reaches it and every other moderation route stays core's.
+
+paths:
+  /api/scopes/{scopeId}/pots/{nodeId}/revisions:
+    get:
+      tags: [expenses]
+      operationId: listPotRevisions
+      summary: A Pot's revisions — a conditional-GET keyset delta for the live Pot (ADR 0033).
+      description: >
+        Every revision of every record of the Pot, live or tombstoned, for an open Pot — the whole ledger, since every
+        balance and every check of the heads reads all of it. The client caches `ledgerRevision` and echoes it as
+        **`If-None-Match`**; unchanged ⇒ **`304`**, no revision query. On a change ⇒ `200` with the revisions **past the
+        client's `since` cursor** (a revision's position, which the server hands out in the order appends commit, then
+        its entry id and revision), so a poll carries only what was appended. **`revisionIds`** — the Pot's current
+        revisions, as references — is present only when an erasure advanced `deleteRevision` past the client's
+        `sinceDelete`: the client drops every revision it holds that the set no longer names. **Pages (ADR 0033 decision
+        6):** at most `limit` revisions per answer, `more: true` while revisions remain; the client asks again with the
+        page's `cursor` as `since`, without `If-None-Match`, until `more` is false, and keeps the first page's revisions.
+        Each revision carries who wrote it (`writer`), and the page the sealed display name of every link guest among
+        them (`guestWriters`). A trashed Pot is read the same way (its trash view and its restore read it). The node
+        must be an `EXPENSES_POT` of the scope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsIfNoneMatch"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSinceDelete"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+      responses:
+        "200":
+          description: >
+            A keyset delta (the revisions past the `since` cursor) plus both counters; `revisionIds` only when
+            `deleteRevision` advanced past the client's `sinceDelete`.
+          headers:
+            ETag: { $ref: "../_common.openapi.yaml#/components/headers/ItemsETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotRevisionPage" }
+        "304": { $ref: "../_common.openapi.yaml#/components/responses/ItemsNotModified" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, or no `EXPENSES_POT` of that id in it, or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+    post:
+      tags: [expenses]
+      operationId: appendPotRevisions
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: revisions.revision
+        epochs:
+          - field: nodeEpoch
+      summary: Append 1–256 revisions of distinct records of a Pot, atomically.
+      description: >
+        Each revision is `revision` = `n + 1` of its record `entryId`, where `n` is the record's latest (`1` for a new
+        record, whose id the client mints, ADR 0072 decision 3). All land or none does: one stale revision fails the batch
+        `409 stale_revision`, naming every record whose latest is not the `revision - 1` it was written on, with that
+        latest (0 where the record does not exist), and nothing of the batch is stored. A batch serves a Pot's first
+        participants, every transfer of a settle-up at once, an import and a copy. Two revisions of one record in a batch
+        are `400 invalid_request`. A record id that already belongs to another Pot, in any scope, is `409 id_taken`, the
+        same wherever it lives. `tombstone` marks a delete; it is the only thing the server learns of a revision's
+        content. The sealed body is one of the four size classes exactly, and its key wrap is bound to the revision it
+        opens (both are checked by the client that reads them; the server checks only the body's length). Every Pot
+        write states `nodeEpoch`, the Pot's key epoch as read (ADR 0109 point 6). The Pot must be a live `EXPENSES_POT`
+        of the scope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PotAppendRequest" }
+            example:
+              nodeEpoch: 0
+              revisions:
+                - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+                  revision: 1
+                  tombstone: false
+                  sealedBody: c2VhbGVkLWJvZHk=
+                  wrappedRevisionKey: d3JhcHBlZC1rLXJldg==
+      responses:
+        "204":
+          description: Every revision of the batch is stored, and the Pot's list moved once for them all.
+        "400":
+          description: Malformed request — a body outside its contract, a body of no size class, or two revisions of one record (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, or no live `EXPENSES_POT` of that id in it (trashed included), or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            `stale_revision` — a revision is not `n + 1` of its record's latest `n`; the body names every stale record with
+            its latest, and nothing was stored. `id_taken` — a new record's id belongs to another Pot. `stale_epoch` —
+            `nodeEpoch` is below the Pot's stored epoch (re-read); `node_rekey_pending` — the Pot is not re-keyed since the
+            last rotation (retry; ADR 0109 point 6). `scope_deleting` — the space is being deleted and read-only. Every
+            code but `stale_revision` carries `code` alone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotRevisionConflict" }
+              example:
+                code: stale_revision
+                stale:
+                  - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+                    revision: 2
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+
+  /api/scopes/{scopeId}/pots/{nodeId}/erasures:
+    post:
+      tags: [expenses]
+      operationId: erasePotRecord
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: revision
+        epochs:
+          - field: nodeEpoch
+      summary: Erase a participant's record — its sealed erasure revision, then none of its earlier revisions (members only).
+      description: >
+        A member deletes or removes a participant (ADR 0108 decisions 3 and 6): the request is the record's erasure
+        revision, `n + 1` of its latest `n`, sealed like any revision; in the same transaction the server stores it and
+        deletes every earlier revision of the record, so its name and every earlier spelling of it are in no row it
+        holds. The erasure revision stays: a reader accepts a revision it finds named but missing only where an erasure
+        of its own record covers it, and the server cannot write one. The Pot's `deleteRevision` moves, so every open
+        list drops the erased revisions on its next poll. The server cannot tell that the record is a participant or
+        that its balance is settled — both sealed — so those are the client's rules. There is no guest twin: a link
+        erases nothing. A record whose latest is not `revision - 1` is `409 stale_revision` (with the record's latest),
+        and nothing is erased.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PotErasureRequest" }
+            example:
+              nodeEpoch: 0
+              entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+              revision: 3
+              sealedBody: c2VhbGVkLWJvZHk=
+              wrappedRevisionKey: d3JhcHBlZC1rLXJldg==
+      responses:
+        "204":
+          description: The erasure revision is stored and the record's earlier revisions are gone.
+        "400":
+          description: Malformed request — a body outside its contract or of no size class (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, no live `EXPENSES_POT` of that id in it, or no record of that id in the Pot; or the caller holds no grant for the scope (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            `stale_revision` — the record's latest is not `revision - 1`; the body names it with its latest, and nothing was
+            erased. `stale_epoch` / `node_rekey_pending` — the Pot's key epoch, as for an append (ADR 0109 point 6).
+            `scope_deleting` — the space is being deleted and read-only. Every code but `stale_revision` carries `code`
+            alone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotRevisionConflict" }
+              example:
+                code: stale_revision
+                stale:
+                  - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+                    revision: 3
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+
+  /api/scopes/{scopeId}/pots/{nodeId}/rekey:
+    get:
+      tags: [expenses]
+      operationId: listPotRekey
+      summary: The Expenses fields a Pot's re-key re-seals — every revision's `K_rev` wrap (ADR 0109 point 2).
+      description: >
+        Every revision of the Pot — of a trashed Pot too — with what is sealed under the Pot's key: its `K_rev` wrap, and
+        nothing else (the body is sealed under `K_rev`, so a re-key leaves it as it is, ADR 0108 decision 4). Paged by
+        `since` / `limit` / `more` as `listPotRevisions`. Only a caller who may commit the node's re-key (core's
+        `listRekeyNodes`) reads it, else `403`. Nothing here is new to the server.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+      responses:
+        "200":
+          description: One page of the Pot's revision key wraps.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotRekeyPage" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or Pot in it, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+  /api/scopes/{scopeId}/pots/{nodeId}/rekey/{rekeyId}:
+    post:
+      tags: [expenses]
+      operationId: stagePotRekey
+      summary: Stage one batch of a Pot's re-wrapped revision keys under a core re-key id.
+      description: >
+        Up to 256 revisions per call, each `K_rev` re-wrapped under the Pot's NEW key (`expense-entry-key`, bound as
+        before) — the only field a re-key writes: a staged part carries no body, so none can be re-sealed and every body
+        and its digest stay byte-identical. Nothing staged is served before core's `commitNodeRekey` under the same
+        `rekeyId`, whose transaction swaps it in through Expenses' participant; a staged revision that no longer exists
+        (erased since) is the commit's `rekey_parts_stale`, a revision the stage misses its `rekey_parts_missing`. A value
+        staged twice is replaced; an unclaimed stage expires after a day. `fromEpoch` is the Pot's epoch as read; a Pot
+        re-keyed since is `409 stale_epoch`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/RekeyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PotRekeyStage" }
+      responses:
+        "204":
+          description: The batch is staged.
+        "400":
+          description: Malformed request (a list over 256 entries, a malformed value).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or Pot in it, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: The Pot's epoch is no longer `fromEpoch`, or it does not lag the scope's current one (`stale_epoch` — nothing to stage), or the space is being deleted and read-only (`scope_deleting`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+
+  /api/shares/{shareId}/pots/{nodeId}/revisions:
+    get:
+      tags: [share-expenses]
+      operationId: listSharePotRevisions
+      summary: A Pot's revisions under a share (unauthenticated) — sealed, and without who wrote them.
+      description: >
+        **No auth.** The Expenses half of a guest's read of a link: core's `resolveShare` serves the shared nodes with
+        their keys, this serves every revision of one live `EXPENSES_POT` of the live shared subtree — with its time, its
+        tombstone mark and its seals, and **no writer** (ADR 0108 decision 6, inbox #190): the guest's schema has no such
+        field. Core's guest gate runs first (`ShareGuestGate`): an active share → the password → the access mode. A
+        `WRITE_ONLY` link reaches no Pot. A Pot outside the live subtree — trashed, moved out, none — answers the same
+        `404` as an unknown share.
+        **Password-protected shares (ADR 0037):** the valid `X-Share-Password` token is required — a missing token is
+        `404`, a wrong one `403 share_password_incorrect`.
+        **Pages (ADR 0033 decision 6):** at most `limit` revisions per answer, ordered by entry id, then revision;
+        `more: true` while revisions remain past them, and the guest asks again with the page's `cursor` as `after`.
+        **Live refresh (ADR 0081 decision 4):** a read without `after` carries an `ETag` that is a digest of everything
+        this read serves across all its pages — never the Pot's item revision. Echoed as `If-None-Match`, an unchanged
+        listing answers `304` with no body. A later page is never conditional and carries no tag.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+        - name: after
+          x-veyq-visibility: structure
+          in: query
+          required: false
+          description: >
+            The `cursor` of the page before — its last revision, `<entryId>,<revision>`; the answer continues with the
+            revisions past it. Omitted => from the beginning.
+          schema: { type: string, maxLength: 64, pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12},[1-9][0-9]{0,15}$", example: "5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c,2" }
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: >
+            The `ETag` of the guest's last first page of this read. When it equals the digest of what the read would serve
+            now, `304`. Ignored on a later page (`after` given).
+          schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
+      responses:
+        "200":
+          description: One page of the Pot's sealed revisions.
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: >
+                On a read without `after`: a digest of everything the read serves, every page of it — echo it as
+                `If-None-Match` on the next poll. Absent on a later page.
+              schema: { type: string, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharePotRevisionPage" }
+        "304":
+          description: Not Modified — the guest's `If-None-Match` equals the digest of what this read would serve; no body.
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), a required password token absent, or no live `EXPENSES_POT` of that id inside the live shared subtree — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+    post:
+      tags: [share-expenses]
+      operationId: appendSharePotRevisions
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: revisions.revision
+        epochs:
+          - field: nodeEpoch
+      summary: Append 1–256 revisions of distinct records of a shared Pot (unauthenticated) — a `READ_WRITE` guest's write.
+      description: >
+        **No auth.** A `READ_WRITE` guest's `appendPotRevisions`, the same batch with the same rules: each revision `n + 1`
+        of its record's latest `n`, all or none, `409 stale_revision` naming every stale record. Core's guest gate runs
+        first (`ShareGuestGate`): an active share → the password → a mode that writes → a valid `contributorToken`. The Pot
+        must be a live `EXPENSES_POT` inside the share's subtree, checked again in the write, under the scope lock, with
+        the link: a Pot trashed or moved out of the subtree since, or a link revoked or deleted since, refuses the batch.
+        Each revision is stamped with the guest's identity and recorded as one guest write (ADR 0093 § 10). A guest may
+        write any record's next revision, a tombstone included (ADR 0108 decision 6): nothing is lost, since every
+        revision stays. It erases nothing — there is no guest erasure.
+        **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong token → `403
+        share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SharePotAppendRequest" }
+            example:
+              nodeEpoch: 0
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              revisions:
+                - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+                  revision: 1
+                  tombstone: false
+                  sealedBody: c2VhbGVkLWJvZHk=
+                  wrappedRevisionKey: d3JhcHBlZC1rLXJldg==
+      responses:
+        "204":
+          description: Every revision of the batch is stored and recorded as a guest write.
+        "400":
+          description: Malformed request — a body outside its contract, a body of no size class, or two revisions of one record (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: >
+            The share does not allow writing (a `READ` link), the contributor token is invalid, or the share root is in the
+            trash (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong
+            (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: >
+            No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access
+            A4)), or it is password-protected and no `X-Share-Password` token was given — non-enumerable (`share_not_found`);
+            or no live `EXPENSES_POT` of that id inside the share's live subtree (`node_not_found`, the same for one outside it
+            as for none).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: >
+            `stale_revision` — a revision is not `n + 1` of its record's latest `n`; the body names every stale record with
+            its latest, and nothing was stored. `id_taken` — a new record's id belongs to another Pot. `stale_epoch` /
+            `node_rekey_pending` — the Pot's key epoch (ADR 0109 point 6). Every code but `stale_revision` carries `code`
+            alone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotRevisionConflict" }
+              example:
+                code: stale_revision
+                stale:
+                  - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+                    revision: 2
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
+  /api/moderation/cases/{caseId}/pots:
+    get:
+      tags: [case-expenses]
+      operationId: listCasePotRevisions
+      summary: A moderator's review of a case's Pot revisions — the held revisions in the guest's shape, with their Pot.
+      description: >
+        The moderation mode of the Pot view reads this instead of `listSharePotRevisions` (uc.moderation.review-a-case):
+        every revision the case's hold copied — every revision of a reported entry (ADR 0108 decision 6), or every
+        revision of every Pot under a reported node — from the snapshot only, so it answers after the revisions, the Pot or
+        the space were deleted. The moderator opens each with the `K_rev` the report share hands over, or with the Pot's
+        key a node's report hands over. No writer, as for a guest. `404 nothing_held` once the hold ended. Behind the
+        `MODERATOR` role and a key proof over this case — core's moderation gate, never a guest's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The held revisions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CasePotRevisionListing" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. Any authenticated caller holding a grant for the scope (enforced by code).
+
+  parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the scope the Pot lives in.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the `EXPENSES_POT` node.
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+    RekeyId:
+      name: rekeyId
+      in: path
+      required: true
+      description: The id of the node's re-key attempt — the one core's `commitNodeRekey` names (`content.openapi.yaml`).
+      schema: { type: string, format: uuid, example: 6c7c3f0e-2a9b-4d4a-8e8b-2c1f2d3e4a5b }
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: The opaque 256-bit share id (base64url, unguessable) — half the capability; the other half is the fragment key.
+      schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
+    SharePassword:
+      name: X-Share-Password
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The password token `base64(Argon2id(password, pwSalt))` for a password-protected share (cr-0118, ADR 0037).
+        Omit for a share with no password; a locked resolve then returns only `passwordRequired` + `pwSalt` so the
+        client can prompt and retry with this header.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+
+  schemas:
+    # --- writes ---------------------------------------------------------------
+    PotAppendRequest:
+      type: object
+      required: [nodeEpoch, revisions]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The Pot's epoch as the client read it: every `K_rev` of the batch is wrapped under the Pot's key. Below the
+            stored epoch is `409 stale_epoch` (the caller re-reads); a Pot not re-keyed since the last rotation is `409
+            node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        revisions:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/PotRevisionWrite" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
+
+    SharePotAppendRequest:
+      type: object
+      required: [nodeEpoch, contributorToken, revisions]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The Pot's epoch as the guest read it: every `K_rev` of the batch is wrapped under the Pot's key. Below the
+            stored epoch is `409 stale_epoch`; a Pot not re-keyed since the last rotation is `409 node_rekey_pending` — ADR
+            0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity`.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        revisions:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/PotRevisionWrite" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
+
+    PotRevisionWrite:
+      type: object
+      description: One revision of one record, as its writer sealed it. The same shape on the member and the guest path.
+      required: [entryId, revision, tombstone, sealedBody, wrappedRevisionKey]
+      properties:
+        entryId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The record's id, minted by the client at its first revision (ADR 0072 decision 3); its seals are bound to it.
+          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            `n + 1` of the record's latest revision `n` as the writer read it (`1` for a new record). Anything else fails
+            the batch `409 stale_revision`. The seals are bound to it.
+          minimum: 1
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        tombstone:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            True for a delete (a `deleted` revision): the record leaves the Pot's live entries and stays restorable by a
+            later revision. The one fact of a revision's content the server holds (ADR 0108 decision 3).
+          example: false
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        sealedBody:
+          type: string
+          description: >
+            The revision (`contracts/expenses/entry.v1.schema.json`) padded to a size class and sealed under its own
+            `K_rev` (field purpose `expense-entry`, bound to scope, Pot, `entryId` and `revision`; opaque base64). Its
+            length is one of exactly four, one per size class — 744, 2792, 10984 or 21908 characters (512, 2048, 8192 or
+            16384 bytes of padded plaintext, the 16 KiB cap) — and anything else is `400 invalid_request`.
+          contentEncoding: base64
+          minLength: 744
+          maxLength: 21908
+          example: c2VhbGVkLWJvZHk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 744, max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedRevisionKey:
+          type: string
+          description: The revision's random `K_rev` wrapped under the Pot's key (seal purpose `expense-entry-key`, bound to scope, Pot, `entryId` and `revision`; opaque base64).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    PotErasureRequest:
+      type: object
+      required: [nodeEpoch, entryId, revision, sealedBody, wrappedRevisionKey]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The Pot's epoch as the client read it (ADR 0109 point 6), as for an append.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        entryId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The participant's record whose earlier revisions the server erases.
+          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: The erasure revision, `n + 1` of the record's latest `n` (so at least 2); anything else is `409 stale_revision`.
+          minimum: 2
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(2)'
+        sealedBody:
+          type: string
+          description: The erasure revision (`kind` `erasure`), padded and sealed as every revision's body is (see `PotRevisionWrite.sealedBody`).
+          contentEncoding: base64
+          minLength: 744
+          maxLength: 21908
+          example: c2VhbGVkLWJvZHk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 744, max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedRevisionKey:
+          type: string
+          description: The erasure revision's `K_rev` wrapped under the Pot's key (`expense-entry-key`; opaque base64).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    PotRevisionConflict:
+      type: object
+      description: >
+        A refused append or erasure. With `code: stale_revision`, `stale` names every record whose latest revision is not
+        the one the write was built on, with that latest (0: the record does not exist). Any other 409 code carries `code`
+        alone. Ids and counters only — nothing the caller cannot already list.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          description: Stable, client-localizable error code.
+          maxLength: 64
+          example: stale_revision
+        stale:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/PotRevisionRef" }
+
+    PotRevisionRef:
+      type: object
+      description: One revision by its address — a record and its revision.
+      required: [entryId, revision]
+      properties:
+        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 0
+          example: 2
+
+    # --- the member's read ----------------------------------------------------
+    PotRevision:
+      type: object
+      description: >
+        One revision of a MEMBER's read. The guest's has its own schema (`SharePotRevision`): a field added here never
+        reaches a link (inbox #190). The client opens `K_rev` under the Pot's key and the body under `K_rev`, each bound to
+        the address it read the revision by — the Pot it asked for, `entryId` and `revision` — never to anything else of
+        the row.
+      required: [entryId, revision, tombstone, erasure, sealedBody, wrappedRevisionKey, writer, createdAt]
+      properties:
+        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        tombstone:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The writer marked it a delete.
+          example: false
+        erasure:
+          x-veyq-visibility: flag
+          type: boolean
+          description: It came through `erasePotRecord`; no earlier revision of its record is held.
+          example: false
+        sealedBody:
+          type: string
+          description: The revision's body as it was appended (opaque base64); its SHA-256 is the digest a later revision's heads name.
+          contentEncoding: base64
+          maxLength: 21908
+          example: c2VhbGVkLWJvZHk=
+        wrappedRevisionKey:
+          type: string
+          description: The revision's `K_rev` wrapped under the Pot's key (opaque base64) — re-wrapped by a re-key, never the body.
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+        writer:
+          x-veyq-visibility: structure
+          type: string
+          description: >
+            Who appended it (ADR 0108 decision 6, the class ADR 0093 § 8 discloses): `user:{userId}` (a member) or
+            `share:{identityId}` (a link guest) — the opaque key shape Memories' `ownerKey` uses. The client names a member
+            from the tenant's member names and a guest from `guestWriters`. Members only: the guest's read carries no such
+            field.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-4c1f-8d3e-4a5b6c7c3f0e"
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server stored it, to the millisecond. Not the list's order, which is the page's `cursor`.
+          example: 2026-07-09T12:34:56.789Z
+
+    PotGuestWriter:
+      type: object
+      description: >
+        A link guest who wrote a revision of the page, with the display name the server holds for it, sealed client-side
+        bound to (scope, `shareId`, identity) under the share root's key — the server relays the ciphertext it stored at
+        `createShareIdentity`. Listed while the identity exists (a deleted link's too, inbox #431). Never served on a share
+        path (inbox #190).
+      required: [identityId, shareId, sealedName]
+      properties:
+        identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-4f3a-8b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The share the identity belongs to — the seal is bound to it (ADR 0072).
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCde
+        sealedName:
+          type: string
+          description: The identity's display name, sealed (opaque base64) — `veyq_share_identity.sealed_display_name`.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+
+    PotRevisionPage:
+      type: object
+      description: >
+        The conditional-GET response for an open Pot (ADR 0033). `revisions` carries only the revisions past the client's
+        `since` cursor — the whole ledger on a first load. `ledgerRevision` / `deleteRevision` are the Pot's counters
+        (`ledgerRevision` doubles as the ETag); `revisionIds` — the Pot's current revisions — only when an erasure
+        advanced `deleteRevision` past the client's `sinceDelete`, else null.
+      required: [revisions, ledgerRevision, deleteRevision, more, guestWriters]
+      properties:
+        revisions:
+          type: array
+          description: The delta, at most `limit` revisions, in cursor order (ADR 0033 decision 6).
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/PotRevision" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Revisions remain past this page — ask again with this page's `cursor` as `since` (and no `If-None-Match`) until false.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 80
+          description: >
+            The keyset position of this page's last revision, opaque to the client: send it as `since` for the next page,
+            and keep the last page's for the next poll. Null when the page carries none (keep the cursor already held).
+          example: "17,5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c"
+        ledgerRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The Pot's item revision — moved by every append and erasure. Doubles as the ETag; echo it as `If-None-Match`.
+          example: 7
+        deleteRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The Pot's delete revision — moved only by an erasure. Echo it as `sinceDelete` to gate `revisionIds`.
+          example: 0
+        revisionIds:
+          type: [array, "null"]
+          description: >
+            Every revision the Pot holds now, as references, present only when `sinceDelete < deleteRevision` (an erasure
+            happened since the client last synced): the client drops every revision it holds that this set does not name.
+            Null otherwise.
+          items: { $ref: "#/components/schemas/PotRevisionRef" }
+        guestWriters:
+          type: array
+          description: One entry per link identity that wrote a revision of this page and still exists — the `share:` writers' names.
+          items: { $ref: "#/components/schemas/PotGuestWriter" }
+
+    # --- the guest's and the moderator's read ----------------------------------
+    SharePotRevision:
+      type: object
+      description: >
+        One revision of a GUEST's read: its address, time, marks and seals, and nothing about who wrote it (ADR 0108
+        decision 6, inbox #190) — a schema of its own so the member's can grow without reaching a guest.
+      required: [entryId, revision, tombstone, erasure, sealedBody, wrappedRevisionKey, createdAt]
+      properties:
+        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        tombstone:
+          x-veyq-visibility: flag
+          type: boolean
+          example: false
+        erasure:
+          x-veyq-visibility: flag
+          type: boolean
+          example: false
+        sealedBody:
+          type: string
+          description: The revision's body as it was appended (opaque base64).
+          contentEncoding: base64
+          maxLength: 21908
+          example: c2VhbGVkLWJvZHk=
+        wrappedRevisionKey:
+          type: string
+          description: The revision's `K_rev` wrapped under the Pot's key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server stored it — the history a guest reads with each revision (ADR 0108 decision 6).
+          example: 2026-07-09T12:34:56.789Z
+
+    SharePotRevisionPage:
+      type: object
+      description: One page of a guest's read of a Pot, ordered by entry id, then revision.
+      required: [revisions, more]
+      properties:
+        revisions:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/SharePotRevision" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Revisions remain past this page — ask again with this page's `cursor` as `after`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 64
+          description: "`<entryId>,<revision>` of this page's last revision; null when the page carries none."
+          example: "5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c,2"
+
+    CasePotRevision:
+      type: object
+      description: One held revision of a case, with the Pot it belongs to — the guest's shape (no writer), plus its node.
+      required: [nodeId, entryId, revision, tombstone, erasure, sealedBody, wrappedRevisionKey, createdAt]
+      properties:
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        tombstone:
+          x-veyq-visibility: flag
+          type: boolean
+          example: false
+        erasure:
+          x-veyq-visibility: flag
+          type: boolean
+          example: false
+        sealedBody:
+          type: string
+          description: The held body as it was appended (opaque base64).
+          contentEncoding: base64
+          maxLength: 21908
+          example: c2VhbGVkLWJvZHk=
+        wrappedRevisionKey:
+          type: string
+          description: The held `K_rev` wrap (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-09T12:34:56.789Z
+
+    CasePotRevisionListing:
+      type: object
+      required: [revisions]
+      properties:
+        revisions:
+          type: array
+          items: { $ref: "#/components/schemas/CasePotRevision" }
+
+    # --- the re-key -------------------------------------------------------------
+    PotRekeyPage:
+      type: object
+      required: [revisions, more]
+      properties:
+        revisions:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/PotRekeyWrap" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Revisions remain past this page; ask again with this page's `cursor` as `since`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 80
+          description: The keyset position of this page's last revision, opaque to the client; null when the page carries none.
+          example: null
+
+    PotRekeyWrap:
+      type: object
+      description: One revision's `K_rev` wrap — under the Pot's current key when listed, under its new key when staged.
+      required: [entryId, revision, wrappedRevisionKey]
+      properties:
+        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        wrappedRevisionKey:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLXJldg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    PotRekeyStage:
+      type: object
+      required: [fromEpoch, revisions]
+      properties:
+        fromEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The Pot's epoch as the re-keyer read it.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        revisions:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/PotRekeyWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
+
+    ErrorResponse:
+      $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

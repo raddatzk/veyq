@@ -12,7 +12,9 @@ with a `mode` of one of two values:
     0080), and each conflicts on its own. A declaration names the request `field` (an integer property of the
     request schema, resolved through `$ref` across spec files, declared once); the field is `required`, or the
     declaration's `requiredWith` names the property — or the list of properties — whose presence makes it required
-    (the server enforces that half). The operation's `409` response — inline or a `$ref` into `_common` — names each
+    (the server enforces that half). A batch whose every item is compare-and-set on its own declares the per-item
+    field as `<array>.<name>` (`appendPotRevisions`' `revisions.revision`): read in the array's item schema, one level
+    deep as for epochs below, and held there to the same rules. The operation's `409` response — inline or a `$ref` into `_common` — names each
     declaration's `conflictCode` (default `stale_revision`) in its description or example. A declared field is
     named as a revision (`revision` or `…Revision`), never as a version: ADR 0086 keeps "version" for
     compatibility, so a counter that says version is a word error the contract would carry onto every client.
@@ -61,7 +63,10 @@ method alone (PUT/PATCH), which misses six POST edits (`renameGroup`, `setScopeI
 was one `field` per operation until ADR 0080 gave `updateNode` a second, independent counter (`placementRevision`
 beside `metaRevision`); a single slot would have forced one of them undeclared, so `fields` became a list with a
 conflict code each. Its bite cases are `validate_guard_gaps.py` 59–61 (a declaration dropped, a second
-counter-shaped field undeclared, a conflict code the `409` does not name) and 82 (a declared field named version).
+counter-shaped field undeclared, a conflict code the `409` does not name), 82 (a declared field named version) and 94 (a
+batch's declared per-item revision its item schema no longer requires). The reverse angle reads top-level counters
+only: a counter one level into a batch's items is held only once declared (`stageMediaRekey`'s `media.metaRevision`
+is not — a re-key's stage is checked by the commit, not compare-and-set on its own).
 """
 from __future__ import annotations
 
@@ -206,34 +211,60 @@ def conflict_text(specs: dict[str, dict], op: dict, file: str) -> str:
     return " ".join(parts)
 
 
+def batch_item_properties(specs: dict[str, dict], props: dict, top: str, file: str) -> tuple[dict, set[str]] | None:
+    """The item schema's properties and required set of the request's array property `top`, or None when `top` is no
+    array property — the one level a batch has, as `epoch_properties` reads it."""
+    prop = props.get(top)
+    if not isinstance(prop, dict):
+        return None
+    if "$ref" in prop:
+        prop, _ = resolve(specs, prop["$ref"], file)
+    t = prop.get("type")
+    if not (t == "array" or (isinstance(t, list) and "array" in t)):
+        return None
+    return request_properties(specs, prop.get("items"), file)
+
+
 def check_declaration(
     where: str, entry: dict, props: dict, required: set[str], conflict: str, declared: list[str],
+    specs: dict[str, dict] | None = None, file: str = "",
 ) -> list[str]:
-    """One `fields` entry: its revision field, what makes it required, and its conflict code in the `409`."""
+    """One `fields` entry: its revision field, what makes it required, and its conflict code in the `409`. A field
+    `<array>.<name>` is a batch's per-item revision (`appendPotRevisions`' `revisions.revision`): read in the array's
+    item schema, required there, one level deep."""
     errors: list[str] = []
     field = entry.get("field")
     if field in declared:
         return [f"{where}: revision field {field!r} is declared twice"]
+    if isinstance(field, str) and "." in field:
+        top, _, name = field.partition(".")
+        inner = batch_item_properties(specs or {}, props, top, file)
+        if inner is None:
+            return [f"{where}: revision field {field!r} names no array property {top!r} of the request schema"]
+        props, required = inner
+        field_label, field = field, name
+    else:
+        field_label = field
     if field not in props:
-        return [f"{where}: revision field {field!r} is not a property of the request schema"]
-    declared.append(field)
+        return [f"{where}: revision field {field_label!r} is not a property of the request schema"]
+    declared.append(field_label)
     if VERSION_SHAPED.match(field):
-        errors.append(f"{where}: revision field {field!r} is named as a version — a counter is a revision "
+        errors.append(f"{where}: revision field {field_label!r} is named as a version — a counter is a revision "
                       f"(ADR 0086)")
     if not is_integer(props[field]):
-        errors.append(f"{where}: revision field {field!r} is not an integer")
+        errors.append(f"{where}: revision field {field_label!r} is not an integer")
     with_ = entry.get("requiredWith")
     with_list = [with_] if isinstance(with_, str) else list(with_ or [])
     if field not in required:
         if not with_list:
-            errors.append(f"{where}: revision field {field!r} is neither required nor `requiredWith` "
+            errors.append(f"{where}: revision field {field_label!r} is neither required nor `requiredWith` "
                           f"another property")
         for w in with_list:
             if w not in props:
-                errors.append(f"{where}: {field!r} requiredWith {w!r} is not a property of the request schema")
+                errors.append(f"{where}: {field_label!r} requiredWith {w!r} is not a property of the request schema")
     code = entry.get("conflictCode") or DEFAULT_CONFLICT
     if code not in conflict:
-        errors.append(f"{where}: its 409 response does not name `{code}` (the conflict of {field!r})")
+        errors.append(f"{where}: its 409 response does not name `{code}` (the conflict of {field_label!r})")
     return errors
 
 
@@ -303,7 +334,7 @@ def main() -> int:
                     if not isinstance(entry, dict):
                         errors.append(f"{where}: a fields entry is {entry!r}, expected a mapping")
                         continue
-                    errors.extend(check_declaration(where, entry, props, required, text, declared))
+                    errors.extend(check_declaration(where, entry, props, required, text, declared, specs, file))
                 for other in counters:
                     if other not in declared:
                         errors.append(f"{where}: carries counter-shaped {other!r} that no declaration names "

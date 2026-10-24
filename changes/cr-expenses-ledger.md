@@ -256,3 +256,23 @@ stopped: the Pot's own categories are added and renamed, never removed, in the f
 ## Retrospective
 
 _Filled by the implementer._
+
+**Phase 1 (2026-10-24), built on `main` `01260a52`, not landed.** Entry checks re-run: both sibling CRs are gone from
+`changes/`, `NodeRekeyParticipant`, `rekeyContent` and `validate_node_rekey_arity.py` exist; the one thing that moved
+since the refine is the participant's extra `lockRows(scopeId, nodeId)` hook. Baselines on that commit: `./gradlew check`
+0, `npm run check` 0 in web, admin-web and `src/packages/crypto`, all 66 `scripts/validate_*.py` 0.
+
+- **The done-when's backend red was remembered, not measured, and it is wider.** A spec under `contracts/api/expenses/`
+  with no `:apps:expenses` fails Gradle while it configures (`buildSrc` `SpecSets.requireNoStray`), so `./gradlew check`
+  runs no task at all, `validate_backend_module_graph.py` rule (d) is red, and `OperatorBlindProbeTest` cannot classify
+  operations no module generates. So phase 1 split in two: the seals, the pad, the entry format, its vectors and the
+  export content (`61e56111`) are green alone; the spec and the guard change it needs (`17d70016`) merge with phase 2's
+  module, as § A contract that makes a client-sent field required argues for a contract no backend can build. Next
+  time: a contracts phase that opens an application's spec directory runs `./gradlew help` at refine.
+- **The `generate:api` entry is a web phase's, not phase 1's.** It generates, and `npm run check` is green with it
+  (measured), but `validate_web_core_imports_no_applications.py` derives every application's client from that script
+  and is red on an owner its `OWNERS` lacks — and `OWNERS` needs `features/expenses/` and its i18n catalog to exist.
+  So the entry, `OWNERS`, `KIND` and `I18N_NAMESPACES` land together, with the first web phase that holds the catalog.
+- **Two things the phase list did not name and the contract needed:** `listCasePotRevisions` (decision 7's case
+  resource implements a generated API, so its operation is the contract's), and `validate_write_concurrency.py` could
+  declare a revision only at the top level, not a batch's per-item one (it learned `revisions.revision`, bite case 94).
