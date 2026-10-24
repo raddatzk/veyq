@@ -1,4 +1,5 @@
 // The layer's menu model (ADR 0107): what `VeyqMenu` lists and `VeyqBreadcrumb` trails. Only the keys the app uses.
+import type { InjectionKey } from 'vue'
 import type { VeyqIconName } from './icons'
 
 export interface VeyqMenuItem {
@@ -18,3 +19,7 @@ export interface VeyqMenuItem {
   class?: string
   badge?: string
 }
+
+/** How an entry of a `VeyqMenu` (or of its submenus) runs its pick: the menu closes and gives focus back to its opener
+ *  first, then `run` runs (`VeyqMenu.vue`). */
+export const MENU_PICK: InjectionKey<(run: () => void) => void> = Symbol('veyq-menu-pick')

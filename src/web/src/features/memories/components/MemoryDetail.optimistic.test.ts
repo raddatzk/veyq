@@ -33,10 +33,12 @@ vi.mock('../uploadQueue', async (orig) => {
 })
 
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
+import exifr from 'exifr'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
-import { retryFile, enqueueUploads } from '../uploadQueue'
+import { retryFile, enqueueUploads, type UploadBatch, type UploadFile } from '../uploadQueue'
 import { blobApi, contentApi } from '../../../api/client'
 import { mediaApi } from '../api'
 import * as v1 from '@veyq/crypto/v1'
@@ -46,6 +48,9 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights } from '../../../test/models'
+import type { UpdateNodeOperationRequest } from '../../../api/generated/content'
+import { unsealMemoryDate } from '../memoryDate'
+import { epochMsToIsoDate } from '../../../shared/isoDate'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -328,5 +333,73 @@ describe('MemoryDetail — the picker does not make everyone wait for Safari', (
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('MemoryDetail — an upload settles the Memory\'s meta once', () => {
+  // The stack lane's lightbox spec read a console 409 on the Memory's PATCH: its one-photo upload ends with BOTH the
+  // file's poll (`onFileDone`) and the batch's re-list (`onComplete`), each refresh settled, and the two auto-date
+  // self-heals ran side by side on the same `metaRevision` 0 — one landed, the other was `409 stale_revision`. The server
+  // here checks the revision as the real one does; one settle at a time writes once and is never refused.
+  it('the poll and the re-list after the last file write the auto date once, never refused', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    const server = { wrappedMeta: null as string | null, metaRevision: 0 }
+    const refused: (number | undefined)[] = []
+    const updateNode = vi.fn(async ({ updateNodeRequest: r }: UpdateNodeOperationRequest) => {
+      await new Promise((resolve) => setTimeout(resolve, 5)) // a round trip, so two writers can be in flight at once
+      if (r.metaRevision !== server.metaRevision) {
+        refused.push(r.metaRevision)
+        throw { response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: server.wrappedMeta, metaRevision: server.metaRevision }), { status: 409 }) }
+      }
+      server.wrappedMeta = r.wrappedMeta ?? null
+      server.metaRevision += 1
+    })
+    fakeApi(contentApi, { updateNode })
+
+    // the host patches the tree's node in place (`patchNodeMeta`), the object this component holds
+    const memory = reactive(node('Rom 2026'))
+    const wrapper = mount(MemoryDetail, {
+      props: {
+        source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: memory, scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights(),
+        onMetaUpdated: (e: { wrappedMeta: string | null; metaRevision: number }) => {
+          memory.wrappedMeta = e.wrappedMeta
+          memory.metaRevision = e.metaRevision
+        },
+      },
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    await flushPromises()
+    expect(updateNode, 'an empty Memory has no date to write').not.toHaveBeenCalled()
+
+    const input = wrapper.find('input[type="file"]')
+    const file = new File([new Uint8Array([1, 2, 3])], 'see.jpg', { type: 'image/jpeg' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    expect(vi.mocked(enqueueUploads)).toHaveBeenCalledTimes(1)
+    const opts = vi.mocked(enqueueUploads).mock.calls[0][2]!
+
+    // the queue's upload lands one EXIF-dated photo, then calls its file's and its batch's hooks back to back
+    const taken = Date.UTC(2021, 4, 1, 10)
+    vi.mocked(exifr.parse).mockResolvedValueOnce({ DateTimeOriginal: new Date(taken) })
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    // the hooks read nothing of what they are handed here: the file and the batch are named casts, not built
+    opts.onFileDone?.({} as unknown as UploadFile)
+    opts.onComplete?.({} as unknown as UploadBatch)
+
+    await vi.waitFor(() => expect(updateNode).toHaveBeenCalled())
+    for (let i = 0; i < 6; i++) {
+      await flushPromises()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(refused, 'no PATCH was built on a revision already written').toEqual([])
+    expect(updateNode).toHaveBeenCalledTimes(1)
+    const day = epochMsToIsoDate(taken)
+    expect(unsealMemoryDate(SCOPE_ID, memoryKey, { id: NODE_ID, wrappedMeta: server.wrappedMeta })).toEqual({ mode: 'auto', from: day, to: day })
+    wrapper.unmount()
   })
 })
