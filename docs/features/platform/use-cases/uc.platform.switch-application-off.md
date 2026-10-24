@@ -18,10 +18,12 @@
 ## Main flow
 
 1. The switch takes effect without a restart; the application's id is missing from every client's effective set.
-2. The create menu offers none of the application's kinds; the application's nodes and records show with every write
-   function removed, and its page says in one line that the application is switched off here and what is there can
-   still be opened and downloaded.
-3. A member opens, reads and downloads what exists; a guest does the same through a link that exists.
+2. Every member of the tenant sees one banner at the top of veyq: the application is switched off here, and what is
+   there can still be opened and downloaded, so there is time to save it (owner 2026-10-24). The create menu offers
+   none of the application's kinds, and the application's nodes and records show with every write function removed.
+3. A member opens, reads and downloads what exists; a guest does the same through a link that exists, which keeps
+   being served (owner 2026-10-24). A guest's page is not told the switch: the link's resolve carries no tenant
+   setting, so a guest's write is refused like any other write (step 4, E6).
 4. Every write of the application is refused `422 capability_disabled` by the server: a node of its kinds created,
    renamed, moved, given a cover, copied or imported; its records and blobs written; a link rooted on one of its nodes
    created, reactivated or given a write role; a guest's write through any link.
@@ -41,8 +43,8 @@
 - **E5 — a member's own marks** (a heart on a medium, Memories' item marks, [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)):
   taken, because they are the member's own blob, not the application's content, and a Master-Key rotation re-tags
   them through the same write, which the server cannot tell from a new mark (owner 2026-10-23).
-- **E6 — a client that does not know the id** (older, or a native app): it hides nothing, and the server refuses its
-  writes all the same.
+- **E6 — a client that does not know the id** (older, or a native app), and **a guest's page**, which is not told it:
+  it hides nothing, and the server refuses its writes all the same.
 
 ## Quality notes
 
@@ -50,6 +52,8 @@
   writes into its existing nodes would not be off; it stops at reading, because a switch that hid what people stored
   would hold their data hostage (owner 2026-10-23).
 - The server sees what it refuses by: the node's kind, the application's operations, the share's root kind.
+- Off is a window, not an end: switched on again, nothing was lost. What follows a long window, the application's
+  data erased after members had time to save it, is open (inbox #539) and not built (owner 2026-10-24).
 
 ## User impact
 

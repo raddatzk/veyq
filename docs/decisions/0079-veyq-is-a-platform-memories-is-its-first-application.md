@@ -78,7 +78,10 @@ through the links that exist too, so nobody's data is trapped. Taking something 
 trash and its restore (a restored node is read-only like the rest), an erasure and a moderation measure go on, and so
 do a member's own marks on its items ([ADR 0068](0068-favorites-two-confidentiality-levels.md)), which a Master-Key
 rotation re-tags through the same write, and so does a rotation's re-key, which is the security of what
-exists. Switched on again, everything is as before; nothing was deleted. Not built yet: `cr-application-switches`.
+exists. While it is off, every member of the tenant sees a banner at the top of veyq that says so, so there is time to
+save what is in it, and the links that exist keep serving it, read-only (owner 2026-10-24). Switched on again,
+everything is as before; nothing was deleted. Off is a window, not an end: erasing an application's data after it is
+open (inbox #539). Not built yet: `cr-application-switches`.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new

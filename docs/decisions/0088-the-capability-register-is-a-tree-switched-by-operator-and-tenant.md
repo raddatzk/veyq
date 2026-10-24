@@ -58,9 +58,11 @@ instance and tenant layers.
    what is **new**. An **application switch** (`memories`, `depot`, `expenses`, the application's own node of the tree)
    is the one feature switch that reaches what exists: it makes the application read-only, every write refused and
    every read, download and removal kept ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
-   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path.
-   What exists stays readable and shareable, so there is no "activated but empty" state machine, and the gate sits
-   at creation instead of on every endpoint (the cost ADR 0079 named).
+   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path, and its
+   one-segment id is the only one a root may be (`core` is no entry). Its members see a banner, and its links keep
+   serving what exists (owner 2026-10-24).
+   What exists stays readable, so there is no "activated but empty" state machine, and the gate sits on the
+   application's writes, never on its reads.
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a
    blob role the server sees. The operator then learns *that* a Memory has a track, never where. This is the same
    kind of metadata as `CHAPTER`.

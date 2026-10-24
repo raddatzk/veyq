@@ -60,8 +60,13 @@ gives `memories` and `depot` an entry each in the capability register and makes 
    nobody classified is red.
 4. **The client** reads `hasCapability('memories' | 'depot')` in the host, which fills an `Access` boolean the rights
    functions read (`src/web/CLAUDE.md`: no rights function reads `hasCapability` inline); a kind's `createEntry` is not
-   offered; the node's page shows the one line below.
+   offered; the member's shell shows **one banner at the top of veyq** per application switched off (owner 2026-10-24,
+   in place of a line on each node's page), so members have time to save what is there. A guest's page is not told:
+   the links keep serving read-only, and a guest's write is refused by the server (owner 2026-10-24; the use case's E6).
 5. **Levels:** `instance` and `tenant` for both entries.
+6. **The register's id rule** (found at implement): an application's root is the one one-segment id, and every
+   application has one (`validate_capabilities.py`, buildSrc's `GenerateCapabilityRegister`); the server's AND
+   already takes every prefix that is an entry (`CapabilityRegistry.selfAndAncestors`).
 
 ## Inventory
 
@@ -84,7 +89,7 @@ gives `memories` and `depot` an entry each in the capability register and makes 
 |---|---|---|
 | register `memories.whenOff` | Nothing new can be added to Memories or changed in them. Everything there can still be opened and downloaded. | In Erinnerungen kann nichts Neues dazukommen und nichts geändert werden. Alles darin lässt sich weiter öffnen und herunterladen. |
 | register `depot.whenOff` | No files can be added or changed. Everything there can still be opened and downloaded. | Dateien können weder dazukommen noch geändert werden. Alles lässt sich weiter öffnen und herunterladen. |
-| web `applications.switchedOff` | {application} is switched off here. You can still open and download what’s here. | {application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen. |
+| web `applications.switchedOff` (the banner) | {application} is switched off here. You can still open and download what’s here, so save what you want to keep. | {application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst. |
 
 The titles and purposes are the implementer's, to the rule (§ Copy); the application names are the catalog's.
 
@@ -102,14 +107,15 @@ The titles and purposes are the implementer's, to the rule (§ Copy); the applic
    `422 capability_disabled` (control: with it on they land), a Memory reads, downloads and goes to the trash and back,
    a rotation's re-key lands, and a heart on a medium is taken; with `memories` off for the instance and on for a tenant it is off; with `depot` off a
    file's completion is refused and its download presigns.
-3. **Web, site, docs, coverage.** Decision 4; the line on the node's page; the texts in EN and DE. Site: the two
+3. **Web, site, docs, coverage.** Decision 4; the banner; the texts in EN and DE. Site: the two
    capability pages and Applications (EN+DE). Docs: ADR 0088's entry tree and § Built today, ADR 0079 decision 8's *not
    built yet* goes, `docs/apps/README.md`'s rule. Coverage of `uc.platform.switch-application-off` from `planned` to
    refs, in the same merge as phase 1's entries. **Done when:** `npm run check`, admin-web's and `site`'s green; every
    `scripts/validate_*.py` exits `0`; a **browser pass** on the dev instance: the tenant owner switches Memories off;
-   a member's create menu offers no Memory, an existing Memory opens with no upload, edit or share and with the line,
-   downloads, and goes to the trash and back; a `READ_WRITE` link guest sees it read-only; switched on, the upload
-   works; the Server Owner's console shows both entries with their texts.
+   every member sees the banner; a member's create menu offers no Memory, an existing Memory opens with no upload,
+   edit or share, downloads, and goes to the trash and back; a `READ_WRITE` link guest still opens it, and its upload
+   is refused with the server's explanation; switched on, the upload works; the Server Owner's console shows both
+   entries with their texts.
 
 ## Definition of done
 
@@ -119,7 +125,9 @@ proves none is left out; reads, downloads and removals stay; the site says so in
 ## Open questions (owner)
 
 None open. Answered (owner 2026-10-23): a delete to the trash and its restore stay, and a restored node is read-only
-like every node of the application; a member's own item marks (`putItemFavorites`) are taken.
+like every node of the application; a member's own item marks (`putItemFavorites`) are taken. Answered at implement
+(owner 2026-10-24): off is a reversible read-only window; links keep being served; members see a banner at the top
+of veyq; a guest learns nothing new (no field on the resolve); erasing the data after the window is inbox #539.
 
 ## Retrospective
 
