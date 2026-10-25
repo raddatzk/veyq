@@ -164,6 +164,36 @@ describe('PotDetail for a member', () => {
     expect(w.text()).toContain('Dinner (Anna)')
   })
 
+  it('a save on an entry the live poll changed under the open editor is stale too, never written over theirs', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 3): the poll brought Ben's version in while Anna's editor showed the one
+    // before, so a write sealed on the latest HELD revision would land as n + 2 and drop Ben's change unseen.
+    const w = mountPot()
+    await flushPromises()
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    server.current.append([{ entryId: DINNER, content: expense('Dinner (Ben)', 9300, ANNA, [ANNA, BEN, CLEO]) }], 'user:u-ben')
+    window.dispatchEvent(new Event('focus')) // the live poll's wake: it reads Ben's revision into the page
+    await flushPromises()
+    expect(w.text()).toContain('Dinner (Ben)')
+    const title = dialog()!.querySelector('input') as HTMLInputElement
+    expect(title.value).toBe('Dinner')
+    title.value = 'Dinner (Anna)'
+    title.dispatchEvent(new Event('input'))
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()!.textContent).toContain(t('expenses.entry.stale'))
+    expect((dialog()!.querySelector('input') as HTMLInputElement).value).toBe('Dinner (Ben)')
+    expect(server.appends).toHaveLength(0)
+    // Control: saved again on the version it now shows, it goes on top.
+    const again = dialog()!.querySelector('input') as HTMLInputElement
+    again.value = 'Dinner (Anna)'
+    again.dispatchEvent(new Event('input'))
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(server.current.held().filter((r) => r.entryId === DINNER).map((r) => r.revision)).toEqual([1, 2, 3])
+  })
+
   it('the history names who wrote each version, for a member', async () => {
     server.current.append([{ entryId: DINNER, content: expense('Dinner for three', 9000, ANNA, [ANNA, BEN, CLEO]) }])
     const w = mountPot()
@@ -202,7 +232,7 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     await buttonIn(dialog()!, t('expenses.entry.delete'))!.click()
     await flushPromises()
-    expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' } }])
+    expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' }, basedOn: 1 }])
     expect(w.text()).toContain(t('expenses.entries.deletedTitle'))
     await openTab(w, t('expenses.tabs.balances'))
     expect(w.text()).toContain(t('expenses.balances.allSettled'))

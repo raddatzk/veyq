@@ -53,6 +53,13 @@ function initialForm(): EntryForm {
   return content ? formOf(content, base.value, offered, locale.value) : emptyForm(base.value, offered)
 }
 const form = ref<EntryForm>(initialForm())
+/** The revision the form shows. Every write of this dialog is made on it (`basedOn`), not on what the live poll brought in
+ *  since: a version saved elsewhere meanwhile is then a `409 stale_revision` the dialog shows, never one written over unseen. */
+const shownRevision = ref<number | undefined>(entry.value?.revision)
+function showCurrent() {
+  form.value = initialForm()
+  shownRevision.value = entry.value?.revision
+}
 const busy = ref(false)
 const error = ref<string | null>(null)
 const stale = ref(false)
@@ -114,7 +121,7 @@ const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(`expenses.
 watch(
   () => entry.value?.revision,
   (now, before) => {
-    if (stale.value && now !== before) form.value = initialForm()
+    if (stale.value && now !== before) showCurrent()
   },
 )
 
@@ -127,7 +134,7 @@ async function run(write: () => Promise<void>) {
   } catch (e) {
     if (e instanceof StaleRevisionError) {
       stale.value = true
-      form.value = initialForm()
+      showCurrent()
     } else if (e instanceof PotWriteRefused) {
       error.value = problemText(e.reason)
     } else if (e instanceof Error && e.name === 'GuestDeclinedError') {
@@ -149,16 +156,16 @@ function save() {
     return
   }
   stale.value = false
-  void run(() => props.session.write([{ entryId: props.entryId ?? crypto.randomUUID(), content: result.content }]))
+  void run(() => props.session.write([{ entryId: props.entryId ?? crypto.randomUUID(), content: result.content, basedOn: shownRevision.value }]))
 }
 function remove() {
   if (!props.entryId) return
-  void run(() => props.session.write([{ entryId: props.entryId!, content: { kind: 'deleted' } }]))
+  void run(() => props.session.write([{ entryId: props.entryId!, content: { kind: 'deleted' }, basedOn: shownRevision.value }]))
 }
 function restore() {
   const content = entry.value?.content
   if (!props.entryId || !content) return
-  void run(() => props.session.write([{ entryId: props.entryId!, content }]))
+  void run(() => props.session.write([{ entryId: props.entryId!, content, basedOn: shownRevision.value }]))
 }
 </script>
 
