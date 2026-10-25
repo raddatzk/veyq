@@ -57,3 +57,4 @@ what it holds.
   [uc.expenses.share-pot](uc.expenses.share-pot.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 1 and 2.
+- End-user view (docs site): [Expenses](../../../../site/src/content/docs/expenses/index.mdx)

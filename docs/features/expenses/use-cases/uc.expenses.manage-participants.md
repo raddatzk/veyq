@@ -58,3 +58,4 @@ changing.
   [uc.expenses.verify-ledger](uc.expenses.verify-ledger.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 2, 3 and 6.
+- End-user view (docs site): [Expenses](../../../../site/src/content/docs/expenses/index.mdx)

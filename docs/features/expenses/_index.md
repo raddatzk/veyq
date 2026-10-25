@@ -42,3 +42,7 @@ flows; their Expenses criteria live in [uc.platform.export-import](../platform/u
 [uc.platform.copy-node](../platform/use-cases/uc.platform.copy-node.md), [uc.moderation.report](../moderation/use-cases/uc.moderation.report.md)
 and [uc.spaces.rekey-after-rotation](../spaces/use-cases/uc.spaces.rekey-after-rotation.md), written by the CR's phase
 that brings their tests.
+
+## Related
+
+- End-user view (docs site): [Expenses](../../../site/src/content/docs/expenses/index.mdx)

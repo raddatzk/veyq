@@ -60,3 +60,4 @@ the earlier version.
   [uc.expenses.exchange-rates](uc.expenses.exchange-rates.md), [uc.expenses.balances](uc.expenses.balances.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 3, 4, 5 and 9; [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) (the live list).
+- End-user view (docs site): [Record an expense](../../../../site/src/content/docs/expenses/record-an-expense.mdx)

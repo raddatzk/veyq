@@ -11,7 +11,8 @@ private. No technical background needed.
 - [Getting started](/veyq/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in
 - [Your account](/veyq/account/devices-and-sessions/): devices, password, email address, keys, profile
 - [Spaces](/veyq/spaces/): your spaces, folders, groups, the trash, download and import
-- [Applications](/veyq/applications/): [Memories](/veyq/memories/) for photos and videos, [Depot](/veyq/depot/) for files
+- [Applications](/veyq/applications/): [Memories](/veyq/memories/) for photos and videos, [Depot](/veyq/depot/) for files,
+  [Expenses](/veyq/expenses/) for shared costs
 - [Sharing](/veyq/sharing/): links for people who have no account
 - [For space owners](/veyq/space-owners/who-gets-into-your-space/): members, terms, email, storage
 - [Privacy](/veyq/privacy/is-my-data-safe/): is my data safe?

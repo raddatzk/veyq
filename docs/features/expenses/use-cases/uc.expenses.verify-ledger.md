@@ -49,3 +49,4 @@ If the server ever left out a change somebody built on, your Pot tells you inste
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 3 and 5; [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md#applications-are-compiled-in--never-loaded).
+- End-user view (docs site): [Expenses](../../../../site/src/content/docs/expenses/index.mdx)
