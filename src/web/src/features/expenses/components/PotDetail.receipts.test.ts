@@ -237,14 +237,14 @@ describe('receipts in the entry dialog', () => {
     expect(buttonIn(dialog()!, t('expenses.entry.restore'))).toBeUndefined()
   })
 
-  it('a receipt is reported on its own, as an ITEM by its receipt id carrying its K_blob, the dialog closing first', async () => {
+  it('a receipt is reported on its own, as an ITEM by its receipt id carrying its K_blob, its dialog left open', async () => {
     const r = dinnerWithReceipt()
     const w = mountPot()
     await flushPromises()
     await openEntry(w, DINNER)
     await buttonIn(dialog()!, t('expenses.receipts.reportNamed', { name: 'bill.jpg' }))!.click()
     await flushPromises()
-    expect(dialog()).toBeNull()
+    expect(dialog()).not.toBeNull()
     const target = vi.mocked(openReport).mock.calls[0]![0].targets[0] as { kind: string; id: string; keys: () => { role: string; ref: string | null; key: Uint8Array }[] }
     expect(target).toMatchObject({ kind: 'ITEM', id: r.receiptId })
     expect(target.keys()).toEqual([{ role: 'EXPENSES_RECEIPT', ref: r.blobId, key: r.blobKey }])

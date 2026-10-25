@@ -4,7 +4,7 @@
 > cr-expenses-exchange-rates, 2026-10-25, their browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`,
 > EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their
 > people, entries with their history and receipts, the day's exchange rate, the ledger check, balances, settle-up,
-> overviews and the link are built. **Not built yet:** "Who am I" (inbox #541). Backend `:apps:expenses`
+> overviews, "Who am I" and the link are built. Backend `:apps:expenses`
 > (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/`, the entry format `contracts/expenses/`, web
 > `src/web/src/features/expenses`. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what
 > the operator sees — is [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this
@@ -44,8 +44,8 @@ and anyone in the Pot sees at any time who owes whom.
   [`contracts/expenses/pot-meta.v1.schema.json`](../../contracts/expenses/pot-meta.v1.schema.json), written by a member
   whole with the revision it read. A Pot whose meta carries no readable `pot` shows no balance and takes no money entry
   until a member sets a base currency: a client never guesses a currency.
-- **Who am I** is each viewer's own choice, kept on the device; it marks "you" in balances and never leaves the client.
-  Not built yet (inbox #541).
+- **Who am I** is each viewer's own choice, kept on the device (per Pot, per account or guest); it marks "you" in the
+  balances and the overview and never leaves the client.
 
 ## Entries
 
@@ -157,11 +157,13 @@ A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 p
   restorable, after it no restore is offered.
 - **Re-key**: each receipt's `K_blob` is re-wrapped in Expenses' participant beside the revisions' `K_rev`
   (ADR 0109 decision 3); a receipt left out is `rekey_parts_missing`.
-- **Report**: an entry's report carries its receipts' `K_blob`s beside its revisions' keys (to the codec's 32, #540); a
+- **Report**: an entry's report carries its receipts' `K_blob`s beside its revisions' keys (all of them, up to the codec's 256 per share; an entry with more is reported through its Pot, ADR 0108 decision 6); a
   receipt is also an `ITEM` on its own, by its receipt id; the hold pins each receipt's blob, and the case view opens
   each with the key the report handed.
 - **Block**: a moderator's content block of a receipt, or of the entry that holds it, answers `451 blocked_by_operator`
   for its bytes, member and guest alike, and the listing marks it; the client lists it as blocked, with nothing to open.
+  A block of the Pot or of an entry also refuses every new revision of it but a tombstone, and every new receipt for it,
+  member and guest alike (ADR 0108 decision 6); the entry dialog says so.
 
 ## What the client computes
 

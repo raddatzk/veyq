@@ -7,6 +7,12 @@
 // `__header-actions`, `__close` and `__content` (styled in `layer.css`). On opening, focus goes to the field marked
 // `autofocus`, else to the first focusable part (the close button), as the dialog before the layer did; `show` fires
 // once it is open and focused.
+//
+// The portal mounts only while the dialog is open, so a dialog that opens later is also later in `<body>` (inbox #545).
+// Every dialog layer shares one z-index (`layer.css`), so their paint order is their document order, and Reka orders its
+// focus, Escape and pointer layers by when each opened: a dialog opened from inside an open one — core's report or
+// confirmation dialog, mounted once in App.vue long before — must therefore enter the document then, not when it was
+// mounted, or it opens beneath the other's mask with the focus trapped in it.
 import { nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
@@ -41,7 +47,7 @@ function onOpenFocus(event: Event) {
 
 <template>
   <DialogRoot :open="visible" @update:open="(open) => (visible = open)">
-    <DialogPortal>
+    <DialogPortal v-if="visible">
       <DialogOverlay class="veyq-dialog__mask" />
       <div :class="['veyq-dialog__frame', `veyq-dialog__frame--${position}`]">
         <DialogContent

@@ -28,6 +28,10 @@ import { appendPotWrites, readGuestPot, sealPotWrites } from '../domain/potApi'
 import { readGuestReceipts, uploadReceipt } from '../receipts'
 import { POT_KIND } from '../kinds'
 import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person, potNode } from '../potTestUtil'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import { setPreferenceAudience } from '../../../shared/state/scopedPreference'
+import { whoAmIBase } from '../whoAmI'
+import { httpError } from '../../../test/httpError'
 
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_8'
 const K_SHARE = v1.randomBytes(32)
@@ -146,6 +150,40 @@ describe('a Pot under its own link', () => {
       expect.objectContaining({ kind: 'guest', shareId: SHARE_ID }),
     ])
     expect(authenticatedCalls).toEqual([])
+  })
+
+  it('READ_WRITE: a save refused 451 says the operator blocked it and keeps the dialog (inbox #542; control: a refusal of another kind is the plain failure)', async () => {
+    const page = await mountShare(ShareRole.ReadWrite)
+    vi.mocked(appendPotWrites).mockRejectedValueOnce(httpError(451, 'blocked_by_operator'))
+    await page.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()!.textContent).toContain(t('expenses.entry.blocked'))
+    vi.mocked(appendPotWrites).mockRejectedValueOnce(httpError(500))
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()!.textContent).toContain(t('expenses.entry.saveFailed'))
+    expect(dialog()!.textContent).not.toContain(t('expenses.entry.blocked'))
+  })
+
+  it('READ: who am I is a guest\'s too — its row marked, kept under the guest\'s own key on this device, nothing sent', async () => {
+    setPreferenceAudience('guest') // as the share page declares it (views/ShareView.vue)
+    localStorage.clear()
+    try {
+      const page = await mountShare(ShareRole.Read)
+      await openTab(page, t('expenses.tabs.balances'))
+      const reads = vi.mocked(readGuestPot).mock.calls.length
+      page.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
+      await flushPromises()
+      expect(page.find(`[data-person="${ANNA}"] .expenses-you`).exists()).toBe(true)
+      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:guest`)).toBe(ANNA)
+      expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
+      expect(vi.mocked(readGuestPot).mock.calls.length).toBe(reads)
+      expect(authenticatedCalls).toEqual([])
+    } finally {
+      setPreferenceAudience('account')
+    }
   })
 
   it('READ: reads everything, writes nothing (control: READ_WRITE above adds)', async () => {

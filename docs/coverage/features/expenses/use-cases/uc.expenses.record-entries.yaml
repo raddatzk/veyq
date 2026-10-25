@@ -21,7 +21,7 @@ acceptanceCriteria:
         unit: [src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/components/PotDetail.test.ts]
     gaps:
       - surface: backend
-        reason: "The race refs are green on H2; on MariaDB they run only in scripts/run_backend_races_on_mariadb.py, not run yet (inbox #544, the V1 heavy stage)."
+        reason: "The race refs are green on H2 and in a local run of scripts/run_backend_races_on_mariadb.py on MariaDB (2026-10-25, inbox #544); CI's backend-races job, which would make that a standing claim, has not run yet (no remote, #317)."
   - id: allocation-and-rounding-are-exact-and-equal-everywhere
     text: "Splits (equal, shares, exact) and line items with the rest spread in proportion or equally are computed in minor units with exact arithmetic, converted once and allocated by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it."
     coverage:

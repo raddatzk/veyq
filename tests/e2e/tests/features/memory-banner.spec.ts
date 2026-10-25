@@ -1,7 +1,6 @@
 // A Memory's banner in a real browser (uc.memory.banner, ADR 0102): the browser pass cr-memory-banner's phase 4 names,
-// written as lane L1's spec and NOT YET RUN (the implementing sessions ran no stack; it waits for the V1 heavy stage).
-// cr-cover-banner-upload-only-and-dedup edited it (not run either): the banner is set only by a file picked in its dialog,
-// has no description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
+// with cr-cover-banner-upload-only-and-dedup's: the banner is set only by a file picked in its dialog, has no
+// description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
 //
 // The owner creates a Memory and adds a landscape image, a portrait image and a video to it, then:
 //  - sets a landscape image as the banner from a file, moves the point that stays in view, and reads the frame at a wide

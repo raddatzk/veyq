@@ -35,6 +35,7 @@ import org.hamcrest.Matchers.containsInAnyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.UUID
 
@@ -220,6 +221,43 @@ class PotSliceTest {
         append(userId, scopeId, pot, listOf(Rev(a, 2))).statusCode(204) // control: on, it lands
         TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.EXPENSES) {
             given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$pot").then().statusCode(204)
+        }
+    }
+
+    /**
+     * Inbox #543: a guest's idle poll — its echoed tag still the one of what the read would serve — is a `304` that reads
+     * no revision row, however large the Pot (the tag is remembered per the Pot's item revision and the rate switch,
+     * [SharePotTags]). Bites: every change a guest is served still moves the tag — a member's edit, a guest's own
+     * append, a tombstone, an erasure — and each is a read of the rows again. Control: a read with no tag reads them.
+     */
+    @Test
+    fun aGuestsIdlePollReadsNoRevision_everyChangeStillMovesTheTag() {
+        val (userId, scopeId) = seedMemberScope()
+        val pot = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
+        val link = GuestTreeShare.seed(userId, scopeId, pot, ShareEntity.READ_WRITE)
+        val dinner = UUID.randomUUID().toString()
+        val anna = UUID.randomUUID().toString()
+        append(userId, scopeId, pot, (1..120).map { Rev() } + Rev(dinner) + Rev(anna)).statusCode(204)
+        val readsRevisions = { sql: List<String> -> sql.any { it.contains("veyq_expenses_revision") } }
+
+        var tag = guestList(link.shareId, pot).statusCode(200).extract().header("ETag")
+        val idle = StatementLog.during { guestList(link.shareId, pot, ifNoneMatch = tag).statusCode(304) }
+        assertFalse(readsRevisions(idle), "an idle poll reads no revision: $idle")
+        val fresh = StatementLog.during { guestList(link.shareId, pot).statusCode(200) }
+        assertTrue(readsRevisions(fresh), "control: a read with no tag reads the rows")
+
+        val changes = listOf<Pair<String, () -> Unit>>(
+            "a member's edit" to { append(userId, scopeId, pot, listOf(Rev(dinner, 2))).statusCode(204) },
+            "a guest's append" to { guestAppend(link, pot, listOf(Rev())).statusCode(204) },
+            "a tombstone" to { append(userId, scopeId, pot, listOf(Rev(dinner, 3, tombstone = true))).statusCode(204) },
+            "an erasure" to { erase(userId, scopeId, pot, anna, 2).statusCode(204) },
+        )
+        for ((what, change) in changes) {
+            change()
+            val next = guestList(link.shareId, pot, ifNoneMatch = tag).statusCode(200).extract().header("ETag")
+            assertNotEquals(tag, next, "$what moves the guest's tag")
+            tag = next
+            guestList(link.shareId, pot, ifNoneMatch = tag).statusCode(304)
         }
     }
 

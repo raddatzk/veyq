@@ -17,8 +17,9 @@ import { openBlobWithKey } from '../../../core/blob/transport'
 import { beginReview } from '../../../core/sharing/review'
 import { fakeApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
-import { RECEIPT_KEY_ROLE } from '../report'
-import { PotServer, POT_ID, SCOPE } from '../potTestUtil'
+import { b64std } from '@veyq/crypto/base64'
+import { RECEIPT_KEY_ROLE, entryReportKeys } from '../report'
+import { ANNA, BEN, PotServer, POT_ID, SCOPE, expense, person } from '../potTestUtil'
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 const TAXI = '0e000000-0000-4000-9000-000000000002'
@@ -86,5 +87,44 @@ describe('PotEntryReview receipts', () => {
     expect(missing.text()).toContain(t('expenses.receipts.noKey'))
     expect(missing.find('button').exists()).toBe(false)
     expect(capped.find(`[data-receipt="${bill.receiptId}"] button`).exists()).toBe(true)
+  })
+})
+
+describe('PotEntryReview revisions', () => {
+  function holdRevisions() {
+    fakeApi(caseExpensesApi, {
+      listCasePotRevisions: async () => ({
+        revisions: pot.rows.map((r) => ({
+          nodeId: POT_ID, entryId: r.entryId, revision: r.revision, tombstone: false, erasure: false,
+          sealedBody: b64std(r.sealedBody), wrappedRevisionKey: b64std(r.wrappedRevisionKey), createdAt: r.createdAt,
+        })),
+        receipts: [],
+      }),
+    })
+  }
+  const titles = (w: ReturnType<typeof mountReview>) => w.findAll('.expenses-review ol .veyq-row-title').map((e) => e.text())
+
+  it('opens every held revision of a reported entry with the keys the share handed, in whatever order they come', async () => {
+    pot.append([{ entryId: ANNA, content: person('Anna', 1) }, { entryId: BEN, content: person('Ben', 2) }])
+    for (let i = 0; i < 40; i++) pot.append([{ entryId: DINNER, content: expense(`Dinner ${i}`, 1000 + i, ANNA, [ANNA, BEN]) }])
+    holdRevisions()
+    const keys = entryReportKeys(SCOPE, POT_ID, pot.potKey, pot.held(), pot.receipts, DINNER)
+    const newestFirst = mountReview(DINNER, keys)
+    await flushPromises()
+    expect(titles(newestFirst)).toHaveLength(40)
+    expect(titles(newestFirst).every((x) => x.includes('Dinner')), 'each revision opened by its own key').toBe(true)
+    expect(titles(newestFirst)[0]).toContain('Dinner 39')
+    const opened = titles(newestFirst)
+    newestFirst.unmount()
+    // the order is only the fast path: a share whose keys come in another order opens the same revisions
+    const reversed = mountReview(DINNER, [...keys].reverse())
+    await flushPromises()
+    expect(titles(reversed)).toEqual(opened)
+    reversed.unmount()
+    // control: a key the share did not carry leaves its revision unreadable
+    const short = mountReview(DINNER, keys.slice(1))
+    await flushPromises()
+    expect(titles(short)[0]).toBe(t('expenses.history.unreadable'))
+    expect(titles(short).slice(1).every((x) => x.includes('Dinner'))).toBe(true)
   })
 })

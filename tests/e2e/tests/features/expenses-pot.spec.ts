@@ -630,8 +630,7 @@ for (const lang of ['en', 'de'] as const) {
         await editorB.getByLabel(L.pot.title, { exact: true }).fill(recordTyped(dinnerB))
         await editorB.getByRole('button', { name: L.save, exact: true }).click()
         await expect(editorB).toBeHidden({ timeout: 30_000 })
-        // B's part in the Pot ends here: step 9 removes B from the group, and a page left open on the Pot would go on
-        // polling a scope B is no longer in, every read answered 404 (inbox #546).
+        // B's part in the Pot pauses here; it comes back in step 4c, and its page stays on the Pot from there into step 9.
         await pb.goto('about:blank')
 
         // A saves on the version its editor shows: told, and shown B's.
@@ -797,9 +796,7 @@ for (const lang of ['en', 'de'] as const) {
           await member.dialog.getByRole('button', { name: L.cancel, exact: true }).click()
           await expect(member.dialog).toBeHidden()
           expect(b.confinement.rateQueries(), 'a member\'s device asks nothing while the tenant has the rates off').toEqual([])
-          // B leaves the Pot again, as in step 3: step 9 removes B from the group, and a page left open on the Pot would
-          // go on polling a scope B is no longer in (inbox #546).
-          await b.page.goto('about:blank')
+          // B's page stays open on the Pot: step 9 removes B from the group while it is (inbox #546).
 
           // The guest: its client holds the instance's manifest alone, which still has them on; its Pot read says off.
           await openLink(guest.page, shareLink)
@@ -829,6 +826,54 @@ for (const lang of ['en', 'de'] as const) {
         await enterGroup(a.page, group)
         await openFolder(a.page, folder)
         await openPot(a.page, L, pot)
+      },
+    )
+
+    test(
+      'step 4d: who am I — a member and a guest each mark their own row, kept on the device over a reload, nothing sent',
+      { tag: '@uc.expenses.balances:who-am-i-stays-on-the-device' },
+      async () => {
+        test.setTimeout(180_000)
+        const marked = (page: Page) => page.locator('.expenses-balances li').filter({ has: page.locator('.expenses-you') })
+        /** Choose [name] in the Balances tab: no request but reads while choosing, and the row is marked. */
+        async function choose(page: Page, name: string): Promise<void> {
+          await openTab(page, L.pot.tabs.balances)
+          await expect(marked(page)).toHaveCount(0)
+          const sent: string[] = []
+          const watch = (r: { method(): string; url(): string }) => {
+            if (r.method() !== 'GET') sent.push(`${r.method()} ${new URL(r.url()).pathname}`)
+          }
+          page.on('request', watch)
+          await pick(page, page.getByRole('combobox', { name: L.pot.whoAmI }), name)
+          await expect(marked(page).locator('.veyq-row-title')).toHaveText([name])
+          await expect(marked(page).locator('.expenses-you')).toHaveText([L.pot.you])
+          page.off('request', watch)
+          expect(sent, 'choosing who one is sends nothing').toEqual([])
+        }
+        await choose(a.page, PEOPLE[0]!)
+        const g = guest.page
+        await choose(g, PEOPLE[1]!)
+        // Each device keeps its own choice: a reload, the member's and the guest's.
+        await a.page.reload()
+        await expect(a.page.getByRole('heading', { level: 1, name: pot })).toBeVisible({ timeout: 60_000 })
+        await expect(a.page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
+        await openTab(a.page, L.pot.tabs.balances)
+        await expect(marked(a.page).locator('.veyq-row-title')).toHaveText([PEOPLE[0]!])
+        await openLink(g, shareLink)
+        await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
+        await openTab(g, L.pot.tabs.balances)
+        await expect(marked(g).locator('.veyq-row-title')).toHaveText([PEOPLE[1]!])
+        // The overview marks the same row.
+        await openTab(g, L.pot.tabs.overview)
+        await expect(g.locator('.expenses-overview tr').filter({ has: g.locator('.expenses-you') }).locator('th')).toContainText([PEOPLE[1]!])
+        // Back to "not chosen", so the later steps read the rows as they were.
+        for (const page of [a.page, g]) {
+          await openTab(page, L.pot.tabs.balances)
+          await pick(page, page.getByRole('combobox', { name: L.pot.whoAmI }), L.pot.nobody)
+          await expect(marked(page)).toHaveCount(0)
+        }
+        await openTab(a.page, L.pot.tabs.entries)
+        await openTab(g, L.pot.tabs.entries)
       },
     )
 
@@ -1032,7 +1077,12 @@ for (const lang of ['en', 'de'] as const) {
         await expect(dialog.getByText(L.reportSent, { exact: true })).toBeVisible({ timeout: 60_000 })
         await dialog.locator('.veyq-report-receipt').getByRole('button', { name: L.close, exact: true }).click()
         await expect(dialog).toBeHidden()
-        await expect(entryDialog(g, L.pot.editEntry), 'the entry dialog closed for the report').toHaveCount(0)
+        // The report dialog opened above the entry dialog, which stayed open beneath it (inbox #545): every click above
+        // reached the report dialog, as Playwright's hit test asks, and the entry dialog is back on top.
+        const entry = entryDialog(g, L.pot.editEntry)
+        await expect(entry, 'the entry dialog stayed open beneath the report').toBeVisible()
+        await entry.getByRole('button', { name: L.cancel, exact: true }).click()
+        await expect(entry).toBeHidden()
 
         // The moderator works where the Server Owner is a member, the shared tenant; the case row names this tenant.
         const m = moderator.page
@@ -1127,6 +1177,17 @@ for (const lang of ['en', 'de'] as const) {
         await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
         await expect(ledgerNotice(g)).toHaveCount(0)
         expect(await figures(g, L), 'the Pot through the link after the re-key').toEqual(before)
+        // B's page, left open on the Pot since step 4c (inbox #546): the scope's reads are answered 404 now, and the page
+        // says the access ended and asks no more — instead of polling on, every read answered 404.
+        await expect(b.page.getByRole('heading', { name: L.accessEnded })).toBeVisible({ timeout: 120_000 })
+        await expect(b.page.locator('.expenses-pot')).toHaveCount(0)
+        const gone = /^GET 404 \/api\/scopes\/[^/]+\//
+        const asked = failures.errors.filter((e) => gone.test(e)).length
+        expect(asked, 'the page learnt it from a 404 of its own scope').toBeGreaterThan(0)
+        await b.page.waitForTimeout(30_000) // more than the tree's and the Pot's poll intervals, their backoff included
+        expect(failures.errors.filter((e) => gone.test(e)), 'and asked nothing of the scope since').toHaveLength(asked)
+        for (let i = failures.errors.length - 1; i >= 0; i--) if (gone.test(failures.errors[i]!)) failures.errors.splice(i, 1)
+        for (let i = consoleErrors.errors.length - 1; i >= 0; i--) if (/status of 404\b/.test(consoleErrors.errors[i]!)) consoleErrors.errors.splice(i, 1)
         // B, removed, no longer lists the group.
         await signIn(b.page, L, accountB)
         await expect(b.page.locator('a.desktop-group-link').filter({ hasText: group })).toHaveCount(0)

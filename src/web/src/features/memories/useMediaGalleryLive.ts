@@ -13,6 +13,7 @@ import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
 import { itemsPollTick, reconcileItems } from '../../core/items/itemsLive'
+import { noteScopeGone } from '../../core/node/treeStore'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useOptimisticTiles, type OptimisticTileVM } from './useOptimisticTiles'
@@ -288,11 +289,17 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       }
     },
     fetch: async (cursor) => {
-      const page = await ctx.source.poll!(cursor.key, {
-        tag: cursor.revision,
-        since: cursor.since,
-        deleteRevision: cursor.deleteRevision,
-      })
+      let page: Awaited<ReturnType<NonNullable<typeof ctx.source.poll>>>
+      try {
+        page = await ctx.source.poll!(cursor.key, {
+          tag: cursor.revision,
+          since: cursor.since,
+          deleteRevision: cursor.deleteRevision,
+        })
+      } catch (e) {
+        await noteScopeGone(ctx.scopeId(), e) // removed from the group: core's page says so and unmounts this (inbox #546)
+        throw e
+      }
       return page.notModified
         ? { notModified: true }
         : { notModified: false, items: page.items, revision: page.tag, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }

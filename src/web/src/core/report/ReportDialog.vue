@@ -2,7 +2,7 @@
 // The report dialog (uc.moderation.report, ADR 0093 § 1): mounted once in App.vue and driven by `reportRequest`
 // (`./report.ts`), for a member and a guest alike. It asks for what DSA Art. 16(2) names — a category, a reason
 // (required), a confirmation of good faith (required), an address (optional) — says on the first category that no name
-// is needed, and above 100 items offers the enclosing node instead. For one node it asks what is reported: the node and
+// is needed, and above 100 items — or for one item too large for a report of its own — offers the enclosing node instead. For one node it asks what is reported: the node and
 // everything in it, or only its name (ADR 0093 § 9, `NAME` — the report then hands over that name's key alone). Sending
 // seals everything the reporter wrote on this device; the receipt it shows (a reference and the time) is the on-screen
 // half of owner decision Q6.
@@ -55,7 +55,9 @@ const scopeOptions = computed(() => [
 const sent = computed<readonly ReportTarget[]>(() => (scope.value === 'name' && nameOnly.value ? [nameOnly.value] : chosen.value))
 
 const open = computed(() => reportRequest.value !== null)
-const tooMany = computed(() => chosen.value.length > MAX_REPORT_ITEMS)
+/** One chosen item holds more keys than one share carries (inbox #540): nothing of it is sent, the enclosing node is offered. */
+const tooLarge = computed(() => chosen.value.some((c) => c.kind !== 'LINK' && c.oversize === true))
+const tooMany = computed(() => chosen.value.length > MAX_REPORT_ITEMS || tooLarge.value)
 const options = computed(() => REPORT_CATEGORIES.map((c) => ({ value: c, label: t(`report.categories.${c}`) })))
 const csam = computed(() => category.value === ReportCategory.ChildSexualAbuse)
 const canSend = computed(() =>
@@ -128,8 +130,8 @@ async function send(): Promise<void> {
       </div>
 
       <template v-if="tooMany">
-        <VeyqMessage tone="warn">{{ t('report.tooMany', { count: chosen.length }) }}</VeyqMessage>
-        <VeyqButton v-if="reportRequest?.enclosing" class="veyq-report-enclosing" :label="t('report.reportEnclosing')" appearance="outlined" @click="useEnclosing" />
+        <VeyqMessage tone="warn">{{ tooLarge ? t('report.tooLarge') : t('report.tooMany', { count: chosen.length }) }}</VeyqMessage>
+        <VeyqButton v-if="reportRequest?.enclosing" class="veyq-report-enclosing" :label="t(tooLarge ? 'report.reportHolder' : 'report.reportEnclosing')" appearance="outlined" @click="useEnclosing" />
       </template>
 
       <template v-else>

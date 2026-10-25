@@ -23,8 +23,12 @@ export const MAX_REPORT_ITEMS = 100
 /** Keys computed when the report is sent, never before; null when this session cannot reach them. */
 export type KeysOf = () => Promise<v1.ReportKey[] | null> | v1.ReportKey[] | null
 
-/** One thing to report: what the wire calls it (a `NAME`'s id is its node's), and a way to its keys. */
-export type ReportTarget = { kind: 'NODE' | 'ITEM' | 'NAME'; id: string; keys: KeysOf } | { kind: 'LINK'; keys: KeysOf }
+/**
+ * One thing to report: what the wire calls it (a `NAME`'s id is its node's), and a way to its keys. `oversize`: it holds
+ * more keys than one share carries (`REPORT.maxKeysPerShare`) — the dialog then sends nothing of it and offers the
+ * request's `enclosing` node, as above {@link MAX_REPORT_ITEMS}, rather than a report that leaves part of it out.
+ */
+export type ReportTarget = { kind: 'NODE' | 'ITEM' | 'NAME'; id: string; keys: KeysOf; oversize?: boolean } | { kind: 'LINK'; keys: KeysOf }
 
 /** What a call site opens the dialog with. */
 export interface ReportRequest {
@@ -33,7 +37,8 @@ export interface ReportRequest {
   /** The space the items lie in (a member's report route names it). */
   readonly scopeId: string
   readonly targets: readonly ReportTarget[]
-  /** Above {@link MAX_REPORT_ITEMS}: the node that holds them all, offered instead (none at a scope's top level). */
+  /** Above {@link MAX_REPORT_ITEMS}, or for an `oversize` target: the node that holds them all, offered instead (none at
+   *  a scope's top level). */
   readonly enclosing?: ReportTarget
   /**
    * One node reported: its name on its own (`NAME`), offered as the dialog's other choice — a name that is the offence

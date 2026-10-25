@@ -7,6 +7,8 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.items.NodeItemsRevisions
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
@@ -23,9 +25,13 @@ import me.raddatz.veyq.expenses.ExpensesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface SharePotListOutcome {
-    /** Every revision of the Pot in the guest's order; the resource pages and tags them. [exchangeRateService] is the
-     *  day's exchange-rate table's address while `expenses.exchange-rates` is active for the Pot's tenant, else null. */
-    data class Listed(val revisions: List<PotRevisionEntity>, val exchangeRateService: String?) : SharePotListOutcome
+    /** Every revision of the Pot in the guest's order; the resource pages and tags them, and remembers the tag under
+     *  [key] ([SharePotTags]). [exchangeRateService] is the day's exchange-rate table's address while
+     *  `expenses.exchange-rates` is active for the Pot's tenant, else null. */
+    data class Listed(val revisions: List<PotRevisionEntity>, val exchangeRateService: String?, val key: SharePotTags.Key) : SharePotListOutcome
+
+    /** The tag the guest echoed is the one remembered for what the read would serve: a `304`, no revision read. */
+    object NotModified : SharePotListOutcome
 
     /** Unknown, disabled, expired or deleted share, a space that serves no guests, a `WRITE_ONLY` link, a required
      *  password absent, or no live Pot of that id in the live shared subtree — one non-enumerable 404. */
@@ -49,7 +55,8 @@ sealed interface SharePotAppendOutcome {
  * A link guest's Pot (tag `share-expenses`, ADR 0108 decision 6): core's guest gate first ([ShareGuestGate], ADR 0079
  * § Application guest operations), then Expenses' work. A guest reads every revision without its writer — the guest's
  * shape has no such field (inbox #190) — and a `READ_WRITE` guest appends revisions as a member does, each recorded as
- * one guest write (ADR 0093 § 10). A guest erases nothing: there is no guest erasure.
+ * one guest write (ADR 0093 § 10) — refused, as a member's, where a moderator blocked the Pot or the entry ([PotBlocks]).
+ * A guest erases nothing: there is no guest erasure.
  */
 @ApplicationScoped
 class SharePotsHandler(
@@ -59,10 +66,17 @@ class SharePotsHandler(
     private val applications: ApplicationSwitch,
     private val capabilities: CapabilityRegistry,
     private val services: ExternalServiceAddresses,
+    private val blocks: ModerationBlocks,
+    private val items: NodeItemsRevisions,
+    private val tags: SharePotTags,
 ) {
 
-    /** Every revision of the live Pot [nodeId] inside the share's live subtree. */
-    fun list(shareId: String, pwToken: String?, nodeId: String): SharePotListOutcome {
+    /**
+     * Every revision of the live Pot [nodeId] inside the share's live subtree — or, when [ifNoneMatch] (a first page's
+     * echo) is the tag remembered for what it would serve, [SharePotListOutcome.NotModified] with no revision read (inbox
+     * #543): an idle poll costs the gate, the Pot's item revision and the rate switch, whatever the Pot holds.
+     */
+    fun list(shareId: String, pwToken: String?, nodeId: String, ifNoneMatch: String? = null): SharePotListOutcome {
         val viewable = when (val g = gate.viewGate(shareId, pwToken)) {
             is ShareViewGate.Viewable -> g
             ShareViewGate.WriteOnly, ShareViewGate.NotFound, ShareViewGate.Locked -> return SharePotListOutcome.NotFound
@@ -71,7 +85,10 @@ class SharePotsHandler(
         }
         if (nodeId !in viewable.liveNodeIds) return SharePotListOutcome.NotFound
         NodeEntity.findById(nodeId)?.takeIf { it.kind == ExpensesNodeKinds.POT } ?: return SharePotListOutcome.NotFound
-        return SharePotListOutcome.Listed(store.allInEntryOrder(nodeId), exchangeRateService(viewable.scopeId))
+        val rates = exchangeRateService(viewable.scopeId)
+        val key = SharePotTags.Key(nodeId, items.revisions(nodeId), rates) // read before the rows ([SharePotTags])
+        if (ifNoneMatch != null && tags.get(key) == ifNoneMatch) return SharePotListOutcome.NotModified
+        return SharePotListOutcome.Listed(store.allInEntryOrder(nodeId), rates, key)
     }
 
     /**
@@ -111,6 +128,9 @@ class SharePotsHandler(
             ShareWriteTarget.NotContributable -> return SharePotAppendOutcome.NotContributable
         }
         if (target.kind != ExpensesNodeKinds.POT) return SharePotAppendOutcome.Written(PotWriteOutcome.NoPot)
+        if (PotBlocks.refusesWrites(blocks.contentView(gated.scopeId), target.nodeId, writes)) {
+            return SharePotAppendOutcome.Written(PotWriteOutcome.Blocked) // a member's rule, the guest's too (inbox #542)
+        }
         val result = store.append(
             gated.scopeId, target.nodeId, nodeEpoch, writes, PrincipalKey.Share(gated.identityId),
             admitted = gate.admittedInto(gated, target),

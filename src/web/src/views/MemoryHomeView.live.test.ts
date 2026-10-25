@@ -265,6 +265,32 @@ describe('the member level view, live', () => {
     expect(w.find('.home-state').exists()).toBe(false)
     w.unmount()
   })
+
+  // Inbox #546: a member removed from the group while its page is open. The server no longer knows them in the scope and
+  // answers its reads `404 scope_not_found`; the page says the access ended and asks no more, rather than poll on.
+  it('a 404 scope_not_found on the poll ends the access: it says so and polls no more', async () => {
+    const w = await mountLevel()
+    expect(w.find('.veyq-level-view').exists()).toBe(true)
+    listNodes.mockRejectedValue(httpError(404, 'scope_not_found'))
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes.mock.calls.length).toBe(1)
+    expect(treeStore.gone).toBe(true)
+    expect(treeStore.error, 'not the error state: nothing to try again').toBe(false)
+    expect(w.find('.home-access-ended').text()).toContain(t('home.accessEnded'))
+    expect(w.find('.veyq-level-view').exists(), 'the page of the scope is gone with it').toBe(false)
+    await settle(OVER_ONE_INTERVAL * 20)
+    expect(listNodes.mock.calls.length, 'no read after the access ended').toBe(1)
+    w.unmount()
+  })
+
+  it('another 404 (a node it cannot see) is no end of the access (control)', async () => {
+    const w = await mountLevel()
+    listNodes.mockRejectedValue(httpError(404, 'node_not_found'))
+    await settle(OVER_ONE_INTERVAL)
+    expect(treeStore.gone).toBe(false)
+    expect(w.find('.home-access-ended').exists()).toBe(false)
+    w.unmount()
+  })
 })
 
 // The drop box's own page (owner decision 2026-10-17): its guests' folders and their file counts ARE the scope's tree, so

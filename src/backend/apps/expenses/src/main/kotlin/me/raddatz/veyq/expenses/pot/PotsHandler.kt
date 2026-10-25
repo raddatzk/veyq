@@ -11,6 +11,8 @@ import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.core.moderation.block.ContentView
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
@@ -57,6 +59,25 @@ sealed interface PotWriteOutcome {
     object ReceiptNotHeld : PotWriteOutcome, HttpFailure by Failures.invalidRequest
     object StaleEpoch : PotWriteOutcome, HttpFailure by Failures.staleEpoch
     object RekeyPending : PotWriteOutcome, HttpFailure by Failures.nodeRekeyPending
+    /** A moderator blocked the Pot, a node above it, or the record a write edits (`451 blocked_by_operator`, [PotBlocks]). */
+    object Blocked : PotWriteOutcome, HttpFailure by Failures.blockedByOperator
+}
+
+/**
+ * What a moderator's content block refuses of a Pot's writers, a member and a guest alike (ADR 0108 decision 6, inbox
+ * #542) — ADR 0093 § 6's rule for blocked content, "deleted but not replaced or restored", in a Pot's terms: a block of
+ * the Pot (or a node above it) refuses every revision but a tombstone, and a block of one entry refuses every revision
+ * of that entry but a tombstone. A tombstone is the record's deletion, which a block never refuses; a member's erasure
+ * of a participant is a removal too and is not asked. A receipt is new content, so it is refused on a blocked Pot or a
+ * blocked entry. Asked before the write and outside its lock, as Depot's replace asks it: a block landing while a write
+ * runs is the next write's to meet.
+ */
+internal object PotBlocks {
+    fun refusesWrites(view: ContentView, nodeId: String, writes: List<RevisionWrite>): Boolean =
+        !view.isEmpty && writes.any { !it.tombstone && view.itemBlocked(it.entryId, nodeId) }
+
+    fun refusesReceipt(view: ContentView, nodeId: String, entryId: String): Boolean =
+        !view.isEmpty && view.itemBlocked(entryId, nodeId)
 }
 
 /** The request checks the contract cannot write: one size class per body, one revision per record in a batch, each
@@ -90,6 +111,7 @@ class PotsHandler(
     private val store: PotRevisionStore,
     private val items: NodeItemsRevisions,
     private val applications: ApplicationSwitch,
+    private val blocks: ModerationBlocks,
 ) {
 
     /** A Pot's revisions as core's conditional keyset read (ADR 0033): live or trashed, its trash view reads it too. */
@@ -114,6 +136,7 @@ class PotsHandler(
             .refusal(PotWriteOutcome.NoScope, PotWriteOutcome.Suspended, PotWriteOutcome.Deleting)?.let { return it }
         applications.requireWritable(CapabilityIds.EXPENSES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         potOf(scopeId, nodeId, liveOnly = true) ?: return PotWriteOutcome.NoPot
+        if (PotBlocks.refusesWrites(blocks.contentView(scopeId), nodeId, writes)) return PotWriteOutcome.Blocked
         return PotRequests.outcome(store.append(scopeId, nodeId, nodeEpoch, writes, PrincipalKey.User(userId)))
     }
 

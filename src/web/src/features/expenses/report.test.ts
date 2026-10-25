@@ -1,12 +1,14 @@
 // A report of an entry reaches the whole entry (ADR 0108 decisions 6 and 7): its share carries each held revision's K_rev
 // and each of its receipts' K_blob, and the moderator's review opens every revision with them alone — no Pot key — each
-// only at its own address, and each receipt by its blob id. Past the share's cap of 32 keys it carries the version on
-// screen first (its revision, then its receipts), then the older revisions. A receipt reported on its own hands over its
-// K_blob alone.
+// only at its own address, and each receipt by its blob id. It carries every key up to the share's cap of 256; an entry
+// past it is not sent as an item at all — the dialog offers its Pot instead (inbox #540). A receipt reported on its own
+// hands over its K_blob alone.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { REPORT } from '@veyq/crypto/v1'
-import { entryReportKeys, ENTRY_REVISION_ROLE, RECEIPT_KEY_ROLE, receiptReportKeys } from './report'
+import { entryReportKeyCount, entryReportKeys, ENTRY_REVISION_ROLE, RECEIPT_KEY_ROLE, receiptReportKeys, reportEntry } from './report'
+import { closeReport, reportRequest, type ReportTarget } from '../../core/report/report'
+import type { Access } from '../../core/access'
 import { openRevisionWithKey, RevisionUnreadable } from './domain/codec'
 import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person } from './potTestUtil'
 
@@ -35,12 +37,16 @@ describe('entryReportKeys', () => {
     expect(entryReportKeys(SCOPE, POT_ID, s.potKey, s.held(), s.receipts, ANNA)).toHaveLength(1)
   })
 
-  it('past the share\'s cap carries the newest revisions only', () => {
-    const s = potWithEdits(REPORT.maxKeysPerShare + 2)
+  it('carries every key up to the share\'s cap, the revisions newest first, and the codec takes them', () => {
+    const s = potWithEdits(REPORT.maxKeysPerShare)
     const keys = entryReportKeys(SCOPE, POT_ID, s.potKey, s.held(), s.receipts, DINNER)
     expect(keys).toHaveLength(REPORT.maxKeysPerShare)
-    const newest = s.rows.filter((r) => r.entryId === DINNER).sort((a, b) => b.revision - a.revision)[0]!
-    expect(openRevisionWithKey({ scopeId: SCOPE, nodeId: POT_ID, entryId: DINNER, revision: newest.revision }, keys[0]!.key, newest.sealedBody).kind).toBe('expense')
+    expect(entryReportKeyCount(s.held(), s.receipts, DINNER)).toBe(REPORT.maxKeysPerShare)
+    expect(v1.decodeReportKeys(v1.encodeReportKeys(keys))).toHaveLength(REPORT.maxKeysPerShare)
+    const rows = s.rows.filter((r) => r.entryId === DINNER).sort((a, b) => b.revision - a.revision)
+    const oldest = rows[rows.length - 1]!
+    const at = { scopeId: SCOPE, nodeId: POT_ID, entryId: DINNER, revision: oldest.revision }
+    expect(openRevisionWithKey(at, keys[keys.length - 1]!.key, oldest.sealedBody).kind, 'the oldest revision is reached too').toBe('expense')
   })
 
   it('carries the receipts of the version on screen right after its revision, each K_blob by its blob id, and none of another entry', () => {
@@ -53,14 +59,28 @@ describe('entryReportKeys', () => {
     expect(keys[1]!.key).toEqual(kept.blobKey)
     expect(keys.some((k) => k.ref === other.blobId)).toBe(false)
   })
+})
 
-  it('past the cap keeps the receipts of the version on screen before the older revisions', () => {
+describe('reportEntry', () => {
+  const access = { mode: 'member', scopeId: SCOPE, epochs: null } as unknown as Access
+  const pot: ReportTarget = { kind: 'NODE', id: POT_ID, keys: () => null }
+
+  it('reports an entry within the cap as one item, its Pot offered only as what holds it', () => {
+    const s = potWithEdits(REPORT.maxKeysPerShare - 1)
+    s.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' })
+    reportEntry(access, POT_ID, s.potKey, s.held(), s.receipts, DINNER, pot)
+    expect(reportRequest.value?.targets).toEqual([expect.objectContaining({ kind: 'ITEM', id: DINNER })])
+    expect(reportRequest.value?.targets[0]).not.toHaveProperty('oversize')
+    closeReport()
+  })
+
+  it('one key past the cap marks the entry too large and offers its Pot, never a share that leaves part of it out', () => {
     const s = potWithEdits(REPORT.maxKeysPerShare)
-    const kept = s.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' })
-    s.append([{ entryId: DINNER, content: { ...expense('Dinner', 1000, ANNA, [ANNA, BEN]), receipts: [kept.receiptId] } }])
-    const keys = entryReportKeys(SCOPE, POT_ID, s.potKey, s.held(), s.receipts, DINNER)
-    expect(keys).toHaveLength(REPORT.maxKeysPerShare)
-    expect(keys[1]).toMatchObject({ role: RECEIPT_KEY_ROLE, ref: kept.blobId })
+    s.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' })
+    reportEntry(access, POT_ID, s.potKey, s.held(), s.receipts, DINNER, pot)
+    expect(reportRequest.value?.targets[0]).toMatchObject({ kind: 'ITEM', id: DINNER, oversize: true })
+    expect(reportRequest.value?.enclosing).toBe(pot)
+    closeReport()
   })
 })
 

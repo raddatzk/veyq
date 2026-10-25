@@ -222,10 +222,11 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 // an opened node it is how a moderator's block of that node, or of a folder above it, reaches the page: a node block
 // moves the scope's tree revision and no item revision (`CaseDecisions.announce`), so a Memory's own gallery poll stays
 // a `304`; the poll brings the row marked, and the page turns to *Blocked by the operator* (the template), its detail
-// unmounted with every object URL it held; a lift brings it back. An idle tick is a `304` (ADR 0081; measured in
+// unmounted with every object URL it held; a lift brings it back. A member removed from the group meanwhile is answered
+// `404 scope_not_found`: the page turns to its access-ended state and the poll stops (inbox #546). An idle tick is a `304` (ADR 0081; measured in
 // `OpenMemoryTreePollSliceTest`: no more statements than the gallery's own idle poll, whatever the tree holds).
 const { ticks: liveTick } = useLevelLive({
-  active: () => activeSpace.status === 'ready' && !treeStore.error && !place.value.person,
+  active: () => activeSpace.status === 'ready' && !treeStore.error && !treeStore.gone && !place.value.person,
   paused: () =>
     !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
@@ -397,6 +398,12 @@ async function onDeleteDone() {
     <div v-else-if="activeSpace.status === 'no-tenant'" class="home-state">
       <h2>{{ t('home.noTenant') }}</h2>
       <p>{{ t('home.noTenantHint') }}</p>
+    </div>
+    <!-- inbox #546: removed from the group (or it is gone) while a page of it was open — the scope's reads answer
+         `404 scope_not_found`; the page says so, and nothing of the scope polls on (`treeStore.noteScopeGone`). -->
+    <div v-else-if="treeStore.gone" class="home-state home-access-ended" role="status">
+      <h2>{{ t('home.accessEnded') }}</h2>
+      <p>{{ t('home.accessEndedHint') }}</p>
     </div>
     <div v-else-if="activeSpace.status === 'error' || treeStore.error" class="home-state">
       <p>{{ t('home.error') }}</p>

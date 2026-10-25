@@ -50,7 +50,10 @@ import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { memberAccessOf, memberTreeOf } from '../../../test/models'
 import { headerButtonIds } from '../../../test/nodeHeader'
-import { ANNA, BEN, CLEO, PotServer, SCOPE, expense, person, potNode } from '../potTestUtil'
+import { ANNA, BEN, CLEO, PotServer, POT_ID, SCOPE, expense, person, potNode } from '../potTestUtil'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import { setAccountUserId } from '../../../app/account'
+import { whoAmIBase } from '../whoAmI'
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 let node: ReturnType<typeof potNode>
@@ -131,6 +134,49 @@ describe('PotDetail for a member', () => {
     expect(w.text()).toContain(t('expenses.balances.allSettled'))
   })
 
+  // uc.expenses.balances step 2 (inbox #541): the viewer picks who they are once; their row is marked in the balances and
+  // the overview; the choice stays in this browser under this account and this Pot, and nothing is sent.
+  it('who am I: the chosen person\'s row is marked you in both tabs, kept on the device, and never sent', async () => {
+    setAccountUserId('u-anna')
+    localStorage.clear()
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.balances'))
+    expect(w.findAll('.expenses-you'), 'nobody is marked before a choice').toHaveLength(0)
+    const reads = vi.mocked(readMemberPot).mock.calls.length
+    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', BEN)
+    await flushPromises()
+    expect(w.find(`.expenses-balances [data-person="${BEN}"] .expenses-you`).text()).toBe(t('expenses.whoAmI.you'))
+    expect(w.findAll('.expenses-balances .expenses-you')).toHaveLength(1)
+    expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:u-anna`)).toBe(BEN)
+    expect(server.appends, 'no write carries it').toEqual([])
+    expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
+    expect(vi.mocked(writeNodeMeta)).not.toHaveBeenCalled()
+    expect(vi.mocked(readMemberPot).mock.calls.length, 'nor any read').toBe(reads)
+    await openTab(w, t('expenses.tabs.overview'))
+    expect(w.find(`.expenses-overview [data-person="${BEN}"] .expenses-you`).exists()).toBe(true)
+    w.unmount()
+
+    // another visit on this device remembers it; another account on it does not share it
+    const again = mountPot()
+    await flushPromises()
+    await openTab(again, t('expenses.tabs.balances'))
+    expect(again.find(`[data-person="${BEN}"] .expenses-you`).exists()).toBe(true)
+    again.unmount()
+    setAccountUserId('u-other')
+    const other = mountPot()
+    await flushPromises()
+    await openTab(other, t('expenses.tabs.balances'))
+    expect(other.findAll('.expenses-you'), 'another account on this browser chose nothing').toHaveLength(0)
+    // and "not chosen" clears it
+    other.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
+    await flushPromises()
+    other.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'nobody')
+    await flushPromises()
+    expect(other.findAll('.expenses-you')).toHaveLength(0)
+    setAccountUserId('')
+  })
+
   it('the ledger notice names an entry whose revision the server left out (control: the full list shows none)', async () => {
     // Ben edits the dinner, then the taxi is written on top of it: the taxi's heads name the edit.
     server.current.append([{ entryId: DINNER, content: expense('Dinner for three', 9000, ANNA, [ANNA, BEN, CLEO]) }], 'user:u-ben')
@@ -202,18 +248,20 @@ describe('PotDetail for a member', () => {
     expect(server.current.held().filter((r) => r.entryId === DINNER).map((r) => r.revision)).toEqual([1, 2, 3])
   })
 
-  it('reporting an entry from its dialog closes the dialog first, so the report dialog is the one on top', async () => {
-    // The lane L1 pass (cr-expenses-ledger step 8): the report dialog opened BEHIND the still-open entry dialog, whose
-    // modal layer kept it out of reach.
+  it('reporting an entry from its dialog keeps the dialog open and offers the Pot as what holds it', async () => {
+    // Core's report dialog stacks above an open dialog (inbox #545, `core/report/ReportDialog.test.ts`), so the entry
+    // dialog no longer closes first.
     const w = mountPot()
     await flushPromises()
     await w.find(`[data-entry="${DINNER}"]`).trigger('click')
     await flushPromises()
     await buttonIn(dialog()!, t('report.action'))!.click()
     await flushPromises()
-    expect(dialog()).toBeNull()
+    expect(dialog()).not.toBeNull()
     expect(openReport).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(openReport).mock.calls[0]![0].targets).toEqual([expect.objectContaining({ kind: 'ITEM', id: DINNER })])
+    const request = vi.mocked(openReport).mock.calls[0]![0]
+    expect(request.targets).toEqual([expect.objectContaining({ kind: 'ITEM', id: DINNER })])
+    expect(request.enclosing).toMatchObject({ kind: 'NODE', id: POT_ID })
   })
 
   it('the history names who wrote each version, for a member', async () => {
