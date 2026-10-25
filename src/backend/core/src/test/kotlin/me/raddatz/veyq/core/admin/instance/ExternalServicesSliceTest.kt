@@ -177,7 +177,7 @@ class ExternalServicesSliceTest {
         put(MEMORIES_MAP, """{"url":"https://tiles.example.com/tile.png"}""").statusCode(400).body("code", equalTo("invalid_request"))
         put(MEMORIES_PLACES, """{"url":"ftp://geo.example.com"}""").statusCode(400).body("code", equalTo("invalid_request"))
         put(MEMORIES_PLACES, """{"url":"https://geo.example.com","attribution":"x"}""").statusCode(400).body("code", equalTo("invalid_request"))
-        put(EXPENSES_EXCHANGE_RATES, """{"url":"https://api.frankfurter.dev/v2/rates"}""").statusCode(400).body("code", equalTo("invalid_request"))
+        put(EXPENSES_EXCHANGE_RATES, """{"url":"https://api.frankfurter.dev/v2/providers/ecb/rates"}""").statusCode(400).body("code", equalTo("invalid_request"))
         put(EXPENSES_EXCHANGE_RATES, """{"url":"$RATES","attribution":"x"}""").statusCode(400).body("code", equalTo("invalid_request"))
         put("core.group-space", """{"url":"https://x.example.com"}""").statusCode(404).body("code", equalTo("service_not_found"))
         // Nothing was stored: the defaults still stand.
@@ -236,7 +236,7 @@ class ExternalServicesSliceTest {
         const val OSM_ATTRIBUTION = "© OpenStreetMap contributors"
         const val NOMINATIM = "https://nominatim.openstreetmap.org"
         const val HIBP = "https://api.pwnedpasswords.com/range/"
-        const val RATES = "https://api.frankfurter.dev/v2/rates?date={date}"
+        const val RATES = "https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"
         const val FRANKFURTER = "https://api.frankfurter.dev"
     }
 }

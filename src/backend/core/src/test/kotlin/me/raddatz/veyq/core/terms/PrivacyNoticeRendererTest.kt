@@ -34,7 +34,7 @@ class PrivacyNoticeRendererTest {
         backupRetentionDays = 30,
         erasureWindowDays = 30,
         breachedPasswordService = PrivacyNoticeRenderer.serviceLabel("https://api.pwnedpasswords.com/range/"),
-        exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://api.frankfurter.dev/v2/rates?date={date}"),
+        exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"),
         browserServices = listOf(BrowserService(SectionTexts("Maps", "Karten"), "tile.example.org")),
         storeHost = null,
     )

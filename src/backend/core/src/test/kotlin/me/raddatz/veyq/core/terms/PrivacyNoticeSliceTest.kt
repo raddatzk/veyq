@@ -288,7 +288,7 @@ class PrivacyNoticeSliceTest {
         const val OWNER_ID = "5d1f7a2c-3e8b-4c9d-b0a1-6f2e8d4c7b19"
         const val CALLER = "198.51.100.77"
         const val HIBP = "https://api.pwnedpasswords.com/range/"
-        const val RATES = "https://api.frankfurter.dev/v2/rates?date={date}"
+        const val RATES = "https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"
         const val EXTERNAL_STORE = "https://s3.provider.example"
         const val CONTROL = "privacy-notice capture control"
         val RECIPIENTS = """
