@@ -1,10 +1,11 @@
 # Application: Expenses
 
-> **The ledger is built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger, 2026-10-25, its browser pass lane L1's
-> `tests/e2e/tests/features/expenses-pot.spec.ts`, EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots,
-> their people, entries with their history, the ledger check, balances, settle-up, overviews and the link are built, a rate
-> is typed. **Not built yet:** receipts (`changes/cr-expenses-receipts.md`), rates fetched by the device
-> (`changes/cr-expenses-exchange-rates.md`) and "Who am I" (inbox #541). Backend `:apps:expenses`
+> **The ledger and its receipts are built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger and
+> cr-expenses-receipts, 2026-10-25, their browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`, EN and
+> DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their people,
+> entries with their history and receipts, the ledger check, balances, settle-up, overviews and the link are built, a
+> rate is typed. **Not built yet:** rates fetched by the device (`changes/cr-expenses-exchange-rates.md`) and "Who am I"
+> (inbox #541). Backend `:apps:expenses`
 > (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/`, the entry format `contracts/expenses/`, web
 > `src/web/src/features/expenses`. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what
 > the operator sees — is [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this
@@ -50,7 +51,7 @@ and anyone in the Pot sees at any time who owes whom.
 ## Entries
 
 Every entry has a title, a date, a currency with its rate to the base currency, and any number of receipts (images or
-PDFs; not built yet — the format lists them, empty until `cr-expenses-receipts`). Three kinds:
+PDFs, § Receipts). Three kinds:
 
 | Kind | Who | Amounts | Category |
 |---|---|---|---|
@@ -105,6 +106,43 @@ entry stays a line in the history.
 **Exchange rates** fill in on their own where the instance allows it, and can always be typed (ADR 0108 decision 8).
 An entry keeps the rate it was saved with; a later rate never changes it. Built today: the typed rate; the fetch comes
 with `cr-expenses-exchange-rates`.
+
+## Receipts
+
+A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 per entry (the format's `receipts`)
+([uc.expenses.attach-receipts](../features/expenses/use-cases/uc.expenses.attach-receipts.md), ADR 0108 decision 7).
+
+- **A row of Expenses' own** (`PotReceiptEntity`): receipt id (minted by the client), entry id, blob id, writer, node,
+  scope, completion time and drop time. A receipt id and a record id share the reportable-item id space, so neither is
+  taken by the other (`id_taken`). The blob is the fourth `veyq_blob` arm (`validate_blob_reference_arity.py`).
+- **Upload** through core's transport in the role `EXPENSES_RECEIPT`, the owner the Pot's node: the `K_blob` is wrapped
+  under the Pot's key bound to (blob, Pot, role), the file's type, name and time are sealed in the blob meta. Expenses'
+  completion checks the session's binding (`UploadSessionEntity.boundTo`) itself, since it does not use core's
+  attachments (one blob per named slot). The cap is the role's: `MemberBlobRoles.maxBytes`, asked by core's start for a
+  member and a guest alike, 10 MiB of plaintext as its sealed size. A guest's receipt goes through the link's gate, is
+  recorded as a guest write, and counts against the link's limit — a link's usage is every application's term summed
+  (`StorageQuota.linkUsage`, ADR 0073 § 4).
+- **Shown by its bytes, never by its claimed type** (`domain/receiptRules.ts`): a raster image as an image, a PDF through
+  core's page renderer `src/web/src/shared/pdf/` (lifted out of Depot, which mounts the same one), anything else only
+  offered for download. The picker takes only what claims to be an image or a PDF — only the client can keep the type.
+- **Remove** is the entry's next revision: it lists what it keeps and names the dropped ones (`droppedReceipts`), which
+  stamps their drop time; a dropped receipt is never held again (a client uploads it anew). A revision names every
+  receipt of its entry it does not keep that the edited revision held, that this writer uploaded, or that was completed
+  before the edited revision (an orphan of a save that failed after its upload); another writer's newer upload is left
+  alone.
+- **Retention** is core's node trash retention, no key of Expenses' own. A receipt goes once it has passed since its
+  drop, since its entry's latest revision if that is a tombstone, or since its completion if its entry never got a
+  revision; a restore is a later live revision, so it needs no write to the receipts. The purge
+  (`PotReceiptPurge`) judges under the locks every Pot writer takes, and reclaims the blobs through
+  `veyq_store_reclaim`. A deleted entry's read carries its `purgeAfter`: until then it says until when it is
+  restorable, after it no restore is offered.
+- **Re-key**: each receipt's `K_blob` is re-wrapped in Expenses' participant beside the revisions' `K_rev`
+  (ADR 0109 decision 3); a receipt left out is `rekey_parts_missing`.
+- **Report**: an entry's report carries its receipts' `K_blob`s beside its revisions' keys (to the codec's 32, #540); a
+  receipt is also an `ITEM` on its own, by its receipt id; the hold pins each receipt's blob, and the case view opens
+  each with the key the report handed.
+- **Block**: a moderator's content block of a receipt, or of the entry that holds it, answers `451 blocked_by_operator`
+  for its bytes, member and guest alike, and the listing marks it; the client lists it as blocked, with nothing to open.
 
 ## What the client computes
 

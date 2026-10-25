@@ -28,8 +28,9 @@ import java.util.UUID
  * The receipts' purge against the writes it races ([PotReceiptPurge]'s lock order: the scope row, the records' revision
  * rows, the receipts, the Pots' node rows — the order every Pot writer takes). A restore of a deleted entry held
  * uncommitted ([whileUncommitted]) while the purge runs: the purge waits on the record's rows, then judges what is
- * committed — the entry is live again, its receipts stay (cr-expenses-receipts decision 2: "a restore within it clears
- * the stamp"). Beside its control: without the restore, the same purge takes them. Run on MariaDB by
+ * committed — the entry is live again, its receipts stay (docs/apps/expenses.md § Receipts: a restore is a later live
+ * revision, so no write to the receipts undoes the deletion). Beside its control: without the restore, the same purge
+ * takes them. Run on MariaDB by
  * `scripts/run_backend_races_on_mariadb.py` (the V1 heavy stage), where READ COMMITTED shows what H2 hides.
  */
 @QuarkusTest

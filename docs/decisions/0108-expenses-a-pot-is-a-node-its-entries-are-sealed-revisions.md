@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger (2026-10-25; its browser pass is lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`), with the rate typed; decision 7 (receipts) waits for `changes/cr-expenses-receipts.md` and decision 8's fetch for `changes/cr-expenses-exchange-rates.md`, both open
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger, decision 7 (receipts) by cr-expenses-receipts (both 2026-10-25; their browser pass is lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`), with the rate typed; decision 8's fetch waits for `changes/cr-expenses-exchange-rates.md`, open
 - Date: 2026-10-23
 
 ## Context
@@ -115,6 +115,13 @@ under the Pot's key and bound to the blob, the node and the role as Depot's is, 
 server enforces the size, which it sees; only the client can enforce the type, which is sealed — an honest client
 offers anything else for download and never renders it. No previews are made. A revision that drops a receipt names it
 to the server, and a receipt nothing holds any more, or whose entry is deleted, is erased after the trash retention.
+Built (cr-expenses-receipts) with these choices, the mechanics in [docs/apps/expenses.md](../apps/expenses.md) § Receipts:
+the cap is the role's, a seam core's upload start asks of every application (`MemberBlobRoles.maxBytes`), never a size
+core names for one; the retention is core's node trash retention, and a deleted entry past it is offered no restore;
+a dropped receipt is never held again; a moderator's content block of a receipt or of its entry answers `451` for its
+bytes, member and guest alike; a link's storage usage sums every application's term, so a folder link holding a Memory
+and a Pot holds one limit for both, never one per application (ADR 0073 § 4); the PDF renderer is core's (`src/web/src/shared/pdf/`), lifted out of
+Depot, since an application may not import another.
 
 **8. Exchange rates are fetched automatically, straight from the client — the second third-party request without
 opt-in.** Where a Pot uses a currency other than its base, a device fetches **the whole day's table** of an

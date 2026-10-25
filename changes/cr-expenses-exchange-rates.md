@@ -23,7 +23,8 @@ decision 8, [uc.expenses.exchange-rates](../docs/features/expenses/use-cases/uc.
 ## Entry condition
 
 `cr-expenses-ledger` has landed (`test -f changes/cr-expenses-ledger.md && echo "ledger CR still open"`): its editor's
-typed rate is what this CR fills. Independent of `cr-expenses-receipts`; not side by side with it in the same files.
+typed rate is what this CR fills. `cr-expenses-receipts` has landed too (2026-10-25): the editor it fills now also holds
+the receipts (`EntryEditor` + `EntryReceipts`), so a refine re-reads it before the first edit.
 
 ## Context & constraints
 

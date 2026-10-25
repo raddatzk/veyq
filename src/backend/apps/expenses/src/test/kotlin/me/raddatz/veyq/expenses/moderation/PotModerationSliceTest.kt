@@ -68,7 +68,7 @@ class PotModerationSliceTest {
     }
 
     /**
-     * ADR 0108 decision 6, cr-expenses-receipts decision 4: a report of an entry reaches its receipts too — the hold copies
+     * ADR 0108 decisions 6 and 7: a report of an entry reaches its receipts too — the hold copies
      * every receipt of it and pins each one's blob — and a receipt is an `ITEM` on its own, held with its blob and nothing
      * else; the moderator reads both from the snapshot after the Pot is gone.
      */

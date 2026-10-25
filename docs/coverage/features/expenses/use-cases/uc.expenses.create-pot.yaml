@@ -40,12 +40,12 @@ acceptanceCriteria:
     text: "A deleted Pot goes to the space's node trash with every entry and receipt, and a restore brings it back whole; its erasure erases every Expenses row and receipt blob of the node."
     coverage:
       backend:
-        integration: [PotSliceTest.offExpensesIsReadOnly_anAppendIsRefusedWhileTheListReadsAndThePotGoesToTheTrash, PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot, PotSliceTest.aPurgedPotTakesItsRevisionsAndTheirGuestWriteRecords]
+        integration: [PotSliceTest.offExpensesIsReadOnly_anAppendIsRefusedWhileTheListReadsAndThePotGoesToTheTrash, PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot, PotSliceTest.aPurgedPotTakesItsRevisionsAndTheirGuestWriteRecords, PotReceiptSliceTest.aPurgedPotTakesItsReceiptsAndTheirObjects]
       web:
         unit: [src/features/expenses/register.test.ts, src/features/expenses/rights.test.ts]
     gaps:
       - surface: backend
-        reason: "Receipts do not exist yet (cr-expenses-receipts adds them and their blobs to the purge). The trash moves no Expenses row, so a restore is core's node restore, which no Pot-specific test repeats; the refs show a trashed Pot still reading its revisions and a purge taking them all."
+        reason: "The trash moves no Expenses row, so a restore is core's node restore, which no Pot-specific test repeats, for its revisions or its receipts; the refs show a trashed Pot still reading its revisions, and a purge taking its revisions and its receipts with their blobs (through the reclaim queue)."
       - surface: web
         reason: "The trash and its restore are core's node trash for every kind; the refs hold that a member may delete a Pot (also while Expenses is off), not the trash view itself."
 gaps:

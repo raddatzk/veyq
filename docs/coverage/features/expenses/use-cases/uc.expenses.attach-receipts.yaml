@@ -1,24 +1,86 @@
 useCase: uc.expenses.attach-receipts
 feature: expenses
 title: Keep the receipts with an entry
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108 decision 7); built by changes/cr-expenses-receipts.md (after cr-expenses-ledger),
-# whose phases turn each gap below into refs.
+# Built by cr-expenses-receipts (inbox #325, ADR 0108 decision 7, docs/apps/expenses.md § Receipts): :apps:expenses on the
+# backend (PotReceiptStore, its completion and drop, the fourth blob arm, the purge through the reclaim queue, the re-key
+# part, the report's hold), features/expenses on the web (receipts.ts, domain/receiptRules.ts, EntryReceipts, ReceiptView,
+# core's shared/pdf; the receipts in the download, the import and the copy).
 acceptanceCriteria:
   - id: receipts-are-blobs-of-the-entry
     text: "A receipt is an image or PDF of at most 10 MB, any number per entry, in Expenses' own table, uploaded through core's transport with its K_blob wrapped under the Pot's key and bound to blob, node and the role EXPENSES_RECEIPT; the server refuses one above 10 MB or bound to another node or role."
+    coverage:
+      backend:
+        integration:
+          - PotReceiptSliceTest.anElevenMibReceiptIsRefusedAtItsSize_oneOfTenMibLands
+          - PotReceiptSliceTest.aSessionForAnotherNodeOrRoleIsRefused_theRightOneLands
+          - PotReceiptSliceTest.aCompletionStatesThePotsEpochAndARefusalLeavesTheUploadOpen
+          - PotReceiptSliceTest.theReadsPageByIdAndTagWhatTheyServe
+          - PotReceiptSliceTest.aBlockedReceiptOrEntryIs451ForAMemberAndAGuest_unblockedItPresigns
+          - PotReceiptSliceTest.offExpensesTakesNoReceipt_theReadsStillServe
+          - PotRekeySliceTest.aRekeyRewrapsEveryReceiptsKeyAfterTheRevisions_andMissesNone
+          - PotModerationSliceTest.aReportedEntryHoldsItsReceipts_aReportedReceiptHoldsItselfAlone
+          - ModuleCompositionTest.aMemberStartTakesTheRolesTheApplicationsDeclare
+      web:
+        unit:
+          - src/features/expenses/receipts.wire.test.ts
+          - src/features/expenses/domain/receiptRules.test.ts
+          - src/features/expenses/domain/potApi.wire.test.ts
+          - src/features/expenses/components/PotDetail.receipts.test.ts
+          - src/features/expenses/components/PotEntryReview.test.ts
+          - src/features/expenses/potSession.receipts.test.ts
+          - src/features/expenses/rekey.test.ts
+          - src/features/expenses/report.test.ts
+          - src/features/expenses/exportImport.receipts.test.ts
+          - src/features/expenses/exportImport.test.ts
+    gaps:
+      - surface: web
+        reason: "Only unit tests reach a receipt the operator blocked (listed as blocked, nothing to open), a receipt reported on its own and the case view's receipts (PotDetail.receipts.test.ts, PotEntryReview.test.ts, report.test.ts): lane L1's browser pass drives neither a moderator's content block nor a single receipt's report, so no browser shows them."
   - id: only-images-and-pdfs-render
     text: "An image or a PDF receipt is shown in the client, a PDF through the shared page renderer; any other type is offered for download and never rendered."
+    coverage:
+      web:
+        unit:
+          - src/features/expenses/domain/receiptRules.test.ts
+          - src/features/expenses/components/ReceiptView.test.ts
+          - src/features/expenses/components/PotDetail.receipts.test.ts
+          - src/features/expenses/components/PotDetail.guest.test.ts
   - id: a-dropped-receipt-goes-after-the-retention
     text: "A revision that drops a receipt names it to the server; a receipt nothing holds any more, or whose entry is deleted, is erased after the trash retention and not before, and comes back with an entry restored within it."
+    coverage:
+      backend:
+        integration:
+          - PotReceiptSliceTest.aRevisionDropsOnlyItsOwnRecordsReceipts_andADropStaysAtItsFirstTime
+          - PotReceiptSliceTest.aDroppedADeletedAndAnOrphanedReceiptGoAfterTheRetentionAndNotBefore_aRestoredEntrysStay
+          - PotReceiptSliceTest.aPurgedPotTakesItsReceiptsAndTheirObjects
+          - PotReceiptRaceSliceTest.aRestoreThePurgeWaitsForKeepsTheEntrysReceipts
+      web:
+        unit:
+          - src/features/expenses/domain/receiptRules.test.ts
+          - src/features/expenses/domain/potApi.wire.test.ts
+          - src/features/expenses/components/PotDetail.receipts.test.ts
+    gaps:
+      - surface: web
+        reason: "The restore's deadline (restorable until the receipts are erased, no restore after it) is unit-tested only (PotDetail.receipts.test.ts, receiptRules.test.ts): lane L1 runs on the default trash retention, so no entry in its browser pass is ever past it."
   - id: a-contributor-adds-and-removes-receipts
     text: "A READ_WRITE guest adds and removes receipts through the link's gate, each recorded as a guest write and counted against the link's storage limit; a READ guest opens and downloads only."
+    coverage:
+      backend:
+        integration:
+          - PotReceiptSliceTest.aGuestsReceiptCountsAgainstTheLinksLimitAndIsRecordedAsAGuestWrite
+          - UploadAdmissionPartitionSliceTest.aLinksUsageSumsEveryApplicationsTermWhateverTheTarget
+      web:
+        unit:
+          - src/features/expenses/components/PotDetail.guest.test.ts
+          - src/features/expenses/receipts.wire.test.ts
+          - src/features/expenses/components/PotDetail.receipts.test.ts
 gaps:
-  web: "Built by cr-expenses-receipts phase 3 (features/expenses: receipts.ts, domain/receiptRules.ts, EntryReceipts, ReceiptView, shared/pdf); its refs are written at the CR's phase 4."
-  backend: "Built by cr-expenses-receipts phase 2 (PotReceiptStore, the fourth blob arm, the purge); its refs are written at the CR's phase 4."
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b and 9b, EN and DE) is written
-    and tagged with `receipts-are-blobs-of-the-entry`, `only-images-and-pdfs-render`,
-    `a-dropped-receipt-goes-after-the-retention` and `a-contributor-adds-and-removes-receipts`, and NOT YET RUN: a JPEG
-    and a PDF drawn, a text claiming to be a PDF only offered for download, one removed, a guest's added through the link,
-    all opening after a rotation. Its run is the CR's phase 4; ADR 0040 admits `stack` refs only from a CI run.
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b, 7 and 9b) drives
+    `receipts-are-blobs-of-the-entry`, `only-images-and-pdfs-render`, `a-dropped-receipt-goes-after-the-retention` and
+    `a-contributor-adds-and-removes-receipts` in Chromium, all in English and again in German, against the release
+    candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion: a `.txt` refused
+    at the picker, a JPEG and a PDF drawn, a text claiming to be a PDF only offered for download and then removed, a
+    guest's JPEG added through the link, all opening after a rotation, the ZIP holding each by its name byte for byte and
+    the import and the copy carrying them; the sweep finds no receipt name and no PDF line readable on the server. Green
+    only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows
+    the suite executed.

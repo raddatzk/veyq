@@ -952,6 +952,12 @@ function does to its input, both one second away. This is § upstream of every t
 more reason the live defect (§ below) beats a forged one — a real leak already arrives in the form the oracle
 sees.
 
+**And a property held in two layers is bitten in both at once.** cr-expenses-receipts' purge keeps a receipt that is
+not yet due twice: the candidates' query leaves it out, and the purge judges again under the locks it then takes (so a
+restore that committed meanwhile is seen). Sabotaging either layer alone stayed green — the other one held, which is
+the design working and a bite proving nothing. Bite each layer alone and say that it stays green and why, then both
+together and see it red by name; a single-layer green read as "the test is weak" sends the fix to the wrong place.
+
 ### A CR that calls an existing test too weak proves it with an injection BOTH tests see
 
 **Otherwise "proven by nothing" is prose, and prose about a test cannot be wrong out loud.** A CR whose

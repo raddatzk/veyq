@@ -56,7 +56,7 @@ data class ReceiptRow(
 )
 
 /**
- * A Pot's receipts (ADR 0108 decision 7, cr-expenses-receipts decisions 1-2): attached by their completion
+ * A Pot's receipts (ADR 0108 decision 7, docs/apps/expenses.md § Receipts): attached by their completion
  * ([ReceiptUploadCompletion] → [attach]), dropped by the revision that names them ([me.raddatz.veyq.expenses.pot.PotRevisionStore.append]),
  * erased after the trash retention ([PotReceiptPurge]) or with the Pot and its space. Every writer calls core's
  * `items.bump` after the rows it changed, so an open Pot learns of the change by its `ledgerRevision`.
@@ -130,7 +130,7 @@ class PotReceiptStore(
 
     /**
      * [receipts] as a read serves them: each with its blob row, its derived purge time under [retention], and whether a
-     * content block in [view] reaches it — itself, its entry or its Pot (ADR 0093 § 6, cr-expenses-receipts decision 5).
+     * content block in [view] reaches it — itself, its entry or its Pot (ADR 0093 § 6, ADR 0108 decision 7).
      * A receipt whose blob row is gone is left out. A constant number of queries per call.
      */
     fun rows(receipts: List<PotReceiptEntity>, retention: Duration, view: ContentView): List<ReceiptRow> {
@@ -163,7 +163,7 @@ class PotReceiptStore(
         const val NODE_REKEY_PENDING = "node_rekey_pending"
 
         /**
-         * When the purge erases [receipt] (cr-expenses-receipts decisions 2 and 6): its drop plus the [retention]; else,
+         * When the purge erases [receipt] (docs/apps/expenses.md § Receipts): its drop plus the [retention]; else,
          * while its record's [latest] revision is a tombstone, that tombstone's time plus it; else, while the record has
          * no revision, the receipt's own time plus it; null while a live record holds it. Derived, never stored, so it
          * follows a reconfigured retention (ADR 0061 decision 6) — and the purge decides by the same rule ([PotReceiptPurge]).

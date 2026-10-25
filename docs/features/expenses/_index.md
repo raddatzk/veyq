@@ -18,8 +18,8 @@ use-cases below say what a person does and point there instead of repeating it.
 ## Use-cases
 
 Built by cr-expenses-ledger (its browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`): the Pot, its people and entries, the history, the ledger check, the balances
-and the link (rates typed), all but "Who am I" (inbox #541). Planned: receipts (`changes/cr-expenses-receipts.md`) and
-fetched rates (`changes/cr-expenses-exchange-rates.md`).
+and the link (rates typed), all but "Who am I" (inbox #541); the receipts by cr-expenses-receipts (in the same pass).
+Planned: fetched rates (`changes/cr-expenses-exchange-rates.md`).
 
 - [uc.expenses.create-pot](use-cases/uc.expenses.create-pot.md) — a member creates a Pot with its base currency and
   participants, edits its settings, and deletes it.
