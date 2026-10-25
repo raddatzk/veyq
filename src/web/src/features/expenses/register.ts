@@ -6,8 +6,8 @@
 // people), its `detail` (the Pot page — entries, balances, overview, people, settings — for a member and, with functions
 // removed, for a `READ` or `READ_WRITE` guest: core's page of a link mounts it, inbox #401), its `shareDialog` (`READ` and
 // `READ_WRITE` links only), its download, import and copy (`exportImport.ts`), its re-key (`rekey.ts`: every revision's
-// `K_rev` re-wrapped, no body touched) and the moderator's review of a reported entry (`PotEntryReview`). No share body:
-// a Pot is never a `WRITE_ONLY` root, so every guest gets core's page.
+// `K_rev` and every receipt's `K_blob` re-wrapped, no body touched) and the moderator's review of a reported entry or receipt
+// (`PotEntryReview`). No share body: a Pot is never a `WRITE_ONLY` root, so every guest gets core's page.
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { targetOf } from '../../core/access'

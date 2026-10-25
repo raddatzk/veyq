@@ -87,6 +87,18 @@ describe("a member's read", () => {
     expect(opened.map((r) => r.body?.kind)).toEqual(['participant', 'participant', 'expense'])
   })
 
+  it('keeps a tombstone\'s purge time, which says until when it may be restored (uc.expenses.entry-history E2)', async () => {
+    const held = heldPot()
+    stubFetch(() =>
+      json({ revisions: [{ ...wire(held[2]!), tombstone: true, writer: 'user:aaaa', purgeAfter: '2026-11-25T10:00:00Z' }, { ...wire(held[0]!), writer: 'user:aaaa', purgeAfter: null }],
+        more: false, cursor: 'c', ledgerRevision: 1, deleteRevision: 0, revisionIds: null, guestWriters: [] }),
+    )
+    const read = await readMemberPot(SCOPE, POT)
+    if (read.notModified) throw new Error('unexpected 304')
+    expect(read.items[0]!.purgeAfter).toEqual(new Date('2026-11-25T10:00:00Z'))
+    expect(read.items[1]!.purgeAfter).toBeUndefined()
+  })
+
   it('a 304 is "nothing changed"', async () => {
     stubFetch(() => new Response(null, { status: 304 }))
     expect(await readMemberPot(SCOPE, POT, { ifNoneMatch: '7' })).toEqual({ notModified: true })
@@ -156,6 +168,23 @@ describe('a write', () => {
     expect(call.headers.get('X-Share-Password')).toBe('cHc=')
     expect(call.headers.get('Authorization')).toBeNull()
     expect(call.json).toMatchObject({ nodeEpoch: 0, contributorToken: 'Y29udHJpYnV0b3I=', revisions: [{ entryId: DINNER, revision: 2, tombstone: true }] })
+  })
+
+  it('a revision lists the receipts it holds, sealed, and names the ones it drops beside it; one it keeps and drops is refused', async () => {
+    const KEPT = '0e000000-0000-4000-a000-000000000001'
+    const DROPPED = '0e000000-0000-4000-a000-000000000002'
+    const calls = stubFetch(() => new Response(null, { status: 204 }))
+    const content = { ...dinner(1200), receipts: [KEPT] } as PotWrite['content']
+    await appendPotWrites(MEMBER, { key: potKey, epoch: 0 }, heldPot(), [{ entryId: DINNER, content, droppedReceipts: [DROPPED] }], BASE)
+    const sent = (calls[0]!.json!.revisions as Record<string, unknown>[])[0]!
+    expect(sent.droppedReceipts).toEqual([DROPPED])
+    const body = openRevision({ scopeId: SCOPE, nodeId: POT, entryId: DINNER, revision: 2 }, potKey, { sealedBody: fromB64std(sent.sealedBody as string), wrappedRevisionKey: fromB64std(sent.wrappedRevisionKey as string) })
+    expect(body).toMatchObject({ receipts: [KEPT] })
+    // a dropped receipt is never held again: a revision that keeps one it drops never leaves the client
+    expect(() => sealPotWrites(MEMBER, potKey, heldPot(), [{ entryId: DINNER, content, droppedReceipts: [KEPT] }], BASE)).toThrow(new PotWriteRefused('receipt-dropped-and-kept'))
+    // control: no drop, no field
+    await appendPotWrites(MEMBER, { key: potKey, epoch: 0 }, heldPot(), [{ entryId: DINNER, content }], BASE)
+    expect(Object.keys((calls[1]!.json!.revisions as Record<string, unknown>[])[0]!)).not.toContain('droppedReceipts')
   })
 
   it('409 stale_revision names every stale record with its latest', async () => {

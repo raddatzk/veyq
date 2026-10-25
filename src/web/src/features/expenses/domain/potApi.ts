@@ -33,6 +33,7 @@ const served = (r: PotRevision | SharePotRevision): ServedRevision => ({
   sealedBody: fromB64std(r.sealedBody),
   wrappedRevisionKey: fromB64std(r.wrappedRevisionKey),
   ...('writer' in r ? { writer: r.writer } : {}),
+  ...(r.purgeAfter ? { purgeAfter: r.purgeAfter } : {}),
 })
 
 // --- the member's read ----------------------------------------------------------------------------------------------
@@ -148,14 +149,29 @@ export type PotTarget =
  *  [basedOn] is the revision the writer's change was made on — an open editor's, which the live poll may have moved past
  *  meanwhile: the write is then revision `basedOn + 1`, so the server answers `409 stale_revision` instead of taking it
  *  over the other writer's version unseen. Absent, it is the latest held. */
-export type PotWrite = { entryId: string; content: Exclude<RevisionContent, { kind: 'erasure' }>; basedOn?: number }
+export type PotWrite = {
+  entryId: string
+  content: Exclude<RevisionContent, { kind: 'erasure' }>
+  basedOn?: number
+  /** The record's receipts this revision no longer holds (`droppedReceipts`, `domain/receiptRules.ts`' rule): each is
+   *  stamped dropped and erased after the trash retention, and never held again. Absent: none. */
+  droppedReceipts?: readonly string[]
+}
 
 /** The client refuses to send a write: an entry that does not add up, a person the Pot does not know, two revisions of one
  *  record in a batch, a participant deactivated or erased while not settled, or whose join order moved. Nothing reached
  *  the server. */
 export class PotWriteRefused extends Error {
   constructor(
-    readonly reason: EntryProblem | 'record-twice' | 'erasure-through-append' | 'not-a-participant' | 'not-settled' | 'joined-moved' | 'empty',
+    readonly reason:
+      | EntryProblem
+      | 'record-twice'
+      | 'erasure-through-append'
+      | 'not-a-participant'
+      | 'not-settled'
+      | 'joined-moved'
+      | 'empty'
+      | 'receipt-dropped-and-kept',
   ) {
     super(`pot_write_refused: ${reason}`)
     this.name = 'PotWriteRefused'
@@ -194,7 +210,7 @@ const latestOf = (held: readonly HeldRevision[]): Map<string, number> => {
  * Seal a batch of writes on what is held: each record's revision `n + 1` of its latest held (`1` for a new one) or of the
  * revision the write says it was made on ([PotWrite.basedOn]), every
  * revision naming the heads the writer read. Refuses ([PotWriteRefused]) before sealing anything: two writes of one record,
- * an erasure, a money entry whose sums do not add up or that names someone who is neither a participant of the Pot nor
+ * an erasure, a revision that keeps a receipt it drops, a money entry whose sums do not add up or that names someone who is neither a participant of the Pot nor
  * one this batch adds. Pure but for the randomness of the seals.
  */
 export function sealPotWrites(
@@ -207,6 +223,11 @@ export function sealPotWrites(
   if (writes.length === 0) throw new PotWriteRefused('empty')
   if (new Set(writes.map((w) => w.entryId)).size !== writes.length) throw new PotWriteRefused('record-twice')
   if (writes.some((w) => (w.content as RevisionContent).kind === 'erasure')) throw new PotWriteRefused('erasure-through-append')
+  // A receipt a revision drops is never held again (ADR 0108 decision 7): a revision that keeps one it drops is a bug.
+  for (const w of writes) {
+    const kept = isMoney(w.content) ? new Set(w.content.receipts) : new Set<string>()
+    if (w.droppedReceipts?.some((id) => kept.has(id))) throw new PotWriteRefused('receipt-dropped-and-kept')
+  }
   const ledger = buildLedger(held, base)
   const known = new Map(ledger.participants.map((p) => [p.id, p] as const))
   const people = new Set(known.keys())
@@ -238,6 +259,7 @@ export function sealPotWrites(
       tombstone: w.content.kind === 'deleted',
       sealedBody: b64std(sealed.sealedBody),
       wrappedRevisionKey: b64std(sealed.wrappedRevisionKey),
+      ...(w.droppedReceipts?.length ? { droppedReceipts: [...w.droppedReceipts] } : {}),
     }
   })
 }

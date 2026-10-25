@@ -13,7 +13,12 @@ export const revisionId = (r: RevisionRef): string => `${r.entryId}:${r.revision
 
 /** One served row, decoded from the wire's base64 but not opened. `writer` is a member read's (`user:{id}` or
  *  `share:{identityId}`); a guest's read has none, and nothing here asks for one. */
-export type ServedRevision = RevisionRef & SealedRevision & { createdAt: Date; writer?: string }
+export type ServedRevision = RevisionRef & SealedRevision & {
+  createdAt: Date
+  writer?: string
+  /** On a tombstone: when the purge erases its record's receipts if it is still the latest (ADR 0108 decision 6). */
+  purgeAfter?: Date | null
+}
 
 /** One revision as held: the row, its body's digest, and what it opened to — or why it did not. */
 export type HeldRevision = ServedRevision & {

@@ -149,7 +149,7 @@ here; the server is blind.
   `EXPENSES_POT` kind — `domain/`: the entry codec, the ledger's arithmetic and check, the reads and writes; around it the
   Pot page (`components/PotDetail.vue`, a member's and a link guest's alike, rights in `rights.ts`), its session
   (`potSession.ts`: the live read, the writes, the stale re-read), the Pot's settings in its sealed meta (`domain/potMeta.ts`,
-  `contracts/expenses/pot-meta.v1.schema.json`), the re-key, download and report of an entry) — the guard's `APPLICATIONS`, keyed by owner;
+  `contracts/expenses/pot-meta.v1.schema.json`), an entry's receipts (`receipts.ts` the wire through core's blob transport, `domain/receiptRules.ts` the rules, `components/EntryReceipts.vue` and `ReceiptView.vue`, which draws a PDF through core's `shared/pdf/` and decides by the bytes), the re-key, download and report of an entry) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop

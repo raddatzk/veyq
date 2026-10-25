@@ -9,7 +9,9 @@
 // |                                                         | member | READ guest | READ_WRITE guest |
 // |---------------------------------------------------------|--------|------------|------------------|
 // | see entries, history, balances, overviews; download     | ✓      | ✓          | ✓                |
-// | create, edit, delete and restore entries                | ✓      | ✗          | ✓                |
+// |   (an entry's receipts opened and downloaded among them) |        |            |                  |
+// | create, edit, delete and restore entries; add and       | ✓      | ✗          | ✓                |
+// |   remove their receipts (`writeEntries`)                 |        |            |                  |
 // | add and rename participants                             | ✓      | ✗          | ✓                |
 // | deactivate, activate, delete and remove participants    | ✓      | ✗          | ✗                |
 // | the Pot's meta (own categories, base currency)          | ✓      | ✗          | ✗                |
@@ -28,7 +30,7 @@ import { POT_KIND } from './kinds'
 export interface ExpensesRights {
   /** See the Pot: its entries, history, balances, overviews; download it. */
   view: boolean
-  /** Create, edit, delete and restore entries; record a settle-up transfer. */
+  /** Create, edit, delete and restore entries, and add and remove their receipts; record a settle-up transfer. */
   writeEntries: boolean
   /** Add a participant and rename one. */
   addPeople: boolean

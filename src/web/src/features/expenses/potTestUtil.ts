@@ -14,6 +14,8 @@ import { openServedRevisions, type HeldRevision, type ServedRevision } from './d
 import { POT_META_KEY, potMetaObject, type OwnCategory } from './domain/potMeta'
 import { POT_KIND } from './kinds'
 import type { ExpenseBody } from './domain/format'
+import { planBlob } from '../../core/blob/transport'
+import { RECEIPT_ROLE, type HeldReceipt } from './receipts'
 
 export const SCOPE = '22222222-2222-4222-8222-222222222222'
 export const POT_ID = '0e000000-0000-4000-b000-000000000001'
@@ -31,7 +33,7 @@ export const expense = (title: string, amount: number, payer: string, among: str
 /** What was appended, in order, as the rows a server serves — with each row's writer (a member's read carries it). */
 export class PotServer {
   rows: ServedRevision[] = []
-  private clock = 0
+  clock = 0
   constructor(readonly potKey: Uint8Array = v1.randomBytes(32), readonly scopeId = SCOPE, readonly nodeId = POT_ID) {}
   held(rows = this.rows): HeldRevision[] {
     return openServedRevisions(this.scopeId, this.nodeId, this.potKey, rows)
@@ -42,6 +44,8 @@ export class PotServer {
         entryId: w.entryId, revision: w.revision, createdAt: new Date(1_767_225_600_000 + this.clock++ * 60_000),
         sealedBody: fromB64std(w.sealedBody), wrappedRevisionKey: fromB64std(w.wrappedRevisionKey), writer,
       })
+      // the server stamps each dropped receipt's drop (a receipt of this record only)
+      for (const r of this.receipts) if (r.entryId === w.entryId && !r.droppedAt && w.droppedReceipts?.includes(r.receiptId)) r.droppedAt = new Date()
     }
   }
   erase(entryId: string, base = EUR): void {
@@ -51,6 +55,22 @@ export class PotServer {
     const s = sealRevision({ scopeId: this.scopeId, nodeId: this.nodeId, entryId, revision: latest + 1 }, this.potKey, { v: 1, heads: headsToName(held), kind: 'erasure', joined })
     this.rows = this.rows.filter((r) => r.entryId !== entryId)
     this.rows.push({ entryId, revision: latest + 1, createdAt: new Date(1_767_225_600_000 + this.clock++ * 60_000), writer: 'user:u-anna', ...s })
+  }
+  /** The receipts the Pot holds, as its listing serves them. */
+  receipts: HeldReceipt[] = []
+  /** A receipt of [entryId] as an upload under the Pot's key leaves it: its `K_blob` wrapped bound to (blob, Pot, the
+   *  receipt role), its type and name sealed in its meta. Held in [receipts]; answered with the blob's key. */
+  receipt(entryId: string, file: { name: string; type: string; bytes?: Uint8Array }, over: Partial<HeldReceipt> = {}): HeldReceipt & { blobKey: Uint8Array } {
+    const bytes = file.bytes ?? new Uint8Array([1, 2, 3])
+    const source = new Blob([bytes as BlobPart], { type: file.type })
+    const plan = planBlob(this.scopeId, { ownerId: this.nodeId, role: RECEIPT_ROLE }, this.potKey, source, { type: file.type, name: file.name })
+    const r: HeldReceipt = {
+      receiptId: crypto.randomUUID(), entryId, blobId: plan.blobId, chunkCount: plan.chunkCount, byteSize: plan.byteSize,
+      wrappedBlobKey: plan.wrappedBlobKey, wrappedBlobMeta: plan.wrappedBlobMeta ?? null, writer: 'user:u-anna',
+      createdAt: new Date(1_767_225_600_000 + this.clock++ * 60_000), droppedAt: null, purgeAfter: null, blockedByOperator: false, ...over,
+    }
+    this.receipts.push(r)
+    return { ...r, blobKey: plan.blobKey }
   }
   /** The rows a guest is served: the same, with no writer. */
   guestRows(): ServedRevision[] {

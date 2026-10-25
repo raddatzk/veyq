@@ -60,7 +60,7 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
    its criterion (`past-the-retention-a-line-without-receipts`, which `cr-expenses-ledger` left out of the coverage for
    want of a test) comes back under that use-case beside its test.
 7. **Rendering through a shared viewer.** An image renders in the client; a PDF through Depot's page renderer, which
-   this CR lifts from `features/depot/components/PdfPages.vue` into `shared/` (an application may not import another,
+   this CR lifts from `features/depot/components/PdfPages.vue` into `shared/` — built: `shared/pdf/` (an application may not import another,
    and the reuse rule forbids a second renderer); anything else is a download.
 
 ## Inventory
@@ -88,7 +88,7 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
    is recorded as a guest write; a blocked receipt's download is `451` for a member and a guest (control: unblocked, it
    presigns). `validate_blob_reference_arity.py` names four arms and is bitten (remove the arm from
    `subtreeBlobIds` → red); `validate_guard_gaps.py --force` green.
-3. **Web.** Upload, list, open (decision 7, Depot's view unchanged), remove; guest uploads through core's guest
+3. **Web.** ✅ **Built 2026-10-25, but for the download, the import and the copy** (§ Retrospective, phase 3). Upload, list, open (decision 7, Depot's view unchanged), remove; guest uploads through core's guest
    transport; the receipts in the download, the import and the copy; the report keys; a blocked receipt drawn as
    blocked; no restore past the retention (decision 6). Site: `expenses/record-an-expense`
    gains receipts (EN+DE). **Done when:** `npm run check` and `site` `npm run check` green; a **browser pass** on the
@@ -170,3 +170,84 @@ is another Pot's) / `stale_epoch` / `node_rekey_pending` (upload stays open), `4
 Re-key: `listPotRekey` pages revisions first, then receipts (`{receiptId, wrappedBlobKey}`); stage them in
 `PotRekeyStage.receipts`; a receipt missed is `rekey_parts_missing`. Report: an entry's report share carries its receipts'
 `K_blob`s beside the `K_rev`s (the 32-key gap, ADR 0108 decision 6); a receipt is an `ITEM` by its receipt id.
+
+**Phase 3 (2026-10-25), built on `main` `e11f9c1e`.** Two commits: the lift, then the receipts.
+
+- **The lift (decision 7).** Depot's renderer is core's `src/web/src/shared/pdf/` — `pdfEngine.ts`, `pdfOptions.ts`,
+  `pdfjsRuntime.ts` (still the one module importing pdf.js, reached only by the dynamic `import()`), `PdfPages.vue` and its
+  stylesheet `pdf.css` (Depot's `depot.css` rule for rule, imported by `PdfPages.vue`, so whoever mounts it gets it);
+  `PdfPages`' eight keys are core's `pdf.*`, the password prompt stays Depot's. Depot's view is unchanged (its suites green,
+  `verify:pdf-worker` green); guard gap 90 now plants its dead rule in Expenses' sheet, as Depot has none left.
+- **The wire** is `features/expenses/receipts.ts`: the upload through core's `planBlob` (owner = the Pot, role
+  `EXPENSES_RECEIPT`, type, name and time sealed in `wrappedBlobMeta`) and the authed or guest pump, then the completion;
+  the listing (first page on its tag); the bytes through `presignBlobDownloads` or the link's `resolveShareBlob`
+  (`ReceiptSource`, one shape for a member, a guest and a moderator). The rules without network are
+  `domain/receiptRules.ts`: what may be added (an image or a PDF by its claim — only the client can keep the type), how an
+  opened one is drawn (by its BYTES: a raster image as `<img>` typed by the sniff, a PDF through `shared/pdf`, anything
+  else — an SVG, a text that claims to be a PDF — only offered for download), which receipts a revision drops, and the
+  restore cut-off.
+- **The drop rule** (`receiptsToDrop`): a revision names every receipt of its entry the listing still holds and it does not
+  keep that the revision it was written on held, that this writer uploaded, or that was completed before that revision — an
+  orphan of a save that failed after its upload, which no later revision could hold and which would otherwise stay with a
+  live entry for good. Another writer's receipt completed after it is left alone (it may be on its way into that writer's
+  revision, which is then stale anyway). `sealPotWrites` refuses a revision that keeps a receipt it drops.
+- **The editor** (`EntryEditor` + `EntryReceipts`): what is picked is uploaded with the save, before the revision that lists
+  it; a new entry's id is minted when its dialog opens, so its receipts complete against it. A receipt the link's limit
+  or the quota has no room for is left out and the entry saves without it, saying so (E2); any other failed upload stops
+  the save, and what was uploaded is kept for the retry. After a stale save the receipts this dialog added stay in the
+  form. Opened in place (`ReceiptView`), downloaded, reported on its own; a blocked one is listed as blocked with nothing to
+  open. A protected PDF is not prompted for: it is offered for download.
+- **The session** re-reads the receipt listing (on its own tag) whenever the revision read answered with a change; a failed
+  receipt read leaves the ledger standing and is retried on the next read. `purgeAfter` is carried on each held revision;
+  a deleted entry says until when it is restorable and, past it, offers no restore (decision 6).
+- **Re-key** re-wraps each receipt's `K_blob` with core's `rewrapBlobKey`; the re-key listing names a receipt by id only,
+  while its wrap is bound to the blob id, so the blob ids come from the receipt listing (read once, and once more for a
+  receipt completed since); an unknown one fails the node.
+- **Report**: an entry's share carries the version on screen's revision key, then its receipts' `K_blob`s (role
+  `EXPENSES_RECEIPT`, ref = the blob id), then the older revisions, then any other receipt of it, to the cap of 32 (#540
+  stays). A receipt is reported on its own as an `ITEM` by its receipt id with its `K_blob` alone. The case view
+  (`PotEntryReview`) lists the hold's receipts of the reported entry or the reported receipt and opens each with its handed
+  key from the hold (`presignCaseBlobs` through the review's `chunkUrls`); one whose key the share did not carry is listed
+  as one the report cannot open.
+- **Site:** `expenses/record-an-expense` (EN+DE) gains § Receipts and the restore's limit.
+- **Bites** (a script that applies one sabotage, runs the named tests, restores — 30, each red): a READ guest offered the
+  remove and the picker; the 10 MiB cap and the type claim gone at the pick; the upload after the revision; a new entry's
+  receipt completed under another id; the drop rule naming nothing, and dropping another writer's newer upload; the
+  drop-and-keep refusal and `droppedReceipts` gone from the wire; a blocked receipt offered its open; a blocked view reading
+  anyway; a `451` not read as blocked; a restore past the retention; an earlier tombstone's time surviving a restore;
+  `purgeAfter` not carried from the wire; a claimed type deciding the view; the re-key leaving receipts unstaged, binding the
+  wrong owner, skipping an unknown receipt; an entry's report without its receipts, a receipt key without its blob ref; the
+  case view showing every receipt of the case, opening one with another blob's key; the guest's upload through the
+  member's door; the wrap bound to the scope, not the Pot; the meta not sealed; no re-read on a moved ledger, a re-read on
+  every `304`; no room failing the save.
+- **Measured:** see the commit messages (`src/web` `npm run check`, `tests/e2e` `npm run check`, `site` `npm run check`, the
+  quick `scripts/validate_*.py`, `validate_guard_gaps.py --force` for the re-anchored gap 90).
+
+**Not built in phase 3 — open for its own slice before phase 4 closes:** the receipts in the **download, the import and the
+copy**. Today the export writes each entry with `receipts: []` (`exportImport.ts`), so a downloaded, imported or copied
+Pot has no receipts; until then the copy dialog names them among what a copy does not carry (`expenses.copyLoss`). Building it needs a contract change
+(`contracts/export/veyq-subtree.schema.json` `expensesPot`: each entry's receipts as payloads), the export adding each
+receipt as a payload with its frames (a copy reads by frame), and the import uploading each receipt under the new Pot
+before the batch whose entry lists it — `createPot` writes people and entries in one call today, so the import must split
+it. `docs/apps/expenses.md` § Download and import already describes the target, not today.
+
+**For phase 4.** The L1 additions are written and NOT run (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b,
+9b; the PDF builder moved to `tests/e2e/src/pdf.ts`, shared with `depot-styles.spec.ts`; labels and `addReceipts` /
+`receiptRow` / `expectReceiptOpens` in `tests/e2e/src/expenses.ts`). The checklist the stack-lane pass proves, EN and DE:
+- 2b: a `.txt` is refused at the picker; a JPEG is drawn as an image (decoded, `naturalWidth > 0`), a PDF as a drawn page
+  (`.pdf-page canvas`), a text named `….pdf` only offered for download (no `img`, no `canvas`); removing it leaves the
+  entry after the save; no figure moves, no ledger notice;
+- 4b: the READ_WRITE guest keeps a JPEG with its own entry through the link and opens A's JPEG and PDF;
+- 9b: after the rotation the receipts open for A and through the link;
+- Depot's PDF view still renders: `depot-styles.spec.ts` (unchanged but for the shared builder) reads its text layer;
+- the canary sweep: every receipt name and the PDF's line are `recordTyped`, so the sweep proves none reached the server
+  readable;
+- not driven in a browser: the blocked state, the restore cut-off, a receipt reported on its own and the case view's
+  receipts (unit-tested in `PotDetail.receipts.test.ts` and `PotEntryReview.test.ts`; a block or a retention past its time
+  needs a moderator measure or a short retention the lane does not set).
+Phase 4 also moves `uc.expenses.attach-receipts`' coverage from `planned` to refs — web: `domain/receiptRules.test.ts`,
+`receipts.wire.test.ts`, `components/ReceiptView.test.ts`, `components/PotDetail.receipts.test.ts`,
+`components/PotDetail.guest.test.ts`, `components/PotEntryReview.test.ts`, `rekey.test.ts`, `report.test.ts`,
+`potSession.receipts.test.ts`, `domain/potApi.wire.test.ts` — and writes `past-the-retention-a-line-without-receipts`
+back beside `PotDetail.receipts.test.ts`' restore case and `receiptRules.test.ts`' `purgeAfterOf and restoreOffered`.
+

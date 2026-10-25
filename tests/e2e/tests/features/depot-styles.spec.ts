@@ -9,13 +9,14 @@
 // A token's value is never spelled here: a probe element is given the same declaration and its computed value is the
 // expected one.
 //
-// The PDF is built here, one page with one line of Helvetica, so no fixture file stands behind it. It starts from the tenant
+// The PDF is built in place (`src/pdf.ts`), one page with one line of Helvetica, so no fixture file stands behind it. It starts from the tenant
 // whose owner the round trip activated (the `features` project). Every value typed is a canary (recordTyped). Labels are
 // src/web/'s own (src/web/src/i18n/index.ts and src/web/src/features/depot/i18n.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { createFolder, downloadButton, pickFiles } from '../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../src/devices'
+import { onePagePdf } from '../../src/pdf'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -25,29 +26,6 @@ const pdfName = `Mietvertrag ${stamp}.pdf`
 
 let member: Device
 let pageConsole: ConsoleErrors
-
-/** A one-page PDF 1.4 with `line` in Helvetica: the objects, then an xref table whose offsets are counted, not guessed. */
-function onePagePdf(line: string): Uint8Array {
-  const content = `BT /F1 24 Tf 72 720 Td (${line}) Tj ET`
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ]
-  let body = '%PDF-1.4\n'
-  const offsets: number[] = []
-  objects.forEach((object, i) => {
-    offsets.push(body.length)
-    body += `${i + 1} 0 obj\n${object}\nendobj\n`
-  })
-  const xref = body.length
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
-  for (const offset of offsets) body += `${String(offset).padStart(10, '0')} 00000 n \n`
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
-  return new TextEncoder().encode(body)
-}
 
 /** The computed value of `property` on a throwaway element given `declarations` — what a rule saying the same resolves to. */
 async function probe(page: Page, declarations: string, property: string): Promise<string> {

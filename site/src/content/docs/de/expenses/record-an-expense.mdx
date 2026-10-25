@@ -3,6 +3,7 @@ title: "Eine Ausgabe eintragen"
 sources:
   - docs/features/expenses/use-cases/uc.expenses.record-entries.md
   - docs/features/expenses/use-cases/uc.expenses.entry-history.md
+  - docs/features/expenses/use-cases/uc.expenses.attach-receipts.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -32,6 +33,13 @@ import Screenshot from '../../../../components/Screenshot.astro';
 Ein Eintrag, der nicht aufgeht, lässt sich nicht speichern, etwa wenn die Beträge der Zahlenden nicht die Summe
 ergeben oder die Posten mehr ausmachen als sie. Der Editor sagt, was nicht stimmt.
 
+## Belege
+
+Wähle im Eintrag unter **Belege** die Schaltfläche **Beleg hinzufügen**, um ein Foto der Rechnung oder ein PDF dazu
+aufzubewahren, jedes höchstens 10 MB groß, bis zu 100 je Eintrag. Sie werden beim Speichern hochgeladen. Öffne einen
+Beleg, um ihn im Eintrag zu sehen; einen, der dort nicht angezeigt werden kann, kannst du nur herunterladen. Um einen
+zu entfernen, entferne ihn und speichere. Alle, die die Kasse sehen, können ihre Belege öffnen.
+
 ## Eine Überweisung
 
 Wähle, wer wem gezahlt hat, und den Betrag. Eine Überweisung hat keine Kategorie. Was
@@ -52,4 +60,5 @@ Hat jemand anderes den Eintrag geändert, während du ihn bearbeitet hast, zeigt
 Speichere noch einmal, um deine darüberzulegen.
 
 Wenn du einen Eintrag löschst, kommt er in die **Gelöschten Einträge** der Kasse. Er zählt nicht mehr zu den Salden,
-und du kannst ihn dort wiederherstellen.
+und du kannst ihn dort mit seinen Belegen wiederherstellen, bis diese nach der Aufbewahrungszeit des Papierkorbs gelöscht
+werden. Danach bleibt er nur noch im Verlauf.

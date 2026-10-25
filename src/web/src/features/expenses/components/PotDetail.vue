@@ -29,7 +29,8 @@ import { targetOf } from '../../../core/access'
 import { expensesRights } from '../rights'
 import { usePotSession } from '../potSession'
 import { personLabel } from '../people'
-import { reportEntry } from '../report'
+import { reportEntry, reportReceipt } from '../report'
+import { potReceiptSource, type HeldReceipt } from '../receipts'
 import EntriesPanel from './EntriesPanel.vue'
 import EntryEditor from './EntryEditor.vue'
 import BalancesPanel from './BalancesPanel.vue'
@@ -99,7 +100,17 @@ const missingEntries = computed(() =>
 function onReport(entryId: string) {
   if (!props.contentKey) return
   editing.value = null
-  reportEntry(props.access, props.node.id, props.contentKey, session.held.value, entryId)
+  reportEntry(props.access, props.node.id, props.contentKey, session.held.value, session.receipts.value, entryId)
+}
+/** Report one receipt on its own, from the entry dialog — which closes first, as for an entry. */
+function onReportReceipt(receipt: HeldReceipt) {
+  if (!props.contentKey) return
+  editing.value = null
+  reportReceipt(props.access, props.node.id, props.contentKey, receipt)
+}
+/** A listed receipt as the entry dialog opens it, for whoever looks (a member's scope read, a guest's link). */
+function receiptSource(receipt: HeldReceipt) {
+  return potReceiptSource(props.access, props.scopeId, props.node.id, props.contentKey!, receipt)
 }
 </script>
 
@@ -157,6 +168,8 @@ function onReport(entryId: string) {
       :writers="rights.writers"
       :people="people"
       :on-report="reportsEntries ? onReport : undefined"
+      :receipt-source="receiptSource"
+      :on-report-receipt="reportsEntries ? onReportReceipt : undefined"
       @close="editing = null"
     />
   </div>

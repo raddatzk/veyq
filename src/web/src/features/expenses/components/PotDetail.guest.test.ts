@@ -3,16 +3,18 @@
 // `ShareTreePage` mounts the Pot's `detail` at the link's root through the app's real registry, the guest's tree opens the
 // Pot's key from the link's `K_share`, and every authenticated client throws (`test/guestMode.ts`). A `READ_WRITE` guest
 // adds an entry and a person through the share path — naming itself first — and sees no Settings, no deactivate or delete
-// of a person and no writer's name; a `READ` guest writes nothing. The Pot's revisions are written by the real write path
-// (`potTestUtil.ts`); only the share path's wire is replaced.
+// of a person and no writer's name; a `READ` guest writes nothing. Its receipts (uc.expenses.attach-receipts E4): a `READ`
+// guest opens and downloads them and adds and removes none, a `READ_WRITE` guest adds one through the link's own upload.
+// The Pot's revisions are written by the real write path (`potTestUtil.ts`); only the share path's wire is replaced.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 
-const server = vi.hoisted(() => ({ current: null as unknown as import('../potTestUtil').PotServer, targets: [] as unknown[] }))
+const server = vi.hoisted(() => ({ current: null as unknown as import('../potTestUtil').PotServer, targets: [] as unknown[], uploads: [] as unknown[] }))
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readGuestPot: vi.fn(), appendPotWrites: vi.fn() }))
+vi.mock('../receipts', async (orig) => ({ ...(await orig<object>()), readGuestReceipts: vi.fn(), uploadReceipt: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
@@ -23,6 +25,7 @@ import { authenticatedCalls } from '../../../test/guestMode'
 import { guestAccessFor } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 import { appendPotWrites, readGuestPot, sealPotWrites } from '../domain/potApi'
+import { readGuestReceipts, uploadReceipt } from '../receipts'
 import { POT_KIND } from '../kinds'
 import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person, potNode } from '../potTestUtil'
 
@@ -52,9 +55,16 @@ beforeEach(async () => {
     server.current.append(writes, 'share:i-guest', held)
     return sealed
   })
+  vi.mocked(readGuestReceipts).mockImplementation(async () => ({ receipts: server.current.receipts.map(({ writer: _w, ...r }) => r), etag: null }))
+  vi.mocked(uploadReceipt).mockImplementation(async (target, _key, entryId, receiptId, file) => {
+    server.uploads.push(target)
+    const { blobKey: _k, writer: _w, ...r } = server.current.receipt(entryId, { name: file.name, type: file.type }, { receiptId })
+    return r
+  })
   document.body.innerHTML = ''
   authenticatedCalls.length = 0
   server.targets = []
+  server.uploads = []
   server.current = new PotServer(v1.randomBytes(32))
   server.current.append([{ entryId: ANNA, content: person('Anna', 1) }, { entryId: BEN, content: person('Ben', 2) }])
   server.current.append([{ entryId: DINNER, content: expense('Dinner', 6000, ANNA, [ANNA, BEN]) }])
@@ -153,6 +163,52 @@ describe('a Pot under its own link', () => {
     await openTab(page, t('expenses.tabs.balances'))
     expect(buttonIn(page.element, t('expenses.balances.record'))).toBeUndefined()
     expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  async function billRow(role: ShareRole) {
+    const bill = server.current.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' })
+    server.current.append([{ entryId: DINNER, content: { ...expense('Dinner for two', 6000, ANNA, [ANNA, BEN]), receipts: [bill.receiptId] } }], 'user:u-ben')
+    const page = await mountShare(role)
+    await page.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    const row = dialog()!.querySelector(`[data-receipt="${bill.receiptId}"]`)!
+    expect(row.textContent).toContain('bill.jpg')
+    expect(buttonIn(row, t('expenses.receipts.openNamed', { name: 'bill.jpg' }))).toBeDefined()
+    expect(buttonIn(row, t('expenses.receipts.downloadNamed', { name: 'bill.jpg' }))).toBeDefined()
+    return row
+  }
+
+  it('READ: a receipt opens and downloads, and none is added or removed', async () => {
+    const row = await billRow(ShareRole.Read)
+    expect(buttonIn(row, t('expenses.receipts.removeNamed', { name: 'bill.jpg' }))).toBeUndefined()
+    expect(buttonIn(dialog()!, t('expenses.receipts.add'))).toBeUndefined()
+    expect(dialog()!.querySelector('input[type="file"]')).toBeNull()
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  it('READ_WRITE: the same receipt is also offered its removal and the picker (control for READ)', async () => {
+    const row = await billRow(ShareRole.ReadWrite)
+    expect(buttonIn(row, t('expenses.receipts.removeNamed', { name: 'bill.jpg' }))).toBeDefined()
+    expect(buttonIn(dialog()!, t('expenses.receipts.add'))).toBeDefined()
+    expect(dialog()!.querySelector('input[type="file"]')).not.toBeNull()
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  it('READ_WRITE: a receipt is uploaded through the link as the guest it named, before the revision that lists it', async () => {
+    const page = await mountShare(ShareRole.ReadWrite)
+    await page.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    const input = dialog()!.querySelector('input[type="file"]') as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(10)], 'taxi.pdf', { type: 'application/pdf' })], configurable: true })
+    input.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(server.uploads).toEqual([expect.objectContaining({ kind: 'guest', shareId: SHARE_ID, nodeId: POT_ID, contributorToken: 'dG9rZW4=' })])
+    const held = server.current.held().filter((r) => r.entryId === DINNER).at(-1)!
+    expect(held.body).toMatchObject({ receipts: [server.current.receipts[0]!.receiptId] })
     expect(authenticatedCalls).toEqual([])
   })
 })
