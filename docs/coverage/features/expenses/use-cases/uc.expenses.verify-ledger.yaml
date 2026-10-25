@@ -1,18 +1,32 @@
 useCase: uc.expenses.verify-ledger
 feature: expenses
 title: A Pot's reader notices a missing revision
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
-# each gap below into refs.
+# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
+# the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
   - id: every-revision-names-the-heads
     text: "Every revision carries, sealed, the Pot's heads as its writer read them (entry id, revision, digest), forming a graph in which concurrent writes share a parent."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/heads.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: a-dropped-revision-marks-the-pot
     text: "On every read the client checks that each named revision is present and matches its digest; a revision the server left out, swapped or that does not open marks the Pot with a notice naming the entries, for a member and a guest alike."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/heads.test.ts, src/features/expenses/domain/codec.test.ts, src/features/expenses/components/PotDetail.test.ts]
+    gaps:
+      - surface: web
+        reason: "The notice is mounted with a revision left out for a member only; a guest's page is the same component over the same check (PotDetail.guest.test.ts mounts it), not asserted with a thinned list."
   - id: only-an-erasure-covers-a-missing-revision
     text: "A named revision may be missing only where a present, opening erasure revision of the same record covers it; the server writes none and takes none from a link."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly]
+      web:
+        unit: [src/features/expenses/domain/heads.test.ts]
   - id: withheld-newest-is-the-stated-limit
     text: "Withholding the newest revisions is not detected and is stated as the platform's freshness limit, not claimed closed."
-gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/heads.test.ts]

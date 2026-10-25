@@ -1,7 +1,7 @@
 ---
 id: cr-expenses-ledger
 title: Expenses, the third application — Pots, people and sealed entry revisions, balances, the link
-status: planned
+status: in-progress
 satisfies: ["uc.expenses.create-pot", "uc.expenses.manage-participants", "uc.expenses.record-entries", "uc.expenses.entry-history", "uc.expenses.verify-ledger", "uc.expenses.balances", "uc.expenses.share-pot"]
 adrs: ["0108", "0109", "0079", "0080", "0082", "0093", "0099", "0088", "0072", "0077", "0033", "0061"]
 invariants:
@@ -220,12 +220,65 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    settled participant; download the Pot and import it into another folder (balances equal); copy it; report an entry as
    a guest and open it as a moderator; rotate the space's key and see every balance unchanged and no ledger notice; the
    Pot at 375 px.
-5. **Close.** Coverage: the seven files from `planned` to refs; Expenses' criteria in `uc.platform.switch-application-off`, `uc.platform.export-import`,
+5. **Close.** ✅ **Built 2026-10-25** (§ Retrospective); only phase 4's browser pass is left (§ Left open). Coverage: the seven files from `planned` to refs; Expenses' criteria in `uc.platform.switch-application-off`, `uc.platform.export-import`,
    `uc.platform.copy-node`, `uc.moderation.report` and `uc.spaces.rekey-after-rotation`, each beside the test that
    answers it. `docs/apps/expenses.md` and `docs/apps/README.md`'s table row say what is built; ADR 0108's status line
    names the two CRs still open; inbox #325's row names them as its next step. **Done when:** every
    `scripts/validate_*.py` exits `0` (`validate_guard_gaps.py --force` too, since phase 2 or 3 touched guards); `site`
    `npm run check` green; the heavy suites (L1, web-e2e, fuzz) are left to the V1 end-stage, named as not run.
+
+## Left open: the browser pass — then delete this CR
+
+Everything else is built, measured and harvested (§ Retrospective, phase 5): the coverage, the docs, ADR 0108, the inbox
+rows, the code traps as comments at their lines. What this file still holds is **phase 4's browser pass**, which that
+phase's done-when names and which no implementing agent could run (no Docker; changes/README.md § A UI phase's
+done-when names its browser pass). Whoever runs it moves what it found into the code, the docs or an inbox row — a
+defect it finds is fixed or filed before this file goes — and then deletes this CR in the same commit; nothing else in
+it binds.
+
+**Instance.** A database of its own beside `veyq` on the dev stack (changes/README.md § A live proof that names a screen
+names the instance state that screen needs): a copy of the branch's fast-jar, `-Dquarkus.profile=e2e`, its own config
+secret, `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin, the bundled S3 store (never the in-memory one),
+then the seeder. It holds one tenant with **two member accounts** (A and B) in one **group space**, and a **moderator**
+of the instance (ADR 0099). Two writers are **two hosts**: A on the tenant's host, B on a second `*.localhost` name
+served by a second Vite with `VEYQ_SMOKE_HOST` (cookies and storage of its own). Before believing the DOM: read the
+console and the failed requests, and name the tree the dev server serves.
+
+**Steps** — all in English, then all again in German (the language switch; every label the catalog's, no key shown raw):
+
+1. A creates a Pot "Trip" in a folder: base currency EUR, people Anna, Ben, Cleo in that order. Green: the Pot opens on
+   Entries; the folder's row shows "EUR" as its detail.
+2. A types in the "trip" Pot of `contracts/expenses/v1-vectors.json`, its nine entries as the vector holds them: equal
+   splits (Dinner, Groceries with two payers, Ferry in GBP at a typed rate `1.1725`), line items with the rest in
+   proportion (Trattoria) and equally (Bar), shares (Museum, JPY 5000 at a typed rate `0.0061234`), exact amounts (Taxi), a
+   refund (Delayed train) and a transfer (Cash, Ben → Anna). Green: Balances shows Anna −€6.59, Ben +€39.28, Cleo
+   −€32.69; the settle-up suggests Cleo → Ben €32.69, then Anna → Ben €6.59 (the vector's `expected`); no entry is marked
+   invalid; on Overview the paid and share columns each sum to the costs.
+3. B, on the second host, opens "Dinner" and saves a change while A's editor is open on it; A saves after. Green: A's
+   dialog shows "Someone else changed this entry. Here is their version; save again to put yours on top." with B's
+   version; saving again puts A's on top; the history lists three versions with A's and B's names.
+4. A shares the Pot `READ_WRITE`: the dialog offers viewing and viewing-and-adding, no upload-only link. In a private
+   window the guest opens the link, names itself, adds an entry and a person. Green: no Settings tab, no deactivate or
+   delete on People, no writer's name in any history; in A's history the guest's entry carries the name it gave.
+5. A deletes "Taxi" and restores it from **Deleted entries**. Green: it leaves the balances and brings them back as they
+   were; no ledger notice after the restore.
+6. A records the settle-up, then deactivates Cleo, activates her again and deletes her after the confirm; a person no
+   entry names is removed. Green: Cleo's entries show "deleted people"; the removed person appears nowhere; neither is
+   offered for a new entry.
+7. A downloads the Pot and imports the ZIP into another folder, then copies the Pot ("Copy to…"). Green: both new Pots
+   show the original's balances and settle-up; the copy dialog names what does not come along (each entry's history and
+   the deleted entries).
+8. The guest reports an entry; the moderator opens the case. Green: the review shows the entry's revisions in plaintext.
+9. The space's key is rotated (B removed from the group space, or a queued rotation) and its re-key finishes. Green:
+   every balance unchanged, no ledger notice ("Changes to these entries are missing…"), and the Pot still opens for A and
+   through the guest's link.
+10. The Pot at **375 px** wide: Entries, Balances, the entry editor with line items, People. Green: no horizontal scroll,
+    every action reachable.
+
+**Green overall** means every step's "Green" held in both languages, with no console error and no failed request but the
+one a step provokes (step 3's `409`); screenshots only as the final proof of steps 2, 3, 4 and 10. **Not driven here,
+named:** browsers other than Chromium, a real phone, the heavy suites (L1, web-e2e, fuzz) and the MariaDB race run
+(inbox #544), all the V1 heavy stage's.
 
 ## Size — what "mostly client work" means here
 
@@ -395,3 +448,36 @@ guard changed); `src/packages/crypto` and `src/admin-web` untouched.
   `exportImport.test.ts`, `rekey.test.ts`, `report.test.ts`, `people.test.ts` and `register.test.ts`; the project website's
   `site/src/components/website/strings.ts` still calls Memories and Depot "the first two" and lists shared expenses as an
   idea; "Who am I" (docs/apps/expenses.md § The Pot) is not built.
+
+**Phase 5 (2026-10-25), built on `main` `70e68e16` (phases 1–4 in), branch `worktree-agent-a992de1147afaed61`.** The seven
+coverage files from `planned` to refs; Expenses' criteria under `uc.platform.switch-application-off`
+(`expenses-off-is-read-only`), `uc.platform.export-import` (`expenses-content`), `uc.platform.copy-node`
+(`a-pot-copies-its-live-entries`), `uc.moderation.report` (`an-expenses-entry-is-reported-whole`) and
+`uc.spaces.rekey-after-rotation` (`pot-revisions-rewrapped-bodies-unchanged`), each beside its test; two rounding vectors
+past 2^53; the website's three applications; ADR 0108's status line, decision 3's erasure-ledger line and decision 6's
+known gap; docs/apps (the table row, a rule on wiring a new application, the reader rules and the Pot meta of phases 3
+and 4), the feature index and two use-cases saying what is not built; inbox #540–#544 and #325's next step;
+`cr-expenses-receipts` taking the content block and the retention. Measured on the branch: `npm run check` 0 in
+`src/web`, `site` `npm run check` 0, `./gradlew check` 0, every quick `scripts/validate_*.py` 0
+(`validate_coverage.py` among them); `validate_guard_gaps.py` not run, no guard changed.
+
+- **Two defects the coverage work found, each red first, then fixed.** A restore wrote the deleted content back with the
+  heads ITS writer had read: `sealPotWrites` spread the content after its own heads, so an opened body's `heads` won and
+  the restored revision did not name the tombstone it lifts (the new restore case in `PotDetail.test.ts` red; fixed in
+  `sealPotWrites`, the comment at the line). And the append's compare-and-set used what its row locks returned before the
+  node lock, so a second append that waited on the first's rows did not see the rows the first inserted: on H2 both
+  `PotAppendRaceSliceTest` cases answered `500` (the unique index) where a replay answers `409 stale_revision`. It now
+  reads the records again under the node lock (`PotRevisionStore`'s lock-order note); the MariaDB run is #544's.
+- **Two criteria could not move as written, and left the coverage with a comment naming where they come back.** "Who am I"
+  is `uc.expenses.balances` step 2 and no phase of this CR named it, so it was not built (#541); "past the retention, no
+  restore" needs the retention clock the receipts' purge brings (`cr-expenses-receipts` decision 6). A criterion without
+  a test has no place in a built coverage file. Root cause: the criteria were first held against the tests at the close,
+  not when the phases were cut. Next time: a refine that satisfies a use-case names, per criterion, the phase whose
+  test answers it.
+- **The rounding bite of phase 3 is closed in the vectors.** A float share division in `allocate` now turns two vectors red
+  (`9007199254740991` by 7:11:13 and by 999999:1:1, computed with Python `Fraction` from the rule as written, beside a
+  float simulation of that sabotage showing both differ); the sabotage was applied to `money.ts` (three tests red) and
+  restored.
+- **Process:** phase 4's done-when names a browser pass, and its brief and this one forbid Docker, so the CR could not
+  close in the sessions that built it. Next time: a phase whose done-when needs an instance is planned for a session that
+  may start one, or its brief names the pass as the orchestrator's from the start.

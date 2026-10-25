@@ -35,6 +35,8 @@ describe('registerExpenses', () => {
       list: { rows: potRows, tabLabel: 'expenses.title' }, placement: { root: true, parents: [FOLDER_KIND] },
       rekeyContent: rekeyPotContent, exportContent: exportPot, importContent: importPot, validateContent: validatePotContent,
       contentSchema: { application: 'expenses', version: 1 }, importStreams: true,
+      // A copy is the download and the import without the file, so it loses what the download leaves out: the history.
+      copyLosses: ['expenses.copyLoss'],
     })
     expect(r.applicationOf(POT_KIND)).toBe(EXPENSES)
     expect(r.applications()).toEqual([{ id: EXPENSES, name: 'expenses.title' }])

@@ -1,20 +1,50 @@
 useCase: uc.expenses.create-pot
 feature: expenses
 title: Create a Pot, set it up, delete it
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
-# each gap below into refs.
+# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
+# the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
   - id: member-creates-a-pot
     text: "A member creates an EXPENSES_POT node in a folder or at the space root with its sealed name and meta (format version, base currency, own categories) and its participants as records at their first revision; the server sees the node's kind and the number of records."
+    coverage:
+      backend:
+        integration: [ModuleCompositionTest.theRulesOfCoreAndEveryApplicationPartitionTheKinds, PotSliceTest.aStaleAppendLandsNothingOfItsBatch_aFreshOneLandsAll]
+      web:
+        unit: [src/features/expenses/components/PotCreateDialog.test.ts, src/features/expenses/register.test.ts, src/features/expenses/domain/potMeta.test.ts]
   - id: no-guest-creates-a-pot
     text: "A guest of any link creates no Pot: Expenses declares no guest-creatable kind, and the server refuses the create from a link."
+    coverage:
+      backend:
+        integration: [ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly]
+      web:
+        unit: [src/features/expenses/rights.test.ts, src/features/expenses/register.test.ts]
   - id: switched-off-is-read-only
     text: "With expenses switched off for the instance or the tenant, no Pot is offered or created and every write of an existing Pot is refused 422 capability_disabled, while it opens, shows its balances and downloads."
+    coverage:
+      backend:
+        integration: [PotSliceTest.offExpensesIsReadOnly_anAppendIsRefusedWhileTheListReadsAndThePotGoesToTheTrash, ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen]
+      web:
+        unit: [src/features/expenses/rights.test.ts, src/features/expenses/register.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: settings-written-whole-with-the-revision-read
     text: "A member writes the Pot's meta whole with the revision it read; a stale write is refused with the current revision; the base currency is not editable once an entry exists."
+    coverage:
+      backend:
+        integration: [NodesSliceTest.staleMetaWriteIs409WithTheCurrentBlobAndWritesNothing]
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/domain/potMeta.test.ts]
+    gaps:
+      - surface: web
+        reason: "PotDetail.test.ts holds the Settings change as an edit core's writeNodeMeta re-runs on the meta it is handed (a peer's category and the envelope's other keys kept); the re-run on a 409 itself is writeNodeMeta's, held under uc.memory.concurrent-curation for every node-meta writer, not again here."
   - id: a-deleted-pot-goes-to-the-trash-whole
     text: "A deleted Pot goes to the space's node trash with every entry and receipt, and a restore brings it back whole; its erasure erases every Expenses row and receipt blob of the node."
-gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
+    coverage:
+      backend:
+        integration: [PotSliceTest.offExpensesIsReadOnly_anAppendIsRefusedWhileTheListReadsAndThePotGoesToTheTrash, PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot, PotSliceTest.aPurgedPotTakesItsRevisionsAndTheirGuestWriteRecords]
+      web:
+        unit: [src/features/expenses/register.test.ts, src/features/expenses/rights.test.ts]
+    gaps:
+      - surface: backend
+        reason: "Receipts do not exist yet (cr-expenses-receipts adds them and their blobs to the purge). The trash moves no Expenses row, so a restore is core's node restore, which no Pot-specific test repeats; the refs show a trashed Pot still reading its revisions and a purge taking them all."
+      - surface: web
+        reason: "The trash and its restore are core's node trash for every kind; the refs hold that a member may delete a Pot (also while Expenses is off), not the trash view itself."

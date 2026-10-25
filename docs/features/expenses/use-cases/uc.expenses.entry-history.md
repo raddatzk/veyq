@@ -24,7 +24,9 @@
   no name, [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 6);
   a `READ` guest has no restore.
 - **E2 — past the trash retention:** the deleted entry stays a line in the history, restore is no longer offered, and
-  its receipts are erased ([uc.expenses.attach-receipts](uc.expenses.attach-receipts.md)).
+  its receipts are erased ([uc.expenses.attach-receipts](uc.expenses.attach-receipts.md)). Not built yet: it comes with
+  the receipts' purge (`changes/cr-expenses-receipts.md`); until then a deleted entry is restorable for as long as its
+  Pot exists, and it has no receipt to lose.
 - **E3 — a stale restore:** someone wrote the entry meanwhile; `409 stale_revision`, the list reloads.
 - **E4 — a participant was deleted:** an old revision that named them shows *deleted people*, as the current ones do.
 

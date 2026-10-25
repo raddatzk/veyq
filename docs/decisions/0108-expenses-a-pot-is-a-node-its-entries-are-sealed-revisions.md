@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); not built — by `changes/cr-expenses-ledger.md`, then `cr-expenses-receipts` and `cr-expenses-exchange-rates`; on the V1 line (owner 2026-10-23)
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by `changes/cr-expenses-ledger.md` (2026-10-25; its browser pass still open there), with the rate typed; decision 7 (receipts) waits for `changes/cr-expenses-receipts.md` and decision 8's fetch for `changes/cr-expenses-exchange-rates.md`, both open
 - Date: 2026-10-23
 
 ## Context
@@ -52,7 +52,9 @@ of that entry: the server takes revision `n + 1` only where `n` is the entry's l
 server-visible tombstone flag (the server needs it for decision 6's purge). Revision rows stay as long as the Pot does:
 the history of every entry, with who wrote each revision, is what makes decision 5 safe. The one exception is a deleted
 participant (decision 6): a member writes a sealed **erasure** revision on its record, and the server then erases that
-record's earlier revisions, so its name and every earlier spelling of it are gone from storage. Entries name a
+record's earlier revisions, so its name and every earlier spelling of it are gone from storage; the erasure is a line of
+the erasure ledger, so a restored backup erases them again ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
+decision 8, GDPR Art. 17). Entries name a
 participant by its id only, so none of them changes. The list is published with
 core's revisioned-list primitive ([docs/apps](../apps/README.md) § How an application publishes a revisioned list).
 
@@ -102,7 +104,9 @@ A guest's revision and receipt are guest writes like any other: behind `ShareGue
 `GuestWriteRecords`, and reportable with a hold copy
 ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)). A report of an entry
 reaches the whole entry — every revision's `K_rev` and every receipt's `K_blob` — and a receipt can also be reported
-on its own; both are an `ITEM` (owner 2026-10-23).
+on its own; both are an `ITEM` (owner 2026-10-23). **Known gap ([inbox #540](../inbox.md)):** the report codec carries at most 32
+keys per item and names no revision in a key, so an entry of more than 32 revisions is reported with its newest 32
+`K_rev`; the hold still copies every revision row. "The whole entry" holds up to 32 revisions until #540 decides.
 
 **7. Receipts are images or PDFs of at most 10 MB, any number per entry, in Expenses' own table.** Core's
 attachments hold one blob per named slot of a node (`ux_attachment_node_slot`), so a receipt is a row of Expenses'

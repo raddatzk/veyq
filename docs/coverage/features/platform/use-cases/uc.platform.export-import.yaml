@@ -54,6 +54,14 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memories/exportImport.test.ts]
+  - id: expenses-content
+    text: "A Pot downloads as its settings (base currency, own categories), its people and each live entry's current revision in the entry format's plaintext, beside a CSV of the entries for a spreadsheet, with no history and no writer; the content passes its own contract check, and an import writes a new Pot under new ids, a deleted person coming back as a deactivated one shown as deleted people, whose balances and settle-up equal the original's; a content that breaks its contract is refused before anything is written."
+    coverage:
+      web:
+        unit: [src/features/expenses/exportImport.test.ts, src/features/expenses/register.test.ts]
+    gaps:
+      - surface: web
+        reason: "No test imports a Pot that held a deleted person; the refs hold the live people, their balances and the settle-up across the round trip."
   - id: download-for-members-and-readers
     text: Download is offered on a folder, a Memory, a chapter or a drop box to a member whose keys are open and to a READ or READ_WRITE share guest - who reads through the link and carries no names and no EXIF copy - never to a WRITE_ONLY guest; a file keeps its own download and gets no ZIP action; import only where a member may create.
     coverage:

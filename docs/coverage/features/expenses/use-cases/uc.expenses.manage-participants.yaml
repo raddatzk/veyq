@@ -1,22 +1,45 @@
 useCase: uc.expenses.manage-participants
 feature: expenses
 title: Manage the people of a Pot
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
-# each gap below into refs.
+# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
+# the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
   - id: writers-add-and-rename
     text: "A member or a READ_WRITE guest adds a participant (a record whose id the client mints) and renames one (its next revision); no entry changes."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aStaleAppendLandsNothingOfItsBatch_aFreshOneLandsAll, PotSliceTest.aGuestBatchRecordsOneGuestWritePerRevision_aStaleOneNone]
+      web:
+        unit: [src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/rights.test.ts]
   - id: member-deactivates-a-settled-participant
     text: "A member deactivates a participant with a zero balance and activates it again; entries keep its name, new entries and the overviews do not offer it; neither is offered while the balance is not zero."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/people.test.ts, src/features/expenses/domain/potApi.wire.test.ts]
   - id: member-deletes-and-the-name-is-erased
     text: "A member deletes a settled participant by a sealed erasure revision, and the server erases that record's earlier revisions in the same transaction; entries show it as deleted people, and no row the server holds keeps any spelling of its name."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly, PotErasureLedgerSliceTest.anErasureWritesItsLineAndItsReapplicationErasesTheRestoredNameOnly]
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/people.test.ts]
   - id: member-removes-an-unnamed-participant
     text: "A member removes a participant no revision of any entry names, by the same erasure; it appears nowhere afterwards. Remove is not offered for a named one."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly]
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts]
   - id: erasure-is-a-members-only
     text: "The server takes the erasure from a member only and refuses it from a link; a guest's page offers add and rename only."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly]
+      web:
+        unit: [src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/rights.test.ts]
   - id: an-unsettling-edit-shows-the-participant-again
     text: "An edit of an old entry that unsettles a deactivated or deleted participant shows it again in the balances and the settle-up, by name or as deleted people."
-gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
+    coverage:
+      web:
+        unit: [src/features/expenses/people.test.ts, src/features/expenses/domain/ledger.test.ts]

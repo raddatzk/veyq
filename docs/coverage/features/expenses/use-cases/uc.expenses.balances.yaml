@@ -1,18 +1,27 @@
 useCase: uc.expenses.balances
 feature: expenses
 title: See who owes whom, settle up, and see where the money went
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
-# each gap below into refs.
+# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
+# the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
+# `who-am-i-stays-on-the-device` ("The viewer's choice of who they are marks their row and never leaves the device") is
+# not built: no phase of the ledger CR named it. Inbox #541 builds it and writes the criterion back beside its test; the
+# use-case's step 2 says so.
 acceptanceCriteria:
   - id: balances-from-the-live-entries
     text: "Each participant's balance is what they paid and received against their share of every expense and refund, transfers included, computed in the client from the live entries."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/ledger.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: settle-up-is-greedy-and-deterministic
     text: "The settle-up suggests at most one transfer fewer than there are people, by the greedy rule with ties by join order, the same on every device; a writer records one or all as transfer entries."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/ledger.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: overviews-by-category-and-person
     text: "The overviews show cost per category, per person (paid and share side by side) and category by person; refunds count against their category, transfers are not costs."
-  - id: who-am-i-stays-on-the-device
-    text: "The viewer's choice of who they are marks their row and never leaves the device."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/ledger.test.ts]
 gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
+  backend: "No part here: every figure is computed in the client from the opened revisions (ADR 0108 decision 9); the server stores and serves them, covered under uc.expenses.record-entries."

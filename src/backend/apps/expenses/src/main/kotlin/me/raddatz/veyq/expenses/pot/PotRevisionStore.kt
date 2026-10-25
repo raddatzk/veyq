@@ -70,9 +70,15 @@ sealed interface PotWriteResult {
  *
  * **Lock order, every writer:** (1) a guest's re-check under the scope and share locks ([append]'s `admitted`); (2) the
  * named records' existing rows, `FOR UPDATE`; (3) the Pot's node row ([NodeEpochGate.check]), which serializes every
- * write of the Pot, so the compare-and-set below reads the records' latest revisions with no writer of the same Pot
- * between; (4) the inserted rows; (5) the item-revision row ([NodeItemsRevisions.bump]). The re-key's commit takes (2)
- * for every row of the Pot before (3) ([PotNodeRekeyParticipant.lockRows]) — the same order.
+ * write of the Pot; (4) the inserted rows; (5) the item-revision row ([NodeItemsRevisions.bump]). The re-key's commit
+ * takes (2) for every row of the Pot before (3) ([PotNodeRekeyParticipant.lockRows]) — the same order.
+ *
+ * **The compare-and-set reads the records again after (3)** ([recordsNow]). What (2) returned is what was committed when
+ * it ran: a writer of the same records that held them, and committed while (2) waited, inserted rows that a locking read
+ * which waited does not return (measured on H2: the second of two appends of `a:2` read `a:1` only, passed, and met the
+ * first's row on `ux_expenses_revision_entry` — a `500` where a replay gets `409 stale_revision`; and a new record has no
+ * row to wait on at all). Every inserter holds (3), so a plain read under it sees every revision any earlier one committed
+ * (READ COMMITTED, ADR 0078). `PotAppendRaceSliceTest` holds it.
  */
 @ApplicationScoped
 class PotRevisionStore(
@@ -93,8 +99,9 @@ class PotRevisionStore(
         admitted: (() -> Boolean)? = null, stored: (List<String>) -> Unit = {},
     ): PotWriteResult {
         if (admitted != null && !admitted()) return PotWriteResult.NotFound
-        val held = lockRecords(writes.map { it.entryId })
+        lockRecords(writes.map { it.entryId })
         lockLivePot(scopeId, nodeId, nodeEpoch)?.let { return it }
+        val held = recordsNow(writes.map { it.entryId })
         if (held.any { it.nodeId != nodeId }) return PotWriteResult.IdTaken
         val latest = held.groupBy { it.entryId }.mapValues { (_, rows) -> rows.maxOf { it.revision } }
         val stale = writes.filter { (latest[it.entryId] ?: 0L) != it.revision - 1 }
@@ -119,8 +126,9 @@ class PotRevisionStore(
      */
     @Transactional
     fun erase(scopeId: String, nodeId: String, nodeEpoch: Int, write: RevisionWrite, member: PrincipalKey.User): PotWriteResult {
-        val held = lockRecords(listOf(write.entryId))
+        lockRecords(listOf(write.entryId))
         lockLivePot(scopeId, nodeId, nodeEpoch)?.let { return it }
+        val held = recordsNow(listOf(write.entryId))
         if (held.isEmpty() || held.any { it.nodeId != nodeId }) return PotWriteResult.NotFound
         val latest = held.maxOf { it.revision }
         if (latest != write.revision - 1) return PotWriteResult.Stale(listOf(RevisionRef(write.entryId, latest)))
@@ -136,9 +144,16 @@ class PotRevisionStore(
     }
 
     /** Every row of [entryIds], `FOR UPDATE`, in one order. */
-    private fun lockRecords(entryIds: List<String>): List<PotRevisionEntity> =
-        entryIds.distinct().sorted().chunked(CHUNK).flatMap {
+    private fun lockRecords(entryIds: List<String>) {
+        entryIds.distinct().sorted().chunked(CHUNK).forEach {
             PotRevisionEntity.find("entryId in ?1 order by entryId, revision", it).withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        }
+    }
+
+    /** Every row of [entryIds] as committed now — read under the node row's lock, which every inserter holds. */
+    private fun recordsNow(entryIds: List<String>): List<PotRevisionEntity> =
+        entryIds.distinct().sorted().chunked(CHUNK).flatMap {
+            PotRevisionEntity.find("entryId in ?1 order by entryId, revision", it).list()
         }
 
     /** The Pot's node row locked and judged ([NodeEpochGate]); null when it is a live Pot of the scope at [stated]. */

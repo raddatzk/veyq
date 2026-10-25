@@ -224,7 +224,10 @@ export function sealPotWrites(
   const heads = headsToName(held)
   return writes.map((w) => {
     const revision = (latest.get(w.entryId) ?? 0) + 1
-    const sealed = sealRevision({ scopeId: target.scopeId, nodeId: target.nodeId, entryId: w.entryId, revision }, potKey, { v: 1, heads, ...w.content })
+    // A content handed back from an opened body (a restore) still carries the `v` and the heads ITS writer read; spread
+    // last, those would overwrite this write's own heads, and the restore would not name the tombstone it lifts.
+    const { v: _v, heads: _theirs, ...content } = w.content as typeof w.content & { v?: unknown; heads?: unknown }
+    const sealed = sealRevision({ scopeId: target.scopeId, nodeId: target.nodeId, entryId: w.entryId, revision }, potKey, { v: 1, heads, ...content })
     return {
       entryId: w.entryId,
       revision,
