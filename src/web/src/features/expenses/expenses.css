@@ -1,14 +1,18 @@
 /* Expenses' global sheet (imported last by `register.ts`): the Pot page's rows and amounts. Tokens only, so the dark mode
    is the tokens'; the rows are the layer's `.veyq-list-row`, a button reset where a row opens an entry. */
 
+/* One column that may shrink below its widest child: an implicit `auto` column takes the tab row's unwrapped width
+   (about 490 px), and at a phone's width the page would be that wide and cut off by the shell (expenses.css.test.ts). */
 .expenses-pot {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   min-width: 0;
 }
 
 .expenses-pot section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   min-width: 0;
 }
