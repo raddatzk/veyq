@@ -278,6 +278,21 @@ describe('PotDetail for a member', () => {
     expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), DAN, expect.anything())
   })
 
+  it('a removed person appears nowhere, not even as a deleted one; a deleted one is still counted (control)', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 6): after Cleo was deleted and an unnamed person removed, the People
+    // tab said "2 deleted people" — the removed one counted, though nothing shows them anywhere else.
+    const DAN = '0e000000-0000-4000-8000-000000000004'
+    server.current.append([{ entryId: DAN, content: person('Dan', 4) }])
+    server.current.erase(DAN)
+    server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: CLEO, to: ANNA } }])
+    server.current.erase(CLEO)
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.people'))
+    expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
+    expect(w.text()).not.toContain(t('expenses.people.deletedSummary', { n: 2 }, 2))
+  })
+
   it('a settings change re-runs on the meta it is handed, and the base currency is fixed once an entry exists', async () => {
     const w = mountPot()
     await flushPromises()
