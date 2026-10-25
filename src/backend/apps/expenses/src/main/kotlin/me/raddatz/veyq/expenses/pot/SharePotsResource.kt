@@ -36,6 +36,7 @@ import java.util.UUID
 class SharePotsResource(
     private val handler: SharePotsHandler,
     private val receipts: ReceiptsHandler,
+    private val tags: SharePotTags,
     /** The client a guest's write records (the guest-write record, ADR 0093 § 10): resolved once, handed down. */
     private val client: RequestClient,
     config: VeyqConfig,
@@ -52,7 +53,8 @@ class SharePotsResource(
     )
     override fun listSharePotRevisions(
         shareId: String, nodeId: UUID, xSharePassword: String?, after: String?, limit: Int?, ifNoneMatch: String?,
-    ): Response = when (val o = handler.list(shareId, xSharePassword, nodeId.toString())) {
+    ): Response = when (val o = handler.list(shareId, xSharePassword, nodeId.toString(), ifNoneMatch?.trim()?.takeIf { after == null })) {
+        SharePotListOutcome.NotModified -> Response.notModified().build()
         is SharePotListOutcome.Listed -> {
             val all = o.revisions.map { toGuest(it, retention) }
             val from = after?.let(::afterIndex)?.let { cut -> all.indexOfFirst { key(it) > cut }.let { if (it < 0) all.size else it } } ?: 0
@@ -67,6 +69,7 @@ class SharePotsResource(
                 Response.ok(body).build() // a later page is never conditional and carries no tag
             } else {
                 val tag = SharePotTag.of(all, o.exchangeRateService)
+                tags.put(o.key, tag)
                 if (ifNoneMatch?.trim() == tag) Response.notModified().build() else Response.ok(body).header("ETag", tag).build()
             }
         }
@@ -153,7 +156,8 @@ class SharePotsResource(
  * The `ETag` of a guest's read of a Pot (ADR 0081 decision 4): a digest of everything the read serves, every page of
  * it — each revision as the generated model names it (its `toString` lists every field, so a field added to the wire is
  * in the tag without anyone remembering it), in the guest's order. Nothing outside the response: it does NOT follow the
- * Pot's item revision, which counts writes. Truncated SHA-256, 128 bits, quoted — `ShareMediaTag`'s form.
+ * Pot's item revision, which counts writes — that only keys where [SharePotTags] remembers it, so an idle poll reads no
+ * row. Truncated SHA-256, 128 bits, quoted — `ShareMediaTag`'s form.
  */
 internal object SharePotTag {
     fun of(revisions: List<SharePotRevision>, exchangeRateService: String?): String {

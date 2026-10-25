@@ -29,6 +29,7 @@ import me.raddatz.veyq.core.sharing.ShareViewGate
 import me.raddatz.veyq.core.sharing.ShareWriteGate
 import me.raddatz.veyq.core.sharing.ShareWriteTarget
 import me.raddatz.veyq.expenses.ExpensesNodeKinds
+import me.raddatz.veyq.expenses.pot.PotBlocks
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration
 
@@ -53,6 +54,8 @@ sealed interface CompleteReceiptOutcome {
     object NotContributable : CompleteReceiptOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     object PasswordIncorrect : CompleteReceiptOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     object RateLimited : CompleteReceiptOutcome, HttpFailure by Failures.rateLimited
+    /** A moderator blocked the Pot, a node above it, or the entry the receipt is for (`451`, [PotBlocks]). */
+    object Blocked : CompleteReceiptOutcome, HttpFailure by Failures.blockedByOperator
 }
 
 /** What a read of a Pot's receipts answers: every receipt as it is served (the resource pages and tags them), or a refusal. */
@@ -116,6 +119,7 @@ class ReceiptsHandler(
             .refusal(CompleteReceiptOutcome.NoScope, CompleteReceiptOutcome.Suspended, CompleteReceiptOutcome.Deleting)?.let { return it }
         applications.requireWritable(CapabilityIds.EXPENSES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
         val node = nodes.findInScope(scopeId, nodeId)?.takeIf { it.kind == ExpensesNodeKinds.POT } ?: return CompleteReceiptOutcome.NoPot
+        if (PotBlocks.refusesReceipt(blocks.contentView(scopeId), node.id, entryId)) return CompleteReceiptOutcome.Blocked
         val item = ReceiptUploadCompletion.item(node.id, uploadId, receiptId, entryId, nodeEpoch)
         return outcome(scopeId, completions.complete(scopeId, listOf(item), UploadOpener.Member(userId)).single())
     }
@@ -145,6 +149,7 @@ class ReceiptsHandler(
             ShareWriteTarget.NotContributable -> return CompleteReceiptOutcome.NotContributable
         }
         if (target.kind != ExpensesNodeKinds.POT) return CompleteReceiptOutcome.NoPot
+        if (PotBlocks.refusesReceipt(blocks.contentView(gated.scopeId), target.nodeId, entryId)) return CompleteReceiptOutcome.Blocked
         val item = ReceiptUploadCompletion.item(target.nodeId, uploadId, receiptId, entryId, nodeEpoch)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
