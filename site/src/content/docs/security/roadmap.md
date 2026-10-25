@@ -220,7 +220,7 @@ every link are part of this and not built either.
 | `core.group-space` | built | creating a group space |
 | `core.remember-device`, with `.passwordless` | built | a device wrap, or a device-key wrap |
 | `core.device-linking` | built | the pairing endpoints |
-| `core.breached-password`, `memories.places`, `memories.map` | built | an external service's origin in the served CSP, and its configured address |
+| `core.breached-password`, `memories.places`, `memories.map`, `expenses.exchange-rates` | built | an external service's origin in the served CSP, and its configured address |
 | `core.personal-space`, `core.member-invites` | planned | a scope kind; the invite endpoint |
 | `memories.chapters`, `.download-originals` and the application's own share entries | planned | a node kind; a blob role |
 | `depot.*` share entries | planned | the application's node kind and blob role |

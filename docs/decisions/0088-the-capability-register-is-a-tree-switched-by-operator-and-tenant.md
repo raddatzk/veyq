@@ -248,9 +248,11 @@ both off a place still works, named by hand. The user's own consent to the two
   it does not know is named plainly.
 - **The external services are entries** (decision 7, measured: `ExternalServicesHandler`, `ExternalServiceOrigins`,
   `AppShellRoutes.cspNow`): `memories.map` and `memories.places` (`*+`) and `core.breached-password` (`*`, because the
-  join and recover screens check before sign-in, decision 12). Source `external-service`: an entry is active only while
+  join and recover screens check before sign-in, decision 12), joined later by `expenses.exchange-rates` (`*+`,
+  [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8: a `{date}` template; a link
+  guest reads it from its Pot read). Source `external-service`: an entry is active only while
   the Server Owner configured its address (`veyq_external_service`, seeded with OSM tiles, Nominatim and the HIBP range
-  API; admin-web's **External services**, `veyq-admin services`). Both deliveries carry the address as `serviceUrl`
+  API, and Frankfurter's ECB rates since; admin-web's **External services**, `veyq-admin services`). Both deliveries carry the address as `serviceUrl`
   (and the tiles' `serviceAttribution`), the web reads only that, and the served CSP names an origin only while its
   entry is active at the instance level: the origins are a snapshot recomputed after each write, because the header is
   written on the event loop, so a tenant's own switch acts through its set and not through the policy. `memories` is

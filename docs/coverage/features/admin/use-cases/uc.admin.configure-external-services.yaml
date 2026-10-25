@@ -4,10 +4,12 @@ title: Configure the external services a browser calls
 # Built by cr-external-services-as-settings (inbox #439 step 4, ADR 0088 decision 7, ADR 0089): veyq_external_service
 # seeded with the old defaults, the registry's "configured" precondition, the address on both deliveries, the served CSP
 # from a snapshot recomputed after each write, web reading the address instead of build variables, admin-web's panel
-# and CLI. Each "gone" in the slice test has its control (another service stays, the same one comes back).
+# and CLI. Each "gone" in the slice test has its control (another service stays, the same one comes back). The fourth
+# service, Expenses' day exchange rates (expenses.exchange-rates, ADR 0108 decision 8), joined with
+# cr-expenses-exchange-rates.
 acceptanceCriteria:
   - id: services-listed-and-set
-    text: The Server Owner lists the three services with their addresses (a new instance has OpenStreetMap tiles with their attribution, Nominatim and the HIBP range API), sets one without a restart, and unconfigures one; an address that is no http(s) URL, a tile template without {z}, {x} and {y}, an attribution for a service that takes none, or an unknown entry is refused and nothing stored; only the Server Owner reaches it.
+    text: The Server Owner lists the four services with their addresses (a new instance has OpenStreetMap tiles with their attribution, Nominatim, the HIBP range API and Frankfurter's ECB endpoint), sets one without a restart, and unconfigures one; an address that is no http(s) URL, a tile template without {z}, {x} and {y}, an exchange-rate address without {date}, an attribution for a service that takes none, or an unknown entry is refused and nothing stored; only the Server Owner reaches it.
     coverage:
       backend:
         integration: [ExternalServicesSliceTest.aNewInstanceStartsWithTodaysDefaultsAndServesThem, ExternalServicesSliceTest.anAddressThatIsNoHttpUrlOrATileTemplateWithoutItsPlaceholdersIsRefused, ExternalServicesSliceTest.onlyTheServerOwnerReachesTheServices]
@@ -18,10 +20,10 @@ acceptanceCriteria:
         unit: [CapabilityRegistryTest.anExternalServiceWithoutAnAddressIsNotActiveAndItsSwitchCannotBringItBack, CapabilityRegistryTest.theOriginOfAServiceAddressIsItsSchemeHostAndPort]
         integration: [ExternalServicesSliceTest.anUnconfiguredServiceLeavesTheManifestAndThePolicyAndAnotherStays]
   - id: policy-follows-the-instance
-    text: The served Content Security Policy names a service's origin (img-src for the tiles, connect-src for the geocoder and the breach check) only while its entry is active at the instance level, and follows a switch at once; a tenant's own switch leaves that tenant's set and not the policy; the built policy names no outside service.
+    text: The served Content Security Policy names a service's origin (img-src for the tiles, connect-src for the geocoder, the breach check and the exchange rates) only while its entry is active at the instance level, and follows a switch at once; a tenant's own switch leaves that tenant's set and not the policy; the built policy names no outside service.
     coverage:
       backend:
-        integration: [ExternalServicesSliceTest.aSwitchedOffServiceLeavesThePolicyUntilItIsBackOn, ExternalServicesSliceTest.aTenantsSwitchLeavesItsSetAndNotThePolicy, AppShellSliceTest.theShellsResponsesCarryThePolicyAndTheApiDoesNot, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns]
+        integration: [ExternalServicesSliceTest.aSwitchedOffServiceLeavesThePolicyUntilItIsBackOn, ExternalServicesSliceTest.aTenantsSwitchLeavesItsSetAndNotThePolicy, ExternalServicesSliceTest.theExchangeRatesOriginIsInThePolicyOnlyWhileAddressedAndOn, ExternalServicesSliceTest.aTenantsExchangeRatesSwitchLeavesItsSetAndNotThePolicy, AppShellSliceTest.theShellsResponsesCarryThePolicyAndTheApiDoesNot, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns]
       web:
         unit: [src/shared/security/csp.test.ts]
   - id: clients-read-the-address

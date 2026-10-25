@@ -50,7 +50,7 @@ The policy:
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
 script-src 'self'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
 img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
-connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>]; form-action 'self'
+connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>]; form-action 'self'
 ```
 
 The bracketed origins are appended by the backend on every response; the built policy names none of them.
@@ -80,18 +80,19 @@ Why each non-obvious source is there:
   Widening either is a decision, not a tweak.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
-- **`<tile-origin>` (img-src), `<geocoder-origin>` and `<breach-check-origin>` (connect-src).** The outside services
-  a member's browser calls directly: the basemap, the reverse geocoder and the client-direct HIBP k-anonymity
-  password check (automatic in the password-choosing dialogs, over the finished password; only a 5-hex SHA-1 prefix
-  leaves the device, [security model](security-model.md) § the breached-password check). Each is a Server-Owner
-  setting and a register entry (`memories.map`, `memories.places`, `core.breached-password`;
-  [ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7,
+- **`<tile-origin>` (img-src), `<geocoder-origin>`, `<breach-check-origin>` and `<rates-origin>` (connect-src).** The
+  outside services a member's browser calls directly: the basemap, the reverse geocoder, the client-direct HIBP
+  k-anonymity password check (automatic in the password-choosing dialogs, over the finished password; only a 5-hex
+  SHA-1 prefix leaves the device, [security model](security-model.md) § the breached-password check) and Expenses' day
+  exchange rates (automatic where an entry's currency differs from its Pot's; only a date leaves the device, same §).
+  Each is a Server-Owner setting and a register entry (`memories.map`, `memories.places`, `core.breached-password`,
+  `expenses.exchange-rates`; [ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7,
   [uc.admin.configure-external-services](../features/admin/use-cases/uc.admin.configure-external-services.md)). The
   backend appends a service's origin only while its address is configured and its entry is on at the instance
   level, so the client reads the address from the same manifest the policy follows: one source, no drift. The origins
   are a snapshot recomputed after every write that can change them, because the header is written on the event loop.
   A tenant owner's own switch acts through the tenant's set, not through the policy. A new instance is seeded with
-  OSM tiles, Nominatim and the HIBP range API; the dev server's header allows those three
+  OSM tiles, Nominatim, the HIBP range API and Frankfurter's ECB rates; the dev server's header allows those four
   ([`mapDefaults.ts`](../../src/web/src/shared/state/mapDefaults.ts)).
 - **`<store-origin>`** is appended by the backend at runtime. Every client `fetch`es store objects and decrypts
   them; no store response is ever rendered ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md)

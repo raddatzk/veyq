@@ -192,7 +192,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    (4); the moderation data about a person and a reporter's contact (ADR 0093 §§ 4, 11); the mail relays (the instance's,
    and a space's own, which its owner sets); the object store (which, outside the bundled one, sees a browser's address
    when it fetches); the breached-password check the browser makes, its recipient and its switch
-   (`core.breached-password`); the backups and B ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
+   (`core.breached-password`), and likewise Expenses' day exchange rates (`expenses.exchange-rates`, joined later,
+   [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8); the backups and B ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
    decision 8); the account erasure and what outlives it
    ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)); the guest-write record,
    with its right to object set apart; and the rights, with the complaint to the supervisory authority. It states what

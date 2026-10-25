@@ -43,8 +43,8 @@ state that gap plainly. In a **self-hosted** deployment the operator is the user
 "Operator-blind" names one adversary: **the veyq server / operator.** It does **not** mean the client never
 talks to any external service. A feature may let the client reach a **third party directly** — today the
 opt-in **reverse-geocoding** lookup that turns a photo coordinate into a place name
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) and the automatic **breached-password check**
-(below), tomorrow map tiles for the tenant map. Such a
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)), the automatic **breached-password check** and the
+automatic **day's exchange rates** of Expenses (both below), tomorrow map tiles for the tenant map. Such a
 request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
 operator's view:
 
@@ -53,8 +53,8 @@ operator's view:
   explicitly disallowed.
 - **No veyq identity, no content context.** The provider receives only what its function needs — a bare
   coordinate (+ the client IP) — never a user id, a Memory id, or any veyq token.
-- **Opt-in + transparent — and opt-in is standing consent** (one stated exception: the breached-password check,
-  below). Off by default; enabling it is an explicit choice
+- **Opt-in + transparent — and opt-in is standing consent** (two stated exceptions: the breached-password check and
+  the exchange rates, below). Off by default; enabling it is an explicit choice
   with a plain-language note that a request leaves the device. Once enabled it may run **automatically** (e.g. a
   reverse lookup on the first geotagged media of an auto-location) — enabling it *is* the consent to those
   requests; it **never** fires without opt-in. A blind, request-free alternative stays available (e.g. typing a
@@ -63,7 +63,7 @@ operator's view:
   a field key derived from `K_node` like any other field — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
 
-**The breached-password check is the second instance, and the one exception to opt-in.** The four dialogs that
+**The breached-password check is the second instance, and the first exception to opt-in.** The four dialogs that
 choose a password (set up the server, join a tenant, change a password, recover access) ask the Have I Been Pwned
 range API whether the password appears in known breaches. The fences apply like this:
 
@@ -75,8 +75,8 @@ range API whether the password appears in known breaches. The fences apply like 
   the password a few keystrokes at a time. Leaving the field is when a person treats the password as done, so the
   check runs then (owner decision 2026-10-14), and once more on submit when the password changed since; every query
   is a whole candidate, never a fragment.
-- **Automatic, not opt-in** (owner decision 2026-10-14). It is the one third-party request that runs without consent,
-  and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
+- **Automatic, not opt-in** (owner decision 2026-10-14). It is one of the two third-party requests that run without
+  consent (the exchange rates below are the other), and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
   instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
@@ -101,8 +101,43 @@ that could not run goes ahead. Each dialog's own test (`ChangePasswordPanel.poli
 it, the note and the one line for a check that could not run; `TenantJoinView.passwordPolicy` also pins that the
 sign-in password, which chooses nothing, is never sent.
 
+**The day's exchange rates are the third instance, and the second exception to opt-in** ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
+decision 8, [uc.expenses.exchange-rates](../features/expenses/use-cases/uc.expenses.exchange-rates.md)). Where an
+Expenses entry's currency differs from its Pot's base, the device fetches the whole day's table of the European Central
+Bank's euro reference rates and fills the rate in. The fences apply like this:
+
+- **Only a date leaves the device.** The address is a `{date}` template; the device puts its own date in and sends a
+  plain `GET` — no currency, no amount, no query parameter of its own, no custom header, no credentials, no Referer.
+  The cross rate (`rate(base) / rate(currency)`) is computed on the device, so the provider never learns which
+  currencies a Pot holds. **What it does disclose, stated:** the client's address, the `Origin` naming the instance,
+  and that this device writes an entry in a foreign currency today — once a day at most: one table per date is kept in
+  the device's local storage for every Pot, and a day whose request failed is not asked again.
+- **Automatic, not opt-in** (owner 2026-10-23), for the breached-password check's reason: what crosses carries no
+  content. Proxying it through the backend is refused — it would hand the operator the date of a trip.
+- **Its address is the Server Owner's** (ADR 0088 decision 7): the register entry `expenses.exchange-rates` carries it,
+  a new instance starts with Frankfurter's endpoint for the ECB's rates (`api.frankfurter.dev/v2/providers/ecb/rates`,
+  owner 2026-10-25: the ECB's rates alone, never the blended default), and the Server Owner or a tenant owner switches it
+  off. **Who may fetch follows the tenant's switch, not the instance's**: a member's client reads the entry from its
+  tenant's set, a link guest's from its Pot read (`exchangeRateService`), since a guest holds only the instance's
+  manifest — so a guest's device never fetches where the tenant's privacy notice names no fetch.
+- **It fills, never gates.** A save never waits for the provider and seals whatever rate the field holds; a saved rate
+  never moves. A provider that cannot be reached, or a currency its table lacks, leaves the rate to be typed.
+- **Its source is cited**, as the ECB's terms for reusing its statistics ask: the editor says the rate is computed from
+  the ECB's euro reference rates of the rows' date, and the privacy notice names Frankfurter as the service the browser
+  contacts and the rates as the ECB's.
+
+**Verification:** [`exchangeRates.test.ts`](../../src/web/src/features/expenses/exchangeRates.test.ts) pins the request
+itself (one per device and day for any number of Pots, kept across a reload; the date and nothing else; not repeated
+for a failed day) and the exact cross rate; [`EntryEditor.rates.test.ts`](../../src/web/src/features/expenses/components/EntryEditor.rates.test.ts)
+that nothing is asked while the Pot's session names no table, that a save does not wait for an unreachable provider and
+that a typed or saved rate is never written over; [`potSession.rates.test.ts`](../../src/web/src/features/expenses/potSession.rates.test.ts)
+and `PotSliceTest.aGuestsReadNamesTheRateTableExactlyWhileItsTenantHasTheRatesOn` the tenant's switch reaching a
+member and a guest. Lane L1 drives it in a browser against a fixed ECB table, never the real provider
+(`tests/e2e/src/egress.ts`).
+
 So the veyq operator stays blind by construction; what crosses goes straight to the provider, never through veyq: a
-consented, identity-free request the **user** turned on, or the breached-password check's 5-hex prefix.
+consented, identity-free request the **user** turned on, the breached-password check's 5-hex prefix, or the exchange
+rates' date.
 
 ## What is encrypted vs. server-visible
 

@@ -4,6 +4,7 @@ sources:
   - docs/features/expenses/use-cases/uc.expenses.record-entries.md
   - docs/features/expenses/use-cases/uc.expenses.entry-history.md
   - docs/features/expenses/use-cases/uc.expenses.attach-receipts.md
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -46,8 +47,11 @@ suggests, you can record it from there.
 
 ## Another currency
 
-If you paid in a currency other than the Pot's base currency, type the rate to the base currency. The entry keeps the
-rate it was saved with.
+If you paid in a currency other than the Pot's base currency, the entry needs the rate to the base currency. Where
+your server and space allow it, the rate fills in from the day's euro reference rates of the European Central Bank
+(ECB), and the editor names their date. Your device fetches those rates itself, once a day; the request carries only
+the date. You can always type another rate, and where no rate fills in, you type it. The entry keeps the rate it was
+saved with, whatever the rates do later.
 
 ## Change or delete an entry
 

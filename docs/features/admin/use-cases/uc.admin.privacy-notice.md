@@ -22,8 +22,8 @@
    do and where in the page's own language (an *other* one with the Server Owner's description as typed; the country
    from its code, "Deutschland" on the German page and "Germany" on the English one), the rights and the
    supervisory authority, with each right to object set apart (GDPR Art. 21(4)).
-3. The passages follow the instance and the host: a switch that is off there (the breached-password check, an
-   external service a member's browser calls) drops its passage — the guest-write record's are bound to none, since the
+3. The passages follow the instance and the host: a switch that is off there (the breached-password check, the
+   exchange rates, an external service a member's browser calls) drops its passage — the guest-write record's are bound to none, since the
    record is kept wherever a guest may write (ADR 0093 § 10) — a service's passage names
    the address the instance actually uses, and N, B and the erasure's window are the values set now.
 

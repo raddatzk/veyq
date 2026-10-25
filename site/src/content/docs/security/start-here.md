@@ -51,9 +51,9 @@ can move a claim to layer 2 (security model § What holds today).
 - **Recipients.** Sharing gives confidentiality up towards the people it is shared with, on purpose. A public link
   is a bearer capability: whoever holds the full URL decrypts what it shares. Content a recipient already
   downloaded cannot be retracted, by revocation or by key rotation.
-- **Third-party services the client talks to directly.** The opt-in reverse-geocoding lookup and the automatic
-  breached-password check go from the device straight to their provider, never through veyq, and carry no veyq
-  identity. They are a separate trust boundary, stated on the [Threat model](/veyq/security/threat-model/).
+- **Third-party services the client talks to directly.** The opt-in reverse-geocoding lookup, the automatic
+  breached-password check and Expenses' automatic day exchange rates go from the device straight to their provider,
+  never through veyq, and carry no veyq identity. They are a separate trust boundary, stated on the [Threat model](/veyq/security/threat-model/).
 - **The user's own device.** Content is decrypted there. A stolen device alone opens nothing by default, but one
   the user chose to remember without a password does; the [Threat model](/veyq/security/threat-model/) has the
   row.

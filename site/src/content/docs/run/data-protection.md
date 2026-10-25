@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
   - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 > **Research, not legal advice.** What follows names the duties of the GDPR an instance's operator carries and what
@@ -74,6 +75,7 @@ in your basis and your recipients. Every row names where veyq keeps the data, so
 | GitHub | your server's IP address, once a day, for the release list ([Operations](/veyq/run/operations/#new-releases)) | the release check's own switch | not named |
 | Let's Encrypt | your ACME email and every domain the instance serves (the domains also appear in public certificate logs) | your own certificates (Kubernetes: no `gateway.tls.acme`) | not named |
 | The breached-password service (default `api.pwnedpasswords.com`) | from the **browser**: the first five characters of a new password's SHA-1, and the browser's IP address | the capability `core.breached-password` | named by the notice itself, by the address it calls |
+| The exchange-rate service (Expenses; default Frankfurter, `api.frankfurter.dev`, serving the ECB's euro reference rates) | from the **browser**: the device's date, at most once a day, with the browser's IP address and, in its `Origin` header, your instance's address — no currency, no amount | `expenses.exchange-rates` (yours, or a tenant owner's for their space) | a passage of its own (`exchange-rates`), naming the address it calls and the ECB as the rates' source |
 | The place-name service and the map tiles (Memories) | from the **browser**: a place's coordinates and the language; the map area viewed; the browser's IP address | `memories.places`, `memories.map` | named by the notice itself, by the address each calls |
 
 A recipient you name takes one of five kinds, which the notice words in its own language on each version: *hosts the

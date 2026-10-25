@@ -10,6 +10,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - docs/features/platform/use-cases/uc.platform.switch-application-off.md
   - contracts/platform/capabilities.json
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 import catalog from '../../../../../contracts/platform/capabilities.json';
@@ -85,25 +86,32 @@ replica both recipes run.
 
 ## External services
 
-Three entries are outside services a member's browser calls directly, never through your server: the map tiles
-(`memories.map`), the geocoder that names places (`memories.places`) and the breached-password check
-(`core.breached-password`). Their addresses are yours to set, in **Server → External services** or with the CLI:
+Four entries are outside services a member's browser calls directly, never through your server: the map tiles
+(`memories.map`), the geocoder that names places (`memories.places`), the breached-password check
+(`core.breached-password`) and Expenses' day exchange rates (`expenses.exchange-rates`). Their addresses are yours to
+set, in **Server → External services** or with the CLI:
 
 ```sh
 veyq-admin services list
 veyq-admin services set memories.map --url 'https://tiles.example.com/{z}/{x}/{y}.png' --attribution '© Example'
 veyq-admin services set memories.places --url https://geocoder.example.com
+veyq-admin services set expenses.exchange-rates --url 'https://rates.example.com/v2/providers/ecb/rates?date={date}'
 veyq-admin services unset core.breached-password
 ```
 
-A new instance starts with OpenStreetMap's tiles, Nominatim and the Have I Been Pwned range API. A service is used only
-while it has an address **and** its entry is on: the members' clients read the address from the capabilities, and the
-Content Security Policy the server sends allows the service's origin only then, so a browser refuses any other. An
-instance without internet runs with all three unset (or switched off): no map, place names typed by hand, no check of
-new passwords against known leaks. Map tiles take a `{z}/{x}/{y}` template and the attribution your provider asks
-for; the geocoder takes a Nominatim-compatible base address; the breach check the prefix the first five characters of
-a hash are appended to. A tenant owner may switch the maps and place names off for their own space; the policy follows
-your level only. The admin console's own first-run screen reaches only the default breach-check address.
+A new instance starts with OpenStreetMap's tiles, Nominatim, the Have I Been Pwned range API and Frankfurter's endpoint
+for the European Central Bank's euro reference rates (`https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}`).
+A service is used only while it has an address **and** its entry is on: the members' clients read the address from the
+capabilities, and the Content Security Policy the server sends allows the service's origin only then, so a browser
+refuses any other. An instance without internet runs with all four unset (or switched off): no map, place names typed
+by hand, no check of new passwords against known leaks, exchange rates typed by hand. Map tiles take a `{z}/{x}/{y}`
+template and the attribution your provider asks for; the geocoder takes a Nominatim-compatible base address; the
+breach check the prefix the first five characters of a hash are appended to; the exchange rates a template holding
+`{date}` (the device's date, `YYYY-MM-DD`) that answers the whole day's table of ECB rates in Frankfurter's v2 shape —
+a mirror or a Frankfurter you run yourself. An address without its placeholders, or an attribution for a service that
+takes none, is refused. A tenant owner may switch the maps, the place names and the exchange rates off for their own
+space, and the exchange rates' switch reaches that space's link guests too; the policy follows your level only. The
+admin console's own first-run screen reaches only the default breach-check address.
 
 ## Requirements
 

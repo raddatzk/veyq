@@ -1,19 +1,66 @@
 useCase: uc.expenses.exchange-rates
 feature: expenses
 title: An entry in a foreign currency gets its rate
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-exchange-rates.md (after
-# cr-expenses-ledger), whose phases turn
-# each gap below into refs.
+# Built by cr-expenses-exchange-rates (inbox #325, ADR 0108 decision 8): the register entry expenses.exchange-rates and its
+# seeded address (Frankfurter's table of the ECB's euro reference rates, core's V202610251600 migration), the CSP origin
+# and the privacy notice's passage in :core; a link guest's Pot read carrying the table's address while the rates are on
+# for its tenant in :apps:expenses; the fetch, its device cache and the editor's fill in features/expenses on the web.
 acceptanceCriteria:
   - id: the-days-table-straight-from-the-device
     text: "Where an entry's currency differs from the base, the device fetches the whole day's table from the provider the instance names, straight from the browser, at most once a day for every Pot on the device; the request carries no currency, amount or veyq identity, and none goes through the backend."
+    coverage:
+      backend:
+        integration:
+          - ExternalServicesSliceTest.aNewInstanceStartsWithTodaysDefaultsAndServesThem
+          - ExternalServicesSliceTest.anAddressThatIsNoHttpUrlOrATileTemplateWithoutItsPlaceholdersIsRefused
+          - PotSliceTest.aGuestsReadNamesTheRateTableExactlyWhileItsTenantHasTheRatesOn
+      web:
+        unit:
+          - src/features/expenses/exchangeRates.test.ts
+          - src/features/expenses/components/EntryEditor.rates.test.ts
+          - src/features/expenses/potSession.rates.test.ts
   - id: the-rate-is-sealed-and-never-moves
     text: "The rate an entry is saved with is sealed into it as a decimal string; a later table never changes it, and it can always be typed."
+    coverage:
+      web:
+        unit:
+          - src/features/expenses/components/EntryEditor.rates.test.ts
+          - src/features/expenses/exchangeRates.test.ts
+          - src/features/expenses/entryForm.test.ts
   - id: switched-off-or-unreachable-asks-for-the-rate
     text: "With expenses.exchange-rates switched off, no provider named, the provider unreachable or the currency missing from its table, no request is sent or awaited and the editor asks for the rate."
+    coverage:
+      backend:
+        integration:
+          - PotSliceTest.aGuestsReadNamesTheRateTableExactlyWhileItsTenantHasTheRatesOn
+          - ExternalServicesSliceTest.aTenantsExchangeRatesSwitchLeavesItsSetAndNotThePolicy
+      web:
+        unit:
+          - src/features/expenses/potSession.rates.test.ts
+          - src/features/expenses/components/EntryEditor.rates.test.ts
+          - src/features/expenses/exchangeRates.test.ts
   - id: csp-and-notice-name-the-provider
     text: "The content security policy admits the configured provider's origin only while the fetch is on, and the privacy notice and the security model name the provider and the fetch."
+    coverage:
+      backend:
+        integration:
+          - ExternalServicesSliceTest.theExchangeRatesOriginIsInThePolicyOnlyWhileAddressedAndOn
+          - PrivacyNoticeSliceTest.theExchangeRatesPassageNamesTheProviderOnlyWhileTheFetchCanRun
+          - PrivacyNoticeSliceTest.aSpacesOwnSwitchDropsItsServiceOnItsHostOnly
+          - AppShellSliceTest.theShellsResponsesCarryThePolicyAndTheApiDoesNot
+        unit:
+          - PrivacyNoticeRendererTest.theExchangeRatesNameTheServiceTheInstanceCallsWhileTheirSwitchIsOn
+      web:
+        unit:
+          - src/shared/security/csp.test.ts
 gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-exchange-rates after cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-exchange-rates after cr-expenses-ledger."
+  stack: >-
+    Lane L1's browser suite drives every criterion in Chromium against the release candidate's two images installed
+    through `veyqctl` (ADR 0090), each test tagged with its criterion: `tests/e2e/tests/features/expenses-pot.spec.ts`
+    step 2a (the device's one request a day, the date alone, answered by the lane's fixed ECB table in `src/egress.ts`;
+    a USD entry's rate filled, citing the ECB and the rows' date, and typeable) and step 4c (the tenant owner's switch
+    off: a member's and a link guest's device make no request and the rate is typed; on again, the guest's device
+    fetches — the control), in English and in German; `privacy-notice.spec.ts` (the passage naming Frankfurter and the
+    ECB while on, gone while the tenant has them off, the breached-password check's beside it). No request leaves the
+    lane for the real provider. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack`
+    refs only once a CI run's log shows the suite executed.

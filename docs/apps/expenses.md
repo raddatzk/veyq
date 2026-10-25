@@ -1,11 +1,10 @@
 # Application: Expenses
 
-> **The ledger and its receipts are built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger and
-> cr-expenses-receipts, 2026-10-25, their browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`, EN and
-> DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their people,
-> entries with their history and receipts, the ledger check, balances, settle-up, overviews and the link are built, a
-> rate is typed. **Not built yet:** rates fetched by the device (`changes/cr-expenses-exchange-rates.md`) and "Who am I"
-> (inbox #541). Backend `:apps:expenses`
+> **Built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger, cr-expenses-receipts and
+> cr-expenses-exchange-rates, 2026-10-25, their browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`,
+> EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their
+> people, entries with their history and receipts, the day's exchange rate, the ledger check, balances, settle-up,
+> overviews and the link are built. **Not built yet:** "Who am I" (inbox #541). Backend `:apps:expenses`
 > (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/`, the entry format `contracts/expenses/`, web
 > `src/web/src/features/expenses`. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what
 > the operator sees — is [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this
@@ -103,9 +102,29 @@ writing member or link guest, recorded by the platform, not a participant). A de
 Pot's own list of deleted entries, restorable during the trash retention; after it, its receipts are erased and the
 entry stays a line in the history.
 
-**Exchange rates** fill in on their own where the instance allows it, and can always be typed (ADR 0108 decision 8).
-An entry keeps the rate it was saved with; a later rate never changes it. Built today: the typed rate; the fetch comes
-with `cr-expenses-exchange-rates`.
+## Exchange rates
+
+A rate fills in on its own where the instance and the space allow it, and can always be typed (ADR 0108 decision 8,
+[uc.expenses.exchange-rates](../features/expenses/use-cases/uc.expenses.exchange-rates.md)). An entry keeps the rate it
+was saved with; a later rate never changes it.
+
+- **The table.** Picking a currency other than the Pot's base, in an editable entry, makes the device fetch the day's
+  table of the European Central Bank's euro reference rates from the address the instance names — a new instance's is
+  Frankfurter's ECB endpoint, `…/v2/providers/ecb/rates?date={date}` — with the device's date in it and nothing else
+  (`src/web/src/features/expenses/exchangeRates.ts`). One table per date is kept in the device's local storage for
+  every Pot; the attempt is recorded before the request goes, so a day whose fetch failed is not asked again.
+- **The rate** from currency X to the base B is `rate(B) / rate(X)`, exact in fractions with the euro as `1`, rounded a
+  half away from zero to the format's 12 decimal places. A row may be of an earlier day than asked (a weekend, a
+  holiday); the editor says the rate is computed from the ECB's reference rates of that day, which also cites the ECB as
+  the source its terms ask for. A currency the table lacks — or a row that is no ISO 4217 code the browser knows — is
+  never offered: its rate is typed.
+- **Never waits, never moves.** The fill only writes an empty rate of the currency just picked; a rate typed meanwhile,
+  another currency or a closed editor drops it. A save seals what the field holds and never waits for the provider, and
+  an entry opened with its saved rate is never refilled.
+- **Who may fetch.** A member's client reads `expenses.exchange-rates` from its tenant's capability set — never the
+  instance's manifest, which a tenant owner's switch does not narrow; a link guest's from its Pot read, which carries the
+  table's address (`exchangeRateService`) exactly while the entry is active for the Pot's tenant. So no device fetches
+  where the tenant's privacy notice names no fetch (`potSession.ts`' `rateService`).
 
 ## Receipts
 
