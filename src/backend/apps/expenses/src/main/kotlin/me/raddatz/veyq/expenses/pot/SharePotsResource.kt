@@ -59,11 +59,14 @@ class SharePotsResource(
             val max = ItemsPage.limitOf(limit)
             val page = all.drop(from).take(max)
             val more = from + page.size < all.size
-            val body = SharePotRevisionPage(revisions = page, more = more, cursor = page.lastOrNull()?.let { "${it.entryId},${it.revision}" })
+            val body = SharePotRevisionPage(
+                revisions = page, more = more, cursor = page.lastOrNull()?.let { "${it.entryId},${it.revision}" },
+                exchangeRateService = o.exchangeRateService,
+            )
             if (after != null) {
                 Response.ok(body).build() // a later page is never conditional and carries no tag
             } else {
-                val tag = SharePotTag.of(all)
+                val tag = SharePotTag.of(all, o.exchangeRateService)
                 if (ifNoneMatch?.trim() == tag) Response.notModified().build() else Response.ok(body).header("ETag", tag).build()
             }
         }
@@ -153,9 +156,11 @@ class SharePotsResource(
  * Pot's item revision, which counts writes. Truncated SHA-256, 128 bits, quoted — `ShareMediaTag`'s form.
  */
 internal object SharePotTag {
-    fun of(revisions: List<SharePotRevision>): String {
+    fun of(revisions: List<SharePotRevision>, exchangeRateService: String?): String {
         val sha = MessageDigest.getInstance("SHA-256")
         for (r in revisions) sha.update((r.toString() + "\n").toByteArray(Charsets.UTF_8))
+        // The rate table's address is part of what the read serves: a switch flipped must reach a polling guest.
+        sha.update(("rates:" + (exchangeRateService ?: "")).toByteArray(Charsets.UTF_8))
         return "\"" + sha.digest().take(16).joinToString("") { "%02x".format(it) } + "\""
     }
 }

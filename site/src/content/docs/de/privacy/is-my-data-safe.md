@@ -10,6 +10,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
@@ -62,7 +63,12 @@ verlangen kannst. Den Text schreibt veyq; die Instanz füllt ihre eigenen Angabe
 tut. Die Einladungsseite, das Meldeformular und ein Link, über den du etwas hinzufügst, führen dich zu dem Teil, der
 dich betrifft.
 
-## Die eine Prüfung, die dein Gerät von selbst verlässt
+## Zwei Anfragen, die dein Gerät von selbst verlassen
+
+Zwei Dinge macht veyq, ohne dich vorher zu fragen, weil das, was sie senden, nichts über deine Inhalte verrät. Die
+Datenschutzerklärung deiner Instanz nennt beide, und wer deinen Server betreibt, kann sie abschalten.
+
+### Ein neues Passwort prüfen
 
 Wenn du ein Passwort wählst — beim Einrichten eines Servers, beim Beitreten zu einem Bereich, beim Ändern deines
 Passworts oder nach einem Zurücksetzen —, gleicht veyq es mit Passwörtern aus bekannten Datenlecks ab. Das
@@ -81,6 +87,21 @@ veyq-Server nutzt und gerade ein Passwort wählt — nicht, wer du bist, und nic
 Taucht das Passwort in einem Datenleck auf, siehst du eine Warnung und entscheidest: ein anderes wählen oder
 **„Trotzdem verwenden“** ankreuzen. Kann die Prüfung nicht laufen — du bist offline, oder der Server kommt nicht
 ins Internet —, wird nichts blockiert; du erfährst nur, dass das Passwort nicht geprüft werden konnte.
+
+### Die Wechselkurse des Tages
+
+Trägst du eine Ausgabe in einer anderen Währung als der ihrer Kasse ein, lädt dein Gerät **die Wechselkurse des
+Tages** — die Euro-Referenzkurse der Europäischen Zentralbank — und trägt den Kurs ein. Das passiert **direkt von
+deinem Gerät**, höchstens einmal am Tag, und die Kurse bleiben auf dem Gerät.
+
+**Was dein Gerät verlässt:** das **Datum**, sonst nichts — nicht die Währung, nicht der Betrag, nicht, wer du bist.
+Den Kurs für deine Währungen rechnet dein Gerät selbst aus.
+
+**Was dieser Dienst erfährt:** deine Internetadresse, von welchem veyq-Server die Anfrage kommt, und damit, dass dort
+heute jemand eine Ausgabe in einer anderen Währung einträgt.
+
+Auch die Person, der dein Bereich gehört, kann das abschalten. Dann, oder wenn die Kurse nicht geladen werden können,
+gibst du den Kurs selbst ein; ein gespeicherter Kurs ändert sich nie.
 
 ## Wenn du teilst
 

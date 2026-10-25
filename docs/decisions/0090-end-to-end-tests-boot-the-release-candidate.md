@@ -92,7 +92,10 @@ What a green run proves today stops short of what a Server Owner runs:
    compose project; the browser suite records what it **typed** as its canaries.
 
 6. **The browser may reach the instance and nothing else.** Every request to another origin is aborted and fails the
-   test, except the HIBP range query, answered locally with no match. Self-hostable by default, checked per page.
+   test, except the two requests a page makes without opt-in, each answered locally: the HIBP range query with no
+   match, and the day's ECB rate table of Expenses (the seeded address with a date) with a fixed table (the rates
+   joined later, [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8).
+   Self-hostable by default, checked per page.
    What a page **tried** counts too: a page's own CSP refuses most foreign requests inside the renderer, where no
    route sees them (measured in phase 2 — an injected `fetch` on admin-web stayed green until CSP violations were
    recorded beside the aborted requests). And the browser's resolver knows the instance's names only, so a request

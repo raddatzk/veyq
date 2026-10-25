@@ -88,7 +88,9 @@ Garage, so using one means editing the compose file, and under Helm it is not po
   and the breached-password check were build-time variables or a fixed origin; they are Server-Owner settings in
   `veyq_external_service` (admin-web's **Server → External services**, `veyq-admin services`), applied without a restart,
   seeded with the old defaults, and followed by the served CSP
-  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7).
+  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7). Expenses' day
+  exchange rates joined them later as a fourth, seeded with Frankfurter's ECB endpoint
+  ([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8).
 - Configuration-as-code ([inbox #444](../inbox.md)) is a later, optional layer over these settings — a declared
   value that wins and shows as fixed in admin-web — not a second place to keep them.
 - ADR 0050's single global fingerprint becomes a per-value one, so re-entering one secret cannot hide that another

@@ -4,6 +4,7 @@ sources:
   - docs/features/expenses/use-cases/uc.expenses.record-entries.md
   - docs/features/expenses/use-cases/uc.expenses.entry-history.md
   - docs/features/expenses/use-cases/uc.expenses.attach-receipts.md
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -47,8 +48,12 @@ Wähle, wer wem gezahlt hat, und den Betrag. Eine Überweisung hat keine Kategor
 
 ## Eine andere Währung
 
-Hast du in einer anderen Währung als der Basiswährung der Kasse bezahlt, gib den Kurs zur Basiswährung ein. Der Eintrag
-behält den Kurs, mit dem er gespeichert wurde.
+Hast du in einer anderen Währung als der Basiswährung der Kasse bezahlt, braucht der Eintrag den Kurs zur
+Basiswährung. Wo dein Server und dein Bereich es erlauben, wird der Kurs aus den Euro-Referenzkursen des Tages der
+Europäischen Zentralbank (EZB) eingetragen, und der Editor nennt ihr Datum. Dein Gerät lädt diese Kurse selbst, einmal am
+Tag; die Anfrage enthält nur das Datum. Du kannst immer einen anderen Kurs eingeben, und wo keiner eingetragen wird,
+gibst du ihn selbst ein. Der Eintrag behält den Kurs, mit dem er gespeichert wurde, egal wie sich die Kurse später
+ändern.
 
 ## Einen Eintrag ändern oder löschen
 

@@ -7,11 +7,17 @@
 //   2. A types in the "trip" Pot of contracts/expenses/v1-vectors.json, its nine entries as the vector holds them (equal,
 //      two payers, a foreign currency at a typed rate, line items with the rest in proportion and equally, shares, exact
 //      amounts, a refund, a transfer): Balances, the settle-up and the Overview show what the vector computes;
+//   2a. A's device fetched the day's ECB table once (answered by the lane's fixture, `src/egress.ts`), with the date and
+//      nothing else; a new entry in USD gets its rate filled from it, typeable, citing the ECB and the rows' date — no
+//      second request;
 //   3. B, in a browser of its own, saves a change to "Dinner" while A's editor is open on it; A's save is told the entry
 //      changed (the one `409` the pass provokes), shows B's version, and saving again puts A's on top; the history names
 //      A, B, A;
 //   4. A shares the Pot READ_WRITE (viewing, or viewing and adding: no other role); the guest names itself, adds a person
 //      and an entry, sees no Settings, manages no people and reads no writer's name; A's history names the guest;
+//   4c. A, the tenant owner, switches the exchange rates off (Settings → Capabilities): B's and the guest's devices, which
+//      hold no table yet, make no request and ask for the rate — the guest learns the switch from its Pot read, its
+//      client holding only the instance's manifest; switched on again, the guest's device fetches and fills (control);
 //   5. A deletes "Taxi" and restores it from Deleted entries: the balances leave and come back, no ledger notice;
 //   6. A records the settle-up, deactivates and activates Cleo, deletes her (entries show "deleted people") and removes
 //      the person the guest added, whom no entry names; neither is offered for a new entry;
@@ -50,7 +56,7 @@ import { birthTenant, type Account } from '../../src/console'
 import { instance, newDevice, tenantOrigin, watchConsole, watchFailedRequests, type ConsoleErrors, type Device } from '../../src/devices'
 import {
   LABELS, addReceipts, entryDialog, entryRow, expectReceiptOpens, ledgerNotice, minorOf, money, openTab, pick, potTab, readBalances,
-  readOverview, receiptRow, squash, tripPot, typeEntry, typed, type Labels, type Lang, type PickedFile,
+  readOverview, receiptRow, squash, tripPot, typeEntry, typed, typedRate, type Labels, type Lang, type PickedFile,
 } from '../../src/expenses'
 import { onePagePdf } from '../../src/pdf'
 import { headerAction } from '../../src/header'
@@ -103,9 +109,11 @@ async function signIn(page: Page, L: Labels, account: Account): Promise<void> {
   const email = page.getByLabel(L.email, { exact: true })
   await expect(home.or(email)).toBeVisible({ timeout: 60_000 })
   if (await email.isVisible()) {
-    await email.fill(account.email)
+    if (await email.isEditable()) await email.fill(account.email)
     await page.getByRole('textbox', { name: L.password }).fill(recordTyped(account.password))
-    await page.locator('#unlock-secret-key').fill(recordTyped(account.secretKey))
+    // A device that kept the session asks the password alone; a fresh one the Secret Key too.
+    const secretKey = page.locator('#unlock-secret-key')
+    if (await secretKey.isVisible()) await secretKey.fill(recordTyped(account.secretKey))
     await page.getByRole('button', { name: L.signIn, exact: true }).click()
   }
   await expect(home).toBeVisible({ timeout: 60_000 })
@@ -218,6 +226,57 @@ async function noHorizontalScroll(page: Page, where: string): Promise<void> {
 async function openLink(page: Page, link: string): Promise<void> {
   await page.goto('about:blank')
   await page.goto(link)
+}
+
+/** The device's own date, `YYYY-MM-DD`, as the editor puts it in the rate table's address (the lane's browsers run in
+ *  the host's time zone). */
+function deviceDay(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The day the lane's fixture rows are of (fixtures/ecb-rates-2026-10-23.json), as the editor names it per language. */
+const FIXTURE_DAY = { en: 'Oct 23, 2026', de: '23.10.2026' } as const
+/** One US dollar in euros from the fixture's table: 1 / 1.1193, rounded half away from zero at 12 places. */
+const USD_IN_EUR = '0.893415527562'
+
+/** Each rate-table request [device] made carried the date and nothing else: the seeded ECB address (the egress route
+ *  answers no other), a plain GET with no header of the page's own, no Referer and no credentials. */
+function expectBareRateQueries(device: Device): void {
+  for (const q of device.confinement.rateQueries()) {
+    expect(q.href, 'the device\'s date, nothing else').toBe(`https://api.frankfurter.dev/v2/providers/ecb/rates?date=${deviceDay()}`)
+    expect(q.method).toBe('GET')
+    expect(q.headers.origin, 'the instance\'s Origin').toBe(potOrigin())
+    for (const name of Object.keys(q.headers)) expect(name, 'a header of the page\'s own').not.toMatch(/^(x-|authorization$|cookie$|referer$|content-type$)/)
+  }
+}
+
+/** A new entry opened on [page], its currency set to [currency]: the dialog, and its rate field. */
+async function foreignEntry(page: Page, L: Labels, currency: string): Promise<{ dialog: Locator; rate: Locator }> {
+  await openTab(page, L.pot.tabs.entries)
+  await page.locator('.expenses-entries').getByRole('button', { name: L.pot.addEntry, exact: true }).click()
+  const dialog = entryDialog(page, L.pot.addEntry)
+  await expect(dialog).toBeVisible()
+  await pick(page, dialog.getByRole('combobox', { name: L.pot.currency }), currency)
+  const rate = dialog.getByLabel(new RegExp(`^${escape(L.pot.rate(currency, 'EUR'))}`))
+  await expect(rate).toBeVisible()
+  return { dialog, rate }
+}
+
+/** Settings → Capabilities of the Expenses tenant, as its owner: the exchange rates switched [off] or on. Off asks first. */
+async function switchExchangeRates(page: Page, L: Labels, off: boolean): Promise<void> {
+  await signIn(page, L, accountA)
+  await page.locator('.profile-button').click()
+  await page.getByRole('menuitem', { name: L.settings, exact: true }).click()
+  await page.getByRole('navigation', { name: L.settings }).getByRole('button', { name: L.capabilities, exact: true }).click()
+  const row = page.locator('li.capability[data-id="expenses.exchange-rates"]')
+  await row.getByRole('button', { name: off ? L.switchOff : L.switchOn, exact: true }).click({ timeout: 60_000 })
+  if (off) {
+    const confirm = page.getByRole('dialog', { name: L.switchOffTitle(L.exchangeRates) })
+    await confirm.getByRole('button', { name: L.switchOff, exact: true }).click()
+    await expect(confirm).toBeHidden()
+  }
+  await expect(row.getByRole('button', { name: off ? L.switchOn : L.switchOff, exact: true })).toBeVisible({ timeout: 30_000 })
 }
 
 /** The moderation gate on this page, in [L]'s language: sign in if it asks, then unlock with both secrets. */
@@ -469,6 +528,31 @@ for (const lang of ['en', 'de'] as const) {
     )
 
     test(
+      'step 2a: the device fetched the day\'s ECB table once, with the date alone; a USD entry gets its rate filled from it',
+      {
+        tag: [
+          '@uc.expenses.exchange-rates:the-days-table-straight-from-the-device',
+          '@uc.expenses.exchange-rates:the-rate-is-sealed-and-never-moves',
+        ],
+      },
+      async () => {
+        const { page } = a
+        // Step 2's JPY entry asked once; its typed rate stood (the vector's balances above prove it).
+        expect(a.confinement.rateQueries(), 'one request for the day, for every entry of step 2').toHaveLength(1)
+        const { dialog, rate } = await foreignEntry(page, L, 'USD')
+        await expect(rate).toHaveValue(USD_IN_EUR, { timeout: 30_000 })
+        await expect(dialog.getByText(L.pot.rateFilled(FIXTURE_DAY[lang]), { exact: true })).toBeVisible()
+        // typeable: what is typed stands, and the ECB's note goes with the filled rate
+        await rate.fill(typedRate('0.9', lang))
+        await expect(dialog.getByText(L.pot.rateFilled(FIXTURE_DAY[lang]), { exact: true })).toHaveCount(0)
+        await dialog.getByRole('button', { name: L.cancel, exact: true }).click()
+        await expect(dialog).toBeHidden()
+        expect(a.confinement.rateQueries(), 'the device\'s table, no second request').toHaveLength(1)
+        expectBareRateQueries(a)
+      },
+    )
+
+    test(
       'step 2b: receipts kept with an entry — an image and a PDF drawn, anything else only for download, one removed again',
       {
         tag: [
@@ -690,6 +774,61 @@ for (const lang of ['en', 'de'] as const) {
         await expectReceiptOpens(museumG, L, receiptJpeg, 'image')
         await expectReceiptOpens(museumG, L, receiptPdf, 'pdf')
         await museumG.getByRole('button', { name: L.cancel, exact: true }).click()
+      },
+    )
+
+    test(
+      'step 4c: switched off by the tenant owner, a member\'s and a guest\'s device ask nothing and the rate is typed',
+      { tag: '@uc.expenses.exchange-rates:switched-off-or-unreachable-asks-for-the-rate' },
+      async () => {
+        test.setTimeout(240_000)
+        expect(b.confinement.rateQueries(), 'B has written no foreign entry yet').toEqual([])
+        expect(guest.confinement.rateQueries(), 'nor has the guest').toEqual([])
+        await switchExchangeRates(a.page, L, true)
+        try {
+          // B, a member: its tenant's set, read anew, lacks the entry.
+          await signIn(b.page, L, accountB)
+          await enterGroup(b.page, group)
+          await openFolder(b.page, folder)
+          await openPot(b.page, L, pot)
+          const member = await foreignEntry(b.page, L, 'USD')
+          await member.dialog.getByLabel(L.pot.title, { exact: true }).fill(recordTyped(titleOf('Off')))
+          await expect(member.rate).toHaveValue('')
+          await member.dialog.getByRole('button', { name: L.cancel, exact: true }).click()
+          await expect(member.dialog).toBeHidden()
+          expect(b.confinement.rateQueries(), 'a member\'s device asks nothing while the tenant has the rates off').toEqual([])
+          // B leaves the Pot again, as in step 3: step 9 removes B from the group, and a page left open on the Pot would
+          // go on polling a scope B is no longer in (inbox #546).
+          await b.page.goto('about:blank')
+
+          // The guest: its client holds the instance's manifest alone, which still has them on; its Pot read says off.
+          await openLink(guest.page, shareLink)
+          await expect(guest.page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
+          const off = await foreignEntry(guest.page, L, 'USD')
+          await off.dialog.getByLabel(L.pot.title, { exact: true }).fill(recordTyped(titleOf('Off guest')))
+          await expect(off.rate).toHaveValue('')
+          await off.dialog.getByRole('button', { name: L.cancel, exact: true }).click()
+          await expect(off.dialog).toBeHidden()
+          expect(guest.confinement.rateQueries(), 'a guest\'s device asks nothing while the tenant has the rates off').toEqual([])
+        } finally {
+          await switchExchangeRates(a.page, L, false)
+        }
+
+        // Control: switched on, the same guest's device fetches once and fills the rate.
+        await openLink(guest.page, shareLink)
+        await expect(guest.page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
+        const on = await foreignEntry(guest.page, L, 'USD')
+        await expect(on.rate).toHaveValue(USD_IN_EUR, { timeout: 30_000 })
+        await on.dialog.getByRole('button', { name: L.cancel, exact: true }).click()
+        await expect(on.dialog).toBeHidden()
+        expect(guest.confinement.rateQueries()).toHaveLength(1)
+        expectBareRateQueries(guest)
+
+        // A back on the Pot, where step 5 goes on.
+        await signIn(a.page, L, accountA)
+        await enterGroup(a.page, group)
+        await openFolder(a.page, folder)
+        await openPot(a.page, L, pot)
       },
     )
 

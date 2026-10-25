@@ -60,8 +60,9 @@ class PrivacyNotices(
             backupRetentionDays = backups.retention().days,
             erasureWindowDays = erasureWindowDays,
             breachedPasswordService = label(CapabilityIds.BREACHED_PASSWORD),
+            exchangeRateService = label(CapabilityIds.EXPENSES_EXCHANGE_RATES),
             browserServices = CapabilityIds.EXTERNAL_SERVICES
-                .filter { it != CapabilityIds.BREACHED_PASSWORD }
+                .filter { it !in OWN_PASSAGE }
                 .sorted()
                 .mapNotNull { id ->
                     label(id)?.let { l -> CapabilityTexts.BY_ID.getValue(id).title.let { BrowserService(SectionTexts(en = it.en, de = it.de), l) } }
@@ -71,6 +72,13 @@ class PrivacyNotices(
         PrivacyNoticeRenderer.render(text, values) { active(it) }
     }
 }
+
+/**
+ * The outside services the notice gives a passage of their own (`breached-password-check`, `exchange-rates`), because
+ * they run without anyone turning them on and the notice says what each request carries; every other one is a line of
+ * `browser-services`. One set, so a service is never named twice.
+ */
+internal val OWN_PASSAGE = setOf(CapabilityIds.BREACHED_PASSWORD, CapabilityIds.EXPENSES_EXCHANGE_RATES)
 
 /** The wire form of the notice (`PrivacyNotice` in `operator.openapi.yaml`). */
 fun RenderedNotice.toWire(): PrivacyNotice = PrivacyNotice(

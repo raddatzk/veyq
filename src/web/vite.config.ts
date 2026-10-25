@@ -9,7 +9,7 @@ import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp'
-import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults'
+import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults'
 
 // Vite dev-server config. `npm run dev` works with the defaults below; the env vars only matter for special
 // setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
@@ -34,18 +34,18 @@ const smokeHost = process.env.VEYQ_SMOKE_HOST
 // intersect with that header and block the store on its own origin again, so the build injects none — and the
 // backend refuses to boot a shell whose index.html carries one, or whose policy file is missing (the file name is
 // `AppShell.POLICY_FILE` there; `npm run verify:csp` checks both properties of dist before an image is built).
-// The built policy names no outside service: the map tiles, the geocoder and the breached-password check are the
-// Server Owner's settings, and the backend appends the origins of those in use per response (ADR 0088 decision 7). The
-// dev server serves the app itself, so its header allows the reference providers a new instance is seeded with; a dev
-// instance pointed at other services edits the three DEV_* origins (mapDefaults.ts).
+// The built policy names no outside service: the map tiles, the geocoder, the breached-password check and the exchange
+// rates are the Server Owner's settings, and the backend appends the origins of those in use per response (ADR 0088
+// decision 7). The dev server serves the app itself, so its header allows the reference providers a new instance is
+// seeded with; a dev instance pointed at other services edits the four DEV_* origins (mapDefaults.ts).
 // The dev server injects every stylesheet as a <style> element, which `style-src` without 'unsafe-inline' refuses, so in
 // dev only Vite stamps them with a nonce (`html.cspNonce`) drawn fresh per start and the header names it (inbox #523).
 // The build loads its CSS as files and carries no nonce.
 function cspPlugin(dev: boolean): Plugin {
   const devStyleNonce = dev ? randomBytes(18).toString('base64') : undefined
   const csp = dev
-    ? buildCsp({ tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, dev, devStyleNonce })
-    : buildCsp({ tileOrigin: null, geocoderOrigin: null, breachOrigin: null })
+    ? buildCsp({ tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, ratesOrigin: DEV_RATES_ORIGIN, dev, devStyleNonce })
+    : buildCsp({ tileOrigin: null, geocoderOrigin: null, breachOrigin: null, ratesOrigin: null })
   return {
     name: 'veyq-csp',
     config: () =>

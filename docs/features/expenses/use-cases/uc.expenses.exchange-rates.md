@@ -3,7 +3,8 @@
 - **ID:** uc.expenses.exchange-rates
 - **Primary actor:** Whoever writes an entry in a currency other than the Pot's base — a **member** or a
   **`READ_WRITE` guest** — and their **device**.
-- **Secondary actor:** The **exchange-rate provider** the instance names.
+- **Secondary actor:** The **exchange-rate provider** the instance names — on a new instance Frankfurter's endpoint for
+  the European Central Bank's euro reference rates (owner 2026-10-25: the ECB's rates alone).
 - **Goal:** A foreign-currency entry gets a fair rate without anyone looking it up, and keeps it.
 - **Preconditions:** The entry's currency differs from the Pot's base.
 - **Postconditions (success):** The entry is saved with a rate to the base currency, sealed into it; a later rate
@@ -16,8 +17,10 @@
 1. The editor needs a rate (step 4 of [uc.expenses.record-entries](uc.expenses.record-entries.md)).
 2. If the device holds no table for today, it fetches **the whole day's table** from the provider the instance names
    — straight from the browser, never through the backend — once per day for every Pot on the device, and keeps it on
-   the device.
-3. The rate from the table fills in; the actor keeps it or types another.
+   the device. A member's device asks only while its tenant's set carries `expenses.exchange-rates`; a guest's only
+   while its Pot read names the table's address (`exchangeRateService`), since a guest holds no tenant's set.
+3. The rate from the table fills in, computed from the ECB's reference rates of the rows' day, which the editor names;
+   the actor keeps it or types another.
 4. On save the rate is sealed into the entry as a decimal string.
 
 ## Alternate / exception flows
@@ -34,7 +37,8 @@
 - The second third-party request without opt-in, after the breached-password check, for the same reason: what
   crosses carries no content ([security-model](../../../crosscutting/security-model.md) § third-party services).
   Proxying it through the backend is refused — it would hand the operator the date of a trip.
-- The privacy notice names the provider and the security model lists the fetch once it runs, not before.
+- The privacy notice names the provider (its passage `exchange-rates`, switched by the entry) and the security model
+  lists the fetch; the ECB's terms ask its rates be cited as the source, so the notice and the editor name the ECB.
 
 ## User impact
 
@@ -49,3 +53,7 @@ rate does.
   decision 8, [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
   decision 7 (a provider's address is the Server Owner's).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md).
+- End-user view (docs site): [Record an expense](../../../../site/src/content/docs/expenses/record-an-expense.mdx),
+  [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md); for the Server Owner:
+  [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx),
+  [Data protection](../../../../site/src/content/docs/run/data-protection.md).

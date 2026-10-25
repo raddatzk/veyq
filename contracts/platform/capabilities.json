@@ -285,6 +285,24 @@
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
       "description": "The Expenses application (ADR 0079 decision 8, ADR 0108). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — an EXPENSES_POT node created, updated, given a link or a write role, a member's or a guest's append of revisions (contracts/api/expenses/). Reads, downloads, a delete to the trash and its restore, the re-key, a participant's erasure and moderation measures stay."
+    },
+    "expenses.exchange-rates": {
+      "title": {
+        "en": "Exchange rates",
+        "de": "Wechselkurse"
+      },
+      "purpose": {
+        "en": "Where an entry’s currency differs from its Pot’s, the browser fetches the day’s exchange rates from a rate service once a day and fills in the rate. The service’s address is a setting of this instance.",
+        "de": "Weicht die Währung eines Eintrags von der seiner Kasse ab, lädt der Browser einmal am Tag die Wechselkurse des Tages von einem Kursdienst und trägt den Kurs ein. Die Adresse des Dienstes ist eine Einstellung dieser Instanz."
+      },
+      "whenOff": {
+        "en": "No rate is filled in any more: whoever writes an entry in another currency types its rate, and the browser is no longer allowed to reach the service. Entries already saved keep their rates. The same holds while no address is set.",
+        "de": "Kein Kurs wird mehr eingetragen: Wer einen Eintrag in einer anderen Währung schreibt, tippt den Kurs selbst, und der Browser darf den Dienst nicht mehr erreichen. Bereits gespeicherte Einträge behalten ihre Kurse. Dasselbe gilt, solange keine Adresse gesetzt ist."
+      },
+      "serves": ["uc.expenses.exchange-rates"],
+      "source": "external-service",
+      "levels": ["instance", "tenant"],
+      "description": "The day's exchange-rate table (ADR 0108 decision 8): a URL template holding {date} (the device's date, YYYY-MM-DD) that answers with the whole day's table of the European Central Bank's euro reference rates in Frankfurter's v2 shape (an array of {date, base, quote, rate}, base EUR; a new instance's is Frankfurter's ECB endpoint, owner 2026-10-25), fetched by the browser straight from the provider at most once per device and day for every Pot, never with a currency, an amount or a veyq identity. Active only while a URL is configured and the entry is on at both levels, under the Expenses switch — a member's client reads it from its tenant's set, a link guest's from its Pot read (exchangeRateService, contracts/api/expenses/), never from the instance's manifest; the served CSP names its origin in connect-src while it is on at the instance level. The privacy notice gives it a passage of its own (exchange-rates), beside the breached-password check's."
     }
   }
 }

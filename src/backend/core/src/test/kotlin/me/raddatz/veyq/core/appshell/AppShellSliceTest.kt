@@ -144,9 +144,11 @@ class AppShellSliceTest {
             "default-src 'self'; frame-ancestors 'none'; img-src 'self'; connect-src 'self'; form-action 'self'"
 
         /** The fixture's policy as served on a new instance: the seeded external services (ADR 0088 decision 7), the map
-         *  tiles in `img-src`, the geocoder and the breach check in `connect-src` (`ExternalServicesSliceTest` moves them). */
+         *  tiles in `img-src`, the geocoder, the breach check and the exchange rates in `connect-src`
+         *  (`ExternalServicesSliceTest` moves them). */
         const val SERVED_POLICY =
             "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
-                "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com; form-action 'self'"
+                "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev; " +
+                "form-action 'self'"
     }
 }

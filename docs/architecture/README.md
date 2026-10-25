@@ -70,11 +70,11 @@ flowchart TB
   NB["sees ciphertext + structure — never a key,<br>name, day, coordinate, or pixel"]
   DB[("MariaDB<br>ciphertext + opaque metadata")]
   S[("Object store<br>S3-compatible (Garage in dev)")]
-  T(["Third-party services<br>(geocoder, map tiles)"])
+  T(["Third-party services<br>(geocoder, map tiles,<br>breached-password check, exchange rates)"])
 
   C -->|"contracts API — ciphertext + opaque metadata + blinded tokens"| B
   C -->|"presigned direct-to-store — ciphertext blob chunks (never via the backend)"| S
-  C -.->|"consented, client-direct — a bare coordinate, opt-in (never via the backend)"| T
+  C -.->|"client-direct — a bare coordinate (opt-in), a 5-hex hash prefix or a date (automatic); never via the backend"| T
   B -->|"opaque rows (ids, kinds, sizes, exact timestamps, wraps, blinded tokens)"| DB
   B -->|"presign only — issues short-TTL URLs; never sees a blob byte"| S
   B -.- NB
@@ -88,10 +88,12 @@ plus operational metadata the server needs to route and bill bytes: ids, kinds, 
 to the millisecond, nothing rounds them), membership, wraps, blinded tokens. What never crosses: a key, a password, a
 name, a day, a coordinate, a pixel.
 
-**Third parties are a separate, consented boundary.** A client may reach a geocoder or tile server *directly* —
+**Third parties are a separate boundary.** A client may reach a geocoder or tile server *directly* —
 never proxied — so that using one leaks a bare coordinate to *that* party and still nothing to the veyq
 operator ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md); the boundary is drawn in
-[security-model](../crosscutting/security-model.md)).
+[security-model](../crosscutting/security-model.md)). Those are opt-in; two requests run without it, because what
+crosses carries no content: the breached-password check (a 5-hex hash prefix) and Expenses' day exchange rates (a
+date, [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8).
 
 ## 4. Solution Strategy
 
@@ -213,7 +215,8 @@ flowchart TB
 ## 8. Cross-cutting Concepts
 
 - **Operator-blind invariant & trust boundaries** — the operator is the adversary; the server sees ciphertext +
-  opaque operational metadata, never keys or content; third parties are a separate consented boundary. →
+  opaque operational metadata, never keys or content; third parties are a separate boundary, opt-in but for two
+  content-free automatic requests (the breached-password check, the exchange rates). →
   [security-model](../crosscutting/security-model.md)
   ([ADR 0003](../decisions/0003-operator-blind-password-auth.md),
   [ADR 0015](../decisions/0015-operator-blind-readable-urls.md),

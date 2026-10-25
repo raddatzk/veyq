@@ -13,13 +13,13 @@ use-cases below say what a person does and point there instead of repeating it.
   (a rotation re-keys a Pot like every node), [ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   (a report and its hold reach an entry and a receipt).
 - **Cross-cutting:** [security-model](../../crosscutting/security-model.md) (the exchange-rate fetch is a third-party
-  request, named there once it runs).
+  request without opt-in, named there beside the breached-password check).
 
 ## Use-cases
 
 Built by cr-expenses-ledger (its browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`): the Pot, its people and entries, the history, the ledger check, the balances
-and the link (rates typed), all but "Who am I" (inbox #541); the receipts by cr-expenses-receipts (in the same pass).
-Planned: fetched rates (`changes/cr-expenses-exchange-rates.md`).
+and the link, all but "Who am I" (inbox #541); the receipts by cr-expenses-receipts and the day's exchange rates by
+cr-expenses-exchange-rates (in the same pass).
 
 - [uc.expenses.create-pot](use-cases/uc.expenses.create-pot.md) — a member creates a Pot with its base currency and
   participants, edits its settings, and deletes it.

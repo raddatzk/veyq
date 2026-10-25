@@ -8,6 +8,9 @@
 //   2. A member's report dialog links the notice at the passage on the reporter's contact, beside the field.
 //   3. A guest of a link it may add through is told at its first write, with a link to the record's passage; after the
 //      write, its session line shows its guest id, which copies — what it names in an objection (A3).
+//   4. The exchange rates' passage (`expenses.exchange-rates`, ADR 0108 decision 8) names Frankfurter and the ECB while the
+//      rates are on for the host's tenant (step 1), and is gone while its owner has them off — the breached-password
+//      check's passage beside it stays (control); switched on again, it is back.
 //
 // The invite acceptance's link is first-run setup's (`first-run.setup.ts`), where the one invite of the run is opened;
 // the German notice with its gap is `terms-operator-section.spec.ts`'s.
@@ -15,7 +18,7 @@ import { test, expect, type BrowserContext, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { confineToInstance } from '../../src/egress'
-import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { instance, newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { headerAction } from '../../src/header'
 
 test.describe.configure({ mode: 'serial' })
@@ -79,6 +82,10 @@ test(
     await expect(notice.locator('aside#guest-write-record-objection')).toContainText('give your guest id')
     await expect(notice.locator('aside#right-to-object')).toContainText('Art. 21 GDPR')
     await expect(notice.locator('#breached-password-check')).toContainText('Have I Been Pwned (api.pwnedpasswords.com)')
+    // The day's exchange rates, on by default: the service the browser contacts, and whose rates they are.
+    await expect(notice.locator('#exchange-rates')).toContainText(
+      "fetches the day's euro reference rates of the European Central Bank (ECB) from Frankfurter (api.frankfurter.dev), at most once a day.",
+    )
     await expect(notice.locator('#storage')).toContainText("on this instance's own server")
     await notice.close()
   },
@@ -181,5 +188,53 @@ test(
     await line.getByRole('button', { name: 'Copy' }).click()
     await expect(line.getByRole('button', { name: 'Copied' })).toBeVisible()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id)
+  },
+)
+
+/** Settings → Capabilities of the shared tenant, as its owner: the exchange rates switched [off] or on. Off asks first.
+ *  A new document on a device that kept the session asks the password again; it is given, and nothing else. */
+async function switchExchangeRates(page: Page, off: boolean): Promise<void> {
+  await page.goto(tenantOrigin())
+  const home = page.getByRole('button', { name: 'New', exact: true })
+  const password = page.getByRole('textbox', { name: /^Password\b/ })
+  await expect(home.or(password).first()).toBeVisible({ timeout: 60_000 })
+  if (await password.isVisible()) {
+    await password.fill(recordTyped(instance().owner.password))
+    const secretKey = page.locator('#unlock-secret-key')
+    if (await secretKey.isVisible()) await secretKey.fill(recordTyped(instance().owner.secretKey))
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  }
+  await expect(home).toBeVisible({ timeout: 60_000 })
+  // Settings as `openSettings` opens it, without its own new document (which would ask the password once more).
+  await page.locator('.profile-button').click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Capabilities', exact: true }).click()
+  const row = page.locator('li.capability[data-id="expenses.exchange-rates"]')
+  await row.getByRole('button', { name: off ? 'Switch off' : 'Switch on', exact: true }).click({ timeout: 60_000 })
+  if (off) {
+    const confirm = page.getByRole('dialog', { name: 'Switch off “Exchange rates”?' })
+    await confirm.getByRole('button', { name: 'Switch off', exact: true }).click()
+    await expect(confirm).toBeHidden()
+  }
+  await expect(row.getByRole('button', { name: off ? 'Switch on' : 'Switch off', exact: true })).toBeVisible({ timeout: 30_000 })
+}
+
+test(
+  'the exchange rates’ passage is there while the tenant has them on, and gone while its owner switched them off',
+  { tag: ['@uc.expenses.exchange-rates:csp-and-notice-name-the-provider', '@uc.admin.privacy-notice:fixed-text-with-instance-values'] },
+  async () => {
+    const notice = visitor.page
+    const passage = notice.locator('#exchange-rates')
+    await switchExchangeRates(member.page, true)
+    try {
+      await notice.goto(`${tenantOrigin()}/privacy`)
+      await expect(notice.locator('#breached-password-check')).toContainText('Have I Been Pwned', { timeout: 60_000 }) // control
+      await expect(passage).toHaveCount(0)
+      await expect(notice.getByTestId('privacy-notice')).not.toContainText('Frankfurter')
+    } finally {
+      await switchExchangeRates(member.page, false)
+    }
+    await notice.goto(`${tenantOrigin()}/privacy`)
+    await expect(passage).toContainText('from Frankfurter (api.frankfurter.dev), at most once a day', { timeout: 60_000 })
   },
 )

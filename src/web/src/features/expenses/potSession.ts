@@ -16,6 +16,10 @@
 //   A failed receipt read leaves the ledger standing — the Pot counts without its receipts — and is tried again on the
 //   next tick. {@link PotSession.addReceipt} uploads one through the same door as a write (a member's write key, the
 //   guest's opened link) before the revision that lists it.
+// - **The day's exchange rates** (ADR 0108 decision 8): {@link PotSession.rateService} is the table's address while
+//   `expenses.exchange-rates` is active for the Pot's tenant — a member's from its tenant's set (never the instance's
+//   manifest, which a tenant owner's switch does not narrow), a guest's from its Pot read (`exchangeRateService`). Null
+//   otherwise, and the editor then fetches nothing (`exchangeRates.ts`).
 import { computed, onScopeDispose, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
 import type { Access, TreeSource } from '../../core/access'
 import type { TreeNode } from '../../core/node/tree'
@@ -37,6 +41,8 @@ import { checkLedger, type LedgerCheck } from './domain/heads'
 import type { HeldRevision } from './domain/revisions'
 import { POT_META_KEY, potMetaObject, potMetaOf, type PotMeta } from './domain/potMeta'
 import { readGuestReceipts, readMemberReceipts, uploadReceipt, type HeldReceipt, type ReceiptFile } from './receipts'
+import { capabilityState } from '../../shared/state/capabilities'
+import { EXPENSES_EXCHANGE_RATES } from '../platform/capabilities'
 
 export interface PotSessionInput {
   access: () => Access
@@ -93,6 +99,9 @@ export interface PotSession {
   addReceipt(entryId: string, receiptId: string, file: ReceiptFile, opts?: { onProgress?: (fraction: number) => void; signal?: AbortSignal }): Promise<HeldReceipt>
   /** Who wrote a revision, for a member's history: a member's name, a guest's marked as a guest's, or null (unknown). */
   writerName(writer: string | undefined, people: ReadonlyMap<string, Person> | null): string | null
+  /** The day's exchange-rate table's address (a `{date}` template) while the rates are on for this Pot's tenant, else
+   *  null: then nothing is fetched and a foreign entry's rate is typed. */
+  rateService: ComputedRef<string | null>
   stop(): void
 }
 
@@ -103,6 +112,8 @@ export function usePotSession(input: PotSessionInput): PotSession {
   const guestWriters = shallowRef<ReadonlyMap<string, PotGuestWriter>>(new Map())
   const receipts = shallowRef<readonly HeldReceipt[]>([])
   const receiptsFailed = ref(false)
+  /** The rate table's address as the guest's last read named it (a `304` keeps it). */
+  const guestRateService = ref<string | null>(null)
   const nodeId = () => input.node().id
   // What the next member poll echoes, and the guest's last tag.
   let cursor: { revision: number; deleteRevision: number; since?: string } | null = null
@@ -182,6 +193,7 @@ export function usePotSession(input: PotSessionInput): PotSession {
       return
     }
     held.value = applyPotChange([], { items: read.revisions, ids: null }, pot())
+    guestRateService.value = read.exchangeRateService
     guestTag = read.etag
     await readReceipts()
   }
@@ -319,5 +331,12 @@ export function usePotSession(input: PotSessionInput): PotSession {
     return name ? guestDisplayName(name) : null
   }
 
-  return { held, loaded, failed, meta, ledger, check, receipts, receiptsFailed, refresh, write, erase, writeMeta, addReceipt, writerName, stop }
+  const rateService = computed<string | null>(() => {
+    if (input.access().mode === 'guest') return guestRateService.value
+    // The tenant's set alone: the instance's manifest says nothing of the tenant owner's switch, so a member whose
+    // tenant's set is not loaded fetches nothing rather than fetch where the tenant's notice names no fetch.
+    return capabilityState.tenantEntries?.[EXPENSES_EXCHANGE_RATES]?.serviceUrl ?? null
+  })
+
+  return { held, loaded, failed, meta, ledger, check, receipts, receiptsFailed, refresh, write, erase, writeMeta, addReceipt, writerName, rateService, stop }
 }

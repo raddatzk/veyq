@@ -80,7 +80,8 @@ class AppShellStoreOriginSliceTest {
             .extract().header("Content-Security-Policy")
         assertEquals(
             "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
-                "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com; form-action 'self'",
+                "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev; " +
+                "form-action 'self'",
             csp,
         )
     }

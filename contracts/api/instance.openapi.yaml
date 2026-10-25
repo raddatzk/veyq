@@ -798,10 +798,11 @@ paths:
       summary: List the external services the browser may call, with their configured addresses.
       description: >
         The outside services a member's browser calls directly (ADR 0088 decision 7, ADR 0089): the map tiles
-        (`memories.map`), the geocoder (`memories.places`) and the breached-password check (`core.breached-password`),
-        each keyed by its register entry. A service with no `url` is not configured: its entry is not active and the
-        served CSP leaves its origin out, which is how an instance without internet runs. A new instance starts with
-        today's defaults (OpenStreetMap tiles, Nominatim, the HIBP range API). Server-Owner only.
+        (`memories.map`), the geocoder (`memories.places`), the breached-password check (`core.breached-password`) and
+        the day's exchange rates (`expenses.exchange-rates`), each keyed by its register entry. A service with no
+        `url` is not configured: its entry is not active and the served CSP leaves its origin out, which is how an
+        instance without internet runs. A new instance starts with the defaults (OpenStreetMap tiles, Nominatim, the
+        HIBP range API, Frankfurter's table of the ECB's euro reference rates). Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -845,8 +846,8 @@ paths:
       description: >
         Stores the address (and, for the map tiles, the attribution) and applies it at once, without a restart: the
         manifest carries it to every client as the entry's `serviceUrl`, and the served CSP names its origin while the
-        entry is on. `url` is an `https://` or `http://` URL; the map tiles' holds `{z}`, `{x}` and `{y}`. An
-        attribution is accepted for the map tiles only. Server-Owner only. Returns the service as it now stands.
+        entry is on. `url` is an `https://` or `http://` URL; the map tiles' holds `{z}`, `{x}` and `{y}`, the
+        exchange rates' holds `{date}`. An attribution is accepted for the map tiles only. Server-Owner only. Returns the service as it now stands.
       security:
         - bearerAuth: []
       parameters:
@@ -869,8 +870,9 @@ paths:
               schema: { $ref: "#/components/schemas/InstanceExternalService" }
         "400":
           description: >
-            The request was malformed: not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, or an
-            attribution for a service that takes none (`invalid_request`). Nothing is stored.
+            The request was malformed: not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, an
+            exchange-rate template without `{date}`, or an attribution for a service that takes none
+            (`invalid_request`). Nothing is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -3118,7 +3120,7 @@ components:
         id:
           x-veyq-visibility: public
           type: string
-          description: The service's register entry (`memories.map`, `memories.places`, `core.breached-password`).
+          description: The service's register entry (`memories.map`, `memories.places`, `core.breached-password`, `expenses.exchange-rates`).
           maxLength: 64
           example: memories.map
         title:
@@ -3149,7 +3151,7 @@ components:
         url:
           x-veyq-visibility: public
           type: string
-          description: An http(s) URL; the map tiles' a template holding `{z}`, `{x}` and `{y}`.
+          description: An http(s) URL; the map tiles' a template holding `{z}`, `{x}` and `{y}`, the exchange rates' one holding `{date}`.
           minLength: 1
           maxLength: 512
           example: https://tile.openstreetmap.org/{z}/{x}/{y}.png

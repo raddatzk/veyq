@@ -40,7 +40,7 @@ Der Dienst wird ohne Verfügbarkeitsgarantie bereitgestellt. Sichere dir Wichtig
 Wie Inhalte gemeldet werden, wer sie prüft, welche Maßnahmen es gibt und wie du widersprechen kannst, regelt der Abschnitt der Betreiberseite unten. Er gilt für jeden Bereich auf diesem Server.
 
 ## 10. Externe Dienste
-Optionale Funktionen (z. B. Kartendienste) können Anfragen an Dritte senden. Sie sind opt-in und in der App gekennzeichnet.
+Manche Funktionen senden Anfragen direkt aus deinem Browser an Dritte: Karten- und Ortsnamendienste erst, wenn du sie einschaltest; die Prüfung auf geleakte Passwörter und die Wechselkurse des Tages von selbst. Die Datenschutzerklärung dieses Servers nennt jeden dieser Dienste.
 
 ## 11. Kontakt & Löschung
 Fragen, Meldungen oder Löschwünsche: {contact}`,
@@ -74,7 +74,7 @@ The service is provided without any availability guarantee. Keep your own backup
 How content is reported, who reviews it, which measures there are and how to object is set out in the operator's section below. It applies to every space on this server.
 
 ## 10. External services
-Optional features (e.g. map services) may send requests to third parties. They are opt-in and marked in the app.
+Some features send requests straight from your browser to third parties: map and place-name services only once you turn them on; the breached-password check and the day's exchange rates by themselves. This server's privacy notice names each of these services.
 
 ## 11. Contact & deletion
 Questions, reports, or deletion requests: {contact}`,

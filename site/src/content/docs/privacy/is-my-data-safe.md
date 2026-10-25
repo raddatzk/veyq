@@ -10,6 +10,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
+  - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
@@ -58,7 +59,12 @@ long, who else receives anything (the company hosting it, a mail service), and w
 text; the instance fills in its own details, so it says what *that* instance does. The invitation page, the report
 form and a link you add something through point you to the part that concerns you.
 
-## The one check that leaves your device by itself
+## Two requests that leave your device by themselves
+
+Two things veyq does without asking you first, because what they send says nothing about your content. Your
+instance's privacy notice names both, and whoever runs your server can switch them off.
+
+### Checking a new password
 
 When you choose a password — setting up a server, joining a space, changing your password, or after a reset —
 veyq checks it against passwords known from data breaches. It does this **by itself**, as soon as you leave the
@@ -77,6 +83,21 @@ server and is choosing a password — not who you are, and not the password.
 If the password shows up in a breach, you see a warning and decide: pick another one, or tick **"Use it
 anyway"**. If the check can't run — you're offline, or the server has no route to the internet — nothing is
 blocked; you're simply told the password could not be checked.
+
+### The day's exchange rates
+
+When you record an expense in a currency other than its Pot's, your device fetches **the day's exchange rates** —
+the euro reference rates of the European Central Bank — and fills in the rate. It does this **straight from your
+device**, at most once a day, and keeps the rates on the device.
+
+**What leaves your device:** the **date**, nothing else — not the currency, not the amount, not who you are. Your
+device works out the rate for your currencies itself.
+
+**What that service does learn:** your internet address, which veyq server the request comes from, and so that
+someone there is recording an expense in another currency today.
+
+The owner of your space can switch it off too. Then, or if the rates can't be fetched, you type the rate yourself; a
+rate you saved never changes.
 
 ## When you share
 

@@ -2,6 +2,10 @@ package me.raddatz.veyq.expenses.pot
 
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecordEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceStore
+import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
+import me.raddatz.veyq.core.platform.capabilities.StoredExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -20,6 +24,7 @@ import me.raddatz.veyq.expenses.pot.PotWire.guestAppend
 import me.raddatz.veyq.expenses.pot.PotWire.guestList
 import me.raddatz.veyq.expenses.pot.PotWire.list
 import io.quarkus.narayana.jta.QuarkusTransaction
+import jakarta.inject.Inject
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -38,10 +43,16 @@ import java.util.UUID
  * positive control on the same predicate: the append is all or none on its records' latest revisions; only a member's
  * erasure removes a revision, and only its record's earlier ones; a Pot is shared `READ` or `READ_WRITE`, never
  * `WRITE_ONLY`; a guest reads every revision but no writer, and each revision it appends is one guest write; switched
- * off, Expenses is read-only.
+ * off, Expenses is read-only; a guest's read names the exchange-rate table exactly while its tenant has the rates on.
  */
 @QuarkusTest
 class PotSliceTest {
+
+    @Inject
+    lateinit var services: ExternalServiceStore
+
+    @Inject
+    lateinit var addresses: StoredExternalServiceAddresses
 
     @Test
     fun aStaleAppendLandsNothingOfItsBatch_aFreshOneLandsAll() {
@@ -212,6 +223,44 @@ class PotSliceTest {
         }
     }
 
+    /**
+     * The guest's half of `expenses.exchange-rates` (ADR 0108 decision 8, option (a), owner 2026-10-25): a guest's client
+     * holds only the instance's manifest, so its Pot read carries the table's address exactly while the entry is active
+     * for the Pot's tenant. Negative: the tenant owner switched the rates off while the instance has them on — the guest's
+     * device must not fetch, as the notice on that tenant's host names no fetch. Control: both on, the address served.
+     */
+    @Test
+    fun aGuestsReadNamesTheRateTableExactlyWhileItsTenantHasTheRatesOn() {
+        val (userId, scopeId, tenantId) = seedMemberScope()
+        val pot = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
+        val link = GuestTreeShare.seed(userId, scopeId, pot, ShareEntity.READ_WRITE)
+        // control: on at both levels, under Expenses on, and configured — the seeded ECB table's address
+        val on = guestList(link.shareId, pot).statusCode(200).body("exchangeRateService", equalTo(SEEDED_RATES)).extract().header("ETag")
+
+        TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.EXPENSES_EXCHANGE_RATES) {
+            val off = guestList(link.shareId, pot, ifNoneMatch = on).statusCode(200).body("exchangeRateService", nullValue()).extract().header("ETag")
+            assertNotEquals(on, off, "a polling guest learns the switch")
+        }
+        TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.EXPENSES) {
+            guestList(link.shareId, pot).statusCode(200).body("exchangeRateService", nullValue()) // under Expenses
+        }
+        CapabilitySwitchFixtures.with(CapabilityIds.EXPENSES_EXCHANGE_RATES) {
+            guestList(link.shareId, pot).statusCode(200).body("exchangeRateService", nullValue()) // the instance's switch
+        }
+        setRates(null)
+        try {
+            guestList(link.shareId, pot).statusCode(200).body("exchangeRateService", nullValue()) // no address
+        } finally {
+            setRates(SEEDED_RATES)
+        }
+        guestList(link.shareId, pot, ifNoneMatch = on).statusCode(304) // back on: the very read the guest held
+    }
+
+    private fun setRates(url: String?) {
+        QuarkusTransaction.requiringNew().run { services.set(CapabilityIds.EXPENSES_EXCHANGE_RATES, url?.let { ServiceAddress(it, null) }) }
+        addresses.invalidate()
+    }
+
     @Test
     fun theMembersListIsAConditionalKeysetDelta() {
         val (userId, scopeId) = seedMemberScope()
@@ -269,4 +318,9 @@ class PotSliceTest {
                 },
             )
             .`when`().post("/api/shares").then()
+
+    private companion object {
+        /** What V202610251600__core_exchange_rate_service.sql seeds: Frankfurter's table of the ECB's reference rates. */
+        const val SEEDED_RATES = "https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"
+    }
 }

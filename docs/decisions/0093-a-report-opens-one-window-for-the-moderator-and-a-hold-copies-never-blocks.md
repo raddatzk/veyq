@@ -769,7 +769,11 @@ what is built (`CLAUDE.md`).
    ([security model](../crosscutting/security-model.md) § third-party services). Whether that rests on Art. 6(1)(f),
    whether a transfer to a third country is involved (the API and its CDN), and whether on-by-default meets Art. 25(2)
    is open (audit 2026-10-18, C7). Until it is answered the privacy notice names the check, its recipient and its
-   switch, and the default stays as decided (owner 2026-10-14).
+   switch, and the default stays as decided (owner 2026-10-14). The same three questions hold for
+   `expenses.exchange-rates` ([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8):
+   a date, with the browser's address and the `Origin`, to Frankfurter's public API, which runs behind Cloudflare's CDN
+   (measured 2026-10-25); the notice names that fetch, its recipient and its switch the same way, and its default
+   stays as decided (owner 2026-10-23).
 8. **Whether a non-economic club is an "enterprise"** under Recommendation 2003/361 for the DSA Art. 15(2)
    exemption from the transparency report (audit 2026-10-18, C8). A micro or small *enterprise* is exempt; a club
    that is no enterprise is either outside the DSA (item 1) or not covered by the exemption's wording. The Run docs

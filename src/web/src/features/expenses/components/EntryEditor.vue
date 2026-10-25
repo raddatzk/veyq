@@ -12,6 +12,12 @@
 // room for is left out and the entry saves without it, saying so (E2); any other failed upload stops the save, and what
 // was already uploaded is kept for the next try. A deleted entry is restorable until its receipts are erased
 // (`restoreOffered`, uc.expenses.entry-history E2); past that, no restore is offered.
+//
+// The day's exchange rate (uc.expenses.exchange-rates, `../exchangeRates.ts`): picking a currency other than the base, in
+// an editable form, while the Pot's session names a rate table (`session.rateService`), fills the empty rate from the
+// device's table of the day, and says it is computed from the ECB's reference rates of the rows' date (the ECB's terms
+// ask its rates be cited as the source). The field stays typeable; a fill that arrives after the person typed a rate,
+// picked another currency or left is dropped. The save never waits for it: it seals what the field holds.
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -29,7 +35,8 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import { namedParticipants, type PotLedger } from '../domain/ledger'
 import { PotWriteRefused, StaleRevisionError } from '../domain/potApi'
 import type { PotSession } from '../potSession'
-import { contentOf, emptyForm, formOf, problemKey, typedSum, withCurrency, type EntryForm, type FormProblem } from '../entryForm'
+import { contentOf, emptyForm, formOf, problemKey, today, typedSum, withCurrency, type EntryForm, type FormProblem } from '../entryForm'
+import { crossRate, dayTable } from '../exchangeRates'
 import { formatMoney, knownCurrencies } from '../amounts'
 import { offeredPeople, personLabel } from '../people'
 import EntryHistory from './EntryHistory.vue'
@@ -130,8 +137,52 @@ const header = computed(() => {
   return props.canWrite && !deleted.value ? t('expenses.entry.editTitle') : t('expenses.entry.viewTitle')
 })
 
+/** Where the fill of the rate stands for the currency picked last: asked, filled (with the rows' date), or not found. */
+type RateFill = { currency: string } & ({ state: 'loading' } | { state: 'filled'; rate: string; date: string } | { state: 'missing' })
+const rateFill = ref<RateFill | null>(null)
+/** Counts the fills asked; an answer to any but the last is dropped. A counter, not the object put in [rateFill]: a ref
+ *  hands back a reactive proxy of what it was given, so `rateFill.value !== asked` holds for the very fill asked and every
+ *  answer would be dropped (found by EntryEditor.rates.test.ts). */
+let fillAsked = 0
+const rateNote = computed(() => {
+  const f = rateFill.value
+  if (!f || f.currency !== form.value.currency) return null
+  if (f.state === 'loading') return t('expenses.entry.rateLoading')
+  if (f.state === 'missing') return t('expenses.entry.rateMissing', { currency: f.currency })
+  return form.value.rate === f.rate ? t('expenses.entry.rateFilled', { date: dayText(f.date) }) : null
+})
+function dayText(day: string): string {
+  const [y, m, d] = day.split('-').map(Number)
+  return new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium' }).format(new Date(y!, m! - 1, d!))
+}
+
+/** Fill the rate of [currency] from the day's table, unless the person moved on meanwhile. */
+async function fillRate(currency: string) {
+  const template = props.session.rateService.value
+  if (!template) return
+  const asked = ++fillAsked
+  rateFill.value = { currency, state: 'loading' }
+  const table = await dayTable(template, today())
+  if (asked !== fillAsked || form.value.currency !== currency) return // another currency picked since
+  const filled = table ? crossRate(table, currency, base.value.currency) : null
+  if (!filled) {
+    rateFill.value = { currency, state: 'missing' }
+    return
+  }
+  if (form.value.rate.trim() !== '' || !editable.value) {
+    rateFill.value = null // typed meanwhile, or saving: what the person wrote stands
+    return
+  }
+  form.value.rate = filled.rate
+  rateFill.value = { currency, state: 'filled', rate: filled.rate, date: filled.date }
+}
+
 function setCurrency(currency: string | null | undefined) {
-  if (currency) form.value = withCurrency(form.value, currency, base.value)
+  if (!currency || currency === form.value.currency) return
+  form.value = withCurrency(form.value, currency, base.value)
+  rateFill.value = null
+  fillAsked++
+  if (editable.value && foreign.value) void fillRate(currency)
 }
 function toggle(list: string[], id: string, on: boolean): string[] {
   return on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
@@ -297,6 +348,7 @@ function restore() {
       <label v-if="foreign">
         {{ t('expenses.entry.rateLabel', { from: form.currency, to: base.currency }) }}
         <VeyqInput v-model="form.rate" inputmode="decimal" autocomplete="off" :disabled="!editable" />
+        <span v-if="rateNote" class="veyq-form-copy">{{ rateNote }}</span>
         <span class="veyq-form-copy">{{ t('expenses.entry.rateHint') }}</span>
       </label>
       <div class="expenses-entry-row">

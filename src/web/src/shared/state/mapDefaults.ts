@@ -8,3 +8,5 @@ export const DEFAULT_TILE_MAX_ZOOM = 19
 export const DEV_TILE_ORIGIN = 'https://tile.openstreetmap.org'
 export const DEV_GEOCODER_ORIGIN = 'https://nominatim.openstreetmap.org'
 export const DEV_BREACH_ORIGIN = 'https://api.pwnedpasswords.com'
+/** Frankfurter, the day's ECB exchange rates Expenses' editor fills a rate from (`expenses.exchange-rates`, ADR 0108). */
+export const DEV_RATES_ORIGIN = 'https://api.frankfurter.dev'

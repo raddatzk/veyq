@@ -34,6 +34,7 @@ class PrivacyNoticeRendererTest {
         backupRetentionDays = 30,
         erasureWindowDays = 30,
         breachedPasswordService = PrivacyNoticeRenderer.serviceLabel("https://api.pwnedpasswords.com/range/"),
+        exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"),
         browserServices = listOf(BrowserService(SectionTexts("Maps", "Karten"), "tile.example.org")),
         storeHost = null,
     )
@@ -100,6 +101,29 @@ class PrivacyNoticeRendererTest {
         assertFalse(mirror.text.en.contains("Have I Been Pwned") || mirror.text.en.contains("pwnedpasswords"), "a mirror never names HIBP")
 
         assertNull(render(active = { it != CapabilityIds.BREACHED_PASSWORD }).passage("breached-password-check"), "the switch off: the passage goes")
+    }
+
+    /**
+     * The exchange rates' passage (ADR 0108 decision 8, Art. 13 GDPR): it names the provider the instance calls and what
+     * the request carries, exactly while its switch is on — the switch is `isActive`, which an unconfigured address keeps
+     * off (the slice test drives that one) — and a mirror is named by its host alone.
+     */
+    @Test
+    fun theExchangeRatesNameTheServiceTheInstanceCallsWhileTheirSwitchIsOn() {
+        val default = render().passage("exchange-rates")!!
+        assertTrue(default.text.en.contains("from Frankfurter (api.frankfurter.dev), at most once a day"), default.text.en)
+        assertTrue(default.text.de.contains("von Frankfurter (api.frankfurter.dev)"), default.text.de)
+        assertTrue(default.text.en.contains("no currency, no amount") && default.text.en.contains("your IP address and the address of this instance"))
+        assertTrue(default.text.en.contains("Art. 6(1)(f) GDPR") && default.text.en.contains("can switch it off"))
+
+        val mirror = render(values = all.copy(exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://rates.example.org/v2/rates?date={date}")))
+            .passage("exchange-rates")!!
+        assertTrue(mirror.text.en.contains("from rates.example.org, at most once a day"), mirror.text.en)
+        assertFalse(mirror.text.en.contains("Frankfurter") || mirror.text.de.contains("Frankfurter"), "a mirror never names Frankfurter")
+
+        val off = render(active = { it != CapabilityIds.EXPENSES_EXCHANGE_RATES })
+        assertNull(off.passage("exchange-rates"), "the switch off: the passage goes")
+        assertTrue(off.passage("breached-password-check") != null, "control: the other passage of its kind stays")
     }
 
     @Test

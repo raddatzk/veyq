@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger, decision 7 (receipts) by cr-expenses-receipts (both 2026-10-25; their browser pass is lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`), with the rate typed; decision 8's fetch waits for `changes/cr-expenses-exchange-rates.md`, open
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger, decision 7 (receipts) by cr-expenses-receipts and decision 8 (the day's exchange rates) by cr-expenses-exchange-rates (all 2026-10-25; their browser pass is lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`).
 - Date: 2026-10-23
 
 ## Context
@@ -134,8 +134,19 @@ so a later table never moves an old balance and a device without the provider st
 configurable, and the operator and a tenant owner switch the fetch off as `expenses.exchange-rates`
 ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A new instance starts with
 **Frankfurter** (open source and self-hostable, serving the ECB's reference rates), as the breached-password check starts
-with HIBP; a mirror can replace it (owner 2026-10-23). Its CORS headers, terms and currency list are checked when the
-fetch is built, before anything depends on them; a currency the table lacks is typed.
+with HIBP; a mirror can replace it (owner 2026-10-23). **How it serves the ECB's rates** (measured and decided when the
+fetch was built, 2026-10-25): the seeded address is Frankfurter's ECB endpoint,
+`https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}` — the ECB's own 30 euro reference rates (29 currencies
+and the euro's `1`), never v2's default table, which blends 105 sources and carries non-ISO rows (owner 2026-10-25: "nur
+EZB"); v1 is deprecated. It answers `access-control-allow-origin: *` to a plain `GET`, a weekend or a future date with
+the latest working day's rows, and the ECB's terms apply to it: its rates are free to reuse with the ECB cited as the
+source, and are published for information. So the editor says a filled rate is computed from the ECB's reference rates
+of the rows' date, and the privacy notice names Frankfurter as the service the browser contacts and the rates as the
+ECB's. Whatever address the Server Owner sets must serve the same table (a mirror, a self-hosted Frankfurter). A
+currency the table lacks is typed, never offered from another source. **The tenant's switch reaches a link guest too:**
+a guest's client holds only the instance's manifest, so its Pot read carries the table's address exactly while the
+entry is active for the Pot's tenant (`exchangeRateService`, owner 2026-10-25, option (a) of the CR's guest question), and
+a member's client reads its tenant's set — neither fetches where that tenant's privacy notice names no fetch.
 
 **9. Everything that reads amounts runs in the client**: balances, the settle-up suggestion, the overviews. The entry
 format is versioned from its first revision (ADR 0079 decision 7), and its rounding rule is part of the version, so
@@ -149,8 +160,10 @@ every device computes the same balance from the same entries.
 - **New on the platform:** the first blobless record list (decision 3), the first guest write that is a record
   (decision 6), two seal purposes (decision 4), the second record type with its own blobs after media (decision 7). A
   generic "record with attachments" primitive in core waits for a third concrete user (Inventory is a concept).
-- **When it is built,** the instance privacy notice (GDPR Art. 13) names the rate provider and the security model lists
-  the fetch beside the breached-password check — not before, because no doc claims what does not run.
+- **Built (cr-expenses-exchange-rates, 2026-10-25),** the instance privacy notice (GDPR Art. 13) names the rate provider
+  in a passage of its own (`exchange-rates`, beside the breached-password check's, switched by the entry), and the
+  security model lists the fetch beside the breached-password check; the mechanics are in
+  [docs/apps/expenses.md](../apps/expenses.md) § Exchange rates.
 - **Out of the first cut:** previews, offline, push, a category per line item, historical rates per entry date (an
   entry entered late takes the day's rate unless typed). Each is additive under the versioned format.
 

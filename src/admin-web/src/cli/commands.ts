@@ -605,9 +605,9 @@ export const COMMANDS: Record<string, Command> = {
   },
   'services set': {
     usage: 'services set <id> --url <url> [--attribution <text>]',
-    summary: 'Configure a service’s address (the map tiles: a {z}/{x}/{y} template and an attribution); acts at once.',
+    summary: 'Configure a service’s address (the map tiles: a {z}/{x}/{y} template and an attribution; the exchange rates: a template with {date}); acts at once.',
     flags: {
-      url: { describe: 'an http(s) address; the map tiles take a template with {z}, {x} and {y}', required: true },
+      url: { describe: 'an http(s) address; the map tiles take a template with {z}, {x} and {y}, the exchange rates one with {date}', required: true },
       attribution: { describe: 'the attribution shown on every map (map tiles only)', required: false },
     },
     operand: serviceId,

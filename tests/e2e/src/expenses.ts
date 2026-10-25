@@ -31,6 +31,9 @@ export const LABELS = {
     remove: 'Remove', removeConfirm: 'Remove and rotate the key?',
     rekeying: 'The new lock is going in. Adding things here waits until it’s done.',
     notifications: 'Notifications',
+    // Settings → Capabilities, the tenant owner's register (src/web/src/i18n/index.ts `tenantCapabilities`, the catalog's title)
+    capabilities: 'Capabilities', switchOff: 'Switch off', switchOn: 'Switch on', exchangeRates: 'Exchange rates',
+    switchOffTitle: (title: string) => `Switch off “${title}”?`,
     pot: {
       newPot: 'New Pot', baseCurrency: /^Base currency/, addPerson: 'Add person', open: (n: string) => `Open ${n}`, kindPot: 'Pot',
       tabs: { entries: 'Entries', balances: 'Balances', overview: 'Overview', people: 'People', settings: 'Settings' },
@@ -41,6 +44,7 @@ export const LABELS = {
       addEntry: 'Add entry', editEntry: 'Edit entry', viewEntry: 'Entry',
       title: 'Title', note: 'Note (optional)', amount: 'Amount', currency: /^Currency/, category_: /^Category/,
       rate: (from: string, to: string) => `Rate: 1 ${from} in ${to}`, from: /^From\b/, to: /^To\b/, person: 'Person',
+      rateFilled: (day: string) => `Computed from the ECB’s euro reference rates of ${day}.`,
       payerAmount: (n: string) => `Amount paid by ${n}`, addPayer: 'Add a payer', item: 'Item', itemAmount: 'Item amount', addItem: 'Add item',
       delete: 'Delete', restore: 'Restore', history: 'History', deletedEntries: 'Deleted entries', deletedBadge: 'deleted',
       invalid: 'does not add up',
@@ -83,6 +87,8 @@ export const LABELS = {
     remove: 'Entfernen', removeConfirm: 'Entfernen und Schlüssel rotieren?',
     rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.',
     notifications: 'Benachrichtigungen',
+    capabilities: 'Funktionen', switchOff: 'Ausschalten', switchOn: 'Einschalten', exchangeRates: 'Wechselkurse',
+    switchOffTitle: (title: string) => `„${title}“ ausschalten?`,
     pot: {
       newPot: 'Neue Kasse', baseCurrency: /^Basiswährung/, addPerson: 'Person hinzufügen', open: (n: string) => `${n} öffnen`, kindPot: 'Kasse',
       tabs: { entries: 'Einträge', balances: 'Salden', overview: 'Überblick', people: 'Personen', settings: 'Einstellungen' },
@@ -93,6 +99,7 @@ export const LABELS = {
       addEntry: 'Eintrag hinzufügen', editEntry: 'Eintrag bearbeiten', viewEntry: 'Eintrag',
       title: 'Titel', note: 'Notiz (optional)', amount: 'Betrag', currency: /^Währung/, category_: /^Kategorie/,
       rate: (from: string, to: string) => `Kurs: 1 ${from} in ${to}`, from: /^Von\b/, to: /^An\b/, person: 'Person',
+      rateFilled: (day: string) => `Berechnet aus den Euro-Referenzkursen der EZB vom ${day}.`,
       payerAmount: (n: string) => `Betrag, den ${n} bezahlt hat`, addPayer: 'Weitere Person hat bezahlt', item: 'Posten', itemAmount: 'Betrag des Postens', addItem: 'Posten hinzufügen',
       delete: 'Löschen', restore: 'Wiederherstellen', history: 'Verlauf', deletedEntries: 'Gelöschte Einträge', deletedBadge: 'gelöscht',
       invalid: 'geht nicht auf',

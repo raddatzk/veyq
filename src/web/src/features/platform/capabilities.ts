@@ -49,3 +49,7 @@ export const MEMORIES_PLACES = 'memories.places'
 /** Map tiles, an outside service; its URL template and attribution are the entry's `serviceUrl` and
  *  `serviceAttribution` (ADR 0018). */
 export const MEMORIES_MAP = 'memories.map'
+
+/** The day's exchange rates for Expenses' editor, an outside service: the entry's `serviceUrl` is a `{date}` template of
+ *  the ECB's euro reference rates (ADR 0108 decision 8). A link guest learns it from its Pot read, never from here. */
+export const EXPENSES_EXCHANGE_RATES = 'expenses.exchange-rates'

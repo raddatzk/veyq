@@ -12,6 +12,8 @@ import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate
 import me.raddatz.veyq.core.sharing.ShareViewGate
@@ -21,8 +23,9 @@ import me.raddatz.veyq.expenses.ExpensesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface SharePotListOutcome {
-    /** Every revision of the Pot in the guest's order; the resource pages and tags them. */
-    data class Listed(val revisions: List<PotRevisionEntity>) : SharePotListOutcome
+    /** Every revision of the Pot in the guest's order; the resource pages and tags them. [exchangeRateService] is the
+     *  day's exchange-rate table's address while `expenses.exchange-rates` is active for the Pot's tenant, else null. */
+    data class Listed(val revisions: List<PotRevisionEntity>, val exchangeRateService: String?) : SharePotListOutcome
 
     /** Unknown, disabled, expired or deleted share, a space that serves no guests, a `WRITE_ONLY` link, a required
      *  password absent, or no live Pot of that id in the live shared subtree — one non-enumerable 404. */
@@ -54,6 +57,8 @@ class SharePotsHandler(
     private val store: PotRevisionStore,
     private val guestWriteRecords: GuestWriteRecords,
     private val applications: ApplicationSwitch,
+    private val capabilities: CapabilityRegistry,
+    private val services: ExternalServiceAddresses,
 ) {
 
     /** Every revision of the live Pot [nodeId] inside the share's live subtree. */
@@ -66,8 +71,19 @@ class SharePotsHandler(
         }
         if (nodeId !in viewable.liveNodeIds) return SharePotListOutcome.NotFound
         NodeEntity.findById(nodeId)?.takeIf { it.kind == ExpensesNodeKinds.POT } ?: return SharePotListOutcome.NotFound
-        return SharePotListOutcome.Listed(store.allInEntryOrder(nodeId))
+        return SharePotListOutcome.Listed(store.allInEntryOrder(nodeId), exchangeRateService(viewable.scopeId))
     }
+
+    /**
+     * The exchange-rate table's address for a guest's device (ADR 0108 decision 8), set exactly while
+     * `expenses.exchange-rates` is active for the tenant [scopeId] lives in — configured, on at both levels, under Expenses
+     * on at both ([CapabilityRegistry.isActiveInScope], the AND along the path). A guest's client holds only the
+     * instance's manifest, so without this a tenant's switch would not reach it: its device would fetch while the notice on
+     * the tenant's host, rightly, names no fetch (the CR's guest question, option (a), owner 2026-10-25).
+     */
+    private fun exchangeRateService(scopeId: String): String? =
+        services.configured()[CapabilityIds.EXPENSES_EXCHANGE_RATES]?.url
+            ?.takeIf { capabilities.isActiveInScope(CapabilityIds.EXPENSES_EXCHANGE_RATES, scopeId) }
 
     /**
      * A `READ_WRITE` guest's batch: the gate (a write role, `READ_WRITE` only — a Pot is never a `WRITE_ONLY` root, and a

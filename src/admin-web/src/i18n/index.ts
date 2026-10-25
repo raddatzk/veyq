@@ -578,7 +578,7 @@ const en = {
   },
   "services": {
     "navTitle": "External services",
-    "sub": "The outside services a member’s browser calls directly: map tiles, place names and the breached-password check. A service without an address is not used at all, and the browser is not allowed to reach it, which is how an instance without internet runs. Changes act at once.",
+    "sub": "The outside services a member’s browser calls directly: map tiles, place names, the breached-password check and exchange rates. A service without an address is not used at all, and the browser is not allowed to reach it, which is how an instance without internet runs. Changes act at once.",
     "loading": "Reading the external services…",
     "loadFailed": "Couldn’t read the external services.",
     "configured": "In use",
@@ -588,8 +588,8 @@ const en = {
     "save": "Save",
     "remove": "Remove address",
     "removeTitle": "Stop using “{title}”?",
-    "removeBody": "No member’s browser will call this service any more. What depends on it is left out: no map, place names typed by hand, or no check of new passwords against known leaks. Nothing stored is deleted.",
-    "invalid": "“{title}” needs an http(s) address; map tiles need a template with {'{'}z{'}'}, {'{'}x{'}'} and {'{'}y{'}'}.",
+    "removeBody": "No member’s browser will call this service any more. What depends on it is left out: no map, place names typed by hand, no check of new passwords against known leaks, or exchange rates typed by hand. Nothing stored is deleted.",
+    "invalid": "“{title}” needs an http(s) address; map tiles need a template with {'{'}z{'}'}, {'{'}x{'}'} and {'{'}y{'}'}, exchange rates one with {'{'}date{'}'}.",
     "saveFailed": "Couldn’t save “{title}”. Please try again."
   },
   "setup": {
@@ -1254,7 +1254,7 @@ const de: typeof en = {
   },
   "services": {
     "navTitle": "Externe Dienste",
-    "sub": "Die Dienste außerhalb, die der Browser eines Mitglieds direkt aufruft: Kartenkacheln, Ortsnamen und die Prüfung auf geleakte Passwörter. Ein Dienst ohne Adresse wird gar nicht genutzt, und der Browser darf ihn nicht erreichen – so läuft eine Instanz ohne Internet. Änderungen wirken sofort.",
+    "sub": "Die Dienste außerhalb, die der Browser eines Mitglieds direkt aufruft: Kartenkacheln, Ortsnamen, die Prüfung auf geleakte Passwörter und Wechselkurse. Ein Dienst ohne Adresse wird gar nicht genutzt, und der Browser darf ihn nicht erreichen – so läuft eine Instanz ohne Internet. Änderungen wirken sofort.",
     "loading": "Externe Dienste werden gelesen…",
     "loadFailed": "Die externen Dienste konnten nicht gelesen werden.",
     "configured": "In Gebrauch",
@@ -1264,8 +1264,8 @@ const de: typeof en = {
     "save": "Speichern",
     "remove": "Adresse entfernen",
     "removeTitle": "„{title}“ nicht mehr nutzen?",
-    "removeBody": "Kein Browser eines Mitglieds ruft diesen Dienst mehr auf. Was davon abhängt, entfällt: keine Karte, Ortsnamen von Hand oder keine Prüfung neuer Passwörter gegen bekannte Lecks. Gelöscht wird nichts.",
-    "invalid": "„{title}“ braucht eine http(s)-Adresse; Kartenkacheln brauchen eine Vorlage mit {'{'}z{'}'}, {'{'}x{'}'} und {'{'}y{'}'}.",
+    "removeBody": "Kein Browser eines Mitglieds ruft diesen Dienst mehr auf. Was davon abhängt, entfällt: keine Karte, Ortsnamen von Hand, keine Prüfung neuer Passwörter gegen bekannte Lecks oder Wechselkurse von Hand. Gelöscht wird nichts.",
+    "invalid": "„{title}“ braucht eine http(s)-Adresse; Kartenkacheln brauchen eine Vorlage mit {'{'}z{'}'}, {'{'}x{'}'} und {'{'}y{'}'}, Wechselkurse eine mit {'{'}date{'}'}.",
     "saveFailed": "„{title}“ konnte nicht gespeichert werden. Bitte erneut versuchen."
   },
   "setup": {

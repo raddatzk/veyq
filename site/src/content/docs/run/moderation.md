@@ -599,8 +599,9 @@ It states what **this** instance does, from what it is set to, so keeping it tru
   its host), backups with your B, logs, and the account erasure with its window and what outlives it;
 - **the guest-write record** with N and N + B and its own right to object, on every instance (it has no switch);
 - **passages that follow a switch**, on the space's own address: the breached-password check naming the address it calls — a mirror you set
-  is named, HIBP is not (*Breached-password check*), and the services a member's browser calls, each by its address
-  (*Place names*, *Maps*; a space's owner can switch these off for their space);
+  is named, HIBP is not (*Breached-password check*), Expenses' day exchange rates naming the address they come from
+  and the ECB as their source (*Exchange rates*), and the services a member's browser calls, each by its address
+  (*Place names*, *Maps*; a space's owner can switch these and the exchange rates off for their space);
 - **the rights**, the complaint to the supervisory authority, and the right to object to everything resting on a
   legitimate interest, set apart.
 
@@ -609,8 +610,8 @@ every instance — a household may owe no notice, but every passage is still tru
 
 **It is a draft too**, and says so on every rendering. Questions only counsel answers, and that the notice answers as
 veyq is built until then: whether each space's owner is a joint controller with you for its members' accounts (the
-notice names you alone), whether the breached-password check may run by default (the notice states it as it runs, its
-recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
+notice names you alone), whether the breached-password check and the exchange rates may run by default (the notice
+states each as it runs, its recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
 towards a person a report names. The record of processing, your contracts with processors, a breach and an access
 request are [Data protection](/veyq/run/data-protection/)'s.
 

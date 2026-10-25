@@ -85,7 +85,7 @@ It defends a leaked database backup, not a compromised host. So:
   days.
 - **The Content Security Policy is built in**: scripts only from the instance itself, no framing, and network
   connections only to the instance, its store and the outside services you configured (the breached-password check,
-  the map tiles and the place-name lookup, [External services](/veyq/run/capabilities/#external-services)); a service
+  the map tiles, the place-name lookup and the exchange rates, [External services](/veyq/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
   ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)).
 - **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `gateway.tls.acme.server`), and switch

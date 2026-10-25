@@ -43,6 +43,8 @@ data class NoticeValues(
     val erasureWindowDays: Int,
     /** What the breached-password check calls, as [PrivacyNoticeRenderer.serviceLabel] names it; null while it calls nothing. */
     val breachedPasswordService: String? = null,
+    /** What the exchange-rate fetch calls (ADR 0108 decision 8), named the same way; null while it calls nothing. */
+    val exchangeRateService: String? = null,
     val browserServices: List<BrowserService> = emptyList(),
     /** An external object store's host; null for the bundled store. */
     val storeHost: String? = null,
@@ -95,12 +97,13 @@ object PrivacyNoticeRenderer {
     }
 
     /**
-     * The services veyq's defaults call, by their own names (the migration that seeds them,
-     * `V202610161210__core_external_service.sql`). A mirror the Server Owner sets is named by its host alone, so the
+     * The services veyq's defaults call, by their own names (the migrations that seed them,
+     * `V202610161210__core_external_service.sql` and `V202610251600__core_exchange_rate_service.sql`). A mirror the Server Owner sets is named by its host alone, so the
      * notice never names a provider the instance does not call.
      */
     private val KNOWN = mapOf(
         "api.pwnedpasswords.com" to "Have I Been Pwned",
+        "api.frankfurter.dev" to "Frankfurter",
         "nominatim.openstreetmap.org" to "Nominatim, OpenStreetMap Foundation",
         "tile.openstreetmap.org" to "OpenStreetMap Foundation",
     )
@@ -131,6 +134,7 @@ object PrivacyNoticeRenderer {
         "backupRetention" -> FixedValue.Text(text.dayUnit.render(v.backupRetentionDays, en))
         "erasureWindow" -> FixedValue.Text(text.dayUnit.render(v.erasureWindowDays, en))
         "breachedPasswordService" -> FixedValue.Text(v.breachedPasswordService)
+        "exchangeRateService" -> FixedValue.Text(v.exchangeRateService)
         "browserServices" -> FixedValue.Items(v.browserServices.map { "${it.title.pick(en)}: ${it.label}" })
         "storeHost" -> FixedValue.Text(v.storeHost)
         else -> error("the privacy notice names an unknown value {$name}")

@@ -27,6 +27,8 @@ export interface CspOptions {
   geocoderOrigin: string | null
   /** Dev only: the breached-password range API's origin (connect-src), or null to allow none. */
   breachOrigin: string | null
+  /** Dev only: the day's exchange-rate table's origin (connect-src, `expenses.exchange-rates`), or null to allow none. */
+  ratesOrigin: string | null
   /** Dev only: also allow the Vite HMR websocket (`ws:`). Never set for a production build. */
   dev?: boolean
   /** Dev only: the nonce Vite puts on the <style> elements it injects (`html.cspNonce`, new per dev-server start). */
@@ -43,12 +45,12 @@ export const REKA_STYLE_HASHES: readonly string[] = ["'sha256-60LHlRjW/B3CtzIoE/
 export const CSP_POLICY_FILE = 'content-security-policy.txt'
 
 /**
- * Build the Content-Security-Policy value. The built policy names no outside service: the map tiles, the geocoder and
- * the breached-password check are the Server Owner's settings (uc.admin.configure-external-services), and the backend
+ * Build the Content-Security-Policy value. The built policy names no outside service: the map tiles, the geocoder, the
+ * breached-password check and the exchange rates are the Server Owner's settings (uc.admin.configure-external-services), and the backend
  * appends the origin of each one in use to `img-src` / `connect-src` on every response (ADR 0069, ADR 0088 decision 7).
  * Only the dev server, which serves the app itself, passes their origins here (`vite.config.ts`).
  */
-export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false, devStyleNonce }: CspOptions): string {
+export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, ratesOrigin, dev = false, devStyleNonce }: CspOptions): string {
   const styleSrc = ["'self'", ...REKA_STYLE_HASHES]
   if (devStyleNonce) styleSrc.push(`'nonce-${devStyleNonce}'`) // Vite's injected stylesheets — dev server only
 
@@ -58,6 +60,7 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, dev = false
   const connectSrc = ["'self'"]
   if (geocoderOrigin) connectSrc.push(geocoderOrigin)
   if (breachOrigin) connectSrc.push(breachOrigin)
+  if (ratesOrigin) connectSrc.push(ratesOrigin)
   if (dev) connectSrc.push('ws:') // Vite HMR socket — dev server only, never in a production build
 
   const directives: Record<string, string[]> = {
