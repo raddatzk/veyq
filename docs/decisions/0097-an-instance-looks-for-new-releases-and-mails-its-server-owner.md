@@ -49,7 +49,7 @@ release list can at worst produce a false notice. admin-web shows, and the mail 
 The release manifest (ADR 0096 decision 3) marks an unscheduled major; the window end follows ADR 0085 decision 5
 from the release dates the check already reads.
 
-**3. The instance gets its own mail settings, for the Server Owner, the moderators and moderation's statements only.** A narrow exception to
+**3. The instance gets its own mail settings, for the Server Owner, the moderators, moderation's statements and erasures only.** A narrow exception to
 ADR 0048 §4: admin-web holds one instance-level SMTP configuration (the same fields as a tenant's), its password
 sealed under the config-secret key exactly as a tenant's is ([ADR 0050](0050-operator-config-secret-encryption.md)).
 It sends **only** instance notices, and **only** to the Server Owner's account address and — for moderation notices
@@ -63,7 +63,9 @@ decision was told, ADR 0093 § 11), bounded per address — and, **for moderatio
 (ADR 0093 § 7; owner decision Q11 of cr-statement-of-reasons-and-objection, 2026-10-17), to the affected and to
 reporters: each affected member's account address gets the statement of reasons after a measure and the answer to
 their objection, and a reporter who left a contact gets the decision on their report, the address sent once in the
-clear by the deciding moderator's client (which opened the sealed copy) and mailed from memory as the receipt is. The
+clear by the deciding moderator's client (which opened the sealed copy) and mailed from memory as the receipt is — and,
+**for an erasure** ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decisions 2
+and 10), to the address of an account being erased and to every member of a tenant the Server Owner deletes. The
 duty is the host's, so the host's channel: a tenant's mail would speak in the tenant's name for the host's decision.
 It is never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
 still holds.
@@ -91,7 +93,8 @@ once confirmed, and a changed address asks again (owner 2026-10-17).
 **6. The channel is built for instance notices, and carries release notices and moderation notices.** Nothing in
 decisions 3–5 is specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is
 one decision away — but each needs its own, because each is a new thing the instance watches. Moderation notices —
-a new case — are the second kind, decided by ADR 0099 § 7, and the only one that reaches anyone but the Server Owner.
+a new case — are the second kind, decided by ADR 0099 § 7, and the first that reaches anyone but the Server Owner;
+an erasure's notice (decision 3, ADR 0101) is the other.
 **Rotation due** is the third, to the Server Owner alone: after a moderator steps down or rotates their identity, reports
 keep sealing to an epoch that moderator held until the Server Owner mints the next one in admin-web, which shows the same
 warning (owner 2026-10-17, ADR 0099 § 4); it is mailed once per epoch. The first tenant owner's invite is
