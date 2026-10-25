@@ -1,7 +1,7 @@
 # Application: Expenses
 
-> **The ledger is built, on the V1 line** (owner 2026-10-23; `changes/cr-expenses-ledger.md`, 2026-10-25, its browser
-> pass still open there). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots,
+> **The ledger is built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger, 2026-10-25, its browser pass lane L1's
+> `tests/e2e/tests/features/expenses-pot.spec.ts`, EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots,
 > their people, entries with their history, the ledger check, balances, settle-up, overviews and the link are built, a rate
 > is typed. **Not built yet:** receipts (`changes/cr-expenses-receipts.md`), rates fetched by the device
 > (`changes/cr-expenses-exchange-rates.md`) and "Who am I" (inbox #541). Backend `:apps:expenses`

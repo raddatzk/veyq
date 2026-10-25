@@ -300,12 +300,16 @@ export function buildLedger(held: readonly HeldRevision[], base: BaseCurrency): 
 
   const balances = balancesOf(order, entries)
   const byId = new Map(participants.map((p) => [p.id, p] as const))
+  const overview = overviewOf(entries)
+  // The people in join order, as every other list of the Pot: in the order entries first name them they would follow the
+  // entries' ids, which an import or a copy mints anew.
+  overview.byPerson = new Map(order.filter((id) => overview.byPerson.has(id)).map((id) => [id, overview.byPerson.get(id)!] as const))
   return {
     participants: order.map((id) => byId.get(id)!),
     entries,
     balances,
     settleUp: settleUp(balances, order),
-    overview: overviewOf(entries),
+    overview,
   }
 }
 

@@ -27,6 +27,10 @@ vi.mock('../../../core/people/directory', async (orig) => ({
 }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn(), eraseParticipant: vi.fn() }))
 vi.mock('../../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn(async () => ({})) }))
+vi.mock('../../../core/report/report', async (orig) => {
+  const { ref } = await import('vue')
+  return { ...(await orig<object>()), useReportOffered: () => ref(true), openReport: vi.fn() }
+})
 
 import * as v1 from '@veyq/crypto/v1'
 import PotDetail from './PotDetail.vue'
@@ -35,6 +39,7 @@ import { treeStore } from '../../../core/node/treeStore'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { appendPotWrites, eraseParticipant, readMemberPot, sealPotWrites, StaleRevisionError } from '../domain/potApi'
 import { writeNodeMeta } from '../../../core/node/nodeMetaWrite'
+import { openReport } from '../../../core/report/report'
 import { POT_META_KEY, potMetaObject, potMetaOf } from '../domain/potMeta'
 import type { RawNodeMeta } from '../../../core/node/nodeMeta'
 import type { MetaEditContext } from '../../../core/node/sealedMetaWrite'
@@ -164,6 +169,50 @@ describe('PotDetail for a member', () => {
     expect(w.text()).toContain('Dinner (Anna)')
   })
 
+  it('a save on an entry the live poll changed under the open editor is stale too, never written over theirs', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 3): the poll brought Ben's version in while Anna's editor showed the one
+    // before, so a write sealed on the latest HELD revision would land as n + 2 and drop Ben's change unseen.
+    const w = mountPot()
+    await flushPromises()
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    server.current.append([{ entryId: DINNER, content: expense('Dinner (Ben)', 9300, ANNA, [ANNA, BEN, CLEO]) }], 'user:u-ben')
+    window.dispatchEvent(new Event('focus')) // the live poll's wake: it reads Ben's revision into the page
+    await flushPromises()
+    expect(w.text()).toContain('Dinner (Ben)')
+    const title = dialog()!.querySelector('input') as HTMLInputElement
+    expect(title.value).toBe('Dinner')
+    title.value = 'Dinner (Anna)'
+    title.dispatchEvent(new Event('input'))
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()!.textContent).toContain(t('expenses.entry.stale'))
+    expect((dialog()!.querySelector('input') as HTMLInputElement).value).toBe('Dinner (Ben)')
+    expect(server.appends).toHaveLength(0)
+    // Control: saved again on the version it now shows, it goes on top.
+    const again = dialog()!.querySelector('input') as HTMLInputElement
+    again.value = 'Dinner (Anna)'
+    again.dispatchEvent(new Event('input'))
+    await buttonIn(dialog()!, t('common.save'))!.click()
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(server.current.held().filter((r) => r.entryId === DINNER).map((r) => r.revision)).toEqual([1, 2, 3])
+  })
+
+  it('reporting an entry from its dialog closes the dialog first, so the report dialog is the one on top', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 8): the report dialog opened BEHIND the still-open entry dialog, whose
+    // modal layer kept it out of reach.
+    const w = mountPot()
+    await flushPromises()
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    await buttonIn(dialog()!, t('report.action'))!.click()
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(openReport).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(openReport).mock.calls[0]![0].targets).toEqual([expect.objectContaining({ kind: 'ITEM', id: DINNER })])
+  })
+
   it('the history names who wrote each version, for a member', async () => {
     server.current.append([{ entryId: DINNER, content: expense('Dinner for three', 9000, ANNA, [ANNA, BEN, CLEO]) }])
     const w = mountPot()
@@ -202,7 +251,7 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     await buttonIn(dialog()!, t('expenses.entry.delete'))!.click()
     await flushPromises()
-    expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' } }])
+    expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' }, basedOn: 1 }])
     expect(w.text()).toContain(t('expenses.entries.deletedTitle'))
     await openTab(w, t('expenses.tabs.balances'))
     expect(w.text()).toContain(t('expenses.balances.allSettled'))
@@ -246,6 +295,21 @@ describe('PotDetail for a member', () => {
     settleConfirm(true)
     await flushPromises()
     expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), DAN, expect.anything())
+  })
+
+  it('a removed person appears nowhere, not even as a deleted one; a deleted one is still counted (control)', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 6): after Cleo was deleted and an unnamed person removed, the People
+    // tab said "2 deleted people" — the removed one counted, though nothing shows them anywhere else.
+    const DAN = '0e000000-0000-4000-8000-000000000004'
+    server.current.append([{ entryId: DAN, content: person('Dan', 4) }])
+    server.current.erase(DAN)
+    server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: CLEO, to: ANNA } }])
+    server.current.erase(CLEO)
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.people'))
+    expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
+    expect(w.text()).not.toContain(t('expenses.people.deletedSummary', { n: 2 }, 2))
   })
 
   it('a settings change re-runs on the meta it is handed, and the base currency is fixed once an entry exists', async () => {

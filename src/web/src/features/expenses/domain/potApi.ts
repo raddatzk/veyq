@@ -144,8 +144,11 @@ export type PotTarget =
   | { kind: 'member'; scopeId: string; nodeId: string }
   | { kind: 'guest'; scopeId: string; nodeId: string; shareId: string; contributorToken: string; pwToken?: string }
 
-/** One record's next revision: a new record (its id minted by the caller, ADR 0072 decision 3) or the next of one held. */
-export type PotWrite = { entryId: string; content: Exclude<RevisionContent, { kind: 'erasure' }> }
+/** One record's next revision: a new record (its id minted by the caller, ADR 0072 decision 3) or the next of one held.
+ *  [basedOn] is the revision the writer's change was made on — an open editor's, which the live poll may have moved past
+ *  meanwhile: the write is then revision `basedOn + 1`, so the server answers `409 stale_revision` instead of taking it
+ *  over the other writer's version unseen. Absent, it is the latest held. */
+export type PotWrite = { entryId: string; content: Exclude<RevisionContent, { kind: 'erasure' }>; basedOn?: number }
 
 /** The client refuses to send a write: an entry that does not add up, a person the Pot does not know, two revisions of one
  *  record in a batch, a participant deactivated or erased while not settled, or whose join order moved. Nothing reached
@@ -188,7 +191,8 @@ const latestOf = (held: readonly HeldRevision[]): Map<string, number> => {
 }
 
 /**
- * Seal a batch of writes on what is held: each record's revision `n + 1` of its latest held (`1` for a new one), every
+ * Seal a batch of writes on what is held: each record's revision `n + 1` of its latest held (`1` for a new one) or of the
+ * revision the write says it was made on ([PotWrite.basedOn]), every
  * revision naming the heads the writer read. Refuses ([PotWriteRefused]) before sealing anything: two writes of one record,
  * an erasure, a money entry whose sums do not add up or that names someone who is neither a participant of the Pot nor
  * one this batch adds. Pure but for the randomness of the seals.
@@ -223,7 +227,7 @@ export function sealPotWrites(
   const latest = latestOf(held)
   const heads = headsToName(held)
   return writes.map((w) => {
-    const revision = (latest.get(w.entryId) ?? 0) + 1
+    const revision = (w.basedOn ?? latest.get(w.entryId) ?? 0) + 1
     // A content handed back from an opened body (a restore) still carries the `v` and the heads ITS writer read; spread
     // last, those would overwrite this write's own heads, and the restore would not name the tombstone it lifts.
     const { v: _v, heads: _theirs, ...content } = w.content as typeof w.content & { v?: unknown; heads?: unknown }

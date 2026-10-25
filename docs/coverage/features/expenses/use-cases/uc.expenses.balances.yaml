@@ -1,7 +1,7 @@
 useCase: uc.expenses.balances
 feature: expenses
 title: See who owes whom, settle up, and see where the money went
-# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 # `who-am-i-stays-on-the-device` ("The viewer's choice of who they are marks their row and never leaves the device") is
@@ -25,3 +25,12 @@ acceptanceCriteria:
         unit: [src/features/expenses/domain/ledger.test.ts]
 gaps:
   backend: "No part here: every figure is computed in the client from the opened revisions (ADR 0108 decision 9); the server stores and serves them, covered under uc.expenses.record-entries."
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `balances-from-the-live-
+    entries`, `settle-up-is-greedy-and-deterministic` and `overviews-by-category-and-person` in Chromium, all in
+    English and again in German, against the release candidate's two images installed through `veyqctl` (ADR 0090),
+    each test tagged with its criterion: the vectors' "trip" Pot typed in shows the vector's balances and settle-up
+    (each amount formatted for the language), the overview's paid and share columns each sum to the costs, the
+    settle-up recorded in one batch settles everyone, and the Pot at 375 px scrolls only down. Green only in local
+    runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite
+    executed.

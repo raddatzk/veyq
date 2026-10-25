@@ -94,8 +94,12 @@ const missingEntries = computed(() =>
   }),
 )
 
+/** Report an entry from its dialog: the entry dialog closes first — core's report dialog, mounted once in App.vue, would
+ *  open beneath its modal layer and out of reach (cr-expenses-ledger's browser pass). */
 function onReport(entryId: string) {
-  if (props.contentKey) reportEntry(props.access, props.node.id, props.contentKey, session.held.value, entryId)
+  if (!props.contentKey) return
+  editing.value = null
+  reportEntry(props.access, props.node.id, props.contentKey, session.held.value, entryId)
 }
 </script>
 

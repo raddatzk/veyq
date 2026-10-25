@@ -21,13 +21,15 @@ const { t, locale } = useI18n()
 const { ask } = useConfirm()
 
 const shown = computed(() => props.ledger.participants.filter((p) => !p.erased))
-const erasedCount = computed(() => props.ledger.participants.filter((p) => p.erased).length)
 /** Every person any revision the Pot holds names, live or deleted: one of them is deleted, never removed. */
 const named = computed(() => {
   const ids = new Set<string>()
   for (const r of props.session.held.value) if (r.body && isMoney(r.body)) for (const id of namedParticipants(r.body)) ids.add(id)
   return ids
 })
+/** The deleted people, as the entries still show them: an erased person no revision names was removed and appears
+ *  nowhere, so the summary does not count them either (uc.expenses.manage-participants). */
+const erasedCount = computed(() => props.ledger.participants.filter((p) => p.erased && named.value.has(p.id)).length)
 const balance = (id: string) => props.ledger.balances.get(id) ?? 0n
 const money = (v: bigint) => formatMoney(v, props.meta.base.currency, props.meta.base.minorUnits, locale.value)
 

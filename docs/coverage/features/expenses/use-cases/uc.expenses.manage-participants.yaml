@@ -1,7 +1,7 @@
 useCase: uc.expenses.manage-participants
 feature: expenses
 title: Manage the people of a Pot
-# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
@@ -43,3 +43,12 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/expenses/people.test.ts, src/features/expenses/domain/ledger.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `writers-add-and-rename` (a
+    link guest adds a person), `member-deactivates-a-settled-participant`, `member-deletes-and-the-name-is-erased`
+    and `member-removes-an-unnamed-participant` in Chromium, all in English and again in German, against the release
+    candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion: once
+    settled, a person deactivated, activated and deleted (their entries name "deleted people"), one no entry names
+    removed, neither offered for a new entry. Green only in local runs of the lane (the V1 heavy stage), and ADR
+    0040 admits `stack` refs only once a CI run's log shows the suite executed.

@@ -1,6 +1,6 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by `changes/cr-expenses-ledger.md` (2026-10-25; its browser pass still open there), with the rate typed; decision 7 (receipts) waits for `changes/cr-expenses-receipts.md` and decision 8's fetch for `changes/cr-expenses-exchange-rates.md`, both open
+- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger (2026-10-25; its browser pass is lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`), with the rate typed; decision 7 (receipts) waits for `changes/cr-expenses-receipts.md` and decision 8's fetch for `changes/cr-expenses-exchange-rates.md`, both open
 - Date: 2026-10-23
 
 ## Context
