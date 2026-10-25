@@ -116,6 +116,7 @@ const en = {
       invalid: 'This entry does not add up, so it counts nowhere. Saving it corrected counts it again.',
       stale: 'Someone else changed this entry. Here is their version; save again to put yours on top.',
       saveFailed: 'The change was not saved. Please try again.',
+      blocked: 'Blocked by the operator: this Pot or entry takes no changes. Nothing was saved.',
       problem: {
         title: 'Give the entry a title.',
         date: 'Pick a date.',
@@ -187,6 +188,12 @@ const en = {
       record: 'Record',
       recordAll: 'Record all',
       allSettled: 'Everyone is settled.',
+    },
+    whoAmI: {
+      label: 'You are',
+      nobody: 'Not chosen',
+      hint: 'Marks your row. Kept on this device only.',
+      you: 'you',
     },
     overview: {
       empty: 'No costs yet.',
@@ -349,6 +356,7 @@ const de: typeof en = {
       invalid: 'Dieser Eintrag geht nicht auf und zählt deshalb nirgends. Korrigiert gespeichert zählt er wieder.',
       stale: 'Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen.',
       saveFailed: 'Die Änderung wurde nicht gespeichert. Bitte versuche es erneut.',
+      blocked: 'Vom Betreiber gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert.',
       problem: {
         title: 'Gib dem Eintrag einen Titel.',
         date: 'Wähle ein Datum.',
@@ -419,6 +427,12 @@ const de: typeof en = {
       record: 'Eintragen',
       recordAll: 'Alle eintragen',
       allSettled: 'Alle sind ausgeglichen.',
+    },
+    whoAmI: {
+      label: 'Du bist',
+      nobody: 'Nicht gewählt',
+      hint: 'Markiert deine Zeile. Nur auf diesem Gerät gespeichert.',
+      you: 'du',
     },
     overview: {
       empty: 'Noch keine Kosten.',

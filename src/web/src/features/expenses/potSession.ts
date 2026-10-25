@@ -25,7 +25,7 @@ import type { Access, TreeSource } from '../../core/access'
 import type { TreeNode } from '../../core/node/tree'
 import type { EpochKeys } from '../spaces/epochs'
 import { nodeKeyForWrite } from '../../core/node/rekey/floor'
-import { loadTree, treeStore } from '../../core/node/treeStore'
+import { loadTree, noteScopeGone, treeStore } from '../../core/node/treeStore'
 import { nodeMetaState, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { memberNodeMetaOptions } from '../../core/node/rereadNode'
@@ -218,8 +218,14 @@ export function usePotSession(input: PotSessionInput): PotSession {
     // failure rejects so the poller backs off (core's `ITEMS_POLL`, inbox #410).
     poller.start(async () => {
       if (!loaded.value || !input.potKey()) return 'skip'
-      if (input.access().mode === 'member') await readMember(cursor === null)
-      else await readGuest()
+      if (input.access().mode !== 'member') return void (await readGuest())
+      try {
+        await readMember(cursor === null)
+      } catch (e) {
+        // removed from the group: core's page says so and unmounts this one, which stops this poll (inbox #546)
+        await noteScopeGone(input.scopeId(), e)
+        throw e
+      }
     })
   }
   const stop = () => {

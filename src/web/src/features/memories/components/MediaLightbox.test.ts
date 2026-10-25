@@ -640,6 +640,25 @@ describe('MediaLightbox — delete (cr-0110)', () => {
     expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
   })
 
+  it('a key typed into a dialog over the lightbox (the report dialog) is that dialog\'s, never the culling hotkey', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    const box = document.createElement('div')
+    box.className = 'veyq-dialog'
+    const reason = document.createElement('textarea')
+    box.append(reason)
+    document.body.append(box)
+    for (const key of ['Backspace', 'Delete', 'ArrowRight', 'Escape']) reason.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    expect(wrapper.emitted('delete')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    box.remove()
+    // control: the same key outside any dialog is the hotkey
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
+    expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
+  })
+
   it('where canDelete says no (a viewer, or a guest on what it did not send) there is no trash button and the Delete key does nothing', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)

@@ -670,6 +670,9 @@ function onKeydown(event: KeyboardEvent) {
   // Any key pauses the slideshow — except the activation keys on its own toggle, whose click would start it again.
   if (!(isSlideshowToggle(event.target) && (event.key === 'Enter' || event.key === ' '))) pauseOnInteraction(event)
   if (props.suspendKeys) return // a modal is open over the lightbox — let it own the keyboard
+  // A layer dialog opened over the lightbox without its parent knowing — core's report dialog, opened from here for a
+  // medium — holds the focus, so its keys are its own: a Backspace in the report's reason is no culling hotkey.
+  if (event.target instanceof Element && event.target.closest('.veyq-dialog')) return
   if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0, and the arrows' pan while zoomed
   if (event.key === 'Escape') {
     if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes

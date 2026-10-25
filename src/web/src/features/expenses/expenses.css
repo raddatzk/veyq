@@ -66,6 +66,20 @@
   font-weight: 700;
 }
 
+/* "Who am I" (uc.expenses.balances step 2): the choice above the balances, and the viewer's own row marked. */
+.expenses-who-am-i {
+  max-width: 20rem;
+}
+
+.expenses-who-am-i-hint {
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}
+
+.expenses-you {
+  font-weight: 600;
+}
+
 .expenses-inline-form {
   display: flex;
   flex-wrap: wrap;

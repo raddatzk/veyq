@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // A Pot's overviews (uc.expenses.balances, docs/apps/expenses.md § What the client computes): the cost per category, and
 // per person what they paid beside what their share was — either alone misleads. Refunds count against their category;
-// transfers are not costs. Computed in the client from the live, valid entries (`ledger.ts`'s `overviewOf`).
+// transfers are not costs. Computed in the client from the live, valid entries (`ledger.ts`'s `overviewOf`). The viewer's
+// own row is marked *you*, as they chose in the balances.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { categoryLabel } from '../domain/categories'
@@ -9,8 +10,11 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { PotLedger } from '../domain/ledger'
 import { formatMoney } from '../amounts'
 import { personLabel } from '../people'
+import { whoAmI } from '../whoAmI'
 
-const props = defineProps<{ ledger: PotLedger; meta: PotMeta }>()
+const props = defineProps<{ ledger: PotLedger; meta: PotMeta; potId: string }>()
+/** The viewer's own row, as they chose in the balances ("Who am I", `../whoAmI.ts`). */
+const me = computed(() => whoAmI(props.potId).me.value)
 const { t, locale } = useI18n()
 
 const money = (v: bigint) => formatMoney(v, props.meta.base.currency, props.meta.base.minorUnits, locale.value)
@@ -67,8 +71,8 @@ const persons = computed(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in persons" :key="p.key">
-            <th scope="row">{{ p.name }}</th>
+          <tr v-for="p in persons" :key="p.key" :class="{ 'is-you': p.key === me }" :data-person="p.key">
+            <th scope="row">{{ p.name }}<span v-if="p.key === me" class="expenses-you"> · {{ t('expenses.whoAmI.you') }}</span></th>
             <td class="expenses-amount">{{ money(p.paid) }}</td>
             <td class="expenses-amount">{{ money(p.share) }}</td>
           </tr>

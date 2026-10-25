@@ -21,7 +21,7 @@ import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { copyHeaderActions } from '../../../core/export/copyActions'
-import { canReport, reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
+import { canReport, nodeTarget, reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
 import { loadTenantPeople, type Person } from '../../../core/people/directory'
 import { useToast } from '../../../shared/state/useToast'
@@ -95,17 +95,14 @@ const missingEntries = computed(() =>
   }),
 )
 
-/** Report an entry from its dialog: the entry dialog closes first — core's report dialog, mounted once in App.vue, would
- *  open beneath its modal layer and out of reach (cr-expenses-ledger's browser pass). */
+/** Report an entry from its dialog, which stays open beneath core's report dialog. */
 function onReport(entryId: string) {
   if (!props.contentKey) return
-  editing.value = null
-  reportEntry(props.access, props.node.id, props.contentKey, session.held.value, session.receipts.value, entryId)
+  reportEntry(props.access, props.node.id, props.contentKey, session.held.value, session.receipts.value, entryId, nodeTarget(props.access, props.tree, props.node))
 }
-/** Report one receipt on its own, from the entry dialog — which closes first, as for an entry. */
+/** Report one receipt on its own, from the entry dialog, as for an entry. */
 function onReportReceipt(receipt: HeldReceipt) {
   if (!props.contentKey) return
-  editing.value = null
   reportReceipt(props.access, props.node.id, props.contentKey, receipt)
 }
 /** A listed receipt as the entry dialog opens it, for whoever looks (a member's scope read, a guest's link). */
@@ -142,10 +139,10 @@ function receiptSource(receipt: HeldReceipt) {
               <EntriesPanel :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" @open="(entryId) => (editing = { entryId })" />
             </VeyqTabPanel>
             <VeyqTabPanel value="balances">
-              <BalancesPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" />
+              <BalancesPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" />
             </VeyqTabPanel>
             <VeyqTabPanel value="overview">
-              <OverviewPanel :ledger="ledger" :meta="meta" />
+              <OverviewPanel :ledger="ledger" :meta="meta" :pot-id="node.id" />
             </VeyqTabPanel>
             <VeyqTabPanel value="people">
               <PeoplePanel :session="session" :ledger="ledger" :meta="meta" :add-people="rights.addPeople" :manage-people="rights.managePeople" />

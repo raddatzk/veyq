@@ -8,6 +8,8 @@ import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
 import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
 import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
 import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, h, ref } from 'vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 
 vi.mock('./report', async (orig) => ({ ...(await orig<typeof import('./report')>()), submitReport: vi.fn() }))
 
@@ -95,6 +97,49 @@ describe('ReportDialog', () => {
     await flushPromises()
     expect(document.body.querySelector('#veyq-report-reason')).not.toBeNull()
     expect(document.body.textContent).toContain(t('report.items', { count: 1 }, 1))
+    w.unmount()
+  })
+
+  it('one item too large for a share of its own sends nothing of it and offers what holds it (inbox #540)', async () => {
+    const w = mountDialog()
+    const holder = target(999)
+    openReport({ access: member, scopeId: 's', targets: [{ kind: 'ITEM', id: '5c09e000-0000-4000-8000-000000000001', keys: () => null, oversize: true }], enclosing: holder })
+    await flushPromises()
+    expect(document.body.textContent).toContain(t('report.tooLarge'))
+    expect(document.body.querySelector('#veyq-report-reason'), 'no form for an item past the share\'s cap').toBeNull()
+    const offer = document.body.querySelector<HTMLButtonElement>('.veyq-report-enclosing')!
+    expect(offer.textContent).toContain(t('report.reportHolder'))
+    offer.click()
+    await flushPromises()
+    expect(document.body.querySelector('#veyq-report-reason')).not.toBeNull()
+    w.unmount()
+  })
+})
+
+describe('the report dialog over an open dialog (inbox #545)', () => {
+  it('opened from inside a dialog that opened after it was mounted, it is drawn above that dialog and holds the focus', async () => {
+    // As in App.vue: the report dialog is mounted first, once; an entry's dialog mounts later and is open when it reports.
+    const shown = ref(false)
+    const Page = defineComponent({
+      setup: () => () => [
+        h(ReportDialog),
+        shown.value ? h(VeyqDialog, { visible: true, header: 'Entry', class: 'entry-dialog' }, { default: () => h('button', { type: 'button' }, 'Report') }) : null,
+      ],
+    })
+    const w = mount(Page, { attachTo: document.body, global: { plugins: [realI18n()] } })
+    shown.value = true
+    await flushPromises()
+    openReport({ access: member, scopeId: 's', targets: [target(1)] })
+    await flushPromises()
+    const report = document.body.querySelector<HTMLElement>('.veyq-report-dialog')!
+    expect(document.body.querySelectorAll('.veyq-dialog__mask')).toHaveLength(2)
+    // Every dialog layer shares one z-index, so the one later in the document paints on top and takes the clicks.
+    const entry = document.body.querySelector<HTMLElement>('.entry-dialog')!
+    const entryMask = entry.closest('.veyq-dialog__frame')!.previousElementSibling!
+    expect(entryMask.classList.contains('veyq-dialog__mask')).toBe(true)
+    expect(entry.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING, 'the report box follows the entry dialog').toBeTruthy()
+    expect(entryMask.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING, 'and the entry dialog\'s mask').toBeTruthy()
+    expect(report.contains(document.activeElement)).toBe(true)
     w.unmount()
   })
 })

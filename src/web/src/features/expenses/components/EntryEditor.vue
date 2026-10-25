@@ -45,6 +45,7 @@ import { purgeAfterOf, receiptsToDrop, restoreOffered } from '../domain/receiptR
 import type { HeldReceipt, ReceiptSource } from '../receipts'
 import { QUOTA_EXCEEDED } from '../../../core/blob/queue'
 import { useToast } from '../../../shared/state/useToast'
+import { httpStatus } from '../../../shared/httpError'
 
 const props = defineProps<{
   session: PotSession
@@ -210,6 +211,9 @@ watch(
   },
 )
 
+/** `451 blocked_by_operator`: the Pot, a node above it, or this entry is blocked by a moderator. */
+const BLOCKED = 451
+
 async function run(write: () => Promise<void>) {
   error.value = null
   busy.value = true
@@ -224,6 +228,9 @@ async function run(write: () => Promise<void>) {
       error.value = t(e.tooLarge ? 'expenses.receipts.tooLarge' : 'expenses.receipts.uploadFailed', { names: e.fileName })
     } else if (e instanceof PotWriteRefused) {
       error.value = problemText(e.reason)
+    } else if (httpStatus(e) === BLOCKED) {
+      // a moderator blocked the Pot or this entry since the page read it (inbox #542): nothing was stored
+      error.value = t('expenses.entry.blocked')
     } else if (e instanceof Error && e.name === 'GuestDeclinedError') {
       error.value = null
     } else {
@@ -262,7 +269,7 @@ async function uploadPicked(): Promise<string[]> {
         noRoom.push(file.name)
         pending.delete(id)
         form.value.receipts = form.value.receipts.filter((x) => x !== id)
-      } else if (e instanceof Error && (e.name === 'GuestDeclinedError' || e.name === 'PotKeyUnavailableError')) {
+      } else if ((e instanceof Error && (e.name === 'GuestDeclinedError' || e.name === 'PotKeyUnavailableError')) || httpStatus(e) === BLOCKED) {
         throw e
       } else {
         throw new ReceiptUploadFailed(file.name, e instanceof Error && e.message === 'budget_exceeded')

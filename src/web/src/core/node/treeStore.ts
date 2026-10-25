@@ -4,12 +4,31 @@
 import { reactive } from 'vue'
 import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
 import { fetchTree, openTree, treeFingerprint, type TreeNode } from './tree'
+import { HttpStatus, isCodedError } from '../../shared/httpError'
 
 export const treeStore = reactive({
   nodes: [] as TreeNode[],
   loaded: false,
   error: false,
+  /** The server no longer knows this member in the active scope — a read of it answered `404 scope_not_found` (they
+   *  were removed from the group, or it is gone): the page says the access ended and stops asking (inbox #546). */
+  gone: false,
 })
+
+/**
+ * Whether [e] says the member no longer reaches the ACTIVE scope [scopeId] (`404 scope_not_found`, "no such scope, or the
+ * caller holds no grant"); if so the tree turns to its access-ended state, which stops the tree's live poll and unmounts
+ * the page — and with it every application's own poll (an Expenses Pot's, a Memory's gallery). Any poll of a scope's
+ * content asks this of its failures, so one that lands while the tree's poll is paused (a dialog is open) ends it too.
+ * Another failure, or a scope that is no longer the active one, changes nothing.
+ */
+export async function noteScopeGone(scopeId: string, e: unknown): Promise<boolean> {
+  if (!scopeId || scopeId !== activeSpace.scopeId) return false
+  if (!(await isCodedError(e, HttpStatus.notFound, 'scope_not_found'))) return false
+  if (scopeId !== activeSpace.scopeId) return false
+  treeStore.gone = true
+  return true
+}
 
 // What the tree on screen was read from: bumped by every load and reset, so a live poll (below) that began before one
 // of them is recognised as stale when it lands. `shown` is the fingerprint of the rows `nodes` holds; `shownTag` the
@@ -23,15 +42,16 @@ export async function loadTree(): Promise<void> {
   const epochs = activeEpochKeys()
   if (!activeSpace.scopeId || !epochs) return
   generation++
+  const scopeId = activeSpace.scopeId
   try {
-    const { rows, etag } = (await fetchTree(activeSpace.scopeId))! // no tag sent, so never a 304
-    treeStore.nodes = openTree(activeSpace.scopeId, epochs, rows)
+    const { rows, etag } = (await fetchTree(scopeId))! // no tag sent, so never a 304
+    treeStore.nodes = openTree(scopeId, epochs, rows)
     shown = treeFingerprint(rows)
     shownTag = etag
     treeStore.loaded = true
     treeStore.error = false
-  } catch {
-    treeStore.error = true
+  } catch (e) {
+    if (!(await noteScopeGone(scopeId, e))) treeStore.error = true
   }
 }
 
@@ -43,7 +63,8 @@ export async function loadTree(): Promise<void> {
  * folder, which moves the scope's revision and not this level's rows). Resolves whether the scope MOVED — the sections'
  * cue to look again at what lives beside the tree (Depot's blob listing: an upload completing changes the revision and
  * no row) — and REJECTS when the read fails (the poller backs off); it never touches `treeStore.error`: a transient
- * failure of a background read must not turn a working page into the error state.
+ * failure of a background read must not turn a working page into the error state. Only the answer that the member no
+ * longer reaches the scope ends it, as {@link noteScopeGone} says.
  *
  * It never races a write. A user's write ends in `loadTree()`, which bumps the generation: a poll that STARTED before
  * any load began, or whose rows came back after one began, is dropped unopened (its rows may predate the write). The
@@ -54,7 +75,13 @@ export async function pollTree(signal: AbortSignal): Promise<boolean> {
   const scopeId = activeSpace.scopeId
   if (!scopeId || !epochs || !treeStore.loaded) return false
   const startedAt = generation
-  const read = await fetchTree(scopeId, shownTag)
+  let read: Awaited<ReturnType<typeof fetchTree>>
+  try {
+    read = await fetchTree(scopeId, shownTag)
+  } catch (e) {
+    if (await noteScopeGone(scopeId, e)) return false // the access ended: the poll stops (its `active` reads `gone`)
+    throw e
+  }
   if (signal.aborted || startedAt !== generation || scopeId !== activeSpace.scopeId) return false
   if (!read) return false // 304: the revision is the one shown
   shownTag = read.etag
@@ -86,4 +113,5 @@ export function resetTree(): void {
   treeStore.nodes = []
   treeStore.loaded = false
   treeStore.error = false
+  treeStore.gone = false
 }
