@@ -52,7 +52,7 @@ export const LABELS = {
       deactivate: 'Deactivate', activate: 'Activate', inactive: 'deactivated',
       deletePerson: (n: string) => `Delete ${n}`, deleteAccept: 'Delete', removePerson: (n: string) => `Remove ${n}`, removeAccept: 'Remove',
       deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', paidBy: (n: string) => `paid by ${n}`,
-      copyLoss: 'The history of each entry, the deleted entries and the receipts: a copy starts every entry at its current version.',
+      copyLoss: 'The history of each entry and the deleted entries: a copy starts every entry at its current version.',
       reviewTitle: 'The reported entry, every version',
       receipts: {
         title: 'Receipts', add: 'Add receipt', open: (n: string) => `Open ${n}`, close: (n: string) => `Close ${n}`,
@@ -102,7 +102,7 @@ export const LABELS = {
       deactivate: 'Deaktivieren', activate: 'Aktivieren', inactive: 'deaktiviert',
       deletePerson: (n: string) => `${n} löschen`, deleteAccept: 'Löschen', removePerson: (n: string) => `${n} entfernen`, removeAccept: 'Entfernen',
       deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', paidBy: (n: string) => `bezahlt von ${n}`,
-      copyLoss: 'Den Verlauf jedes Eintrags, die gelöschten Einträge und die Belege: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
+      copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
       reviewTitle: 'Der gemeldete Eintrag, jede Fassung',
       receipts: {
         title: 'Belege', add: 'Beleg hinzufügen', open: (n: string) => `${n} öffnen`, close: (n: string) => `${n} schließen`,

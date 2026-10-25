@@ -15,7 +15,7 @@ import { readBlobMeta, makeChunkProvider, planBlob, presignAllChunks, reserveAnd
 import { guestReserve, guestWindow, shareChunkUrls } from '../../core/sharing/guestBlob'
 import { streamBlob, type ByteSink } from '../../core/blob/stream'
 import { downloadName, type OpenedBlobMeta } from '../../core/blob/meta'
-import type { BlobRef } from '../../core/blob/types'
+import type { BlobRef, BlobSource } from '../../core/blob/types'
 import { expectMintedId } from '../../core/node/mintedId'
 import { plaintextTotal } from '../../sw/range'
 import { openSaveTarget } from '../../shared/saveStream'
@@ -121,8 +121,9 @@ export function readGuestReceipts(shareId: string, nodeId: string, opts: { pwTok
 
 // --- the upload -------------------------------------------------------------------------------------------------------
 
-/** The picked file a receipt is made of: its bytes are read frame by frame, its type, name and time sealed in its meta. */
-export type ReceiptFile = Pick<File, 'size' | 'type' | 'name' | 'lastModified' | 'slice'>
+/** The file a receipt is made of — a picked one, or an import's payload (a ZIP's, or a copy's original read by frame):
+ *  its bytes are read frame by frame, its type, name and time sealed in its meta. */
+export type ReceiptFile = BlobSource & { readonly name: string; readonly lastModified: number }
 
 /**
  * Seal and upload one picked file as the receipt [receiptId] of the entry [entryId] in the Pot [target] (see the header),

@@ -511,7 +511,7 @@
       }
     },
     "expensesPot": {
-      "description": "Expenses: the content of an EXPENSES_POT node (docs/apps/expenses.md § Download and import) - its settings, its people and the current revision of each live entry, in the plaintext of the entry format (contracts/expenses/entry.v1.schema.json). History is not exported, nor are deleted entries: an import starts each entry at its current revision, under ids it mints, mapping every reference below. Ids here are the Pot's own and mean nothing in another instance.",
+      "description": "Expenses: the content of an EXPENSES_POT node (docs/apps/expenses.md § Download and import) - its settings, its people, the current revision of each live entry, in the plaintext of the entry format (contracts/expenses/entry.v1.schema.json), and the receipts that revision holds, each a payload. History is not exported, nor are deleted entries or dropped receipts: an import uploads each receipt under a new id before the revision that lists it and starts each entry at its current revision, under ids it mints, mapping every reference below. Ids here are the Pot's own and mean nothing in another instance.",
       "properties": {
         "type": {
           "const": "expenses.pot"
@@ -619,6 +619,14 @@
         "id": {
           "$ref": "../expenses/entry.v1.schema.json#/$defs/uuid"
         },
+        "receipts": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "The receipts the entry's current revision holds, each with its bytes: exactly the ids its `entry.receipts` lists, each once. A receipt the download cannot read - one the operator blocked - is left out of both. Absent: none.",
+          "items": {
+            "$ref": "#/$defs/expensesReceipt"
+          }
+        },
         "entry": {
           "description": "The entry's current revision without `v` and `heads`, which an import writes anew.",
           "oneOf": [
@@ -632,6 +640,38 @@
               "$ref": "../expenses/entry.v1.schema.json#/$defs/transfer"
             }
           ]
+        }
+      }
+    },
+    "expensesReceipt": {
+      "type": "object",
+      "description": "One receipt (uc.expenses.attach-receipts): its id, which the entry's `receipts` lists, its file name and its bytes. The name and the type are what its sealed blob meta said, opened on the exporting device; the server never saw either.",
+      "required": [
+        "id",
+        "file"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../expenses/entry.v1.schema.json#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "The receipt's own file name (the archive path may be a safe or numbered form of it)."
+        },
+        "file": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/payload"
+            }
+          ],
+          "properties": {
+            "size": {
+              "maximum": 10485760
+            }
+          },
+          "description": "The receipt's plaintext, at most 10 MiB (the receipt role's cap). Its `mediaType` is the sealed type, empty where none was sealed; an import takes only an image or `application/pdf` by that type or, without one, by the name's extension (the picker's rule), and refuses anything else before writing."
         }
       }
     },

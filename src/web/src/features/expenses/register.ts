@@ -60,7 +60,8 @@ export function registerExpenses(registry: Registry): void {
     importContent: importPot,
     contentSchema: EXPENSES_CONTENT_SCHEMA,
     validateContent: validatePotContent,
-    // The import reads no payload (the CSV is for a spreadsheet only), so a copy hands it nothing to buffer.
+    // The import reads a receipt's payload only through the upload pump's frame-sized slices (the CSV is for a spreadsheet
+    // only, never read), so a copy hands it the original read by frame and nothing is buffered whole.
     importStreams: true,
     copyLosses: ['expenses.copyLoss'],
   })

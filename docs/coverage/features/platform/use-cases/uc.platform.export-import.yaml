@@ -55,10 +55,10 @@ acceptanceCriteria:
       web:
         unit: [src/features/memories/exportImport.test.ts]
   - id: expenses-content
-    text: "A Pot downloads as its settings (base currency, own categories), its people and each live entry's current revision in the entry format's plaintext, beside a CSV of the entries for a spreadsheet, with no history and no writer; the content passes its own contract check, and an import writes a new Pot under new ids, a deleted person coming back as a deactivated one shown as deleted people, whose balances and settle-up equal the original's; a content that breaks its contract is refused before anything is written."
+    text: "A Pot downloads as its settings (base currency, own categories), its people and each live entry's current revision in the entry format's plaintext with the receipts it holds as files under their sealed names and types (one the operator blocked left out), beside a CSV of the entries for a spreadsheet, with no history and no writer, in a ZIP of the length it announced; the content passes its own contract check, and an import writes a new Pot under new ids, each receipt uploaded under a new id before the revision that lists it and opening byte-identical, a deleted person coming back as a deactivated one shown as deleted people, whose balances and settle-up equal the original's; a content that breaks its contract is refused before anything is written, and an import that fails part-way trashes the Pot it made."
     coverage:
       web:
-        unit: [src/features/expenses/exportImport.test.ts, src/features/expenses/register.test.ts]
+        unit: [src/features/expenses/exportImport.test.ts, src/features/expenses/exportImport.receipts.test.ts, src/features/expenses/register.test.ts]
     gaps:
       - surface: web
         reason: "No test imports a Pot that held a deleted person; the refs hold the live people, their balances and the settle-up across the round trip."

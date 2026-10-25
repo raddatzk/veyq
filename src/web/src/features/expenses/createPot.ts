@@ -3,6 +3,9 @@
 // records — the people, and for an import or a copy its entries — appended as batches of the server's cap (ADR 0108
 // decision 1). The node exists before its records do: a records append that fails leaves an empty Pot, which the caller
 // says ({@link PotPeopleNotAdded}); nothing is rolled back behind the person's back.
+//
+// The two steps are apart ({@link createPotNode}, {@link appendInBatches}) for the import: a new entry's receipts are
+// completed before its first revision, so the import uploads each batch's receipts between the node and that batch.
 import { createContentNode, type CreateNodeOptions, type NodeParent } from '../../core/node/tree'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { EpochKeys } from '../spaces/epochs'
@@ -35,28 +38,46 @@ export function participantWrites(names: readonly string[], now = Date.now()): P
  */
 export async function appendInBatches(
   scopeId: string, nodeId: string, key: { key: Uint8Array; epoch: number }, base: BaseCurrency, writes: readonly PotWrite[],
+  beforeBatch?: (batch: readonly PotWrite[]) => Promise<void>,
 ): Promise<void> {
   const seal = async (batch: readonly PotWrite[], held: readonly HeldRevision[]) =>
     heldOfSent(scopeId, nodeId, key.key, await appendPotWrites({ kind: 'member', scopeId, nodeId }, key, held, batch, base))
   let held: HeldRevision[] = []
-  for (let i = 0; i < writes.length; i += APPEND_BATCH) held = [...held, ...(await seal(writes.slice(i, i + APPEND_BATCH), held))]
+  for (let i = 0; i < writes.length; i += APPEND_BATCH) {
+    const batch = writes.slice(i, i + APPEND_BATCH)
+    await beforeBatch?.(batch)
+    held = [...held, ...(await seal(batch, held))]
+  }
+}
+
+/** A created Pot: its node id, its content key and the epoch that key was minted at (what a write states). */
+export type CreatedPot = { nodeId: string; nodeKey: Uint8Array; epoch: number }
+
+/** Create the Pot's node named [name] under [parent], its settings ([base], [categories]) sealed into its meta — no
+ *  records yet. */
+export async function createPotNode(
+  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency,
+  opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [],
+): Promise<CreatedPot> {
+  const meta = { v: 1, [POT_META_KEY]: potMetaObject({ base, categories: [...categories] }) }
+  const created = await createContentNode(scopeId, epochs, parent, POT_KIND, name, (key, node) => sealNodeMeta(key, { scopeId: node.scopeId, nodeId: node.nodeId }, meta), opts)
+  return { nodeId: created.nodeId, nodeKey: created.contentKey, epoch: created.epoch }
 }
 
 /** Create a Pot named [name] under [parent] with [base] and [categories], and its people [names]. Returns its id and
  *  key. Throws {@link PotPeopleNotAdded} when the node exists but its people were not appended. */
 export async function createPot(
   scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency, names: readonly string[],
-  opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [], more: readonly PotWrite[] = [],
-): Promise<{ nodeId: string; nodeKey: Uint8Array; epoch: number }> {
-  const meta = { v: 1, [POT_META_KEY]: potMetaObject({ base, categories: [...categories] }) }
-  const created = await createContentNode(scopeId, epochs, parent, POT_KIND, name, (key, node) => sealNodeMeta(key, { scopeId: node.scopeId, nodeId: node.nodeId }, meta), opts)
-  const writes = [...participantWrites(names), ...more]
+  opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [],
+): Promise<CreatedPot> {
+  const created = await createPotNode(scopeId, epochs, parent, name, base, opts, categories)
+  const writes = participantWrites(names)
   if (writes.length) {
     try {
-      await appendInBatches(scopeId, created.nodeId, { key: created.contentKey, epoch: created.epoch }, base, writes)
+      await appendInBatches(scopeId, created.nodeId, { key: created.nodeKey, epoch: created.epoch }, base, writes)
     } catch (e) {
       throw new PotPeopleNotAdded(created.nodeId, e)
     }
   }
-  return { nodeId: created.nodeId, nodeKey: created.contentKey, epoch: created.epoch }
+  return created
 }
