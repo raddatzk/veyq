@@ -317,8 +317,8 @@ describe('displayNamesOf', () => {
 // The grammar of inbox #328 (ADR 0015, amended 2026-10-11): a folder ends in a slash, a Depot node is its plain name, any
 // other application's node carries the application's slug, and a claimed slug is reserved among the plain names.
 describe('the route grammar', () => {
-  it('rests on what the applications claimed in the real registry: Memories `memories`, Depot no segment', () => {
-    expect(registry.routeSlugs()).toEqual(['memories'])
+  it('rests on what the applications claimed in the real registry: Memories `memories`, Depot no segment, Expenses `expenses`', () => {
+    expect(registry.routeSlugs()).toEqual(['memories', 'expenses'])
     expect(() => registry.claimRouteSlug('memories', ['SOMETHING'])).toThrow(/already claimed/) // Memories holds it
     expect(() => registry.claimNoRouteSegment(['SOMETHING'])).toThrow(/no route segment/) // Depot declared it
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) expect(registry.routeOf(kind).slug).toBe('memories')

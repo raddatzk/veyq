@@ -39,6 +39,10 @@ export const MEMORIES = 'memories'
 /** The Depot application itself: off, it is read-only (uc.platform.switch-application-off). */
 export const DEPOT = 'depot'
 
+/** The Expenses application itself: off, it is read-only (uc.platform.switch-application-off) — no Pot created, no entry
+ *  or person added or changed; reading, downloading and a Pot's trash stay. */
+export const EXPENSES = 'expenses'
+
 /** Place names from a geocoder, an outside service; its address is the entry's `serviceUrl` (ADR 0016). */
 export const MEMORIES_PLACES = 'memories.places'
 

@@ -106,5 +106,7 @@ div.veyq-node-host
             "Depot"
           button.veyq-tab [role="tab"]
             "Drop boxes"
+          button.veyq-tab [role="tab"]
+            "Expenses"
     p.veyq-empty.veyq-empty-inline
-      "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files, Upload folder…)."
+      "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files, Upload folder…, New Pot)."

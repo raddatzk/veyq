@@ -6,8 +6,10 @@
 import { registry } from './core/applications/registry'
 import { registerMemories } from './features/memories/register'
 import { registerDepot } from './features/depot/register'
+import { registerExpenses } from './features/expenses/register'
 
 export function registerApplications(): void {
   registerMemories(registry)
   registerDepot(registry)
+  registerExpenses(registry)
 }

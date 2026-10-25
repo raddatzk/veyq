@@ -7,6 +7,8 @@ import { DROPBOX_KIND, FILE_KIND } from './features/depot/kinds'
 import { fileNameSlug } from './shared/naming'
 import { memoryRows } from './features/memories/levelRows'
 import { depotRows } from './features/depot/levelRows'
+import { potRows } from './features/expenses/levelRows'
+import { POT_KIND } from './features/expenses/kinds'
 import FileDetail from './features/depot/components/FileDetail.vue'
 import FileShareDialog from './features/depot/components/FileShareDialog.vue'
 import MemoryNodeDialog from './features/memories/components/MemoryNodeDialog.vue'
@@ -53,19 +55,21 @@ describe('composition root', () => {
 
   // The level view is core's (P4b) and draws ONE list (inbox #407): Memories' row factory serves both its kinds, Depot's serves
   // FILE and the drop box; each kind has its tab, in registration order (Memories first).
-  it('gives the level view two row sources: Memories\' for MEMORY and CHAPTER, then Depot\'s for FILE and the drop box', () => {
+  it('gives the level view three row sources: Memories\' for MEMORY and CHAPTER, Depot\'s for FILE and the drop box, Expenses\' for the Pot', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
       { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { rows: depotRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
+      { rows: potRows, views: [], kinds: [POT_KIND] },
     ])
   })
 
-  it('gives the level view its tabs: Memories, Depot, Drop boxes - the filter of the one list', () => {
+  it('gives the level view its tabs: Memories, Depot, Drop boxes, Expenses - the filter of the one list', () => {
     expect(registry.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
       { id: MEMORY_KIND, label: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { id: FILE_KIND, label: 'depot.title', kinds: [FILE_KIND] },
       { id: DROPBOX_KIND, label: 'depot.dropBox.section', kinds: [DROPBOX_KIND] },
+      { id: POT_KIND, label: 'expenses.title', kinds: [POT_KIND] },
     ])
   })
 

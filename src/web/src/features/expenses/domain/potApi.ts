@@ -235,15 +235,16 @@ export function sealPotWrites(
   })
 }
 
-/** Append a batch to the Pot ([sealPotWrites]), atomically. Throws [StaleRevisionError] on `409 stale_revision`, and the
- *  server's other refusals as the generated client throws them. */
+/** Append a batch to the Pot ([sealPotWrites]), atomically, and answer the revisions the server took (a writer that
+ *  appends a second batch on the first — an import — holds them, `heldOfSent`). Throws [StaleRevisionError] on
+ *  `409 stale_revision`, and the server's other refusals as the generated client throws them. */
 export async function appendPotWrites(
   target: PotTarget,
   key: PotWriteKey,
   held: readonly HeldRevision[],
   writes: readonly PotWrite[],
   base: BaseCurrency,
-): Promise<void> {
+): Promise<PotRevisionWrite[]> {
   const revisions = sealPotWrites(target, key.key, held, writes, base)
   try {
     if (target.kind === 'member') {
@@ -261,6 +262,18 @@ export async function appendPotWrites(
   } catch (e) {
     throw (await staleOf(e)) ?? e
   }
+  return revisions
+}
+
+/** The revisions an append took, opened as held (their server time is the writer's clock: only a batch written on them
+ *  reads it, as the order of their heads). */
+export function heldOfSent(scopeId: string, nodeId: string, potKey: Uint8Array, sent: readonly PotRevisionWrite[], at = new Date()): HeldRevision[] {
+  return openServedRevisions(
+    scopeId,
+    nodeId,
+    potKey,
+    sent.map((r) => ({ entryId: r.entryId, revision: r.revision, createdAt: at, sealedBody: fromB64std(r.sealedBody), wrappedRevisionKey: fromB64std(r.wrappedRevisionKey) })),
+  )
 }
 
 /**

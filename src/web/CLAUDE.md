@@ -146,8 +146,10 @@ here; the server is blind.
 - **Core and application ([ADR 0079](../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
   The applications are `src/features/memories/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/depot.md](../../docs/apps/depot.md)) and `src/features/expenses/` (Expenses: the
-  `EXPENSES_POT` kind — so far its domain alone, `domain/`: the entry codec, the ledger's arithmetic and check, the reads
-  and writes; no registration and no screen yet, so `applications.ts` does not register it) — the guard's `APPLICATIONS`, keyed by owner;
+  `EXPENSES_POT` kind — `domain/`: the entry codec, the ledger's arithmetic and check, the reads and writes; around it the
+  Pot page (`components/PotDetail.vue`, a member's and a link guest's alike, rights in `rights.ts`), its session
+  (`potSession.ts`: the live read, the writes, the stale re-read), the Pot's settings in its sealed meta (`domain/potMeta.ts`,
+  `contracts/expenses/pot-meta.v1.schema.json`), the re-key, download and report of an entry) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop

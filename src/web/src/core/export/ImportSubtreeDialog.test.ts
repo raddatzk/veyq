@@ -88,12 +88,12 @@ describe('ImportSubtreeDialog', () => {
 
   it('newer content is listed as newer; an archive with nothing importable offers only Cancel', async () => {
     const nothing: Manifest = {
-      format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x', applications: [{ id: 'expenses', contentSchema: 1 }],
-      root: { id: 'n1', kind: 'EXPENSES', name: 'Budget', path: 'Budget', content: { type: 'expenses.sheet', schema: 1 }, children: [{ id: 'n2', kind: 'EXPENSES', name: 'May', path: 'Budget/May' }] },
+      format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x', applications: [{ id: 'ledgers', contentSchema: 1 }],
+      root: { id: 'n1', kind: 'LEDGER_SHEET', name: 'Budget', path: 'Budget', content: { type: 'ledgers.sheet', schema: 1 }, children: [{ id: 'n2', kind: 'LEDGER_SHEET', name: 'May', path: 'Budget/May' }] },
     }
     vi.mocked(openExport).mockResolvedValue({ source: {}, manifest: nothing } as unknown as OpenedExport)
     await mountDialog()
-    expect(body().querySelector('[data-testid="import-skipped"]')?.textContent).toContain(i18n.global.t('export.skipReason.unknown_application', { application: 'expenses', n: 2 }, 2))
+    expect(body().querySelector('[data-testid="import-skipped"]')?.textContent).toContain(i18n.global.t('export.skipReason.unknown_application', { application: 'ledgers', n: 2 }, 2))
     expect(body().querySelector('[data-testid="import-summary"]')?.textContent).toContain(t('export.importNothing'))
     expect(body().querySelector('[data-testid="import-submit"]')).toBeNull()
     expect(body().querySelector('[data-testid="import-cancel"]')).not.toBeNull()
