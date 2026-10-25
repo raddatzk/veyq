@@ -203,7 +203,7 @@ migration and two writers are what the passes need. Two writers are two hosts, n
    missing revision covered by an erasure of its own record passes, one covered only by another record's does not; a
    revision moved to another entry does not open; a re-wrapped `K_rev` (a re-key) leaves every digest matching. Bite the
    rounding: replace one `BigInt` division by a float one → a vector red.
-4. **Web: the Pot.** The registration (`KindDescriptor` with `createDialog`/`createEntry`, `list.rows` with decision 8's
+4. **Web: the Pot.** ✅ **Built 2026-10-25**, its browser pass not run (§ Retrospective). The registration (`KindDescriptor` with `createDialog`/`createEntry`, `list.rows` with decision 8's
    detail, `detail`, `shareDialog` offering `READ`/`READ_WRITE`, `contentSchema`/`exportContent`/`importContent`/
    `validateContent`, `rekeyContent` (planned in cr-scope-rotation-rekeys-nodes)); the
    Pot page on core's existing pieces — `VeyqTabs` for Entries / Balances / Overview, the entry editor (splits, line
@@ -353,3 +353,45 @@ the real code (15 conversions, 10 roundings, both Pots' entries, balances and se
   write key comes from core's `nodeKeyForWrite` (the floor). `rewrapRevisionKey` and `revisionKeyOf` are the cores of
   `rekeyContent` and of the report's keys. `core/export/ImportSubtreeDialog.test.ts` and `importHardening.test.ts` use
   `expenses` as an UNKNOWN application id: once phase 4 registers Expenses they need another id.
+
+**Phase 4 (2026-10-25), built on `main` `7019ea60` (phases 1–3 in).** The registration (`features/expenses/register.ts`:
+the Pot kind, "New Pot", its rows with the base currency as detail, `PotDetail`, `PotShareDialog` on core's link manager
+with `READ`/`READ_WRITE`, the content hooks, `rekeyContent`, the route slug `expenses`, the item review, the application
+entry); the Pot page (`components/`: Entries with the deleted ones, the entry editor with splits, line items and a typed
+rate, its history, Balances with the settle-up recorded one by one or as one batch, Overview, People, Settings, the ledger
+notice); `rights.ts` over `Access`; `potSession.ts` (the reads on core's `readItemPages` and `ITEMS_POLL`, the writes, the
+epoch retry, the stale re-read); `rekey.ts`; `exportImport.ts`; `report.ts` with `PotEntryReview.vue`; the `expenses`
+catalog in EN and DE. Site: `applications/index.mdx` names three applications; `expenses/{index,record-an-expense,
+settle-up,share-a-pot}.mdx` in EN and DE, each back-linked from the use-cases it names. Measured: `npm run check` 0 in
+`src/web` (4925 tests); `site` `npm run check` 0; every quick `scripts/validate_*.py` 0 (`validate_guard_gaps.py` not run: no
+guard changed); `src/packages/crypto` and `src/admin-web` untouched.
+
+- **The Pot's meta, decided:** the `pot` sub-object of core's `node-meta` envelope, `{ v: 1, baseCurrency, baseMinorUnits,
+  categories?: [{ id, name }] }` — `contracts/expenses/pot-meta.v1.schema.json`, its bounds read by `potMeta.test.ts`. No
+  vector: nothing is computed from it, and the envelope's seal is `node-meta`'s, already pinned in `v1.json`. A member
+  writes it through core's `writeNodeMeta` (the change re-runs on a `409`); the base currency is fixed once the Pot holds
+  any money entry, live or deleted. A Pot whose meta carries no readable `pot` shows no balance and takes no money entry
+  until a member sets one in Settings — a client never guesses a currency.
+- **A report key cannot name a revision.** `@veyq/crypto`'s report codec takes a `ref` that is a uuid or null and at most
+  32 keys per item, so each `K_rev` goes as role `ENTRY_REVISION` with a null ref, the review tries each key on each held
+  revision (a seal binds its address), and an entry of more than 32 revisions hands over its newest 32. "A report reaches
+  the whole entry" (ADR 0108 decision 6) holds only up to 32 revisions: a candidate for the report codec, not changed here.
+- **`appendPotWrites` answers the revisions it sent** (`heldOfSent` opens them): an import of more than 256 records appends
+  batch after batch, each on what the one before wrote, or its entries would name people the next batch does not know.
+- **A deleted participant imports as a deactivated one named by the catalog's "deleted people"**: its name is gone, and an
+  erasure on import would need the balance settled first. A member can delete it again.
+- **Bites**, by a script applying one sabotage, running the suites and restoring (16 sabotages, 15 red): a `READ_WRITE` guest managing people, a `READ`
+  guest writing, the switch ignored, a delete offered to an unsettled person, the Settings tab for everyone, writers named
+  for a guest, no re-read on a stale save, the ledger notice always on, erased balances shown apart, a deactivated person
+  offered, the re-key sending the old wrap, a report handing one key, an import keeping the old ids, a guest writing as a
+  member, a row without its currency — each red; "erased people not merged" stayed green, an equivalent mutant (the ledger
+  gives an erased participant no name, so `p.name === null` already says it).
+- **Not run:** the phase's **browser pass** (EN/DE, two hosts, a guest, a moderator, a rotation, 375 px): it needs a fresh
+  instance on the dev stack, which this phase's agent may not start (no Docker). L1 specs: the phase asks none. Left for the
+  orchestrator.
+- **For phase 5:** the coverage moves (the seven use-cases, and Expenses' criteria under `uc.platform.switch-application-off`,
+  `uc.platform.export-import`, `uc.platform.copy-node`, `uc.moderation.report`, `uc.spaces.rekey-after-rotation`) can point at
+  `rights.test.ts`, `components/PotDetail.test.ts`, `components/PotDetail.guest.test.ts`, `entryForm.test.ts`,
+  `exportImport.test.ts`, `rekey.test.ts`, `report.test.ts`, `people.test.ts` and `register.test.ts`; the project website's
+  `site/src/components/website/strings.ts` still calls Memories and Depot "the first two" and lists shared expenses as an
+  idea; "Who am I" (docs/apps/expenses.md § The Pot) is not built.
