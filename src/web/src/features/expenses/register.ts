@@ -21,7 +21,7 @@ import PotCreateDialog from './components/PotCreateDialog.vue'
 import PotDetail from './components/PotDetail.vue'
 import PotShareDialog from './components/PotShareDialog.vue'
 import PotEntryReview from './components/PotEntryReview.vue'
-// Expenses' global stylesheet — LAST, after the components above (Depot's `depot.css` has the reason).
+// Expenses' global stylesheet — LAST, after the components above (Memories' `memories.css` header has the reason).
 import './expenses.css'
 
 /** Where "New Pot" sits in the level's "New" menu: after core's folder (0), Memories' Memory (10), Depot's drop box (20)

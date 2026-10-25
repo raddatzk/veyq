@@ -402,7 +402,7 @@ here; the server is blind.
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memories/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; each application's strings are
-  its own catalog (`features/<owner>/i18n.ts`, added at build time by `src/applicationMessages.ts`; core's `src/i18n/index.ts` holds core's alone), Memories' global classes its own `features/memories/memories.css` (the media lightbox included, #517) and Depot's its `features/depot/depot.css` (the PDF text layer), each imported last by its application's `register.ts` (inbox #513, #517). An application's global classes are its own sheet in its directory, imported by the application: it loads BEFORE `style.css`, so a rule styling an element a core class also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by order; its dark twins sit at its end. `validate_stylesheet_anchors.py` reads every `.css` under `src/`.
+  its own catalog (`features/<owner>/i18n.ts`, added at build time by `src/applicationMessages.ts`; core's `src/i18n/index.ts` holds core's alone), Memories' global classes its own `features/memories/memories.css` (the media lightbox included, #517) and Expenses' its `features/expenses/expenses.css`, each imported last by its application's `register.ts` (inbox #513, #517); the PDF text layer's rules are core's `shared/pdf/pdf.css`, imported by the renderer `shared/pdf/PdfPages.vue`, which every application that shows a PDF mounts. An application's global classes are its own sheet in its directory, imported by the application: it loads BEFORE `style.css`, so a rule styling an element a core class also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by order; its dark twins sit at its end. `validate_stylesheet_anchors.py` reads every `.css` under `src/`.
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
   evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A
   node-environment suite gets no registry, so one that exercises a hook registers the real `memoriesLifecycle`
@@ -440,7 +440,7 @@ here; the server is blind.
   a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.
 
 - **A file page shows the file when it is opened** (inbox #412, `features/depot/components/FileViewer.vue` +
-  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/depot.md` § The viewer). Depot makes **no thumbnail or
+  `useFileViewer.ts` + `view.ts`, the PDF pages core's `shared/pdf/PdfPages.vue`; the rules and caps are `docs/apps/depot.md` § The viewer). Depot makes **no thumbnail or
   preview blob**. Four rules bind a change here: (1) **the decrypted bytes decide the kind** (`core/blob/sniff.ts`), the
   sealed type and the name only narrow - a test per claim-vs-bytes case; (2) **never render a peer's bytes as markup or code**:
   text is `textContent`, an image an `<img>` on an object URL owned by `useObjectUrl` and typed with the SNIFFED type (SVG
@@ -449,7 +449,7 @@ here; the server is blind.
   (4) **everything the viewer made is undone** on a new file, on navigation and on unmount (object URL, playback handle,
   the `AbortSignal` into the stream pump). A PDF is drawn by **pdf.js** (`pdfjs-dist`, legacy build) onto canvases in the page, never by the browser's
   viewer: `frame-src`/`object-src` stay `'none'` and **the CSP is unchanged** (widening it is the owner's decision). The rules
-  (`features/depot/pdf/`, `docs/apps/depot.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
+  (core's `shared/pdf/`, so any application draws a PDF through it - Depot's viewer is the first; `docs/apps/depot.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
   `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The viewer of an opened file (inbox #412): the file's own content, decrypted when the page opens and shown in the page
-// or full screen - an image, a text, a PDF drawn page by page onto canvases by pdf.js (`PdfPages`, loaded on the first PDF),
+// or full screen - an image, a text, a PDF drawn page by page onto canvases by pdf.js (core's `shared/pdf/PdfPages`, pdf.js loaded on the first PDF),
 // a video or audio through the service worker's media route (ADR 0047), and for anything else (a format the browser cannot
 // decode, a PDF whose password was declined, a file over its cap) a plain statement and the download. A password-protected PDF
 // asks for its password in the page (a field only pdf.js ever sees; see below) before it is shown. Depot makes no
@@ -27,7 +27,7 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useFileViewer, type ViewerTarget } from '../useFileViewer'
-import PdfPages from './PdfPages.vue'
+import PdfPages from '../../../shared/pdf/PdfPages.vue'
 import { TEXT_CAP } from '../view'
 
 const props = defineProps<{

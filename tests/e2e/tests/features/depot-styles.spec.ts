@@ -1,9 +1,9 @@
-// Depot's stylesheet after the core/application split (inbox #517, ADR 0079), read in a real browser — written as lane L1's
+// The PDF text layer's stylesheet after the core/application split (inbox #517, ADR 0079), read in a real browser through Depot's viewer — written as lane L1's
 // spec and NOT YET RUN (the implementing session ran no stack; it waits for the V1 heavy stage, where it is the visual
 // proof of the move). The Memories twin is `memories-styles.spec.ts`.
 //
-// `styles/pdf.css` went to the application's own `features/depot/depot.css`, imported by the application, so it now loads
-// BEFORE core's `style.css`. What a unit test cannot see is the cascade: happy-dom applies no stylesheet. So this reads the
+// `styles/pdf.css` went to Depot's own `features/depot/depot.css` and from there, with the renderer, to core's
+// `shared/pdf/pdf.css`, imported by `shared/pdf/PdfPages.vue`; either way it loads BEFORE core's `style.css`. What a unit test cannot see is the cascade: happy-dom applies no stylesheet. So this reads the
 // computed styles of the PDF text layer pdf.js builds over a drawn page — the layer, a text span and the end marker — light
 // and dark (a page is paper in every theme). No rule of that sheet tied with a core rule at the move; this holds it there.
 // A token's value is never spelled here: a probe element is given the same declaration and its computed value is the

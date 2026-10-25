@@ -1,10 +1,10 @@
-// Run AFTER `vite build`: fail unless the PDF viewer's pdf.js is a LAZY chunk with a same-origin worker, its runtime data is
+// Run AFTER `vite build`: fail unless the PDF renderer's pdf.js (core's `src/shared/pdf/`) is a LAZY chunk with a same-origin worker, its runtime data is
 // emitted, and nothing that would widen the page's policy shipped. The twin of `assert-media-worker-in-dist.mjs` and
 // `../packages/crypto/scripts/assert-argon-worker-in-dist.mjs` (inbox #412).
 //
-// Why a build can lose any of this and still exit 0: pdf.js is reached through `import('./pdfjsRuntime')` (pdfEngine.ts).
+// Why a build can lose any of this and still exit 0: pdf.js is reached through `import('./pdfjsRuntime')` (`src/shared/pdf/pdfEngine.ts`).
 // A static import of it anywhere puts ~0.5 MB of parser into the entry bundle of every page, silently; a worker URL spelled
-// any other way than the `?url` import in pdfjsRuntime.ts is inlined as a `data:` URL, which `worker-src 'self'` refuses, and
+// any other way than the `?url` import in `src/shared/pdf/pdfjsRuntime.ts` is inlined as a `data:` URL, which `worker-src 'self'` refuses, and
 // every PDF then fails to open ("the file cannot be read") while all unit tests - which mock the engine - stay green.
 //
 // It asserts, each named in its failure:
@@ -20,7 +20,7 @@
 // What it does NOT prove: that a browser starts the worker or that the deployed policy admits it at run time - only a real
 // page with the real header shows that (docs/apps/depot.md names the proof).
 //
-// Bite (snapshot-and-restore, never `git checkout`): in pdfEngine.ts replace the dynamic import with a static
+// Bite (snapshot-and-restore, never `git checkout`): in `src/shared/pdf/pdfEngine.ts` replace the dynamic import with a static
 // `import { getDocument } from './pdfjsRuntime'`, build, and (iii) goes RED; restore and it is green.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'

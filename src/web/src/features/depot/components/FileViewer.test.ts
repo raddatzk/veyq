@@ -14,7 +14,7 @@ vi.mock('../../../sw/register', () => ({
 }))
 
 // PDFs are `FileViewer.pdf.test.ts`'s; here the engine is a stub so no test loads pdf.js by accident.
-vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 
 import FileViewer from './FileViewer.vue'
 import { registerPlayback, revokePlayback } from '../../../sw/register'

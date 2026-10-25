@@ -217,7 +217,12 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   at its size) and handed to **`pdfjs-dist`** (Mozilla, Apache-2.0, the *legacy* build) as `{data: Uint8Array}` — never
   a URL, so pdf.js opens no connection for the document. **The policy is unchanged** (the built header is pinned by
   `verify:csp`).
-  - **Lazy.** `pdf/pdfEngine.ts` is the seam (`openPdf` -> `PdfDocument`: page count, page size, `render` onto a canvas,
+  - **Core's renderer.** The engine, its options, the pdf.js runtime, the page component and the text layer's sheet are
+    core's `src/web/src/shared/pdf/` (`pdfEngine.ts`, `pdfOptions.ts`, `pdfjsRuntime.ts`, `PdfPages.vue`, `pdf.css`), not
+    Depot's: an application may not import another ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)),
+    so Expenses' receipts draw a PDF through the same renderer instead of a second one. What stays Depot's is the viewer
+    around it (`FileViewer`, `useFileViewer`, `view.ts`) and the password prompt.
+  - **Lazy.** `shared/pdf/pdfEngine.ts` is the seam (`openPdf` -> `PdfDocument`: page count, page size, `render` onto a canvas,
     `destroy`); it reaches pdf.js through a dynamic `import('./pdfjsRuntime')`, so the library (~0.5 MB) and its worker
     (~1.3 MB) are a chunk of their own that loads on the first PDF opened, never before. The worker is a hashed
     same-origin asset (`pdfjsRuntime.ts` imports it with `?url`; `vite.config.ts` emits it as `assets/pdf.worker.min-<hash>.js`,
@@ -245,7 +250,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     the viewport (an `IntersectionObserver` with a one-viewport margin; each page is drawn at the container's width times
     `devicePixelRatio`, at most 3), and its canvas is given back (resized to 0 x 0) when far away, so a long PDF holds a
     handful of bitmaps. "Page n of N", and zoom out / zoom in / fit width (50 % to 400 % of the fitted width) are labelled
-    buttons (`depot.viewer.pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
+    buttons (core's `pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
     component serves the member and both guest roles. Full screen is the viewer's, unchanged.
   - **Text layer (select and copy).** Over each drawn canvas `PdfPages` has a host `<div class="pdf-text-layer">`; the
     engine's `render(page, canvas, cssWidth, pixelRatio, textHost)` fills it with pdf.js 6's `TextLayer`
@@ -259,7 +264,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     page's text leaves an empty layer and the page drawn; a scan without a text layer is simply empty. The host is sized
     in px as the raw (unrotated) page at the current zoom (`viewport.rawDims`, the plain-px stand-in for the CSS `round()`
     pdf.js writes) and a page with `/Rotate` is turned into place by `[data-main-rotation]` rules - found wrong by a real
-    browser on the first try. The few rules it needs are in Depot's own `features/depot/depot.css` (tokens, two-class selectors: the spans get
+    browser on the first try. The few rules it needs are in core's `shared/pdf/pdf.css`, imported by `PdfPages.vue` (tokens, two-class selectors: the spans get
     `color: transparent`, `user-select: text`, `font-size`/`transform` from the custom properties pdf.js sets, the selection
     colour from `--app-accent`; the stylesheet pdf.js ships is not imported, so no `new` CSS file and no origin). The
     `.pdf-text-end` element pdf.js' own viewer appends keeps a drag from selecting the whole page (`.pdf-text-selecting`,

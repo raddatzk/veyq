@@ -2,7 +2,7 @@
 // `ready` (an image, a text or a media element's source), `too-large`, `unsupported` (and why), `error` or `cancelled`. The
 // reading and the decision are `view.ts`'s; this owns what must be undone: the AbortController of a read in flight, the
 // object URL of an image (core's `useObjectUrl`, revoked on replace, on a new target and on unmount), the service
-// worker's playback handle (revoked the same way) and a PDF's document (`pdf/pdfEngine.ts`: pdf.js, lazily loaded on the
+// worker's playback handle (revoked the same way) and a PDF's document (`shared/pdf/pdfEngine.ts`: pdf.js, lazily loaded on the
 // first PDF; destroyed - its pages, its worker, its memory - the same way). A protected PDF is the `password` state: the engine
 // asks `ask()`, the page answers through `submitPassword`/`cancelPassword`; the answer is only ever a resolved promise's value,
 // never kept in the state.
@@ -13,7 +13,7 @@ import { onBeforeUnmount, shallowRef, watch, type Ref } from 'vue'
 import type { BlobChunkProvider } from '../../core/blob/transport'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../sw/register'
-import { openPdf, PdfOpenError, type PdfDocument } from './pdf/pdfEngine'
+import { openPdf, PdfOpenError, type PdfDocument } from '../../shared/pdf/pdfEngine'
 import { loadFileView, type UnsupportedReason, type ViewHints } from './view'
 
 /** What the viewer opens: `id` changes whenever the content does (the blob's id); the provider reads and decrypts it. */

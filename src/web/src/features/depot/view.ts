@@ -12,7 +12,7 @@
 // read nothing beyond chunk 0 here - the service worker's media route (ADR 0047) pulls the rest on demand. A file over its
 // cap is not read past the first chunk.
 //
-// **A PDF is returned as bytes** (inbox #412): it is drawn by pdf.js onto canvases inside the page (`pdf/pdfEngine.ts`), not
+// **A PDF is returned as bytes** (inbox #412): it is drawn by pdf.js onto canvases inside the page (`shared/pdf/pdfEngine.ts`), not
 // by the browser's own viewer, which would need an `<iframe>`/`<object>` on a `blob:` URL against the app's policy
 // (`frame-src 'none'; object-src 'none'`, `docs/crosscutting/cc.security.csp.md`). This module does not load pdf.js: it
 // decides "this is a PDF" from the bytes and reads them; opening them is the viewer's.

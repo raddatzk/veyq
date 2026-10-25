@@ -77,16 +77,9 @@ const en = {
         copiedShown: 'Copied the shown part of the text to the clipboard.',
         copyManual: 'Your browser does not allow copying with the button here. The text is selected: press Ctrl+C (Cmd+C on a Mac) to copy it.',
       },
-      // The PDF viewer (components/PdfPages.vue): drawn by pdf.js onto canvases inside the page.
+      // A PDF's viewer: its pages and toolbar are core's renderer (`shared/pdf/PdfPages.vue`, its texts core's `pdf.*`);
+      // what stays here is Depot's own part of it.
       pdf: {
-        toolbar: 'PDF controls',
-        pageOf: 'Page {page} of {total}',
-        pages: 'Pages of {name}',
-        page: 'Page {page} of {total}',
-        pageFailed: 'Page {page} could not be shown.',
-        zoomOut: 'Zoom out',
-        zoomIn: 'Zoom in',
-        fitWidth: 'Fit to width',
         // The prompt for a password-protected PDF: the password goes to the PDF reader on this device and nowhere else.
         passwordTitle: '{name} is password protected',
         passwordLabel: 'Password',
@@ -269,14 +262,6 @@ const de: typeof en = {
         copyManual: 'Dein Browser erlaubt das Kopieren per Schaltfläche hier nicht. Der Text ist markiert: Drücke Strg+C (Cmd+C auf dem Mac), um ihn zu kopieren.',
       },
       pdf: {
-        toolbar: 'PDF-Steuerung',
-        pageOf: 'Seite {page} von {total}',
-        pages: 'Seiten von {name}',
-        page: 'Seite {page} von {total}',
-        pageFailed: 'Seite {page} konnte nicht angezeigt werden.',
-        zoomOut: 'Verkleinern',
-        zoomIn: 'Vergrößern',
-        fitWidth: 'An Breite anpassen',
         passwordTitle: '{name} ist passwortgeschützt',
         passwordLabel: 'Passwort',
         passwordHint: 'Es wird nicht gespeichert: Du gibst es bei jedem Öffnen dieses PDFs neu ein.',

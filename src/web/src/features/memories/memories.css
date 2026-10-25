@@ -14,9 +14,9 @@
    and wins by specificity. Measured at #513's move: those two were the only ties (`.memory-card` against `.veyq-card`'s
    border, radius, background, shadow and min-width; `.memory-create-card-memory` and its icon against
    `.veyq-create-card`'s columns, gap, height, padding and alignment); the lightbox's are listed in its section. Every
-   other rule here styles an element no core sheet's rule of equal specificity reaches. The sheets after it (Depot's
-   `depot.css`, then `settings`, `dark`) were after it before too. Keep it so: a new rule here that styles a core
-   class's element compounds with that class. */
+   other rule here styles an element no core sheet's rule of equal specificity reaches. The sheets after it (the PDF
+   renderer's `shared/pdf/pdf.css`, reached through Depot, then `settings`, `dark`) were after it before too. Keep it so: a
+   new rule here that styles a core class's element compounds with that class. */
 
 .media-grid {
   position: relative;

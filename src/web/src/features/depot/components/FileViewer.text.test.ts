@@ -11,7 +11,7 @@ vi.mock('../../../sw/register', () => ({
   revokePlayback: vi.fn(),
   handleFromUrl: (url: string) => url.replace('/__media/', ''),
 }))
-vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 
 import FileViewer from './FileViewer.vue'
 import { TEXT_CAP } from '../view'
