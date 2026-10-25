@@ -33,7 +33,7 @@ beforeEach(() => {
   server.append([{ entryId: '0e000000-0000-4000-9000-000000000001', content: expense('Dinner', 4000, ANNA, [ANNA, BEN]) }])
   const wire = server.rows.map((r) => ({ entryId: r.entryId, revision: r.revision, wrappedRevisionKey: b64std(r.wrappedRevisionKey) }))
   // Two pages: the cursor of the first is the index of the second.
-  api.pages = [{ revisions: wire.slice(0, 2), more: true, cursor: '1' }, { revisions: wire.slice(2), more: false, cursor: null }]
+  api.pages = [{ revisions: wire.slice(0, 2), receipts: [], more: true, cursor: '1' }, { revisions: wire.slice(2), receipts: [], more: false, cursor: null }]
 })
 
 const ctx = (oldKey: Uint8Array) => ({

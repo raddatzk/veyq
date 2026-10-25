@@ -2666,7 +2666,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows, `id_taken` = the `blobId` already exists, `quota_exceeded` = the request's admissible items together do not fit the link's storage limit or the tenant's quota (which one is not said), so every one of them is refused and no session is opened — no retry can help (ADR 0073 §5–§6), `store_unavailable`); null on success.
+          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap or over its role's own cap — Expenses' `EXPENSES_RECEIPT` at 10 MiB of plaintext, see `BlobRole` —, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows, `id_taken` = the `blobId` already exists, `quota_exceeded` = the request's admissible items together do not fit the link's storage limit or the tenant's quota (which one is not said), so every one of them is refused and no session is opened — no retry can help (ADR 0073 §5–§6), `store_unavailable`); null on success.
           maxLength: 64
           example: null
 
