@@ -13,7 +13,9 @@
   the tenant.
 - **Postconditions (success):** Nothing of the application is written in the tenant while it is off; everything of it
   that exists opens, downloads and can be deleted as before; switched on again, everything is as it was. Its child
-  entries (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it.
+  entries (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it. Left off for the window, its
+  content is erased on a day its members are told
+  ([uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md), planned).
 
 ## Main flow
 
@@ -53,8 +55,10 @@
   writes into its existing nodes would not be off; it stops at reading, because a switch that hid what people stored
   would hold their data hostage (owner 2026-10-23).
 - The server sees what it refuses by: the node's kind, the application's operations, the share's root kind.
-- Off is a window, not an end: switched on again, nothing was lost. What follows a long window, the application's
-  data erased after members had time to save it, is open (inbox #539) and not built (owner 2026-10-24).
+- Off is a window, not an end: switched on again, nothing was lost. What follows a long window is
+  [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md): the application's
+  content in the tenant is erased on a day the banner and a mail name, unless it is switched on before (owner
+  2026-10-24 and 2026-10-25). It is planned, not built; until it is, nothing is erased.
 
 ## User impact
 
@@ -63,7 +67,8 @@ they had already put into it.
 
 ## Related
 
-- **Use-cases:** [uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md),
+- **Use-cases:** [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md) (what
+  follows a long window, planned), [uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md),
   [uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md),
   [uc.platform.capability-discovery](uc.platform.capability-discovery.md).
 - **Decisions:** [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,

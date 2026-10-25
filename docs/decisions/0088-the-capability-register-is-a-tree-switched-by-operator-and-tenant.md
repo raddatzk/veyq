@@ -62,7 +62,15 @@ instance and tenant layers.
    one-segment id is the only one a root may be (`core` is no entry). Its members see a banner, and its links keep
    serving what exists (owner 2026-10-24).
    What exists stays readable, so there is no "activated but empty" state machine, and the gate sits on the
-   application's writes, never on its reads.
+   application's writes, never on its reads. **Left off, it is the one switch that erases** (owner 2026-10-25, inbox
+   #539, ADR 0079 decision 8): after a window, an instance-wide configuration property of the Server Owner
+   (`veyq.application.off.retention`, default `P30D`), the application's content in the tenant is erased on a day
+   every member is told. Switched on before that day, nothing is lost. The window is no requirement (decision 8): a
+   tenant owner sets no value for it, and a tenant only narrows by switching the application off, never by shortening
+   what the instance allows (decision 2). An instance switch gives every tenant its own day. Only the application's
+   own entry erases; a child entry (`memories.places`) erases nothing. Planned, not built
+   ([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md),
+   `changes/cr-switched-off-application-is-erased.md`).
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a
    blob role the server sees. The operator then learns *that* a Memory has a track, never where. This is the same
    kind of metadata as `CHAPTER`.

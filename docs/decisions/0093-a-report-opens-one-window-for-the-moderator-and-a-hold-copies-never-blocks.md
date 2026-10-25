@@ -792,3 +792,19 @@ what is built (`CLAUDE.md`).
     and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block, loses a case or
     revives a hold that had ended ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8); this
     item is only about the capture's own existence.
+12. **Whether erasing a switched-off application's content needs a basis in the terms.** A tenant owner or the
+    operator switches an application off, and after a window its members' content in the tenant is erased
+    ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,
+    [uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md);
+    owner 2026-10-25, inbox #539). Whether erasing content other members made, on someone else's decision and after a
+    notice, needs a basis in the terms is open. If it does, it is also open whether that basis belongs in the operator
+    section (veyq's fixed text, [ADR 0035](0035-server-terms-of-service.md) decision 6) or in the space's own terms.
+    It is tied to item 6, who the controller is. Until counsel answers, the operator section stays as it is, and the
+    privacy notice names how long content is kept (GDPR Art. 13(2)(a)).
+13. **Whether the notice of that erasure is adequate.** Members are told the day by a banner and, where the instance
+    has mail, by a notice and a reminder, each tried once, with no delivery guarantee. An instance without mail tells
+    them by the banner alone. Whether that suffices as notice before content is erased is open.
+14. **Whether switching an application off is a moderation decision.** The reading taken is no: a switch-off does not
+    act on content for being illegal or against the terms, so it is no content moderation in the sense of DSA
+    Art. 3(t), and it owes no statement of reasons under Art. 17 (§ 7). The reading was not checked against a source or
+    by counsel. If it is wrong, a switch-off that leads to an erasure owes each affected member a statement.
