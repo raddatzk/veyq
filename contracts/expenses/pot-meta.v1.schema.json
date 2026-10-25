@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/expenses/pot-meta.v1.schema.json",
+  "title": "Expenses Pot settings, format v1",
+  "description": "The `pot` sub-object of an EXPENSES_POT node's sealed `node-meta` (ADR 0108 decision 2): the Pot's base currency and its own categories, and nothing else. The node-meta envelope (`{ v, cover?, ... }`, the `node-meta` field seal under the Pot's K_node, bound to (scope, node), contracts/crypto/vectors/v1.json) is core's and carries this object under the key `pot`; a member writes it whole with the `metaRevision` it read (ADR 0077) and a link guest never writes it. Its participants are NOT here: they are records of the Pot's list (entry.v1.schema.json, kind `participant`), so a guest who adds one leaves a revision in the history. Readers ignore unknown fields: a field added later under `v: 1` is additive. A Pot whose meta carries no readable `pot` object has no base currency: a client shows its entries as unreadable balances and writes nothing until a member sets one. The base currency is fixed once the Pot holds its first money entry, because every entry carries its rate to it. Categories are added and renamed, never removed, in the first cut, so an id an entry names stays resolvable. The cap of the whole envelope is node-meta's 8192 base64 characters (content.openapi.yaml); 200 categories of at most 100 characters fit under it only when names are short, so a client refuses a write whose sealed envelope would pass the cap.",
+  "type": "object",
+  "required": ["v", "baseCurrency", "baseMinorUnits"],
+  "properties": {
+    "v": { "const": 1, "description": "The format version of this sub-object (ADR 0079 decision 7)." },
+    "baseCurrency": {
+      "$ref": "entry.v1.schema.json#/$defs/currency",
+      "description": "The ISO 4217 code every balance is in; each entry's `rate` converts to it."
+    },
+    "baseMinorUnits": {
+      "$ref": "entry.v1.schema.json#/$defs/minorUnits",
+      "description": "The base currency's minor-unit digits as the Pot's creator counted them, sealed so no reader's currency table can move a balance."
+    },
+    "categories": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The Pot's own categories beside the default set (entry.v1.schema.json#/$defs/category): each a client-minted id an entry names, and its name. Absent: none.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "$ref": "entry.v1.schema.json#/$defs/uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 }
+        }
+      }
+    }
+  }
+}
