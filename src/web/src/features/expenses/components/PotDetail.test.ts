@@ -27,6 +27,10 @@ vi.mock('../../../core/people/directory', async (orig) => ({
 }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn(), eraseParticipant: vi.fn() }))
 vi.mock('../../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn(async () => ({})) }))
+vi.mock('../../../core/report/report', async (orig) => {
+  const { ref } = await import('vue')
+  return { ...(await orig<object>()), useReportOffered: () => ref(true), openReport: vi.fn() }
+})
 
 import * as v1 from '@veyq/crypto/v1'
 import PotDetail from './PotDetail.vue'
@@ -35,6 +39,7 @@ import { treeStore } from '../../../core/node/treeStore'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { appendPotWrites, eraseParticipant, readMemberPot, sealPotWrites, StaleRevisionError } from '../domain/potApi'
 import { writeNodeMeta } from '../../../core/node/nodeMetaWrite'
+import { openReport } from '../../../core/report/report'
 import { POT_META_KEY, potMetaObject, potMetaOf } from '../domain/potMeta'
 import type { RawNodeMeta } from '../../../core/node/nodeMeta'
 import type { MetaEditContext } from '../../../core/node/sealedMetaWrite'
@@ -192,6 +197,20 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(dialog()).toBeNull()
     expect(server.current.held().filter((r) => r.entryId === DINNER).map((r) => r.revision)).toEqual([1, 2, 3])
+  })
+
+  it('reporting an entry from its dialog closes the dialog first, so the report dialog is the one on top', async () => {
+    // The lane L1 pass (cr-expenses-ledger step 8): the report dialog opened BEHIND the still-open entry dialog, whose
+    // modal layer kept it out of reach.
+    const w = mountPot()
+    await flushPromises()
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    await buttonIn(dialog()!, t('report.action'))!.click()
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(openReport).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(openReport).mock.calls[0]![0].targets).toEqual([expect.objectContaining({ kind: 'ITEM', id: DINNER })])
   })
 
   it('the history names who wrote each version, for a member', async () => {
