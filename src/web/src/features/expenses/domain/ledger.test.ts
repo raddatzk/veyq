@@ -257,6 +257,14 @@ describe('the overviews', () => {
     expect(paid).toBe(costs)
   })
 
+  it('list the people in join order, whichever entry names them first (an import mints new entry ids)', () => {
+    // The lane L1 pass (cr-expenses-ledger step 7): an imported Pot listed "deleted people" first, the original last —
+    // the rows followed the first entry, by id, that named each person. The museum alone: Cleo pays, so she comes first.
+    const museum = trip.entries.find((e) => e.body.title === 'Museum')!
+    const one = buildLedger(potOf(trip, [museum]), base)
+    expect([...one.overview.byPerson.keys()]).toEqual([ANNA, BEN, CLEO])
+  })
+
   it('split each category by person', () => {
     const transport = ledger.overview.byCategoryAndPerson.get('transport')!
     // Taxi 0/700/300, Ferry 1303/1303/1302, the refund −500 each.
