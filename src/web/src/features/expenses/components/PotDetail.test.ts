@@ -4,7 +4,9 @@
 // the real reader (`potTestUtil.ts`' server, whose append takes revision `n + 1` only on `n`, as the backend does); only
 // the wire is replaced. Each rule beside its control: the ledger notice shows only for a list missing a revision; a save
 // on a stale entry shows the other writer's version and saves on top; a person is deleted only when settled; the
-// history names writers; Expenses switched off leaves the page read-only.
+// history names writers; a deleted entry is restored; a person no entry names is removed, a named one only deleted;
+// the settings are a change re-run on the meta the writer reads, the base currency fixed once an entry exists;
+// Expenses switched off leaves the page read-only.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
@@ -24,6 +26,7 @@ vi.mock('../../../core/people/directory', async (orig) => ({
   loadTenantPeople: vi.fn(async () => new Map([['u-anna', { userId: 'u-anna', username: 'anna', realName: 'Anna Member', displayName: 'Anna Member' }]])),
 }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn(), eraseParticipant: vi.fn() }))
+vi.mock('../../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn(async () => ({})) }))
 
 import * as v1 from '@veyq/crypto/v1'
 import PotDetail from './PotDetail.vue'
@@ -31,6 +34,10 @@ import type { NodeDetailProps } from '../../../core/applications/registry'
 import { treeStore } from '../../../core/node/treeStore'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { appendPotWrites, eraseParticipant, readMemberPot, sealPotWrites, StaleRevisionError } from '../domain/potApi'
+import { writeNodeMeta } from '../../../core/node/nodeMetaWrite'
+import { POT_META_KEY, potMetaObject, potMetaOf } from '../domain/potMeta'
+import type { RawNodeMeta } from '../../../core/node/nodeMeta'
+import type { MetaEditContext } from '../../../core/node/sealedMetaWrite'
 import { EXPENSES } from '../../platform/capabilities'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
@@ -186,6 +193,87 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), CLEO, expect.anything())
     expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
+  })
+
+  it('a deleted entry leaves the list for the deleted ones and is restored as its next revision', async () => {
+    const w = mountPot()
+    await flushPromises()
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    await buttonIn(dialog()!, t('expenses.entry.delete'))!.click()
+    await flushPromises()
+    expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' } }])
+    expect(w.text()).toContain(t('expenses.entries.deletedTitle'))
+    await openTab(w, t('expenses.tabs.balances'))
+    expect(w.text()).toContain(t('expenses.balances.allSettled'))
+    await openTab(w, t('expenses.tabs.entries'))
+    await w.find(`[data-entry="${DINNER}"]`).trigger('click')
+    await flushPromises()
+    expect(dialog()!.textContent).toContain(t('expenses.entry.deletedHint'))
+    expect(buttonIn(dialog()!, t('common.save'))).toBeUndefined()
+    await buttonIn(dialog()!, t('expenses.entry.restore'))!.click()
+    await flushPromises()
+    const dinner = server.current.held().filter((r) => r.entryId === DINNER)
+    expect(dinner.map((r) => r.revision)).toEqual([1, 2, 3])
+    const { heads, ...restored } = dinner[2]!.body as unknown as { heads: { entryId: string; revision: number }[] }
+    expect(restored).toEqual({ v: 1, ...expense('Dinner', 9000, ANNA, [ANNA, BEN, CLEO]) })
+    // It names the heads its writer read — the tombstone it lifts — never those the deleted content once named.
+    expect(heads.map((h) => `${h.entryId}:${h.revision}`)).toEqual([`${DINNER}:2`])
+    expect(w.text()).not.toContain(t('expenses.entries.deletedTitle'))
+    await openTab(w, t('expenses.tabs.balances'))
+    expect(w.text()).toContain(t('expenses.balances.owed', { amount: '€60.00' }))
+  })
+
+  it('removes a person no entry names, offers a named one delete only, and deactivates a settled one', async () => {
+    const DAN = '0e000000-0000-4000-8000-000000000004'
+    server.current.append([{ entryId: DAN, content: person('Dan', 4) }])
+    server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: CLEO, to: ANNA } }])
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.people'))
+    const row = (id: string) => w.find(`[data-person="${id}"]`)
+    // Cleo is named by the dinner: delete, never remove; Dan by nothing: remove, never delete.
+    expect([row(CLEO).find('[data-action="delete"]').exists(), row(CLEO).find('[data-action="remove"]').exists()]).toEqual([true, false])
+    expect([row(DAN).find('[data-action="delete"]').exists(), row(DAN).find('[data-action="remove"]').exists()]).toEqual([false, true])
+    // Ben is not settled: neither deactivate nor delete is offered.
+    expect(buttonIn(row(BEN).element, t('expenses.people.deactivate'))).toBeUndefined()
+    await buttonIn(row(CLEO).element, t('expenses.people.deactivate'))!.click()
+    await flushPromises()
+    expect(server.appends.at(-1)).toEqual([{ entryId: CLEO, content: person('Cleo', 3, false) }])
+    await row(DAN).find('[data-action="remove"]').trigger('click')
+    await flushPromises()
+    expect(confirmRequest.value?.message).toBe(t('expenses.people.removeConfirm'))
+    settleConfirm(true)
+    await flushPromises()
+    expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), DAN, expect.anything())
+  })
+
+  it('a settings change re-runs on the meta it is handed, and the base currency is fixed once an entry exists', async () => {
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.settings'))
+    expect(w.text()).toContain(t('expenses.settings.currencyFixed'))
+    const input = w.find('.expenses-settings form.expenses-inline-form input')
+    await input.setValue('Ski pass')
+    await w.find('.expenses-settings form.expenses-inline-form').trigger('submit')
+    await flushPromises()
+    expect(writeNodeMeta).toHaveBeenCalledTimes(1)
+    // The edit is applied to whatever meta the write reads (a peer's category written meanwhile included): it keeps
+    // the peer's and every other key of the envelope, and adds its own.
+    const edit = vi.mocked(writeNodeMeta).mock.calls[0]![4]
+    const current: RawNodeMeta = { v: 1, cover: { kept: true }, [POT_META_KEY]: potMetaObject({ base: { currency: 'EUR', minorUnits: 2 }, categories: [{ id: '0e000000-0000-4000-a000-0000000000c1', name: 'Peer' }] }) }
+    const written = await edit(structuredClone(current), { retry: true } as unknown as MetaEditContext)
+    expect(written!.cover).toEqual({ kept: true })
+    expect(potMetaOf(written!)!.categories.map((c) => c.name)).toEqual(['Peer', 'Ski pass'])
+  })
+
+  it('control: a Pot with people only offers its base currency', async () => {
+    server.current.rows = server.current.rows.filter((r) => r.entryId !== DINNER)
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.settings'))
+    expect(w.text()).not.toContain(t('expenses.settings.currencyFixed'))
+    expect(w.text()).toContain(t('expenses.create.currencyHint'))
   })
 
   it('Expenses switched off: no entry is added and no setting changed; the Pot still opens', async () => {
