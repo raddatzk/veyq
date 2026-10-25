@@ -236,6 +236,11 @@ done-when names its browser pass). Whoever runs it moves what it found into the 
 defect it finds is fixed or filed before this file goes — and then deletes this CR in the same commit; nothing else in
 it binds.
 
+**Run 2026-10-25, as lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`** (§ Retrospective, the browser pass): all
+ten steps, EN and DE, green on the stack lane, with the after-browser checks; the full lane is red on one test outside
+Expenses (inbox #547), so this file stays until a full run is green. The harvest and this file's deletion wait as one
+commit on branch `worktree-agent-a14fb52a33df182f4-close`.
+
 **Instance.** A database of its own beside `veyq` on the dev stack (changes/README.md § A live proof that names a screen
 names the instance state that screen needs): a copy of the branch's fast-jar, `-Dquarkus.profile=e2e`, its own config
 secret, `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin, the bundled S3 store (never the in-memory one),
@@ -481,3 +486,24 @@ and 4), the feature index and two use-cases saying what is not built; inbox #540
 - **Process:** phase 4's done-when names a browser pass, and its brief and this one forbid Docker, so the CR could not
   close in the sessions that built it. Next time: a phase whose done-when needs an instance is planned for a session that
   may start one, or its brief names the pass as the orchestrator's from the start.
+
+**The browser pass (2026-10-25), on `main` `7b0810c1`, branch `worktree-agent-a14fb52a33df182f4`.** Written as lane L1's
+`tests/e2e/tests/features/expenses-pot.spec.ts` (helpers `tests/e2e/src/expenses.ts`, `watchFailedRequests` in
+`devices.ts`), not driven by hand: a tenant of its own, its owner and a member invited by mail sharing one group per
+language, then the ten steps in an `en-US` and a `de-DE` context, the "trip" vector typed in field by field and its figures
+formatted per language, every page's console and failed requests asserted empty but step 3's one `409`. The CR's "second
+host" is a second browser context: the lane serves a tenant on one host. Measured: `tests/e2e` `npm run check` 0; the
+candidate images built as `ci.yml`'s local step does; the stack lane with the spec alone GREEN (`.e2e-stack-out/
+20261025-095352`, 21 tests, sweep, guest-write record and host check ok); the full lane 154 passed, 1 failed, 4 did not run
+(`-095701`), the red memory-banner's (#547, red without this spec too, `-101305`); `src/web` `npm run check` 0.
+
+- **Five client defects, each fixed with a test red first:** an open entry editor wrote on the latest HELD revision, so
+  one the live poll brought in was written over unseen (`PotWrite.basedOn`); People counted a removed person among the
+  deleted ones; the Overview listed people in the order entries first named them, which an import's new ids change; the
+  entry dialog's Report opened core's report dialog beneath it, out of reach (core's trap: #545); the Pot page was as wide
+  as its tab row at 375 px, cut off by the shell (`expenses.css`, one `minmax(0, 1fr)` column).
+- **Filed, not Expenses':** #545 (the report dialog beneath an open dialog), #546 (a removed member's open page polls on,
+  answered 404), #547 (memory-banner red in the full lane).
+- **Lane traps the spec names at their lines:** a `goto` to the URL already open, fragment and all, only moves to the
+  fragment (`openLink`); a field whose label holds a hint is matched by the label's start; a case a spec opens is
+  dismissed again, or moderation.spec.ts's empty queue and three later moderation specs' counts are red.

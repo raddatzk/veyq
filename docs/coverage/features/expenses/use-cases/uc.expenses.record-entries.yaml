@@ -1,7 +1,7 @@
 useCase: uc.expenses.record-entries
 feature: expenses
 title: Record, edit and delete entries
-# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
@@ -49,3 +49,13 @@ acceptanceCriteria:
         integration: [PotSliceTest.theMembersListIsAConditionalKeysetDelta, PotSliceTest.aGuestReadsNoWriter_aMemberReadsEachOne]
       web:
         unit: [src/features/expenses/domain/potApi.wire.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `allocation-and-rounding-are-
+    exact-and-equal-everywhere`, `revision-n-plus-one-or-stale` and `delete-is-a-tombstone-revision` in Chromium,
+    all in English and again in German, against the release candidate's two images installed through `veyqctl` (ADR
+    0090), each test tagged with its criterion: the nine entries of the vectors' "trip" Pot typed into the editor
+    (equal, two payers, a typed rate, line items with either rest, shares, exact amounts, a refund, a transfer); a
+    second member's save while the first's editor is open, the first's save then answered 409 and shown the other
+    version, saved again on top; an entry deleted and restored. Green only in local runs of the lane (the V1 heavy
+    stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

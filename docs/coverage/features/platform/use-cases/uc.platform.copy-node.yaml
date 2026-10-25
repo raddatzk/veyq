@@ -40,6 +40,12 @@ acceptanceCriteria:
         reason: >-
           No wire test copies a Pot through core's prepareCopy as depot/copy.wire.test.ts does a file; the refs hold the
           hooks a copy runs (exportImport.test.ts, import under new ids, balances equal) and the declared loss
-          (register.test.ts). The copy in a browser is cr-expenses-ledger's open browser pass.
+          (register.test.ts). The copy in a browser is lane L1's, named under `gaps: stack`.
 gaps:
   backend: No backend change - a copy uses the node create and blob upload endpoints, whose slice tests stand.
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `a-pot-copies-its-live-entries`
+    in Chromium, all in English and again in German, against the release candidate's two images installed through
+    `veyqctl` (ADR 0090), each test tagged with its criterion: "Copy to…" on a Pot names what does not come along,
+    and the copy shows the original's balances, settle-up and overview. Green only in local runs of the lane (the V1
+    heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

@@ -1,7 +1,7 @@
 useCase: uc.expenses.share-pot
 feature: expenses
 title: Share a Pot through a link
-# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
@@ -36,3 +36,13 @@ acceptanceCriteria:
     gaps:
       - surface: backend
         reason: "A link has no node-meta write at all (the meta is written only on the member's scope path, core's updateNode), so no Expenses test refuses one; the refs hold the erasure and a READ guest's append."
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `read-and-read-write-never-
+    write-only`, `the-guest-sees-the-members-view`, `a-contributor-writes-like-a-member` and `what-stays-a-members`
+    in Chromium, all in English and again in German, against the release candidate's two images installed through
+    `veyqctl` (ADR 0090), each test tagged with its criterion: the Pot's share dialog offers viewing and viewing-
+    and-adding only; the READ_WRITE guest names itself on its first write, adds a person and an entry, sees no
+    Settings tab, no deactivate or delete, and reports an entry; the link still opens the Pot after a re-key. Green
+    only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log
+    shows the suite executed.

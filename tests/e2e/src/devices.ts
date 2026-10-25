@@ -1,6 +1,6 @@
 // A device of the scenarios: one browser context, confined to the instance (egress.ts), and the tenant owner the
 // round trip activated (instance.json in the run directory) signing in on it with both secrets, as a new device must.
-import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { recordTyped } from './canaries'
 import { confineToInstance, type Confinement } from './egress'
@@ -39,8 +39,9 @@ export function saveDeputy(d: Deputy): void {
   writeFileSync(`${stack().outDir}/deputy.json`, JSON.stringify(d, null, 2))
 }
 
-export async function newDevice(browser: Browser): Promise<Device> {
-  const context = await browser.newContext()
+/** A new device, confined to the instance; [options] for one that is not the suite's default (another `locale`). */
+export async function newDevice(browser: Browser, options: BrowserContextOptions = {}): Promise<Device> {
+  const context = await browser.newContext(options)
   const confinement = await confineToInstance(context)
   return { context, page: await context.newPage(), confinement }
 }
@@ -93,6 +94,29 @@ export function watchConsole(...pages: Page[]): ConsoleErrors {
       errors.push(from ? `${m.text()} (${from})` : m.text())
     })
     page.on('pageerror', (e) => errors.push(String(e)))
+  }
+  return { errors, clear: () => void (errors.length = 0) }
+}
+
+/**
+ * The failed requests of [pages] — every answer of 400 or more, and every request that failed on the way (an abort a
+ * navigation or a stopped poll makes, `net::ERR_ABORTED`, is no failure) — as `METHOD status path`, for a scenario
+ * that asserts none but the one a step provokes. The signed-out boot's refresh is left out, as [watchConsole] does.
+ */
+export function watchFailedRequests(...pages: Page[]): ConsoleErrors {
+  const errors: string[] = []
+  for (const page of pages) {
+    page.on('response', (r) => {
+      if (r.status() < 400) return
+      const url = new URL(r.url())
+      if (url.pathname === SIGNED_OUT_BOOT.path && SIGNED_OUT_BOOT.statuses.includes(r.status())) return
+      errors.push(`${r.request().method()} ${r.status()} ${url.pathname}`)
+    })
+    page.on('requestfailed', (r) => {
+      const failure = r.failure()?.errorText ?? ''
+      if (failure === 'net::ERR_ABORTED') return
+      errors.push(`${r.method()} failed (${failure}) ${new URL(r.url()).pathname}`)
+    })
   }
   return { errors, clear: () => void (errors.length = 0) }
 }
