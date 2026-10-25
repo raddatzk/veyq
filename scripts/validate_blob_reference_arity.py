@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
 """Guard the number of places that reference a `veyq_blob` row — and that the one predicate over them sees all of them (ADR 0013).
 
-**What it asserts.** Exactly **three arms** point at a blob row, and this pins each by name from four
+**What it asserts.** Exactly **four arms** point at a blob row, and this pins each by name from four
 independent keys:
 
   - *entity* — the Kotlin `@Column` declarations: `MediaEntity.blob_id`, `MediaDerivativeEntity.blob_id`,
-    `NodeAttachmentEntity.blob_id`.
-  - *schema* — the SQL declarations of the same three columns, keyed `<table>.<column>` by the statement that
+    `NodeAttachmentEntity.blob_id`, `PotReceiptEntity.blob_id` (Expenses' receipts, cr-expenses-receipts).
+  - *schema* — the SQL declarations of the same four columns, keyed `<table>.<column>` by the statement that
     declares them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`): `veyq_media.blob_id`,
-    `veyq_media_derivative.blob_id`, `veyq_node_attachment.blob_id`. Keyed on the table, not the migration file: one
-    baseline declares several tables, so a file key would fold two arms into one name and stop telling them apart. A
-    column is read on its own line, so a declaration must keep `blob_id UUID` (or `VARCHAR`) there.
-  - *backstop* — which of those arms a foreign key refuses to orphan: **all three**, `veyq_media.fk_media_blob`,
-    `veyq_media_derivative.fk_derivative_blob` and `veyq_node_attachment.fk_attachment_blob`. This one is asserted
-    by name deliberately. An arm *gaining* a foreign key is a real change in what the database guarantees, and it
-    should turn this guard red and be recorded, not land silently as an improvement nobody notices — the attachment
-    arm was recorded so (cr-files-application P3-S3), born with its key.
+    `veyq_media_derivative.blob_id`, `veyq_node_attachment.blob_id`, `veyq_expenses_receipt.blob_id`. Keyed on the
+    table, not the migration file: one baseline declares several tables, so a file key would fold two arms into one
+    name and stop telling them apart. A column is read on its own line, so a declaration must keep `blob_id UUID` (or
+    `VARCHAR`) there.
+  - *backstop* — which of those arms a foreign key refuses to orphan: **all four**, `veyq_media.fk_media_blob`,
+    `veyq_media_derivative.fk_derivative_blob`, `veyq_node_attachment.fk_attachment_blob` and
+    `veyq_expenses_receipt.fk_expenses_receipt_blob`. This one is asserted by name deliberately. An arm *gaining* a
+    foreign key is a real change in what the database guarantees, and it should turn this guard red and be recorded,
+    not land silently as an improvement nobody notices — the attachment arm was recorded so (cr-files-application
+    P3-S3), and the receipt arm (cr-expenses-receipts), each born with its key.
   - *live twin* — that `SharingStore.subtreeBlobIds` plus every `SharedSubtreeContributor.authorizedBlobIds` (the
-    media and derivative arms in Memories' contributor, the attachment arm in core's) enumerate all three.
+    media and derivative arms in Memories' contributor, the attachment arm in core's, the receipt arm in Expenses')
+    enumerate all four.
 
 The first three keys pin how many arms **exist**. Only the fourth pins that the predicate already running over
 them in production **enumerates** them — and that is the one carrying the invariant, because the three
@@ -94,13 +97,16 @@ EXPECTED_ENTITY_ARMS = [
     "MediaDerivativeEntity.blob_id",
     "MediaEntity.blob_id",
     "NodeAttachmentEntity.blob_id",
+    "PotReceiptEntity.blob_id",
 ]
 EXPECTED_SCHEMA_ARMS = [
+    "veyq_expenses_receipt.blob_id",
     "veyq_media.blob_id",
     "veyq_media_derivative.blob_id",
     "veyq_node_attachment.blob_id",
 ]
 EXPECTED_FK_ARMS = [
+    "veyq_expenses_receipt.fk_expenses_receipt_blob",
     "veyq_media.fk_media_blob",
     "veyq_media_derivative.fk_derivative_blob",
     "veyq_node_attachment.fk_attachment_blob",
@@ -115,10 +121,10 @@ EXPECTED_FK_ARMS = [
 NOT_REFERENCE_ENTITY = ["UploadSessionEntity.blob_id"]
 NOT_REFERENCE_SCHEMA = ["veyq_upload_session.blob_id"]
 
-# The three arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
+# The four arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
 # arm removes the marker. The attachment arm (a Memory's cover among its rows, inbox #341) is core's own contributor
 # (`AttachmentSharedSubtreeContributor`), and its marker is the entity it reads: that contributor is the only body
-# that names it.
+# that names it. The receipt arm is Expenses' (`ReceiptSharedSubtreeContributor`), its marker the accessor it adds by.
 LIVE_TWIN_FN = "fun subtreeBlobIds"
 # Where the media, derivative and attachment arms live: every implementation of the interface,
 # found by its declaration, contributes its `authorizedBlobIds` body to the live twin.
@@ -128,6 +134,7 @@ EXPECTED_LIVE_TWIN_ARMS = {
     "attachment": "NodeAttachmentEntity",
     "media": "ids.add(m.blobId)",
     "derivative": "MediaDerivativeEntity",
+    "receipt": "ids.add(receipt.blobId)",
 }
 
 

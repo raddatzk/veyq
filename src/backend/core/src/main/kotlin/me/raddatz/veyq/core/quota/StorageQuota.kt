@@ -19,8 +19,8 @@ import jakarta.persistence.EntityManager
  * Two checks, each independent of the other (ADR 0073 §1, §4): the Server Owner's tenant quota ([tenantFits]) on
  * every start, and the tenant owner's per-link limit ([linkFits]) on a link start. A link's usage has three terms: the
  * sessions its identities hold open and the node attachments they uploaded — core's tables, summed here — and the
- * blobs they contributed to an application's own rows, which only the application that takes uploads into the start's
- * target kind can find ([UploadAdmission]; the target is the share root or a node below it, ADR 0080 decision 6).
+ * blobs they contributed to the applications' own rows, which only the applications can find ([UploadAdmission]: every
+ * one's term, summed; the start's target kind — the share root or a node below it, ADR 0080 decision 6 — must have one).
  */
 @ApplicationScoped
 class StorageQuota(
@@ -70,8 +70,8 @@ class StorageQuota(
 
     /**
      * What link [shareId] holds (ADR 0073 §4): every open session one of its identities opened, plus the blob of every
-     * node attachment one of them uploaded ([linkAttachmentUsage]), plus the blobs they contributed to the application's
-     * own rows, as [targetKind]'s [UploadAdmission] measures them. A blob a member
+     * node attachment one of them uploaded ([linkAttachmentUsage]), plus the blobs they contributed to the applications'
+     * own rows, as every [UploadAdmission] measures its own. A blob a member
      * uploaded into the same node is not the link's, and neither is another link's. The measure is per link, never per
      * node: it counts what the link's identities contributed anywhere in its subtree (Memories: by identity, whatever
      * Memory or chapter holds the medium). Null when no single admission measures [targetKind] ([admissionFor]) —
@@ -79,13 +79,16 @@ class StorageQuota(
      * stays refused (an application with blobs of its own rows would otherwise count only its attachments), and an
      * application whose guest uploads are all attachments registers an admission that reports 0.
      *
-     * Dispatched by the start's target kind, not the root's: a folder link's root kind has no measure (no application
-     * takes uploads into a folder) while its guests upload into Memories below. A link whose guests some day upload
-     * into two applications' kinds is then measured by each application for its own starts only — the open question
-     * the first second application answers (one measure summing every application's blobs of the link).
+     * Gated by the start's target kind, not the root's: a folder link's root kind has no measure (no application takes
+     * uploads into a folder) while its guests upload into Memories below. But the measure is **every** application's
+     * term summed, not the target's alone: a folder link's guests upload into two applications' kinds — a Memory's media
+     * and a Pot's receipts (cr-expenses-receipts, the second application with blob rows of its own) — and measured by
+     * the target's application only, a start into a Pot would not count the link's media, nor one into a Memory its
+     * receipts, so the link could hold its limit once per application. Each term counts its own rows by identity, so no
+     * blob is counted twice (`UploadAdmissionPartitionSliceTest`).
      */
     fun linkUsage(shareId: String, targetKind: String): Long? {
-        val admission = admissionFor(targetKind) ?: return null
+        admissionFor(targetKind) ?: return null
         // One statement per term, the sessions read FIRST (the return adds left to right): a completion or an attach
         // committing between two of them turns a session into a blob, and read in this order it is counted twice
         // (refused a little early), never zero times (admitted over the limit) — each reads what is committed when it runs.
@@ -97,7 +100,7 @@ class StorageQuota(
             """,
             shareId,
         )
-        return open + linkAttachmentUsage(shareId) + admission.linkBlobUsage(shareId)
+        return open + linkAttachmentUsage(shareId) + admissions.sumOf { it.linkBlobUsage(shareId) }
     }
 
     /**

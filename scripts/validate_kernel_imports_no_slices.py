@@ -32,9 +32,9 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
   both are what this rule reads. Each kind must still be named in code by some application main file, so the list
   cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
-  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, Depot's `FILE_CONTENT`; `COVER` is core's own since inbox #411, `NodeCover`) are read by the same rule since the contract's `BlobRole`
+  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, Depot's `FILE_CONTENT`, Expenses' `EXPENSES_RECEIPT`; `COVER` is core's own since inbox #411, `NodeCover`) are read by the same rule since the contract's `BlobRole`
   opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
-  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `DepotBlobRoles`),
+  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `DepotBlobRoles`, `ExpensesBlobRoles`),
   declared to core's member start through `MemberBlobRoles` (inbox #366).
   The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Depot's
   sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
@@ -134,6 +134,7 @@ APPLICATION_BLOB_ROLES = [
     "THUMBNAIL",
     "PREVIEW",
     "FILE_CONTENT",
+    "EXPENSES_RECEIPT",
 ]
 APPLICATION_TOKENS = APPLICATION_KINDS + APPLICATION_BLOB_ROLES
 KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_TOKENS) + r")(?!\w)")

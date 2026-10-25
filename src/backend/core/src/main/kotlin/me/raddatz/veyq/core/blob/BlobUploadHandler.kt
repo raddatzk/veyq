@@ -204,14 +204,16 @@ class BlobUploadHandler(
 
     /**
      * Each declared item paired with the code that refuses it on its own, or null when it is admissible (ADR 0013 §3,
-     * ADR 0072): over the per-blob cap, a shape the size does not derive, or a blob id already taken — by a blob, an
-     * open session, or an earlier item of the same request.
+     * ADR 0072): over the per-blob cap or its role's own ([MemberBlobRoles.maxBytes] — a receipt's 10 MiB, on a member's
+     * start and a guest's alike), a shape the size does not derive, or a blob id already taken — by a blob, an open
+     * session, or an earlier item of the same request.
      */
     private fun admissibility(declares: List<UploadDeclare>): List<Pair<UploadDeclare, String?>> {
         val claimed = HashSet<String>()
         return declares.map { d ->
             val error = when {
                 d.byteSize > maxBytes -> "budget_exceeded"
+                MemberBlobRoles.capOf(memberRoles, d.role)?.let { d.byteSize > it } == true -> "budget_exceeded"
                 // The frame size fixes the shape (ADR 0013 §3): a count the size does not derive is a client bug, not a
                 // big file, so it gets its own code. The size is checked first — chunkCount() is defined only where it holds.
                 !ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize) -> "shape_invalid"

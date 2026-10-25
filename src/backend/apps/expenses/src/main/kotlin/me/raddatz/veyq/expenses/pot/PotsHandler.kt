@@ -53,19 +53,24 @@ sealed interface PotWriteOutcome {
     object Deleting : PotWriteOutcome, HttpFailure by Failures.scopeDeleting
     object NoPot : PotWriteOutcome, HttpFailure by Failures.nodeNotFound
     object IdTaken : PotWriteOutcome, HttpFailure by Failures.idTaken
+    /** A dropped receipt is no receipt of its record in this Pot. */
+    object ReceiptNotHeld : PotWriteOutcome, HttpFailure by Failures.invalidRequest
     object StaleEpoch : PotWriteOutcome, HttpFailure by Failures.staleEpoch
     object RekeyPending : PotWriteOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
-/** The request checks the contract cannot write: one size class per body, one revision per record in a batch. */
+/** The request checks the contract cannot write: one size class per body, one revision per record in a batch, each
+ *  dropped receipt named once. */
 internal object PotRequests {
     fun valid(writes: List<RevisionWrite>): Boolean =
-        writes.map { it.entryId }.distinct().size == writes.size && writes.all { PotBodies.sizeClassOf(it.sealedBody.length) != null }
+        writes.map { it.entryId }.distinct().size == writes.size && writes.all { PotBodies.sizeClassOf(it.sealedBody.length) != null } &&
+            writes.flatMap { it.droppedReceipts }.let { it.distinct().size == it.size }
 
     fun outcome(result: PotWriteResult): PotWriteOutcome = when (result) {
         is PotWriteResult.Stored -> PotWriteOutcome.Done
         is PotWriteResult.Stale -> PotWriteOutcome.Stale(result.stale)
         PotWriteResult.IdTaken -> PotWriteOutcome.IdTaken
+        PotWriteResult.ReceiptNotHeld -> PotWriteOutcome.ReceiptNotHeld
         PotWriteResult.NotFound -> PotWriteOutcome.NoPot
         PotWriteResult.StaleEpoch -> PotWriteOutcome.StaleEpoch
         PotWriteResult.RekeyPending -> PotWriteOutcome.RekeyPending

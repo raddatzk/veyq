@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.expenses.ExpensesNodeKinds
+import me.raddatz.veyq.expenses.receipt.PotReceiptEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -24,8 +25,12 @@ object PotBodies {
     fun sizeClassOf(base64Length: Int): Int? = CLASSES[base64Length]
 }
 
-/** One revision as its writer sent it — the member's and the guest's batch alike. */
-data class RevisionWrite(val entryId: String, val revision: Long, val tombstone: Boolean, val sealedBody: String, val wrappedRevisionKey: String)
+/** One revision as its writer sent it — the member's and the guest's batch alike; [droppedReceipts] are the receipts of
+ *  its record it no longer holds (ADR 0108 decision 7). */
+data class RevisionWrite(
+    val entryId: String, val revision: Long, val tombstone: Boolean, val sealedBody: String, val wrappedRevisionKey: String,
+    val droppedReceipts: List<String> = emptyList(),
+)
 
 /** A revision by its address. */
 data class RevisionRef(val entryId: String, val revision: Long) {
@@ -52,8 +57,10 @@ sealed interface PotWriteResult {
     data class Stored(val rowIds: List<String>) : PotWriteResult
     /** These records' latest revisions are not the ones the write was built on (0: the record does not exist). */
     data class Stale(val stale: List<RevisionRef>) : PotWriteResult
-    /** A new record's id belongs to another Pot. */
+    /** A new record's id belongs to another Pot, or is a receipt's. */
     object IdTaken : PotWriteResult
+    /** A dropped receipt is no receipt of its record in this Pot (`400 invalid_request`). */
+    object ReceiptNotHeld : PotWriteResult
     /** No live Pot of that id in the scope — or, for a guest, the link or the Pot's place in its subtree gone since. */
     object NotFound : PotWriteResult
     /** The stated epoch is not the Pot's (`stale_epoch`). */
@@ -69,9 +76,11 @@ sealed interface PotWriteResult {
  * their position.
  *
  * **Lock order, every writer:** (1) a guest's re-check under the scope and share locks ([append]'s `admitted`); (2) the
- * named records' existing rows, `FOR UPDATE`; (3) the Pot's node row ([NodeEpochGate.check]), which serializes every
- * write of the Pot; (4) the inserted rows; (5) the item-revision row ([NodeItemsRevisions.bump]). The re-key's commit
- * takes (2) for every row of the Pot before (3) ([PotNodeRekeyParticipant.lockRows]) — the same order.
+ * named records' existing rows, `FOR UPDATE`; (2b) the receipt rows a revision drops ([PotReceiptEntity]); (3) the Pot's
+ * node row ([NodeEpochGate.check]), which serializes every write of the Pot; (4) the inserted rows; (5) the
+ * item-revision row ([NodeItemsRevisions.bump]). The re-key's commit takes (2) and (2b) for every row of the Pot before
+ * (3) ([PotNodeRekeyParticipant.lockRows]), and a receipt's completion and the receipts' purge the same order
+ * ([me.raddatz.veyq.expenses.receipt.PotReceiptStore]).
  *
  * **The compare-and-set reads the records again after (3)** ([recordsNow]). What (2) returned is what was committed when
  * it ran: a writer of the same records that held them, and committed while (2) waited, inserted rows that a locking read
@@ -100,15 +109,24 @@ class PotRevisionStore(
     ): PotWriteResult {
         if (admitted != null && !admitted()) return PotWriteResult.NotFound
         lockRecords(writes.map { it.entryId })
+        val dropped = lockReceipts(writes.flatMap { it.droppedReceipts })
         lockLivePot(scopeId, nodeId, nodeEpoch)?.let { return it }
         val held = recordsNow(writes.map { it.entryId })
         if (held.any { it.nodeId != nodeId }) return PotWriteResult.IdTaken
         val latest = held.groupBy { it.entryId }.mapValues { (_, rows) -> rows.maxOf { it.revision } }
+        // A new record's id may not be a receipt's: both are a reportable item's id (`PotReportableItems.locate`).
+        val created = writes.map { it.entryId }.filter { it !in latest }
+        if (created.isNotEmpty() && created.chunked(CHUNK).any { PotReceiptEntity.count("id in ?1", it) > 0 }) return PotWriteResult.IdTaken
         val stale = writes.filter { (latest[it.entryId] ?: 0L) != it.revision - 1 }
             .map { RevisionRef(it.entryId, latest[it.entryId] ?: 0L) }
         if (stale.isNotEmpty()) return PotWriteResult.Stale(stale)
+        // Each dropped receipt is one of its record's in this Pot (read under the locks above: a receipt is never moved).
+        val byId = dropped.associateBy { it.id }
+        val notHeld = writes.any { w -> w.droppedReceipts.any { id -> byId[id]?.let { it.nodeId != nodeId || it.entryId != w.entryId } ?: true } }
+        if (notHeld) return PotWriteResult.ReceiptNotHeld
 
         val now = Instant.now()
+        dropped.filter { it.droppedAt == null }.forEach { it.droppedAt = now } // a drop stays at its first time
         val rows = writes.map { w -> newRow(scopeId, nodeId, w.entryId, w.revision, w.tombstone, false, w.sealedBody, w.wrappedRevisionKey, writer, now) }
         rows.forEach { it.persist() }
         val position = items.bump(scopeId, nodeId) // after the record rows: record rows -> node row -> revision row
@@ -149,6 +167,12 @@ class PotRevisionStore(
             PotRevisionEntity.find("entryId in ?1 order by entryId, revision", it).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         }
     }
+
+    /** Every receipt row of [receiptIds], `FOR UPDATE`, in one order — after the records' rows, before the node's. */
+    private fun lockReceipts(receiptIds: List<String>): List<PotReceiptEntity> =
+        receiptIds.distinct().sorted().chunked(CHUNK).flatMap {
+            PotReceiptEntity.find("id in ?1 order by id", it).withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        }
 
     /** Every row of [entryIds] as committed now — read under the node row's lock, which every inserter holds. */
     private fun recordsNow(entryIds: List<String>): List<PotRevisionEntity> =

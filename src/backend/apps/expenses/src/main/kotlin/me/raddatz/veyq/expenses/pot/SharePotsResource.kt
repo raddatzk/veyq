@@ -13,6 +13,14 @@ import me.raddatz.veyq.expenses.generated.model.SharePotAppendRequest
 import me.raddatz.veyq.expenses.generated.model.SharePotRevision
 import me.raddatz.veyq.expenses.generated.model.SharePotRevisionPage
 import jakarta.annotation.security.PermitAll
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.expenses.generated.model.SharePotReceiptCompleteRequest
+import me.raddatz.veyq.expenses.generated.model.SharePotReceiptPage
+import me.raddatz.veyq.expenses.receipt.CompleteReceiptOutcome
+import me.raddatz.veyq.expenses.receipt.ListReceiptsOutcome
+import me.raddatz.veyq.expenses.receipt.ReceiptWire
+import me.raddatz.veyq.expenses.receipt.ReceiptsHandler
+import java.time.Duration
 import jakarta.ws.rs.core.Response
 import java.security.MessageDigest
 import java.time.ZoneOffset
@@ -27,9 +35,14 @@ import java.util.UUID
  */
 class SharePotsResource(
     private val handler: SharePotsHandler,
+    private val receipts: ReceiptsHandler,
     /** The client a guest's write records (the guest-write record, ADR 0093 § 10): resolved once, handed down. */
     private val client: RequestClient,
+    config: VeyqConfig,
 ) : ShareExpensesApi {
+
+    /** The trash retention a tombstone's `purgeAfter` is derived from (decision 6), never stored. */
+    private val retention: Duration = config.node().trash().retention()
 
     @PermitAll
     @RateLimitExempt(
@@ -41,7 +54,7 @@ class SharePotsResource(
         shareId: String, nodeId: UUID, xSharePassword: String?, after: String?, limit: Int?, ifNoneMatch: String?,
     ): Response = when (val o = handler.list(shareId, xSharePassword, nodeId.toString())) {
         is SharePotListOutcome.Listed -> {
-            val all = o.revisions.map(::toGuest)
+            val all = o.revisions.map { toGuest(it, retention) }
             val from = after?.let(::afterIndex)?.let { cut -> all.indexOfFirst { key(it) > cut }.let { if (it < 0) all.size else it } } ?: 0
             val max = ItemsPage.limitOf(limit)
             val page = all.drop(from).take(max)
@@ -75,6 +88,39 @@ class SharePotsResource(
         }
     }
 
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Guest read of a Pot's receipt references under a share — the Expenses half of resolveShare's read, as " +
+            "listShareFiles is Depot's. Volume is unbounded BY DECISION, not by omission, recorded in cc.security.rate-limit " +
+            "(§ Unbounded by decision) beside listSharePotRevisions.",
+    )
+    override fun listSharePotReceipts(
+        shareId: String, nodeId: UUID, xSharePassword: String?, after: UUID?, limit: Int?, ifNoneMatch: String?,
+    ): Response = when (val o = receipts.listShared(shareId, xSharePassword, nodeId.toString())) {
+        is ListReceiptsOutcome.Listed -> ReceiptWire.respond(o.receipts.map(ReceiptWire::guest), { it.receiptId }, after, limit, ifNoneMatch) { page, more, cursor ->
+            SharePotReceiptPage(receipts = page, more = more, cursor = cursor)
+        }
+        is HttpFailure -> httpError(o)
+    }
+
+    @PermitAll
+    // A guest's receipt creates a receipt and a blob row, so it rides the per-share upload budget, as completeShareFile does.
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun completeSharePotReceipt(
+        shareId: String, nodeId: UUID, sharePotReceiptCompleteRequest: SharePotReceiptCompleteRequest, xSharePassword: String?,
+    ): Response {
+        val r = sharePotReceiptCompleteRequest
+        return when (
+            val o = receipts.completeShared(
+                shareId, xSharePassword, r.contributorToken, nodeId.toString(), r.entryId.toString(), r.receiptId.toString(),
+                r.uploadId.toString(), r.nodeEpoch.validated(), client.seen(),
+            )
+        ) {
+            is CompleteReceiptOutcome.Ok -> Response.ok(ReceiptWire.guest(o.receipt)).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
     private fun key(r: SharePotRevision): Pair<String, Long> = r.entryId.toString() to r.revision
 
     /** The contract's `after` (`<entryId>,<revision>`, its pattern already held at the boundary). */
@@ -88,7 +134,7 @@ class SharePotsResource(
         compareValuesBy(this, other, { it.first }, { it.second })
 
     /** The guest's shape — no writer field at all (ADR 0108 decision 6, inbox #190). */
-    private fun toGuest(r: PotRevisionEntity) = SharePotRevision(
+    private fun toGuest(r: PotRevisionEntity, retention: Duration) = SharePotRevision(
         entryId = UUID.fromString(r.entryId),
         revision = r.revision,
         tombstone = r.tombstone,
@@ -96,6 +142,7 @@ class SharePotsResource(
         sealedBody = r.sealedBody,
         wrappedRevisionKey = r.wrappedRevisionKey,
         createdAt = r.createdAt.atOffset(ZoneOffset.UTC),
+        purgeAfter = PotsResource.purgeAfterOf(r, retention),
     )
 }
 

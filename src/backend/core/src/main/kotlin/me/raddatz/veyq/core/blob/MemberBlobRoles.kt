@@ -26,8 +26,21 @@ interface MemberBlobRoles {
      *  (uc.platform.switch-application-off): a union, so one still on keeps the role open. */
     fun application(): String? = null
 
+    /**
+     * The largest sealed `byteSize` a blob in [role] may declare, below core's per-blob cap (`veyq.blob.max-bytes`), or
+     * null for none of its own — the cap of the ROLE, so it holds on every start that names it, a member's and a link
+     * guest's alike (`BlobUploadHandler.admissibility`: over it, the item is `budget_exceeded` before any session or
+     * quota is taken). An application caps a role by its size, which the server sees, never by its type, which is sealed
+     * (Expenses' receipts, ADR 0108 decision 7). Asked of every implementation declaring the role: the smallest cap wins.
+     */
+    fun maxBytes(role: String): Long? = null
+
     companion object {
         /** Whether some implementation of [declared] attaches a member's upload in [role]; none → no. */
         fun admits(declared: List<MemberBlobRoles>, role: String): Boolean = declared.any { role in it.roles() }
+
+        /** The smallest cap any implementation of [declared] puts on [role] ([maxBytes]); null when none does. */
+        fun capOf(declared: List<MemberBlobRoles>, role: String): Long? =
+            declared.filter { role in it.roles() }.mapNotNull { it.maxBytes(role) }.minOrNull()
     }
 }
