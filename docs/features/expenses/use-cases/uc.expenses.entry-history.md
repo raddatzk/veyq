@@ -46,3 +46,4 @@ that was deleted.
 - **Use-cases:** [uc.expenses.record-entries](uc.expenses.record-entries.md), [uc.expenses.verify-ledger](uc.expenses.verify-ledger.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 3 and 6; [ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) (the retention).
+- End-user view (docs site): [Record an expense](../../../../site/src/content/docs/expenses/record-an-expense.mdx)

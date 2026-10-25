@@ -21,9 +21,9 @@ export default defineConfig({
       },
       // One group per area and reader: Use (EN+DE, users), Run (EN, administrators), Security (EN, researchers).
       // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
-      // Spaces), then the applications (Memories, Depot), then Sharing, the space owner's tasks, Privacy and Help.
-      // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, sharing/,
-      // space-owners/, privacy/, help/), so a page's URL says its section. A section with no page yet is left out
+      // Spaces), then the applications (Memories, Depot, Expenses), then Sharing, the space owner's tasks, Privacy and Help.
+      // A section's pages live in its folder (getting-started/, account/, spaces/, memories/, depot/, expenses/,
+      // sharing/, space-owners/, privacy/, help/), so a page's URL says its section. A section with no page yet is left out
       // rather than shown empty. The labels are the web client's own words in each language.
       sidebar: [
         {
@@ -110,6 +110,16 @@ export default defineConfig({
                     'depot/rename-a-file',
                     'depot/delete-a-file',
                     'depot/drop-boxes',
+                  ],
+                },
+                {
+                  label: 'Expenses',
+                  translations: { de: 'Ausgaben' },
+                  items: [
+                    { slug: 'expenses', label: 'What Expenses is for', translations: { de: 'Wofür Ausgaben da ist' } },
+                    'expenses/record-an-expense',
+                    'expenses/settle-up',
+                    'expenses/share-a-pot',
                   ],
                 },
               ],

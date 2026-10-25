@@ -54,6 +54,8 @@ vi.mock('../core/node/treeStore', async () => {
 import MemoryHomeView from './MemoryHomeView.vue'
 import { memoryRows } from '../features/memories/levelRows'
 import { depotRows } from '../features/depot/levelRows'
+import { potRows } from '../features/expenses/levelRows'
+import { POT_KIND } from '../features/expenses/kinds'
 import { DROPBOX_KIND, FILE_KIND } from '../features/depot/kinds'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
@@ -67,7 +69,7 @@ import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 import { capabilityState } from '../shared/state/capabilities'
-import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX, DEPOT, MEMORIES } from '../features/platform/capabilities'
+import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX, DEPOT, EXPENSES, MEMORIES } from '../features/platform/capabilities'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../test/i18n'
@@ -139,7 +141,7 @@ beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockImplementation((id) => id === uid('Solo')) // one favourite, so both pin states show
   treeStore.nodes = TREE.map((n) => ({ ...n }))
-  capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+  capabilityState.ids = [MEMORIES, DEPOT, EXPENSES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   activeSpace.deletedAt = null
   activeSpace.purgeAfter = null
 })
@@ -165,11 +167,12 @@ describe('the Memories level view (golden)', () => {
   // The control every snapshot rests on: the level's rows are the real Memories and Depot registrations, as `main.ts` registers
   // them (MEMORY and CHAPTER naming one row factory, FILE and the drop box the other) - a golden of a stub would pin nothing
   // about what a user sees. Since the unified list (inbox #407) core draws ONE list of folders and every kind's rows.
-  it('control: the level view renders the real Memories and Depot registrations', () => {
+  it('control: the level view renders the real Memories, Depot and Expenses registrations', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
       { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { rows: depotRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
+      { rows: potRows, views: [], kinds: [POT_KIND] },
     ])
   })
 
@@ -190,7 +193,7 @@ describe('the Memories level view (golden)', () => {
   })
 
   it('inside a folder, sharing off: the overview card keeps rename and delete, no share', async () => {
-    capabilityState.ids = [MEMORIES, DEPOT]
+    capabilityState.ids = [MEMORIES, DEPOT, EXPENSES]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-unshareable'))
   })
 
@@ -201,12 +204,12 @@ describe('the Memories level view (golden)', () => {
 
   it('pending deletion with sharing off: the overview card has no actions row at all', async () => {
     pendingDeletion()
-    capabilityState.ids = [MEMORIES, DEPOT]
+    capabilityState.ids = [MEMORIES, DEPOT, EXPENSES]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-readonly-unshareable'))
   })
 
   it('Memories switched off for the tenant: the banner names it, no new Memory, the Memory keeps no write (uc.platform.switch-application-off)', async () => {
-    capabilityState.ids = [DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+    capabilityState.ids = [DEPOT, EXPENSES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-memories-off'))
   })
 

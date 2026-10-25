@@ -61,6 +61,8 @@ div.veyq-node-host
             "Depot"
           button.veyq-tab [role="tab"]
             "Drop boxes"
+          button.veyq-tab [role="tab"]
+            "Expenses"
     ul.veyq-level-list
       li.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Empty"]

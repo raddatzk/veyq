@@ -189,17 +189,17 @@ describe('what this build cannot import is listed, and left out on "Import the r
   const payload = (path: string, body: string) => ({ path, size: body.length, mediaType: 'text/plain', sha256: sha(body) })
   const manifest = {
     format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x',
-    applications: [{ id: 'h', contentSchema: 2 }, { id: 'expenses', contentSchema: 1 }],
+    applications: [{ id: 'h', contentSchema: 2 }, { id: 'ledgers', contentSchema: 1 }],
     root: {
       id: 'n1', kind: 'FOLDER', name: 'Home', path: 'Home', children: [
         { id: 'n2', kind: FILE, name: 'keep.txt', path: 'Home/keep.txt', content: { type: 'h.file', schema: 1, file: payload('Home/keep.txt', 'kept') } },
         {
-          id: 'n3', kind: 'EXPENSES', name: 'Budget', path: 'Home/Budget', content: { type: 'expenses.sheet', schema: 1 }, children: [
+          id: 'n3', kind: 'LEDGER_SHEET', name: 'Budget', path: 'Home/Budget', content: { type: 'ledgers.sheet', schema: 1 }, children: [
             { id: 'n4', kind: 'FOLDER', name: 'May', path: 'Home/Budget/May' },
           ],
         },
         { id: 'n5', kind: FILE, name: 'newer.txt', path: 'Home/newer.txt', content: { type: 'h.file', schema: 2, file: payload('Home/newer.txt', 'new') } },
-        { id: 'n6', kind: 'EXPENSES', name: 'Taxes', path: 'Home/Taxes', content: { type: 'expenses.sheet', schema: 1 } },
+        { id: 'n6', kind: 'LEDGER_SHEET', name: 'Taxes', path: 'Home/Taxes', content: { type: 'ledgers.sheet', schema: 1 } },
       ],
     },
   }
@@ -213,7 +213,7 @@ describe('what this build cannot import is listed, and left out on "Import the r
     const plan = planImport((await openExport(zipOf(await archive()))).manifest)
     expect(plan.nodes).toBe(2)
     expect(plan.groups).toEqual([
-      { application: 'expenses', reason: 'unknown_application', nodes: 3 },
+      { application: 'ledgers', reason: 'unknown_application', nodes: 3 },
       { application: 'h', reason: 'newer_content', nodes: 1 },
     ])
     expect(plan.skipped.map((s) => s.name)).toEqual(['Budget', 'newer.txt', 'Taxes'])

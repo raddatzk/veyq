@@ -120,3 +120,7 @@ and its receipts as files beside them. History is not exported; an import starts
 
 Previews of receipts, offline use, push notices, a category per line item, and rates by entry date (an entry entered
 late takes the day's rate unless typed).
+
+## Related
+
+- End-user view (docs site): [Expenses](../../site/src/content/docs/expenses/index.mdx)

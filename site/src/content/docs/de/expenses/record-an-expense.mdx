@@ -1,0 +1,55 @@
+---
+title: "Eine Ausgabe eintragen"
+sources:
+  - docs/features/expenses/use-cases/uc.expenses.record-entries.md
+  - docs/features/expenses/use-cases/uc.expenses.entry-history.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Öffne die Kasse und wähle **Eintrag hinzufügen**. Ein Eintrag ist eine von drei Arten:
+
+- **Ausgabe**: jemand hat bezahlt, für sich und andere.
+- **Erstattung**: Geld kam zurück, etwa eine Gutschrift für einen verspäteten Flug.
+- **Überweisung**: eine Person hat einer anderen Geld zurückgezahlt.
+
+## Eine Ausgabe oder eine Erstattung
+
+1. Gib einen Titel, das Datum, den Betrag und seine Währung ein und wähle eine Kategorie.
+2. Gib an, wer bezahlt hat, mit wie viel. Eine Rechnung kann mehrere Zahlende haben. Bei einer Erstattung gib an, wer
+   das Geld bekommen hat.
+3. Gib an, wie aufgeteilt wird:
+   - **Zu gleichen Teilen** unter den Personen, die du wählst.
+   - **Nach Anteilen**, etwa zwei Anteile für ein Paar und einer für eine einzelne Person.
+   - **Nach genauen Beträgen** je Person.
+   - **Nach Posten**: jeder Posten mit seinem Betrag und den Personen, zu denen er gehört, etwa eine Flasche Wein für
+     drei. Was die Rechnung über die Posten hinaus enthält, etwa ein Trinkgeld, wird im Verhältnis zu den Posten jeder
+     Person verteilt oder zu gleichen Teilen unter den Personen auf der Rechnung.
+4. Speichere.
+
+<Screenshot id="expenses-entry-editor" shows="Der Eintragseditor für eine nach Posten aufgeteilte Ausgabe: Titel, Datum, Betrag, Währung und Kategorie oben, die zahlende Person mit ihrem Betrag, drei Posten mit ihren Personen und das Trinkgeld im Verhältnis verteilt" />
+
+Ein Eintrag, der nicht aufgeht, lässt sich nicht speichern, etwa wenn die Beträge der Zahlenden nicht die Summe
+ergeben oder die Posten mehr ausmachen als sie. Der Editor sagt, was nicht stimmt.
+
+## Eine Überweisung
+
+Wähle, wer wem gezahlt hat, und den Betrag. Eine Überweisung hat keine Kategorie. Was
+[Ausgleichen](/veyq/de/expenses/settle-up/) vorschlägt, kannst du auch dort eintragen.
+
+## Eine andere Währung
+
+Hast du in einer anderen Währung als der Basiswährung der Kasse bezahlt, gib den Kurs zur Basiswährung ein. Der Eintrag
+behält den Kurs, mit dem er gespeichert wurde.
+
+## Einen Eintrag ändern oder löschen
+
+Öffne den Eintrag, um ihn zu ändern. Jede Änderung behält die frühere Fassung: Der Eintrag zeigt **bearbeitet**, und
+sein Verlauf listet jede Fassung und wann sie gespeichert wurde. Mitglieder des Bereichs sehen auch, wer sie gespeichert
+hat.
+
+Hat jemand anderes den Eintrag geändert, während du ihn bearbeitet hast, zeigt dir das Speichern dessen Fassung.
+Speichere noch einmal, um deine darüberzulegen.
+
+Wenn du einen Eintrag löschst, kommt er in die **Gelöschten Einträge** der Kasse. Er zählt nicht mehr zu den Salden,
+und du kannst ihn dort wiederherstellen.

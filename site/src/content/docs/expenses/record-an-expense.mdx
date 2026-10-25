@@ -1,0 +1,52 @@
+---
+title: "Record an expense"
+sources:
+  - docs/features/expenses/use-cases/uc.expenses.record-entries.md
+  - docs/features/expenses/use-cases/uc.expenses.entry-history.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+Open the Pot and choose **Add entry**. An entry is one of three kinds:
+
+- **Expense**: someone paid, for themselves and others.
+- **Refund**: money came back, such as a credit for a delayed flight.
+- **Transfer**: one person paid another back.
+
+## An expense or a refund
+
+1. Type a title, the date, the amount and its currency, and choose a category.
+2. Say who paid, with how much each. One bill can have several payers. For a refund, say who received the money.
+3. Say how it is split:
+   - **Equally** among the people you choose.
+   - **By shares**, such as two shares for a couple and one for a single person.
+   - **By exact amounts** per person.
+   - **As line items**: each item with its amount and the people it belongs to, such as one bottle of wine for three.
+     What the bill has beyond the items, like a tip, is spread in proportion to each person's items, or equally among
+     the people on the bill.
+4. Save.
+
+<Screenshot id="expenses-entry-editor" shows="The entry editor for an expense split as line items: title, date, amount, currency and category at the top, the payer with their amount, three items each with its people, and the tip spread in proportion" />
+
+An entry that does not add up cannot be saved, for example when the payers' amounts are not the total or the items
+come to more than it. The editor says what is off.
+
+## A transfer
+
+Choose who paid whom and the amount. A transfer has no category. To pay back what [Settle up](/veyq/expenses/settle-up/)
+suggests, you can record it from there.
+
+## Another currency
+
+If you paid in a currency other than the Pot's base currency, type the rate to the base currency. The entry keeps the
+rate it was saved with.
+
+## Change or delete an entry
+
+Open the entry to change it. Every change keeps the earlier version: the entry shows **edited**, and its history lists
+each version and when it was saved. Members of the space also see who saved each one.
+
+If someone else changed the entry while you were editing, saving shows you their version. Save again to put yours on
+top of it.
+
+Deleting an entry moves it to the Pot's **Deleted entries**. It leaves the balances, and you can restore it from there.

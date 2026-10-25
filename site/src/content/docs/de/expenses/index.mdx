@@ -1,0 +1,78 @@
+---
+title: "Ausgaben"
+sources:
+  - docs/features/expenses/_index.md
+  - docs/apps/expenses.md
+  - docs/features/expenses/use-cases/uc.expenses.create-pot.md
+  - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
+  - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+**Ausgaben** führt **Kassen** für gemeinsame Kosten: eine Reise, eine WG, einen Vereinsabend. Alle tragen ein, was sie
+bezahlt haben, und die Kasse zeigt jederzeit, wer was bezahlt hat und wer wem etwas schuldet.
+
+<Screenshot id="expenses-pot-entries" shows="Eine geöffnete Kasse im Reiter Einträge, mit den Reitern Einträge, Salden, Überblick, Personen und Einstellungen, und einigen Einträgen, jeder mit Titel, Datum, Betrag und wer bezahlt hat" />
+
+## Was du tun kannst
+
+- [Eine Ausgabe eintragen](/veyq/de/expenses/record-an-expense/)
+- [Ausgleichen](/veyq/de/expenses/settle-up/)
+- [Eine Kasse teilen](/veyq/de/expenses/share-a-pot/)
+
+## Eine Kasse anlegen
+
+1. Öffne den Ordner, in dem die Kasse liegen soll.
+2. Wähle **Neu**, dann **Neue Kasse**.
+3. Gib einen Namen ein, wähle die **Basiswährung** (in ihr wird jeder Anteil gerechnet) und gib die Namen der Personen
+   darin ein.
+4. Lege sie an. Die Kasse öffnet sich, noch ohne Einträge.
+
+Die Personen einer Kasse sind nur Namen. Sie hängen an keinem Konto, du kannst also auch jemanden eintragen, der veyq
+nicht nutzt.
+
+## Die Seite der Kasse
+
+- **Einträge**: alles, was bezahlt, erstattet oder zurückgezahlt wurde. Siehe
+  [Eine Ausgabe eintragen](/veyq/de/expenses/record-an-expense/).
+- **Salden**: wer Geld bekommt und wer etwas schuldet, und ein Vorschlag zum Ausgleichen. Siehe
+  [Ausgleichen](/veyq/de/expenses/settle-up/).
+- **Überblick**: die Summen je Kategorie, und je Person, was sie bezahlt hat, neben ihrem Anteil.
+- **Personen**: die Namen in der Kasse.
+- **Einstellungen** (nur für Mitglieder des Bereichs): die Basiswährung, die sich nur ändern lässt, solange die Kasse
+  keinen Eintrag hat, und die eigenen Kategorien der Kasse neben den vorgegebenen. Eigene Kategorien kannst du
+  hinzufügen und umbenennen, nicht entfernen.
+
+## Personen
+
+Unter **Personen** kann jede Person, die Einträge ändern darf, jemanden hinzufügen und umbenennen. Ein Mitglied des
+Bereichs kann außerdem:
+
+- Eine Person **deaktivieren**, deren Saldo ausgeglichen ist. Sie wird für neue Einträge nicht mehr angeboten, alte
+  Einträge zeigen weiter ihren Namen. Du kannst sie wieder aktivieren.
+- Eine Person **löschen**, deren Saldo ausgeglichen ist. Ihr Name wird gelöscht, und Einträge zeigen an seiner Stelle
+  **gelöschte Personen**. Das lässt sich nicht rückgängig machen.
+
+## Wenn Änderungen fehlen
+
+Jeder Eintrag merkt sich, auf welchen Einträgen er aufbaut. Lässt der Server eine Änderung weg, auf die sich ein
+späterer Eintrag bezieht, sagt die Kasse über ihren Salden, dass sie falsch sein können, und nennt die Einträge, zu
+denen die fehlenden Änderungen gehören.
+
+## Wie alles andere in deinem Bereich
+
+Eine Kasse lässt sich verschieben, kopieren, in den [Papierkorb](/veyq/de/spaces/trash/) löschen und wiederherstellen
+wie ein Ordner oder eine Datei. [Herunterladen](/veyq/de/spaces/download-and-import/) gibt dir eine Datei, die veyq
+wieder einliest, wenn du sie in einen anderen Ordner importierst, und eine CSV-Datei der Einträge für eine
+Tabellenkalkulation. Wer einen Eintrag sehen kann, kann ihn [melden](/veyq/de/help/report-something/).
+
+Ist Ausgaben [abgeschaltet](/veyq/de/applications/), sagt ein Hinweis das, und in einer Kasse kann nichts dazukommen
+und nichts geändert werden.
+
+## Ist das privat?
+
+Eine Kasse wird auf deinem Gerät verschlüsselt wie alles andere in veyq. Der Server sieht, dass es eine Kasse gibt,
+wie viele Einträge sie hat und wann und von wem sie geschrieben wurden. Er sieht keinen Betrag, keinen Namen in der
+Kasse, keine Kategorie, keine Währung und nicht, wer wem etwas schuldet. Mehr dazu:
+[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

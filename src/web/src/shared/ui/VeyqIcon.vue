@@ -99,6 +99,7 @@ import {
   UserMinusIcon,
   UserPlusIcon,
   UsersIcon,
+  WalletIcon,
   XIcon,
   ZoomInIcon,
   ZoomOutIcon,
@@ -202,6 +203,7 @@ const DRAWN: Record<VeyqIconName, LucideIcon> = {
   'user-plus': UserPlusIcon,
   'users': UsersIcon,
   'verified': BadgeCheckIcon,
+  'wallet': WalletIcon,
   'window-maximize': Maximize2Icon,
   'window-minimize': Minimize2Icon,
 }

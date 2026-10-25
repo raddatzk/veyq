@@ -1,0 +1,32 @@
+---
+title: "Ausgleichen"
+sources:
+  - docs/features/expenses/use-cases/uc.expenses.balances.md
+---
+
+import Screenshot from '../../../../components/Screenshot.astro';
+
+Öffne die Kasse und wähle **Salden**. Der Saldo einer Person ist, was sie bezahlt und bekommen hat, gegen ihren Anteil
+an jeder Ausgabe und Erstattung, Überweisungen eingerechnet. Er zeigt, wer Geld bekommt und wer etwas schuldet.
+
+## Ausgleichen
+
+Unter den Salden schlägt die Kasse eine kurze Liste von Überweisungen vor, die alle auf null bringt: wer wem zahlt und
+wie viel. Jedes Gerät zeigt denselben Vorschlag.
+
+<Screenshot id="expenses-balances-settle-up" shows="Der Reiter Salden einer Kasse mit drei Personen, eine bekommt Geld und zwei schulden etwas, darunter die vorgeschlagenen Überweisungen, jede mit wer wem zahlt und dem Betrag" />
+
+Ist eine vorgeschlagene Überweisung bezahlt, trag sie dort ein. Sie kommt als Überweisung zu den Einträgen, und die
+Salden ändern sich mit. Stehen alle auf null, sagt die Kasse, dass niemand etwas schuldet.
+
+Eine deaktivierte oder gelöschte Person zählt weiter. Wird ein alter Eintrag so geändert, dass sie wieder etwas schuldet
+oder bekommt, erscheint sie wieder in den Salden und im Vorschlag: eine deaktivierte mit Namen, eine gelöschte als
+**gelöschte Personen**.
+
+## Wohin das Geld ging
+
+**Überblick** zeigt die Summe je Kategorie, und je Person, was sie bezahlt hat, neben ihrem Anteil. Nur eins von beiden
+anzusehen kann täuschen. Erstattungen zählen gegen ihre Kategorie; Überweisungen sind keine Kosten.
+
+Sagt die Kasse, dass Änderungen fehlen, sind ihre Zahlen aus dem berechnet, was da ist, und können falsch sein. Siehe
+[Wenn Änderungen fehlen](/veyq/de/expenses/#wenn-änderungen-fehlen).

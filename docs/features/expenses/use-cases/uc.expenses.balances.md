@@ -46,3 +46,4 @@ You always know who owes whom, can settle a whole trip in a few transfers, and s
 - **Feature:** [expenses](../_index.md); the computations in [docs/apps/expenses.md](../../../apps/expenses.md) § What the client computes.
 - **Use-cases:** [uc.expenses.record-entries](uc.expenses.record-entries.md), [uc.expenses.manage-participants](uc.expenses.manage-participants.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 9.
+- End-user view (docs site): [Settle up](../../../../site/src/content/docs/expenses/settle-up.mdx)

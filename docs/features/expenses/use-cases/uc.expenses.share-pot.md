@@ -55,3 +55,4 @@ change getting lost.
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
   decisions 2 and 6, [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decision 6, [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10.
+- End-user view (docs site): [Share a Pot](../../../../site/src/content/docs/expenses/share-a-pot.mdx)

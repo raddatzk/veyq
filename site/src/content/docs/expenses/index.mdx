@@ -1,0 +1,69 @@
+---
+title: "Expenses"
+sources:
+  - docs/features/expenses/_index.md
+  - docs/apps/expenses.md
+  - docs/features/expenses/use-cases/uc.expenses.create-pot.md
+  - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
+  - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
+---
+
+import Screenshot from '../../../components/Screenshot.astro';
+
+**Expenses** keeps **Pots** for shared costs: a trip, a shared flat, a club evening. Everyone puts in what they paid,
+and the Pot shows at any time who paid what and who owes whom.
+
+<Screenshot id="expenses-pot-entries" shows="An opened Pot on its Entries tab, with the tabs Entries, Balances, Overview, People and Settings, and a few entries, each with its title, date, amount and who paid" />
+
+## What you can do
+
+- [Record an expense](/veyq/expenses/record-an-expense/)
+- [Settle up](/veyq/expenses/settle-up/)
+- [Share a Pot](/veyq/expenses/share-a-pot/)
+
+## Create a Pot
+
+1. Open the folder where the Pot should be.
+2. Choose **New**, then **New Pot**.
+3. Type a name, choose the **base currency** (what every share is counted in), and type the names of the people in it.
+4. Create it. The Pot opens, with no entries yet.
+
+The people in a Pot are just names. They are not linked to an account, so you can add someone who does not use veyq.
+
+## The Pot's page
+
+- **Entries**: everything that was paid, paid back or handed over. See [Record an expense](/veyq/expenses/record-an-expense/).
+- **Balances**: who is owed and who owes, and a suggestion how to settle up. See [Settle up](/veyq/expenses/settle-up/).
+- **Overview**: the totals per category, and per person what they paid beside what their share was.
+- **People**: the names in the Pot.
+- **Settings** (members of the space only): the base currency, which can be changed only while the Pot has no entry,
+  and the Pot's own categories beside the given ones. You can add and rename your own categories, not remove them.
+
+## People
+
+On **People**, whoever may change entries can add a person and rename one. A member of the space can also:
+
+- **Deactivate** a person whose balance is settled. They are no longer offered for new entries, and old entries still
+  show their name. You can activate them again.
+- **Delete** a person whose balance is settled. Their name is erased, and entries show **deleted people** in its place.
+  This cannot be undone.
+
+## If changes are missing
+
+Every entry remembers which entries it was written on top of. If the server leaves out a change that a later entry
+refers to, the Pot says above its balances that they may be wrong, and names the entries the missing changes belong to.
+
+## Like every other thing in your space
+
+A Pot can be moved, copied, deleted to the [trash](/veyq/spaces/trash/) and restored like a folder or a file.
+[Download](/veyq/spaces/download-and-import/) gives you a file that veyq reads back when you import it into another
+folder, and a CSV file of the entries for a spreadsheet. Anyone who can see an entry can
+[report it](/veyq/help/report-something/).
+
+If Expenses is [switched off](/veyq/applications/), a banner says so and nothing in a Pot can be added or changed.
+
+## Is it private?
+
+A Pot is locked on your device like everything else in veyq. The server sees that a Pot exists, how many entries it
+has, and when they were written and by whom. It does not see an amount, a name in the Pot, a category, a currency, or
+who owes whom. Details: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

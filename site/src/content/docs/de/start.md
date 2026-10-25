@@ -12,7 +12,7 @@ teilst, und warum sie privat bleiben. Kein technisches Vorwissen nötig.
 - [Dein Konto](/veyq/de/account/devices-and-sessions/): Geräte, Passwort, E-Mail-Adresse, Schlüssel, Profil
 - [Bereiche](/veyq/de/spaces/): deine Bereiche, Ordner, Gruppen, der Papierkorb, Herunterladen und Importieren
 - [Anwendungen](/veyq/de/applications/): [Erinnerungen](/veyq/de/memories/) für Fotos und Videos, [Depot](/veyq/de/depot/)
-  für Dateien
+  für Dateien, [Ausgaben](/veyq/de/expenses/) für gemeinsame Kosten
 - [Teilen](/veyq/de/sharing/): Links für Menschen ohne Konto
 - [Wenn dir der Bereich gehört](/veyq/de/space-owners/who-gets-into-your-space/): Mitglieder, Bedingungen, E-Mail,
   Speicher

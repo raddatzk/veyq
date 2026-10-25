@@ -86,6 +86,22 @@ export function revisionKeyOf(address: RevisionAddress, potKey: Uint8Array, wrap
   }
 }
 
+/** Open one revision's body with its `K_rev` alone — a moderator's review, handed the keys a report shared, holds no Pot
+ *  key. Bound to [address] as every open is, so a key of another revision does not open it. Throws [RevisionUnreadable]. */
+export function openRevisionWithKey(address: RevisionAddress, kRev: Uint8Array, sealedBody: Uint8Array): RevisionBody {
+  let padded: Uint8Array
+  try {
+    padded = v1.openField(bodyContext(address), kRev, sealedBody)
+  } catch {
+    throw new RevisionUnreadable('body')
+  }
+  try {
+    return decodeRevisionBody(v1.unpad(padded))
+  } catch {
+    throw new RevisionUnreadable('format')
+  }
+}
+
 /** A re-key's part for one revision: its `K_rev` opened under the Pot's old key and wrapped under the new one, bound to
  *  the same address. The body is not an input, so it cannot change. */
 export const rewrapRevisionKey = (address: RevisionAddress, oldPotKey: Uint8Array, newPotKey: Uint8Array, wrappedRevisionKey: Uint8Array): Uint8Array =>

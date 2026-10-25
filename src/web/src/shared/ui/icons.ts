@@ -97,6 +97,7 @@ export const VEYQ_ICON_NAMES = [
   'user-plus',
   'users',
   'verified',
+  'wallet',
   'window-maximize',
   'window-minimize',
 ] as const

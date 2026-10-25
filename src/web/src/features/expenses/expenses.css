@@ -1,0 +1,104 @@
+/* Expenses' global sheet (imported last by `register.ts`): the Pot page's rows and amounts. Tokens only, so the dark mode
+   is the tokens'; the rows are the layer's `.veyq-list-row`, a button reset where a row opens an entry. */
+
+.expenses-pot {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.expenses-pot section {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.expenses-pot h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.expenses-subhead {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+
+.expenses-row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.expenses-row:hover {
+  background: var(--app-hover);
+}
+
+.expenses-row:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.expenses-static-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 3.25rem;
+}
+
+.expenses-row-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.expenses-amount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.expenses-amount.is-positive,
+.expenses-amount.is-negative {
+  font-weight: 700;
+}
+
+.expenses-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.expenses-inline-form > .veyq-input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.expenses-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.expenses-table th,
+.expenses-table td {
+  padding: 0.45rem 0.25rem;
+  border-bottom: 1px solid var(--app-line);
+  text-align: left;
+  font-weight: 400;
+}
+
+.expenses-table thead th,
+.expenses-table tfoot th,
+.expenses-table tfoot td {
+  font-weight: 700;
+}
+
+.expenses-table .expenses-amount {
+  text-align: right;
+}
+
+.expenses-ledger-notice ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}

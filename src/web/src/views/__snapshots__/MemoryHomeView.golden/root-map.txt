@@ -54,5 +54,7 @@ div.veyq-node-host
             "Depot"
           button.veyq-tab [role="tab"]
             "Drop boxes"
+          button.veyq-tab [role="tab"]
+            "Expenses"
     div.space-map-stub
       "Beach, Italy"
