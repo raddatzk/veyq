@@ -16,20 +16,23 @@
 //   6. A records the settle-up, deactivates and activates Cleo, deletes her (entries show "deleted people") and removes
 //      the person the guest added, whom no entry names; neither is offered for a new entry;
 //   7. A downloads the Pot and imports the ZIP into another folder, then copies it ("Copy to…", which names what does not
-//      come along): both new Pots show the original's balances, settle-up and overview;
+//      come along, and no longer the receipts): both new Pots show the original's balances, settle-up and overview, and
+//      the receipts the entries hold — the ZIP holds each by its name, byte for byte, and not the one removed in 2b;
 //   8. the guest reports "Dinner"; the moderator (the Server Owner, holding the key since first-run setup) opens the case
 //      and reads the entry's three versions in plaintext, then dismisses it (the shared queue is left as found);
 //   9. A removes B from the group, which rotates the group's key and re-keys the Pot: no re-key left running, every
 //      figure unchanged, no ledger notice, and the Pot still opens for A and through the guest's link;
 //  10. the Pot at 375 px: Entries, Balances, the editor with line items, People — no horizontal scroll, every action in reach.
 //
-// Receipts (cr-expenses-receipts, uc.expenses.attach-receipts), written into the same pass and NOT YET RUN (the implementing
-// session ran no stack; its run is the CR's phase 4):
+// Receipts (uc.expenses.attach-receipts), in the same pass:
 //   2b. A keeps a JPEG, a PDF and a text that claims to be a PDF with "Museum" (a `.txt` is refused at the picker): the
 //       JPEG is drawn as an image, the PDF by core's page renderer, the false PDF only offered for download; removing it
 //       leaves the entry, and no figure moves;
 //   4b. the guest keeps a JPEG with its own entry through the link and opens A's receipts;
 //   9b. after the rotation every receipt still opens, for A and through the link.
+// Not driven here: a receipt the operator blocked, the restore cut-off past the retention, a receipt reported on its own
+// and the case view's receipts — a block needs a moderator's measure and a cut-off a retention the lane does not shorten
+// (unit-tested: PotDetail.receipts.test.ts, PotEntryReview.test.ts, receiptRules.test.ts).
 //
 // Two writers are two browser contexts, each its own cookie jar and storage: the lane serves each tenant on one host
 // (`<name>.<domain>` through Traefik), so the CR's "second host" — which on the dev stack bought exactly that separation —
@@ -54,6 +57,7 @@ import { headerAction } from '../../src/header'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
 import { toast } from '../../src/toast'
+import { readZip } from '../../src/zip'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -351,6 +355,29 @@ for (const lang of ['en', 'de'] as const) {
     const reason = lang === 'en' ? `This entry insults someone ${stamp}` : `Dieser Eintrag beleidigt jemanden ${stamp}`
     const vectorRows = () => balanceRows(L, lang, trip.expected.balances)
     const eur = (minor: number) => squash(money(minor, 'EUR', 2, lang))
+    // The PDF receipt's bytes: its one line is a canary (the sweep proves it never reached the server readable).
+    const admissionPdf = () => Buffer.from(onePagePdf(recordTyped(`Eintritt ${stamp}`)))
+
+    /** The receipts an import or a copy carried ([where]): Museum's JPEG and PDF and the guest's JPEG with their entries,
+     *  each opening as it did, and not the one step 2b removed. */
+    async function expectCarriedReceipts(page: Page, where: string): Promise<void> {
+      await openTab(page, L.pot.tabs.entries)
+      await entryRow(page, museum).click()
+      const museumDialog = entryDialog(page, L.pot.editEntry)
+      await expect(receiptRow(museumDialog, receiptJpeg), `${where}: ${receiptJpeg}`).toHaveCount(1, { timeout: 30_000 })
+      await expect(receiptRow(museumDialog, receiptPdf), `${where}: ${receiptPdf}`).toHaveCount(1)
+      await expect(receiptRow(museumDialog, falsePdf), `${where}: the removed receipt is not carried`).toHaveCount(0)
+      await expectReceiptOpens(museumDialog, L, receiptJpeg, 'image')
+      await expectReceiptOpens(museumDialog, L, receiptPdf, 'pdf')
+      await museumDialog.getByRole('button', { name: L.cancel, exact: true }).click()
+      await expect(museumDialog).toBeHidden()
+      await entryRow(page, snacks).click()
+      const snacksDialog = entryDialog(page, L.pot.editEntry)
+      await expect(receiptRow(snacksDialog, guestJpeg), `${where}: ${guestJpeg}`).toHaveCount(1, { timeout: 30_000 })
+      await expectReceiptOpens(snacksDialog, L, guestJpeg, 'image')
+      await snacksDialog.getByRole('button', { name: L.cancel, exact: true }).click()
+      await expect(snacksDialog).toBeHidden()
+    }
 
     let a: Device
     let b: Device
@@ -463,7 +490,7 @@ for (const lang of ['en', 'de'] as const) {
         await expect(editor.getByText(R.notReceipt(note), { exact: true })).toBeVisible()
         await addReceipts(editor, [
           jpegFile(receiptJpeg),
-          { name: recordTyped(receiptPdf), mimeType: 'application/pdf', buffer: Buffer.from(onePagePdf(recordTyped(`Eintritt ${stamp}`))) },
+          { name: recordTyped(receiptPdf), mimeType: 'application/pdf', buffer: admissionPdf() },
           // claims to be a PDF; its bytes are a text: the bytes decide
           { name: recordTyped(falsePdf), mimeType: 'application/pdf', buffer: Buffer.from(recordTyped(`not a PDF ${stamp}`)) },
         ])
@@ -766,9 +793,13 @@ for (const lang of ['en', 'de'] as const) {
     )
 
     test(
-      'step 7: the Pot downloaded and imported into another folder, then copied: both show its balances and overview',
+      'step 7: the Pot downloaded and imported into another folder, then copied: both show its balances, overview and receipts',
       {
-        tag: ['@uc.platform.export-import:expenses-content', '@uc.platform.copy-node:a-pot-copies-its-live-entries'],
+        tag: [
+          '@uc.platform.export-import:expenses-content',
+          '@uc.platform.copy-node:a-pot-copies-its-live-entries',
+          '@uc.expenses.attach-receipts:receipts-are-blobs-of-the-entry',
+        ],
       },
       async () => {
         test.setTimeout(300_000)
@@ -789,6 +820,15 @@ for (const lang of ['en', 'de'] as const) {
         expect(download.suggestedFilename()).toBe(`${pot}.zip`)
         const zip = readFileSync(await download.path())
         await expect(toast(page, L.downloadSaved, lang)).toBeVisible({ timeout: 60_000 })
+        // The receipts the entries hold sit beside the Pot's content under their own names, byte for byte; the one
+        // removed in step 2b is not carried.
+        const archived = readZip(zip)
+        for (const [name, bytes] of [[receiptJpeg, PHOTO], [receiptPdf, admissionPdf()], [guestJpeg, PHOTO]] as const) {
+          const held = archived.get(`${pot}/${name}`)
+          expect(held, `the ZIP holds ${name}`).toBeDefined()
+          expect(held!.equals(bytes), `${name} byte for byte`).toBe(true)
+        }
+        expect([...archived.keys()].filter((path) => path.includes(falsePdf)), 'the removed receipt is not in the ZIP').toEqual([])
 
         // Import: the ZIP picked for an upload in another folder of the group.
         await signIn(page, L, accountA)
@@ -804,6 +844,7 @@ for (const lang of ['en', 'de'] as const) {
         await expect(toast(page, L.imported(pot), lang)).toBeVisible({ timeout: 90_000 })
         await openPot(page, L, pot)
         expect(await figures(page, L), 'the imported Pot').toEqual(before)
+        await expectCarriedReceipts(page, 'the imported Pot')
 
         // Copy: "Copy to…" from the Pot's page, into its own folder (the copy is named apart there).
         await signIn(page, L, accountA)
@@ -813,6 +854,7 @@ for (const lang of ['en', 'de'] as const) {
         await headerAction(page, L.copyTo)
         const copy = page.getByRole('dialog', { name: L.copyTitle(pot), exact: true })
         await expect(copy.getByTestId('copy-losses')).toContainText(L.pot.copyLoss, { timeout: 60_000 })
+        await expect(copy.getByTestId('copy-losses'), 'the receipts come along: no loss names them').not.toContainText(L.pot.receipts.word)
         await copy.getByTestId('copy-submit').click()
         // Beside its original the copy is named apart (core's `Name (2)`), and the toast names it so.
         const copyName = `${pot} (2)`
@@ -823,6 +865,7 @@ for (const lang of ['en', 'de'] as const) {
         await expect(page.locator('li.veyq-level-item[data-kind="EXPENSES_POT"]')).toHaveCount(2, { timeout: 60_000 })
         await openPot(page, L, copyName)
         expect(await figures(page, L), 'the copied Pot').toEqual(before)
+        await expectCarriedReceipts(page, 'the copied Pot')
       },
     )
 

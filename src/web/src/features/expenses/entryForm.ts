@@ -38,7 +38,8 @@ export interface EntryForm {
   /** A transfer's two ends. */
   from: string
   to: string
-  /** Kept from the revision edited (receipts arrive with `cr-expenses-receipts`; the format already carries the list). */
+  /** The receipt ids the revision lists: the edited revision's, less the removed ones, plus those added in the dialog
+   *  (`EntryEditor`; docs/apps/expenses.md § Receipts). */
   receipts: string[]
   refunds?: string
 }

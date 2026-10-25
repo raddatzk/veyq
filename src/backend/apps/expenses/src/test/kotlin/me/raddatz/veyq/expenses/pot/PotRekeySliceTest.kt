@@ -91,7 +91,7 @@ class PotRekeySliceTest {
     }
 
     /**
-     * A receipt's `K_blob` is re-wrapped in the same participant (ADR 0109 decision 3, cr-expenses-receipts decision 3):
+     * A receipt's `K_blob` is re-wrapped in the same participant (ADR 0109 decision 3, ADR 0108 decision 7):
      * the listing serves every receipt's wrap after the revisions', a stage that misses one is `rekey_parts_missing`, one
      * naming a receipt the Pot does not hold is `rekey_parts_stale`, and the control re-wraps every receipt's blob row —
      * its stored object, size and meta untouched.

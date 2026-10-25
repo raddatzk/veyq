@@ -4,9 +4,8 @@ title: See what changed, and restore a deleted entry
 # Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
-# `past-the-retention-a-line-without-receipts` ("Past the trash retention a deleted entry stays a line in the history and
-# restore is no longer offered") is not built: it comes with the receipts' purge, and changes/cr-expenses-receipts.md
-# (decision 6) writes it back beside its test. The use-case's E2 says so.
+# `past-the-retention-a-line-without-receipts` came with the receipts' purge (cr-expenses-receipts, ADR 0108 decision 7):
+# a tombstone's read carries when its receipts go, and past it no restore is offered.
 acceptanceCriteria:
   - id: history-shows-every-revision
     text: "An entry's history lists every revision the server holds, newest first, with what changed and when; an edited entry says so in the list."
@@ -29,9 +28,16 @@ acceptanceCriteria:
         integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly]
       web:
         unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/domain/ledger.test.ts]
+  - id: past-the-retention-a-line-without-receipts
+    text: "Past the trash retention a deleted entry stays a line in the history and restore is no longer offered; its receipts are erased."
+    coverage:
+      backend:
+        integration: [PotReceiptSliceTest.aDroppedADeletedAndAnOrphanedReceiptGoAfterTheRetentionAndNotBefore_aRestoredEntrysStay]
+      web:
+        unit: [src/features/expenses/components/PotDetail.receipts.test.ts, src/features/expenses/domain/receiptRules.test.ts]
     gaps:
       - surface: web
-        reason: "No retention bounds the restore yet: a deleted entry is restorable for as long as its Pot exists (cr-expenses-receipts decision 6 brings the retention)."
+        reason: "The cut-off is unit-tested only: PotDetail.receipts.test.ts (restorable until the tombstone's purge time, not after it) and receiptRules.test.ts (purgeAfterOf and restoreOffered). Lane L1 runs on the default trash retention, so no entry in its browser pass is ever past it."
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `history-shows-every-revision`,

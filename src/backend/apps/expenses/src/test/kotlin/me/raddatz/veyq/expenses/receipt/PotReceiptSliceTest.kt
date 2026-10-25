@@ -56,7 +56,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * A Pot's receipts (ADR 0108 decision 7, cr-expenses-receipts decisions 1-5) end to end through the wire the web will
+ * A Pot's receipts (ADR 0108 decision 7, docs/apps/expenses.md § Receipts) end to end through the wire the web will
  * use: core's `startBlobUploads` / `startShareBlobUploads` (role `EXPENSES_RECEIPT`, owner the Pot), the chunks staged as
  * an honest client leaves them, Expenses' completion, its reads, a revision's drop, the purge after the trash retention,
  * core's presigned downloads and a content block. [FakePresignProfile] makes declare-then-verify run, so a completion
@@ -176,7 +176,7 @@ class PotReceiptSliceTest {
     }
 
     /**
-     * cr-expenses-receipts decisions 2 and 6: a dropped receipt, a deleted entry's and one whose entry never got a revision
+     * docs/apps/expenses.md § Receipts, the retention: a dropped receipt, a deleted entry's and one whose entry never got a revision
      * go once the retention has passed since the drop, the tombstone or the completion — and not before; a restored
      * entry's stay. Each goes with its blob row and puts its store objects on the reclaim list (ADR 0062).
      */
@@ -278,7 +278,7 @@ class PotReceiptSliceTest {
     }
 
     /**
-     * cr-expenses-receipts decision 5: a moderator's content block of a receipt, or of the entry that holds it, answers
+     * ADR 0108 decision 7: a moderator's content block of a receipt, or of the entry that holds it, answers
      * `blocked_by_operator` for its bytes — a member's presign per item, a guest's GET `451` — and the reads mark it;
      * control: an unblocked receipt of the same Pot presigns for both.
      */

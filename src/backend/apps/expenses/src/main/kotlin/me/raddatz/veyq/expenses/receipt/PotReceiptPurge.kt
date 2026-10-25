@@ -19,7 +19,7 @@ import java.time.Instant
 import org.jboss.logging.Logger
 
 /**
- * The receipts' retention purge (ADR 0108 decision 7, cr-expenses-receipts decision 2): a receipt goes once the trash
+ * The receipts' retention purge (ADR 0108 decision 7, docs/apps/expenses.md § Receipts): a receipt goes once the trash
  * retention (`veyq.node.trash.retention`, core's node retention — Expenses has no key of its own) has passed since
  *
  * - a revision of its entry dropped it ([PotReceiptEntity.droppedAt]);
@@ -36,7 +36,9 @@ import org.jboss.logging.Logger
  * **One transaction per scope**, a failure logged and stepped over (`NodeSubtreePurge.run`'s shape). Under the scope
  * row's lock the candidates are selected, then locked in the order every Pot writer takes ([PotReceiptStore]): the
  * records' revisions, the receipts, the Pots' node rows — and judged again on what is committed then, so a restore that
- * committed while this waited is seen and its receipts stay (`PotReceiptPurgeSliceTest`).
+ * committed while this waited is seen and its receipts stay (`PotReceiptRaceSliceTest`). The cutoff therefore holds in
+ * two layers, the candidates' query and that judging again: either alone keeps a receipt that is not yet due, so a test
+ * that breaks only one stays green — a bite of the cutoff breaks both (`PotReceiptSliceTest`).
  */
 @ApplicationScoped
 class PotReceiptPurge(

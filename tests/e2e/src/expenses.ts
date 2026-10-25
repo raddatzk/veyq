@@ -59,6 +59,8 @@ export const LABELS = {
         download: (n: string) => `Download ${n}`, remove: (n: string) => `Remove ${n}`, downloadOnly: 'Download',
         notShown: 'This receipt cannot be shown here. You can download it.',
         notReceipt: (n: string) => `Only images and PDFs can be receipts, not added: ${n}.`,
+        // the word in any text that names receipts (the copy's losses must not)
+        word: /receipt/i,
       },
     },
   },
@@ -109,6 +111,7 @@ export const LABELS = {
         download: (n: string) => `${n} herunterladen`, remove: (n: string) => `${n} entfernen`, downloadOnly: 'Herunterladen',
         notShown: 'Dieser Beleg kann hier nicht angezeigt werden. Du kannst ihn herunterladen.',
         notReceipt: (n: string) => `Nur Bilder und PDFs können Belege sein, nicht hinzugefügt: ${n}.`,
+        word: /beleg/i,
       },
     },
   },

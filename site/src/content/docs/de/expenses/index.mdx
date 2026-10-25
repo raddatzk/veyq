@@ -6,6 +6,7 @@ sources:
   - docs/features/expenses/use-cases/uc.expenses.create-pot.md
   - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
   - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
+  - docs/features/expenses/use-cases/uc.expenses.attach-receipts.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -64,8 +65,10 @@ denen die fehlenden Änderungen gehören.
 
 Eine Kasse lässt sich verschieben, kopieren, in den [Papierkorb](/veyq/de/spaces/trash/) löschen und wiederherstellen
 wie ein Ordner oder eine Datei. [Herunterladen](/veyq/de/spaces/download-and-import/) gibt dir eine Datei, die veyq
-wieder einliest, wenn du sie in einen anderen Ordner importierst, und eine CSV-Datei der Einträge für eine
-Tabellenkalkulation. Wer einen Eintrag sehen kann, kann ihn [melden](/veyq/de/help/report-something/).
+wieder einliest, wenn du sie in einen anderen Ordner importierst, eine CSV-Datei der Einträge für eine
+Tabellenkalkulation und jeden [Beleg](/veyq/de/expenses/record-an-expense/#belege) als eigene Datei. Ein Import und eine
+Kopie nehmen die Belege mit ihren Einträgen mit. Wer einen Eintrag sehen kann, kann ihn
+[melden](/veyq/de/help/report-something/).
 
 Ist Ausgaben [abgeschaltet](/veyq/de/applications/), sagt ein Hinweis das, und in einer Kasse kann nichts dazukommen
 und nichts geändert werden.
@@ -73,6 +76,7 @@ und nichts geändert werden.
 ## Ist das privat?
 
 Eine Kasse wird auf deinem Gerät verschlüsselt wie alles andere in veyq. Der Server sieht, dass es eine Kasse gibt,
-wie viele Einträge sie hat und wann und von wem sie geschrieben wurden. Er sieht keinen Betrag, keinen Namen in der
-Kasse, keine Kategorie, keine Währung und nicht, wer wem etwas schuldet. Mehr dazu:
+wie viele Einträge sie hat, wann und von wem sie geschrieben wurden und wie viele Belege ein Eintrag hat und wie groß
+jeder ist. Er sieht keinen Betrag, keinen Namen in der Kasse, keine Kategorie, keine Währung, nicht, was ein Beleg
+zeigt, und nicht, wer wem etwas schuldet. Mehr dazu:
 [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

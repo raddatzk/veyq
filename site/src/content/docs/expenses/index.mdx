@@ -6,6 +6,7 @@ sources:
   - docs/features/expenses/use-cases/uc.expenses.create-pot.md
   - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
   - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
+  - docs/features/expenses/use-cases/uc.expenses.attach-receipts.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -57,7 +58,8 @@ refers to, the Pot says above its balances that they may be wrong, and names the
 
 A Pot can be moved, copied, deleted to the [trash](/veyq/spaces/trash/) and restored like a folder or a file.
 [Download](/veyq/spaces/download-and-import/) gives you a file that veyq reads back when you import it into another
-folder, and a CSV file of the entries for a spreadsheet. Anyone who can see an entry can
+folder, a CSV file of the entries for a spreadsheet, and each [receipt](/veyq/expenses/record-an-expense/#receipts) as a
+file of its own. An import and a copy bring the receipts along with their entries. Anyone who can see an entry can
 [report it](/veyq/help/report-something/).
 
 If Expenses is [switched off](/veyq/applications/), a banner says so and nothing in a Pot can be added or changed.
@@ -65,5 +67,5 @@ If Expenses is [switched off](/veyq/applications/), a banner says so and nothing
 ## Is it private?
 
 A Pot is locked on your device like everything else in veyq. The server sees that a Pot exists, how many entries it
-has, and when they were written and by whom. It does not see an amount, a name in the Pot, a category, a currency, or
-who owes whom. Details: [Is my data safe?](/veyq/privacy/is-my-data-safe/)
+has, when they were written and by whom, and how many receipts an entry keeps and how large each is. It does not see an
+amount, a name in the Pot, a category, a currency, what a receipt shows, or who owes whom. Details: [Is my data safe?](/veyq/privacy/is-my-data-safe/)
