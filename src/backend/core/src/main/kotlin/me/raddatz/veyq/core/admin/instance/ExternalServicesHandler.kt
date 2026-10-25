@@ -24,8 +24,8 @@ sealed interface ExternalServiceOutcome {
     data class Stored(val view: ExternalServiceView) : ExternalServiceOutcome
     /** No external service has this register entry; nothing is stored. */
     data object NotFound : ExternalServiceOutcome, HttpFailure by httpFailure("service_not_found", FailureStatus.NOT_FOUND)
-    /** Not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, or an attribution for a service that takes
-     *  none; nothing is stored. */
+    /** Not an http(s) URL, a tile template without `{z}`, `{x}` or `{y}`, an exchange-rate template without `{date}`,
+     *  or an attribution for a service that takes none; nothing is stored. */
     data object Invalid : ExternalServiceOutcome, HttpFailure by Failures.invalidRequest
 }
 
@@ -70,10 +70,13 @@ class ExternalServicesHandler(
     private fun acceptable(id: String, url: String, attribution: String?): Boolean {
         if (ExternalServiceOrigins.origin(url) == null) return false
         if (id == CapabilityIds.MEMORIES_MAP) return TILE_PLACEHOLDERS.all { it in url }
+        // The day's table is a fixed URL per date (ADR 0108 decision 8): without {date} the device could not key it.
+        if (id == CapabilityIds.EXPENSES_EXCHANGE_RATES && DATE_PLACEHOLDER !in url) return false
         return attribution == null
     }
 
     private companion object {
         val TILE_PLACEHOLDERS = listOf("{z}", "{x}", "{y}")
+        const val DATE_PLACEHOLDER = "{date}"
     }
 }

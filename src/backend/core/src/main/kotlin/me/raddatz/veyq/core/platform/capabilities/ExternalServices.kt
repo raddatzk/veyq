@@ -123,13 +123,21 @@ class ExternalServiceOrigins(
             fun originOf(id: String): String? =
                 configured[id]?.takeIf { registry.isActive(id, null) }?.let { origin(it.url) }
             ExternalOriginSet(
-                connect = listOfNotNull(originOf(CapabilityIds.MEMORIES_PLACES), originOf(CapabilityIds.BREACHED_PASSWORD)).distinct(),
+                connect = CONNECT.mapNotNull(::originOf).distinct(),
                 img = listOfNotNull(originOf(CapabilityIds.MEMORIES_MAP)).distinct(),
             )
         }
     }
 
     companion object {
+        /**
+         * The services the browser `fetch`es, in the order the policy lists their origins — written out, never derived
+         * from the register, so a new external-service entry reaches `connect-src` only by being named here (the tiles
+         * are images, `img-src`). The exchange rates are Expenses' (ADR 0108 decision 8), named by core as the geocoder
+         * is Memories': the policy is one, the instance's.
+         */
+        val CONNECT = listOf(CapabilityIds.MEMORIES_PLACES, CapabilityIds.BREACHED_PASSWORD, CapabilityIds.EXPENSES_EXCHANGE_RATES)
+
         /** The `scheme://host[:port]` of an http(s) URL, or null — a `{z}` in a tile template is in the path only. */
         fun origin(url: String): String? = runCatching {
             val uri = URI(url.replace("{", "%7B").replace("}", "%7D"))

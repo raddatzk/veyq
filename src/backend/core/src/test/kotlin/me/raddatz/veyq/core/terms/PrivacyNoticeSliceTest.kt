@@ -71,6 +71,7 @@ class PrivacyNoticeSliceTest {
             GuestWriteRetentionEntity.deleteAll()
             StoreSettingEntity.delete("id = ?1 and endpoint = ?2", StoreSettingEntity.ACTIVE_ID, EXTERNAL_STORE)
             services.set(CapabilityIds.BREACHED_PASSWORD, ServiceAddress(HIBP, null))
+            services.set(CapabilityIds.EXPENSES_EXCHANGE_RATES, ServiceAddress(RATES, null))
         }
         InstanceMailSettingsSliceTest.clear()
         addresses.invalidate()
@@ -84,7 +85,7 @@ class PrivacyNoticeSliceTest {
         val before = rows()
         val logs = capture {
             given().header("X-Forwarded-For", CALLER).`when`().get(PATH).then().statusCode(200)
-                .body("revision", equalTo(4)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
+                .body("revision", equalTo(5)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
         }
         assertEquals(before, rows(), "reading the notice writes no row")
         assertFalse(logs.contains(CALLER), "the caller's address is in no log line")
@@ -111,6 +112,44 @@ class PrivacyNoticeSliceTest {
         CapabilitySwitchFixtures.with(CapabilityIds.BREACHED_PASSWORD) {
             assertNull(passage("breached-password-check"), "the check off: no passage")
         }
+    }
+
+    /**
+     * The exchange rates' passage (ADR 0108 decision 8) names the provider only while the fetch can run: addressed, on at
+     * the instance level (its own switch and the Expenses switch above it) and, on a space's host, on for that space.
+     * Every "gone" beside its control, and the provider is never listed among the other services instead.
+     */
+    @Test
+    fun theExchangeRatesPassageNamesTheProviderOnlyWhileTheFetchCanRun() {
+        val default = passage("exchange-rates")!!
+        assertTrue(default.contains("from Frankfurter (api.frankfurter.dev)"), "control: the default names Frankfurter: $default")
+        assertFalse(passage("browser-services").orEmpty().contains("frankfurter"), "named once, in its own passage")
+
+        for (off in listOf(CapabilityIds.EXPENSES_EXCHANGE_RATES, CapabilityIds.EXPENSES)) {
+            CapabilitySwitchFixtures.with(off) {
+                assertNull(passage("exchange-rates"), "$off off: no passage")
+                assertTrue(passage("breached-password-check") != null, "control: the other passage of its kind stays")
+            }
+        }
+        assertTrue(passage("exchange-rates") != null, "control: back on, back")
+
+        val domain = "exchange-rates-host.example.com"
+        val tenantId = seedTenant(domain = domain)
+        TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.EXPENSES_EXCHANGE_RATES) {
+            assertNull(passage("exchange-rates", domain), "the space switched it off: not named on its host")
+            assertTrue(passage("exchange-rates") != null, "control: the instance level still names it")
+        }
+
+        setService(CapabilityIds.EXPENSES_EXCHANGE_RATES, "https://rates.mirror.example/v2/rates?date={date}")
+        val mirror = passage("exchange-rates")!!
+        assertTrue(mirror.contains("from rates.mirror.example, at most once a day"), mirror)
+        assertFalse(mirror.contains("Frankfurter") || mirror.contains("frankfurter"), "a mirror never names Frankfurter")
+
+        QuarkusTransaction.requiringNew().run { services.set(CapabilityIds.EXPENSES_EXCHANGE_RATES, null) }
+        addresses.invalidate()
+        origins.refresh()
+        assertNull(passage("exchange-rates"), "no address: no passage")
+        assertFalse(notice().getString("passages.text.en").contains("rates.mirror.example"), "and named nowhere else")
     }
 
     @Test
@@ -249,6 +288,7 @@ class PrivacyNoticeSliceTest {
         const val OWNER_ID = "5d1f7a2c-3e8b-4c9d-b0a1-6f2e8d4c7b19"
         const val CALLER = "198.51.100.77"
         const val HIBP = "https://api.pwnedpasswords.com/range/"
+        const val RATES = "https://api.frankfurter.dev/v2/rates?date={date}"
         const val EXTERNAL_STORE = "https://s3.provider.example"
         const val CONTROL = "privacy-notice capture control"
         val RECIPIENTS = """
