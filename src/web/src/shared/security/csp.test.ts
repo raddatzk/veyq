@@ -5,15 +5,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildCsp, REKA_STYLE_HASHES } from './csp'
-import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_TILE_ORIGIN } from '../state/mapDefaults'
+import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from '../state/mapDefaults'
 
 // Guard the CSP the app ships with (cr-0133). These pins exist so a directive can't be silently loosened or a
 // third-party origin baked in without a failing test — the policy is a security backstop, not incidental config.
 
 // The built policy names no outside service: the backend appends the configured ones per response (ADR 0088 decision
 // 7). The dev server passes the reference providers' origins, as `vite.config.ts` does.
-const BUILT = { tileOrigin: null, geocoderOrigin: null, breachOrigin: null }
-const DEV = { tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, dev: true }
+const BUILT = { tileOrigin: null, geocoderOrigin: null, breachOrigin: null, ratesOrigin: null }
+const DEV = { tileOrigin: DEV_TILE_ORIGIN, geocoderOrigin: DEV_GEOCODER_ORIGIN, breachOrigin: DEV_BREACH_ORIGIN, ratesOrigin: DEV_RATES_ORIGIN, dev: true }
 
 const directive = (policy: string, name: string) =>
   policy.split(';').map((d) => d.trim().split(/\s+/)).find(([n]) => n === name)?.slice(1)
@@ -104,6 +104,7 @@ describe('buildCsp', () => {
     expect(dev).toMatch(/img-src[^;]*https:\/\/tile\.openstreetmap\.org/)
     expect(dev).toMatch(/connect-src[^;]*https:\/\/nominatim\.openstreetmap\.org/)
     expect(dev).toMatch(/connect-src[^;]*https:\/\/api\.pwnedpasswords\.com/)
+    expect(dev).toMatch(/connect-src[^;]*https:\/\/api\.frankfurter\.dev/)
   })
 
   it("forbids framing in dev and production alike (the policy is always a header, never a <meta>)", () => {

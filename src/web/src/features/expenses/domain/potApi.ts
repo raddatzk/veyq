@@ -99,8 +99,10 @@ export function applyPotChange(
 
 // --- the guest's read -----------------------------------------------------------------------------------------------
 
-/** A guest's read of a Pot: every revision, and the tag of its first page (`null`: the server named none). */
-export type GuestPotRead = { revisions: ServedRevision[]; etag: string | null }
+/** A guest's read of a Pot: every revision, the tag of its first page (`null`: the server named none), and the day's
+ *  exchange-rate table's address while the Pot's tenant has the rates on (`exchangeRateService`, else null) — a guest
+ *  holds no tenant's capability set, so this is the one place its device learns whether it may fetch. */
+export type GuestPotRead = { revisions: ServedRevision[]; etag: string | null; exchangeRateService: string | null }
 
 /**
  * Read a Pot under a share link in full. With `ifNoneMatch` (the last first page's `ETag`, quoted, as served) the first
@@ -122,6 +124,7 @@ export async function readGuestPot(
   }
   const etag = res.raw.headers.get('ETag')
   let page = await res.value()
+  const exchangeRateService = page.exchangeRateService ?? null
   const revisions = page.revisions.map(served)
   while (page.more) {
     const after = page.cursor
@@ -130,7 +133,7 @@ export async function readGuestPot(
     if (page.more && page.cursor === after) throw new Error('pot_page_did_not_advance')
     revisions.push(...page.revisions.map(served))
   }
-  return { revisions, etag }
+  return { revisions, etag, exchangeRateService }
 }
 
 // --- writes ---------------------------------------------------------------------------------------------------------

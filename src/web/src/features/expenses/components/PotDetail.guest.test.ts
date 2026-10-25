@@ -48,7 +48,7 @@ let router: Router
 beforeEach(async () => {
   vi.clearAllMocks()
   // The share path's wire, served by the test's Pot: no writer on a guest's read; each append as the guest it named.
-  vi.mocked(readGuestPot).mockImplementation(async () => ({ revisions: server.current.guestRows(), etag: null }))
+  vi.mocked(readGuestPot).mockImplementation(async () => ({ revisions: server.current.guestRows(), etag: null, exchangeRateService: null }))
   vi.mocked(appendPotWrites).mockImplementation(async (target, key, held, writes, base) => {
     server.targets.push(target)
     const sealed = sealPotWrites(target, key.key, held, writes, base)

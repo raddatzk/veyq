@@ -1,7 +1,8 @@
 // The outside services a test's client sees (uc.admin.configure-external-services): the entries `memories.map`,
 // `memories.places` and `core.breached-password` with the address the server would carry as their `serviceUrl`. A test
 // sets them here the way the manifest would, never through a client-side override (there is none). `setup.ts` puts a
-// new instance's defaults in place before every test.
+// new instance's defaults in place before every test. The fourth, `expenses.exchange-rates`, is not here: the editor reads it
+// from a tenant's set or a guest's Pot read alone, never from the instance's manifest (`features/expenses/potSession.ts`).
 import { capabilityState } from '../shared/state/capabilities'
 import { CORE_BREACHED_PASSWORD, MEMORIES_MAP, MEMORIES_PLACES } from '../features/platform/capabilities'
 
