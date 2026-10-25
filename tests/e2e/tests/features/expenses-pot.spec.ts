@@ -23,6 +23,14 @@
 //      figure unchanged, no ledger notice, and the Pot still opens for A and through the guest's link;
 //  10. the Pot at 375 px: Entries, Balances, the editor with line items, People — no horizontal scroll, every action in reach.
 //
+// Receipts (cr-expenses-receipts, uc.expenses.attach-receipts), written into the same pass and NOT YET RUN (the implementing
+// session ran no stack; its run is the CR's phase 4):
+//   2b. A keeps a JPEG, a PDF and a text that claims to be a PDF with "Museum" (a `.txt` is refused at the picker): the
+//       JPEG is drawn as an image, the PDF by core's page renderer, the false PDF only offered for download; removing it
+//       leaves the entry, and no figure moves;
+//   4b. the guest keeps a JPEG with its own entry through the link and opens A's receipts;
+//   9b. after the rotation every receipt still opens, for A and through the link.
+//
 // Two writers are two browser contexts, each its own cookie jar and storage: the lane serves each tenant on one host
 // (`<name>.<domain>` through Traefik), so the CR's "second host" — which on the dev stack bought exactly that separation —
 // is a second context here. No console error, and no failed request but step 3's `409`, on any page of a pass (afterEach).
@@ -32,14 +40,16 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { freshOwner, readKit } from '../../src/accounts'
 import { recordTyped } from '../../src/canaries'
 import { birthTenant, type Account } from '../../src/console'
 import { instance, newDevice, tenantOrigin, watchConsole, watchFailedRequests, type ConsoleErrors, type Device } from '../../src/devices'
 import {
-  LABELS, entryDialog, entryRow, ledgerNotice, minorOf, money, openTab, pick, potTab, readBalances, readOverview, squash, tripPot,
-  typeEntry, typed, type Labels, type Lang,
+  LABELS, addReceipts, entryDialog, entryRow, expectReceiptOpens, ledgerNotice, minorOf, money, openTab, pick, potTab, readBalances,
+  readOverview, receiptRow, squash, tripPot, typeEntry, typed, type Labels, type Lang, type PickedFile,
 } from '../../src/expenses'
+import { onePagePdf } from '../../src/pdf'
 import { headerAction } from '../../src/header'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
@@ -70,6 +80,10 @@ let setupOwner: Device
 let setupMember: Device
 let accountA: Account
 let accountB: Account
+
+// A real photo's bytes for the image receipts (Memories' fixture, as depot-download.spec.ts reads it).
+const PHOTO = readFileSync(fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
+const jpegFile = (name: string): PickedFile => ({ name: recordTyped(name), mimeType: 'image/jpeg', buffer: PHOTO })
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const memberRow = (page: Page, handle: string) => page.locator('.member-row').filter({ hasText: `@${handle}` })
@@ -329,6 +343,11 @@ for (const lang of ['en', 'de'] as const) {
     const dinner = titleOf('Dinner')
     const dinnerB = titleOf(lang === 'en' ? 'Dinner at the port' : 'Abendessen am Hafen')
     const dinnerA = titleOf(lang === 'en' ? 'Dinner for three' : 'Abendessen zu dritt')
+    const museum = titleOf('Museum')
+    const receiptJpeg = `${lang === 'en' ? 'Museum ticket' : 'Museumsticket'} ${stamp}.jpg`
+    const receiptPdf = `${lang === 'en' ? 'Admission' : 'Eintrittskarte'} ${stamp}.pdf`
+    const falsePdf = `${lang === 'en' ? 'Note' : 'Notiz'} ${stamp}.pdf`
+    const guestJpeg = `${lang === 'en' ? 'Kiosk receipt' : 'Kioskbeleg'} ${stamp}.jpg`
     const reason = lang === 'en' ? `This entry insults someone ${stamp}` : `Dieser Eintrag beleidigt jemanden ${stamp}`
     const vectorRows = () => balanceRows(L, lang, trip.expected.balances)
     const eur = (minor: number) => squash(money(minor, 'EUR', 2, lang))
@@ -418,6 +437,57 @@ for (const lang of ['en', 'de'] as const) {
         await expect(page.locator('.expenses-entries').getByText(L.pot.invalid, { exact: true }), 'no entry is marked invalid').toHaveCount(0)
         await expectBalances(page, L, vectorRows(), transferRows(L, lang))
         await expectOverviewAddsUp(page, L)
+        await expect(ledgerNotice(page)).toHaveCount(0)
+      },
+    )
+
+    test(
+      'step 2b: receipts kept with an entry — an image and a PDF drawn, anything else only for download, one removed again',
+      {
+        tag: [
+          '@uc.expenses.attach-receipts:receipts-are-blobs-of-the-entry',
+          '@uc.expenses.attach-receipts:only-images-and-pdfs-render',
+          '@uc.expenses.attach-receipts:a-dropped-receipt-goes-after-the-retention',
+        ],
+      },
+      async () => {
+        test.setTimeout(240_000)
+        const { page } = a
+        const R = L.pot.receipts
+        await openTab(page, L.pot.tabs.entries)
+        await entryRow(page, museum).click()
+        const editor = entryDialog(page, L.pot.editEntry)
+        // A `.txt` is no receipt: refused at the picker, before anything is uploaded.
+        const note = `${lang === 'en' ? 'Notes' : 'Notizen'} ${stamp}.txt`
+        await addReceipts(editor, [{ name: recordTyped(note), mimeType: 'text/plain', buffer: Buffer.from(recordTyped(`plain ${stamp}`)) }])
+        await expect(editor.getByText(R.notReceipt(note), { exact: true })).toBeVisible()
+        await addReceipts(editor, [
+          jpegFile(receiptJpeg),
+          { name: recordTyped(receiptPdf), mimeType: 'application/pdf', buffer: Buffer.from(onePagePdf(recordTyped(`Eintritt ${stamp}`))) },
+          // claims to be a PDF; its bytes are a text: the bytes decide
+          { name: recordTyped(falsePdf), mimeType: 'application/pdf', buffer: Buffer.from(recordTyped(`not a PDF ${stamp}`)) },
+        ])
+        await editor.getByRole('button', { name: L.save, exact: true }).click()
+        await expect(editor).toBeHidden({ timeout: 60_000 })
+
+        await entryRow(page, museum).click()
+        const saved = entryDialog(page, L.pot.editEntry)
+        for (const name of [receiptJpeg, receiptPdf, falsePdf]) await expect(receiptRow(saved, name)).toHaveCount(1, { timeout: 30_000 })
+        await expectReceiptOpens(saved, L, receiptJpeg, 'image')
+        await expectReceiptOpens(saved, L, receiptPdf, 'pdf')
+        await expectReceiptOpens(saved, L, falsePdf, 'other')
+        await receiptRow(saved, falsePdf).getByRole('button', { name: R.remove(falsePdf), exact: true }).click()
+        await saved.getByRole('button', { name: L.save, exact: true }).click()
+        await expect(saved).toBeHidden({ timeout: 60_000 })
+
+        await entryRow(page, museum).click()
+        const after = entryDialog(page, L.pot.editEntry)
+        await expect(receiptRow(after, receiptJpeg)).toHaveCount(1, { timeout: 30_000 })
+        await expect(receiptRow(after, receiptPdf)).toHaveCount(1)
+        await expect(receiptRow(after, falsePdf), 'a removed receipt leaves the entry').toHaveCount(0)
+        await after.getByRole('button', { name: L.cancel, exact: true }).click()
+        // Receipts move no figure.
+        await expectBalances(page, L, vectorRows(), transferRows(L, lang))
         await expect(ledgerNotice(page)).toHaveCount(0)
       },
     )
@@ -568,6 +638,31 @@ for (const lang of ['en', 'de'] as const) {
         expect((await historyOf(page, L, L.pot.editEntry)).map((h) => h.by.startsWith(L.pot.byAt(L.guestName(guestName))))).toEqual([true])
         await entryDialog(page, L.pot.editEntry).getByRole('button', { name: L.cancel, exact: true }).click()
         await expectBalances(page, L, balanceRows(L, lang, trip.expected.balances, [dora]), transferRows(L, lang))
+      },
+    )
+
+    test(
+      'step 4b: the guest keeps a receipt with its entry through the link and opens the member\'s',
+      { tag: ['@uc.expenses.attach-receipts:a-contributor-adds-and-removes-receipts', '@uc.expenses.attach-receipts:only-images-and-pdfs-render'] },
+      async () => {
+        test.setTimeout(240_000)
+        const g = guest.page
+        await openTab(g, L.pot.tabs.entries)
+        await entryRow(g, snacks).click()
+        const editor = entryDialog(g, L.pot.editEntry)
+        await addReceipts(editor, [jpegFile(guestJpeg)])
+        await editor.getByRole('button', { name: L.save, exact: true }).click()
+        await expect(editor).toBeHidden({ timeout: 60_000 })
+        await entryRow(g, snacks).click()
+        const saved = entryDialog(g, L.pot.editEntry)
+        await expectReceiptOpens(saved, L, guestJpeg, 'image')
+        await saved.getByRole('button', { name: L.cancel, exact: true }).click()
+        // A's receipts open through the link too.
+        await entryRow(g, museum).click()
+        const museumG = entryDialog(g, L.pot.editEntry)
+        await expectReceiptOpens(museumG, L, receiptJpeg, 'image')
+        await expectReceiptOpens(museumG, L, receiptPdf, 'pdf')
+        await museumG.getByRole('button', { name: L.cancel, exact: true }).click()
       },
     )
 
@@ -853,6 +948,36 @@ for (const lang of ['en', 'de'] as const) {
         // B, removed, no longer lists the group.
         await signIn(b.page, L, accountB)
         await expect(b.page.locator('a.desktop-group-link').filter({ hasText: group })).toHaveCount(0)
+      },
+    )
+
+    test(
+      'step 9b: after the rotation every receipt still opens, for the member and through the link',
+      { tag: ['@uc.expenses.attach-receipts:receipts-are-blobs-of-the-entry'] },
+      async () => {
+        test.setTimeout(240_000)
+        const { page } = a
+        await openTab(page, L.pot.tabs.entries)
+        await entryRow(page, museum).click()
+        const museumA = entryDialog(page, L.pot.editEntry)
+        await expectReceiptOpens(museumA, L, receiptJpeg, 'image')
+        await expectReceiptOpens(museumA, L, receiptPdf, 'pdf')
+        await museumA.getByRole('button', { name: L.cancel, exact: true }).click()
+        await entryRow(page, snacks).click()
+        const snacksA = entryDialog(page, L.pot.editEntry)
+        await expectReceiptOpens(snacksA, L, guestJpeg, 'image')
+        await snacksA.getByRole('button', { name: L.cancel, exact: true }).click()
+
+        const g = guest.page
+        await openTab(g, L.pot.tabs.entries)
+        await entryRow(g, snacks).click()
+        const snacksG = entryDialog(g, L.pot.editEntry)
+        await expectReceiptOpens(snacksG, L, guestJpeg, 'image')
+        await snacksG.getByRole('button', { name: L.cancel, exact: true }).click()
+        await entryRow(g, museum).click()
+        const museumG = entryDialog(g, L.pot.editEntry)
+        await expectReceiptOpens(museumG, L, receiptPdf, 'pdf')
+        await museumG.getByRole('button', { name: L.cancel, exact: true }).click()
       },
     )
 

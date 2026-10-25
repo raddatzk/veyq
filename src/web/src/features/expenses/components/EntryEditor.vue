@@ -5,7 +5,14 @@
 // `../entryForm.ts`'s answer, and the write path asks `entryProblem` again before sealing: an entry that does not add up
 // is never saved (owner 2026-10-24). A `409 stale_revision` re-reads the Pot (the session's write does), loads the other
 // writer's version into the form and says so (`expenses.entry.stale`); saving again puts this one on top.
-import { computed, ref, watch } from 'vue'
+//
+// Its receipts (uc.expenses.attach-receipts, `EntryReceipts`): what is picked is uploaded with the save, BEFORE the revision
+// that lists it (a new entry's id is minted when the dialog opens, so its receipts are completed against it), and the
+// revision names the receipts it no longer holds (`receiptsToDrop`). A receipt the link's storage limit or the quota has no
+// room for is left out and the entry saves without it, saying so (E2); any other failed upload stops the save, and what
+// was already uploaded is kept for the next try. A deleted entry is restorable until its receipts are erased
+// (`restoreOffered`, uc.expenses.entry-history E2); past that, no restore is offered.
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -16,7 +23,7 @@ import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { Person } from '../../../core/people/directory'
-import { DEFAULT_CATEGORIES } from '../domain/format'
+import { DEFAULT_CATEGORIES, isMoney } from '../domain/format'
 import { categoryLabel } from '../domain/categories'
 import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import { namedParticipants, type PotLedger } from '../domain/ledger'
@@ -26,6 +33,11 @@ import { contentOf, emptyForm, formOf, problemKey, typedSum, withCurrency, type 
 import { formatMoney, knownCurrencies } from '../amounts'
 import { offeredPeople, personLabel } from '../people'
 import EntryHistory from './EntryHistory.vue'
+import EntryReceipts from './EntryReceipts.vue'
+import { purgeAfterOf, receiptsToDrop, restoreOffered } from '../domain/receiptRules'
+import type { HeldReceipt, ReceiptSource } from '../receipts'
+import { QUOTA_EXCEEDED } from '../../../core/blob/queue'
+import { useToast } from '../../../shared/state/useToast'
 
 const props = defineProps<{
   session: PotSession
@@ -39,9 +51,18 @@ const props = defineProps<{
   people: ReadonlyMap<string, Person> | null
   /** Report this entry (core's report dialog, uc.moderation.report); absent where the viewer reports nothing. */
   onReport?: (entryId: string) => void
+  /** Open a listed receipt for whoever looks (`potReceiptSource`). */
+  receiptSource: (r: HeldReceipt) => ReceiptSource
+  /** Report one receipt on its own; absent where the viewer reports nothing. */
+  onReportReceipt?: (r: HeldReceipt) => void
 }>()
 const emit = defineEmits<{ close: [] }>()
 const { t, locale } = useI18n()
+const toast = useToast()
+
+/** The record this dialog writes: the opened entry's, or one minted now for a new entry — its receipts are completed
+ *  against it before its first revision. */
+const recordId = props.entryId ?? crypto.randomUUID()
 
 const entry = computed(() => (props.entryId ? (props.ledger.entries.find((e) => e.id === props.entryId) ?? null) : null))
 const base = computed(() => props.meta.base)
@@ -56,8 +77,16 @@ const form = ref<EntryForm>(initialForm())
 /** The revision the form shows. Every write of this dialog is made on it (`basedOn`), not on what the live poll brought in
  *  since: a version saved elsewhere meanwhile is then a `409 stale_revision` the dialog shows, never one written over unseen. */
 const shownRevision = ref<number | undefined>(entry.value?.revision)
-function showCurrent() {
+/** Files picked in this dialog and not uploaded yet, by the receipt id minted for each. */
+const pending = reactive(new Map<string, File>())
+/** Receipts this dialog uploaded (the drop rule reads them: one added and removed again is dropped). */
+const uploaded = new Set<string>()
+/** Show the entry as held now. After a stale save the receipts this dialog added stay in the form, so the save on top
+ *  keeps them. */
+function showCurrent(carryOwn = false) {
+  const own = carryOwn ? form.value.receipts.filter((id) => pending.has(id) || uploaded.has(id)) : []
   form.value = initialForm()
+  for (const id of own) if (!form.value.receipts.includes(id)) form.value.receipts.push(id)
   shownRevision.value = entry.value?.revision
 }
 const busy = ref(false)
@@ -65,6 +94,11 @@ const error = ref<string | null>(null)
 const stale = ref(false)
 const showHistory = ref(false)
 const editable = computed(() => props.canWrite && !deleted.value && !busy.value)
+const purgeAfter = computed(() => (deleted.value ? purgeAfterOf(props.session.held.value, recordId) : null))
+const restorable = computed(() => restoreOffered(purgeAfter.value))
+const purgeDate = computed(() =>
+  purgeAfter.value ? new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium' }).format(purgeAfter.value) : '',
+)
 
 const offered = computed(() => {
   const content = entry.value?.content
@@ -121,7 +155,7 @@ const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(`expenses.
 watch(
   () => entry.value?.revision,
   (now, before) => {
-    if (stale.value && now !== before) showCurrent()
+    if (stale.value && now !== before) showCurrent(true)
   },
 )
 
@@ -134,7 +168,9 @@ async function run(write: () => Promise<void>) {
   } catch (e) {
     if (e instanceof StaleRevisionError) {
       stale.value = true
-      showCurrent()
+      showCurrent(true)
+    } else if (e instanceof ReceiptUploadFailed) {
+      error.value = t(e.tooLarge ? 'expenses.receipts.tooLarge' : 'expenses.receipts.uploadFailed', { names: e.fileName })
     } else if (e instanceof PotWriteRefused) {
       error.value = problemText(e.reason)
     } else if (e instanceof Error && e.name === 'GuestDeclinedError') {
@@ -149,6 +185,50 @@ async function run(write: () => Promise<void>) {
 
 const isParticipant = (id: string) => props.ledger.participants.some((p) => p.id === id && !p.erased)
 
+/** A picked file's upload failed in a way the save cannot go past (`budget_exceeded`: over 10 MiB; anything else but no
+ *  room). What was uploaded before it stays uploaded. */
+class ReceiptUploadFailed extends Error {
+  constructor(
+    readonly fileName: string,
+    readonly tooLarge: boolean,
+  ) {
+    super('receipt_upload_failed')
+  }
+}
+
+/** Upload every picked file the form still holds; answer the names of those there was no room for (left out of the form). */
+async function uploadPicked(): Promise<string[]> {
+  const noRoom: string[] = []
+  for (const id of [...form.value.receipts]) {
+    const file = pending.get(id)
+    if (!file) continue
+    try {
+      await props.session.addReceipt(recordId, id, file)
+      uploaded.add(id)
+      pending.delete(id)
+    } catch (e) {
+      if (e instanceof Error && e.message === QUOTA_EXCEEDED) {
+        noRoom.push(file.name)
+        pending.delete(id)
+        form.value.receipts = form.value.receipts.filter((x) => x !== id)
+      } else if (e instanceof Error && (e.name === 'GuestDeclinedError' || e.name === 'PotKeyUnavailableError')) {
+        throw e
+      } else {
+        throw new ReceiptUploadFailed(file.name, e instanceof Error && e.message === 'budget_exceeded')
+      }
+    }
+  }
+  return noRoom
+}
+
+/** The revision the form shows, as the drop rule reads it: the receipts it lists and when it was stored. */
+function shownRevisionFacts(): { receipts: readonly string[]; createdAt: Date } | null {
+  if (shownRevision.value === undefined) return null
+  const r = props.session.held.value.find((x) => x.entryId === recordId && x.revision === shownRevision.value)
+  if (!r) return null
+  return { receipts: r.body && isMoney(r.body) ? r.body.receipts : [], createdAt: r.createdAt }
+}
+
 function save() {
   const result = contentOf(form.value, isParticipant)
   if ('problem' in result) {
@@ -156,7 +236,25 @@ function save() {
     return
   }
   stale.value = false
-  void run(() => props.session.write([{ entryId: props.entryId ?? crypto.randomUUID(), content: result.content, basedOn: shownRevision.value }]))
+  void run(async () => {
+    const noRoom = await uploadPicked()
+    const receipts = [...form.value.receipts]
+    const content = { ...result.content, receipts }
+    const droppedReceipts = receiptsToDrop(props.session.receipts.value, recordId, receipts, shownRevisionFacts(), uploaded)
+    await props.session.write([{ entryId: recordId, content, basedOn: shownRevision.value, droppedReceipts }])
+    if (noRoom.length) toast.error(t('expenses.receipts.noRoom', { names: noRoom.join(', ') }))
+  })
+}
+function addReceipts(files: File[]) {
+  for (const f of files) {
+    const id = crypto.randomUUID()
+    pending.set(id, f)
+    form.value.receipts.push(id)
+  }
+}
+function removeReceipt(id: string) {
+  form.value.receipts = form.value.receipts.filter((x) => x !== id)
+  pending.delete(id)
 }
 function remove() {
   if (!props.entryId) return
@@ -164,7 +262,7 @@ function remove() {
 }
 function restore() {
   const content = entry.value?.content
-  if (!props.entryId || !content) return
+  if (!props.entryId || !content || !restorable.value) return
   void run(() => props.session.write([{ entryId: props.entryId!, content, basedOn: shownRevision.value }]))
 }
 </script>
@@ -173,7 +271,11 @@ function restore() {
   <VeyqDialog :visible="true" :header="header" :closable="!busy" :close-on-escape="!busy" class="expenses-entry-dialog" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="save">
       <VeyqMessage v-if="stale" tone="warn">{{ t('expenses.entry.stale') }}</VeyqMessage>
-      <VeyqMessage v-if="deleted" tone="info">{{ t('expenses.entry.deletedHint') }}</VeyqMessage>
+      <VeyqMessage v-if="deleted" tone="info">
+        {{ t('expenses.entry.deletedHint') }}
+        <template v-if="purgeAfter && restorable">{{ t('expenses.entry.restorableUntil', { date: purgeDate }) }}</template>
+        <template v-else-if="purgeAfter">{{ t('expenses.entry.notRestorable') }}</template>
+      </VeyqMessage>
       <VeyqMessage v-if="entry?.status === 'invalid'" tone="warn">{{ t('expenses.entry.invalid') }}</VeyqMessage>
 
       <VeyqToggleGroup v-model="form.kind" :options="kindOptions" :disabled="!editable" />
@@ -294,6 +396,18 @@ function restore() {
         </fieldset>
       </template>
 
+      <EntryReceipts
+        :ids="form.receipts"
+        :listing="session.receipts.value"
+        :pending="pending"
+        :editable="editable"
+        :failed="session.receiptsFailed.value"
+        :source="receiptSource"
+        :on-report="onReportReceipt"
+        @add="addReceipts"
+        @remove="removeReceipt"
+      />
+
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
 
       <EntryHistory v-if="entry && showHistory" :session="session" :meta="meta" :entry-id="entry.id" :writers="writers" :people="people" />
@@ -304,7 +418,7 @@ function restore() {
           <VeyqButton v-if="entry" :label="showHistory ? t('expenses.history.hide') : t('expenses.history.show')" icon="history" variant="secondary" appearance="text" @click="showHistory = !showHistory" />
           <VeyqButton v-if="entry && onReport" :label="t('report.action')" icon="flag" variant="secondary" appearance="text" :disabled="busy" @click="onReport(entry.id)" />
           <VeyqButton v-if="entry && canWrite && !deleted" :label="t('expenses.entry.delete')" icon="trash" variant="danger" appearance="outlined" :disabled="busy" @click="remove" />
-          <VeyqButton v-if="entry && canWrite && deleted" type="button" :label="t('expenses.entry.restore')" icon="undo" :loading="busy" @click="restore" />
+          <VeyqButton v-if="entry && canWrite && deleted && restorable" type="button" :label="t('expenses.entry.restore')" icon="undo" :loading="busy" @click="restore" />
           <VeyqButton v-if="canWrite && !deleted" type="submit" :label="t('common.save')" icon="check" :loading="busy" />
         </span>
       </div>

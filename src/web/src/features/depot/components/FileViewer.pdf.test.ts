@@ -7,7 +7,7 @@
 // puts nothing in the page that a PDF could use to act: no frame/object/embed, no link, no raw HTML.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 vi.mock('../../../sw/register', () => ({
@@ -15,10 +15,10 @@ vi.mock('../../../sw/register', () => ({
   revokePlayback: vi.fn(),
   handleFromUrl: (url: string) => url.replace('/__media/', ''),
 }))
-vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 
 import FileViewer from './FileViewer.vue'
-import { openPdf, PdfOpenError, type PdfDocument } from '../pdf/pdfEngine'
+import { openPdf, PdfOpenError, type PdfDocument } from '../../../shared/pdf/pdfEngine'
 import { PLAINTEXT_CHUNK_SIZE } from '../../../sw/range'
 import { PDF_CAP } from '../view'
 import type { ViewerTarget } from '../useFileViewer'
@@ -126,8 +126,8 @@ describe('opening a PDF', () => {
     await flushPromises()
     expect(w.find('[role="status"]').exists()).toBe(false)
     expect(w.findAll('.pdf-page')).toHaveLength(4)
-    expect(indicator(w)).toBe(t('depot.viewer.pdf.pageOf', { page: 1, total: 4 }))
-    expect(w.find('canvas').attributes('aria-label')).toBe(t('depot.viewer.pdf.page', { page: 1, total: 4 }))
+    expect(indicator(w)).toBe(t('pdf.pageOf', { page: 1, total: 4 }))
+    expect(w.find('canvas').attributes('aria-label')).toBe(t('pdf.page', { page: 1, total: 4 }))
   })
 
   it('hands the engine the decrypted bytes (the whole file), decided by the bytes - not by the claimed type', async () => {
@@ -260,8 +260,8 @@ describe('pages are drawn lazily', () => {
     fake.doc.render.mockImplementationOnce(() => ({ done: Promise.reject(new Error('bad page')), cancel: vi.fn() }))
     intersect(nearObserver(), { 1: true, 2: true })
     await flushPromises()
-    expect(w.findAll('.pdf-page')[0].text()).toContain(t('depot.viewer.pdf.pageFailed', { page: 1 }))
-    expect(w.findAll('.pdf-page')[1].text()).not.toContain(t('depot.viewer.pdf.pageFailed', { page: 2 }))
+    expect(w.findAll('.pdf-page')[0].text()).toContain(t('pdf.pageFailed', { page: 1 }))
+    expect(w.findAll('.pdf-page')[1].text()).not.toContain(t('pdf.pageFailed', { page: 2 }))
   })
 })
 
@@ -270,20 +270,20 @@ describe('the page indicator and the zoom controls', () => {
     const { w } = await openReady(9)
     intersect(currentObserver(), { 1: 0.4, 2: 0.6 })
     await flushPromises()
-    expect(indicator(w)).toBe(t('depot.viewer.pdf.pageOf', { page: 2, total: 9 }))
+    expect(indicator(w)).toBe(t('pdf.pageOf', { page: 2, total: 9 }))
     intersect(currentObserver(), { 2: 0.1, 3: 0.9 })
     await flushPromises()
-    expect(indicator(w)).toBe(t('depot.viewer.pdf.pageOf', { page: 3, total: 9 }))
+    expect(indicator(w)).toBe(t('pdf.pageOf', { page: 3, total: 9 }))
   })
 
   it('has labelled, real buttons for zoom out, zoom in and fit-width (keyboard and screen reader)', async () => {
     const { w } = await openReady(2)
     for (const key of ['zoomOut', 'zoomIn', 'fitWidth']) {
-      const b = w.find(`button[aria-label="${t(`depot.viewer.pdf.${key}`)}"]`)
+      const b = w.find(`button[aria-label="${t(`pdf.${key}`)}"]`)
       expect(b.exists(), key).toBe(true)
       expect(b.element.tagName).toBe('BUTTON')
     }
-    expect(w.find('[role="toolbar"]').attributes('aria-label')).toBe(t('depot.viewer.pdf.toolbar'))
+    expect(w.find('[role="toolbar"]').attributes('aria-label')).toBe(t('pdf.toolbar'))
     expect(w.find('.pdf-scroll').attributes('tabindex')).toBe('0') // arrow keys / Page Down scroll the pages
   })
 
@@ -293,9 +293,9 @@ describe('the page indicator and the zoom controls', () => {
     await flushPromises()
     fake.jobs[0].finish()
     await flushPromises()
-    const fit = w.find(`button[aria-label="${t('depot.viewer.pdf.fitWidth')}"]`)
+    const fit = w.find(`button[aria-label="${t('pdf.fitWidth')}"]`)
     expect(fit.attributes('disabled')).toBeDefined() // already fitted
-    await w.find(`button[aria-label="${t('depot.viewer.pdf.zoomIn')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('pdf.zoomIn')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.pdf-zoom-level').text()).toBe('125 %')
     expect(fake.doc.render).toHaveBeenCalledTimes(2)
@@ -310,8 +310,8 @@ describe('the page indicator and the zoom controls', () => {
 
   it('zoom out narrows them, and each end of the range disables its button', async () => {
     const { w } = await openReady(2)
-    const out = w.find(`button[aria-label="${t('depot.viewer.pdf.zoomOut')}"]`)
-    const inn = w.find(`button[aria-label="${t('depot.viewer.pdf.zoomIn')}"]`)
+    const out = w.find(`button[aria-label="${t('pdf.zoomOut')}"]`)
+    const inn = w.find(`button[aria-label="${t('pdf.zoomIn')}"]`)
     await out.trigger('click')
     expect(w.find('.pdf-zoom-level').text()).toBe('75 %')
     await out.trigger('click')
@@ -392,7 +392,7 @@ describe('the fit width holds still', () => {
     const { w, fake } = await openReady(3)
     intersect(nearObserver(), { 1: true })
     await frames()
-    const zoomIn = w.find(`button[aria-label="${t('depot.viewer.pdf.zoomIn')}"]`)
+    const zoomIn = w.find(`button[aria-label="${t('pdf.zoomIn')}"]`)
     await zoomIn.trigger('click')
     await zoomIn.trigger('click')
     await frames()
@@ -407,21 +407,21 @@ describe('the fit width holds still', () => {
     expect(pageWidth(w)).toBe(2373) // (1600 - 18) x 1.5
     await frames()
     expect(pageWidth(w)).toBe(2373)
-    await w.find(`button[aria-label="${t('depot.viewer.pdf.fitWidth')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('pdf.fitWidth')}"]`).trigger('click')
     await frames()
     expect(pageWidth(w)).toBe(1582)
   })
 
   it('keeps the scroller\'s width off its pages in the stylesheet: contained, inside a viewer that may shrink', () => {
-    const base = join(process.cwd(), 'src/features/depot/components')
+    const base = join(process.cwd(), 'src')
     const rule = (file: string, selector: string) => {
       const src = readFileSync(join(base, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
       const m = new RegExp(`(^|\\n)${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(src)
       expect(m, `${file} has a ${selector} rule`).not.toBeNull()
       return m![2]
     }
-    expect(rule('PdfPages.vue', '.pdf-scroll')).toMatch(/(^|\s)contain: inline-size;/)
-    expect(rule('FileViewer.vue', '.file-viewer')).toMatch(/(^|\s)min-width: 0;/)
+    expect(rule('shared/pdf/PdfPages.vue', '.pdf-scroll')).toMatch(/(^|\s)contain: inline-size;/)
+    expect(rule('features/depot/components/FileViewer.vue', '.file-viewer')).toMatch(/(^|\s)min-width: 0;/)
   })
 })
 
@@ -514,21 +514,36 @@ describe('the page holds nothing a PDF could act through', () => {
   })
 
   it('never interprets markup: no v-html or innerHTML in the viewer\'s sources', () => {
-    const base = join(process.cwd(), 'src/features/depot')
-    for (const file of ['components/FileViewer.vue', 'components/PdfPages.vue', 'useFileViewer.ts', 'pdf/pdfEngine.ts', 'pdf/pdfjsRuntime.ts']) {
+    const base = join(process.cwd(), 'src')
+    for (const file of [
+      'features/depot/components/FileViewer.vue',
+      'features/depot/useFileViewer.ts',
+      'shared/pdf/PdfPages.vue',
+      'shared/pdf/pdfEngine.ts',
+      'shared/pdf/pdfjsRuntime.ts',
+    ]) {
       const src = readFileSync(join(base, file), 'utf8').replace(/\/\/.*$/gm, '')
       expect(src, file).not.toMatch(/v-html|innerHTML|outerHTML|insertAdjacentHTML|document\.write/)
     }
   })
 
   it('loads pdf.js only through a dynamic import: no source but the runtime itself imports it, none imports the runtime statically', () => {
-    const base = join(process.cwd(), 'src/features/depot')
-    for (const file of ['components/FileViewer.vue', 'components/PdfPages.vue', 'useFileViewer.ts', 'view.ts', 'pdf/pdfEngine.ts', 'pdf/pdfOptions.ts']) {
+    // Every source of the app, not a list: the renderer is core's (`shared/pdf/`), so any application may call it, and a
+    // new caller is covered the day it is written. Tests are not shipped (the engine's own import the runtime to fake it).
+    const base = join(process.cwd(), 'src')
+    const sources = (dir: string): string[] =>
+      readdirSync(join(base, dir), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? sources(join(dir, e.name)) : /\.(ts|vue)$/.test(e.name) && !/\.test\.ts$/.test(e.name) ? [join(dir, e.name)] : [],
+      )
+    const files = sources('.').filter((f) => f !== join('shared', 'pdf', 'pdfjsRuntime.ts'))
+    expect(files).toContain(join('features', 'depot', 'components', 'FileViewer.vue')) // a walk that found nothing proves nothing
+    expect(files).toContain(join('shared', 'pdf', 'PdfPages.vue'))
+    for (const file of files) {
       const src = readFileSync(join(base, file), 'utf8')
       expect(src, file).not.toMatch(/from\s+['"]pdfjs-dist/)
       expect(src, file).not.toMatch(/import\s+[^(]*from\s+['"][^'"]*pdfjsRuntime/)
     }
-    expect(readFileSync(join(base, 'pdf/pdfEngine.ts'), 'utf8')).toMatch(/await import\('\.\/pdfjsRuntime'\)/)
+    expect(readFileSync(join(base, 'shared/pdf/pdfEngine.ts'), 'utf8')).toMatch(/await import\('\.\/pdfjsRuntime'\)/)
   })
 })
 
@@ -589,7 +604,7 @@ describe('the text layer (select and copy)', () => {
     await flushPromises()
     fake.jobs[0].finish()
     await flushPromises()
-    await w.find(`button[aria-label="${t('depot.viewer.pdf.zoomIn')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('pdf.zoomIn')}"]`).trigger('click')
     await flushPromises()
     expect(fake.doc.render).toHaveBeenCalledTimes(2)
     const layers = fake.doc.render.mock.calls.filter((c) => c[4] instanceof HTMLElement)
@@ -629,7 +644,7 @@ describe('the text layer (select and copy)', () => {
     const end = document.createElement('div')
     end.className = 'pdf-text-end'
     hostOf(w, 1).element.append(end)
-    expect(unselectableBy(end).map((r) => r.file)).toEqual(['features/depot/depot.css'])
+    expect(unselectableBy(end).map((r) => r.file)).toEqual(['shared/pdf/pdf.css'])
   })
 
   it('a drag that starts in a page marks that layer as selecting until the pointer is released anywhere', async () => {

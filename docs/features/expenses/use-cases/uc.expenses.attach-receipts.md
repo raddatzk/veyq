@@ -43,3 +43,4 @@ The receipt stays with the expense it proves, readable only by the people of the
 - **Use-cases:** [uc.expenses.record-entries](uc.expenses.record-entries.md), [uc.expenses.share-pot](uc.expenses.share-pot.md),
   [uc.sharing.share-link-storage-limit](../../sharing/use-cases/uc.sharing.share-link-storage-limit.md).
 - **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 7.
+- End-user view (docs site): [Record an expense](../../../../site/src/content/docs/expenses/record-an-expense.mdx)

@@ -8,9 +8,9 @@ gallery or social network.
 
 **`src/web/src/styles/`** — core's stylesheets (`base` tokens, `ui`, `layout`, `forms`, `markdown`, `settings`,
 **`dark`**); `src/web/src/style.css` is the import barrel. **An application's own global classes are its own
-sheet in its directory** (`src/web/src/features/memories/memories.css`, inbox #513 — the media lightbox too since #517;
-`src/web/src/features/depot/depot.css`, the PDF text layer, #517), imported by the application, never by
-the barrel: it loads with the application, *before* `style.css`, so a rule of it that styles an element a core class
+sheet in its directory** (`src/web/src/features/memories/memories.css`, inbox #513 — the media lightbox too since #517),
+imported by the application, never by the barrel (a core component's global rules are its own sheet beside it, imported by
+it: the PDF text layer's `src/web/src/shared/pdf/pdf.css`, #517, with `PdfPages.vue`): it loads with the application, *before* `style.css`, so a rule of it that styles an element a core class
 also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by source order — and
 its dark twins sit at its end, not in `dark.css`. Which rules tie is measured in the built bundle, not read off the
 sheets: #517's move compounded eleven lightbox rules (`.veyq-icon-button.lightbox-nav`,

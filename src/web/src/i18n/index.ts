@@ -65,6 +65,17 @@ const en = {
     firstDayOfWeek: '0',
     dateSegment: { day: 'Day', month: 'Month', year: 'Year', empty: 'Empty' },
   },
+  // The PDF renderer's own texts (`shared/pdf/PdfPages.vue`): its toolbar and its pages, read wherever an application draws a PDF.
+  pdf: {
+    toolbar: 'PDF controls',
+    pageOf: 'Page {page} of {total}',
+    pages: 'Pages of {name}',
+    page: 'Page {page} of {total}',
+    pageFailed: 'Page {page} could not be shown.',
+    zoomOut: 'Zoom out',
+    zoomIn: 'Zoom in',
+    fitWidth: 'Fit to width',
+  },
   notSetUp: {
     title: 'This instance isn’t set up yet',
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
@@ -2023,6 +2034,16 @@ const de: typeof en = {
     nextMonth: 'Nächster Monat',
     firstDayOfWeek: '1',
     dateSegment: { day: 'Tag', month: 'Monat', year: 'Jahr', empty: 'Leer' },
+  },
+  pdf: {
+    toolbar: 'PDF-Steuerung',
+    pageOf: 'Seite {page} von {total}',
+    pages: 'Seiten von {name}',
+    page: 'Seite {page} von {total}',
+    pageFailed: 'Seite {page} konnte nicht angezeigt werden.',
+    zoomOut: 'Verkleinern',
+    zoomIn: 'Vergrößern',
+    fitWidth: 'An Breite anpassen',
   },
   notSetUp: {
     title: 'Diese Instanz ist noch nicht eingerichtet',

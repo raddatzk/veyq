@@ -58,7 +58,8 @@ export { RATE }
 export const MAX_HEADS = 64
 const MAX_SAFE = Number.MAX_SAFE_INTEGER
 const MAX_LIST = 200
-const MAX_RECEIPTS = 100
+/** The most receipts one revision lists (the schema's `maxItems`). */
+export const MAX_RECEIPTS = 100
 const MAX_SHARES = 1_000_000
 
 /** Why a body is not a v1 revision: the first rule it breaks, by the schema's path. */

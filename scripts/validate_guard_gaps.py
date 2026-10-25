@@ -246,9 +246,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      #513 moved Memories' rules out of `styles/memory.css`, that guard read `src/styles/` and the barrel alone, so the
      move would have taken its 87 anchor compounds out of its sight with nothing turning red (and
      `shared/ui/shareGate.css`'s 10 had never been in it)
-  90 a dead rule in Depot's own stylesheet (`src/web/src/features/depot/depot.css`) — rejected: the second application's
-     sheet (inbox #517 moved `styles/pdf.css` there) is read as well; 89 alone would stay green if the guard's walk
-     narrowed to Memories' directory, which is where the first application sheet happened to sit
+  90 a dead rule in another application's own stylesheet (`src/web/src/features/expenses/expenses.css`) — rejected:
+     every application's sheet is read, not only Memories'; 89 alone would stay green if the guard's walk narrowed to
+     Memories' directory, which is where the first application sheet happened to sit. (It was planted in Depot's
+     `depot.css` until that sheet, the PDF text layer, went to core's `shared/pdf/pdf.css` with the renderer)
   91 `completeMedia`'s per-item `nodeEpoch` declaration dropped, the field still on the batch's items — rejected:
      `validate_write_concurrency` reads epoch-shaped fields one level into a batch's items and requires each to be
      declared (ADR 0109 point 6). Before, the guard resolved top-level properties only, so a per-item epoch was invisible
@@ -1317,13 +1318,14 @@ def forge_dead_rule_in_application_sheet(root: pathlib.Path) -> str:
     return "a dead rule in Memories' own stylesheet outside src/styles/ (must be REJECTED — every sheet under src/ is read)"
 
 
-def forge_dead_rule_in_depot_sheet(root: pathlib.Path) -> str:
-    # inbox #517: Depot's sheet, the second application's. Found, not named, as in 89.
-    sheets = sorted((root / "src" / "web" / "src" / "features" / "depot").rglob("*.css"))
+def forge_dead_rule_in_expenses_sheet(root: pathlib.Path) -> str:
+    # inbox #517: an application's sheet other than Memories'. Found, not named, as in 89 — Expenses' since Depot's own
+    # sheet (the PDF text layer) moved to core's `shared/pdf/` with the renderer.
+    sheets = sorted((root / "src" / "web" / "src" / "features" / "expenses").rglob("*.css"))
     if not sheets:
-        raise ForgeError("no .css under src/web/src/features/depot — re-anchor this forgery on Depot's sheet")
-    sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-depot-markup-applies-this {\n  color: red;\n}\n")
-    return "a dead rule in Depot's own stylesheet (must be REJECTED — every application's sheet is read, not only Memories')"
+        raise ForgeError("no .css under src/web/src/features/expenses — re-anchor this forgery on an application's sheet other than Memories'")
+    sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-expenses-markup-applies-this {\n  color: red;\n}\n")
+    return "a dead rule in Expenses' own stylesheet (must be REJECTED — every application's sheet is read, not only Memories')"
 
 
 def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
@@ -1676,7 +1678,7 @@ CASES = [
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),
     ("88", WEB_GUARD, forge_web_application_reads_another_namespace, False),
     ("89", "validate_stylesheet_anchors.py", forge_dead_rule_in_application_sheet, False),
-    ("90", "validate_stylesheet_anchors.py", forge_dead_rule_in_depot_sheet, False),
+    ("90", "validate_stylesheet_anchors.py", forge_dead_rule_in_expenses_sheet, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
     ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]

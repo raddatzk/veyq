@@ -17,8 +17,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
-// A PDF is drawn by pdf.js, which `pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
-vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+// A PDF is drawn by pdf.js, which `shared/pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
+vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 const memberReads = vi.hoisted(() => [] as string[])
 vi.mock('../../../app/activeSpace', () => ({
@@ -44,7 +44,7 @@ vi.mock('../../../core/sharing/guestTree', async (orig) => ({
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { publicShareFilesApi } from '../api'
 import { downloadFile, fileChunkProvider } from '../download'
-import { openPdf, PdfOpenError, type PdfDocument } from '../pdf/pdfEngine'
+import { openPdf, PdfOpenError, type PdfDocument } from '../../../shared/pdf/pdfEngine'
 import { PDF_BYTES, PNG_BYTES, providerOf } from '../../../test/fileChunks'
 import { guestFileUploadJob, type GuestFileTarget } from '../shareUpload'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'

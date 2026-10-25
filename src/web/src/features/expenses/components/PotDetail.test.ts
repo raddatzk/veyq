@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 const server = vi.hoisted(() => ({ current: null as unknown as import('../potTestUtil').PotServer, appends: [] as unknown[] }))
+vi.mock('../receipts', async (orig) => ({ ...(await orig<object>()), readMemberReceipts: vi.fn() }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('../../../core/node/treeStore', async () => {
@@ -38,6 +39,7 @@ import type { NodeDetailProps } from '../../../core/applications/registry'
 import { treeStore } from '../../../core/node/treeStore'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { appendPotWrites, eraseParticipant, readMemberPot, sealPotWrites, StaleRevisionError } from '../domain/potApi'
+import { readMemberReceipts } from '../receipts'
 import { writeNodeMeta } from '../../../core/node/nodeMetaWrite'
 import { openReport } from '../../../core/report/report'
 import { POT_META_KEY, potMetaObject, potMetaOf } from '../domain/potMeta'
@@ -87,6 +89,7 @@ function serve() {
     server.current.append(writes, 'user:u-anna', held)
     return sealed
   })
+  vi.mocked(readMemberReceipts).mockImplementation(async () => ({ receipts: [...server.current.receipts], etag: null }))
   vi.mocked(eraseParticipant).mockImplementation(async (_target, _key, _held, id) => {
     server.current.erase(id)
   })

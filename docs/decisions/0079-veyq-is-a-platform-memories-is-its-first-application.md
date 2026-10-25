@@ -322,7 +322,8 @@ on their own.
   throws; core's catalog (`i18n/index.ts`) holds core's alone. Each application's global classes are its own
   stylesheet, imported by the application with their dark twins: Memories' `features/memories/memories.css` (the old
   `styles/memory.css`'s Memories part and the media lightbox of the old `styles/media.css`), Depot's
-  `features/depot/depot.css` (the PDF text layer of the old `styles/pdf.css`); the core part of the old
+  `features/depot/depot.css` (the PDF text layer of the old `styles/pdf.css`; core's again as `shared/pdf/pdf.css` beside
+  `PdfPages.vue` once the PDF renderer moved to core, so that Expenses' receipts draw through it too); the core part of the old
   `styles/memory.css` went to core (the rendered Markdown to `styles/markdown.css`, the image cropper's classes renamed
   `veyq-cropper*` in `shared/ui/ImageCropper.vue`), and `styles/` holds no application's sheet any more. An
   application's sheet loads with the application, before core's

@@ -97,7 +97,7 @@ describe('the form as a person fills it', () => {
 
   it('every problem it or the write path can name has a sentence in both languages', () => {
     const reasons = ['title', 'date', 'amount', 'rate', 'payers', 'split', 'items', 'transfer', 'payers-unbalanced', 'receivers-unbalanced', 'exact-unbalanced',
-      'items-above-total', 'named-twice', 'unknown-participant', 'record-twice', 'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty']
+      'items-above-total', 'named-twice', 'unknown-participant', 'record-twice', 'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty', 'receipt-dropped-and-kept']
     for (const locale of ['en', 'de'] as const) {
       const sentences = expensesMessages[locale].expenses.entry.problem as Record<string, string>
       expect(reasons.map(problemKey).filter((k) => !sentences[k])).toEqual([])

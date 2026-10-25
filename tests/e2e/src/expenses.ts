@@ -52,8 +52,14 @@ export const LABELS = {
       deactivate: 'Deactivate', activate: 'Activate', inactive: 'deactivated',
       deletePerson: (n: string) => `Delete ${n}`, deleteAccept: 'Delete', removePerson: (n: string) => `Remove ${n}`, removeAccept: 'Remove',
       deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', paidBy: (n: string) => `paid by ${n}`,
-      copyLoss: 'The history of each entry and the deleted entries: a copy starts every entry at its current version.',
+      copyLoss: 'The history of each entry, the deleted entries and the receipts: a copy starts every entry at its current version.',
       reviewTitle: 'The reported entry, every version',
+      receipts: {
+        title: 'Receipts', add: 'Add receipt', open: (n: string) => `Open ${n}`, close: (n: string) => `Close ${n}`,
+        download: (n: string) => `Download ${n}`, remove: (n: string) => `Remove ${n}`, downloadOnly: 'Download',
+        notShown: 'This receipt cannot be shown here. You can download it.',
+        notReceipt: (n: string) => `Only images and PDFs can be receipts, not added: ${n}.`,
+      },
     },
   },
   de: {
@@ -96,8 +102,14 @@ export const LABELS = {
       deactivate: 'Deaktivieren', activate: 'Aktivieren', inactive: 'deaktiviert',
       deletePerson: (n: string) => `${n} löschen`, deleteAccept: 'Löschen', removePerson: (n: string) => `${n} entfernen`, removeAccept: 'Entfernen',
       deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', paidBy: (n: string) => `bezahlt von ${n}`,
-      copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
+      copyLoss: 'Den Verlauf jedes Eintrags, die gelöschten Einträge und die Belege: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
       reviewTitle: 'Der gemeldete Eintrag, jede Fassung',
+      receipts: {
+        title: 'Belege', add: 'Beleg hinzufügen', open: (n: string) => `${n} öffnen`, close: (n: string) => `${n} schließen`,
+        download: (n: string) => `${n} herunterladen`, remove: (n: string) => `${n} entfernen`, downloadOnly: 'Herunterladen',
+        notShown: 'Dieser Beleg kann hier nicht angezeigt werden. Du kannst ihn herunterladen.',
+        notReceipt: (n: string) => `Nur Bilder und PDFs können Belege sein, nicht hinzugefügt: ${n}.`,
+      },
     },
   },
 } as const
@@ -299,3 +311,41 @@ async function split(dialog: Locator, L: Labels, lang: Lang, b: VectorEntry['bod
 
 /** A line item's label as typed: the vector's word and a spelling the sweep cannot find in ciphertext by chance. */
 export const itemLabel = (label: string) => `${label} am Tisch`
+
+// --- receipts -------------------------------------------------------------------------------------------------------------
+
+/** A file a receipt pass picks: its name, its type as the browser would report it, its bytes. */
+export type PickedFile = { name: string; mimeType: string; buffer: Buffer }
+
+/** Pick [files] in an open entry dialog's receipt picker (a hidden file input, opened by "Add receipt"). */
+export async function addReceipts(editor: Locator, files: PickedFile[]): Promise<void> {
+  await editor.locator('.expenses-receipts input[type="file"]').setInputFiles(files)
+}
+
+/** One receipt's row in an open entry dialog, by the name it shows. */
+export const receiptRow = (editor: Locator, name: string): Locator => editor.locator('.expenses-receipt').filter({ hasText: name })
+
+/**
+ * Open the receipt [name] in [editor] and prove what it is drawn as: an `image` decoded by the browser (a real, non-empty
+ * bitmap), a `pdf` page drawn by core's renderer, or `other` — no image, no page, only the download offered. Closes it again.
+ */
+export async function expectReceiptOpens(editor: Locator, L: Labels, name: string, as: 'image' | 'pdf' | 'other'): Promise<void> {
+  const row = receiptRow(editor, name)
+  await row.getByRole('button', { name: L.pot.receipts.open(name), exact: true }).click()
+  const view = row.locator('.expenses-receipt-view')
+  if (as === 'image') {
+    const img = view.locator('img.expenses-receipt-image')
+    await expect(img).toBeVisible({ timeout: 60_000 })
+    await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0)
+  } else if (as === 'pdf') {
+    await expect(view.locator('.pdf-page canvas').first()).toBeVisible({ timeout: 60_000 })
+    await expect(view.locator('img')).toHaveCount(0)
+  } else {
+    await expect(view.getByText(L.pot.receipts.notShown)).toBeVisible({ timeout: 60_000 })
+    await expect(view.getByRole('button', { name: L.pot.receipts.downloadOnly, exact: true })).toBeVisible()
+    await expect(view.locator('img, canvas')).toHaveCount(0)
+  }
+  await row.getByRole('button', { name: L.pot.receipts.close(name), exact: true }).click()
+  await expect(view).toHaveCount(0)
+}
+

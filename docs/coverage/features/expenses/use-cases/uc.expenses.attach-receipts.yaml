@@ -14,5 +14,11 @@ acceptanceCriteria:
   - id: a-contributor-adds-and-removes-receipts
     text: "A READ_WRITE guest adds and removes receipts through the link's gate, each recorded as a guest write and counted against the link's storage limit; a READ guest opens and downloads only."
 gaps:
-  web: "No Expenses client exists; receipts are built by cr-expenses-receipts after cr-expenses-ledger."
-  backend: "No receipt table or upload completion for EXPENSES_POT exists; built by cr-expenses-receipts."
+  web: "Built by cr-expenses-receipts phase 3 (features/expenses: receipts.ts, domain/receiptRules.ts, EntryReceipts, ReceiptView, shared/pdf); its refs are written at the CR's phase 4."
+  backend: "Built by cr-expenses-receipts phase 2 (PotReceiptStore, the fourth blob arm, the purge); its refs are written at the CR's phase 4."
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b and 9b, EN and DE) is written
+    and tagged with `receipts-are-blobs-of-the-entry`, `only-images-and-pdfs-render`,
+    `a-dropped-receipt-goes-after-the-retention` and `a-contributor-adds-and-removes-receipts`, and NOT YET RUN: a JPEG
+    and a PDF drawn, a text claiming to be a PDF only offered for download, one removed, a guest's added through the link,
+    all opening after a rotation. Its run is the CR's phase 4; ADR 0040 admits `stack` refs only from a CI run.

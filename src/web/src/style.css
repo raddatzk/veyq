@@ -8,8 +8,8 @@
    could not work. Those are the ui-web-styleguide's own rules applied backwards to the inherited code; each edit
    carries its reason in place. Diff a sheet against legacy/frontend-noe2ee/src/styles/ before assuming a
    difference is drift. An application's sheets are not imported here: the old memory.css and media.css are
-   Memories' `features/memories/memories.css`, pdf.css is Depot's `features/depot/depot.css`, each imported by its
-   application and so loading before this barrel (inbox #513, #517).
+   Memories' `features/memories/memories.css`, imported by its application, and pdf.css is the PDF renderer's
+   `shared/pdf/pdf.css`, imported by `shared/pdf/PdfPages.vue`; both load before this barrel (inbox #513, #517).
 
    Below: the few E2EE-specific additions the pre-E2EE source never had (the centered public-shell wrapper +
    the Secret-Key unlock field). */

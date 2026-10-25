@@ -9,12 +9,16 @@
 // and emptied when the page is freed - one per drawn page, never more. A page without extractable text (a scan) has none.
 //
 // What this is NOT, on purpose: no annotation layer (a link in a PDF is ink on a canvas, never an element: a PDF cannot
-// navigate this app - the text layer is spans only), no form fields. The document and its worker belong to `useFileViewer` and are destroyed there; this component
-// only borrows them and cancels its own drawing when it goes.
+// navigate this app - the text layer is spans only), no form fields. The document and its worker belong to the caller
+// (Depot's `useFileViewer`; this component is core's, ADR 0079, so an application that may not import Depot draws a PDF
+// through the same renderer) and are destroyed there; this component only borrows them and cancels its own drawing when it goes.
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
-import type { PdfDocument, PdfRenderJob } from '../pdf/pdfEngine'
+import VeyqButton from '../ui/VeyqButton.vue'
+import type { PdfDocument, PdfRenderJob } from './pdfEngine'
+// The text layer's global rules (`pdf.css`, its header has why they are global and why their place in the cascade is safe):
+// loaded with this component, so every application that renders a PDF through it gets them.
+import './pdf.css'
 
 const props = defineProps<{ doc: PdfDocument; name: string }>()
 const { t } = useI18n()
@@ -265,14 +269,14 @@ function fit(): void {
 
 <template>
   <div class="pdf-viewer">
-    <div class="pdf-toolbar" role="toolbar" :aria-label="t('depot.viewer.pdf.toolbar')">
-      <span class="pdf-page-indicator">{{ t('depot.viewer.pdf.pageOf', { page: current, total: doc.numPages }) }}</span>
+    <div class="pdf-toolbar" role="toolbar" :aria-label="t('pdf.toolbar')">
+      <span class="pdf-page-indicator">{{ t('pdf.pageOf', { page: current, total: doc.numPages }) }}</span>
       <span class="pdf-zoom">
         <VeyqButton
           class="pdf-zoom-out"
           icon="search-minus"
-          :aria-label="t('depot.viewer.pdf.zoomOut')"
-          :title="t('depot.viewer.pdf.zoomOut')"
+          :aria-label="t('pdf.zoomOut')"
+          :title="t('pdf.zoomOut')"
           :disabled="!canZoomOut"
           size="small"
           variant="secondary"
@@ -283,8 +287,8 @@ function fit(): void {
         <VeyqButton
           class="pdf-zoom-in"
           icon="search-plus"
-          :aria-label="t('depot.viewer.pdf.zoomIn')"
-          :title="t('depot.viewer.pdf.zoomIn')"
+          :aria-label="t('pdf.zoomIn')"
+          :title="t('pdf.zoomIn')"
           :disabled="!canZoomIn"
           size="small"
           variant="secondary"
@@ -294,8 +298,8 @@ function fit(): void {
         <VeyqButton
           class="pdf-zoom-fit"
           icon="arrows-h"
-          :aria-label="t('depot.viewer.pdf.fitWidth')"
-          :title="t('depot.viewer.pdf.fitWidth')"
+          :aria-label="t('pdf.fitWidth')"
+          :title="t('pdf.fitWidth')"
           :disabled="zoom === 1"
           size="small"
           variant="secondary"
@@ -304,16 +308,16 @@ function fit(): void {
         />
       </span>
     </div>
-    <div ref="scroller" class="pdf-scroll" tabindex="0" role="group" :aria-label="t('depot.viewer.pdf.pages', { name })" @pointerdown="startSelecting">
+    <div ref="scroller" class="pdf-scroll" tabindex="0" role="group" :aria-label="t('pdf.pages', { name })" @pointerdown="startSelecting">
       <div v-for="n in pageNumbers" :key="n" class="pdf-page" :data-page="n" :style="pageStyle(n)">
         <canvas
           :ref="(el) => setCanvas(n, el)"
           class="pdf-canvas"
           role="img"
-          :aria-label="t('depot.viewer.pdf.page', { page: n, total: doc.numPages })"
+          :aria-label="t('pdf.page', { page: n, total: doc.numPages })"
         />
         <div :ref="(el) => setTextHost(n, el)" class="pdf-text-layer" />
-        <span v-if="failed[n]" class="pdf-page-failed" role="note">{{ t('depot.viewer.pdf.pageFailed', { page: n }) }}</span>
+        <span v-if="failed[n]" class="pdf-page-failed" role="note">{{ t('pdf.pageFailed', { page: n }) }}</span>
       </div>
     </div>
   </div>
@@ -382,6 +386,8 @@ function fit(): void {
   text-align: center;
   color: #444;
 }
+/* A caller's full-size frame lets the scroll grow to the screen: Depot's viewer (`.file-viewer-full`, `.file-viewer` in full
+   screen). A class name only, no import: another caller's frame is added here the same way. */
 :global(.file-viewer-full) .pdf-scroll,
 :global(.file-viewer:fullscreen) .pdf-scroll {
   max-height: calc(100vh - 9rem);

@@ -11,8 +11,8 @@ import * as v1 from '@veyq/crypto/v1'
 import type { FileListPage } from '../../../api/generated/depot'
 
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
-// A PDF is drawn by pdf.js, which `pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
-vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+// A PDF is drawn by pdf.js, which `shared/pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
+vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../download', async (importOriginal) => ({
@@ -38,7 +38,7 @@ vi.mock('../../../core/node/treeStore', async () => {
 import FileDetail from './FileDetail.vue'
 import { filesApi } from '../api'
 import { downloadFile, fileChunkProvider } from '../download'
-import { openPdf, PdfOpenError, type PdfDocument } from '../pdf/pdfEngine'
+import { openPdf, PdfOpenError, type PdfDocument } from '../../../shared/pdf/pdfEngine'
 import { PDF_BYTES, PNG_BYTES, providerOf, utf8 } from '../../../test/fileChunks'
 import { fileUploadJob, StaleFileError, type FileUploadTarget } from '../uploadFile'
 import { planBlob } from '../../../core/blob/transport'
