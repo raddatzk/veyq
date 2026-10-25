@@ -23,7 +23,10 @@ import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
 import { memberAccessOf } from '../../test/models'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import { exportPot, importPot, validatePotContent } from './exportImport'
+import { readFileSync } from 'node:fs'
+import { MAX_RECEIPT_NAME, exportPot, importPot, validatePotContent } from './exportImport'
+import { RECEIPT_MAX_BYTES } from './receipts'
+import { MAX_RECEIPTS } from './domain/format'
 import { appendPotWrites, readMemberPot, sealPotWrites } from './domain/potApi'
 import { buildLedger } from './domain/ledger'
 import { potMetaOf } from './domain/potMeta'
@@ -98,5 +101,54 @@ describe('validatePotContent', () => {
     expect(validatePotContent({ ...sound, entries: [{ id: sound.entries[0]!.id, entry: { ...sound.entries[0]!.entry, amount: 0 } }] })?.code).toBe('invalid_manifest')
     expect(validatePotContent({ ...sound, entries: [{ id: sound.entries[0]!.id, entry: expense('Taxi', 100, BEN, [ANNA]) }] })?.message).toContain('does not have')
     expect(validatePotContent({ ...sound, entries: [{ id: sound.entries[0]!.id, entry: { kind: 'participant', name: 'x', active: true, joined: 1 } }] })?.code).toBe('invalid_manifest')
+  })
+})
+
+describe('validatePotContent — the receipts an entry carries', () => {
+  const R1 = '0e000000-0000-4000-a000-000000000001'
+  const R2 = '0e000000-0000-4000-a000-000000000002'
+  const file = (over: Record<string, unknown> = {}) => ({ path: 'Trip/Taxi.jpg', size: 10, mediaType: 'image/jpeg', ...over })
+  const pot = (entries: { listed: string[]; carried?: unknown }[]) => ({
+    type: 'expenses.pot', schema: 1, baseCurrency: 'EUR', baseMinorUnits: 2, participants: [{ id: ANNA, joined: 1, name: 'Anna' }],
+    entries: entries.map((e, i) => ({
+      id: `0e000000-0000-4000-9000-00000000000${i + 1}`, entry: { ...expense('Taxi', 100, ANNA, [ANNA]), receipts: e.listed },
+      ...(e.carried === undefined ? {} : { receipts: e.carried }),
+    })),
+  })
+  const problem = (entries: { listed: string[]; carried?: unknown }[]) => validatePotContent(pot(entries))
+
+  it('takes receipts that are exactly the ones their entry lists (control)', () => {
+    expect(problem([{ listed: [R1, R2], carried: [{ id: R1, name: 'Taxi.jpg', file: file() }, { id: R2, file: file({ path: 'Trip/b.pdf', mediaType: '' }) }] }])).toBeNull()
+    expect(problem([{ listed: [] }])).toBeNull()
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file({ size: RECEIPT_MAX_BYTES }) }] }])).toBeNull()
+  })
+
+  it('refuses a receipt listed but not carried, carried but not listed, or carried twice', () => {
+    expect(problem([{ listed: [R1] }])?.message).toContain('not the ones it lists')
+    expect(problem([{ listed: [], carried: [{ id: R1, file: file() }] }])?.message).toContain('not the ones it lists')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file() }] }, { listed: [R1], carried: [{ id: R1, file: file() }] }])?.message).toContain('carried twice')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file() }, { id: R1, file: file() }] }])?.message).toContain('carried twice')
+  })
+
+  it('refuses a receipt above 10 MiB, one that claims no image or PDF, and one without its file', () => {
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file({ size: RECEIPT_MAX_BYTES + 1 }) }] }])?.code).toBe('too_large')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, name: 'note.txt', file: file({ mediaType: 'text/plain' }) }] }])?.message).toContain('no image or PDF')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file({ path: 'Trip/note', mediaType: '' }) }] }])?.message).toContain('no image or PDF')
+    expect(problem([{ listed: [R1], carried: [{ id: R1 }] }])?.message).toContain('without its file')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, file: file({ size: -1 }) }] }])?.message).toContain('without its file')
+    expect(problem([{ listed: [R1], carried: [{ id: 'r1', file: file() }] }])?.message).toContain('without an id')
+    expect(problem([{ listed: [R1], carried: [{ id: R1, name: `${'x'.repeat(MAX_RECEIPT_NAME)}.jpg`, file: file() }] }])?.code).toBe('too_large')
+    expect(problem([{ listed: [R1], carried: { id: R1 } }])?.message).toContain('no list')
+  })
+
+  it("each limit is the schema's", () => {
+    const schema = JSON.parse(readFileSync(new URL('../../../../../contracts/export/veyq-subtree.schema.json', import.meta.url), 'utf8'))
+    const d = schema.$defs
+    expect({
+      name: d.expensesReceipt.properties.name.maxLength,
+      size: d.expensesReceipt.properties.file.properties.size.maximum,
+      perEntry: d.expensesEntry.properties.receipts.maxItems,
+    }).toEqual({ name: MAX_RECEIPT_NAME, size: RECEIPT_MAX_BYTES, perEntry: MAX_RECEIPTS })
+    expect(d.expensesReceipt.required).toEqual(['id', 'file'])
   })
 })

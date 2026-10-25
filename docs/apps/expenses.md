@@ -138,10 +138,13 @@ stays inside the Pot (§ Entries).
 
 A Pot downloads ([ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md))
 as a JSON file of its participants and entries, which an import reads back, a CSV of the entries for a spreadsheet,
-and its receipts as files beside them. History is not exported; an import starts each entry at its current revision,
-under new ids, a batch of at most 256 records after another, each on what the one before wrote. A deleted person comes
-back as a deactivated one shown as "deleted people": its name is gone, and an erasure on import would need its balance
-settled first; a member can delete it again. A copy is the download and the import without the file.
+and its receipts as files beside them, each under the name and type its sealed meta holds, opened on the downloading
+device. History is not exported; an import starts each entry at its current revision, under new ids, a batch of at most
+256 records after another, each on what the one before wrote, and uploads each receipt under a new id into the new Pot
+before the batch whose revision lists it. A receipt the operator blocked is not read, so it is left out of its entry. A
+deleted person comes back as a deactivated one shown as "deleted people": its name is gone, and an erasure on import
+would need its balance settled first; a member can delete it again. A copy is the download and the import without the
+file: it reads each receipt by frame and seals it again under a fresh key bound to the copy.
 
 ## Out of the first cut
 

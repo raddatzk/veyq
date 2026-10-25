@@ -88,7 +88,8 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
    is recorded as a guest write; a blocked receipt's download is `451` for a member and a guest (control: unblocked, it
    presigns). `validate_blob_reference_arity.py` names four arms and is bitten (remove the arm from
    `subtreeBlobIds` → red); `validate_guard_gaps.py --force` green.
-3. **Web.** ✅ **Built 2026-10-25, but for the download, the import and the copy** (§ Retrospective, phase 3). Upload, list, open (decision 7, Depot's view unchanged), remove; guest uploads through core's guest
+3. **Web.** ✅ **Built 2026-10-25**, the download, the import and the copy in a slice of their own (§ Retrospective, phase 3
+   and its receipts-in-the-download slice). Upload, list, open (decision 7, Depot's view unchanged), remove; guest uploads through core's guest
    transport; the receipts in the download, the import and the copy; the report keys; a blocked receipt drawn as
    blocked; no restore past the retention (decision 6). Site: `expenses/record-an-expense`
    gains receipts (EN+DE). **Done when:** `npm run check` and `site` `npm run check` green; a **browser pass** on the
@@ -223,13 +224,44 @@ Re-key: `listPotRekey` pages revisions first, then receipts (`{receiptId, wrappe
 - **Measured:** see the commit messages (`src/web` `npm run check`, `tests/e2e` `npm run check`, `site` `npm run check`, the
   quick `scripts/validate_*.py`, `validate_guard_gaps.py --force` for the re-anchored gap 90).
 
-**Not built in phase 3 — open for its own slice before phase 4 closes:** the receipts in the **download, the import and the
-copy**. Today the export writes each entry with `receipts: []` (`exportImport.ts`), so a downloaded, imported or copied
-Pot has no receipts; until then the copy dialog names them among what a copy does not carry (`expenses.copyLoss`). Building it needs a contract change
-(`contracts/export/veyq-subtree.schema.json` `expensesPot`: each entry's receipts as payloads), the export adding each
-receipt as a payload with its frames (a copy reads by frame), and the import uploading each receipt under the new Pot
-before the batch whose entry lists it — `createPot` writes people and entries in one call today, so the import must split
-it. `docs/apps/expenses.md` § Download and import already describes the target, not today.
+**Phase 3's receipts-in-the-download slice (2026-10-25), built on `main` `519ca0d2`.** Phase 3 left the receipts out of
+the download, the import and the copy (the export wrote `receipts: []`); this slice closes that gap.
+
+- **The contract.** `contracts/export/veyq-subtree.schema.json`: `expensesEntry.receipts` (optional, `maxItems` 100) holds
+  the receipts the entry's current revision holds, each an `expensesReceipt` — `id` (the one `entry.receipts` lists),
+  `name` (optional, the sealed name, ≤ 1024) and `file`, a `payload` of at most 10 MiB. Exactly the listed ids, each once;
+  one the download cannot read is left out of both. The content schema stays `expenses` 1: Expenses has not been released,
+  so no archive of an older shape exists, and a 1 without `receipts` still imports.
+- **The export** (`exportImport.ts`' `withReceipts`) reads the listing through the session's own door only where a live
+  entry holds a receipt, and declares each held receipt as a payload with its frames (`CHUNK_SIZE`, the upload's), its size
+  the exact plaintext (`receiptSize`), its name and type from the sealed blob meta opened on the device. A receipt the
+  listing holds dropped, blocked or for another entry is left out of the entry's list with it, and its bytes are never
+  read; its `K_blob` is unwrapped at the walk, so a row moved here from another Pot refuses it. ADR 0082's model holds:
+  the plaintext reaches only the person's own save target, or in a copy the tab's frame window before it is sealed again.
+  The ZIP's length needs nothing of Expenses: core's `zipLength` plans every declared payload, and the test pins it with
+  the receipts in.
+- **The import** splits `createPot` into `createPotNode` + `appendInBatches(…, beforeBatch)`: each batch's receipts are
+  uploaded into the new Pot (`uploadReceipt`, a fresh `K_blob` bound to it) and completed against the entry's new id before
+  that batch's append, under new ids minted in a map apart from the records' (an archive's receipt id equal to a record id
+  still gets one of its own); the revision lists the new ids. An import that fails part-way trashes the Pot it made (it
+  left an empty or half Pot before when the Pot was the import's top node, whose id core never learns). `validatePotContent`
+  refuses a receipt over 10 MiB, one that claims no image or PDF (the picker's `claimsReceipt`), a list and a carried set
+  that differ, a receipt carried twice, and a malformed one, before anything is written. `ReceiptFile` is now any
+  `BlobSource` with a name and a time, so the import hands it the archive's or the copy's payload.
+- **The copy** carries the receipts; `expenses.copyLoss` names only the history and the deleted entries (EN, DE, and the
+  e2e labels). `uc.platform.copy-node`'s web gap ("no wire test copies a Pot through prepareCopy") is closed by the new suite.
+- **Tests** (red before, green after): `exportImport.receipts.test.ts` — core's real walk, ZIP writer, import and copy with
+  Expenses' registered hooks and core's real blob transport against a fake control plane and store: the ZIP's announced
+  length equals its real length with the receipts; the import's balances equal and every receipt opens byte-identical
+  under the new Pot, its name and type kept, its wrap bound to the new Pot only, each completed before the append that
+  lists it; a copy the same; a blocked, a dropped and another entry's receipt left out unread; a failed upload trashes the
+  Pot. `exportImport.test.ts` — the receipt rules of `validatePotContent` and their schema limits.
+- **Bites** (a script that applies one sabotage, runs the two suites, restores — 18, each red): no receipt exported; a
+  blocked, a dropped, another entry's receipt exported; the sealed name, the sealed type not carried; the payload declared
+  at its sealed size; frames of another size; the receipts uploaded after their batch; the old receipt ids kept; the
+  revision listing the old ids; no cleanup of a failed import; the 10 MiB cap, the claim, the listed set, a receipt carried
+  twice, the name length not checked; the copy loss still naming the receipts.
+- **Measured:** see the commit message.
 
 **For phase 4.** The L1 additions are written and NOT run (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b,
 9b; the PDF builder moved to `tests/e2e/src/pdf.ts`, shared with `depot-styles.spec.ts`; labels and `addReceipts` /
@@ -239,6 +271,10 @@ it. `docs/apps/expenses.md` § Download and import already describes the target,
   entry after the save; no figure moves, no ledger notice;
 - 4b: the READ_WRITE guest keeps a JPEG with its own entry through the link and opens A's JPEG and PDF;
 - 9b: after the rotation the receipts open for A and through the link;
+- step 7 (NOT yet written into the spec — phase 4 adds and runs it): the downloaded ZIP holds `<Pot>/<receipt name>` for
+  Museum's JPEG and PDF and the guest's JPEG, and not the removed false PDF; the imported Pot and the copy each show
+  those receipts on their entries, the JPEGs opening as images, the PDF as a drawn page; the copy dialog's losses no
+  longer name receipts;
 - Depot's PDF view still renders: `depot-styles.spec.ts` (unchanged but for the shared builder) reads its text layer;
 - the canary sweep: every receipt name and the PDF's line are `recordTyped`, so the sweep proves none reached the server
   readable;
