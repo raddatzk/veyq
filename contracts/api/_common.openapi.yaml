@@ -306,11 +306,12 @@ components:
           description: >
             The report share: the item's keys, role-tagged, sealed under `K_report` (`seal` purpose
             `report-share` [itemKind, itemId], or `report-link` [shareId]; `@veyq/crypto`'s report.ts). At most
-            32 keys.
+            256 keys (`REPORT.maxKeysPerShare`); 32812 is the base64 length of that many with every role 16 bytes and
+            every ref a UUID.
           contentEncoding: base64
-          maxLength: 4140
+          maxLength: 32812
           example: AnJlcG9ydC1zaGFyZQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4140) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 32812) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ReportSubmission:
       type: object

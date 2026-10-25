@@ -61,6 +61,19 @@ describe('report keys (a report share\'s plaintext)', () => {
     expect(() => v1.encodeReportKeys([...max, max[0]])).toThrow(new ReportInvalid('key count'))
   })
 
+  it('seals its largest share to exactly the length the contract admits for one item', () => {
+    // Inbox #540: the cap and the wire's bound move together. The worst case is every role 16 bytes and every ref a UUID.
+    const contract = readFileSync(resolve(here, '../../../../contracts/api/_common.openapi.yaml'), 'utf8')
+    const bound = /sealedShare:[\s\S]*?maxLength: (\d+)[\s\S]*?Size\(max = (\d+)\)/.exec(contract)
+    const admitted = Number(bound?.[1])
+    expect(Number(bound?.[2])).toBe(admitted)
+    expect(REPORT.maxKeysPerShare).toBe(256)
+    const worst = Array.from({ length: REPORT.maxKeysPerShare }, (_, i) => ({ role: 'ENTRY_REVISION_XY', ref: ID, key: key(i) }))
+    worst.forEach((k) => (k.role = k.role.slice(0, 16)))
+    const sealed = v1.sealReportShare(new Uint8Array(32).fill(7), { kind: 'ITEM', id: ID }, worst)
+    expect(Buffer.from(sealed).toString('base64')).toHaveLength(admitted)
+  })
+
   it.each([
     ['a lower-case role', { role: 'node', ref: null, key: key(1) }, 'role'],
     ['a role of seventeen characters', { role: 'A'.repeat(17), ref: null, key: key(1) }, 'role'],

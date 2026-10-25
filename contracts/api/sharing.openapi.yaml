@@ -2266,7 +2266,7 @@ components:
           type: string
           description: The report share — the item's keys sealed under `K_report` (`report-share` [itemKind, itemId] or `report-link` [shareId]).
           contentEncoding: base64
-          maxLength: 8192
+          maxLength: 32812
           example: AnJlcG9ydC1zaGFyZQ==
 
     CaseHeldLink:

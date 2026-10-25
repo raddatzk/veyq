@@ -26,7 +26,14 @@ export const REPORT = {
   contactBytes: 254,
   contextBytes: 8000,
   bucketBytes: 512,
-  maxKeysPerShare: 32,
+  /**
+   * The most keys one share carries — a decoder's bound against a hostile count, and the reach of one item: an Expenses
+   * entry hands over a key per revision and per receipt (ADR 0108 decision 6), and one past this is reported through
+   * its Pot instead. Its worst-case sealed share (every role 16 bytes, every ref a UUID) is the contract's
+   * `ReportItemSubmission.sealedShare` `maxLength`, 32812 base64 characters (`report.test.ts` pins the two together);
+   * 100 items of it stay well inside the request body limit, and a share row inside MariaDB's `TEXT`.
+   */
+  maxKeysPerShare: 256,
   noteBytes: 8000,
 } as const
 
