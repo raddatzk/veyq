@@ -79,10 +79,29 @@ trash and its restore (a restored node is read-only like the rest), an erasure a
 do a member's own marks on its items ([ADR 0068](0068-favorites-two-confidentiality-levels.md)), which a Master-Key
 rotation re-tags through the same write, and so does a rotation's re-key, which is the security of what
 exists. While it is off, every member of the tenant sees a banner at the top of veyq that says so, so there is time to
-save what is in it, and the links that exist keep serving it, read-only (owner 2026-10-24). Switched on again,
-everything is as before; nothing was deleted. Off is a window, not an end: erasing an application's data after it is
-open (inbox #539). Built: core's `ApplicationSwitch`, asked by kind and by name, and its sweep over every application's
-operations ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) Consequences).
+save what is in it, and the links that exist keep serving it, read-only (owner 2026-10-24). Switched on again
+before its day (below), everything is as before; nothing was deleted. Built: core's `ApplicationSwitch`, asked by kind
+and by name, and its sweep over every application's operations
+([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) Consequences).
+
+**Off is a window with an end** (owner 2026-10-24 and 2026-10-25, inbox #539,
+[uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md)).
+When an application goes off for a tenant, at either level, the tenant gets a day for it: that moment plus one
+instance-wide window, `veyq.application.off.retention` (default `P30D`). Like every other erasure window, it is a
+configuration property of the Server Owner, and a tenant owner has no lever over it.
+
+- **Who is told.** Every member is told the day by the banner and, where the instance has mail, by a notice at
+  switch-off and a reminder seven days before. Without instance mail it is the banner alone.
+- **What goes.** On the day, every node of the application's kinds made before the day is erased in every scope of the
+  tenant, personal spaces included, through the trash purge's erase, with its ledger, its store reclaim and every
+  hold unchanged.
+- **Switching on.** Before the day, switching on cancels it. After it, the erasure completes and spares what was made
+  after the switch-on.
+- **An instance switch.** It gives every tenant its own day, a tenant already off keeps its earlier one, and the notice
+  says only the operator can switch it on again.
+
+The day a member was told is never moved earlier, and a switch is never refused. Planned, not built:
+`changes/cr-switched-off-application-is-erased.md`; until it is built, nothing is erased.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new

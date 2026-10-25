@@ -35,6 +35,10 @@ what this instance can do, what version it speaks, and which optional features t
 - [uc.platform.switch-application-off](use-cases/uc.platform.switch-application-off.md) — **built**
   (an application switched off for the instance or a tenant is
   read-only — every write refused, every read, download and removal kept.)
+- [uc.platform.erase-switched-off-application](use-cases/uc.platform.erase-switched-off-application.md) — **planned**
+  (`changes/cr-switched-off-application-is-erased.md`: an application left off for the window,
+  `veyq.application.off.retention`, is erased in the tenant on a day every member is told by banner and mail;
+  switched on before the day, nothing is lost.)
 
 ## Enablers
 

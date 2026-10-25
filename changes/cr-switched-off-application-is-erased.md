@@ -2,7 +2,7 @@
 id: cr-switched-off-application-is-erased
 title: An application left switched off is erased in the tenant after a window members are told about
 status: planned
-satisfies: ["uc.platform.switch-application-off"]
+satisfies: ["uc.platform.switch-application-off", "uc.platform.erase-switched-off-application"]
 adrs: ["0079", "0088", "0056", "0093", "0097", "0101"]
 invariants:
   - core never calls an application and names none; it finds an application's nodes by asking NodeKindRules.applicationOf per kind
@@ -23,10 +23,12 @@ When an application has been off in a tenant for the window, every node of its k
 with everything that hangs off it, through the same erase the trash purge runs. Members are told the day by the banner
 and by mail. Switching the application on again before the day cancels the erasure.
 
-**This CR is not ready to implement until the owner has answered § Open questions and phase 0 has written the
-answers into state** (`docs/ai/README.md` § Refined state comes before the CR). The decisions below are written on
-the recommended answers. An answer that differs is edited into every decision and phase it changes before phase 1
-starts (`changes/README.md` § An owner's answer that reverses a decision).
+**The refine is closed** (2026-10-25). The owner answered § Open questions with every recommendation ("Passt"), so the
+decisions below, written on the recommended answers, stand as written. Phase 0 wrote the answers into state
+(`docs/ai/README.md` § Refined state comes before the CR): the use case
+[uc.platform.erase-switched-off-application](../docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md)
+with its planned coverage, ADR 0079 decision 8, ADR 0088 decision 5 and ADR 0093 § Legal basis, Still open 12–14.
+Implementation waits for the owner's go on this CR; phase 1 is next.
 
 ## Context & constraints
 
@@ -159,7 +161,7 @@ Explore sweeps read the code; the pointers I relied on I re-read myself and mark
      the switched-off window through the new placeholder `{applicationOffWindow}`, and `revision` moves.
    - The `mail` passage changes, so that erasure notices go through the instance's relay and not the space's.
    - The operator section of the terms does not change (Q6).
-   - The legal blockers stay as listed under Q6.
+   - The legal blockers of Q6 are ADR 0093 § Legal basis, Still open 12–14.
 
 ## Inventory
 
@@ -201,7 +203,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
 
 ## Phases
 
-0. **Refine close (the refining conversation, not the implementer).** Once the owner has answered:
+0. **Refine close (the refining conversation, not the implementer). Done 2026-10-25.** Once the owner has answered:
    - Write `uc.platform.erase-switched-off-application`, with `status: planned` coverage that gaps `backend` and
      `web`. It is a use case of its own: the time is its trigger, and its postcondition (the data gone) and its failure
      modes (no mail, switched on in time, an instance switch, a hold) belong to no operation of
@@ -292,11 +294,17 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
 
 ## Open questions (owner)
 
+All six answered by the owner on 2026-10-25 ("Passt"): each recommendation was taken, and decisions 1 to 7 are written
+on them.
+
 1. **The window: how long, and who sets it?**
    - (a) a fixed 30 days;
    - (b) a configuration property of the Server Owner, default 30 days;
    - (c) the Server Owner in admin-web, per instance, as a days value;
    - (d) the tenant owner per tenant, within a floor the Server Owner sets.
+
+   **Answered 2026-10-25: (b).** `veyq.application.off.retention`, default `P30D`, set by the Server Owner; no tenant
+   lever (decision 2).
 
    **Recommendation: (b).** It is how every other erasure window works today: trash, group, tenant and account, all
    `P30D` properties. The tenant owner already decides *whether* the application is off. Letting them also decide *how
@@ -310,6 +318,9 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
 
    In both, without instance mail it is the banner alone, and the switch is neither refused nor delayed.
 
+   **Answered 2026-10-25: (a).** The banner, a notice at switch-off and a reminder seven days before the day; without
+   instance mail, the banner alone (decision 5).
+
    **Recommendation: (a).** Erased content cannot be restored, and the member most likely to miss the banner is the
    one who has not opened veyq for weeks. The reminder costs one claim column and one branch in the purge's tick.
 3. **Up to when does switching on cancel?**
@@ -317,16 +328,26 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
      switch-on;
    - (b) up to the moment the purge actually starts.
 
+   **Answered 2026-10-25: (a).** Switching on cancels up to the named day; after it, the erasure completes and spares
+   what was made after the switch-on (decision 4).
+
    **Recommendation: (a).** The day members were told is the rule, and nobody depends on the hourly tick. Under (b),
    "switched on at 10:05 when the day began at 10:00" sometimes saves everything and sometimes saves nothing.
-4. **An instance-level switch: does each tenant get its own window?** **Recommendation: yes.** Each tenant gets a row
-   from the moment of the instance switch, and a tenant that was already off keeps its earlier day. Every member of
-   each tenant is mailed, and the text names the operator as the one who switched it and the only one who can switch it
-   back on. The Server Owner is told by the `whenOff` text of admin-web's confirmation and gets no per-tenant view.
-5. **Personal spaces too?** **Recommendation: yes.** A switch-off covers the whole tenant, a member's personal space
-   included. That is what the read-only switch already does, and what a tenant deletion erases after the same 30 days.
+4. **An instance-level switch: does each tenant get its own window?** **Answered 2026-10-25: yes**, a tenant already
+   off keeps its earlier day, and every member is mailed that only the operator can switch it on again (decisions 1
+   and 5).
+
+   **Recommendation: yes.** Each tenant gets a row from the moment of the instance switch, and a tenant that was already
+   off keeps its earlier day. Every member of each tenant is mailed, and the text names the operator as the one who
+   switched it and the only one who can switch it back on. The Server Owner is told by the `whenOff` text of admin-web's confirmation and gets no per-tenant view.
+5. **Personal spaces too?** **Answered 2026-10-25: yes** (decision 3).
+
+   **Recommendation: yes.** A switch-off covers the whole tenant, a member's personal space included. That is what the read-only switch already does, and what a tenant deletion erases after the same 30 days.
    The alternative, keeping personal-space content, leaves exactly the "kept for good" data #539 exists to end.
-6. **The legal texts, and what stays open.**
+6. **The legal texts, and what stays open.** **Answered 2026-10-25: as recommended.** The privacy notice gains the
+   storage-period line and its `mail` passage is corrected; the operator section stays; the three blockers below are
+   ADR 0093 § Legal basis, Still open 12 (i), 13 (ii) and 14 (iii), met while veyq is not offered as a service
+   (decision 7).
    - **Recommendation:** add the privacy notice line of decision 7 (GDPR Art. 13(2)(a): the storage period or its
      criteria) and correct its `mail` passage. Leave the operator section of the terms unchanged.
    - The following are named as **legal blockers**, under ADR 0093's treatment: taken as met while veyq is not offered
