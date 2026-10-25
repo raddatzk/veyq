@@ -31,6 +31,7 @@ export const LABELS = {
     remove: 'Remove', removeConfirm: 'Remove and rotate the key?',
     rekeying: 'The new lock is going in. Adding things here waits until it’s done.',
     notifications: 'Notifications',
+    accessEnded: 'You no longer have access to this space',
     // Settings → Capabilities, the tenant owner's register (src/web/src/i18n/index.ts `tenantCapabilities`, the catalog's title)
     capabilities: 'Capabilities', switchOff: 'Switch off', switchOn: 'Switch on', exchangeRates: 'Exchange rates',
     switchOffTitle: (title: string) => `Switch off “${title}”?`,
@@ -58,6 +59,7 @@ export const LABELS = {
       deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', paidBy: (n: string) => `paid by ${n}`,
       copyLoss: 'The history of each entry and the deleted entries: a copy starts every entry at its current version.',
       reviewTitle: 'The reported entry, every version',
+      whoAmI: 'You are', nobody: 'Not chosen', you: 'you',
       receipts: {
         title: 'Receipts', add: 'Add receipt', open: (n: string) => `Open ${n}`, close: (n: string) => `Close ${n}`,
         download: (n: string) => `Download ${n}`, remove: (n: string) => `Remove ${n}`, downloadOnly: 'Download',
@@ -87,6 +89,7 @@ export const LABELS = {
     remove: 'Entfernen', removeConfirm: 'Entfernen und Schlüssel rotieren?',
     rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.',
     notifications: 'Benachrichtigungen',
+    accessEnded: 'Du hast keinen Zugriff mehr auf diesen Bereich',
     capabilities: 'Funktionen', switchOff: 'Ausschalten', switchOn: 'Einschalten', exchangeRates: 'Wechselkurse',
     switchOffTitle: (title: string) => `„${title}“ ausschalten?`,
     pot: {
@@ -113,6 +116,7 @@ export const LABELS = {
       deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', paidBy: (n: string) => `bezahlt von ${n}`,
       copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
       reviewTitle: 'Der gemeldete Eintrag, jede Fassung',
+      whoAmI: 'Du bist', nobody: 'Nicht gewählt', you: 'du',
       receipts: {
         title: 'Belege', add: 'Beleg hinzufügen', open: (n: string) => `${n} öffnen`, close: (n: string) => `${n} schließen`,
         download: (n: string) => `${n} herunterladen`, remove: (n: string) => `${n} entfernen`, downloadOnly: 'Herunterladen',
