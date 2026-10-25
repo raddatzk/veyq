@@ -82,12 +82,18 @@ const titleRow = ref<HTMLElement | null>(null)
 const titleEl = ref<HTMLElement | null>(null)
 const actionsEl = ref<HTMLElement | null>(null)
 
+// The header's width the drawn layout was measured at (`data-layout-width`): until a measurement has run after a resize it
+// names the old width, so a reader — a browser spec choosing between a button and the ⋯ — can tell a settled header from one
+// whose ResizeObserver frame is still pending. Unset until the first measurement.
+const layoutWidth = ref<number | null>(null)
+
 const px = (v: string) => Number.parseFloat(v) || 0
 async function measure() {
   const head = header.value
   const row = titleRow.value
   const title = titleEl.value
   if (!head || !row || !title) return
+  const headerWidth = head.clientWidth
   const actions = actionsEl.value
   // One button stands for all (icon-only, one size); the ⋯ is the same kind of button, so it stands in where none is drawn.
   const button = actions?.querySelector<HTMLElement>('.veyq-node-header-action') ?? actions?.querySelector<HTMLElement>('.veyq-node-header-more') ?? null
@@ -104,7 +110,7 @@ async function measure() {
   const leadingWide = visual ? px(getComputedStyle(visual).getPropertyValue('--veyq-node-header-leading-wide')) : 0
   const layoutMore = parts.value.buttons.length > floor.value || parts.value.menuOnly.length > 0
   const layout = headerLayout({
-    headerWidth: head.clientWidth,
+    headerWidth,
     leadingWide,
     leadingGap: px(headStyle.columnGap),
     nameMin: px(headStyle.getPropertyValue('--veyq-node-header-name-min')),
@@ -120,13 +126,17 @@ async function measure() {
     compact.value = layout === 'compact'
     await nextTick()
   }
-  if (!actions) return
+  if (!actions) {
+    layoutWidth.value = headerWidth
+    return
+  }
   // Wide, the room is never less than the floor's (its buttons and the ⋯ beside them): a long name is shortened instead. A
   // pixel of slack on the name: `scrollWidth` rounds the text's width, and a button that overflows it would shorten the name.
   const floorItems = floor.value + (layoutMore ? 1 : 0)
   const floorWidth = floor.value * buttonWidth + (layoutMore ? moreWidth : 0) + Math.max(0, floorItems - 1) * gap
   const rowWidth = compact.value ? actions.clientWidth : Math.max(floorWidth, row.clientWidth - (title.scrollWidth + 1) - rowGap)
   measured.value = { rowWidth: Math.max(0, rowWidth), buttonWidth, gap, moreWidth }
+  layoutWidth.value = headerWidth // with the fit, so both reach the DOM in one patch
 }
 
 // Measured before the first paint (a mount runs before it), then again on every change of the header's or the name's size
@@ -157,7 +167,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!slots.leading, 'has-leading': hasLeading, 'is-compact': compact }">
+  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!slots.leading, 'has-leading': hasLeading, 'is-compact': compact }" :data-layout-width="layoutWidth ?? undefined">
     <div v-if="hasLeading" class="veyq-node-header-leading">
       <slot name="leading" :compact="compact"><VeyqIcon v-if="icon" :name="icon" class="veyq-node-header-icon" /></slot>
     </div>

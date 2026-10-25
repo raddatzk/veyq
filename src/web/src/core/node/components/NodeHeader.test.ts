@@ -242,6 +242,42 @@ describe('NodeHeader', () => {
       vi.unstubAllGlobals()
       expect(seen).toEqual([true, true, true, true])
     })
+
+    it('names the width its drawn layout belongs to: the old one until the resize\'s measurement has run', async () => {
+      // A browser spec picks a button or the ⋯ from the drawn layout; right after a resize that layout is the old width's
+      // until the ResizeObserver's frame has measured. `data-layout-width` is how it tells the two apart.
+      let resized: (() => void) | null = null
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: () => void) {
+          resized = cb
+        }
+        observe() {}
+        disconnect() {}
+      })
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+        cb(0)
+        return 0
+      })
+      layoutWidths(300)
+      const w = mountMemory('Rom 2026')
+      await flushPromises()
+      const head = () => w.find('.veyq-node-header')
+      expect(head().attributes('data-layout-width')).toBe('300')
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+
+      // The header is 900 px now, its observer's frame not yet run: still the 300 px layout, and it says so.
+      vi.restoreAllMocks()
+      layoutWidths(900)
+      await flushPromises()
+      expect(head().attributes('data-layout-width')).toBe('300')
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+
+      resized!()
+      await flushPromises()
+      vi.unstubAllGlobals()
+      expect(head().attributes('data-layout-width')).toBe('900')
+      expect(headerButtonIds(w)).toHaveLength(11)
+    })
   })
 
   it('core\'s own actions sit before or after the application\'s, gated like any other', () => {
