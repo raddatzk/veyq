@@ -78,10 +78,10 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
 
 ## Phases
 
-1. **Contracts.** Receipt completion and drop (member and guest twins), the receipts in the member and guest reads,
+1. **Contracts.** ✅ **Built 2026-10-25**, landed with phase 2 (§ Retrospective). Receipt completion and drop (member and guest twins), the receipts in the member and guest reads,
    the 10 MB cap, the re-key stage's receipt part (the ledger's stage operation gains it). **Done when:**
    `npm run generate:api` runs; the contracts guards green; `OperatorBlindProbeTest` classifies the new operations.
-2. **Backend.** Decisions 1–4; the fourth blob arm. **Done when:** `./gradlew check` green; slice tests: an 11 MB
+2. **Backend.** ✅ **Built 2026-10-25** (§ Retrospective). Decisions 1–4; the fourth blob arm. **Done when:** `./gradlew check` green; slice tests: an 11 MB
    receipt refused at its size (control: 10 MB lands); a session bound to another node or role refused (control: the
    right one lands); a dropped receipt and a deleted entry's receipts reclaimed after the retention and not before, a
    restored entry's kept (a short retention in the test profile); a guest's receipt counts against the link's limit and
@@ -110,4 +110,63 @@ None open.
 
 ## Retrospective
 
-_Filled by the implementer._
+**Entry condition, checked 2026-10-25 on `main` `e02db2d0`:** `changes/cr-expenses-ledger.md` is gone — the ledger has
+landed. The revision format lists `receipts` by receipt id (`contracts/expenses/entry.v1.schema.json`, `maxItems` 100).
+
+**Phases 1 and 2 (2026-10-25), one landing.** The contracts phase adds operations to the existing `expenses` and
+`share-expenses` tags, so `PotsResource` / `SharePotsResource` stop compiling without the backend (changes/README.md):
+both phases land together.
+
+- **The wire.** `listPotReceipts` / `completePotReceipt` (member) and `listSharePotReceipts` / `completeSharePotReceipt`
+  (guest) under `…/pots/{nodeId}/receipts`; `PotRevisionWrite.droppedReceipts` (optional) is the drop, on both append
+  twins; `PotRevision` / `SharePotRevision` gain `purgeAfter` on a tombstone (decision 6's read); `PotRekeyPage.receipts`
+  and `PotRekeyStage.receipts` (optional; `revisions` now `minItems: 0`, at least one value in all); the case listing
+  gains `receipts`. Every new request field is optional, so the web compiles unchanged until phase 3.
+- **The cap is the role's, in core.** `MemberBlobRoles.maxBytes(role)` (default none) is asked by core's
+  `BlobUploadHandler.admissibility` on every start, member and guest: Expenses caps `EXPENSES_RECEIPT` at 10 MiB of
+  plaintext = 10 486 880 sealed bytes (40 frames), `budget_exceeded` before any session or quota. A core change for an
+  application's need, but a seam core asks, never an application core names.
+- **A link's usage is every application's term summed** (`StorageQuota.linkUsage`): measured by the target's admission
+  alone, a folder link holding both a Memory and a Pot would have counted its limit once per application — the open
+  question the KDoc left for "the first second application". The target's admission still gates (fail closed). ADR 0073
+  § 4 says so.
+- **The purge reads the latest revision, it stores no tombstone stamp.** A receipt is due once the retention has passed
+  since its drop (`dropped_at`), since its entry's latest revision if that is a tombstone, or since its completion if its
+  entry never got a revision (an entry whose first revision never came — the completion accepts an entry with no revision
+  yet, so this is the only way such a row ever goes). A restore is a later non-tombstone revision, so it needs no write
+  to the receipts. `PotReceiptStore.purgeAfter` is the rule, served as each receipt's `purgeAfter` and judged by the
+  purge. One transaction per scope, the scope row first, then revisions → receipts → node rows → blob rows.
+- **A dropped receipt is never held again.** A revision cannot name it back; a client that wants it uploads it again.
+- **A receipt id and a record id share the reportable-item id space** (`PotReportableItems.locate` answers both), so a
+  completion refuses a record's id and an append of a new record a receipt's (`id_taken`).
+- **Bites** (a script that applies one sabotage, runs the named test, restores — 16, each red): the cap removed from
+  Expenses' roles, the cap check removed from core's start, the session's binding unchecked, a tombstone's restore
+  ignored, the cutoff ignored (in both of its layers, the candidates' query and the re-judging under the locks: either
+  alone still holds, so the single-layer sabotage stayed green), the link's receipts not counted, the guest write not recorded, an entry block not
+  reaching its receipts, the receipt arm left out of the share's blob arms (the guest's download and
+  `validate_blob_reference_arity.py`), a drop of another record's receipt, a receipt's wrap not required by the re-key,
+  the hold not pinning a receipt's blob, a purged Pot not freeing its receipts' blobs, the restore race's re-judging under
+  the locks, and the link usage summing the target's term only.
+- **Measured:** `./gradlew check` green (root 205, `:core` 1671, `:apps:memories` 442, `:apps:depot` 83,
+  `:apps:expenses` 31 tests); every quick `scripts/validate_*.py` 0 and `validate_guard_gaps.py --force` 0 (two guards
+  changed: the blob arity names four arms, the kernel-import rule names `EXPENSES_RECEIPT`); `npm run generate:api`
+  runs; `src/web` `npm run typecheck` 0 after one typed fixture gained `receipts: []`
+  (`features/expenses/rekey.test.ts`: `PotRekeyPage.receipts` is a required response field), its 216 Expenses tests green.
+- **Not run:** `scripts/run_backend_races_on_mariadb.py` (Docker; `PotReceiptRaceSliceTest` is new and runs there in the
+  V1 heavy stage).
+
+**For phase 3.** The member read is `GET /api/scopes/{s}/pots/{n}/receipts` (paged by `after` = the last receipt id,
+`limit`, `more`, `cursor`; a first page carries an `ETag` digest, `If-None-Match` → `304`); the guest's is the same under
+`/api/shares/{shareId}/pots/{n}/receipts` (no `writer`). Every receipt change moves the Pot's `ledgerRevision`, so the
+client re-reads receipts when its revision poll answers `200`. Upload: core's `startBlobUploads` (guest:
+`startShareBlobUploads` with `nodeId` = the Pot) with `role: EXPENSES_RECEIPT`, `ownerId` = the Pot's node id, the
+`K_blob` wrapped under the Pot's key bound to (blob, Pot, role), the file's type and name in `wrappedBlobMeta`; windows as
+usual; then `completePotReceipt {nodeEpoch, entryId, receiptId (client-minted), uploadId}` → `200 PotReceipt`. Errors:
+`400 budget_exceeded` (verify), `404 upload_not_found` / `node_not_found`, `409 id_taken` (receipt id taken, or the entry
+is another Pot's) / `stale_epoch` / `node_rekey_pending` (upload stays open), `422 upload_mismatch` /
+`capability_disabled`; the start answers `budget_exceeded` per item over 10 MiB. Download: core's
+`presignBlobDownloads` by `blobId` (a block: the item's `blocked_by_operator`), a guest's `resolveShareBlob` (a block:
+`451`). Remove: the entry's next revision lists the receipts it holds and names the dropped ones in `droppedReceipts`.
+Re-key: `listPotRekey` pages revisions first, then receipts (`{receiptId, wrappedBlobKey}`); stage them in
+`PotRekeyStage.receipts`; a receipt missed is `rekey_parts_missing`. Report: an entry's report share carries its receipts'
+`K_blob`s beside the `K_rev`s (the 32-key gap, ADR 0108 decision 6); a receipt is an `ITEM` by its receipt id.
