@@ -6,7 +6,7 @@ title: An application switched off is read-only
 # write handlers); the web's is the registry's applicationOf and MemberAccess.applicationsOff.
 acceptanceCriteria:
   - id: each-application-is-an-entry
-    text: "Every application the backend composes (memories and depot today) is an entry of the capability register of its own, switchable by the Server Owner for the instance and by a tenant owner for the tenant, with its title, purpose and whenOff text in EN and DE; its children are off with it, and off for the instance is off for every tenant."
+    text: "Every application the backend composes (memories, depot and expenses today) is an entry of the capability register of its own, switchable by the Server Owner for the instance and by a tenant owner for the tenant, with its title, purpose and whenOff text in EN and DE; its children are off with it, and off for the instance is off for every tenant."
     coverage:
       backend:
         unit: [CapabilityRegistryTest.anApplicationsOwnEntryIsAnAncestorOfItsChildrenAtBothLevels, CapabilityRegistryTest.theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords]
@@ -35,6 +35,16 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/blob/applicationOff.test.ts, src/core/blob/queue.test.ts, src/features/memories/components/OptimisticTile.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/views/LevelNewMenu.entries.test.ts, src/core/node/cover/rights.test.ts, src/core/export/copyActions.test.ts, src/core/applications/registry.test.ts, src/views/MemoryHomeView.golden.test.ts]
+  - id: expenses-off-is-read-only
+    text: "With expenses off, a Pot's append is refused 422 capability_disabled for a member and a link guest alike, while its revisions list on both paths and a member deletes it to the trash; a member's erasure of a participant (a removal) and a rotation's re-key still land; the Pot page offers no new Pot, no entry, no person and no setting, and opens with what it holds."
+    coverage:
+      backend:
+        integration: [PotSliceTest.offExpensesIsReadOnly_anAppendIsRefusedWhileTheListReadsAndThePotGoesToTheTrash, PotRekeySliceTest.aRekeyLandsWhileExpensesIsSwitchedOff, ApplicationSwitchSweepTest.everyWriteOfEveryApplicationIsGatedOrExemptWithAReason, ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen]
+      web:
+        unit: [src/features/expenses/rights.test.ts, src/features/expenses/register.test.ts, src/features/expenses/components/PotDetail.test.ts]
+    gaps:
+      - surface: backend
+        reason: "The erasure is exempt from the switch by the sweep's stated reason (a removal); no slice test erases a participant while Expenses is off."
   - id: on-again-nothing-lost
     text: "Switched on again, every write is accepted and nothing stored was lost."
     coverage:

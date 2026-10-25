@@ -13,8 +13,9 @@
 
 1. **Balances:** per participant, what they paid and received against their share of every expense and refund,
    transfers included ([docs/apps/expenses.md](../../../apps/expenses.md) § What the client computes). The viewer's
-   own row is marked *you* when they chose who they are.
-2. **Who am I:** the viewer picks their participant once; the choice stays on the device and is never sent.
+   own row is marked *you* when they chose who they are (not built yet, step 2).
+2. **Who am I:** the viewer picks their participant once; the choice stays on the device and is never sent. Not built
+   yet ([inbox #541](../../../inbox.md)): no client offers the choice, and no row is marked.
 3. **Settle up:** the suggested transfers that bring every balance to zero, computed greedily as the domain says — at
    most one fewer than there are people, the same on every device.
 4. **Record** (a writer): one suggested transfer, or all of them, is saved as transfer entries

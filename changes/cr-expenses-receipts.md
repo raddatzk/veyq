@@ -49,7 +49,17 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
    (ADR 0109 decision 3).
 4. **A report of an entry carries its receipts' `K_blob`s; a receipt is also an `ITEM` on its own** (ADR 0108 decision 6);
    the hold pins each receipt's blob.
-5. **Rendering through a shared viewer.** An image renders in the client; a PDF through Depot's page renderer, which
+5. **A content block reaches a receipt, and an entry's.** The ledger refuses nothing on a blocked entry: an entry has no
+   blob and its list carries no block mark (`cr-expenses-ledger` phase 2). A moderator's content block of a receipt, or
+   of the entry that holds it, answers `451 blocked_by_operator` for its bytes, member and guest alike, and the list
+   marks it, as Memories' media do (`ShareMediaWire.media`'s `blockedByOperator`); the web draws "Blocked by the
+   operator". A block of the Pot's node is inbox #542's, not this CR's.
+6. **Past the retention, no restore.** `uc.expenses.entry-history` E2 is built here, with the purge: a deleted entry
+   past `veyq.node.trash.retention` is no longer offered a restore, so the read carries when its receipts go (the
+   tombstone's time plus the retention, derived at the resource boundary as `content.openapi.yaml`'s purge time is), and
+   its criterion (`past-the-retention-a-line-without-receipts`, which `cr-expenses-ledger` left out of the coverage for
+   want of a test) comes back under that use-case beside its test.
+7. **Rendering through a shared viewer.** An image renders in the client; a PDF through Depot's page renderer, which
    this CR lifts from `features/depot/components/PdfPages.vue` into `shared/` (an application may not import another,
    and the reuse rule forbids a second renderer); anything else is a download.
 
@@ -75,14 +85,18 @@ files (`src/web/src/features/expenses/i18n.ts`, the editor).
    receipt refused at its size (control: 10 MB lands); a session bound to another node or role refused (control: the
    right one lands); a dropped receipt and a deleted entry's receipts reclaimed after the retention and not before, a
    restored entry's kept (a short retention in the test profile); a guest's receipt counts against the link's limit and
-   is recorded as a guest write. `validate_blob_reference_arity.py` names four arms and is bitten (remove the arm from
+   is recorded as a guest write; a blocked receipt's download is `451` for a member and a guest (control: unblocked, it
+   presigns). `validate_blob_reference_arity.py` names four arms and is bitten (remove the arm from
    `subtreeBlobIds` → red); `validate_guard_gaps.py --force` green.
-3. **Web.** Upload, list, open (decision 5, Depot's view unchanged), remove; guest uploads through core's guest
-   transport; the receipts in the download, the import and the copy; the report keys. Site: `expenses/record-an-expense`
+3. **Web.** Upload, list, open (decision 7, Depot's view unchanged), remove; guest uploads through core's guest
+   transport; the receipts in the download, the import and the copy; the report keys; a blocked receipt drawn as
+   blocked; no restore past the retention (decision 6). Site: `expenses/record-an-expense`
    gains receipts (EN+DE). **Done when:** `npm run check` and `site` `npm run check` green; a **browser pass** on the
    ledger CR's instance: a JPEG and a PDF render, a `.txt` receipt is only offered for download, a member and a guest
    each add one, a removed one leaves the entry, a rotation leaves every receipt opening, Depot's PDF view still renders.
-4. **Close.** `uc.expenses.attach-receipts`' coverage from `planned` to refs; ADR 0108 and docs/apps say what is built.
+4. **Close.** `uc.expenses.attach-receipts`' coverage from `planned` to refs, and `uc.expenses.entry-history`'s
+   `past-the-retention-a-line-without-receipts` back beside its test; the receipt half of `uc.expenses.create-pot`'s
+   `a-deleted-pot-goes-to-the-trash-whole` (its criterion gap); ADR 0108 and docs/apps say what is built.
    **Done when:** every `scripts/validate_*.py` exits `0` (`validate_guard_gaps.py --force` too).
 
 ## Definition of done

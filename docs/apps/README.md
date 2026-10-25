@@ -51,6 +51,13 @@ media tables. What is built and what is open: the ADR's Consequences.
   neither answers `capability_disabled` off nor is exempt with its reason); and on the web
   `registry.registerApplication` with its kinds and its rights function reading `access.applicationsOff`. Nothing
   names the kinds' application for `applicationOf` but the application itself: a kind left out is never switched.
+- **Wired in one step, on both sides.** An application's spec directory `contracts/api/<application>/` lands with its
+  Gradle module `:apps:<application>`: buildSrc's `SpecSets.requireNoStray` refuses a spec no module generates while
+  the build is configured, so `./gradlew check` runs no task at all (`./gradlew help` shows it at refine). On the web,
+  its `generate:api` line in `src/web/package.json`, its directory in `OWNERS`, its kinds in `KIND` and its i18n
+  namespace in `I18N_NAMESPACES` (`scripts/validate_web_core_imports_no_applications.py`, which derives every
+  application's client from that script) land together with a catalog for the namespace, or that guard is red
+  (cr-expenses-ledger).
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so Depot needed no new seal purpose
@@ -62,7 +69,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 |---|---|
 | [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`src/web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
-| [Expenses](expenses.md) | Refined, not built, on the V1 line (owner 2026-10-23): [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md). A Pot is a node kind; its entries are sealed revisions in its own table. |
+| [Expenses](expenses.md) | The ledger built, on the V1 line (owner 2026-10-23): [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`, depending on `:core` only), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link. Receipts and fetched rates are not built (`cr-expenses-receipts`, `cr-expenses-exchange-rates`). |
 | [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
 
 ## How an application publishes a revisioned list

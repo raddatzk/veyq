@@ -27,5 +27,19 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/export/copySubtree.test.ts, src/core/export/CopyNodesDialog.test.ts, src/features/depot/copy.wire.test.ts]
+  - id: a-pot-copies-its-live-entries
+    text: >-
+      A Pot is copied through its download and import hooks: a new Pot under a fresh key and new ids with its settings,
+      its people and each live entry at its current revision, the balances equal; the dialog names what does not come
+      along — each entry's history and the deleted entries.
+    coverage:
+      web:
+        unit: [src/features/expenses/exportImport.test.ts, src/features/expenses/register.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          No wire test copies a Pot through core's prepareCopy as depot/copy.wire.test.ts does a file; the refs hold the
+          hooks a copy runs (exportImport.test.ts, import under new ids, balances equal) and the declared loss
+          (register.test.ts). The copy in a browser is cr-expenses-ledger's open browser pass.
 gaps:
   backend: No backend change - a copy uses the node create and blob upload endpoints, whose slice tests stand.

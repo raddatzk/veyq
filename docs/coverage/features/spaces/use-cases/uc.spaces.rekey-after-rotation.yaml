@@ -25,6 +25,15 @@ acceptanceCriteria:
           - RekeyCoreSliceTest.aReKeyTouchesNoStoreObject
           - MediaNodeRekeySliceTest.aBlobWrapNotStagedRefusesTheWholeCommit
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
+  - id: pot-revisions-rewrapped-bodies-unchanged
+    text: A Pot's re-key re-wraps every revision's K_rev under the Pot's new key, page by page, and changes no body; the server refuses a staged part that names anything but a wrap and lands nothing of it, every body and its digest stay byte-identical, and a re-key lands while Expenses is switched off.
+    coverage:
+      backend:
+        integration:
+          - PotRekeySliceTest.theListingServesEveryRevisionsWrapInPages
+          - PotRekeySliceTest.aPartNamingABodyIsRefusedAndLandsNothing_theWrapsAloneLandAndNoBodyMoves
+          - PotRekeySliceTest.aRekeyLandsWhileExpensesIsSwitchedOff
+      web: { unit: [src/features/expenses/rekey.test.ts, src/features/expenses/domain/codec.test.ts, src/features/expenses/domain/heads.test.ts] }
   - id: writes-wait-per-node
     text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a re-keyed node takes writes at once.
     coverage:

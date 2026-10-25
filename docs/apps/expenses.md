@@ -1,9 +1,14 @@
 # Application: Expenses
 
-> **Refined, not built, on the V1 line** (owner 2026-10-23). Shared expense tracking in the shape of Splid, as the third application on the
-> platform. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what the operator sees — is
-> [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this page is the domain.
-> Its flows are the use-cases under [features/expenses](../features/expenses/_index.md), planned.
+> **The ledger is built, on the V1 line** (owner 2026-10-23; `changes/cr-expenses-ledger.md`, 2026-10-25, its browser
+> pass still open there). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots,
+> their people, entries with their history, the ledger check, balances, settle-up, overviews and the link are built, a rate
+> is typed. **Not built yet:** receipts (`changes/cr-expenses-receipts.md`), rates fetched by the device
+> (`changes/cr-expenses-exchange-rates.md`) and "Who am I" (inbox #541). Backend `:apps:expenses`
+> (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/`, the entry format `contracts/expenses/`, web
+> `src/web/src/features/expenses`. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what
+> the operator sees — is [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this
+> page is the domain. Its flows are the use-cases under [features/expenses](../features/expenses/_index.md).
 
 Expenses (*Ausgaben*) keeps **Pots** (*Kassen*): a trip, a shared flat, a club evening. People put in what they paid,
 and anyone in the Pot sees at any time who owes whom.
@@ -34,14 +39,18 @@ and anyone in the Pot sees at any time who owes whom.
   | `leisure` | Freizeit | Leisure |
   | `household` | Haushalt | Household |
   | `other` | Sonstiges | Other |
-- **Base currency**: chosen when the Pot is created, fixed from its first entry on, because every entry carries its
-  rate to it.
+- **Base currency**: chosen when the Pot is created, fixed from its first entry on (live or deleted), because every
+  entry carries its rate to it. It and the Pot's own categories are the `pot` object of the node's sealed meta,
+  [`contracts/expenses/pot-meta.v1.schema.json`](../../contracts/expenses/pot-meta.v1.schema.json), written by a member
+  whole with the revision it read. A Pot whose meta carries no readable `pot` shows no balance and takes no money entry
+  until a member sets a base currency: a client never guesses a currency.
 - **Who am I** is each viewer's own choice, kept on the device; it marks "you" in balances and never leaves the client.
+  Not built yet (inbox #541).
 
 ## Entries
 
 Every entry has a title, a date, a currency with its rate to the base currency, and any number of receipts (images or
-PDFs). Three kinds:
+PDFs; not built yet — the format lists them, empty until `cr-expenses-receipts`). Three kinds:
 
 | Kind | Who | Amounts | Category |
 |---|---|---|---|
@@ -71,7 +80,21 @@ compute alike:
 - An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
   first and allocated as one, so rounding never accumulates across items.
 - An entry that does not add up (payers' amounts beside the total, exact amounts beside it, line items above it) is
-  not saved; one that arrives anyway counts nowhere and is shown as invalid (owner 2026-10-24).
+  not saved; one that arrives anyway counts nowhere and is shown as invalid (owner 2026-10-24). So does an entry that
+  names someone who is no participant of the Pot: it has no place in the join order the rounding breaks ties by.
+
+**Reading a Pot.** Where the schema leaves a reader a choice, every client chooses alike:
+
+- A record counts by its **latest** revision. One whose latest revision does not open counts nowhere — never an earlier
+  one in its place, which would count what the server chose to serve.
+- The ledger check ([uc.expenses.verify-ledger](../features/expenses/use-cases/uc.expenses.verify-ledger.md)) marks a
+  named revision that is missing, swapped or does not open, and also a hole in a record's revisions `1..latest`, which the
+  named-head check misses once the revision naming the dropped one is dropped too.
+- A missing revision is covered only by a revision of the **same** record that opened to `kind: "erasure"`; the
+  server's own erasure flag is never read for it.
+- A writer refuses before sealing anything: a money entry that does not add up, two revisions of one record in a batch,
+  an erasure through the append, a participant whose `joined` moved, and a deactivation or an erasure while the
+  balance is not settled.
 
 **Editing and deleting** are open to everyone who may write (ADR 0108 decision 6). Each change keeps the earlier
 version: an entry shows that it was edited, and its history what changed and when — and, for a member, who (the
@@ -80,7 +103,8 @@ Pot's own list of deleted entries, restorable during the trash retention; after 
 entry stays a line in the history.
 
 **Exchange rates** fill in on their own where the instance allows it, and can always be typed (ADR 0108 decision 8).
-An entry keeps the rate it was saved with; a later rate never changes it.
+An entry keeps the rate it was saved with; a later rate never changes it. Built today: the typed rate; the fetch comes
+with `cr-expenses-exchange-rates`.
 
 ## What the client computes
 
@@ -114,7 +138,10 @@ stays inside the Pot (§ Entries).
 
 A Pot downloads ([ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md))
 as a JSON file of its participants and entries, which an import reads back, a CSV of the entries for a spreadsheet,
-and its receipts as files beside them. History is not exported; an import starts each entry at its current revision.
+and its receipts as files beside them. History is not exported; an import starts each entry at its current revision,
+under new ids, a batch of at most 256 records after another, each on what the one before wrote. A deleted person comes
+back as a deactivated one shown as "deleted people": its name is gone, and an erasure on import would need its balance
+settled first; a member can delete it again. A copy is the download and the import without the file.
 
 ## Out of the first cut
 

@@ -110,6 +110,17 @@ acceptanceCriteria:
         integration: [ReportNameSliceTest.aNameReportIsACaseOfItsOwnAndItsHoldIsTheNodesOneRow, ReportNameSliceTest.aGuestReportsAChildsNameButNotTheLinkRootsWhichIsTheLinks]
       web:
         unit: [src/core/report/reportKeys.test.ts, src/core/report/ReportDialog.test.ts, src/core/report/report.wire.test.ts]
+  - id: an-expenses-entry-is-reported-whole
+    text: >-
+      An Expenses entry is reported as an ITEM: the report share hands over its revisions' K_rev (each opening its own
+      revision and no other; past the codec's 32 keys per item, the newest 32 — inbox #540), and the hold copies every
+      revision row of the entry, which outlives a member's erasure of it; the moderator reviews the held revisions. An id
+      no Pot holds is no reportable item.
+    coverage:
+      backend:
+        integration: [PotModerationSliceTest.aReportedEntrysHoldCopiesEveryRevisionAndOutlivesTheErasure, PotModerationSliceTest.anIdNoPotHoldsIsNoReportableItem]
+      web:
+        unit: [src/features/expenses/report.test.ts, src/features/expenses/register.test.ts]
 gaps:
   crypto: >-
     The report bundle's layouts and seals are pinned by packages/crypto's src/report.test.ts and src/v1.conformance.test.ts

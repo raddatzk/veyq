@@ -1,18 +1,38 @@
 useCase: uc.expenses.share-pot
 feature: expenses
 title: Share a Pot through a link
-status: planned
-# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
-# each gap below into refs.
+# Built by changes/cr-expenses-ledger.md (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
+# erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
+# the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
 acceptanceCriteria:
   - id: read-and-read-write-never-write-only
     text: "A Pot is a share root for READ and READ_WRITE; the dialog offers no upload-only link and the server refuses one on an EXPENSES_POT."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aWriteOnlyLinkOnAPotIsRefused_aReadWriteOneIsCreated]
+      web:
+        unit: [src/features/expenses/register.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/features/expenses/rights.test.ts]
   - id: the-guest-sees-the-members-view
     text: "A guest's Pot is the member's view with what the role does not allow removed: entries, history, deleted entries, balances, settle-up and overviews, under the link's key chain."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestReadsNoWriter_aMemberReadsEachOne]
+      web:
+        unit: [src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/domain/potApi.wire.test.ts]
   - id: a-contributor-writes-like-a-member
     text: "A READ_WRITE guest adds, edits, deletes and restores entries and adds and renames participants; each write passes the link's gate and is recorded as a guest write."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestBatchRecordsOneGuestWritePerRevision_aStaleOneNone, PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly]
+      web:
+        unit: [src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/rights.test.ts]
   - id: what-stays-a-members
     text: "From a link the server refuses the Pot's meta write and the erasure, and a READ guest's every write; the page does not offer them."
-gaps:
-  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
-  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."
+    coverage:
+      backend:
+        integration: [PotSliceTest.aGuestErasesNothing_aMembersErasureRemovesTheRecordsEarlierRevisionsOnly, PotSliceTest.aGuestBatchRecordsOneGuestWritePerRevision_aStaleOneNone]
+      web:
+        unit: [src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/rights.test.ts]
+    gaps:
+      - surface: backend
+        reason: "A link has no node-meta write at all (the meta is written only on the member's scope path, core's updateNode), so no Expenses test refuses one; the refs hold the erasure and a READ guest's append."
