@@ -104,9 +104,14 @@ A guest's revision and receipt are guest writes like any other: behind `ShareGue
 `GuestWriteRecords`, and reportable with a hold copy
 ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)). A report of an entry
 reaches the whole entry — every revision's `K_rev` and every receipt's `K_blob` — and a receipt can also be reported
-on its own; both are an `ITEM` (owner 2026-10-23). **Known gap ([inbox #540](../inbox.md)):** the report codec carries at most 32
-keys per item and names no revision in a key, so an entry of more than 32 revisions is reported with its newest 32
-`K_rev`; the hold still copies every revision row. "The whole entry" holds up to 32 revisions until #540 decides.
+on its own; both are an `ITEM` (owner 2026-10-23). One report share carries up to 256 keys (`@veyq/crypto`'s
+`REPORT.maxKeysPerShare`, inbox #540), and an entry's share carries all of them: an entry with more revisions and
+receipts than that is not reported as an item at all — the dialog offers its Pot instead, a `NODE` whose key reaches
+every revision and receipt in it, as it offers the enclosing folder above 100 items (ADR 0093 § 1). So no report of an
+entry leaves part of it out; the hold copies every revision row either way. A moderator's content block of the Pot (or a
+node above it), or of one entry, refuses every revision of what it reaches but a tombstone, and every receipt for it,
+from a member and a guest alike (`451 blocked_by_operator`, inbox #542) — ADR 0093 § 6's "deleted, never replaced or
+restored": a tombstone is the record's deletion, and an erasure is a removal, so neither is refused.
 
 **7. Receipts are images or PDFs of at most 10 MB, any number per entry, in Expenses' own table.** Core's
 attachments hold one blob per named slot of a node (`ux_attachment_node_slot`), so a receipt is a row of Expenses'

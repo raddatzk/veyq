@@ -105,5 +105,5 @@ gaps:
     Lane L1's browser pass (`tests/e2e/tests/features/memory-banner.spec.ts`: an uploaded landscape image framed at a wide and a
     phone width with the tab row stuck under the top bar, a portrait photo fit then fill, a video uploaded equal to the
     gallery's as the banner with no play before the click, the same Memory through a READ link, the removal, the console
-    free of errors) is written with cr-memory-banner and cr-cover-banner-upload-only-and-dedup and not yet run: the lane's CI job awaits its
-    first run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.
+    free of errors) is green in local runs of the full lane (the V1 heavy stage); ADR 0040 admits `stack` refs only once
+    a CI run's log shows the suite executed (no remote yet).
