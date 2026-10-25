@@ -22,13 +22,13 @@ export const localePath = (lang: Lang, path = '') => (lang === defaultLang ? pat
 const en = {
   htmlTitle: 'veyq — share what matters, only with the people it belongs to',
   description:
-    'veyq is a self-hostable, end-to-end encrypted platform for what you share with your family, your friends or your club: photos and videos, documents and files, and more to come.',
+    'veyq is a self-hostable, end-to-end encrypted platform for what you share with your family, your friends or your club: photos and videos, documents and files, shared costs, and more to come.',
   nav: { apps: 'Applications', how: 'How it works', run: 'Run it yourself', docs: 'Documentation', main: 'Main', language: 'Language', skip: 'Skip to content' },
   hero: {
     eyebrow: ['End-to-end encrypted', 'Self-hostable', 'Free software'],
     title: 'Share what matters — only with the people it belongs to.',
     lead:
-      'veyq is a private, self-hostable platform for what you share with your family, your friends or your club: photos and videos in Memories, documents and files in Depot, and more to come. Everything is locked on your own device before it is sent, so the server that stores it cannot look inside.',
+      'veyq is a private, self-hostable platform for what you share with your family, your friends or your club: photos and videos in Memories, documents and files in Depot, shared costs in Expenses, and more to come. Everything is locked on your own device before it is sent, so the server that stores it cannot look inside.',
     primary: 'What veyq is',
     secondary: 'Run your own server',
     status: 'In development — there is no stable release yet.',
@@ -48,7 +48,7 @@ const en = {
     kicker: 'Applications',
     title: 'One platform, more than one application',
     lead:
-      'What you keep in a space comes from an application. Memories and Depot are the first two: they live side by side in the same folders, and each gets the same spaces, sharing and encryption from the platform.',
+      'What you keep in a space comes from an application. Memories, Depot and Expenses are the first three: they live side by side in the same folders, and each gets the same spaces, sharing and encryption from the platform.',
     more: 'All applications',
     items: [
       {
@@ -81,11 +81,26 @@ const en = {
         shot: 'depot',
         shotShows: 'A Depot folder in list view: each file with its size and when it changed',
       },
+      {
+        name: 'Expenses',
+        tag: 'Shared costs',
+        text: 'For the costs you share: a trip, a shared flat, a club evening.',
+        points: [
+          'Split equally, by shares, by exact amounts or by the items on the bill',
+          'Who owes whom, and a short list of transfers to settle up',
+          'Every change kept in the history, a deleted entry restorable',
+          'Friends follow and add entries through a link, without an account',
+        ],
+        link: 'expenses/',
+        linkLabel: 'Expenses in the guide',
+        shot: 'pot',
+        shotShows: 'A Pot on its Balances tab: who is owed, who owes, and the transfers that settle it',
+      },
     ],
     next: {
       tag: 'On the drawing board',
       name: 'More to come',
-      text: 'Because the platform already carries spaces, sharing, encryption and export, a new application only adds what is its own. Ideas being worked out: an inventory of the things you own, and the expenses you share.',
+      text: 'Because the platform already carries spaces, sharing, encryption and export, a new application only adds what is its own. An idea being worked out: an inventory of the things you own.',
     },
   },
   how: {
@@ -160,13 +175,13 @@ export type Strings = typeof en;
 const de: Strings = {
   htmlTitle: 'veyq — teile, was zählt, nur mit den Menschen, zu denen es gehört',
   description:
-    'veyq ist eine selbst betreibbare, Ende-zu-Ende-verschlüsselte Plattform für das, was du mit deiner Familie, deinen Freundinnen und Freunden oder deinem Verein teilst: Fotos und Videos, Dokumente und Dateien, und mehr kommt dazu.',
+    'veyq ist eine selbst betreibbare, Ende-zu-Ende-verschlüsselte Plattform für das, was du mit deiner Familie, deinen Freundinnen und Freunden oder deinem Verein teilst: Fotos und Videos, Dokumente und Dateien, gemeinsame Kosten, und mehr kommt dazu.',
   nav: { apps: 'Anwendungen', how: 'So funktioniert’s', run: 'Selbst betreiben', docs: 'Dokumentation', main: 'Hauptnavigation', language: 'Sprache', skip: 'Zum Inhalt' },
   hero: {
     eyebrow: ['Ende-zu-Ende-verschlüsselt', 'Selbst betreibbar', 'Freie Software'],
     title: 'Teile, was zählt — nur mit den Menschen, zu denen es gehört.',
     lead:
-      'veyq ist eine private, selbst betreibbare Plattform für das, was du mit deiner Familie, deinen Freundinnen und Freunden oder deinem Verein teilst: Fotos und Videos in Erinnerungen, Dokumente und Dateien im Depot, und mehr kommt dazu. Alles wird auf deinem eigenen Gerät verschlossen, bevor es verschickt wird. Der Server, der es speichert, kann deshalb nicht hineinsehen.',
+      'veyq ist eine private, selbst betreibbare Plattform für das, was du mit deiner Familie, deinen Freundinnen und Freunden oder deinem Verein teilst: Fotos und Videos in Erinnerungen, Dokumente und Dateien im Depot, gemeinsame Kosten in Ausgaben, und mehr kommt dazu. Alles wird auf deinem eigenen Gerät verschlossen, bevor es verschickt wird. Der Server, der es speichert, kann deshalb nicht hineinsehen.',
     primary: 'Was veyq ist',
     secondary: 'Eigenen Server betreiben',
     status: 'In Entwicklung — es gibt noch kein stabiles Release.',
@@ -186,7 +201,7 @@ const de: Strings = {
     kicker: 'Anwendungen',
     title: 'Eine Plattform, mehr als eine Anwendung',
     lead:
-      'Was du in einem Bereich aufbewahrst, kommt aus einer Anwendung. Erinnerungen und Depot sind die ersten beiden: Sie liegen nebeneinander in denselben Ordnern, und jede bekommt dieselben Bereiche, dasselbe Teilen und dieselbe Verschlüsselung von der Plattform.',
+      'Was du in einem Bereich aufbewahrst, kommt aus einer Anwendung. Erinnerungen, Depot und Ausgaben sind die ersten drei: Sie liegen nebeneinander in denselben Ordnern, und jede bekommt dieselben Bereiche, dasselbe Teilen und dieselbe Verschlüsselung von der Plattform.',
     more: 'Alle Anwendungen',
     items: [
       {
@@ -219,11 +234,26 @@ const de: Strings = {
         shot: 'depot',
         shotShows: 'Ein Depot-Ordner als Liste: jede Datei mit Größe und letzter Änderung',
       },
+      {
+        name: 'Ausgaben',
+        tag: 'Gemeinsame Kosten',
+        text: 'Für die Kosten, die ihr euch teilt: eine Reise, eine WG, ein Vereinsabend.',
+        points: [
+          'Gleich, nach Anteilen, nach genauen Beträgen oder nach den Posten der Rechnung aufteilen',
+          'Wer wem etwas schuldet, und eine kurze Liste von Überweisungen zum Ausgleichen',
+          'Jede Änderung bleibt im Verlauf, ein gelöschter Eintrag lässt sich wiederherstellen',
+          'Freundinnen und Freunde sehen und ergänzen Einträge über einen Link, ohne Konto',
+        ],
+        link: 'expenses/',
+        linkLabel: 'Ausgaben in der Anleitung',
+        shot: 'pot',
+        shotShows: 'Eine Kasse im Reiter Salden: wem etwas zusteht, wer etwas schuldet und die Überweisungen, die es ausgleichen',
+      },
     ],
     next: {
       tag: 'In Arbeit',
       name: 'Mehr kommt dazu',
-      text: 'Weil die Plattform Bereiche, Teilen, Verschlüsselung und Export schon mitbringt, fügt eine neue Anwendung nur hinzu, was ihr eigenes ist. Ideen, die gerade ausgearbeitet werden: ein Inventar der Dinge, die dir gehören, und Ausgaben, die ihr euch teilt.',
+      text: 'Weil die Plattform Bereiche, Teilen, Verschlüsselung und Export schon mitbringt, fügt eine neue Anwendung nur hinzu, was ihr eigenes ist. Eine Idee, die gerade ausgearbeitet wird: ein Inventar der Dinge, die dir gehören.',
     },
   },
   how: {
