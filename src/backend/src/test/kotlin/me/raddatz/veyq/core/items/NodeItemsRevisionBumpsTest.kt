@@ -33,14 +33,16 @@ class NodeItemsRevisionBumpsTest {
 
     private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
-    /** Rows of a list: a Memory's gallery, a Pot's revisions (cr-expenses-ledger). */
+    /** Rows of a list: a Memory's gallery, a Pot's revisions (cr-expenses-ledger) and its receipts (cr-expenses-receipts). */
     private val writes = Regex(
         """MediaEntity\(\)|MediaEntity\.(update|delete|deleteById)\(|\.deletedAt = |\.bucketId = |""" +
-            """PotRevisionEntity\(\)|PotRevisionEntity\.(update|delete|deleteById)\(""",
+            """PotRevisionEntity\(\)|PotRevisionEntity\.(update|delete|deleteById)\(|""" +
+            """PotReceiptEntity\(\)|PotReceiptEntity\.(update|delete|deleteById)\(|\.droppedAt = """,
     )
 
     private val store = "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaStore.kt"
     private val potStore = "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotRevisionStore.kt"
+    private val receiptStore = "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/receipt/PotReceiptStore.kt"
 
     /** The application modules whose item rows the scan reads. */
     private val listModules = listOf("apps/memories/", "apps/expenses/")
@@ -51,6 +53,8 @@ class NodeItemsRevisionBumpsTest {
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaShareGuestWrites.kt" to setOf("deleteOwn"),
         potStore to setOf("append", "erase"),
         "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/ExpensesErasures.kt" to setOf("reapplyRecord"),
+        receiptStore to setOf("attach"),
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/receipt/PotReceiptPurge.kt" to setOf("purgeIn"),
     )
 
     /** Public functions of a bumping file that write media rows and bump nothing, and why. */
@@ -63,8 +67,8 @@ class NodeItemsRevisionBumpsTest {
     /** Writers that move no revision on their own, and why. */
     private val exempt = mapOf(
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt" to "erases the scope's media with the scope (and its counters, in core's node eraser)",
-        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotScopeEraser.kt" to "erases the scope's Pot revisions with the scope (and its counters, in core's node eraser)",
-        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotNodeSubtreeEraser.kt" to "erases a purged Pot's revisions: the Pot is in the trash, so no open list watches it, and its counters go with it (core's phase 300)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotScopeEraser.kt" to "erases the scope's Pot revisions and receipts with the scope (and its counters, in core's node eraser)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotNodeSubtreeEraser.kt" to "erases a purged Pot's revisions and receipts: the Pot is in the trash, so no open list watches it, and its counters go with it (core's phase 300)",
     )
 
     /** The only files that may name the counters' entity: core's items package, and the scope eraser that deletes by node. */
@@ -117,7 +121,7 @@ class NodeItemsRevisionBumpsTest {
     fun theScanSeesWhatItClaimsToGuard() {
         val sources = mainSources()
         for (file in bumping.keys + exempt.keys + counterWriters) assertTrue(file in sources, "$file is not a main source any more - update this test")
-        for (file in listOf(store, potStore)) {
+        for (file in listOf(store, potStore, receiptStore)) {
             assertTrue(writes.containsMatchIn(root.resolve(file).readText()), "$file matches no write marker - has the marker list gone stale?")
         }
     }

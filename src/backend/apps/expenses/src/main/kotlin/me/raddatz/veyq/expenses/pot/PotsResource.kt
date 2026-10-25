@@ -22,6 +22,16 @@ import me.raddatz.veyq.expenses.generated.model.PotRevisionRef
 import me.raddatz.veyq.expenses.generated.model.PotRevisionWrite
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.expenses.generated.model.PotReceiptCompleteRequest
+import me.raddatz.veyq.expenses.generated.model.PotReceiptPage
+import me.raddatz.veyq.expenses.generated.model.PotRekeyReceiptWrap
+import me.raddatz.veyq.expenses.receipt.CompleteReceiptOutcome
+import me.raddatz.veyq.expenses.receipt.ListReceiptsOutcome
+import me.raddatz.veyq.expenses.receipt.ReceiptWire
+import me.raddatz.veyq.expenses.receipt.ReceiptsHandler
+import java.time.Duration
+import java.time.OffsetDateTime
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
@@ -41,8 +51,13 @@ import java.util.UUID
 class PotsResource(
     private val handler: PotsHandler,
     private val rekey: PotRekeyHandler,
+    private val receipts: ReceiptsHandler,
     private val identity: SecurityIdentity,
+    config: VeyqConfig,
 ) : ExpensesApi {
+
+    /** The trash retention a tombstone's `purgeAfter` is derived from (decision 6), never stored. */
+    private val retention: Duration = config.node().trash().retention()
 
     override fun listPotRevisions(scopeId: UUID, nodeId: UUID, ifNoneMatch: String?, since: String?, sinceDelete: Int?, limit: Int?): Response =
         when (
@@ -53,7 +68,7 @@ class PotsResource(
         ) {
             is PotListOutcome.Page -> Response.ok(
                 PotRevisionPage(
-                    revisions = o.revisions.map(::toMember),
+                    revisions = o.revisions.map { toMember(it, retention) },
                     more = o.more,
                     ledgerRevision = o.ledgerRevision,
                     deleteRevision = o.deleteRevision,
@@ -80,18 +95,37 @@ class PotsResource(
         return respond(handler.erase(identity.principal.name, scopeId.toString(), nodeId.toString(), r.nodeEpoch.validated(), write))
     }
 
+    override fun listPotReceipts(scopeId: UUID, nodeId: UUID, after: UUID?, limit: Int?, ifNoneMatch: String?): Response =
+        when (val o = receipts.list(identity.principal.name, scopeId.toString(), nodeId.toString())) {
+            is ListReceiptsOutcome.Listed -> ReceiptWire.respond(o.receipts.map(ReceiptWire::member), { it.receiptId }, after, limit, ifNoneMatch) { page, more, cursor ->
+                PotReceiptPage(receipts = page, more = more, cursor = cursor)
+            }
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun completePotReceipt(scopeId: UUID, nodeId: UUID, potReceiptCompleteRequest: PotReceiptCompleteRequest): Response {
+        val r = potReceiptCompleteRequest
+        return when (
+            val o = receipts.complete(
+                identity.principal.name, scopeId.toString(), nodeId.toString(), r.entryId.toString(), r.receiptId.toString(),
+                r.uploadId.toString(), r.nodeEpoch.validated(),
+            )
+        ) {
+            is CompleteReceiptOutcome.Ok -> Response.ok(ReceiptWire.member(o.receipt)).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
     override fun listPotRekey(scopeId: UUID, nodeId: UUID, since: String?, limit: Int?): Response =
         when (
-            val o = rekey.list(
-                identity.principal.name, scopeId.toString(), nodeId.toString(),
-                ItemsCursor.parse(since)?.let { RevisionRef.parse(it.id) }, ItemsPage.limitOf(limit),
-            )
+            val o = rekey.list(identity.principal.name, scopeId.toString(), nodeId.toString(), ItemsCursor.parse(since), ItemsPage.limitOf(limit))
         ) {
             is PotRekeyListOutcome.Page -> Response.ok(
                 PotRekeyPage(
-                    revisions = o.revisions.items.map { PotRekeyWrap(UUID.fromString(it.entryId), it.revision, it.wrappedRevisionKey) },
-                    more = o.revisions.more,
-                    cursor = o.revisions.cursor?.wire(),
+                    revisions = o.revisions.map { PotRekeyWrap(UUID.fromString(it.entryId), it.revision, it.wrappedRevisionKey) },
+                    receipts = o.receipts.map { (r, blob) -> PotRekeyReceiptWrap(UUID.fromString(r.id), blob.wrappedBlobKey) },
+                    more = o.more,
+                    cursor = o.cursor?.wire(),
                 ),
             ).build()
             is PotRekeyListOutcome.Refused -> httpError(o.failure)
@@ -99,10 +133,17 @@ class PotsResource(
 
     override fun stagePotRekey(scopeId: UUID, nodeId: UUID, rekeyId: UUID, potRekeyStage: PotRekeyStage): Response {
         val wraps = potRekeyStage.revisions.associate { RevisionRef(it.entryId.toString(), it.revision) to it.wrappedRevisionKey }
-        if (wraps.size != potRekeyStage.revisions.size) return httpError(RekeyOutcome.InvalidRequest) // one value per revision
+        val receiptWraps = potRekeyStage.receipts.orEmpty().associate { it.receiptId.toString() to it.wrappedBlobKey }
+        // One value per revision and per receipt, and at least one value (the contract's rule beside its bounds).
+        if (wraps.size != potRekeyStage.revisions.size || receiptWraps.size != potRekeyStage.receipts.orEmpty().size ||
+            wraps.isEmpty() && receiptWraps.isEmpty()
+        ) {
+            return httpError(RekeyOutcome.InvalidRequest)
+        }
         return when (
             val o = rekey.stage(
-                identity.principal.name, scopeId.toString(), nodeId.toString(), rekeyId.toString(), potRekeyStage.fromEpoch.validated(), wraps,
+                identity.principal.name, scopeId.toString(), nodeId.toString(), rekeyId.toString(), potRekeyStage.fromEpoch.validated(),
+                wraps, receiptWraps,
             )
         ) {
             RekeyOutcome.Staged -> Response.noContent().build()
@@ -112,8 +153,14 @@ class PotsResource(
     }
 
     companion object {
-        fun toWrite(w: PotRevisionWrite) =
-            RevisionWrite(w.entryId.toString(), w.revision, w.tombstone.validated(), w.sealedBody, w.wrappedRevisionKey)
+        fun toWrite(w: PotRevisionWrite) = RevisionWrite(
+            w.entryId.toString(), w.revision, w.tombstone.validated(), w.sealedBody, w.wrappedRevisionKey,
+            w.droppedReceipts.orEmpty().map { it.toString() },
+        )
+
+        /** A tombstone's `purgeAfter` (decision 6): its time plus the trash retention, derived here and never stored. */
+        fun purgeAfterOf(r: PotRevisionEntity, retention: Duration): OffsetDateTime? =
+            if (r.tombstone) r.createdAt.plus(retention).atOffset(ZoneOffset.UTC) else null
 
         fun toRef(r: RevisionRef) = PotRevisionRef(UUID.fromString(r.entryId), r.revision)
 
@@ -126,7 +173,7 @@ class PotsResource(
         }
 
         /** The member's shape: the guest's ([SharePotsResource]) is its own and has no writer (inbox #190). */
-        private fun toMember(r: PotRevisionEntity) = PotRevision(
+        private fun toMember(r: PotRevisionEntity, retention: Duration) = PotRevision(
             entryId = UUID.fromString(r.entryId),
             revision = r.revision,
             tombstone = r.tombstone,
@@ -135,6 +182,7 @@ class PotsResource(
             wrappedRevisionKey = r.wrappedRevisionKey,
             writer = r.writer.format(),
             createdAt = r.createdAt.atOffset(ZoneOffset.UTC),
+            purgeAfter = purgeAfterOf(r, retention),
         )
     }
 }

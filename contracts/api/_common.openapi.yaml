@@ -810,7 +810,10 @@ components:
         a role no application declares (`400 invalid_request`), a guest's one the target node's application does not
         take from a guest (`400 invalid_request`, before the link's upload budget is spent; Memories: a medium's
         roles only, never COVER, BANNER or BANNER_POSTER), and Memories' completion attaches only the role it asks
-        for.
+        for. Expenses' is EXPENSES_RECEIPT (a receipt kept with an entry, member and `READ_WRITE` guest alike), which
+        carries a cap of its own: at most 10 MiB of plaintext, so a start over 10 486 880 sealed bytes is
+        `budget_exceeded` — an application caps a role by its size, which the server sees, never by its type, which is
+        sealed.
       example: ORIGINAL
 
     SharedBlob:

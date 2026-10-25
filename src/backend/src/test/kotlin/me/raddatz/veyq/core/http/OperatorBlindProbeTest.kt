@@ -194,6 +194,13 @@ class OperatorBlindProbeTest {
             )
         },
         "listPotRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/rekey") },
+        "listPotReceipts" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/receipts") },
+        "completePotReceipt" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/receipts",
+                """{"nodeEpoch":0,"entryId":"${UUID.randomUUID()}","receiptId":"${UUID.randomUUID()}","uploadId":"${s.uploadId}"}""",
+            )
+        },
         "stagePotRekey" to Probe(Address.SCOPE) { s ->
             Call(
                 "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/rekey/${UUID.randomUUID()}",
@@ -311,7 +318,7 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
-            "listSharePotRevisions", "appendSharePotRevisions",
+            "listSharePotRevisions", "appendSharePotRevisions", "listSharePotReceipts", "completeSharePotReceipt",
             "reportInShare", "getShareOrderNotice",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )

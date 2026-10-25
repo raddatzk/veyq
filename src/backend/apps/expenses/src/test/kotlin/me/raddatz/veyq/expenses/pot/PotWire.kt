@@ -20,8 +20,13 @@ object PotWire {
         val tombstone: Boolean = false,
         val body: String = body(),
         val wrap: String = WRAP,
+        /** The receipts of the record this revision drops (`droppedReceipts`); none is left out of the body. */
+        val drops: List<String> = emptyList(),
     ) {
-        fun json() = """{"entryId":"$entryId","revision":$revision,"tombstone":$tombstone,"sealedBody":"$body","wrappedRevisionKey":"$wrap"}"""
+        fun json(): String {
+            val dropped = if (drops.isEmpty()) "" else ""","droppedReceipts":[${drops.joinToString(",") { "\"$it\"" }}]"""
+            return """{"entryId":"$entryId","revision":$revision,"tombstone":$tombstone,"sealedBody":"$body","wrappedRevisionKey":"$wrap"$dropped}"""
+        }
     }
 
     fun append(userId: String, scopeId: String, potId: String, revs: List<Rev>, nodeEpoch: Int = 0): ValidatableResponse =

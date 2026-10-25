@@ -251,7 +251,10 @@ class ModuleCompositionTest {
      */
     @Test
     fun theUploadSeamsOfEveryApplicationPartitionTheKinds() {
-        val owners = mapOf("MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.depot.")
+        val owners = mapOf(
+            "MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.depot.",
+            "EXPENSES_POT" to "me.raddatz.veyq.expenses.", // its receipts (cr-expenses-receipts)
+        )
         for ((kind, owner) in owners) {
             val accepting = completions.filter { it.accepts(kind) }.map(::beanClass)
             assertEquals(1, accepting.size, "an upload into a $kind must have exactly one completion: $accepting")
@@ -298,14 +301,14 @@ class ModuleCompositionTest {
 
     /**
      * Inbox #366: a member's start takes every role an application declares — Memories' five (a medium's three and a
-     * Memory's banner and poster), core's cover and Depot's one, which only
+     * Memory's banner and poster), core's cover, Depot's one and Expenses' receipt, which only
      * this composition holds together — and refuses a well-formed token none declares, whole and before any session.
      */
     @Test
     fun aMemberStartTakesTheRolesTheApplicationsDeclare() {
         val declared = memberRoles.flatMap { it.roles() }.toSet()
         assertEquals(
-            setOf("ORIGINAL", "THUMBNAIL", "PREVIEW", "BANNER", "BANNER_POSTER", "COVER", "FILE_CONTENT"), declared,
+            setOf("ORIGINAL", "THUMBNAIL", "PREVIEW", "BANNER", "BANNER_POSTER", "COVER", "FILE_CONTENT", "EXPENSES_RECEIPT"), declared,
             "the roles the applications declare",
         )
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)

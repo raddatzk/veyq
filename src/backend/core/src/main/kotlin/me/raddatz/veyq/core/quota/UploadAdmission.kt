@@ -7,9 +7,11 @@ package me.raddatz.veyq.core.quota
  * sizes with the tenant's `shareLinkLimitBytes` ([StorageQuota.linkFits]). An application whose guest uploads all
  * become attachments still implements this for its kinds and reports 0: core's terms never admit a link alone.
  *
- * Dispatched by the kind of the start's target node (the share root, or a node below it the guest named — ADR 0080
+ * Gated by the kind of the start's target node (the share root, or a node below it the guest named — ADR 0080
  * decision 6), like `ShareGuestWrites` ([supports]); **exactly one** implementation
- * must measure a kind, or the link start is refused (`share_not_contributable`). Absence fails closed on purpose: an
+ * must measure a kind, or the link start is refused (`share_not_contributable`). The usage itself is every
+ * implementation's [linkBlobUsage] summed, whatever the target (`StorageQuota.linkUsage`): a folder link's guests upload
+ * into several applications' kinds, and each term counts only its own rows. Absence fails closed on purpose: an
  * application whose implementation went missing — an unindexed module, a dropped bean — would otherwise have its links
  * count nothing and admit everything. `UploadAdmissionPartitionSliceTest` pins the partition.
  */

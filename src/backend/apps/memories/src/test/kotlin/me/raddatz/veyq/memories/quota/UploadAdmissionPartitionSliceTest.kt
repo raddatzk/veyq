@@ -70,6 +70,27 @@ class UploadAdmissionPartitionSliceTest {
         assertNull(linkUsage(mutableListOf(), shareId))
     }
 
+    /**
+     * The measure is every application's term summed, the target's admission only the gate (cr-expenses-receipts, ADR
+     * 0073 § 4): a folder link's guests upload into a Memory and into another application's kind alike, and a start into
+     * the Memory counts what the link holds in the other one too — else the link would hold its limit once per
+     * application. Control: the same other kind's term is not counted twice when the start is into its own kind.
+     */
+    @Test
+    fun aLinksUsageSumsEveryApplicationsTermWhateverTheTarget() {
+        val (_, shareId) = link()
+        val other = Holding("OTHER_KIND", 1234)
+        val list = (admissions + other).toMutableList()
+        assertEquals(1234L, linkUsage(list, shareId), "a Memory start counts the other application's blobs of the link")
+        assertEquals(1234L, QuarkusTransaction.requiringNew().call { quota(list).linkUsage(shareId, "OTHER_KIND") }, "once, into its own kind")
+    }
+
+    /** Measures [kind] and holds [bytes] of the link — another application's term. */
+    private class Holding(private val kind: String, private val bytes: Long) : UploadAdmission {
+        override fun supports(nodeKind: String): Boolean = nodeKind == kind
+        override fun linkBlobUsage(shareId: String): Long = bytes
+    }
+
     private fun quota(list: MutableList<UploadAdmission>) = StorageQuota(em, usage, list)
 
     private fun fits(list: MutableList<UploadAdmission>, tenantId: String, shareId: String): Boolean =
