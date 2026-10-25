@@ -237,7 +237,8 @@ components:
             `expenses.exchange-rates`; the catalog's `source`), and only while it is active: the address the Server
             Owner configured, which the browser calls directly (ADR 0088 decision 7). The tiles' URL is a `{z}/{x}/{y}`
             template, the geocoder's a Nominatim-compatible base, the breach check's the range API's prefix, the
-            exchange rates' a `{date}` template of a whole day's table in Frankfurter's v2 shape (ADR 0108 decision 8).
+            exchange rates' a `{date}` template of a whole day's table of the ECB's euro reference rates in Frankfurter's v2
+            shape (ADR 0108 decision 8).
             The served CSP names its origin.
           maxLength: 512
           example: https://tile.openstreetmap.org/{z}/{x}/{y}.png

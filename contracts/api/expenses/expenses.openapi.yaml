@@ -1286,6 +1286,19 @@ components:
           maxLength: 64
           description: "`<entryId>,<revision>` of this page's last revision; null when the page carries none."
           example: "5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c,2"
+        exchangeRateService:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          maxLength: 512
+          description: >
+            The address of the day's exchange-rate table (`expenses.exchange-rates`, ADR 0108 decision 8) — the `{date}`
+            template the Server Owner configured, as a member's capability entry carries it in `serviceUrl` — set exactly
+            while that entry is active for the tenant this Pot lives in: configured, on at the instance level and at the
+            tenant's, under Expenses on at both. Null otherwise. A guest's client holds only the instance's manifest, never
+            the tenant's set, so this is how a guest's device learns whether it may fetch the table at all: it fetches only
+            while this is set, and the privacy notice on the tenant's host names the fetch exactly then. Part of what the
+            `ETag` digests, so a switch flipped reaches a polling guest.
+          example: https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}
 
     CasePotRevision:
       type: object

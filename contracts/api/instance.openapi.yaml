@@ -802,7 +802,7 @@ paths:
         the day's exchange rates (`expenses.exchange-rates`), each keyed by its register entry. A service with no
         `url` is not configured: its entry is not active and the served CSP leaves its origin out, which is how an
         instance without internet runs. A new instance starts with the defaults (OpenStreetMap tiles, Nominatim, the
-        HIBP range API, Frankfurter's day table). Server-Owner only.
+        HIBP range API, Frankfurter's table of the ECB's euro reference rates). Server-Owner only.
       security:
         - bearerAuth: []
       responses:
