@@ -1,7 +1,7 @@
 // uc.admin.tenant-switch-capabilities (web) — the tenant owner's register as a tree: the state is the server's
 // `effective`/`serverOff`, and "off through" names the nearest ancestor the TENANT switched off.
 import { describe, it, expect } from 'vitest'
-import { hasDescendants, inLocale, tenantCapabilityTree, type TenantCapabilitySwitch } from './tenantCapabilities'
+import { erasureNote, hasDescendants, inLocale, tenantCapabilityTree, type TenantCapabilitySwitch } from './tenantCapabilities'
 
 const text = { en: 'x', de: 'y' }
 function entry(id: string, over: Partial<TenantCapabilitySwitch> = {}): TenantCapabilitySwitch {
@@ -38,5 +38,34 @@ describe('tenantCapabilityTree', () => {
     expect(hasDescendants('core.group-space', all)).toBe(false)
     expect(inLocale({ en: 'Groups', de: 'Gruppen' }, 'de')).toBe('Gruppen')
     expect(inLocale({ en: 'Groups', de: 'Gruppen' }, 'fr')).toBe('Groups')
+  })
+})
+
+// uc.platform.erase-switched-off-application (web): the owner's row names the day only where it is true — a switch-on
+// here cancels it before the day, only the operator's can while the instance holds it off, and none can after it.
+describe('erasureNote', () => {
+  const now = new Date('2026-11-01T12:00:00Z')
+  const day = new Date('2026-11-25T10:00:00Z')
+
+  it('names the day the tenant owner can still cancel, and none for an entry without one', () => {
+    expect(erasureNote(entry('depot', { off: true, effective: false, erasureDueAt: day }), now)).toEqual({ kind: 'day', day })
+    expect(erasureNote(entry('depot', { off: true, effective: false }), now)).toBeNull() // control: no day served, none shown
+  })
+
+  it('names the operator as the one who can cancel while the instance holds it off, the tenant\'s own switch off too', () => {
+    expect(erasureNote(entry('depot', { serverOff: true, effective: false, erasureDueAt: day }), now)).toEqual({ kind: 'byServer', day })
+    expect(erasureNote(entry('depot', { off: true, serverOff: true, effective: false, erasureDueAt: day }), now))
+      .toEqual({ kind: 'byServer', day })
+  })
+
+  it('promises no cancel once the day has come, switched on again or not', () => {
+    const past = new Date('2026-10-31T10:00:00Z')
+    expect(erasureNote(entry('depot', { off: true, effective: false, erasureDueAt: past }), now)).toEqual({ kind: 'running', day: past })
+    // Switched on after the day: the server keeps the row until the erasure finished; what existed still goes.
+    expect(erasureNote(entry('depot', { effective: true, erasureDueAt: past }), now)).toEqual({ kind: 'running', day: past })
+  })
+
+  it('names no coming day for an entry in effect', () => {
+    expect(erasureNote(entry('depot', { effective: true, erasureDueAt: day }), now)).toBeNull()
   })
 })

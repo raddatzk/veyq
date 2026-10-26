@@ -123,6 +123,17 @@ const TREE: TreeNode[] = [
   nodeOf('Rome', FOLDER_KIND, 'Trips', 1),
 ]
 
+async function mountHome(hash: string) {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
+  await router.replace({ name: 'home', hash })
+  await router.isReady()
+  const w = mount(MemoryHomeView, {
+    global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } },
+  })
+  await flushPromises()
+  return w
+}
+
 async function golden(hash: string, mode: ViewMode = 'grid'): Promise<string> {
   setViewMode(mode)
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
@@ -142,6 +153,8 @@ beforeEach(() => {
   vi.mocked(isFavorite).mockImplementation((id) => id === uid('Solo')) // one favourite, so both pin states show
   treeStore.nodes = TREE.map((n) => ({ ...n }))
   capabilityState.ids = [MEMORIES, DEPOT, EXPENSES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
+  capabilityState.tenantIds = null
+  capabilityState.tenantErasures = null
   activeSpace.deletedAt = null
   activeSpace.purgeAfter = null
 })
@@ -211,6 +224,26 @@ describe('the Memories level view (golden)', () => {
   it('Memories switched off for the tenant: the banner names it, no new Memory, the Memory keeps no write (uc.platform.switch-application-off)', async () => {
     capabilityState.ids = [DEPOT, EXPENSES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-memories-off'))
+  })
+
+  // uc.platform.erase-switched-off-application (web): the banner names the day the server erases the application's
+  // content, and only while the set says it is off — the server keeps the day while a due erasure still runs.
+  it('an application switched off with a named day: the dated banner; on again with the day still served: none', async () => {
+    const until = new Date('2026-11-25T10:00:00Z')
+    const local = Date.prototype.toLocaleDateString
+    vi.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (this: Date, locales, options) {
+      return local.call(this, locales, { ...options, timeZone: 'UTC' })
+    })
+    capabilityState.tenantIds = [MEMORIES, EXPENSES, CORE_PUBLIC_SHARES]
+    capabilityState.tenantErasures = { depot: until, memories: until }
+    const banners = (await mountHome('#~me')).findAll('.application-off-banner').map((b) => b.text())
+    expect(banners).toEqual([
+      'Depot is switched off here. You can open and download what’s here until 11/25/2026; then it is erased. Save what you want to keep.',
+    ]) // Memories is on: its served day (an erasure that still runs) draws no banner
+
+    capabilityState.tenantErasures = {} // off, with no day served: the undated banner stands
+    const undated = (await mountHome('#~me')).findAll('.application-off-banner').map((b) => b.text())
+    expect(undated).toEqual(['Depot is switched off here. You can still open and download what’s here, so save what you want to keep.'])
   })
 
   it('an empty folder: both empty states beside the create cards', async () => {

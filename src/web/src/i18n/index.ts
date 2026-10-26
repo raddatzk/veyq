@@ -1333,7 +1333,7 @@ const en = {
   },
   tenantCapabilities: {
     navTitle: 'Capabilities',
-    sub: 'Decide what this space offers, such as public links or groups. You can only switch off what the server allows; switching back on brings everything back as it was, because nothing is deleted.',
+    sub: 'Decide what this space offers, such as public links or groups. You can only switch off what the server allows. An application left off is erased on the day shown beside it; anything switched back on before then is as it was.',
     loading: 'Loading capabilities…',
     loadFailed: 'Couldn’t load the capabilities.',
     notOwner: 'Only the space owner can switch capabilities.',
@@ -1345,6 +1345,10 @@ const en = {
     switchOff: 'Switch off',
     confirmTitle: 'Switch off “{title}”?',
     switchFailed: 'Couldn’t switch “{title}”.',
+    // uc.platform.erase-switched-off-application: beside an application's own entry while the server names its day.
+    erasureDay: 'Erased on {day} unless switched on again',
+    erasureDayByServer: 'Erased on {day} unless switched on again — only whoever runs the server can do that',
+    erasureRunning: 'Being erased since {day}',
     requirementNone: 'Not required',
     requirementOn: 'Required',
     requirementDays: '{days} days',
@@ -1397,6 +1401,8 @@ const en = {
   applications: {
     // uc.platform.switch-application-off: the banner above every page of a space while an application is switched off.
     switchedOff: '{application} is switched off here. You can still open and download what’s here, so save what you want to keep.',
+    // uc.platform.erase-switched-off-application: the same banner once the server names the day the content is erased.
+    switchedOffUntil: '{application} is switched off here. You can open and download what’s here until {day}; then it is erased. Save what you want to keep.',
   },
   groups: {
     createTitle: 'New group',
@@ -3270,7 +3276,7 @@ const de: typeof en = {
   },
   tenantCapabilities: {
     navTitle: 'Funktionen',
-    sub: 'Lege fest, was dieser Bereich anbietet, etwa öffentliche Links oder Gruppen. Ausschalten lässt sich nur, was der Server erlaubt; wieder eingeschaltet ist alles wie zuvor, denn gelöscht wird nichts.',
+    sub: 'Lege fest, was dieser Bereich anbietet, etwa öffentliche Links oder Gruppen. Ausschalten lässt sich nur, was der Server erlaubt. Eine Anwendung, die aus bleibt, wird an dem Tag gelöscht, der neben ihr steht; was vorher wieder eingeschaltet wird, ist wie zuvor.',
     loading: 'Funktionen werden geladen…',
     loadFailed: 'Die Funktionen konnten nicht geladen werden.',
     notOwner: 'Nur die Besitzperson des Bereichs kann Funktionen schalten.',
@@ -3282,6 +3288,9 @@ const de: typeof en = {
     switchOff: 'Ausschalten',
     confirmTitle: '„{title}“ ausschalten?',
     switchFailed: '„{title}“ konnte nicht geschaltet werden.',
+    erasureDay: 'Wird am {day} gelöscht, wenn es nicht wieder eingeschaltet wird',
+    erasureDayByServer: 'Wird am {day} gelöscht, wenn es nicht wieder eingeschaltet wird – das kann nur, wer den Server betreibt',
+    erasureRunning: 'Wird seit dem {day} gelöscht',
     requirementNone: 'Nicht verlangt',
     requirementOn: 'Verlangt',
     requirementDays: '{days} Tage',
@@ -3331,6 +3340,7 @@ const de: typeof en = {
   },
   applications: {
     switchedOff: '{application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst.',
+    switchedOffUntil: '{application} ist hier abgeschaltet. Was da ist, kannst du bis zum {day} öffnen und herunterladen; dann wird es gelöscht. Sichere, was du behalten willst.',
   },
   groups: {
     createTitle: 'Neue Gruppe',

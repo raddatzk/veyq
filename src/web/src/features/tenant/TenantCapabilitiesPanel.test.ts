@@ -87,7 +87,7 @@ describe('TenantCapabilitiesPanel (uc.admin.tenant-switch-capabilities, web)', (
   it('switches off only after a confirmation showing the entry\'s own words, then re-reads the shell\'s set', async () => {
     vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([entry('core.group-space', 'Groups')])
     vi.mocked(setTenantCapabilitySwitch).mockResolvedValue(entry('core.group-space', 'Groups', { off: true, effective: false }))
-    vi.mocked(getTenantCapabilities).mockResolvedValue([{ id: 'core.public-shares' }])
+    vi.mocked(getTenantCapabilities).mockResolvedValue({ capabilities: [{ id: 'core.public-shares' }], applicationErasures: [] })
     const wrapper = await mountPanel()
 
     ask.mockResolvedValueOnce(false) // declined: nothing is sent
@@ -107,12 +107,51 @@ describe('TenantCapabilitiesPanel (uc.admin.tenant-switch-capabilities, web)', (
   it('switches back on without asking', async () => {
     vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([entry('core.group-space', 'Groups', { off: true, effective: false })])
     vi.mocked(setTenantCapabilitySwitch).mockResolvedValue(entry('core.group-space', 'Groups'))
-    vi.mocked(getTenantCapabilities).mockResolvedValue([])
+    vi.mocked(getTenantCapabilities).mockResolvedValue({ capabilities: [], applicationErasures: [] })
     const wrapper = await mountPanel()
     await row(wrapper, 'core.group-space').find('button').trigger('click')
     await flushPromises()
     expect(ask).not.toHaveBeenCalled()
     expect(setTenantCapabilitySwitch).toHaveBeenCalledWith('t-1', 'core.group-space', false)
+  })
+
+  // uc.platform.erase-switched-off-application (web): the dialog shows the application's served `whenOff`, and its row
+  // names the day from the PUT's answer at once; switched on before the day, the answer carries none and the row says none.
+  it('an application switched off names the day its content is erased, and switched on before it, no longer', async () => {
+    const due = new Date('2099-11-25T10:00:00Z')
+    const day = due.toLocaleDateString('en')
+    const depot = (over: Partial<TenantCapabilitySwitch> = {}) => entry('depot', 'Depot', over)
+    vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([depot()])
+    vi.mocked(setTenantCapabilitySwitch).mockResolvedValueOnce(depot({ off: true, effective: false, erasureDueAt: due }))
+    vi.mocked(getTenantCapabilities).mockResolvedValue({ capabilities: [], applicationErasures: [{ id: 'depot', dueAt: due }] })
+    const wrapper = await mountPanel()
+    expect(row(wrapper, 'depot').find('.capability__erasure').exists()).toBe(false) // control: on, no day
+
+    ask.mockResolvedValueOnce(true)
+    await row(wrapper, 'depot').find('button').trigger('click')
+    await flushPromises()
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ message: 'Depot off effect' })) // the server's own words
+    expect(row(wrapper, 'depot').find('.capability__erasure').text()).toBe(t('tenantCapabilities.erasureDay', { day }))
+    expect(capabilityState.tenantErasures).toEqual({ depot: due }) // the shell's banner reads the day too
+
+    vi.mocked(setTenantCapabilitySwitch).mockResolvedValueOnce(depot()) // the answer names no day
+    vi.mocked(getTenantCapabilities).mockResolvedValue({ capabilities: [{ id: 'depot' }], applicationErasures: [] })
+    await row(wrapper, 'depot').find('button').trigger('click')
+    await flushPromises()
+    expect(row(wrapper, 'depot').find('.capability__erasure').exists()).toBe(false)
+  })
+
+  it('while the instance holds an application off, its row says only whoever runs the server can switch it on in time', async () => {
+    const due = new Date('2099-11-25T10:00:00Z')
+    vi.mocked(listTenantCapabilitySwitches).mockResolvedValue([
+      entry('depot', 'Depot', { serverOff: true, effective: false, erasureDueAt: due }),
+      entry('memories', 'Memories', { off: true, effective: false, erasureDueAt: due }),
+    ])
+    const wrapper = await mountPanel()
+    const day = due.toLocaleDateString('en')
+    expect(row(wrapper, 'depot').find('.capability__erasure').text()).toBe(t('tenantCapabilities.erasureDayByServer', { day }))
+    // control: the tenant's own switch alone — its owner can still cancel it here
+    expect(row(wrapper, 'memories').find('.capability__erasure').text()).toBe(t('tenantCapabilities.erasureDay', { day }))
   })
 
   it('renders a non-owner\'s 403 as the read-only notice, not the register', async () => {
@@ -130,7 +169,7 @@ describe('TenantCapabilitiesPanel (uc.admin.tenant-switch-capabilities, web)', (
       requirements: [requirement('linkPassword', 'flag', { value: 1, effective: 1 }), requirement('linkMaxDays', 'days', { value: 30, effective: 30 })],
     }))
     vi.mocked(clearTenantCapabilityRequirement).mockResolvedValue(entry('core.public-shares', 'Public links', { requirements: [] }))
-    vi.mocked(getTenantCapabilities).mockResolvedValue([{ id: 'core.public-shares', linkPassword: true }])
+    vi.mocked(getTenantCapabilities).mockResolvedValue({ capabilities: [{ id: 'core.public-shares', linkPassword: true }], applicationErasures: [] })
     const wrapper = await mountPanel()
     const flag = wrapper.find('li[data-requirement="linkPassword"]')
     expect(flag.text()).toContain(t('tenantCapabilities.requirementNone'))

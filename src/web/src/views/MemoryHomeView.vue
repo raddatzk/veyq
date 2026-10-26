@@ -64,7 +64,7 @@ const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 const offerUndo = useTrashUndo()
-const { hasCapability, isSwitchedOff } = useCapabilities()
+const { hasCapability, isSwitchedOff, erasureDay } = useCapabilities()
 
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
 // its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
@@ -157,6 +157,20 @@ const kindShareable = computed(() => {
 // The applications switched off for this tenant (uc.platform.switch-application-off): one manifest id each — the server
 // ANDs the instance's and the tenant's switches; each is named once in the banner above every page of the space.
 const applicationsOff = computed(() => registry.applications().filter((a) => isSwitchedOff(a.id)))
+// Each banner names the day the server erases the application's content here, while it names one
+// (uc.platform.erase-switched-off-application); `erasureDay` gives one only for an application the set says is off.
+const applicationOffBanners = computed(() =>
+  applicationsOff.value.map((app) => {
+    const day = erasureDay(app.id)
+    const application = t(app.name)
+    return {
+      id: app.id,
+      text: day
+        ? t('applications.switchedOffUntil', { application, day: day.toLocaleDateString(locale.value) })
+        : t('applications.switchedOff', { application }),
+    }
+  }),
+)
 const access = computed(() =>
   memberAccess({
     scopeId: activeSpace.scopeId ?? '',
@@ -414,8 +428,8 @@ async function onDeleteDone() {
       <VeyqMessage v-if="isPendingDeletion" tone="warn" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </VeyqMessage>
-      <VeyqMessage v-for="app in applicationsOff" :key="app.id" tone="warn" class="application-off-banner">
-        {{ t('applications.switchedOff', { application: t(app.name) }) }}
+      <VeyqMessage v-for="banner in applicationOffBanners" :key="banner.id" tone="warn" class="application-off-banner">
+        {{ banner.text }}
       </VeyqMessage>
       <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
       <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason; a member

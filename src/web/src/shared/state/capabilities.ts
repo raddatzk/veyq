@@ -22,6 +22,10 @@ export const capabilityState = reactive({
   // manifest, the tenant's (the strictest of both levels, server-computed) once its set is loaded.
   entries: {} as Record<string, Capability>,
   tenantEntries: null as Record<string, Capability> | null,
+  // The open tenant's named erasure days (`applicationErasures`, uc.platform.erase-switched-off-application): the day each
+  // application switched off there is erased, by register id; null while no tenant's set is loaded. A row outlives the
+  // switch while a due erasure still runs, so a reader asks `useCapabilities().erasureDay`, which ANDs it with the set.
+  tenantErasures: null as Record<string, Date> | null,
   // The instance's advertised version; null until discovered. `major` drives the hard gate, `build` is info-only.
   major: null as number | null,
   build: null as number | null,

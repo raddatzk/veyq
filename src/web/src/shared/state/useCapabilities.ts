@@ -1,5 +1,6 @@
 import { capabilityState, EXPECTED_MAJOR } from './capabilities'
 import type { Capability, SetupStatus } from '../../api/generated'
+import type { ApplicationErasure } from '../../api/generated/tenants'
 
 /** Direction of a `major` mismatch: the app is too old (update it) vs the server is too old (update it). */
 export type Incompatibility = 'update-app' | 'update-server'
@@ -25,6 +26,17 @@ export function useCapabilities() {
   }
 
   /**
+   * The day application [id]'s content in the open tenant is erased (uc.platform.erase-switched-off-application), or null.
+   * A day only while the set says [id] is switched off ({@link isSwitchedOff}): the server keeps its row until a due
+   * erasure has finished, even after the application was switched on again, and a banner naming a day for an
+   * application that is on would be false. Null too while no tenant's set is loaded — the instance's manifest names no day.
+   */
+  function erasureDay(id: string): Date | null {
+    if (!isSwitchedOff(id)) return null
+    return capabilityState.tenantErasures?.[id] ?? null
+  }
+
+  /**
    * The requirement values in effect on capability [id] (ADR 0088 decision 8) — the open tenant's once loaded, else the
    * instance's — or undefined when the entry is not served. A requirement constrains a form (a password a link must
    * carry); it never hides an affordance, so it is read by the form it constrains, and the server enforces it anyway.
@@ -46,14 +58,16 @@ export function useCapabilities() {
     return null
   }
 
-  return { capabilityState, hasCapability, isSwitchedOff, capabilityValues, incompatibility }
+  return { capabilityState, hasCapability, isSwitchedOff, erasureDay, capabilityValues, incompatibility }
 }
 
-/** Record the open tenant's effective set after sign-in, or forget it (`null`: sign-out, or no tenant's set could be
- *  read, when the instance's manifest stands — the server refuses what the tenant switched off either way). */
-export function setTenantCapabilities(entries: Capability[] | null): void {
+/** Record the open tenant's effective set after sign-in, with the days its switched-off applications are erased, or
+ *  forget both (`null`: sign-out, or no tenant's set could be read, when the instance's manifest stands — the server
+ *  refuses what the tenant switched off either way). */
+export function setTenantCapabilities(entries: Capability[] | null, erasures: readonly ApplicationErasure[] = []): void {
   capabilityState.tenantIds = entries?.map((c) => c.id) ?? null
   capabilityState.tenantEntries = entries ? Object.fromEntries(entries.map((c) => [c.id, c])) : null
+  capabilityState.tenantErasures = entries ? Object.fromEntries(erasures.map((e) => [e.id, e.dueAt])) : null
 }
 
 /** Record the instance's version + active capability manifest from the boot setup status. */
