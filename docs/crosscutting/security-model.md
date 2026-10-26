@@ -743,7 +743,12 @@ account is erased on request and an active tenant can be deleted
 ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)): the account stops
 at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after the
 scope trash's retention one purge erases it with its own scopes, every row keyed on it and its address wherever it was
-copied; a tenant goes offline at once and is erased after the same window. Nothing is decrypted to erase: what goes is
+copied; a tenant goes offline at once and is erased after the same window. An application left switched off in a
+tenant is erased there on a day its members are told, `veyq.application.off.retention` after it went off: every node of
+its kinds made before the day, in every scope of the tenant, goes through the trash purge's erase, and switched on
+before the day nothing goes
+([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md)).
+Nothing is decrypted to erase: what goes is
 ciphertext and metadata, its bytes through the reclaim list. What it put into shared scopes stays with the scope under
 its opaque id, shown as a former member's, and holds and the moderation records naming it stay to their own ends, its
 terms acceptance rows with them while a case names it. `scripts/validate_account_erasure_arity.py` holds that every

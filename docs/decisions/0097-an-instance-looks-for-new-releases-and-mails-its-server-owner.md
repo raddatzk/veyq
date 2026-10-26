@@ -125,5 +125,6 @@ not an instance notice and stays ADR 0048 §5's copy-link (inbox #465).
   under a tenant's identity.
 
 On the docs site: [Operations](../../site/src/content/docs/run/operations.md) (the check, switching it off, a mirror),
-[Storage and email](../../site/src/content/docs/run/storage-and-email.md) (the instance mail) and
+[Storage and email](../../site/src/content/docs/run/storage-and-email.md) (the instance mail),
+[Running your own instance](../../site/src/content/docs/run/index.md) (what mail is the Server Owner's) and
 [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

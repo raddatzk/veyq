@@ -4,10 +4,11 @@ sources:
   - docs/features/admin/use-cases/uc.admin.tenant-switch-capabilities.md
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - docs/features/platform/use-cases/uc.platform.switch-application-off.md
+  - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
 ---
 
-Du legst fest, was dein Bereich seinen Mitgliedern anbietet: Erinnerungen und Depot, öffentliche Links, Links, über
-die Gäste Fotos oder Dateien hinzufügen, Briefkästen und Gruppen. Zuerst entscheidet die Person, die den Server betreibt; du kannst mehr
+Du legst fest, was dein Bereich seinen Mitgliedern anbietet: Erinnerungen, Depot und Ausgaben, öffentliche Links,
+Links, über die Gäste Fotos oder Dateien hinzufügen, Briefkästen und Gruppen. Zuerst entscheidet die Person, die den Server betreibt; du kannst mehr
 abschalten, nie weniger.
 
 1. Öffne das Menü unten in der Seitenleiste, wähle **Einstellungen**, dann **Funktionen** unter **Geteilter Bereich**.
@@ -16,7 +17,8 @@ abschalten, nie weniger.
    ändern.
 3. Wähle **Ausschalten**. Bevor etwas passiert, liest du, was Ausschalten mit Neuem und mit Bestehendem macht, und
    bestätigst.
-4. **Einschalten** bringt alles zurück, wie es war. Beim Ausschalten wird nichts gelöscht.
+4. **Einschalten** bringt alles zurück, wie es war. Beim Ausschalten wird nichts sofort gelöscht; nur eine Anwendung,
+   die aus bleibt, wird gelöscht, an dem Tag, den ihre Zeile zeigt.
 
 Was Ausschalten bewirkt, kurz:
 
@@ -24,11 +26,18 @@ Was Ausschalten bewirkt, kurz:
   dieselbe Seite „Dieser Link ist nicht verfügbar“ wie bei einem abgelaufenen Link, und niemand kann einen anlegen oder
   erneuern. Die Links funktionieren wieder, sobald du einschaltest.
 - **Gruppen**: Niemand kann eine neue Gruppe anlegen. Bestehende Gruppen bleiben nutzbar.
-- **Erinnerungen** oder **Depot**: Nichts Neues kann dazukommen und nichts darin geändert werden – kein Hochladen,
-  Umbenennen, Verschieben, kein Cover und kein neuer Link, und auch Gäste können über einen Link nichts hinzufügen.
-  Alles darin lässt sich weiter öffnen und herunterladen, auch über seine Links, und Mitglieder können weiter in den
-  Papierkorb löschen und wiederherstellen. Alle Mitglieder sehen einen Hinweis, dass es abgeschaltet ist, damit sie
-  Zeit haben zu sichern, was sie behalten wollen.
+- **Erinnerungen**, **Depot** oder **Ausgaben**: Nichts Neues kann dazukommen und nichts darin geändert werden – kein
+  Hochladen, kein Eintrag, kein Umbenennen, Verschieben, kein Cover und kein neuer Link, und auch Gäste können über
+  einen Link nichts hinzufügen. Alles darin lässt sich weiter öffnen und herunterladen, auch über seine Links, und
+  Mitglieder können weiter in den Papierkorb löschen und wiederherstellen.
+- **Bleibt eine Anwendung aus, wird sie an einem Tag gelöscht.** Ihre Zeile zeigt, an welchem Tag, und alle Mitglieder
+  sehen einen Hinweis mit diesem Tag, damit sie Zeit haben herunterzuladen, was sie behalten wollen. Verschickt der
+  Server Mails, bekommen alle Mitglieder auch eine, wenn du sie ausschaltest, und noch eine eine Woche vor dem Tag. An
+  dem Tag wird alles darin in deinem Bereich gelöscht, auch in den persönlichen Bereichen der Mitglieder; Ordner
+  bleiben. Schaltest du sie vor dem Tag wieder ein, wird nichts gelöscht. Schaltest du sie später ein, wird das Löschen
+  trotzdem fertig: Nur was Mitglieder danach neu anlegen, etwa eine neue Erinnerung, Datei oder Kasse, bleibt. Wie lang
+  die Frist ist, entscheidet die Person, die den Server betreibt; hat sie die Anwendung für den ganzen Server
+  ausgeschaltet, kann nur sie sie rechtzeitig wieder einschalten.
 
 Gemerkte Geräte, Entsperren ohne Passwort und das Hinzufügen eines Geräts über ein anderes werden auf der
 Anmeldeseite angeboten, bevor dein Bereich dort bekannt ist; deshalb schaltet sie nur die Person, die den Server

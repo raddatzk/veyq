@@ -64,7 +64,8 @@ import java.util.UUID
 
 /**
  * What the erasure of an application left switched off does to the content (uc.platform.erase-switched-off-application,
- * the CR's slice tests (a) to (e)), with every application booted: a root test, because its controls are another
+ * the content (a), the derived sweep (b), the ledger (c), the holds (d) and a switch-on after the day (e), each
+ * lettered below), with every application booted: a root test, because its controls are another
  * application's nodes and its completeness sweep reads every application's tables. The day is driven into the past —
  * a switch-off one window and a minute ago — so the server's own clock (a node's `createdAt`) and the purge's agree.
  *

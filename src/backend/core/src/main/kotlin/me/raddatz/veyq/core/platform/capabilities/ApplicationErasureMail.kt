@@ -15,8 +15,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * The two mails of an application left switched off (uc.platform.erase-switched-off-application steps 2 and 3, the
- * CR's decision 5): the **notice** once a tenant's erasure row exists, and the **reminder** [REMINDER_AHEAD] before its
+ * The two mails of an application left switched off (uc.platform.erase-switched-off-application steps 2 and 3): the
+ * **notice** once a tenant's erasure row exists, and the **reminder** [REMINDER_AHEAD] before its
  * day. Every member of the tenant (`pendingConsent = false`, the tenant owner among them) at their account address,
  * through the instance mail (ADR 0097 decision 3): an erasure is the host's to announce, as a tenant's deletion is
  * (`TenantDeletionMail`). Sent by [ApplicationErasurePurge]'s tick, never by the switch's request, so no switch waits on

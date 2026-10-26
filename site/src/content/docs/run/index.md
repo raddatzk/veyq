@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
+  - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/crosscutting/security-model.md
 ---
 
@@ -84,14 +85,19 @@ So the things you own are:
 
 - **Availability.** Whether the service is up, whether backups exist, whether an upgrade breaks. All of this is
   yours, and none of it is veyq's to promise.
-- **The key that keeps mail working — not the mail itself.** You do not configure SMTP: there is no
-  instance-wide mailer. Each space's owner sets up that space's own relay in the app (Settings → Email), and
-  two of the things veyq mails have no substitute at all — an invitation to join that space, and a
-  password-reset link. Both are addressed to the person concerned, so there is no link for you to hand over
-  instead; a space with no email set up refuses those actions and says so out loud. What *is* yours is the
-  server's key file that seals those owners' SMTP passwords (below): lose it, and every space whose relay needs
-  a password stops sending. The one mail you trigger yourself, the invitation of a new space's first owner,
-  falls back to a link you copy and pass on, because that space has no relay yet.
+- **The instance's own mail, and the key that keeps every relay working — not a space's mail.** Each space's
+  owner sets up that space's own relay in the app (Settings → Email), and two of the things veyq mails have no
+  substitute at all — an invitation to join that space, and a password-reset link. Both are addressed to the
+  person concerned, so there is no link for you to hand over instead; a space with no email set up refuses those
+  actions and says so out loud. Yours is the instance's own relay, which is optional (**Server → Mail**,
+  [Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)): it mails you of new releases,
+  the moderators of moderation's notices, a reporter and the people a decision concerns of its receipt and
+  statement, and the people the host has to tell — an account being erased, the members of a
+  space being deleted, and the members of a space where an application was switched off, with the day it is erased.
+  Without it none of these is mailed, and it never stands in for a space's relay. Also yours is the server's key file
+  that seals every relay's SMTP password (below): lose it, and every relay that needs a password stops sending. The
+  one mail you trigger yourself, the invitation of a new space's first owner, falls back to a link you copy and pass
+  on, because that space has no relay yet.
 - **Nothing else.** Not the content, not the keys, not who verified whom. Read
   [Is my data safe?](/veyq/privacy/is-my-data-safe/) — the "what we can see" table there is what *you* can see.
 

@@ -9,6 +9,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - docs/features/platform/use-cases/uc.platform.switch-application-off.md
+  - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
   - contracts/platform/capabilities.json
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
 ---
@@ -52,7 +53,8 @@ the sign-in screen reads your list before any tenant is known. The list before s
 after sign-in each member's client reads their tenant's (`GET /api/tenants/{tenantId}/capabilities`), and the gates
 refuse per tenant.
 
-**Switching off never deletes stored data.** What a switch does to what already exists is
+**Switching off deletes nothing at once.** One switch erases later: an application left off in a tenant, whose
+content there is erased on a day its members are told. What a switch does to what already exists is
 [below](#what-acts-at-once-and-what-only-on-new-data).
 
 ## Switch an entry
@@ -209,13 +211,24 @@ switch refuses only what is new.
   `core.public-shares` stops every kind, its two children only their own. Nothing is deleted, so switching back on
   brings every link back as it was. A download or upload address the server signed just before stays usable until it
   expires, ten minutes by default, as after a member turns a link off.
-- **An application switch acts at once, and makes the application read-only.** With `memories` or `depot` off,
-  nothing of that application can be added or changed: no new Memory or file, no upload, rename, move, cover or new
-  link, and a guest's upload through a link that exists is refused. Everything in it still opens and downloads, for
-  members and through the links that exist, and members can still delete to the trash and restore. A rotation of keys
-  and a moderation measure still reach it. Every member of the tenant sees a banner saying the application is switched
-  off here, so they have time to save what they want to keep. The application's own entries below it
-  (`memories.places`, `memories.map`) are off with it. Nothing is deleted: switched back on, everything is as before.
+- **An application switch acts at once, and makes the application read-only.** With `memories`, `depot` or
+  `expenses` off, nothing of that application can be added or changed: no new Memory, file or Pot, no upload, entry,
+  rename, move, cover or new link, and a guest's write through a link that exists is refused. Everything in it still
+  opens and downloads, for members and through the links that exist, and members can still delete to the trash and
+  restore. A rotation of keys and a moderation measure still reach it. The application's own entries below it
+  (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it.
+- **An application left off is erased on its day.** When an application goes off for a tenant, at your level or the
+  tenant owner's, the tenant gets a day: that moment plus `veyq.application.off.retention`, 30 days unless you set
+  another ([Configuration](/veyq/run/configuration/#backend-keys-for-tuning)). Every member sees a banner naming the
+  day, the tenant owner sees it beside the entry, and where the instance has its own mail
+  ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)) every member is mailed a notice and,
+  seven days before the day, a reminder. On the day, everything of that application made before it is erased in every
+  space of the tenant, personal spaces included, the way the trash's purge erases: its files, the erasure ledger a
+  restore replays, and every moderation hold's copy kept. Folders stay. Switched back on before the day, nothing is
+  erased and everything is as before; switched on after it, the erasure completes, and only what members then make as
+  a new Memory, file or Pot stays. Switched off for the whole instance, every tenant gets its own day, a tenant already
+  off keeps its earlier one, and the notice says only you can switch it back on. Only an application's own entry
+  erases; `memories.places` and the other children erase nothing.
 - **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
   existing group stays fully usable.
 

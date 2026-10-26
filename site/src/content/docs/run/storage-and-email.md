@@ -8,6 +8,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
+  - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
 ---
 
 ## The object store
@@ -76,11 +77,21 @@ What is yours:
 
 ### The instance's own mail, to you
 
-The one relay that is yours is optional: the instance's mail to **you**, for its notices about new releases
-([Operations](/veyq/run/operations/#new-releases)). Set it on the console's **Server → Mail** — the same fields as a
-tenant's relay. It sends only those notices and only to the address of your Server Owner account, and it never sends
-a tenant's mail, nor stands in for a tenant without one
+The one relay that is yours is optional: the instance's mail, for what the host itself announces. Set it on the
+console's **Server → Mail** — the same fields as a tenant's relay. It sends only these, each to an address the server
+already holds:
+
+- to **you**, at the address of your Server Owner account: the notices about new releases
+  ([Operations](/veyq/run/operations/#new-releases));
+- to the **moderators** and the instance contact: moderation's notices; to a **reporter** and the people a decision
+  concerns: the receipt and the statement of reasons, at an address their client sent ([Moderation](/veyq/run/moderation/));
+- to the **people an erasure concerns**: an account being erased, every member of a tenant you delete, and every member
+  of a tenant where an application was switched off — a notice naming the day its content there is erased, and a
+  reminder seven days before ([Capabilities](/veyq/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)).
+
+It never sends a tenant's mail, nor stands in for a tenant without one
 ([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
+Without it none of the above is mailed; a switched-off application's day is then on its banner alone.
 
 1. Enter the relay and save. The instance mails an eight-digit code to your account's address.
 2. Type the code into **Server → Mail** within an hour. A wrong code counts; five spend it, and a save sends a new one.

@@ -1,7 +1,8 @@
 # The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
 # Encrypt, the DNS name and CA trust the public internet would give the instance, the mail relay its provider would,
 # the release stamp and the stub release mirror that let the release check find something (below, at `app` and
-# `release-mirror`), the store's request log the wire sweep's control reads (at `garage`), and the browser that drives
+# `release-mirror`), a switched-off application's erasure window short enough to wait out (at `app`), the store's
+# request log the wire sweep's control reads (at `garage`), and the browser that drives
 # it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py
 # installs the candidate with `veyqctl install` and makes this file the instance's operator override
 # (`<home>/compose.override.yml`), so it is laid OVER the release's own recipe (never over this checkout's copy) on
@@ -16,7 +17,7 @@
 # serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
 # production file is edited for this. Every other service, network, posture and secret is the operator's: this file
 # adds four services, gives Traefik's ACME client one CA to trust and the app the release stamp and check interval
-# of the release-check test double (at `app`), and must never weaken what the recipe sets. The browser is a CLIENT of
+# of the release-check test double and the short erasure window (at `app`), and must never weaken what the recipe sets. The browser is a CLIENT of
 # the instance — it publishes nothing and changes no operator service — and sits behind a profile, so `up` never
 # starts it.
 #
@@ -113,6 +114,15 @@ services:
       # it anywhere — and then only a day later, so a run would never see it read the mirror. Every 5 s, the check the
       # Server Owner points at the mirror reads it within seconds, with no "check now" the product does not have.
       VEYQ_RELEASE_CHECK_EVERY: 5s
+      # `veyq.application.off.retention` (P30D by default) and `veyq.application.erasure.purge.every` (1h): an
+      # application left switched off is erased on its day, the switch-off plus the window, by a tick of the purge
+      # (uc.platform.erase-switched-off-application). A run would never reach a 30-day day, so the window is one the
+      # suite can wait out — long enough for application-erasure.spec.ts to read the day on the owner's row, the
+      # member's banner in two languages and the notice mail, and to switch back on before it — and the tick every 5 s,
+      # so the erasure follows the day within seconds. No other spec switches an application's own entry off, so the
+      # short window erases nothing another spec relies on. A window this short has no reminder (seven days ahead).
+      VEYQ_APPLICATION_OFF_RETENTION: PT2M
+      VEYQ_APPLICATION_ERASURE_PURGE_EVERY: 5s
     # No internet for the release check's default source: until the suite points it at the mirror, the check reads the
     # GitHub Releases, every 5 s at first and spaced out by each failure in a row (ReleaseCheckBackoff; pointing it at
     # the mirror starts over, so the mirror is read at the next tick). These names resolve to the app's own loopback, so

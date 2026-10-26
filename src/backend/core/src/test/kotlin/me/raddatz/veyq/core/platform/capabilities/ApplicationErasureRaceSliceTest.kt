@@ -17,12 +17,13 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Two levels switching one application at once (uc.platform.erase-switched-off-application A3 and A4, the CR's (f)):
+ * Two levels switching one application at once (uc.platform.erase-switched-off-application A3 and A4, the race half of
+ * ApplicationErasureSliceTest's (f)):
  * the erasure row is what the final state implies, in every order the hold forces. Each writer reads the OTHER level's
  * switch; without [ApplicationErasureStore]'s lock order (the instance row, then the tenant row) each reads the other's
  * switch as it was before the other committed, and the race ends with an application switched on in both levels and a
  * row that erases it on its day — or switched off with no row, kept for good. Found red with each level taking only its
- * own row's lock (the switch stores as they were before this CR), green with the order.
+ * own row's lock (the switch stores as they were before the erasure row existed), green with the order.
  */
 @QuarkusTest
 class ApplicationErasureRaceSliceTest {
