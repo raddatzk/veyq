@@ -9,12 +9,13 @@
 //   3. the console lists the pending erasure and stops it — A signs in again (the positive control of 2's refusal) —, B
 //      owns "E2E Erase" (no "No owner" marker), and the console's own door starts and stops the same erasure;
 //   4. the Server Owner deletes "E2E Keep" with its typed domain: offline at once for B, B mailed, and a stop leaves it
-//      offline until it is brought back online, when B reaches it again;
-//   5. the erase panel once in German.
+//      offline until it is brought back online, when B reaches it again.
 //
-// It runs after instance-mail.spec.ts (the instance mail the erasure and deletion mails go through is set up and
-// confirmed there) and after every other feature scenario, so the accounts and tenants it erases disturb none of them.
-// The labels are the web client's and admin-web's own (each package's i18n, en; de for the last test).
+// The erase panel's German words are the catalogs' (src/web/'s i18n.test.ts: the same keys in both languages, every key
+// used), not a browser's: no German pass here (ADR 0090 decision 9). It runs after instance-mail.spec.ts (the `instance`
+// project: the instance mail the erasure and deletion mails go through is set up and confirmed there); the accounts and
+// tenants it erases are its own, so it disturbs no other scenario. The labels are the web client's and admin-web's own
+// (each package's i18n, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { freshOwner, readKit } from '../../src/accounts'
@@ -404,18 +405,5 @@ test(
 
     // The account kept: B signs in and reaches its space again.
     await reachHome(bob, keepOrigin, accountB)
-  },
-)
-
-test(
-  'the erase panel speaks German',
-  { tag: '@uc.account.erase-account:both-doors-start-the-same-erasure' },
-  async () => {
-    const { page } = bob
-    await openSettingsOn(bob, `https://${keepDomain()}`, accountB, 'Appearance and language')
-    await page.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Deutsch' }).click()
-    await page.getByRole('navigation', { name: 'Einstellungen' }).getByRole('button', { name: 'Konto löschen', exact: true }).click()
-    await expect(page.getByRole('heading', { level: 2, name: 'Dein Konto löschen' })).toBeVisible()
-    await expect(page.locator('.erasure-action').getByRole('button', { name: 'Konto löschen', exact: true })).toBeVisible()
   },
 )
