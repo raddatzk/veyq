@@ -1697,7 +1697,9 @@ cr-switched-off-application-is-erased's lane ran a two-minute window with a five
 browser cancel before the day and watch the erasure after it. A switch-on *after* the day is a race with the tick's
 phase, and a reminder seven days ahead has no window at all, so both stayed the backend's, named in the use case's
 `stack` gap. Where the claim is that a tick did nothing (a cancelled day passed and nothing was erased), there is no
-state to wait for: the wait is the server's own day plus a number of ticks, computed, never a fixed sleep.
+state to wait for: the wait is the server's own day plus a number of ticks, computed, never a fixed sleep — and since
+2026-10-26 that claim is not waited out in the lane at all: the slice test with its injected clock holds it, and the
+lane's window is thirty seconds (ADR 0090 decision 9).
 
 ### A CR that grows a count checks each stage against the caps the contract already sets
 

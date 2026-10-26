@@ -60,7 +60,8 @@ gaps:
     step 2a (the device's one request a day, the date alone, answered by the lane's fixed ECB table in `src/egress.ts`;
     a USD entry's rate filled, citing the ECB and the rows' date, and typeable) and step 4c (the tenant owner's switch
     off: a member's and a link guest's device make no request and the rate is typed; on again, the guest's device
-    fetches — the control), in English and in German; `privacy-notice.spec.ts` (the passage naming Frankfurter and the
+    fetches — the control), in English, and the filled rate again in the German pass under the fixture's German date
+    (ADR 0090 decision 9); `privacy-notice.spec.ts` (the passage naming Frankfurter and the
     ECB while on, gone while the tenant has them off, the breached-password check's beside it). No request leaves the
     lane for the real provider. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack`
     refs only once a CI run's log shows the suite executed.

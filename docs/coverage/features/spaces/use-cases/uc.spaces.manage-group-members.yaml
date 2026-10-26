@@ -113,7 +113,7 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `remove-rotates-forward` in
-    Chromium, all in English and again in German, against the release candidate's two images installed through
+    Chromium, in English (ADR 0090 decision 9), against the release candidate's two images installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion: a group owner removes the other member, the group's
     key is rotated and its Pot re-keyed on the owner's device, the panel no longer reads as re-keying, and the
     removed member's sidebar no longer lists the group. Green only in local runs of the lane (the V1 heavy stage),

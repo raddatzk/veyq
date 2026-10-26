@@ -40,7 +40,7 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `read-and-read-write-never-
     write-only`, `the-guest-sees-the-members-view`, `a-contributor-writes-like-a-member` and `what-stays-a-members`
-    in Chromium, all in English and again in German, against the release candidate's two images installed through
+    in Chromium, in English (ADR 0090 decision 9), against the release candidate's two images installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion: the Pot's share dialog offers viewing and viewing-
     and-adding only; the READ_WRITE guest names itself on its first write, adds a person and an entry, sees no
     Settings tab, no deactivate or delete, and reports an entry; the link still opens the Pot after a re-key. Green
