@@ -78,7 +78,7 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `pot-revisions-rewrapped-
-    bodies-unchanged` in Chromium, all in English and again in German, against the release candidate's two images
+    bodies-unchanged` in Chromium, in English (ADR 0090 decision 9), against the release candidate's two images
     installed through `veyqctl` (ADR 0090), each test tagged with its criterion: after a member's removal rotates
     the group's key, the Pot's balances, settle-up and overview read as before the rotation, with no ledger notice
     and no entry unreadable, for the owner and through a link made before the re-key. Green only in local runs of

@@ -77,7 +77,7 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts` steps 2b, 4b, 7 and 9b) drives
     `receipts-are-blobs-of-the-entry`, `only-images-and-pdfs-render`, `a-dropped-receipt-goes-after-the-retention` and
-    `a-contributor-adds-and-removes-receipts` in Chromium, all in English and again in German, against the release
+    `a-contributor-adds-and-removes-receipts` in Chromium, in English (ADR 0090 decision 9), against the release
     candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion: a `.txt` refused
     at the picker, a JPEG and a PDF drawn, a text claiming to be a PDF only offered for download and then removed, a
     guest's JPEG added through the link, all opening after a rotation, the ZIP holding each by its name byte for byte and

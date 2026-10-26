@@ -107,8 +107,37 @@ What a green run proves today stops short of what a Server Owner runs:
    Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor and L3's
    restores. Retries are 0.
 
+   **Run whole, in shards** (2026-10-26, ADR 0091 decision 1: a stage that outgrows its budget is sharded): the suite's
+   browser stage took 18.8 min on 2026-10-26, against the job's 15, so CI runs it as two shards per architecture
+   (`ci.yml`'s `stack` legs, Playwright's `--shard`), each on an instance of its own with its own sweeps. Every shard runs
+   the dependency projects whole — `setup`, `scenarios`, and `instance`, which holds the instance-wide state other
+   scenarios read (the instance mail, the deputy moderator) — and its part of `features`, whose specs read nothing
+   another feature spec left (`tests/e2e/playwright.config.ts`; `tests/e2e/shards.test.mjs` holds the split). Measured
+   the same day on arm64, after decision 9's rule: the browser stage 15.7 min whole (165 tests), 9.4 and 6.8 min per
+   shard (93 and 91 tests, the dependency projects' 19 in each), the whole lane 10.0 and 7.3 min per shard. One
+   worker per instance still: more workers wait until every spec is proven isolated (inbox #548).
+
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
    bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
+
+9. **One rule for languages and test levels** (owner 2026-10-26: "Das sollten wir alles vereinheitlichen"). L1 proves
+   what only the release candidate in a browser can show, once:
+   - **Every flow runs in English.**
+   - **A second language is the catalogs' and the component tests'**: src/web/'s `i18n.test.ts` holds that both
+     languages carry the same keys and every key is used, and selected statements are asserted in both; component
+     tests render a panel in either. L1 does not walk a flow a second time to read the same keys in German.
+   - **One short German pass per application** proves only what a browser alone shows in German: number and date
+     formats, an amount typed with a decimal comma, a date typed in the German field order, long words in the real
+     layout, and the locale switch itself. Today: `expenses-pot.spec.ts`'s `auf Deutsch`, `locale-de.spec.ts` (Memories
+     and Depot, with the switch in Settings), and application-erasure.spec.ts's dated banner.
+   - **The exception is the legal texts** — the privacy notice and the terms (`privacy-notice.spec.ts`,
+     `terms-operator-section.spec.ts`): their exact wording in each language is the claim, so they keep both languages.
+   - **A rule already proven below L1** — a slice test with an injected clock, a component test — **is not proven again
+     by waiting real time**: L1 shows once that the release candidate does it, and the use case's `stack` gap names the
+     test that holds the rest.
+   - **The e2e overlay may shorten a server-side interval** (a window, a tick, a poll) so a wait the lane keeps is
+     short, and says why its number is safe; it never changes a product default. A client constant with no seam stays
+     what it is (`memory-guest-live.spec.ts` waits the gallery's real 20-second poll, `ITEMS_POLL`).
 
 ## Rejected alternatives
 

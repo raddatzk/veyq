@@ -189,8 +189,9 @@ jobs:
         working-directory: src/admin-web
         run: npm run check
 
-      # Lane L1's browser suite runs only in `stack-e2e`, so its lint, its types, its spec list and its specs'
-      # out-of-tree fixture paths (`new URL('../../../../…', import.meta.url)`) are checked here, on every commit.
+      # Lane L1's browser suite runs only in `stack`, so its lint, its types, its spec list, its specs' out-of-tree
+      # fixture paths (`new URL('../../../../…', import.meta.url)`) and the split of its shards (`shards.test.mjs`) are
+      # checked here, on every commit.
       - name: Run browser suite checks
         working-directory: tests/e2e
         run: npm run check
@@ -666,6 +667,12 @@ jobs:
   # instance per run; the orchestrator prints every stage's wall time into its summary, which the job's budget (ADR
   # 0091 decision 1, 15 min) is held against.
   #
+  # Sharded (ADR 0091 decision 1: a stage that outgrows its budget is sharded): the whole suite took 18.8 min of browser
+  # time alone on 2026-10-26, so each architecture runs it as two legs, `shard` 1 and 2 of 2, each its own runner and its
+  # own instance — Playwright's `--shard`, handed through the orchestrator. Every leg runs `setup`, `scenarios` and
+  # `instance` whole and its half of `features` (tests/e2e/playwright.config.ts says why that is the split), then the
+  # sweeps over what its own browser typed; the publish waits for every leg.
+  #
   # Which bytes it tests (ADR 0090 decision 2): on a dispatch, the `build-<sha>-<arch>` images `build` pushed, pulled
   # by the digest `build` handed over and given a local name, because `veyqctl --unsigned-local` takes only a local
   # build's bare `name:tag` — the publish waits on this job, so it names nothing this lane did not install. A push and
@@ -673,7 +680,7 @@ jobs:
   # its own job, with `build`'s arguments and from its cache, and pushes nothing. A pull request runs the amd64 leg
   # only; a push and a dispatch run both architectures, since nothing else ever starts the arm64 image.
   stack:
-    name: Stack lane L1 (${{ matrix.arch }})
+    name: Stack lane L1 (${{ matrix.arch }}, shard ${{ matrix.shard }}/2)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     # `frontend` too: it is the one install of the lockfile that asks the registry about the packages this platform
@@ -691,6 +698,8 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
+        # The shard count is the `/2` of this job's name and of the `--shard` below.
+        shard: [1, 2]
         exclude:
           - arch: ${{ github.event_name == 'pull_request' && 'arm64' || 'none' }}
         include:
@@ -822,9 +831,10 @@ jobs:
       - name: Run lane L1
         env:
           ARCH: ${{ matrix.arch }}
+          SHARD: ${{ matrix.shard }}
         run: |
           "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_e2e.py \
-            --app "veyq:candidate-${ARCH}" --admin "veyq-admin:candidate-${ARCH}"
+            --app "veyq:candidate-${ARCH}" --admin "veyq-admin:candidate-${ARCH}" -- --shard "${SHARD}/2"
 
       # The run directory: the release and the instance's home, every container's log, the browser's report and a trace
       # per test, the sweeps' dumps. Kept on success too, so a green run can be compared with a red one. It holds the
@@ -833,7 +843,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: stack-out-${{ matrix.arch }}
+          name: stack-out-${{ matrix.arch }}-shard-${{ matrix.shard }}
           path: .e2e-stack-out/
           include-hidden-files: true
           if-no-files-found: warn

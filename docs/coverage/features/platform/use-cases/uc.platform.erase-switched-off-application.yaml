@@ -55,13 +55,16 @@ acceptanceCriteria:
         unit: [src/features/tenant/tenantCapabilities.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser pass (`tests/e2e/tests/features/application-erasure.spec.ts`, its own Playwright project after every
-    feature scenario) drives the-day-is-set-once, every-member-is-told-the-day, the-day-is-served,
-    on-the-day-its-nodes-are-erased and switched-on-before-the-day-nothing-is-lost against the release candidate, with
-    the overlay's two-minute window and a five-second tick: a tenant owner switches Depot off; the confirmation, the
-    owner's row and the member's banner (EN and DE) name the day, and the notice reaches Mailpit; switched on before it,
-    nothing is erased when it passes; left off, the files in the shared and the personal space go, while the core
-    folders and a Memory stay, and a fresh day and notice follow. Not driven there: the reminder (a window short enough
-    to wait out has none), a switch-on after the day (a race with the tick's phase, not a state a browser can hold), an
-    instance switch, the sweep, the ledger and the holds; the backend's tests hold those. Green only in local runs of
+    Lane L1's browser pass (`tests/e2e/tests/features/application-erasure.spec.ts`, a feature scenario that reads the
+    instance mail the `instance` project set up) drives the-day-is-set-once, every-member-is-told-the-day,
+    the-day-is-served, on-the-day-its-nodes-are-erased and switched-on-before-the-day-nothing-is-lost against the release
+    candidate, with the overlay's thirty-second window and a five-second tick: a tenant owner switches Depot off; the
+    confirmation, the owner's row and the member's banner (in English, and the dated banner once in German) name the
+    day, and the notice reaches Mailpit; switched on before it, the day and the banner are gone; off again and left
+    off, the files in the shared and the personal space go, while the core folders and a Memory stay, and a fresh day
+    and notice follow. Not driven there (ADR 0090 decision 9: what a slice test proves with an injected clock is not
+    waited out again in a browser): that nothing is erased once a cancelled day has passed
+    (ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt), the reminder (a window
+    short enough to wait out has none), a switch-on after the day (a race with the tick's phase, not a state a browser
+    can hold), an instance switch, the sweep, the ledger and the holds; the backend's tests hold those. Green only in local runs of
     `scripts/run_stack_e2e.py`, and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

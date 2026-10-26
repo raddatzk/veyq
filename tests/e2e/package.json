@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "list": "playwright test --list",
     "spec-urls": "node --test spec-urls.test.mjs",
-    "check": "npm run lint && npm run typecheck && npm run spec-urls && npm run list"
+    "shards": "node --test shards.test.mjs",
+    "check": "npm run lint && npm run typecheck && npm run spec-urls && npm run shards && npm run list"
   },
   "dependencies": {
     "@veyq/crypto": "*"

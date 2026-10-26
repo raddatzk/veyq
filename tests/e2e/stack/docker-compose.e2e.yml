@@ -117,11 +117,15 @@ services:
       # `veyq.application.off.retention` (P30D by default) and `veyq.application.erasure.purge.every` (1h): an
       # application left switched off is erased on its day, the switch-off plus the window, by a tick of the purge
       # (uc.platform.erase-switched-off-application). A run would never reach a 30-day day, so the window is one the
-      # suite can wait out — long enough for application-erasure.spec.ts to read the day on the owner's row, the
-      # member's banner in two languages and the notice mail, and to switch back on before it — and the tick every 5 s,
-      # so the erasure follows the day within seconds. No other spec switches an application's own entry off, so the
-      # short window erases nothing another spec relies on. A window this short has no reminder (seven days ahead).
-      VEYQ_APPLICATION_OFF_RETENTION: PT2M
+      # suite waits out once (ADR 0090 decision 9: an e2e overlay shortens a server-side interval, never a product
+      # default). Thirty seconds: between its first switch-off and the switch-on that must come before the day,
+      # application-erasure.spec.ts reads the owner's row, the member's banner in two browsers, a download and the
+      # notice mail — 2.9 to 5.8 s in the three lane runs of 2026-10-26 — so 30 s leaves four times that for a loaded
+      # machine, and the spec asserts at least 10 s are left (red naming this variable, never a race). The tick every
+      # 5 s, a sixth of the window, so the notice comes and the erasure follows the day within seconds. No other spec
+      # switches an application's own entry off (expenses-pot.spec.ts switches the exchange rates, no application), so
+      # the short window erases nothing another spec relies on. A window this short has no reminder (seven days ahead).
+      VEYQ_APPLICATION_OFF_RETENTION: PT30S
       VEYQ_APPLICATION_ERASURE_PURGE_EVERY: 5s
     # No internet for the release check's default source: until the suite points it at the mirror, the check reads the
     # GitHub Releases, every 5 s at first and spaced out by each failure in a row (ReleaseCheckBackoff; pointing it at

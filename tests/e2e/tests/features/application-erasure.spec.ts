@@ -1,27 +1,31 @@
 // An application left switched off is erased on its day, in a browser (uc.platform.erase-switched-off-application; ADR
-// 0079 decision 8, ADR 0088 decision 5). The lane's overlay shortens the window to two minutes and runs the purge every
-// five seconds (`VEYQ_APPLICATION_OFF_RETENTION`, `VEYQ_APPLICATION_ERASURE_PURGE_EVERY`), so the suite can wait out a
-// day. Everything happens in a tenant of its own ("E2E Erasure"), so what it erases no other spec reads:
+// 0079 decision 8, ADR 0088 decision 5). The lane's overlay shortens the window to thirty seconds and runs the purge
+// every five seconds (`VEYQ_APPLICATION_OFF_RETENTION`, `VEYQ_APPLICATION_ERASURE_PURGE_EVERY`; the overlay says why those
+// numbers), so the suite waits out one day. Everything happens in a tenant of its own ("E2E Erasure"), so what it erases
+// no other spec reads:
 //
 //   1. the Server Owner creates the tenant for a fresh owner, who sets the space's mail to the run's relay and invites a
 //      fresh member by mail; the owner's device delivers the space's key;
 //   2. the owner keeps a Depot file in a folder of the shared space (beside a subfolder) and a Memory at its root; the
 //      member keeps a Depot file in a folder of their personal space;
 //   3. the owner switches Depot off in Settings → Capabilities: the confirmation shows the catalog's `whenOff`, the owner's
-//      row names the day, the member's banner names it in English and in German, the notice reaches the owner and the
-//      member through the instance mail (set up by instance-mail.spec.ts), and the file still downloads while the member
-//      is offered no upload;
-//   4. switched on before the day, the row's day and the banner are gone; switched off again at once, a fresh day and a
-//      fresh notice — and when the first day has passed, nothing was erased: the control;
-//   5. left off past the second day: both files are gone, for the member and in the personal space; the folders, the
-//      subfolder and the Memory stay; still off, a fresh day starts and a fresh notice goes; switched on, it ends.
+//      row names the day, the member's banner names it — in English, and once in German, a date the browser writes in
+//      its locale (ADR 0090 decision 9) — the notice reaches the owner and the member through the instance mail (set up
+//      by instance-mail.spec.ts in the `instance` project), and the file still downloads while the member is offered no
+//      upload;
+//   4. switched on before the day, the row's day and the banner are gone; switched off again, a fresh day and a fresh
+//      notice;
+//   5. left off past that day: both files are gone, for the member and in the personal space; the folders, the subfolder
+//      and the Memory stay; still off, a fresh day starts and a fresh notice goes; switched on, it ends.
 //
-// Not driven here, each for its reason: the reminder (seven days before the day — a window short enough to wait out has
-// none; ApplicationErasureSliceTest drives it with a clock), and a switch-on AFTER the day (the purge ticks every five
-// seconds, so a switch-on between the day and the tick that erases is a race with the tick's phase, not a state a browser
-// can hold; ApplicationErasureSweepTest drives it). It runs in its own Playwright project after every feature scenario
-// (playwright.config.ts). The labels are src/web/'s own (src/web/src/i18n/index.ts, en and de), the entry's words the
-// catalog's (contracts/platform/capabilities.json, which the image serves), the mail's ApplicationErasureMail's.
+// Not driven here, each for its reason (ADR 0090 decision 9: a rule a slice test proves with an injected clock is not
+// proven again here by waiting real time): that a switch-on before the day leaves everything in place once the day has
+// passed (ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt); the reminder (seven
+// days before the day — a window short enough to wait out has none; ApplicationErasureSliceTest drives it with a
+// clock); and a switch-on AFTER the day (the purge ticks every five seconds, so a switch-on between the day and the
+// tick that erases is a race with the tick's phase, not a state a browser can hold; ApplicationErasureSweepTest drives
+// it). The labels are src/web/'s own (src/web/src/i18n/index.ts, en and de), the entry's words the catalog's
+// (contracts/platform/capabilities.json, which the image serves), the mail's ApplicationErasureMail's.
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -51,7 +55,7 @@ const TENANT = 'E2E Erasure'
 // ApplicationErasureMail's notice: one subject, EN / DE.
 const NOTICE = /^veyq: Depot is switched off in a space you belong to \/ /
 // The overlay's window and the purge's tick (`VEYQ_APPLICATION_OFF_RETENTION`, `VEYQ_APPLICATION_ERASURE_PURGE_EVERY`).
-const WINDOW_MS = 120_000
+const WINDOW_MS = 30_000
 const TICK_MS = 5_000
 
 const LABELS = {
@@ -174,8 +178,8 @@ const onScreen = (page: Page, day: Date, lang: Lang) =>
 /** [day] as the mails write it: `yyyy-MM-dd`, UTC. */
 const inMail = (day: Date) => day.toISOString().slice(0, 10)
 
-/** Wait until [day] plus [ticks] of the purge has passed: the purge has had its turn at that day. A duration, not a
- *  state, because a tick that finds nothing due leaves nothing to observe — which is exactly the control's claim. */
+/** Wait until [day] plus [ticks] of the purge has passed: the purge has had its turn at that day, so what is read
+ *  afterwards is what it left (and is still polled, for a tick that ran late). */
 async function passDay(page: Page, day: Date, ticks: number): Promise<void> {
   const wait = day.getTime() + ticks * TICK_MS - Date.now()
   if (wait > 0) await page.waitForTimeout(wait)
@@ -353,7 +357,7 @@ test(
     await expect(erasureLine(page)).toHaveCount(0)
     cancelledDay = await switchDepotOff()
     const windowMs = cancelledDay.getTime() - Date.now()
-    expect(windowMs, 'the day is the overlay\'s window away').toBeGreaterThan(60_000)
+    expect(windowMs, 'the day is the overlay\'s window away').toBeGreaterThan(WINDOW_MS / 2)
     expect(windowMs).toBeLessThanOrEqual(WINDOW_MS)
     await expect(erasureLine(page)).toHaveText(`Erased on ${await onScreen(page, cancelledDay, 'en')} unless switched on again`)
 
@@ -373,7 +377,7 @@ test(
     await expect(m.getByRole('menuitem', { name: 'Upload files' })).toHaveCount(0)
     await m.keyboard.press('Escape')
 
-    // …and in German.
+    // …and in German: the day as a German browser writes it.
     const de = memberDe.page
     await reachHome(memberDe, accountMember, 'de')
     await expect(banner(de)).toHaveText(
@@ -386,17 +390,16 @@ test(
 )
 
 test(
-  'switched on before the day, the day and the banner are gone, and when the day passes nothing was erased',
+  'switched on before the day, the day and the banner are gone; off again, a fresh day and a fresh notice',
   { tag: '@uc.platform.erase-switched-off-application:switched-on-before-the-day-nothing-is-lost' },
   async () => {
-    test.setTimeout(240_000)
     const { page } = owner
     expect(cancelledDay.getTime() - Date.now(),
       'the switch-on comes before the day (a slower run needs a longer VEYQ_APPLICATION_OFF_RETENTION)').toBeGreaterThan(10_000)
     await switchDepotOn()
     await expect(erasureLine(page)).toHaveCount(0)
-    // The member's next document is served Depot on and no day: the folder's New menu offers the upload again, and no
-    // banner shows.
+    // The member's next document is served Depot on and no day: the folder's New menu offers the upload again, the file
+    // is there, and no banner shows.
     const m = member.page
     const served = tenantSet(m)
     await openSharedFolder()
@@ -404,26 +407,16 @@ test(
     expect(set.capabilities.map((c) => c.id)).toContain('depot')
     expect(set.applicationErasures).toEqual([])
     await expect(m.getByRole('button', { name: subfolder, exact: true })).toBeVisible()
+    await expect(downloadButton(m, sharedFile.name)).toBeEnabled({ timeout: 60_000 })
     await m.getByRole('button', { name: 'New', exact: true }).click()
     await expect(m.getByRole('menuitem', { name: 'Upload files' })).toBeVisible()
     await m.keyboard.press('Escape')
     await expect(banner(m)).toHaveCount(0)
 
-    // Off again a minute after the first switch-off: a fresh day, and a fresh notice naming it. The minute keeps the
-    // second day far enough behind the cancelled one to read both spaces between them (lane L1, 2026-10-26: switched
-    // off again at once, the second day came 4 s after the first, before the control could look).
-    await passDay(m, new Date(cancelledDay.getTime() - WINDOW_MS + 60_000), 0)
+    // Off again: a fresh day, later than the cancelled one, and a fresh notice naming it.
     erasureDay = await switchDepotOff()
-    expect(erasureDay.getTime() - cancelledDay.getTime()).toBeGreaterThanOrEqual(60_000)
+    expect(erasureDay.getTime()).toBeGreaterThan(cancelledDay.getTime())
     await expectNotices(2, erasureDay)
-
-    // The cancelled day has passed, and three ticks after it: the shared and the personal file are both still there.
-    await passDay(m, cancelledDay, 3)
-    expect(Date.now(), 'still before the second day').toBeLessThan(erasureDay.getTime())
-    await openSharedFolder()
-    await expect(downloadButton(m, sharedFile.name)).toBeEnabled({ timeout: 60_000 })
-    await openPersonalFolder()
-    await expect(downloadButton(m, personalFile.name)).toBeEnabled({ timeout: 60_000 })
   },
 )
 
@@ -436,8 +429,8 @@ test(
     ],
   },
   async () => {
-    // Up to the day, its window plus the wait for the purge's tick.
-    test.setTimeout(240_000)
+    // Up to the day, at most its window, plus the wait for the purge's tick.
+    test.setTimeout(150_000)
     const m = member.page
     await passDay(m, erasureDay, 1)
 

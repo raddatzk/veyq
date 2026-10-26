@@ -64,6 +64,11 @@ the recipe:
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
+     **A shard is a run of its own**: `ci.yml`'s `stack` legs pass `-- --shard <i>/<n>`, and each leg boots its own
+     instance, runs Playwright's dependency projects (`setup`, `scenarios`, `instance`) whole and its share of
+     `features` (`tests/e2e/playwright.config.ts`), and sweeps only what its own browser typed — every stage below reads
+     this run's directory and this run's stack, so no shard reads another's. The guest-write record skips, saying so,
+     on the shard whose selection did not run that spec.
      **A red browser stage skips nothing after it**: the stages 7b and 8 read what the run left on the stack, so they
      run whenever the stack came up (`PAST_BROWSER`); a red of any stage before the browser still skips them.
   7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
@@ -801,7 +806,7 @@ def browser(compose: list[str], workdir: Path, mirror: Mirror, selection: list[s
         },
         "outDir": CONTAINER_OUT,
     }, indent=2) + "\n", encoding="utf-8")
-    # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`); CI passes none.
+    # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`, a CI leg's `-- --shard i/n`).
     cmd = [*compose, "run", "--rm", "--no-deps", "-T", "browser", *selection]
     print("+", " ".join(cmd), flush=True)
     with (workdir / "browser.log").open("w", encoding="utf-8") as log:
@@ -1135,7 +1140,8 @@ def main() -> int:
         if before is not None:
             stage("host", lambda: host_untouched(before, host_snapshot(), project, started and not args.keep))
 
-    print(f"\n== summary — {project}, run directory {workdir.relative_to(ROOT)}")
+    print(f"\n== summary — {project}, run directory {workdir.relative_to(ROOT)}"
+          + (f", playwright {' '.join(selection)}" if selection else ""))
     for name, secs, verdict in stages:
         print(f"  {name:<13} {secs:7.1f}s  {verdict}")
         if name == "browser":

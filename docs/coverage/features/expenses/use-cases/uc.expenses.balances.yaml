@@ -31,8 +31,8 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `balances-from-the-live-
     entries`, `settle-up-is-greedy-and-deterministic`, `overviews-by-category-and-person` and
-    `who-am-i-stays-on-the-device` in Chromium, all in
-    English and again in German, against the release candidate's two images installed through `veyqctl` (ADR 0090),
+    `who-am-i-stays-on-the-device` in Chromium, in
+    English, with the first two again in the German pass (ADR 0090 decision 9), against the release candidate's two images installed through `veyqctl` (ADR 0090),
     each test tagged with its criterion: the vectors' "trip" Pot typed in shows the vector's balances and settle-up
     (each amount formatted for the language), the overview's paid and share columns each sum to the costs, the
     settle-up recorded in one batch settles everyone, a member and a guest each marked as who they chose (kept over a

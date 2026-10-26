@@ -33,7 +33,7 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `every-revision-names-the-
-    heads` in Chromium, all in English and again in German, against the release candidate's two images installed
+    heads` in Chromium, in English (ADR 0090 decision 9), against the release candidate's two images installed
     through `veyqctl` (ADR 0090), each test tagged with its criterion: no ledger notice after a restore, nor after
     the group's key is rotated and the Pot re-keyed. A dropped revision is not provoked there: the lane's server
     serves every revision, so the notice's positive case stays the unit refs'. Green only in local runs of the lane

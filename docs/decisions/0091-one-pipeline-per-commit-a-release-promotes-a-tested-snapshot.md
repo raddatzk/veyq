@@ -80,7 +80,8 @@ Three structural costs sit on top of those numbers:
    Every lane drives the operator's own tool, `veyqctl` ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)), against the candidate's release assets served as a
    local source — so what is tested is what a Server Owner runs:
    - **L1 feature** — `veyqctl install` of the candidate, fresh: write, then read; plus the feature scenarios that
-     need no predecessor.
+     need no predecessor. Sharded since 2026-10-26 (decision 1), each shard a fresh install of its own; which
+     languages and which waits it keeps is [ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md) decision 9.
    - **L2 upgrade in place** — `veyqctl install` of the previous release, write; `veyqctl upgrade` to the candidate
      on the same instance (its backup, template check and health wait, ADR 0096 §5); read.
    - **L3 backup import** — every archived backup of the current major and the previous major's last release
