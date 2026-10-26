@@ -22,17 +22,24 @@ import me.raddatz.veyq.core.platform.capabilities.CapabilityTexts
 import me.raddatz.veyq.core.platform.capabilities.StoredTenantCapabilitySwitches
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilityState
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchStore
+import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureDay
+import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import java.time.Instant
 
 /** A tenant-switchable entry as its tenant owner reads it: the catalog's words, both levels' state and its requirements. */
 data class TenantCapabilityView(
     val state: TenantCapabilityState, val texts: CapabilityEntryTexts, val requirements: List<TenantRequirementState>,
+    /** For an application's own entry, the day its content in the tenant is erased while one is named; else null. */
+    val erasureDueAt: Instant? = null,
 )
 
 sealed interface TenantCapabilitiesOutcome {
     data class Ok(
         val ids: List<String>, val requirements: Map<String, Int>, val services: Map<String, ServiceAddress>,
+        /** The named erasure days of the tenant's switched-off applications (uc.platform.erase-switched-off-application). */
+        val erasures: List<ApplicationErasureDay>,
     ) : TenantCapabilitiesOutcome
     data object Suspended : TenantCapabilitiesOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TenantCapabilitiesOutcome, HttpFailure by Failures.tenantNotFound
@@ -76,21 +83,28 @@ class TenantCapabilitySwitchHandler(
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
     private val services: ExternalServiceAddresses,
+    private val erasures: ApplicationErasureStore,
 ) {
     /** The tenant's effective set, for every member (decision 3). */
     fun effective(callerId: String, tenantId: String): TenantCapabilitiesOutcome {
         access.check(callerId, tenantId, READ)
             .refusal(TenantCapabilitiesOutcome.NotFound, TenantCapabilitiesOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return TenantCapabilitiesOutcome.NotFound
-        return TenantCapabilitiesOutcome.Ok(registry.active(tenantId), registry.requirements(tenantId), services.configured())
+        return TenantCapabilitiesOutcome.Ok(
+            registry.active(tenantId), registry.requirements(tenantId), services.configured(), days(tenantId),
+        )
     }
+
+    private fun days(tenantId: String): List<ApplicationErasureDay> =
+        QuarkusTransaction.joiningExisting().call { erasures.days(tenantId) }
 
     fun list(callerId: String, tenantId: String): TenantCapabilitySwitchesOutcome {
         access.check(callerId, tenantId, READ)
             .refusal(TenantCapabilitySwitchesOutcome.NotFound, TenantCapabilitySwitchesOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return TenantCapabilitySwitchesOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return TenantCapabilitySwitchesOutcome.NotOwner
-        return TenantCapabilitySwitchesOutcome.Ok(registry.tenantRegister(tenantId).map { it.view(tenantId) })
+        val due = days(tenantId).associate { it.application to it.dueAt }
+        return TenantCapabilitySwitchesOutcome.Ok(registry.tenantRegister(tenantId).map { it.view(tenantId, due) })
     }
 
     fun set(callerId: String, tenantId: String, capabilityId: String, off: Boolean): TenantCapabilitySetOutcome {
@@ -121,5 +135,8 @@ class TenantCapabilitySwitchHandler(
     }
 
     private fun TenantCapabilityState.view(tenantId: String) =
-        TenantCapabilityView(this, CapabilityTexts.BY_ID.getValue(id), registry.tenantRequirements(tenantId, id))
+        view(tenantId, days(tenantId).associate { it.application to it.dueAt })
+
+    private fun TenantCapabilityState.view(tenantId: String, due: Map<String, Instant>) =
+        TenantCapabilityView(this, CapabilityTexts.BY_ID.getValue(id), registry.tenantRequirements(tenantId, id), due[id])
 }

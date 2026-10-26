@@ -33,6 +33,8 @@ class PrivacyNoticeRendererTest {
         retentionDays = 7,
         backupRetentionDays = 30,
         erasureWindowDays = 30,
+        trashWindowDays = 14,
+        applicationOffWindowDays = 45,
         breachedPasswordService = PrivacyNoticeRenderer.serviceLabel("https://api.pwnedpasswords.com/range/"),
         exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"),
         browserServices = listOf(BrowserService(SectionTexts("Maps", "Karten"), "tile.example.org")),
@@ -89,6 +91,18 @@ class PrivacyNoticeRendererTest {
         val nothingOn = render(active = { false })
         assertTrue(nothingOn.passage("guest-write-record") != null && nothingOn.passage("guest-write-record-objection") != null)
         assertNull(nothingOn.passage("breached-password-check"), "control: a passage bound to a switch goes with it")
+    }
+
+    /** GDPR Art. 13(2)(a): the storage period of content, named by both windows the instance runs
+     *  (uc.platform.erase-switched-off-application), on the bundled store's page and an external one's alike. */
+    @Test
+    fun theStoragePassageNamesTheTrashAndTheSwitchedOffWindow() {
+        for (values in listOf(all, all.copy(storeHost = "s3.example.org"))) {
+            val storage = render(values = values).passages.single { it.id == "storage" || it.id == "storage-external" }
+            assertTrue(storage.text.en.contains("waits 14 days in its space's trash"), storage.text.en)
+            assertTrue(storage.text.en.contains("stays readable for 45 days and is then erased"), storage.text.en)
+            assertTrue(storage.text.de.contains("liegt 14 Tage im Papierkorb") && storage.text.de.contains("45 Tage lang lesbar"), storage.text.de)
+        }
     }
 
     @Test

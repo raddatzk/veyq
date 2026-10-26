@@ -1,6 +1,5 @@
 package me.raddatz.veyq.core.platform.capabilities
 
-import me.raddatz.veyq.core.instance.VeyqInstance
 import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
@@ -9,9 +8,9 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
-import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -44,7 +43,7 @@ class CapabilitySwitchEntity : PanacheEntityBase {
 
 /** The switches' persistence. Every method runs in the caller's transaction. */
 @ApplicationScoped
-class CapabilitySwitchStore {
+class CapabilitySwitchStore(private val erasures: ApplicationErasureStore) {
 
     fun switchedOff(): Set<String> = CapabilitySwitchEntity.listAll().mapTo(mutableSetOf()) { it.id }
 
@@ -54,14 +53,25 @@ class CapabilitySwitchStore {
      *
      * **Under the instance singleton's row lock.** Two writes of one entry would otherwise both read "no row" and both
      * insert, and the second would fail on the primary key instead of answering what the first already stored. Only
-     * this write takes that lock, and it takes no other, so it waits behind nothing but itself.
+     * this write takes that lock first.
+     *
+     * **An application's own entry** ([ApplicationErasureStore.APPLICATIONS]) also keeps every tenant's erasure row
+     * (uc.platform.erase-switched-off-application): off makes it in each tenant that has none, on removes it in each
+     * tenant whose own switch is on, unless it is due. Each tenant's row is locked after the instance's, in ascending id
+     * order — [ApplicationErasureStore]'s lock order. [now] is null in production (the clock is read under the locks).
      */
-    fun set(id: String, off: Boolean) {
-        VeyqInstance.findById(VeyqInstance.SINGLETON_ID, LockModeType.PESSIMISTIC_WRITE)
+    fun set(id: String, off: Boolean, now: Instant? = null) {
+        erasures.lockInstance()
         val row = CapabilitySwitchEntity.findById(id)
         when {
             off && row == null -> CapabilitySwitchEntity().apply { this.id = id }.persist()
             !off && row != null -> row.delete()
+        }
+        if (id !in ApplicationErasureStore.APPLICATIONS) return
+        CapabilitySwitchEntity.flush()
+        TenantEntity.findAll().list().map { it.id }.sorted().forEach { tenantId ->
+            erasures.lockTenant(tenantId) ?: return@forEach
+            erasures.reconcile(tenantId, id, SwitchLevel.INSTANCE, now)
         }
     }
 }
@@ -133,7 +143,7 @@ class TenantCapabilitySwitchEntity : PanacheEntityBase {
 
 /** The tenant switches' persistence. Every method runs in the caller's transaction. */
 @ApplicationScoped
-class TenantCapabilitySwitchStore {
+class TenantCapabilitySwitchStore(private val erasures: ApplicationErasureStore) {
 
     fun switchedOff(tenantId: String): Set<String> =
         TenantCapabilitySwitchEntity.list("tenantId", tenantId).mapTo(mutableSetOf()) { it.capabilityId }
@@ -142,9 +152,16 @@ class TenantCapabilitySwitchStore {
      * Store [capabilityId]'s own switch for [tenantId]: a row while it is off, none while it is on; writing the state it
      * has changes nothing. **Under the tenant row's lock**, for the reason [CapabilitySwitchStore.set] takes the
      * instance's: two writes of one entry would otherwise both read "no row" and the second fail on the key.
+     *
+     * **An application's own entry** ([ApplicationErasureStore.APPLICATIONS]) also keeps the tenant's erasure row
+     * (uc.platform.erase-switched-off-application): off makes it if none exists, on removes it unless the instance still
+     * holds the application off or it is due. [now] is null in production (the clock is read under the locks).
      */
-    fun set(tenantId: String, capabilityId: String, off: Boolean) {
-        TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)
+    fun set(tenantId: String, capabilityId: String, off: Boolean, now: Instant? = null) {
+        // The instance's row first, then the tenant's ([ApplicationErasureStore]'s order): this write reads the
+        // instance's switch, so it must not read it while an instance write of it is uncommitted.
+        erasures.lockInstance()
+        erasures.lockTenant(tenantId)
         val row = TenantCapabilitySwitchEntity.find("tenantId = ?1 and capabilityId = ?2", tenantId, capabilityId).firstResult()
         when {
             off && row == null -> TenantCapabilitySwitchEntity().apply {
@@ -154,6 +171,9 @@ class TenantCapabilitySwitchStore {
             }.persist()
             !off && row != null -> row.delete()
         }
+        if (capabilityId !in ApplicationErasureStore.APPLICATIONS) return
+        TenantCapabilitySwitchEntity.flush()
+        erasures.reconcile(tenantId, capabilityId, SwitchLevel.TENANT, now)
     }
 }
 

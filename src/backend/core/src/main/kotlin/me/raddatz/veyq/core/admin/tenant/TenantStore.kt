@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.admin.tenant
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
+import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
@@ -90,6 +92,7 @@ class TenantStore(
     private val membership: MembershipStore,
     private val hosts: TenantHostResolver,
     private val ledger: ErasureLedger,
+    private val erasures: ApplicationErasureStore,
 ) {
 
     /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
@@ -288,6 +291,10 @@ class TenantStore(
         tokenHash: String,
         expiresAt: Instant,
     ): Pair<String, Instant> {
+        // The instance row's lock before the tenant exists (ApplicationErasureStore's lock order): an instance switch of
+        // an application either committed before this reads it, and the new tenant gets its erasure row below, or it
+        // waits and finds the tenant (uc.platform.erase-switched-off-application A4).
+        erasures.lockInstance()
         val now = Instant.now()
         val tenantId = UUID.randomUUID().toString()
         TenantEntity().apply {
@@ -298,6 +305,11 @@ class TenantStore(
             status = TenantEntity.PENDING
         }.persist()
         mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, now)
+        TenantEntity.flush()
+        // Its own window from its creation, and no notice: nobody is a member yet. The reminder reaches who joins.
+        ApplicationErasureStore.APPLICATIONS.filter { erasures.isOff(tenantId, it) }.forEach {
+            erasures.reconcile(tenantId, it, SwitchLevel.INSTANCE, now, noticeOwed = false)
+        }
         return tenantId to expiresAt
     }
 

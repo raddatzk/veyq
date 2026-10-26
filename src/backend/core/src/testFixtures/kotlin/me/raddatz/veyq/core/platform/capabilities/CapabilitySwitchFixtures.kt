@@ -31,7 +31,10 @@ object CapabilitySwitchFixtures {
 
     /** Switches every entry back on — for a class that switches through the Admin API and must not leave a row. */
     fun clear() {
-        QuarkusTransaction.requiringNew().run { CapabilitySwitchEntity.deleteAll() }
+        QuarkusTransaction.requiringNew().run {
+            CapabilitySwitchEntity.deleteAll()
+            dropUnimpliedErasures()
+        }
         switches().invalidate()
     }
 
@@ -62,13 +65,26 @@ object TenantCapabilitySwitchFixtures {
 
     /** Switches every tenant's entries back on — for a class that switches through the API and must not leave a row. */
     fun clear() {
-        QuarkusTransaction.requiringNew().run { TenantCapabilitySwitchEntity.deleteAll() }
+        QuarkusTransaction.requiringNew().run {
+            TenantCapabilitySwitchEntity.deleteAll()
+            dropUnimpliedErasures()
+        }
         switches().invalidate()
     }
 
     private fun store(): TenantCapabilitySwitchStore = Arc.container().instance(TenantCapabilitySwitchStore::class.java).get()
     private fun switches(): StoredTenantCapabilitySwitches =
         Arc.container().instance(StoredTenantCapabilitySwitches::class.java).get()
+}
+
+/**
+ * The erasure rows (uc.platform.erase-switched-off-application) the switches no longer imply, gone with the switch rows
+ * a fixture's clear deletes directly: a row left behind would make a later class's tick erase that tenant's content.
+ * In the caller's transaction.
+ */
+fun dropUnimpliedErasures() {
+    val store = Arc.container().instance(ApplicationErasureStore::class.java).get()
+    ApplicationErasureEntity.listAll().filter { !store.isOff(it.tenantId, it.application) }.forEach { it.delete() }
 }
 
 /**

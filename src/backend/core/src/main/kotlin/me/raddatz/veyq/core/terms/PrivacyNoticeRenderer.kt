@@ -41,6 +41,11 @@ data class NoticeValues(
     val backupRetentionDays: Int,
     /** The account erasure's window (ADR 0101 decision 3). */
     val erasureWindowDays: Int,
+    /** How long a deleted node waits in its space's trash (`veyq.node.trash.retention`, ADR 0061). */
+    val trashWindowDays: Int,
+    /** How long an application switched off in a tenant stays before its content there is erased
+     *  (`veyq.application.off.retention`, uc.platform.erase-switched-off-application). */
+    val applicationOffWindowDays: Int,
     /** What the breached-password check calls, as [PrivacyNoticeRenderer.serviceLabel] names it; null while it calls nothing. */
     val breachedPasswordService: String? = null,
     /** What the exchange-rate fetch calls (ADR 0108 decision 8), named the same way; null while it calls nothing. */
@@ -133,6 +138,8 @@ object PrivacyNoticeRenderer {
         "retention" -> FixedValue.Text(text.dayUnit.render(v.retentionDays, en))
         "backupRetention" -> FixedValue.Text(text.dayUnit.render(v.backupRetentionDays, en))
         "erasureWindow" -> FixedValue.Text(text.dayUnit.render(v.erasureWindowDays, en))
+        "trashWindow" -> FixedValue.Text(text.dayUnit.render(v.trashWindowDays, en))
+        "applicationOffWindow" -> FixedValue.Text(text.dayUnit.render(v.applicationOffWindowDays, en))
         "breachedPasswordService" -> FixedValue.Text(v.breachedPasswordService)
         "exchangeRateService" -> FixedValue.Text(v.exchangeRateService)
         "browserServices" -> FixedValue.Items(v.browserServices.map { "${it.title.pick(en)}: ${it.label}" })

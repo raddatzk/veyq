@@ -15,9 +15,11 @@ import java.time.format.DateTimeFormatter
  * Instance mail (ADR 0097 decisions 3–5, uc.admin.learn-of-new-releases): the test mail that carries the confirmation
  * code, and one mail per release notice once the address is confirmed.
  *
- * **Only the instance's own settings, only to the Server Owner.** It reads [InstanceMailSettingsStore] and nothing of a
- * tenant's, and its recipient is always the address of the account that saved the settings, as that account has it
- * now — never an address a request or a notice names. Nothing a tenant configures can make it send, and nothing it
+ * **Only the instance's own settings, only to the host's recipients** (ADR 0097 decision 3). It reads
+ * [InstanceMailSettingsStore] and nothing of a tenant's. Its release and instance notices go to the address of the
+ * account that saved the settings, as that account has it now; [mailTo] carries the host's other notices — moderation,
+ * an erasure, an application's switch-off notice and reminder (`ApplicationErasureMail`) — to an address its caller read
+ * from the server's own rows, never one a request or a notice names. Nothing a tenant configures can make it send, and nothing it
  * holds is a tenant mailer's default or fallback (ADR 0048 §4). The mail carries no user data (ADR 0049): what was
  * found, the date, the Run area's upgrade page, and for the test mail the code.
  *
@@ -86,9 +88,10 @@ class InstanceNoticeMailer(
     }
 
     /**
-     * A moderation notice (ADR 0097 decision 3, ADR 0099 § 7) to [to] — a confirmed moderator's own account address,
-     * which the caller (`ModeratorNotices`) read from the roster and the account row, never from a request. Through the
-     * instance's settings whenever they can send.
+     * One of the host's notices (ADR 0097 decision 3) to [to] — a confirmed moderator's account address (ADR 0099 § 7,
+     * `ModeratorNotices`), an account being erased, a member of a tenant being deleted or of one where an application is
+     * switched off: an address the caller read from the server's own rows, never from a request. Through the instance's
+     * settings whenever they can send; `FAILED` without them.
      */
     fun mailTo(to: String, subject: String, body: String, what: String): DeliveryResult {
         val transport = settings.find()?.transport?.takeIf { it.host != null } ?: return DeliveryResult.FAILED

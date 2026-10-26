@@ -71,6 +71,14 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_account_erasure.mailed_at" to "AccountErasureMail mails only while it is unset, and retries those",
             // --- tenants + scopes
             "veyq_tenant.deletion_due_at" to "TenantPurge erases a tenant pending deletion once it is due; served to the Server Owner",
+            // an application left switched off (uc.platform.erase-switched-off-application)
+            "veyq_application_erasure.off_since" to "ApplicationErasureMail asks whether the window is longer than the " +
+                "reminder's seven days (Duration.between(offSince, dueAt))",
+            "veyq_application_erasure.due_at" to "ApplicationErasurePurge erases once it is due; served to every member " +
+                "(applicationErasures) and to the tenant owner (erasureDueAt), and named by both mails",
+            "veyq_application_erasure.notice_mailed_at" to "ApplicationErasureMail's claim: a notice is owed while it is " +
+                "null; a reminder is sent only when the notice went before the reminder's seven days",
+            "veyq_application_erasure.reminder_mailed_at" to "ApplicationErasureMail's claim: the reminder is owed while it is null",
             "veyq_tenant_invite.expires_at" to "TenantStore/TenantAcceptHandler refuse and expire; served to the admin",
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",
             "veyq_scope.deleted_at" to "ScopePurge's grace cutoff; served as deletedAt/purgeAfter of a pending group",

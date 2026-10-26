@@ -27,6 +27,7 @@ import me.raddatz.veyq.core.generated.model.TenantCapabilityRequirementUpdate
 import me.raddatz.veyq.core.platform.capabilities.capabilityWire
 import me.raddatz.veyq.core.generated.model.CapabilityText
 import me.raddatz.veyq.core.generated.model.TenantCapabilities
+import me.raddatz.veyq.core.generated.model.ApplicationErasure
 import me.raddatz.veyq.core.generated.model.TenantCapabilitySwitch
 import me.raddatz.veyq.core.generated.model.TenantCapabilitySwitchUpdate
 import me.raddatz.veyq.core.generated.model.TenantMailSettings
@@ -369,7 +370,12 @@ class TenantsResource(
     @Authenticated
     override fun getTenantCapabilities(tenantId: UUID): Response =
         when (val o = capabilitiesHandler.effective(identity.principal.name, tenantId.toString())) {
-            is TenantCapabilitiesOutcome.Ok -> Response.ok(TenantCapabilities(o.ids.map { capabilityWire(it, o.requirements, o.services) })).build()
+            is TenantCapabilitiesOutcome.Ok -> Response.ok(
+                TenantCapabilities(
+                    capabilities = o.ids.map { capabilityWire(it, o.requirements, o.services) },
+                    applicationErasures = o.erasures.map { ApplicationErasure(id = it.application, dueAt = it.dueAt.utc()) },
+                ),
+            ).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -420,6 +426,7 @@ class TenantsResource(
                 value = it.value, serverValue = it.serverValue, effective = it.effective,
             )
         },
+        erasureDueAt = erasureDueAt?.utc(),
     )
 
     private fun me.raddatz.veyq.core.platform.capabilities.CapabilityText.toDto() = CapabilityText(en = en, de = de)
