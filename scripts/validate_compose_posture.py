@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, the client port's source is true, and every log is bounded.
+"""Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, the client port's source is true, and every log is bounded; the dev stack publishes on loopback only.
 
 **What it asserts** (ADR 0071), over `infra/docker/docker-compose.prod.yml` as YAML with its merge keys resolved, and
 over every service the file declares — the set is the file's, never a list here:
@@ -37,10 +37,15 @@ over every service the file declares — the set is the file's, never a list her
      in its command or entrypoint and no `TRAEFIK_ACCESSLOG*` variable, because an access log records every reader
      with every share id read; and it sets its own level, `--log.level` of `ERROR`, `FATAL` or `PANIC`, rather than
      inheriting the image's. The level is the clause's positive control: the proxy's flags were read.
+  7. **The dev stack publishes on loopback only** — over `infra/docker/docker-compose.yml`, the one rule here that reads
+     it. Every port entry of every service names a loopback address (`127.0.0.1`, `::1`), and no service runs on the
+     host's network (`network_mode: host`). Its credentials are throwaways that are public with the repository, so a
+     port on every interface — Compose's default — lets anyone on the developer's network in with them. The positive
+     control: the file publishes at least one port, or there would be nothing to hold.
 
-**Scoped to the production file on purpose.** The dev stack (`infra/docker/docker-compose.yml`) is not internet-facing:
-it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords. A rule
-that made its services unprivileged would guard a stack nobody deploys.
+**Assertions 1–6 are scoped to the production file on purpose.** The dev stack (`infra/docker/docker-compose.yml`) is not
+internet-facing: it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords.
+A rule that made its services unprivileged would guard a stack nobody deploys; where its ports listen is assertion 7.
 
 **The defect that bought it — live when this guard was written (cr-runtime-hardening-both-targets).** No service
 of the production recipe set `user:`, `cap_drop`, `no-new-privileges` or `read_only`, Garage ran as uid 0 where
@@ -63,7 +68,12 @@ snapshot-and-restore: one service's block removed, `max-file` dropped, the store
 `garage=info`, and kept at `garage=warn` with one crate raised to `debug`. Its proxy clause came with cr-logging: no
 incident — Traefik wrote no access log, by its default rather than by the recipe — and its first run on that tree was
 red on the missing level alone. Bitten by snapshot-and-restore: `--accesslog=true` added, `--accessLog.filePath=…`
-added, `TRAEFIK_ACCESSLOG=true` set, and the level removed or set to `INFO`.
+added, `TRAEFIK_ACCESSLOG=true` set, and the level removed or set to `INFO`. Assertion 7 came before the repository
+went public (2026-10-26), live when written: all six ports of the dev stack were published on every interface and
+answered on the Mac's LAN address, with the database's `change-me` and the store's admin token in the file. Its first
+run on that tree was red on all four services. Bitten by snapshot-and-restore: one port's address removed, one set to
+`0.0.0.0`, the long form with no `host_ip`, a service moved to `network_mode: host`, and every port removed (the
+control).
 
 **Its limits — what a green run does NOT prove.** It reads the file; it runs nothing. So a read-only root that
 misses a scratch path, a `tmpfs:` a process cannot write, or a uid the image cannot run as are all green here
@@ -82,7 +92,9 @@ the declaration, not the daemon or Garage: that the pinned Garage reads `RUST_LO
 store to `info` on purpose) is outside its reach. It bounds a log's size, never its age. The proxy clause reads the
 flags and variables Traefik takes its static configuration from on this recipe; a static configuration file
 (`--configFile`, or one mounted where Traefik looks by default) is not read, and nothing the proxy logs at `ERROR` is
-checked — what a Traefik error line holds is Traefik's.
+checked — what a Traefik error line holds is Traefik's. Assertion 7 reads this one file: a port a script publishes
+with `docker run -p` (the race lane's MariaDB, the volume measurement's mailbox) or an override file is out of its reach,
+and it cannot see a host firewall that would have closed the port anyway.
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
@@ -102,6 +114,7 @@ import repo_layout  # noqa: E402 - where the deployment files and the test harne
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPOSE = repo_layout.PROD_COMPOSE
+DEV_COMPOSE = repo_layout.DEV_COMPOSE
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BUILD_JOB = "build"
 
@@ -394,6 +407,24 @@ for proxy in proxies:
         fail(f"the proxy `{proxy}` sets --log.level={'/'.join(levels) or '(nothing)'} — set it to ERROR, never inherit "
              f"the image's level (ADR 0092 § 5)")
 
+# --- 7: the dev stack publishes on loopback only ---
+try:
+    dev_doc = yaml.safe_load(DEV_COMPOSE.read_text()) or {}
+except (OSError, yaml.YAMLError) as e:
+    dev_doc = {}
+    errors.append(f"{DEV_COMPOSE.relative_to(ROOT)} is not readable YAML: {e}")
+dev_services = {n: s for n, s in (dev_doc.get("services") or {}).items() if isinstance(s, dict)}
+for name, service in sorted(dev_services.items()):
+    if publishes_publicly(service):
+        errors.append(f"{DEV_COMPOSE.relative_to(ROOT)}: service `{name}` publishes a port beyond loopback — its "
+                      f"credentials are public with the repository; prefix the port with `127.0.0.1:`")
+    if str(service.get("network_mode") or "") == "host":
+        errors.append(f"{DEV_COMPOSE.relative_to(ROOT)}: service `{name}` runs on the host's network — every port it "
+                      f"listens on is open on every interface")
+dev_published = sum(len(s.get("ports") or []) for s in dev_services.values())
+if dev_published == 0:
+    errors.append(f"{DEV_COMPOSE.relative_to(ROOT)}: control: publishes no port — assertion 7 would hold nothing")
+
 if errors:
     print("COMPOSE POSTURE CHECK FAILED:")
     for e in errors:
@@ -406,5 +437,5 @@ print(
     f"network with the database ({database}), and the app reaches both; the app's port source is "
     f"{source or 'unset'} with {', '.join(plugins) or 'no'} local plugin, no remote plugin and no PROXY protocol; every "
     f"service's log rotates by size, the store ({store}) logs below info, and the proxy keeps no access log at its "
-    f"own ERROR level"
+    f"own ERROR level; the dev stack's {dev_published} ports listen on loopback only"
 )

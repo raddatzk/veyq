@@ -74,6 +74,14 @@ Docker Compose for the local dev dependencies. Three profiles:
   ([ADR 0055](../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §2), so every web e2e suite
   reads this mailbox.
 
+**Every port is published on `127.0.0.1` only.** The stack's credentials are throwaways that are public with the
+repository, so a port on every interface (Compose's default) would let anyone on the same network into the dev
+database and store with them. Nothing in the dev loop needs another interface: the backend, Vite (which proxies
+`/blobs/`) and the e2e orchestrators reach the ports on the host, and the containers that need the store or the
+database join the compose network. A stack started before 2026-10-26 keeps its old bindings until its containers are
+recreated — `docker compose -f infra/docker/docker-compose.yml --profile s3 --profile mail up -d` recreates the four
+changed services and keeps their volumes; `scripts/run_web_e2e.py`'s `up --no-recreate` never does.
+
 ```sh
 # database only (the usual dev loop)
 docker compose -f infra/docker/docker-compose.yml up -d

@@ -11,6 +11,14 @@
 # `scripts/run_web_e2e.py` reads the network's name from here.
 name: infra
 
+# Every port is published on 127.0.0.1 only. The credentials below are throwaways, and they are public with the
+# repository: published on every interface (Compose's default), the database, the store and its admin API would
+# answer anyone on the same network with them — measured 2026-10-26, all six ports open on the Mac's LAN address.
+# Nothing needs another interface: the backend, Vite (which proxies `/blobs/`), the e2e orchestrators and an
+# emulator (10.0.2.2 is the host's loopback) reach them on the host, and the containers that need the store or the
+# database (the backup tool's rclone and mariadb-dump) join the compose network. `localhost` still works from
+# Node and curl, which fall back from ::1 to 127.0.0.1 (measured).
+
 services:
   mariadb:
     image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
@@ -23,7 +31,7 @@ services:
       MARIADB_PASSWORD: change-me
       MARIADB_ROOT_PASSWORD: change-me-root
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - veyq-mariadb-data:/var/lib/mysql
     healthcheck:
@@ -58,8 +66,8 @@ services:
       # written inside the metadata volume grows the very thing a volume-copy rollback copies.
       - veyq-garage-snapshots:/var/lib/garage/snapshots
     ports:
-      - "19000:3900"   # S3 API — VEYQ_S3_ENDPOINT for the backend e2e; also the internal endpoint the backend stats against
-      - "19003:3903"   # admin API (local only)
+      - "127.0.0.1:19000:3900"   # S3 API — VEYQ_S3_ENDPOINT for the backend e2e; also the internal endpoint the backend stats against
+      - "127.0.0.1:19003:3903"   # admin API
 
   # Reverse proxy so the bundled store is reachable same-origin (ADR 0013 §4). Routes only the bucket path, from
   # a static file: like production, the file provider is its only provider, so no container holds the Docker
@@ -74,7 +82,7 @@ services:
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--entrypoints.web.address=:80"
     ports:
-      - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /blobs/<obj> → Garage
+      - "127.0.0.1:18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /blobs/<obj> → Garage
     volumes:
       - "./traefik-dev:/etc/traefik/dynamic:ro"
 
@@ -93,8 +101,8 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports:
-      - "11025:1025"   # SMTP — a tenant's mail settings point here (host localhost, port 11025)
-      - "18025:8025"   # web UI + HTTP API — read delivered invites (http://localhost:18025)
+      - "127.0.0.1:11025:1025"   # SMTP — a tenant's mail settings point here (host localhost, port 11025)
+      - "127.0.0.1:18025:8025"   # web UI + HTTP API — read delivered invites (http://localhost:18025)
 
 volumes:
   veyq-mariadb-data:
