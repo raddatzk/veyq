@@ -1,8 +1,9 @@
 # ADR 0104 — The identity-pin store is one sealed entry per pin, held together by a sealed head
 
 - Status: Accepted 2026-10-19, built. The per-entry shape is the owner's decision (instead of raising the cap); so are
-  the fingerprint hash per entry (decision 3), the count named openly (decision 5) and no read path for the single-blob
-  store (decision 7: veyq was not live). [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decisions 1 and 7
+  the fingerprint hash per entry (decision 3), the count named openly (decision 5), no read path for the single-blob
+  store (decision 7: veyq was not live) and keeping the cap and the rotation's one request once it was measured
+  (§ Consequences, 2026-10-26). [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decisions 1 and 7
   say what is pinned and which revision is marked in place.
 - Date: 2026-10-19
 
@@ -79,9 +80,16 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
 
 - **The ceiling moves from about 444 pins to the request size of the one write that carries all of them** — a rotation
   (ADR 0060 re-seals the store inside its transaction) or a reset. The contract bounds that write, and the store, at
-  25,000 entries: a write of 25,000 is 9,600,083 bytes against Quarkus 3.36's default body limit of 10,485,760
-  (`quarkus.http.limits.max-body-size` is not set), with room for the rotation's other fields (M). Above it a rotation
-  would need a staged write, which is not built. One new pin writes about 400 bytes instead of the whole store.
+  25,000 entries, against Quarkus 3.36's default body limit of 10,485,760 bytes (`quarkus.http.limits.max-body-size` is
+  set nowhere; `RequestTooLargeRoutes` answers it alike on every path). **Measured 2026-10-26** (M, the real
+  `rotateKeys` against a live backend, `rotationAtPinCap.measure.e2e.test.ts`): a rotation costs **384 bytes a pin and
+  about 2,700 beside them**, so at the cap it sends **9,602,700 bytes (91.6 %)** and is answered `200`. With every
+  other field at its contract maximum — the identity bundle and its wrapped private key, both cold wraps, the
+  signature, the device register, the head — it would send about **9.70 MB (92.5 %)**, so the limit carries
+  **≈ 27,000 pins** even then (`IdentityPinsSliceTest` holds that worst case against the configured limit). A body past
+  the limit is `413 request_too_large`, answered on its `Content-Length` before authentication, and nothing is written.
+  **The cap and the one request stay** (owner, 2026-10-26): the measured margin is 883 KB. Above it a rotation would
+  need a staged write, which is not built. One new pin writes about 400 bytes instead of the whole store.
 - **What the operator learns per write changes shape, not amount.** It sees which entry was written; today it sees that
   the store was. Linking an entry to a contact by timing (a write right after a directory read of that contact) works
   for both shapes alike, and the server already relays the grant the pin precedes.
@@ -94,6 +102,10 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
 - **Rejected:** a bigger cap (moves the wall, keeps the O(N) write); one store per scope (one contact's trust split per
   scope, against ADR 0023); fingerprint pins in the single blob (lifts the cap about eightfold and keeps the O(N) write —
   the owner chose per-entry); rows without a head (ADR 0028 Decision 7 lost per entry); dummy entries to hide the count
-  (it was never hidden, decision 5); an incremental digest (decision 4).
+  (it was never hidden, decision 5); an incremental digest (decision 4). And, once the cap's rotation was measured
+  (owner, 2026-10-26): a lower cap (margin nobody needs, at the price of fewer members per key-holder); a chunked
+  rotation (a staged set the server holds, cleans up and erases, against ADR 0060's one request, for a ceiling not
+  reached); a body limit for that one endpoint (Quarkus has one global limit, so every other path would need a rule of
+  its own in a pre-authentication filter).
 
 Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../site/src/content/docs/security/protocols.mdx), [Threat model](../../site/src/content/docs/security/threat-model.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).
