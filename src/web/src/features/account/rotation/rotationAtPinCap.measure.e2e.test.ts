@@ -1,6 +1,17 @@
-// Inbox #538 live e2e (VEYQ_E2E=1): does an account rotation still fit the request body limit when the identity-pin
-// store holds the contract's cap of 25,000 entries (ADR 0104 § Consequences)? REAL backend + MariaDB, REAL crypto, the
-// REAL `rotateKeys` — the request measured is the one the client builds, not a body assembled here.
+// Inbox #538 live MEASUREMENT (VEYQ_E2E=1 and VEYQ_E2E_MEASURE=1): does an account rotation still fit the request body
+// limit when the identity-pin store holds the contract's cap of 25,000 entries? REAL backend + MariaDB, REAL crypto, the
+// REAL `rotateKeys` — the request measured is the one the client builds, not a body assembled here. ADR 0104
+// § Consequences holds its readings (9,602,700 bytes at the cap, 384 a pin) and the decision they bought: the cap and the
+// one request stay.
+//
+// **Opt-in, not in the default web-e2e run** (the `.measure.e2e.test.ts` suffix; `scripts/run_web_e2e.py` leaves it out
+// unless the variable is set, and refuses to run it named without it). From a worktree, beside the owner's stack:
+//   (cd src/backend && ./gradlew quarkusBuild)
+//   VEYQ_E2E_MEASURE=1 VEYQ_PIN_ROTATION_POINTS=999,10000,20000,25000 VEYQ_PIN_ROTATION_OUT=<file> \
+//   VEYQ_INFRA_DIR=<main checkout>/infra/docker VEYQ_JAR=$PWD/src/backend/build/quarkus-app/quarkus-run.jar \
+//   VEYQ_PORT=<free> VEYQ_ADMIN_PORT=<free> \
+//   python3 scripts/run_web_e2e.py src/web/src/features/account/rotation/rotationAtPinCap.measure.e2e.test.ts
+// It answers once the body limit, the cap or a field's bound moves; CI holds the arithmetic in `IdentityPinsSliceTest`.
 //
 // The store is seeded through the store's own write, sealed in the documented format (`src/test/pinStore.ts`, the
 // independent writer the unit tests use) under the account's current Master Key: one `replaceAll` of N entries for N
@@ -101,7 +112,8 @@ async function seed(userIds: string[]): Promise<void> {
 /** The `i`-th contact's fingerprint: 32 bytes as a real `fingerprintDigestB64` is, distinct per contact. */
 const fingerprintOf = (i: number) => createHash('sha256').update(`veyq #538 contact ${i}`).digest('base64')
 
-describe.skipIf(!process.env.VEYQ_E2E)('#538 — a rotation of a full identity-pin store (live, real crypto)', () => {
+// The measurement's own gate (the header says why it is opt-in), beside the live suites' `VEYQ_E2E`.
+describe.skipIf(!process.env.VEYQ_E2E || process.env.VEYQ_E2E_MEASURE !== '1')('#538 — a rotation of a full identity-pin store (live, real crypto, a measurement)', () => {
   it('rotates a store of 25,000 pins in one request the server accepts', async () => {
     expect(POINTS.every((p, i) => Number.isInteger(p) && p > 0 && p <= CAP && (i === 0 || p > POINTS[i - 1])), `points ${POINTS}`).toBe(true)
     const { owner } = await birthInstance('E2E Pin Cap')

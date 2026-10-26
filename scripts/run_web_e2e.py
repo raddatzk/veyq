@@ -76,8 +76,12 @@ Usage:
     python3 scripts/run_web_e2e.py --upgrade         # the upgrade proof against the default predecessor
     python3 scripts/run_web_e2e.py --upgrade-from <git ref>
 
-With no arguments it runs every `src/web/src/**/*.e2e.test.ts` — that is how CI invokes it. Paths may be given
-relative to the repo root or to `src/web/`, which is a local debugging convenience only.
+With no arguments it runs every `src/web/src/**/*.e2e.test.ts` — that is how CI invokes it — except the
+**measurements**, `*.measure.e2e.test.ts`: a suite that takes a reading rather than holding a claim CI must keep (the
+rotation of a full identity-pin store, inbox #538). One runs only when asked for, with `VEYQ_E2E_MEASURE=1` set — named
+as an argument, or with no arguments beside every other suite — and its own `describe.skipIf` reads the same variable.
+Left in the default set, a skipped suite would still boot an instance and fail its sweeps for recording no canary.
+Paths may be given relative to the repo root or to `src/web/`, which is a local debugging convenience only.
 
 Prerequisite: the fast-jar exists (`cd src/backend && ./gradlew quarkusBuild`). CI builds it once, before this runs.
 **And a STALE jar fails as a wrong answer, not as an error** (cost one run in cr-account-recovery): this boots
@@ -113,6 +117,7 @@ Environment (all optional):
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
     VEYQ_E2E_KEEP_RUNS    How many run directories `.e2e-out/` keeps, the new one included (at least 1). Default: 2
     VEYQ_DB_ROOT_PASSWORD MariaDB root password. Default: the documented compose throwaway.
+    VEYQ_E2E_MEASURE      `1` runs the `*.measure.e2e.test.ts` measurements too (see above). Default: unset.
 """
 from __future__ import annotations
 
@@ -268,6 +273,25 @@ def discover(root: Path = WEB) -> list[Path]:
     if not files:
         raise NoE2eFilesError(f"no *.e2e.test.ts found under {root}/src — refusing to report success on zero files")
     return files
+
+
+MEASUREMENT_SUFFIX = ".measure.e2e.test.ts"
+
+
+def opted_in(files: list[Path], named: bool) -> list[Path]:
+    """The run's files without the measurements, unless `VEYQ_E2E_MEASURE=1` asks for them (the module docstring says why).
+
+    A measurement named as an argument without the variable is refused rather than run: its suite would skip, and a
+    skipped suite's sweeps fail on the canary it never recorded — a red that says nothing about the measurement.
+    """
+    if os.environ.get("VEYQ_E2E_MEASURE") == "1":
+        return files
+    measurements = [f for f in files if f.name.endswith(MEASUREMENT_SUFFIX)]
+    if named and measurements:
+        raise SystemExit(f"[e2e] {', '.join(f.name for f in measurements)}: a measurement runs only with VEYQ_E2E_MEASURE=1")
+    for f in measurements:
+        log(f"leaving out the measurement {f.name} (VEYQ_E2E_MEASURE=1 runs it)")
+    return [f for f in files if f not in measurements]
 
 
 def normalize(arg: str) -> Path:
@@ -1880,6 +1904,7 @@ def main(argv: list[str]) -> int:
                          f"(cd {repo_layout.rel(repo_layout.BACKEND)} && ./gradlew quarkusBuild)")
 
     files = [normalize(a) for a in argv] if argv else discover()
+    files = opted_in(files, named=bool(argv))
     groups = into_groups(files)
     if upgrade:
         # Refused before anything is built: a ref that is no commit, or one older than the seeder.
