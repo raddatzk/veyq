@@ -65,7 +65,11 @@ reporters: each affected member's account address gets the statement of reasons 
 their objection, and a reporter who left a contact gets the decision on their report, the address sent once in the
 clear by the deciding moderator's client (which opened the sealed copy) and mailed from memory as the receipt is — and,
 **for an erasure** ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decisions 2
-and 10), to the address of an account being erased and to every member of a tenant the Server Owner deletes. The
+and 10), to the address of an account being erased and to every member of a tenant the Server Owner deletes — and,
+for an **application left switched off** ([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md),
+[ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8), the notice at switch-off and the
+reminder seven days before the day to every member of the tenant (`pendingConsent = false`), whether the tenant owner
+or the Server Owner switched it off. The
 duty is the host's, so the host's channel: a tenant's mail would speak in the tenant's name for the host's decision.
 It is never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
 still holds.

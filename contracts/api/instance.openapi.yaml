@@ -1061,14 +1061,21 @@ paths:
       tags: [instance]
       operationId: getInstanceMailSettings
       x-veyq-channel: admin
-      summary: Read the instance's own mail settings, which send release notices to the Server Owner only.
+      summary: Read the instance's own mail settings, which send the host's notices, never a space's.
       description: >
         The instance's one SMTP configuration (ADR 0097 decision 3): the same transport fields as a tenant's, the
         password write-only (`passwordSet`) and sealed under the config-secret key exactly as a tenant's is
-        ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)). It sends **only** instance notices
-        and **only** to the Server Owner's account address, and it is never a default or a fallback for a tenant's
-        mail ([ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md) §4). Notices are mailed
-        only once the address is confirmed by the code the test mail carried (decision 5). Server-Owner only.
+        ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)). It sends **only** the host's own
+        notices, and it is never a default or a fallback for a tenant's mail
+        ([ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md) §4). Its recipients are
+        ADR 0097 decision 3's, each address read from the server's own rows, never from this request: the Server
+        Owner's account address (the test mail, release and other instance notices); each accepted moderator and the
+        instance contact's notification address (moderation notices); a reporter (the receipt) and the affected and
+        reporters (moderation statements), at an address their client sent once; and for an erasure, an account being
+        erased, every member of a tenant the Server Owner deletes, and every member of a tenant where an application
+        is switched off (the notice and the reminder of uc.platform.erase-switched-off-application). Release notices
+        are mailed only once the Server Owner's address is confirmed by the code the test mail carried (decision 5).
+        Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -3353,9 +3360,9 @@ components:
         address:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
-            The Server Owner's own account address (uc.admin.setup-server), already server-held plaintext — the only
-            address instance mail may reach (ADR 0097 decision 3), shown back to its holder so they see where the
-            code and the notices go.
+            The Server Owner's own account address (uc.admin.setup-server), already server-held plaintext — where the
+            test mail and the Server Owner's notices go (ADR 0097 decision 3), shown back to its holder so they see
+            where the code and those notices go.
           type: string
           format: email
           description: The address the test mail and the notices go to — the Server Owner's account address.

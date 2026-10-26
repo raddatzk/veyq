@@ -206,13 +206,13 @@
         "de": "Mitglieder bewahren Fotos und Videos in Erinnerungen auf, mit Kapiteln, und teilen sie. Ortsnamen und Karten gehören dazu."
       },
       "whenOff": {
-        "en": "Nothing new can be added to Memories or changed in them. Everything there can still be opened and downloaded.",
-        "de": "In Erinnerungen kann nichts Neues dazukommen und nichts geändert werden. Alles darin lässt sich weiter öffnen und herunterladen."
+        "en": "Nothing new can be added to Memories or changed in them. Everything there can still be opened and downloaded until the day shown at the top of veyq; then it is erased, unless Memories is switched on again before.",
+        "de": "In Erinnerungen kann nichts Neues dazukommen und nichts geändert werden. Alles darin lässt sich bis zu dem Tag öffnen und herunterladen, den veyq oben anzeigt; dann wird es gelöscht, wenn Erinnerungen nicht vorher wieder eingeschaltet wird."
       },
       "serves": ["uc.platform.switch-application-off"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
-      "description": "The Memories application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a MEMORY or CHAPTER node created, updated, given a cover or a banner, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one, and every non-GET operation of contracts/api/memories/ but the named exemptions (deleteMedia, restoreMedia, deleteShareMedia, deleteBucket, purgeMedia, putItemFavorites, stageMediaRekey). Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. memories.places and memories.map are off with it (the AND along the path)."
+      "description": "The Memories application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a MEMORY or CHAPTER node created, updated, given a cover or a banner, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one, and every non-GET operation of contracts/api/memories/ but the named exemptions (deleteMedia, restoreMedia, deleteShareMedia, deleteBucket, purgeMedia, putItemFavorites, stageMediaRekey). Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. memories.places and memories.map are off with it (the AND along the path). Left off for veyq.application.off.retention (default P30D) from the moment it went off for the tenant, at either level, every MEMORY and CHAPTER made before that day is erased in every scope of the tenant, with everything that hangs off it, through the trash purge's erase (uc.platform.erase-switched-off-application); switched on before the day, nothing is erased. Core folders stay."
     },
     "memories.places": {
       "title": {
@@ -260,13 +260,13 @@
         "de": "Mitglieder bewahren Dokumente und jede andere Datei in ihren Bereichen auf und sammeln in Briefkästen Dateien von anderen."
       },
       "whenOff": {
-        "en": "No files can be added or changed. Everything there can still be opened and downloaded.",
-        "de": "Dateien können weder dazukommen noch geändert werden. Alles lässt sich weiter öffnen und herunterladen."
+        "en": "No files can be added or changed. Everything there can still be opened and downloaded until the day shown at the top of veyq; then it is erased, unless Depot is switched on again before.",
+        "de": "Dateien können weder dazukommen noch geändert werden. Alles lässt sich bis zu dem Tag öffnen und herunterladen, den veyq oben anzeigt; dann wird es gelöscht, wenn Depot nicht vorher wieder eingeschaltet wird."
       },
       "serves": ["uc.platform.switch-application-off"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
-      "description": "The Depot application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a FILE or DEPOT_DROPBOX node created, updated, given a cover, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one (a drop box's included), and every non-GET operation of contracts/api/depot/. Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. The drop box's own creation switch stays core.public-shares.drop-box."
+      "description": "The Depot application (ADR 0079 decision 8). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — a FILE or DEPOT_DROPBOX node created, updated, given a cover, an upload started or completed for one, a link rooted on one created, reactivated, re-issued or given a write role, every guest write into one (a drop box's included), and every non-GET operation of contracts/api/depot/. Reads, downloads, a delete to the trash and its restore, the re-key, erasures and moderation measures stay. The drop box's own creation switch stays core.public-shares.drop-box. Left off for veyq.application.off.retention (default P30D) from the moment it went off for the tenant, at either level, every FILE and DEPOT_DROPBOX made before that day is erased in every scope of the tenant, with everything that hangs off it, a drop box's guest folders included, through the trash purge's erase (uc.platform.erase-switched-off-application); switched on before the day, nothing is erased. Core folders stay."
     },
     "expenses": {
       "title": {
@@ -278,13 +278,13 @@
         "de": "Mitglieder und ihre Link-Gäste erfassen gemeinsame Ausgaben in Kassen und sehen, wer wem etwas schuldet."
       },
       "whenOff": {
-        "en": "No Pot can be created and no entry added or changed. Every Pot can still be opened and downloaded.",
-        "de": "Keine Kasse kann angelegt und kein Eintrag hinzugefügt oder geändert werden. Jede Kasse lässt sich weiter öffnen und herunterladen."
+        "en": "No Pot can be created and no entry added or changed. Every Pot can still be opened and downloaded until the day shown at the top of veyq; then it is erased, unless Expenses is switched on again before.",
+        "de": "Keine Kasse kann angelegt und kein Eintrag hinzugefügt oder geändert werden. Jede Kasse lässt sich bis zu dem Tag öffnen und herunterladen, den veyq oben anzeigt; dann wird sie gelöscht, wenn Ausgaben nicht vorher wieder eingeschaltet wird."
       },
       "serves": ["uc.platform.switch-application-off"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
-      "description": "The Expenses application (ADR 0079 decision 8, ADR 0108). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — an EXPENSES_POT node created, updated, given a link or a write role, a member's or a guest's append of revisions (contracts/api/expenses/). Reads, downloads, a delete to the trash and its restore, the re-key, a participant's erasure and moderation measures stay."
+      "description": "The Expenses application (ADR 0079 decision 8, ADR 0108). Off => it is read-only in the tenant (uc.platform.switch-application-off, ADR 0088 decision 5): every write of it is refused with 422 capability_disabled — an EXPENSES_POT node created, updated, given a link or a write role, a member's or a guest's append of revisions (contracts/api/expenses/). Reads, downloads, a delete to the trash and its restore, the re-key, a participant's erasure and moderation measures stay. Left off for veyq.application.off.retention (default P30D) from the moment it went off for the tenant, at either level, every EXPENSES_POT made before that day is erased in every scope of the tenant, with its revisions and receipts, through the trash purge's erase (uc.platform.erase-switched-off-application); switched on before the day, nothing is erased. Core folders stay."
     },
     "expenses.exchange-rates": {
       "title": {
