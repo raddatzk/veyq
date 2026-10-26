@@ -12,6 +12,8 @@ import { stack } from './src/stack'
 // `npm run check` lists the tests with no stack booted; everything that needs one reads it at run time.
 const booted = process.env.VEYQ_STACK_FILE !== undefined
 const outDir = booted ? stack().outDir : 'test-results'
+// The one scenario of its own project (below).
+const ERASURE = /features\/application-erasure\.spec\.ts/
 
 // The browser's resolver knows the instance and nothing else: the domain and every tenant subdomain resolve to
 // Traefik on the run's `edge` network (as public DNS resolves an operator's domain to the host), `localhost` stays
@@ -60,6 +62,10 @@ export default defineConfig({
     // The feature scenarios start from a tenant whose owner is active, which the round trip leaves; each one restores
     // what it switches (capability-off-states.spec.ts ends with every entry back on), except that instance-mail.spec.ts
     // ends with the release check switched off, the state an offline run's check belongs in (ADR 0097).
-    { name: 'features', testMatch: /features\/.*\.spec\.ts/, dependencies: ['scenarios'] },
+    { name: 'features', testMatch: /features\/.*\.spec\.ts/, testIgnore: ERASURE, dependencies: ['scenarios'] },
+    // Last, after every feature scenario: it waits out the overlay's short erasure window, so it costs the lane minutes
+    // where nothing else runs, and it needs the instance mail instance-mail.spec.ts sets up — a file name sorting first
+    // would run before that one inside `features`. Its tenant is its own, so what it erases no other spec reads.
+    { name: 'erasure', testMatch: ERASURE, dependencies: ['features'] },
   ],
 })
