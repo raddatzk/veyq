@@ -1,7 +1,7 @@
 ---
 id: cr-switched-off-application-is-erased
 title: An application left switched off is erased in the tenant after a window members are told about
-status: planned
+status: in-progress
 satisfies: ["uc.platform.switch-application-off", "uc.platform.erase-switched-off-application"]
 adrs: ["0079", "0088", "0056", "0093", "0097", "0101"]
 invariants:
@@ -28,7 +28,8 @@ decisions below, written on the recommended answers, stand as written. Phase 0 w
 (`docs/ai/README.md` § Refined state comes before the CR): the use case
 [uc.platform.erase-switched-off-application](../docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md)
 with its planned coverage, ADR 0079 decision 8, ADR 0088 decision 5 and ADR 0093 § Legal basis, Still open 12–14.
-Implementation waits for the owner's go on this CR; phase 1 is next.
+The owner's go came on 2026-10-26. Phases 1 and 2 are built on the implementer's branch; phase 3 (web) builds on top of
+it, and phases 1 to 3 land on `main` in one merge, because `applicationErasures` is a required response field.
 
 ## Context & constraints
 
@@ -90,7 +91,7 @@ Explore sweeps read the code; the pointers I relied on I re-read myself and mark
 ## Decisions this CR takes
 
 1. **One erasure row per tenant and application while it is off.** A new core table, `veyq_application_erasure`:
-   - `tenant_id` (FK `veyq_tenant` `ON DELETE CASCADE`), `application` (the register id), `switched_by` (`TENANT` or
+   - `tenant_id` (FK `veyq_tenant` `ON DELETE CASCADE`), `application` (the register id), `switch_level` (`TENANT` or
      `INSTANCE`, the level that made the row, for the notice's wording), `off_since`, `due_at`, `notice_mailed_at`,
      `reminder_mailed_at`;
    - unique on `(tenant_id, application)`.
@@ -215,7 +216,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
    - Add the new use case to this CR's `satisfies:`.
 
    **Done when:** every `scripts/validate_*.py` exits `0`.
-1. **Contracts.** Before the first edit, record the exit codes of `./gradlew check` and `npm run check` (web,
+1. **Contracts. Done 2026-10-26** (see § Retrospective for what moved). Before the first edit, record the exit codes of `./gradlew check` and `npm run check` (web,
    admin-web) on `main`, and the guard baseline.
    - The register texts above and the three descriptions.
    - `TenantCapabilities.applicationErasures` and `TenantCapabilitySwitch.erasureDueAt`.
@@ -227,7 +228,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
    **Done when:** `npm run generate:api` runs and the contracts guards are green. The predicted reds are named and
    measured once: the backend's `TenantCapabilities(...)` at `TenantsResource.kt:372` (a required response field), and
    the web fixtures the inventory's grep lists. They clear in phases 2 and 3. Phases 1 to 3 land on `main` in one merge.
-2. **Backend.** Decisions 1 to 5 and 7: the migration, the store and its row upkeep at the three writers and the
+2. **Backend. Done 2026-10-26** (see § Retrospective). Decisions 1 to 5 and 7: the migration, the store and its row upkeep at the three writers and the
    creation, the purge, the two mails, the response fields, the placeholder, the config.
 
    **Done when** `./gradlew check` is green, and slice tests drive the clock through a `now` parameter as
@@ -368,3 +369,39 @@ on them.
 ## Retrospective
 
 _Filled by the implementer._
+
+**Phases 1 and 2 (2026-10-26, worktree `agent-a0d40b2ca49505c2f`).** Measured: the guard baseline before the first
+edit was 0 red; `./gradlew check` on `main` was not re-run (the branch started at `main`'s merge). `npm run
+generate:api` was not run here (this worktree has no `node_modules`); phase 3 runs it and meets the predicted web reds.
+
+What moved against the plan, each for its reason:
+- **`{trashWindow}` beside `{applicationOffWindow}`.** The storage line names the trash's window, and no placeholder
+  carried `veyq.node.trash.retention`; naming it without the number would not be a storage period (Art. 13(2)(a)).
+- **`switch_level`, not `switched_by`.** `validate_account_erasure_arity.py` reads a `*_by` column as an account; the
+  column holds `TENANT`/`INSTANCE`.
+- **The tick opens a missing row** (`ApplicationErasurePurge` step 1): an application switched off before the table
+  existed, or a row a defect lost, gets its window from that tick — never an earlier day, and its notice. Without it
+  an instance that already had Depot off would keep its data for good. The writers are still proven on their own:
+  the race class never runs the tick.
+- **The clock is read under the locks** (`now` null in production): a scope being erased holds the tenant's row with a
+  clock past the day, so a switch-on that waited for it reads a later clock and keeps the row. Tests pass `now`.
+- **A scope's erasure takes the tenant's row first**, then the scope's. A tenant's own purge takes the tenant, its
+  scopes, then cascades onto the erasure row; taking the erasure row first would wait crosswise on it.
+- **The tenant switch takes the instance row's lock too** (decision 1). The instance switch already locks every tenant
+  row, which alone would serialise the pair; the lock is kept so every writer reading both levels holds both.
+- **Mails:** a tenant that is not `ACTIVE` is not claimed (offline, its members could not download what the mail
+  offers) and is mailed if it is active again before the day. A reminder whose notice itself went inside the seven
+  days is stamped, not sent. A fresh window's notice goes in the same tick that ends the old one.
+- **Subtree semantics reach after a switch-on:** an old node is erased with its whole subtree, so a Chapter added to an
+  existing Memory after a switch-on past the day goes with that Memory. Only a new top node (a new Memory, File or Pot)
+  survives. Phase 4's texts should not promise more.
+
+Found, not fixed (owner's): the privacy notice's `mail` passage says account mails go through the instance's relay,
+but the recovery and the email-change mails go through the space's (`TenantMailSender`).
+
+Proofs: (f) found red first on H2 and on MariaDB with each level taking only its own row's lock (all three race tests
+red), green with the order on both engines. Every erasure, legal and mail rule was bitten by a source mutation,
+snapshot-restored: the reclaim's hold-pin check, the ledger's `NODE` line, the `createdAt` filter, personal scopes,
+core folders, cancel-before-the-day, the day never moving, `pendingConsent`, the notice's claim; each went red on its
+test. (b)'s sweep is bitten in-test by leaving `ItemFavoritesNodeSubtreeEraser` out: it names
+`veyq_scope_item_favorites` and nothing else.
