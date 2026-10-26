@@ -45,7 +45,7 @@ acceptanceCriteria:
         unit: [src/features/expenses/people.test.ts, src/features/expenses/domain/ledger.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `writers-add-and-rename` (a
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `writers-add-and-rename` (a
     link guest adds a person), `member-deactivates-a-settled-participant`, `member-deletes-and-the-name-is-erased`
     and `member-removes-an-unnamed-participant` in Chromium, in English (ADR 0090 decision 9), against the release
     candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion: once

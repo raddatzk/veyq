@@ -136,10 +136,11 @@ export async function signInOwner(device: Device): Promise<void> {
 /**
  * A section of Settings, reached the one way the shell offers (the profile menu's "Settings"): from the space's home,
  * so the shared space is the active one — the space's own sections (Your profile, Storage) are listed only then, and an
- * address typed straight into a new document opens Settings with no active space.
+ * address typed straight into a new document opens Settings with no active space. [origin] is another tenant's, for a
+ * spec with a tenant of its own.
  */
-export async function openSettings(page: Page, section: string): Promise<void> {
-  await page.goto(tenantOrigin())
+export async function openSettings(page: Page, section: string, origin: string = tenantOrigin()): Promise<void> {
+  await page.goto(origin)
   await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
   await page.locator('.profile-button').click()
   await page.getByRole('menuitem', { name: 'Settings' }).click()

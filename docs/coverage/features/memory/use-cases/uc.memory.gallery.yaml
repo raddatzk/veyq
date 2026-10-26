@@ -462,7 +462,7 @@ acceptanceCriteria:
         reason: >-
           Keys pressed on the rendered grid in happy-dom, which has no tab navigation: "Tab leaves the grid" is asserted
           as the tab order holding one tile's controls (bitten: dropping the roving tab stop turns two cases red). No
-          screen reader has read the grid yet; the browser walk (`tests/e2e/tests/features/gallery-keyboard.spec.ts`) is
+          screen reader has read the grid yet; the browser walk (`tests/e2e/tests/features/memories/gallery-keyboard.spec.ts`) is
           green in local runs of lane L1, whose `stack` refs ADR 0040 admits only after a CI run.
   - id: focus-returns-from-the-lightbox
     text: >-
@@ -477,7 +477,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           Opened, paged and closed by keys on the real detail in happy-dom (bitten: skipping the focus return turns it
-          red); its browser walk, `tests/e2e/tests/features/gallery-keyboard.spec.ts`, is green in local runs of lane L1 only.
+          red); its browser walk, `tests/e2e/tests/features/memories/gallery-keyboard.spec.ts`, is green in local runs of lane L1 only.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
@@ -490,9 +490,9 @@ gaps:
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/features/depot-download.spec.ts`,
-    `tests/e2e/tests/features/video-playback.spec.ts`, `tests/e2e/tests/features/gallery-keyboard.spec.ts` — the windowed grid's
-    keyboard walk and its window, written with ADR 0105; `tests/e2e/tests/features/memories-styles.spec.ts` —
+    Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/features/depot/depot-download.spec.ts`,
+    `tests/e2e/tests/features/memories/video-playback.spec.ts`, `tests/e2e/tests/features/memories/gallery-keyboard.spec.ts` — the windowed grid's
+    keyboard walk and its window, written with ADR 0105; `tests/e2e/tests/features/memories/memories-styles.spec.ts` —
     `lightbox-preview` as far as the lightbox's look: its buttons, its details pane wide and narrow, light and dark, read
     as computed styles after inbox #517 moved its rules from core's `styles/media.css` into Memories' own sheet)
     drives `thumbnail-grid`, `download-stable-name` (the lightbox saves the original under its sealed name, byte for

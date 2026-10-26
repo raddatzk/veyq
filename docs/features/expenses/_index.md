@@ -17,7 +17,7 @@ use-cases below say what a person does and point there instead of repeating it.
 
 ## Use-cases
 
-Built by cr-expenses-ledger (its browser pass lane L1's `tests/e2e/tests/features/expenses-pot.spec.ts`): the Pot, its people and entries, the history, the ledger check, the balances
+Built by cr-expenses-ledger (its browser pass lane L1's `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`): the Pot, its people and entries, the history, the ledger check, the balances
 and the link; "Who am I" by inbox #541; the receipts by cr-expenses-receipts and the day's exchange rates by
 cr-expenses-exchange-rates (in the same pass).
 

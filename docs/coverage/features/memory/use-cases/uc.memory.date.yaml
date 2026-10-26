@@ -49,10 +49,10 @@ acceptanceCriteria:
           - src/features/memories/memoryDate.test.ts
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `four-mode-date-header-editor` in Chromium
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `four-mode-date-header-editor` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
     criterion. The single-day mode only: the day set in the header editor reads back in the header after a reload and on
-    a second device; and once in German (`tests/e2e/tests/features/locale-de.spec.ts`, ADR 0090 decision 9), the day
+    a second device; and once in German (`tests/e2e/tests/features/platform/locale-de.spec.ts`, ADR 0090 decision 9), the day
     typed in the German segment order and shown as `dd.mm.yyyy` after a reload. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`)
     awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite
     executed. On that run each file becomes a ref on the criteria its tests are tagged with, and this gap goes.

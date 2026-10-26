@@ -38,7 +38,7 @@ acceptanceCriteria:
         reason: "A link has no node-meta write at all (the meta is written only on the member's scope path, core's updateNode), so no Expenses test refuses one; the refs hold the erasure and a READ guest's append."
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `read-and-read-write-never-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `read-and-read-write-never-
     write-only`, `the-guest-sees-the-members-view`, `a-contributor-writes-like-a-member` and `what-stays-a-members`
     in Chromium, in English (ADR 0090 decision 9), against the release candidate's two images installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion: the Pot's share dialog offers viewing and viewing-

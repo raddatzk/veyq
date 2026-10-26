@@ -83,7 +83,7 @@ acceptanceCriteria:
         unit: [src/core/sharing/resolvePublicShare.test.ts, src/core/sharing/shareNote.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `curator-sets-note-at-creation`,
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `curator-sets-note-at-creation`,
     `note-shown-and-rendered-on-share-page` in Chromium against the release candidate's two images, installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion. The note and the label set at creation read back in the
     curator's Edit share after a reload and on a second device; the guest reads the note on the share page, also after a

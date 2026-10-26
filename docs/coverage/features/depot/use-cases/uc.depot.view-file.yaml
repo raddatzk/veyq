@@ -117,7 +117,7 @@ acceptanceCriteria:
           with a stub detail on a Memories kind (MemoryHomeView.registry.test.ts), not with Depot's file detail itself.
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/depot-styles.spec.ts`) drives `the-text-of-a-pdf-can-be-selected-and-copied`
+    Lane L1's browser suite (`tests/e2e/tests/features/depot/depot-styles.spec.ts`) drives `the-text-of-a-pdf-can-be-selected-and-copied`
     as far as the drawn page's text layer: a one-page PDF built in the spec is uploaded into a folder and opened, and the
     layer, a text span (transparent, selectable, the accent as its selection) and the end marker are read as computed
     styles in light and dark (inbox #517 moved those rules from core's `styles/pdf.css` into Depot's own

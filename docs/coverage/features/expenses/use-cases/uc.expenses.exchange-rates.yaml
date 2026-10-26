@@ -56,7 +56,7 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser suite drives every criterion in Chromium against the release candidate's two images installed
-    through `veyqctl` (ADR 0090), each test tagged with its criterion: `tests/e2e/tests/features/expenses-pot.spec.ts`
+    through `veyqctl` (ADR 0090), each test tagged with its criterion: `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`
     step 2a (the device's one request a day, the date alone, answered by the lane's fixed ECB table in `src/egress.ts`;
     a USD entry's rate filled, citing the ECB and the rows' date, and typeable) and step 4c (the tenant owner's switch
     off: a member's and a link guest's device make no request and the rate is typed; on again, the guest's device

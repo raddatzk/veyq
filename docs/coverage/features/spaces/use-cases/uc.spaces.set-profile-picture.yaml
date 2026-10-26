@@ -88,7 +88,7 @@ acceptanceCriteria:
           - MemberAvatarSliceTest.aCallerWithNoProfileInTheHostTenantIs404AndAnUnknownHostToo
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `picture-sealed-on-device-constant-length`
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `picture-sealed-on-device-constant-length`
     in Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged
     with its criterion. A picture picked, cropped and saved in Settings → Your profile decodes in the sidebar after a
     reload and on a second device; its constant length is the backend's (MemberAvatarSliceTest), not asserted there.

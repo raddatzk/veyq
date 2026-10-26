@@ -29,7 +29,7 @@ acceptanceCriteria:
 gaps:
   backend: "No part here: every figure is computed in the client from the opened revisions (ADR 0108 decision 9); the server stores and serves them, covered under uc.expenses.record-entries."
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `balances-from-the-live-
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `balances-from-the-live-
     entries`, `settle-up-is-greedy-and-deterministic`, `overviews-by-category-and-person` and
     `who-am-i-stays-on-the-device` in Chromium, in
     English, with the first two again in the German pass (ADR 0090 decision 9), against the release candidate's two images installed through `veyqctl` (ADR 0090),

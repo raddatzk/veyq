@@ -135,7 +135,7 @@ acceptanceCriteria:
         e2e: [src/features/spaces/admission.e2e.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `member-invite-and-onboard` on
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `member-invite-and-onboard` on
     its way to the Expenses pass: a tenant owner sets the space's mail, invites a fresh address, the invitee
     registers from the mailed link, and the owner's device delivers the space's key. tests/e2e/tests/features/join-
     profile-picture.spec.ts walks the same invitation. Green only in local runs of the lane (the V1 heavy stage),

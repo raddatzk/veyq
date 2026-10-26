@@ -4,7 +4,7 @@ title: Review a case
 # Built by cr-moderation-review-and-measures: core/moderation/cases (CaseViews, CaseDecisions) and core/moderation/review
 # (CaseReviewResource), Memories' CaseMediaResource and Depot's CaseFilesResource on the backend, all behind
 # ModerationProofGate; features/moderation (the queue, CaseDetail, cases.ts) and features/moderation/review (ShareReview,
-# openReview, the review data source) on web. Lane L1's browser pass is tests/e2e/tests/features/review-and-measures.spec.ts,
+# openReview, the review data source) on web. Lane L1's browser pass is tests/e2e/tests/features/moderation/review-and-measures.spec.ts,
 # tagged per criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: the-queue-lists-cases-in-clear-fields
@@ -111,7 +111,7 @@ gaps:
     by packages/crypto's src/report.test.ts, "moderation notes", against its vector, but crypto's CI job has never
     executed (ADR 0040).
   stack: >-
-    tests/e2e/tests/features/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
+    tests/e2e/tests/features/moderation/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
     the-queue-lists-cases-in-clear-fields, a-case-shows-its-reports-and-log and
     moderation-mode-renders-the-guest-viewer-without-guest-calls; stack refs are admitted only once a CI run executed
     lane L1 (ADR 0040).

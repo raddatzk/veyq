@@ -107,15 +107,34 @@ What a green run proves today stops short of what a Server Owner runs:
    Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor and L3's
    restores. Retries are 0.
 
-   **Run whole, in shards** (2026-10-26, ADR 0091 decision 1: a stage that outgrows its budget is sharded): the suite's
-   browser stage took 18.8 min on 2026-10-26, against the job's 15, so CI runs it as two shards per architecture
-   (`ci.yml`'s `stack` legs, Playwright's `--shard`), each on an instance of its own with its own sweeps. Every shard runs
-   the dependency projects whole — `setup`, `scenarios`, and `instance`, which holds the instance-wide state other
-   scenarios read (the instance mail, the deputy moderator) — and its part of `features`, whose specs read nothing
-   another feature spec left (`tests/e2e/playwright.config.ts`; `tests/e2e/shards.test.mjs` holds the split). Measured
-   the same day on arm64, after decision 9's rule: the browser stage 15.7 min whole (165 tests), 9.4 and 6.8 min per
-   shard (93 and 91 tests, the dependency projects' 19 in each), the whole lane 10.0 and 7.3 min per shard. One
-   worker per instance still: more workers wait until every spec is proven isolated (inbox #548).
+   **Run whole, one leg per domain** (2026-10-26, ADR 0091 decision 1: a stage that outgrows its budget is sharded;
+   owner: "Können wir das nicht einfach nach domain clustern?", small ones, never clusters that look half random): the
+   suite's browser stage took 15.7 min on 2026-10-26, against the job's 15, so CI runs it as one leg per domain and architecture (`ci.yml`'s
+   `stack` matrix, Playwright's `--project <domain>`), each on an instance of its own with its own sweeps. **A domain is
+   a folder** of `tests/e2e/tests/features/` and a Playwright project of the same name (`tests/e2e/playwright.config.ts`
+   reads the folders): today `account`, `depot`, `expenses`, `memories`, `moderation` and `platform`. Every leg runs the
+   dependency projects whole — `setup`, `scenarios`, and `instance` (`features/instance/`), which holds the instance-wide
+   state other scenarios read (the instance mail, the deputy moderator) — and its domain, whose specs read nothing
+   another feature spec left (a spec that writes what no later spec may meet, published terms or a device cap, does so
+   in a tenant of its own). `tests/e2e/shards.test.mjs` holds the split: every feature spec in exactly one domain folder
+   and none directly in `features/`, every folder a project and a matrix leg, a matrix leg with no folder red,
+   the dependency projects whole in every leg. **A new spec goes into its domain's folder**, so nothing is rebalanced: the
+   legs are domains, not bins balanced by time. A new domain is a new folder and its matrix leg, in one change. A domain
+   whose leg grows past about 7 min is split by sub-domain (Depot's downloads apart from its browsing, say), never at
+   random. It replaced, the same day, Playwright's `--shard`, which splits by test count and not by time (two shards of
+   9.4 and 6.8 min browser). Measured on arm64 on 2026-10-26, the images built, after this decision's and decision 9's
+   changes: the whole suite in one run 13.3 min browser (165 tests), 14.0 min the whole lane; per leg, browser and
+   whole lane, `account` 2.9 and 3.5 min, `depot` 3.5 and 4.0, `expenses` 3.3 and 3.7, `memories` 2.3 and 2.9,
+   `moderation` 2.5 and 3.0, `platform` 3.4 and 3.9 — each leg's boot about 25 s before its browser and its dependency
+   projects about 52 s of it. So the slowest leg, the job's wall time, is 4.0 min (two shards: 10.0; neither counts the image build every leg
+   repeats from the cache first); the six legs
+   together cost 20.9 min of runner time per architecture (two shards: 17.3), the boot and the dependency projects
+   paid six times instead of twice. One worker per instance still: more workers wait until every spec is proven
+   isolated (inbox #548); one snapshot of the instance after the dependency projects, restored per leg, is inbox #552.
+
+   **Traces**: a local run keeps one per test, so a green run on a laptop can be compared with a red one; CI (`CI=true`,
+   handed to the browser container) keeps one for a failed test only — a trace costs about 0.5 s a test, 83 s a whole
+   run (2026-10-26). A green CI leg's run directory still keeps its logs, report and dumps.
 
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
    bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
@@ -137,7 +156,24 @@ What a green run proves today stops short of what a Server Owner runs:
      test that holds the rest.
    - **The e2e overlay may shorten a server-side interval** (a window, a tick, a poll) so a wait the lane keeps is
      short, and says why its number is safe; it never changes a product default. A client constant with no seam stays
-     what it is (`memory-guest-live.spec.ts` waits the gallery's real 20-second poll, `ITEMS_POLL`).
+     what it is — but where the product itself acts at once, the lane triggers that instead of waiting: every live poll
+     ticks on a tab's return to visible (`src/web/src/shared/state/livePoller.ts`, held by its component tests), so
+     `memory-guest-live.spec.ts` asks for its idle `304` by hiding and showing the tab, and keeps one real tick of the
+     gallery's 20-second poll (`ITEMS_POLL`) for its claim that a visible gallery updates by itself.
+   - **A Service Worker is stopped through DevTools, never waited for.** Playwright attaches DevTools to every worker,
+     and with DevTools attached Chromium does not stop an idle one (measured: in five runs on 2026-10-26 a worker with
+     no client left was never stopped by itself within 40 s), so a wait for Chromium's idle stop is a wait for nothing;
+     `ServiceWorker.stopAllWorkers` stops it at the moment the test needs (`depot-download-interrupted.spec.ts`'s closed
+     tab). That file keeps one real 40 s pause, for the claim that NOTHING stops a download that stands still — which a
+     stop cannot show — and says why.
+   - **Measured, not taken** (2026-10-26): seeding a spec's state through the API instead of the UI, and reusing a
+     signed-in session across specs. Seeding with the real client code saves only 1–4 s per tenant birth, because
+     Argon2id dominates — about 3 s per sign-in, and the same derivations when seeding; typing nine Expenses entries
+     takes 5.4 s. `storageState` cannot carry an unlocked veyq session, and that is correct: the session vault is sealed
+     under a non-extractable key in IndexedDB, and copying it would itself be a defect. Reusing a session through
+     `window.open` saved 1–5 s per spec for 19 specs, at the cost of browser state shared between specs. And both loosen
+     decision 4's boundary (the suite sees the surfaces only as a browser does): the seeding imports the client's code,
+     the reuse hands a spec a session another spec opened. The whole run gained 48–81 s, so neither was taken.
 
 ## Rejected alternatives
 

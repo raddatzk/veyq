@@ -40,7 +40,7 @@ acceptanceCriteria:
         reason: "The cut-off is unit-tested only: PotDetail.receipts.test.ts (restorable until the tombstone's purge time, not after it) and receiptRules.test.ts (purgeAfterOf and restoreOffered). Lane L1 runs on the default trash retention, so no entry in its browser pass is ever past it."
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `history-shows-every-revision`,
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `history-shows-every-revision`,
     `writer-names-for-members-only` and `deleted-entries-are-restorable` in Chromium, in English (ADR 0090
     decision 9), against the release candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion: three versions by two members listed with their names, a link guest's entry named by the name it

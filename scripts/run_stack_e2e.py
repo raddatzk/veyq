@@ -64,16 +64,16 @@ the recipe:
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
-     **A shard is a run of its own**: `ci.yml`'s `stack` legs pass `-- --shard <i>/<n>`, and each leg boots its own
-     instance, runs Playwright's dependency projects (`setup`, `scenarios`, `instance`) whole and its share of
-     `features` (`tests/e2e/playwright.config.ts`), and sweeps only what its own browser typed — every stage below reads
-     this run's directory and this run's stack, so no shard reads another's. The guest-write record skips, saying so,
-     on the shard whose selection did not run that spec.
+     **A leg is a run of its own**: `ci.yml`'s `stack` legs pass `-- --project <domain>`, one domain folder of
+     `tests/e2e/tests/features/` each, and each leg boots its own instance, runs Playwright's dependency projects
+     (`setup`, `scenarios`, `instance`) whole and its domain (`tests/e2e/playwright.config.ts`), and sweeps only what its
+     own browser typed — every stage below reads this run's directory and this run's stack, so no leg reads another's.
+     The guest-write record skips, saying so, on every leg whose selection did not run that spec.
      **A red browser stage skips nothing after it**: the stages 7b and 8 read what the run left on the stack, so they
      run whenever the stack came up (`PAST_BROWSER`); a red of any stage before the browser still skips them.
   7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
-     stage leaves open (that one reads an echo): `tests/e2e/tests/features/guest-write-record.spec.ts` has a guest create a
-     folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
+     stage leaves open (that one reads an echo): `tests/e2e/tests/features/moderation/guest-write-record.spec.ts` has a
+     guest create a folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
      Traefik's :443 and the folder's id (`guest-write-record.json`). This stage reads the app's record of that write off
      the instance's database: exactly one row, the browser's own address, and a port that is one of the browser's own
      sockets' — the one Traefik accepted and its plugin stated (ADR 0094 decision 7). Skipped, saying so, when the
@@ -102,7 +102,7 @@ in the job's own steps, which the CI log times.
 the instance's home (`home/`: `.env` with every secret of an instance that no longer exists, `state.json`, the
 override file, `releases/<release>/`), `pebble.env`, Pebble's root, `install.log`, `compose.log`, `ps.json`, and the
 browser's: `stack.json`, `browser.log`, `junit.xml`, `report/` (Playwright's HTML report), `playwright/` (a trace per
-test, `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
+test, or per failed test under `CI=true`; `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
 and the sweeps': `canaries-<spec>.json` and their union `swept-canaries.json`, `database-veyq.sql` (the dump the
 database sweep read), `container-<service>.log`, `mariadb-general.log` (the window's statements), and a mirror of the
 bucket only where the store sweep found something.
@@ -806,7 +806,7 @@ def browser(compose: list[str], workdir: Path, mirror: Mirror, selection: list[s
         },
         "outDir": CONTAINER_OUT,
     }, indent=2) + "\n", encoding="utf-8")
-    # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`, a CI leg's `-- --shard i/n`).
+    # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`, a CI leg's `-- --project <domain>`).
     cmd = [*compose, "run", "--rm", "--no-deps", "-T", "browser", *selection]
     print("+", " ".join(cmd), flush=True)
     with (workdir / "browser.log").open("w", encoding="utf-8") as log:

@@ -84,7 +84,7 @@ acceptanceCriteria:
           waits for the V1 heavy stage.
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `sub-bucket-endpoints`,
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `sub-bucket-endpoints`,
     `contributions-tab-primary-grouping`, `guest-names-for-members-only` in Chromium against the release candidate's two
     images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. A sub-bucket created under the
     member's own primary, and a contributing guest's name, read back in the Contributions picker after a reload and on a

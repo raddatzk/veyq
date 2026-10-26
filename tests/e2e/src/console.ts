@@ -1,7 +1,7 @@
 // The Server Owner's console (admin-web) as the scenarios reach it, and the one way an account is born there: a tenant
 // the Server Owner creates for a fresh address, its invite accepted on the tenant's own domain. A scenario that needs
 // an uploader, a moderator's case or a count of its own makes its tenant this way, so what it counts is its own and the
-// shared tenant the `features` project starts from is left as it was found (moderation.spec.ts, server-owner-statement.spec.ts
+// shared tenant every domain project starts from is left as it was found (moderation.spec.ts, server-owner-statement.spec.ts
 // and tenant-and-account-erasure.spec.ts birth theirs the same way). The labels are admin-web's and src/web/'s own
 // (each package's i18n, en).
 import { expect, type Page } from '@playwright/test'
