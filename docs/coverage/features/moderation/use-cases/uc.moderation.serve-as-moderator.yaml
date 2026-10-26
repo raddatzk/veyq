@@ -3,7 +3,7 @@ feature: moderation
 title: Serve as a moderator
 # Built by cr-moderators-and-the-moderation-key: the role (SessionTokenIdentityProvider over veyq_moderator), the proof
 # gate (core/moderation/ModerationProofGate), the delivery and the log on the backend; the moderation surface
-# (views/ModerationView.vue, features/moderation/) on web. Lane L1's browser pass is tests/e2e/tests/features/moderation.spec.ts,
+# (views/ModerationView.vue, features/moderation/) on web. Lane L1's browser pass is tests/e2e/tests/features/instance/moderation.spec.ts,
 # tagged per criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: accepting-grants-the-role-and-mails-a-code
@@ -82,5 +82,5 @@ acceptanceCriteria:
         unit: [ModerationLogSliceTest.theRetentionEndIsTheLastDayOfTheThirdYearAfter]
 gaps:
   stack: >-
-    tests/e2e/tests/features/moderation.spec.ts tags its criteria (accept and code, delivery, unlock, the queue behind the
+    tests/e2e/tests/features/instance/moderation.spec.ts tags its criteria (accept and code, delivery, unlock, the queue behind the
     proof); stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

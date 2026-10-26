@@ -50,7 +50,7 @@ acceptanceCriteria:
         reason: "The trash and its restore are core's node trash for every kind; the refs hold that a member may delete a Pot (also while Expenses is off), not the trash view itself."
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `member-creates-a-pot` in
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `member-creates-a-pot` in
     Chromium, in English and again in the German pass (ADR 0090 decision 9), against the release candidate's two images installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion: a member creates a Pot in a folder of a group with
     EUR and three people in order, the folder's row shows the base currency as its detail, and the Pot opens on

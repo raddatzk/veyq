@@ -112,7 +112,7 @@ acceptanceCriteria:
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/shared/ui/ConfirmDialog.test.ts] }
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/expenses-pot.spec.ts`) drives `remove-rotates-forward` in
+    Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `remove-rotates-forward` in
     Chromium, in English (ADR 0090 decision 9), against the release candidate's two images installed through
     `veyqctl` (ADR 0090), each test tagged with its criterion: a group owner removes the other member, the group's
     key is rotated and its Pot re-keyed on the owner's device, the panel no longer reads as re-keying, and the

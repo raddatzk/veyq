@@ -170,6 +170,8 @@ services:
     environment:
       HOME: /tmp/home
       VEYQ_STACK_FILE: /out/stack.json
+      # A CI runner's `CI=true` (empty elsewhere): playwright.config.ts keeps a trace only for a failed test then.
+      CI: ${CI:-}
     volumes:
       # The checkout read-only: tests/e2e/, src/packages/crypto/ and the root node_modules the host installed through
       # scripts/npm_ci_no_deprecated.py — nothing is installed in here. Pure-JS packages only on this path

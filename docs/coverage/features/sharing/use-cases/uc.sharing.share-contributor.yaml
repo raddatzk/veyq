@@ -259,10 +259,10 @@ gaps:
     run whose log shows admin-web's suites, it becomes a ref on
     `a-guest-who-objects-has-its-record-deleted-except-what-a-hold-copied` and this gap goes.
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `sealed-name-anonymous-identity` in
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `sealed-name-anonymous-identity` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion. A guest of a "View + add photos" link names itself at its first upload; the name holds on its page
-    after a reload and reaches the members. `tests/e2e/tests/features/guest-write-record.spec.ts` drives
+    after a reload and reaches the members. `tests/e2e/tests/features/moderation/guest-write-record.spec.ts` drives
     `create-contributor-share`, `a-writing-guest-is-told-before-its-first-write` and
     `a-guests-write-records-the-address-the-network-vouches-for`: a guest reads the notice with N = 7 in the naming
     dialog and creates a folder through the release's Traefik, and the orchestrator's `guest-write record` stage holds

@@ -55,7 +55,7 @@ acceptanceCriteria:
         unit: [src/features/tenant/tenantCapabilities.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser pass (`tests/e2e/tests/features/application-erasure.spec.ts`, a feature scenario that reads the
+    Lane L1's browser pass (`tests/e2e/tests/features/platform/application-erasure.spec.ts`, a feature scenario that reads the
     instance mail the `instance` project set up) drives the-day-is-set-once, every-member-is-told-the-day,
     the-day-is-served, on-the-day-its-nodes-are-erased and switched-on-before-the-day-nothing-is-lost against the release
     candidate, with the overlay's thirty-second window and a five-second tick: a tenant owner switches Depot off; the

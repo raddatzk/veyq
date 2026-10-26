@@ -52,7 +52,7 @@ acceptanceCriteria:
         integration: [MemoriesSwitchedOffSliceTest.offAMemoryIsNotRenamedNoMediumCompletesAndNoGuestUploads_onEachLands, DepotSwitchedOffSliceTest.offADropBoxGuestGetsNoFolder_onItDoes]
 gaps:
   stack: >-
-    Lane L1's browser pass `tests/e2e/tests/features/application-erasure.spec.ts` drives the-client-removes-every-write
+    Lane L1's browser pass `tests/e2e/tests/features/platform/application-erasure.spec.ts` drives the-client-removes-every-write
     and reads-downloads-and-removals-stay on its way to the erasure: with Depot switched off by the tenant owner, the
     member's banner shows, the folder's New menu offers a folder and no upload, and the file downloads byte for byte.
     Green only in local runs of `scripts/run_stack_e2e.py`, and ADR 0040 admits `stack` refs only once a CI run's log

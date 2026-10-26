@@ -156,7 +156,7 @@ acceptanceCriteria:
           - src/views/ShareView.live.test.ts
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/memory-guest-live.spec.ts`) drives `guest-live-poll` in Chromium
+    Lane L1's browser suite (`tests/e2e/tests/features/memories/memory-guest-live.spec.ts`) drives `guest-live-poll` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), tagged with its criterion: a
     read-only link's open gallery answers its polls 304, then shows the owner's second photo without a reload (a marker
     on the document survives), in separate browser contexts. Not yet run — written with inbox #497, whose rule ran no L1.

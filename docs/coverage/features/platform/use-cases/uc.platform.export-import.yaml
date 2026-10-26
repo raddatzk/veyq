@@ -81,7 +81,7 @@ acceptanceCriteria:
         unit: [src/features/tenant/tenantStorageFits.test.ts, src/core/export/ImportSubtreeDialog.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/export-import.spec.ts`, inbox #379) drives `memories-content`,
+    Lane L1's browser suite (`tests/e2e/tests/features/platform/export-import.spec.ts`, inbox #379) drives `memories-content`,
     `archive-reads-as-the-tree`, `recognised-on-upload`, `round-trip-by-hooks`, `dialogs` and
     `manifest-is-trusted-for-nothing` in Chromium against the release candidate's two images, installed through `veyqctl`
     (ADR 0090), each test tagged with its criterion: a Memory with an uploaded cover and two GPS-tagged photos and a Files

@@ -90,7 +90,7 @@ acceptanceCriteria:
         reason: >-
           The frame's aspect, its height bound and the sticky tab row are CSS a DOM test does not lay out: the formula
           (`object-position` from the focal point), the fit/fill choice and the previews are asserted, the rendered frame and
-          the row's offset under the top bar are the browser pass's (`tests/e2e/tests/features/memory-banner.spec.ts`), written,
+          the row's offset under the top bar are the browser pass's (`tests/e2e/tests/features/memories/memory-banner.spec.ts`), written,
           not run.
   - id: video-poster-no-autoplay
     text: A video banner shows its poster and a play button, never plays on its own (no video element and no read of the video before the click), and on a click plays the banner's own attachment through the media service worker (decrypted whole where there is none), never the gallery's original; a video has no length limit, and a picked video of which this browser cannot decode a frame is refused for a banner with a message.
@@ -102,7 +102,7 @@ acceptanceCriteria:
           - src/features/memories/banner/BannerDialog.test.ts
 gaps:
   stack: >-
-    Lane L1's browser pass (`tests/e2e/tests/features/memory-banner.spec.ts`: an uploaded landscape image framed at a wide and a
+    Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-banner.spec.ts`: an uploaded landscape image framed at a wide and a
     phone width with the tab row stuck under the top bar, a portrait photo fit then fill, a video uploaded equal to the
     gallery's as the banner with no play before the click, the same Memory through a READ link, the removal, the console
     free of errors) is green in local runs of the full lane (the V1 heavy stage); ADR 0040 admits `stack` refs only once

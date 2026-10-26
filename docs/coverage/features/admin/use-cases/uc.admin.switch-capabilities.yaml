@@ -63,7 +63,7 @@ acceptanceCriteria:
           unlocked with the password alone through the same DEVICE wrap and the remembered one opened without a
           prompt in a new tab. Not covered: a real browser restart after a sign-in made while the switch was off (the
           browser pane cannot restart its browser; the restart is the test's cookie jar). Lane L1 now runs that pass
-          in Chromium against the candidate image (`tests/e2e/tests/features/capability-off-states.spec.ts`, the use-case's
+          in Chromium against the candidate image (`tests/e2e/tests/features/platform/capability-off-states.spec.ts`, the use-case's
           `stack` gap below), green locally; it waits there until a CI run admits `stack`.
   - id: share-switch-acts-at-once
     text: While core.public-shares, .contribute or .drop-box is effectively off, every guest endpoint in core, Memories and Depot answers an existing link of the role it reaches exactly as an unknown link (the same 404 and body, before the password is asked), the links of the roles it does not reach stay served, and switching back on serves every link again because nothing was written onto it; changing a READ link into a READ_WRITE one while .contribute is off is refused with 422 capability_disabled.
@@ -111,7 +111,7 @@ acceptanceCriteria:
           was keyed on an email field that started empty; since inbox #450 the field is filled in from the device's
           record, which `LoginView.test.ts` pins); a child switched on under a parent still off showed "off through"
           it. Switched on again, every affordance returned. That pass is now lane L1's
-          `tests/e2e/tests/features/capability-off-states.spec.ts` (the email prefilled and the hint shown before anything
+          `tests/e2e/tests/features/platform/capability-off-states.spec.ts` (the email prefilled and the hint shown before anything
           is typed included); it waits under the use-case's `stack` gap until a CI run admits `stack`.
 gaps:
   admin-web: >-
@@ -124,7 +124,7 @@ gaps:
     answer. On the first run of that job they flip to refs on register-listed, switch-without-restart and
     unknown-id-refused.
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/capability-off-states.spec.ts`) drives `off-state-in-a-browser`,
+    Lane L1's browser suite (`tests/e2e/tests/features/platform/capability-off-states.spec.ts`) drives `off-state-in-a-browser`,
     `switch-without-restart` and `device-switch-acts-at-once` in Chromium against the release candidate's two images,
     installed through `veyqctl` (ADR 0090): the Server Owner switches drop boxes, adding a device from another one,
     unlocking without a password and remembered devices off one at a time in admin-web's Server → Capabilities, each

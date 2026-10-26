@@ -75,7 +75,7 @@ acceptanceCriteria:
         unit: [src/features/depot/components/DropBoxShareBody.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/depot-live.spec.ts`) drives `one-folder-per-guest-identity`,
+    Lane L1's browser suite (`tests/e2e/tests/features/depot/depot-live.spec.ts`) drives `one-folder-per-guest-identity`,
     `members-open-every-guest-folder`, `members-place-nothing-and-only-delete-or-move-out` in Chromium against the
     release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. Two
     guests in two browser contexts send a file each under one display name; the owner's open level counts them without

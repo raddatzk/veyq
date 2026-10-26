@@ -5,22 +5,32 @@
 // carries the acceptance criterion it covers as a tag (`@uc.<feature>.<use-case>:<criterion-id>`). Every flow runs in
 // English; which German passes it keeps, and why, is ADR 0090 decision 9.
 //
-// CI splits the run into shards (`ci.yml`'s `stack` job, `-- --shard <i>/<n>`), each on an instance of its own. Playwright
-// shards only the projects no other project depends on, and runs every dependency project whole in every shard: so the
-// state a feature scenario needs from another one lives in a dependency project (`instance`, below), and `features` is
-// the one project that is split — every spec in it starts from what `setup`, `scenarios` and `instance` left, never from
-// another feature spec, whichever shard it lands in.
+// The feature specs are grouped by domain, one folder each under `tests/features/` (memories, depot, expenses, moderation,
+// platform, account), and each folder is a project of its own (`DOMAINS`, read from the folders). CI runs one domain per
+// leg (`ci.yml`'s `stack` job, `-- --project <domain>`), each on an instance of its own; Playwright runs a project's
+// dependencies with it, so every leg runs `setup`, `scenarios` and `instance` first. The state a feature scenario needs
+// from another one therefore lives in a dependency project (`instance`, below): every domain's spec starts from what
+// those three left, never from another feature spec. A new spec goes into its domain's folder; a new folder is a new
+// project and must be a new leg (`shards.test.mjs` holds both, ADR 0090 decision 7).
 //
 // It runs inside the Playwright image the overlay pins, on the run's compose network — never on the host — so a
 // laptop runs exactly what CI runs (ADR 0090 decision 3): `scripts/run_stack_e2e.py` starts it.
 import { defineConfig, devices } from '@playwright/test'
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { stack } from './src/stack'
 
 // `npm run check` lists the tests with no stack booted; everything that needs one reads it at run time.
 const booted = process.env.VEYQ_STACK_FILE !== undefined
 const outDir = booted ? stack().outDir : 'test-results'
-// The instance-wide state other feature scenarios read, set up in every shard (the `instance` project, below).
-const INSTANCE = /features\/(instance-mail|moderation)\.spec\.ts/
+// The instance-wide state other feature scenarios read, set up in every leg: the folder `features/instance/` is the
+// dependency project `instance` (below), every other folder a domain.
+const INSTANCE = 'instance'
+const FEATURES = fileURLToPath(new URL('./tests/features/', import.meta.url))
+export const DOMAINS = readdirSync(FEATURES, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== INSTANCE)
+  .map((entry) => entry.name)
+  .sort()
 
 // The browser's resolver knows the instance and nothing else: the domain and every tenant subdomain resolve to
 // Traefik on the run's `edge` network (as public DNS resolves an operator's domain to the host), `localhost` stays
@@ -54,7 +64,10 @@ export default defineConfig({
     // (tests/e2e/stack/nss_trust_root.py) and nothing else does: a certificate Traefik failed to obtain — its default one,
     // ADR 0071's silent failure — is a red navigation here, not an ignored warning.
     ignoreHTTPSErrors: false,
-    trace: 'on',
+    // A trace per test costs about 0.5 s each, 83 s a whole run (measured 2026-10-26). In CI (`CI=true`, which the
+    // overlay hands the browser container) only a failed test keeps one; a local run keeps one for every test, so a
+    // green run on a laptop can still be compared with a red one.
+    trace: process.env.CI === 'true' ? 'retain-on-failure' : 'on',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'en-US',
@@ -66,15 +79,19 @@ export default defineConfig({
     { name: 'setup', testMatch: /setup\/.*\.setup\.ts/ },
     // The scenarios start from the instance the setup project left (instance.json in the run directory).
     { name: 'scenarios', testMatch: /scenarios\/.*\.spec\.ts/, dependencies: ['setup'] },
-    // The instance-wide state the feature scenarios read, in every shard: instance-mail.spec.ts sets up the instance mail
-    // (the notices of moderation, erasure and application-erasure.spec.ts go out through it) and ends with the release
-    // check switched off, the state an offline run's check belongs in (ADR 0097); then moderation.spec.ts appoints the
+    // The instance-wide state the feature scenarios read, in every leg (`features/instance/`): instance-mail.spec.ts sets
+    // up the instance mail (the notices of moderation, erasure and application-erasure.spec.ts go out through it) and ends
+    // with the release check switched off, the state an offline run's check belongs in (ADR 0097); then moderation.spec.ts appoints the
     // deputy whom statement-and-objection.spec.ts and takedown-orders-and-art18.spec.ts sign in as (`deputy.json`) and
     // confirms the moderator report.spec.ts mails. In this order: moderation's code mail goes through the instance mail.
-    { name: 'instance', testMatch: INSTANCE, dependencies: ['scenarios'] },
+    { name: INSTANCE, testMatch: new RegExp(`features/${INSTANCE}/[^/]+\\.spec\\.ts$`), dependencies: ['scenarios'] },
     // The feature scenarios start from a tenant whose owner is active, which the round trip leaves, and from the instance
     // the `instance` project set up; each one restores what it switches (capability-off-states.spec.ts ends with every
-    // entry back on), and none reads what another feature spec left — the project a shard splits.
-    { name: 'features', testMatch: /features\/.*\.spec\.ts/, testIgnore: INSTANCE, dependencies: ['instance'] },
+    // entry back on), and none reads what another feature spec left — one project per domain folder, one CI leg each.
+    ...DOMAINS.map((domain) => ({
+      name: domain,
+      testMatch: new RegExp(`features/${domain}/[^/]+\\.spec\\.ts$`),
+      dependencies: [INSTANCE],
+    })),
   ],
 })

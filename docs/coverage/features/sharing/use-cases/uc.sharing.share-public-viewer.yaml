@@ -146,7 +146,7 @@ acceptanceCriteria:
         unit: [src/core/node/LevelView.blocked.test.ts, src/core/sharing/ShareGuestStops.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/features/field-seal.spec.ts`)
+    Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/features/account/field-seal.spec.ts`)
     drives `anonymous-resolve-decrypt`, `create-public-share`, `guest-sees-the-member-view` in Chromium against the
     release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. The
     field-seal scenario resolves a contributor link: the Memory's name the link carries, opened anonymously. Green only

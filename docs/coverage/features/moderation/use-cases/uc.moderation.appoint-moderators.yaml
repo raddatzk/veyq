@@ -77,5 +77,5 @@ gaps:
     Built and tested (features/instance/moderation.test.ts, moderation.noOpen.test.ts — the admin-web-never-opens-a-grant
     criterion —, ModerationPanel.test.ts, cli/cli.test.ts), but admin-web's job has never executed (ADR 0040).
   stack: >-
-    tests/e2e/tests/features/moderation.spec.ts tags turning moderation on and appointing; stack refs are admitted only once a
+    tests/e2e/tests/features/instance/moderation.spec.ts tags turning moderation on and appointing; stack refs are admitted only once a
     CI run executed lane L1 (ADR 0040).
