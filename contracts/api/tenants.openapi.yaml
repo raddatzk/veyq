@@ -1431,13 +1431,15 @@ paths:
         of the space it opened and soft-gates on it as on the pre-auth manifest of `GET /api/setup`, which carries the
         instance level alone. A tenant only narrows, so this set is a subset of that manifest. The same for every
         member of the tenant; every member may read it. The gates follow the same set (`422 capability_disabled`).
+        Beside it, `applicationErasures` names the day each switched-off application's content in the tenant is
+        erased (uc.platform.erase-switched-off-application), which the banner at the top of veyq shows.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
       responses:
         "200":
-          description: The tenant's effective set.
+          description: The tenant's effective set, and the days its switched-off applications are erased.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantCapabilities" }
@@ -1445,6 +1447,8 @@ paths:
                 capabilities:
                   - { id: core.public-shares }
                   - { id: core.remember-device }
+                applicationErasures:
+                  - { id: depot, dueAt: "2026-11-25T10:00:00Z" }
         "401":
           description: Generic authentication failure.
           content:
@@ -1473,7 +1477,9 @@ paths:
         alone and are not listed. Each entry carries the catalog's words in English and German (decision 13), the
         tenant's own switch (`off`), whether the instance level has it off (`serverOff`: the Server Owner switched it
         or an ancestor off), and `effective`, the AND of both levels along the path, which the gates and the tenant's
-        set follow. Owner-gated: a member who is not the owner gets `403 not_tenant_owner`, a non-member `404`.
+        set follow. An application's own entry carries `erasureDueAt` while its content in the tenant is erased on a
+        named day (uc.platform.erase-switched-off-application). Owner-gated: a member who is not the owner gets
+        `403 not_tenant_owner`, a non-member `404`.
       security:
         - bearerAuth: []
       parameters:
@@ -1495,6 +1501,15 @@ paths:
                   serverOff: false
                   effective: false
                   requirements: []
+                - id: depot
+                  title: { en: "Depot", de: "Depot" }
+                  purpose: { en: "Members keep documents and any other file in their spaces …", de: "Mitglieder bewahren Dokumente und jede andere Datei in ihren Bereichen auf …" }
+                  whenOff: { en: "No files can be added or changed …", de: "Dateien können weder dazukommen noch geändert werden …" }
+                  "off": true
+                  serverOff: false
+                  effective: false
+                  requirements: []
+                  erasureDueAt: "2026-11-25T10:00:00Z"
         "401":
           description: Generic authentication failure.
           content:
@@ -3044,7 +3059,7 @@ components:
       description: >
         A tenant's effective capability set (ADR 0088 decision 3). The same for every member of the tenant;
         nothing here is member data.
-      required: [capabilities]
+      required: [capabilities, applicationErasures]
       properties:
         capabilities:
           type: array
@@ -3053,6 +3068,39 @@ components:
             order. A client soft-gates each optional feature on the presence of its id and never ANDs ids itself.
           maxItems: 256
           items: { $ref: "#/components/schemas/Capability" }
+        applicationErasures:
+          type: array
+          description: >
+            Every application of this tenant whose content is erased on a named day
+            (uc.platform.erase-switched-off-application): one entry while the application is switched off for the
+            tenant, at either level, and until a due erasure has finished. Empty while every application is on. A
+            named day is final: a second level switching off never moves it, and switching the application on before
+            it cancels the erasure. In register order, at most one entry per application.
+          maxItems: 16
+          items: { $ref: "#/components/schemas/ApplicationErasure" }
+
+    ApplicationErasure:
+      type: object
+      description: >
+        The day an application switched off in a tenant is erased there (ADR 0079 decision 8, ADR 0088 decision 5).
+        Tenant configuration, the same for every member; nothing here is member data.
+      required: [id, dueAt]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The application's register id, its one-segment root entry.
+          maxLength: 64
+          example: depot
+        dueAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            When the erasure is due: the moment the application went off for the tenant plus the instance's window
+            (`veyq.application.off.retention`). From then on, switching it on no longer cancels the erasure, and only
+            what members make after that switch-on stays.
+          example: 2026-11-25T10:00:00Z
 
     Capability:
       $ref: '_common.openapi.yaml#/components/schemas/Capability'
@@ -3103,6 +3151,15 @@ components:
             value, the instance's and the one in effect (ADR 0088 decision 8).
           maxItems: 16
           items: { $ref: "#/components/schemas/TenantCapabilityRequirement" }
+        erasureDueAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            For an application's own entry, the day its content in this tenant is erased, while one is named
+            (`ApplicationErasure.dueAt`, uc.platform.erase-switched-off-application). Absent for every other entry,
+            and while the application is on.
+          example: 2026-11-25T10:00:00Z
 
     CapabilityText:
       type: object

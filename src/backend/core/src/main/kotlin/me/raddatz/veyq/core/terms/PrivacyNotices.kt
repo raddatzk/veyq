@@ -40,6 +40,10 @@ class PrivacyNotices(
     /** The account erasure's window: the scope trash's retention, on purpose one value (ADR 0101 decision 3). */
     private val erasureWindowDays: Int = config.scope().delete().retention().toDays().toInt()
 
+    /** The node trash's window and an application's switched-off window: the storage period of content (GDPR Art. 13(2)(a)). */
+    private val trashWindowDays: Int = config.node().trash().retention().toDays().toInt()
+    private val applicationOffWindowDays: Int = config.application().off().retention().toDays().toInt()
+
     /** The notice for the space [tenantId] — a host's — or the instance level (null). */
     fun render(tenantId: String?): RenderedNotice = QuarkusTransaction.joiningExisting().call {
         val v = details.publicValues()
@@ -59,6 +63,8 @@ class PrivacyNotices(
             retentionDays = records.retentionDays(),
             backupRetentionDays = backups.retention().days,
             erasureWindowDays = erasureWindowDays,
+            trashWindowDays = trashWindowDays,
+            applicationOffWindowDays = applicationOffWindowDays,
             breachedPasswordService = label(CapabilityIds.BREACHED_PASSWORD),
             exchangeRateService = label(CapabilityIds.EXPENSES_EXCHANGE_RATES),
             browserServices = CapabilityIds.EXTERNAL_SERVICES

@@ -1,6 +1,16 @@
 package me.raddatz.veyq.core.terms
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import me.raddatz.veyq.core.account.email.EmailChangeMailer
+import me.raddatz.veyq.core.account.email.EmailConfirmationMailer
+import me.raddatz.veyq.core.account.erasure.AccountErasureMail
+import me.raddatz.veyq.core.account.recovery.RecoveryMailer
+import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
+import me.raddatz.veyq.core.admin.tenant.SmtpTenantInviteMailer
+import me.raddatz.veyq.core.admin.tenant.TenantDeletionMail
+import me.raddatz.veyq.core.admin.tenant.TenantMailSender
+import me.raddatz.veyq.core.moderation.statement.StatementMail
+import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureMail
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -33,6 +43,8 @@ class PrivacyNoticeRendererTest {
         retentionDays = 7,
         backupRetentionDays = 30,
         erasureWindowDays = 30,
+        trashWindowDays = 14,
+        applicationOffWindowDays = 45,
         breachedPasswordService = PrivacyNoticeRenderer.serviceLabel("https://api.pwnedpasswords.com/range/"),
         exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"),
         browserServices = listOf(BrowserService(SectionTexts("Maps", "Karten"), "tile.example.org")),
@@ -89,6 +101,46 @@ class PrivacyNoticeRendererTest {
         val nothingOn = render(active = { false })
         assertTrue(nothingOn.passage("guest-write-record") != null && nothingOn.passage("guest-write-record-objection") != null)
         assertNull(nothingOn.passage("breached-password-check"), "control: a passage bound to a switch goes with it")
+    }
+
+    /** GDPR Art. 13(2)(a): the storage period of content, named by both windows the instance runs
+     *  (uc.platform.erase-switched-off-application), on the bundled store's page and an external one's alike. */
+    @Test
+    fun theStoragePassageNamesTheTrashAndTheSwitchedOffWindow() {
+        for (values in listOf(all, all.copy(storeHost = "s3.example.org"))) {
+            val storage = render(values = values).passages.single { it.id == "storage" || it.id == "storage-external" }
+            assertTrue(storage.text.en.contains("waits 14 days in its space's trash"), storage.text.en)
+            assertTrue(storage.text.en.contains("stays readable for 45 days and is then erased"), storage.text.en)
+            assertTrue(storage.text.de.contains("liegt 14 Tage im Papierkorb") && storage.text.de.contains("45 Tage lang lesbar"), storage.text.de)
+        }
+    }
+
+    /**
+     * GDPR Art. 13(1)(e): the `mail` passage names which relay sends which mail, and each mail it names is sent where it
+     * says. The recovery and the address mails go through the space's relay ([TenantMailSender]), the erasure and
+     * moderation mails through the instance's ([InstanceNoticeMailer]); a mailer moved to the other relay turns this red
+     * and asks for the passage to move with it.
+     */
+    @Test
+    fun theMailPassageNamesWhichRelaySendsWhichMail() {
+        fun sendsThrough(mailer: Class<*>, relay: Class<*>) = mailer.constructors.any { relay in it.parameterTypes }
+        for (space in listOf(RecoveryMailer::class.java, EmailConfirmationMailer::class.java, EmailChangeMailer::class.java, SmtpTenantInviteMailer::class.java)) {
+            assertTrue(sendsThrough(space, TenantMailSender::class.java), "${space.simpleName} no longer sends through the space's relay")
+        }
+        for (instance in listOf(AccountErasureMail::class.java, StatementMail::class.java, TenantDeletionMail::class.java, ApplicationErasureMail::class.java)) {
+            assertTrue(sendsThrough(instance, InstanceNoticeMailer::class.java), "${instance.simpleName} no longer sends through the instance's relay")
+        }
+
+        val mail = render().passage("mail")!!
+        val (instanceEn, spaceEn) = mail.text.en.split("The relay the space's owner set up").also { assertEquals(2, it.size, mail.text.en) }
+        assertTrue(listOf("account's erasure", "moderation", "the space's deletion", "an application switched off").all { it in instanceEn }, instanceEn)
+        assertTrue(listOf("invitations", "confirm or change your address", "recover your access").all { it in spaceEn }, spaceEn)
+        assertFalse("recover" in instanceEn || "invitation" in instanceEn, "control: no space mail is named under the instance's relay: $instanceEn")
+
+        val (instanceDe, spaceDe) = mail.text.de.split("Das Relay, das die Person").also { assertEquals(2, it.size, mail.text.de) }
+        assertTrue(listOf("Löschung deines Kontos", "Moderation", "der des Bereichs", "einer Anwendung").all { it in instanceDe }, instanceDe)
+        assertTrue(listOf("Einladungen", "bestätigen oder ändern", "Zugang wiederherstellen").all { it in spaceDe }, spaceDe)
+        assertFalse("wiederherstellen" in instanceDe || "Einladung" in instanceDe, "control: $instanceDe")
     }
 
     @Test

@@ -44,6 +44,7 @@ interface VeyqConfig {
     fun moderation(): Moderation
     fun scope(): Scope
     fun node(): Node
+    fun application(): Application
     fun blob(): Blob
     fun blobStore(): BlobStore
 
@@ -406,6 +407,24 @@ interface VeyqConfig {
             @WithDefault("P30D")
             fun retention(): Duration
 
+            fun purge(): Interval
+        }
+    }
+
+    /** `veyq.application.*` — an application left switched off in a tenant (uc.platform.erase-switched-off-application). */
+    interface Application {
+        fun off(): Off
+        fun erasure(): Erasure
+
+        interface Off {
+            /** How long an application stays switched off in a tenant before its content there is erased: the day
+             *  members are told is the moment it went off plus this (ADR 0079 decision 8). One instance-wide value. */
+            @WithDefault("P30D")
+            fun retention(): Duration
+        }
+
+        interface Erasure {
+            /** How often `ApplicationErasurePurge` mails the due notices and erases what is due. */
             fun purge(): Interval
         }
     }

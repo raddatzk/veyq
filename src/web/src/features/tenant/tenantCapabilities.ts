@@ -3,14 +3,15 @@
 // `403 not_tenant_owner`, and the owner is an ordinary member of their own tenant (ADR 0065). The effective set is
 // every member's.
 import { tenantsApi } from '../../api/client'
-import type { Capability, CapabilityText, TenantCapabilitySwitch } from '../../api/generated/tenants'
+import type { CapabilityText, TenantCapabilities, TenantCapabilitySwitch } from '../../api/generated/tenants'
 
 export type { CapabilityText, TenantCapabilityRequirement, TenantCapabilitySwitch } from '../../api/generated/tenants'
 
 /** Any member: the entries this tenant serves, the instance level ANDed with the tenant's along the path, each with the
- *  requirement values in effect (the strictest of both levels) — all server-computed. */
-export async function getTenantCapabilities(tenantId: string): Promise<Capability[]> {
-  return (await tenantsApi().getTenantCapabilities({ tenantId })).capabilities
+ *  requirement values in effect (the strictest of both levels), and the day each switched-off application is erased
+ *  (`applicationErasures`) — all server-computed. */
+export function getTenantCapabilities(tenantId: string): Promise<TenantCapabilities> {
+  return tenantsApi().getTenantCapabilities({ tenantId })
 }
 
 /** Owner-only: the entries a tenant may switch, with the catalog's words and both levels' state. */
@@ -84,6 +85,25 @@ function stateOf(entry: TenantCapabilitySwitch, ancestors: TenantCapabilitySwitc
   if (entry.serverOff) return { kind: 'serverOff' }
   const through = ancestors.find((a) => a.off)
   return through ? { kind: 'offThrough', through } : { kind: 'off' }
+}
+
+/**
+ * What an application's row tells its tenant owner about the day its content is erased
+ * (uc.platform.erase-switched-off-application), or null when it names none:
+ *   - `running`  — the day has come: the erasure is committed and no switch cancels it, so the row says it runs;
+ *   - `byServer` — the instance holds the application off: only whoever runs the server can switch it on in time;
+ *   - `day`      — switching it on here before the day cancels the erasure.
+ * The day is the server's (`erasureDueAt`); an entry in effect names no coming day, because switching on before the day
+ * already ended it. Only what is made after a switch-on past the day stays, so no state promises more than `running`.
+ */
+export type ErasureNote = { kind: 'running' | 'byServer' | 'day'; day: Date }
+
+export function erasureNote(entry: TenantCapabilitySwitch, now: Date): ErasureNote | null {
+  const day = entry.erasureDueAt
+  if (!day) return null
+  if (day.getTime() <= now.getTime()) return { kind: 'running', day }
+  if (entry.effective) return null
+  return { kind: entry.serverOff ? 'byServer' : 'day', day }
 }
 
 /** Whether any entry hangs below this one — its descendants' `effective` changes when it is switched. */

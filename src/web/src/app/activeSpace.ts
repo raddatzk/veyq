@@ -250,7 +250,8 @@ export async function refreshTenantCapabilities(tenantId: string | null): Promis
     return
   }
   try {
-    setTenantCapabilities(await getTenantCapabilities(tenantId))
+    const set = await getTenantCapabilities(tenantId)
+    setTenantCapabilities(set.capabilities, set.applicationErasures)
   } catch {
     setTenantCapabilities(null)
   }

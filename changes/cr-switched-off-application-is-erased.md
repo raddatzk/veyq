@@ -1,7 +1,7 @@
 ---
 id: cr-switched-off-application-is-erased
 title: An application left switched off is erased in the tenant after a window members are told about
-status: planned
+status: in-progress
 satisfies: ["uc.platform.switch-application-off", "uc.platform.erase-switched-off-application"]
 adrs: ["0079", "0088", "0056", "0093", "0097", "0101"]
 invariants:
@@ -28,7 +28,8 @@ decisions below, written on the recommended answers, stand as written. Phase 0 w
 (`docs/ai/README.md` § Refined state comes before the CR): the use case
 [uc.platform.erase-switched-off-application](../docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md)
 with its planned coverage, ADR 0079 decision 8, ADR 0088 decision 5 and ADR 0093 § Legal basis, Still open 12–14.
-Implementation waits for the owner's go on this CR; phase 1 is next.
+The owner's go came on 2026-10-26. Phases 1 to 3 are built on the implementer's branches (phase 3 on top of phases 1
+and 2), and they land on `main` in one merge, because `applicationErasures` is a required response field.
 
 ## Context & constraints
 
@@ -90,7 +91,7 @@ Explore sweeps read the code; the pointers I relied on I re-read myself and mark
 ## Decisions this CR takes
 
 1. **One erasure row per tenant and application while it is off.** A new core table, `veyq_application_erasure`:
-   - `tenant_id` (FK `veyq_tenant` `ON DELETE CASCADE`), `application` (the register id), `switched_by` (`TENANT` or
+   - `tenant_id` (FK `veyq_tenant` `ON DELETE CASCADE`), `application` (the register id), `switch_level` (`TENANT` or
      `INSTANCE`, the level that made the row, for the notice's wording), `off_since`, `due_at`, `notice_mailed_at`,
      `reminder_mailed_at`;
    - unique on `(tenant_id, application)`.
@@ -191,6 +192,9 @@ Explore sweeps read the code; the pointers I relied on I re-read myself and mark
 | register `expenses.whenOff` | No Pot can be created and no entry added or changed. Every Pot can still be opened and downloaded until the day shown at the top of veyq; then it is erased, unless Expenses is switched on again before. | Keine Kasse kann angelegt und kein Eintrag hinzugefügt oder geändert werden. Jede Kasse lässt sich bis zu dem Tag öffnen und herunterladen, den veyq oben anzeigt; dann wird sie gelöscht, wenn Ausgaben nicht vorher wieder eingeschaltet wird. |
 | web `applications.switchedOffUntil` | {application} is switched off here. You can open and download what’s here until {day}; then it is erased. Save what you want to keep. | {application} ist hier abgeschaltet. Was da ist, kannst du bis zum {day} öffnen und herunterladen; dann wird es gelöscht. Sichere, was du behalten willst. |
 | web, the owner's panel | Erased on {day} unless switched on again | Wird am {day} gelöscht, wenn es nicht wieder eingeschaltet wird |
+| web, the owner's panel, the instance holds it off (phase 3) | Erased on {day} unless switched on again — only whoever runs the server can do that | Wird am {day} gelöscht, wenn es nicht wieder eingeschaltet wird – das kann nur, wer den Server betreibt |
+| web, the owner's panel, the day has come (phase 3) | Being erased since {day} | Wird seit dem {day} gelöscht |
+| web `tenantCapabilities.sub` (phase 3; it said "nothing is deleted") | Decide what this space offers, such as public links or groups. You can only switch off what the server allows. An application left off is erased on the day shown beside it; anything switched back on before then is as it was. | Lege fest, was dieser Bereich anbietet, etwa öffentliche Links oder Gruppen. Ausschalten lässt sich nur, was der Server erlaubt. Eine Anwendung, die aus bleibt, wird an dem Tag gelöscht, der neben ihr steht; was vorher wieder eingeschaltet wird, ist wie zuvor. |
 | mail subject (notice) | veyq: {application} is switched off in a space you belong to | {application} ist in einem Bereich abgeschaltet, dem du angehörst |
 | mail body (notice) | {who} switched {application} off in the space "{space}". Everything in it can still be opened and downloaded until {day}; then it is erased, unless {application} is switched on again before. Download what you want to keep. | {who} hat {application} im Bereich „{space}“ abgeschaltet. Alles darin lässt sich bis zum {day} öffnen und herunterladen; dann wird es gelöscht, wenn {application} nicht vorher wieder eingeschaltet wird. Lade herunter, was du behalten willst. |
 | mail subject (reminder) | veyq: {application} in "{space}" is erased on {day} | {application} in „{space}“ wird am {day} gelöscht |
@@ -215,7 +219,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
    - Add the new use case to this CR's `satisfies:`.
 
    **Done when:** every `scripts/validate_*.py` exits `0`.
-1. **Contracts.** Before the first edit, record the exit codes of `./gradlew check` and `npm run check` (web,
+1. **Contracts. Done 2026-10-26** (see § Retrospective for what moved). Before the first edit, record the exit codes of `./gradlew check` and `npm run check` (web,
    admin-web) on `main`, and the guard baseline.
    - The register texts above and the three descriptions.
    - `TenantCapabilities.applicationErasures` and `TenantCapabilitySwitch.erasureDueAt`.
@@ -227,7 +231,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
    **Done when:** `npm run generate:api` runs and the contracts guards are green. The predicted reds are named and
    measured once: the backend's `TenantCapabilities(...)` at `TenantsResource.kt:372` (a required response field), and
    the web fixtures the inventory's grep lists. They clear in phases 2 and 3. Phases 1 to 3 land on `main` in one merge.
-2. **Backend.** Decisions 1 to 5 and 7: the migration, the store and its row upkeep at the three writers and the
+2. **Backend. Done 2026-10-26** (see § Retrospective). Decisions 1 to 5 and 7: the migration, the store and its row upkeep at the three writers and the
    creation, the purge, the two mails, the response fields, the placeholder, the config.
 
    **Done when** `./gradlew check` is green, and slice tests drive the clock through a `now` parameter as
@@ -255,7 +259,7 @@ on screen. `applications.switchedOff` stays as the fallback for an off applicati
    - (h) `getTenantCapabilities` serves the day to a member, and `listTenantCapabilitySwitches` serves it to the owner.
 
    `validate_account_erasure_arity.py` is green, and `EveryStoredTimeHasAReaderTest` names each new column's reader.
-3. **Web.** The dated banner, reading `applicationErasures` through the host's `Access` as `applicationsOff` does
+3. **Web. Done 2026-10-26** (see § Retrospective; the browser pass is open). The dated banner, reading `applicationErasures` through the host's `Access` as `applicationsOff` does
    (`src/web/CLAUDE.md`: no rights function reads `hasCapability` inline). The owner panel's day. The texts in EN and DE.
 
    **Done when:** `npm run check` (web, admin-web) is green, and there is a **browser pass** on the dev instance:
@@ -368,3 +372,73 @@ on them.
 ## Retrospective
 
 _Filled by the implementer._
+
+**Phases 1 and 2 (2026-10-26, worktree `agent-a0d40b2ca49505c2f`).** Measured: the guard baseline before the first
+edit was 0 red; `./gradlew check` on `main` was not re-run (the branch started at `main`'s merge). `npm run
+generate:api` was not run here (this worktree has no `node_modules`); phase 3 runs it and meets the predicted web reds.
+
+What moved against the plan, each for its reason:
+- **`{trashWindow}` beside `{applicationOffWindow}`.** The storage line names the trash's window, and no placeholder
+  carried `veyq.node.trash.retention`; naming it without the number would not be a storage period (Art. 13(2)(a)).
+- **`switch_level`, not `switched_by`.** `validate_account_erasure_arity.py` reads a `*_by` column as an account; the
+  column holds `TENANT`/`INSTANCE`.
+- **The tick opens a missing row** (`ApplicationErasurePurge` step 1): an application switched off before the table
+  existed, or a row a defect lost, gets its window from that tick — never an earlier day, and its notice. Without it
+  an instance that already had Depot off would keep its data for good. The writers are still proven on their own:
+  the race class never runs the tick.
+- **The clock is read under the locks** (`now` null in production): a scope being erased holds the tenant's row with a
+  clock past the day, so a switch-on that waited for it reads a later clock and keeps the row. Tests pass `now`.
+- **A scope's erasure takes the tenant's row first**, then the scope's. A tenant's own purge takes the tenant, its
+  scopes, then cascades onto the erasure row; taking the erasure row first would wait crosswise on it.
+- **The tenant switch takes the instance row's lock too** (decision 1). The instance switch already locks every tenant
+  row, which alone would serialise the pair; the lock is kept so every writer reading both levels holds both.
+- **Mails:** a tenant that is not `ACTIVE` is not claimed (offline, its members could not download what the mail
+  offers) and is mailed if it is active again before the day. A reminder whose notice itself went inside the seven
+  days is stamped, not sent. A fresh window's notice goes in the same tick that ends the old one.
+- **Subtree semantics reach after a switch-on:** an old node is erased with its whole subtree, so a Chapter added to an
+  existing Memory after a switch-on past the day goes with that Memory. Only a new top node (a new Memory, File or Pot)
+  survives. Phase 4's texts should not promise more.
+
+Found in phase 2, fixed in phase 3: the privacy notice's `mail` passage said account mails go through the instance's
+relay, but the recovery and the address mails go through the space's (`TenantMailSender`).
+
+Proofs: (f) found red first on H2 and on MariaDB with each level taking only its own row's lock (all three race tests
+red), green with the order on both engines. Every erasure, legal and mail rule was bitten by a source mutation,
+snapshot-restored: the reclaim's hold-pin check, the ledger's `NODE` line, the `createdAt` filter, personal scopes,
+core folders, cancel-before-the-day, the day never moving, `pendingConsent`, the notice's claim; each went red on its
+test. (b)'s sweep is bitten in-test by leaving `ItemFavoritesNodeSubtreeEraser` out: it names
+`veyq_scope_item_favorites` and nothing else.
+
+**Phase 3 (2026-10-26, worktree `agent-a1de66709dca9d8f1`, on top of phases 1 and 2).** Measured: root `npm ci` and
+`npm run generate:api` (web, admin-web) ran first. The predicted web reds did not come: the inventory's grep lists
+`SetupStatus` fixtures and `setTenantCapabilities` arguments, and `getTenantCapabilities` unwrapped `.capabilities`, so the
+required field reached no fixture. It now returns the whole `TenantCapabilities`, and the two suites that mock it
+(`activeSpace.test.ts`, `TenantCapabilitiesPanel.test.ts`) carry `applicationErasures`. admin-web reads no
+`TenantCapabilities`; its switch dialog already shows the served `whenOff`.
+
+What moved against the plan, each for its reason:
+- **The day is no `Access` field.** No rights function reads it: the banner is the host's (`MemoryHomeView`), and the
+  host reads it through `useCapabilities().erasureDay` beside `isSwitchedOff`, the way `applicationsOff` is filled.
+  `erasureDay` names a day only while the set says the application is off (phase 2's handover: the row outlives a
+  switch-on while a due erasure runs), else the undated `applications.switchedOff` stands.
+- **Two more owner-row texts** (§ Texts): "unless switched on again" is false while the instance holds the application
+  off (the tenant's switch cannot cancel it) and once the day has come (nothing cancels it, a switch-on after the day
+  included). `erasureNote` (`features/tenant/tenantCapabilities.ts`) picks the line from `erasureDueAt`, `serverOff`
+  and `effective`; an entry in effect names no coming day.
+- **`tenantCapabilities.sub` said "nothing is deleted"**, false with this CR; it now says an application left off is
+  erased on the day beside it. The site's pages are phase 4's.
+- **The privacy notice's `mail` passage** names which relay sends which mail. `revision` stays 6: `main` serves 5, so 6
+  has not shipped. `PrivacyNoticeRendererTest.theMailPassageNamesWhichRelaySendsWhichMail` holds the text and ties each
+  mailer it names to its relay by constructor, so a mailer moved to the other relay goes red.
+
+Proofs, each bitten by a snapshot-restored source mutation: `erasureDay` without its off check (red:
+`useCapabilities.test.ts`; the golden stays green, since the banners already iterate `applicationsOff` — the unit test is
+the bite); the host's banner without the day (red: `MemoryHomeView.golden.test.ts`); `activeSpace` not passing the days
+(red: `activeSpace.test.ts`); `erasureNote` without its `running`, `serverOff` or `effective` branch (each red on
+`tenantCapabilities.test.ts`, the `serverOff` one on the panel test too); the `mail` passage naming the recovery mail
+under the instance's relay (red: the renderer test).
+
+**Not done: the browser pass on the dev instance.** It needs phases 1 and 2 running, and the dev backend is the main
+checkout's, without them; starting this branch's backend against the dev MariaDB would apply the unlanded migration
+`V202610260552` to the owner's database. Phase 4's L1 spec drives the same path (banner, owner row, switch-on, erasure);
+the hand pass of § Phases 3 is owed once phases 1 to 3 are on `main`.

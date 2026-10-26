@@ -19,6 +19,7 @@ beforeEach(() => {
   // reset the module singleton to the pre-discovery state
   capabilityState.ids = null
   capabilityState.tenantIds = null
+  capabilityState.tenantErasures = null
   capabilityState.major = null
   capabilityState.build = null
 })
@@ -52,6 +53,21 @@ describe('useCapabilities', () => {
     setTenantCapabilities([{ id: 'depot' }])
     expect(isSwitchedOff('memories')).toBe(true) // the tenant switched it off
     expect(isSwitchedOff('depot')).toBe(false)
+  })
+
+  it('erasureDay names a day only for an application the set says is off (uc.platform.erase-switched-off-application)', () => {
+    const { erasureDay } = useCapabilities()
+    const day = new Date('2026-11-25T10:00:00Z')
+    setCapabilities(status({ capabilities: [{ id: 'memories' }, { id: 'depot' }] }))
+    expect(erasureDay('depot')).toBeNull() // no tenant set read: the instance's manifest names no day
+    setTenantCapabilities([{ id: 'memories' }], [{ id: 'depot', dueAt: day }])
+    expect(erasureDay('depot')).toEqual(day) // off, with a day: the dated banner
+    expect(erasureDay('memories')).toBeNull() // control: on, and no day served
+    // Switched on again after the day, the server keeps the row while the erasure still runs: no day for an app that is on.
+    setTenantCapabilities([{ id: 'memories' }, { id: 'depot' }], [{ id: 'depot', dueAt: day }])
+    expect(erasureDay('depot')).toBeNull()
+    setTenantCapabilities(null) // sign-out: the day goes with the set
+    expect(capabilityState.tenantErasures).toBeNull()
   })
 
   it('incompatibility is null when the major matches, and before discovery; build never gates', () => {

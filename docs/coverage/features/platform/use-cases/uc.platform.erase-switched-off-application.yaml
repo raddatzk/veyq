@@ -24,5 +24,5 @@ acceptanceCriteria:
     text: "Switched off for the instance, every tenant gets its own day, a tenant already off keeps its earlier one, and the notice names the operator as the only one who can switch it on again; switched on for the instance, each day ends except where the tenant's own switch holds it off, and two levels switching at once leave the record the final state implies."
 gaps:
   backend: "Nothing is built: the window's record, the purge, the two mails and the served day are cr-switched-off-application-is-erased phase 2, whose slice tests (a)-(h) become the refs."
-  web: "Nothing is built: the dated banner and the tenant owner's day are cr-switched-off-application-is-erased phase 3."
+  web: "Built in cr-switched-off-application-is-erased phase 3 (the dated banner, the tenant owner's day); its refs (src/shared/state/useCapabilities.test.ts, src/views/MemoryHomeView.golden.test.ts, src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts, src/app/activeSpace.test.ts) move under the criteria when phase 4 turns the use case from planned to built."
   stack: "Nothing is built: application-erasure.spec.ts (a short window in the e2e overlay, Mailpit's notice, the file gone after it) is cr-switched-off-application-is-erased phase 4."

@@ -9,8 +9,11 @@
 //     locale — never written into this package;
 //   - the state shown is the server's `effective` and `serverOff`; "off through" only names the nearest ancestor that is
 //     itself off, and "off for the whole server" says the tenant's switch cannot bring it back;
-//   - switching off asks first and shows the entry's own `whenOff` (a share switch stops existing links at once);
-//     switching on only restores, so it asks nothing;
+//   - switching off asks first and shows the entry's own `whenOff` (a share switch stops existing links at once; an
+//     application's says its content is erased on the day the banner shows); switching on before that day only
+//     restores, so it asks nothing;
+//   - an application's row names the day its content is erased, the server's `erasureDueAt`, and says who can still
+//     cancel it (`erasureNote`, uc.platform.erase-switched-off-application);
 //   - a row re-renders from the PUT's answer, and the shell's own set is re-read, so the change shows at once.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -20,6 +23,7 @@ import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import {
   clearTenantCapabilityRequirement,
+  erasureNote,
   hasDescendants,
   inLocale,
   listTenantCapabilitySwitches,
@@ -27,6 +31,7 @@ import {
   setTenantCapabilitySwitch,
   tenantCapabilityTree,
   type CapabilityText,
+  type ErasureNote,
   type TenantCapabilityRequirement,
   type TenantCapabilityState,
   type TenantCapabilitySwitch,
@@ -54,6 +59,14 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
 
 const tree = computed(() => tenantCapabilityTree(entries.value))
 const words = (text: CapabilityText) => inLocale(text, locale.value)
+
+const ERASURE_TEXT = { day: 'erasureDay', byServer: 'erasureDayByServer', running: 'erasureRunning' } as const
+/** The row's erasure line in the web's day format (as `groups.pendingDeletion`), or '' when it names no day. */
+function erasureText(entry: TenantCapabilitySwitch): string {
+  const note: ErasureNote | null = erasureNote(entry, new Date())
+  if (!note) return ''
+  return t(`tenantCapabilities.${ERASURE_TEXT[note.kind]}`, { day: note.day.toLocaleDateString(locale.value) })
+}
 
 const STATE_TONE = { on: 'success', off: 'danger', offThrough: 'warning', serverOff: 'warning' } as const
 function stateLabel(state: TenantCapabilityState): string {
@@ -173,6 +186,7 @@ async function toggle(entry: TenantCapabilitySwitch) {
               <strong class="capability__title">{{ words(node.entry.title) }}</strong>
               <span class="veyq-badge capability__state" :class="STATE_TONE[node.state.kind]">{{ stateLabel(node.state) }}</span>
               <small class="settings-muted capability__purpose">{{ words(node.entry.purpose) }}</small>
+              <small v-if="erasureText(node.entry)" class="capability__erasure">{{ erasureText(node.entry) }}</small>
               <ul v-if="node.entry.requirements.length" class="capability__requirements">
                 <li v-for="r in node.entry.requirements" :key="r.name" class="requirement" :data-requirement="r.name">
                   <span class="requirement__title">{{ words(r.title) }}</span>
@@ -263,6 +277,7 @@ async function toggle(entry: TenantCapabilitySwitch) {
   min-width: 0;
 }
 .capability__purpose,
+.capability__erasure,
 .capability__requirements {
   flex-basis: 100%;
 }
