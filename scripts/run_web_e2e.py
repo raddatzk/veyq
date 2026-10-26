@@ -228,8 +228,8 @@ GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-t
 # exact alias, so the name is a contract between this file and that class.
 STORE_BUCKET = "blobs"
 STORE_KEY_ALIAS = "veyq-app"
-# The store's compose service, and its S3 API as `infra/docker/docker-compose.yml` publishes it to this host (`19000:3900`)
-# — the endpoint `%e2e` hands the jar, so every presigned URL of a run goes through it. [plant_store_sentinel]
+# The store's compose service, and its S3 API as `infra/docker/docker-compose.yml` publishes it to this host's loopback
+# (`127.0.0.1:19000:3900`) — the endpoint `%e2e` hands the jar, so every presigned URL of a run goes through it. [plant_store_sentinel]
 # sends the run's log control there.
 STORE_SERVICE = "garage"
 STORE_S3 = "http://127.0.0.1:19000"
