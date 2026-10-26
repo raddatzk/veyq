@@ -68,9 +68,9 @@ instance and tenant layers.
    every member is told. Switched on before that day, nothing is lost. The window is no requirement (decision 8): a
    tenant owner sets no value for it, and a tenant only narrows by switching the application off, never by shortening
    what the instance allows (decision 2). An instance switch gives every tenant its own day. Only the application's
-   own entry erases; a child entry (`memories.places`) erases nothing. Planned, not built
+   own entry erases; a child entry (`memories.places`) erases nothing. Built
    ([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md),
-   `changes/cr-switched-off-application-is-erased.md`).
+   ADR 0079 decision 8).
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a
    blob role the server sees. The operator then learns *that* a Memory has a track, never where. This is the same
    kind of metadata as `CHAPTER`.

@@ -15,13 +15,14 @@
   that exists opens, downloads and can be deleted as before; switched on again, everything is as it was. Its child
   entries (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it. Left off for the window, its
   content is erased on a day its members are told
-  ([uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md), planned).
+  ([uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md)).
 
 ## Main flow
 
 1. The switch takes effect without a restart; the application's id is missing from every client's effective set.
 2. Every member of the tenant sees one banner at the top of veyq: the application is switched off here, and what is
-   there can still be opened and downloaded, so there is time to save it (owner 2026-10-24). The create menu offers
+   there can still be opened and downloaded until the day it is erased, so there is time to save it (owner 2026-10-24;
+   the day is [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md)'s). The create menu offers
    none of the application's kinds, and the application's nodes and records show with every write function removed.
 3. A member opens, reads and downloads what exists; a guest does the same through a link that exists, which keeps
    being served (owner 2026-10-24). A guest's page is not told the switch: the link's resolve carries no tenant
@@ -58,7 +59,7 @@
 - Off is a window, not an end: switched on again, nothing was lost. What follows a long window is
   [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md): the application's
   content in the tenant is erased on a day the banner and a mail name, unless it is switched on before (owner
-  2026-10-24 and 2026-10-25). It is planned, not built; until it is, nothing is erased.
+  2026-10-24 and 2026-10-25).
 
 ## User impact
 
@@ -68,7 +69,7 @@ they had already put into it.
 ## Related
 
 - **Use-cases:** [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md) (what
-  follows a long window, planned), [uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md),
+  follows a long window), [uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md),
   [uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md),
   [uc.platform.capability-discovery](uc.platform.capability-discovery.md).
 - **Decisions:** [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,

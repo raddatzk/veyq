@@ -36,7 +36,7 @@ import java.util.UUID
 
 /**
  * The erasure row of an application left switched off and the two mails (uc.platform.erase-switched-off-application,
- * the CR's slice tests (e) — its rows —, (f), (g) and (h)), with core alone: no application kind exists here, so this
+ * the row of one tenant (e), two levels (f), the mails (g) and the API (h), each a section below), with core alone: no application kind exists here, so this
  * class proves what the switches, the tick and the API do with the row, and the root's `ApplicationErasureSweepTest`
  * what the erasure does to the content. The clock is driven through each writer's `now`.
  *

@@ -96,12 +96,17 @@ configuration property of the Server Owner, and a tenant owner has no lever over
   tenant, personal spaces included, through the trash purge's erase, with its ledger, its store reclaim and every
   hold unchanged.
 - **Switching on.** Before the day, switching on cancels it. After it, the erasure completes and spares what was made
-  after the switch-on.
+  after the switch-on as a node of its own (a new Memory, file or Pot); what was added under a node that existed goes
+  with that node's subtree.
 - **An instance switch.** It gives every tenant its own day, a tenant already off keeps its earlier one, and the notice
   says only the operator can switch it on again.
 
-The day a member was told is never moved earlier, and a switch is never refused. Planned, not built:
-`changes/cr-switched-off-application-is-erased.md`; until it is built, nothing is erased.
+The day a member was told is never moved earlier, and a switch is never refused. Built: core's
+`veyq_application_erasure` holds one row per tenant and application while it is off (its day, and the claims of the two
+mails), kept by both levels' switches under the instance's row lock, then the tenant's; `ApplicationErasurePurge`
+(`veyq.application.erasure.purge.every`, hourly by default) mails what is due and hands each scope's nodes of the
+application's kinds to `NodeSubtreePurge`, finding them by `NodeKindRules.applicationOf`, so core names no
+application.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new

@@ -1692,6 +1692,12 @@ A live proof that shortens a duration to fit in minutes (a grace, a retention) s
 rendered: cr-bucket-reconcile's three-minute grace read "0 days" in the verdict and the confirm dialog, every unit test
 having used the 30-day default. So a UI that renders a configured duration is unit-tested with the shortest value its
 live proof will use, too.
+**And a lane that shortens a window to wait it out decides which of a criterion's branches a browser can hold.**
+cr-switched-off-application-is-erased's lane ran a two-minute window with a five-second purge tick, which let the
+browser cancel before the day and watch the erasure after it. A switch-on *after* the day is a race with the tick's
+phase, and a reminder seven days ahead has no window at all, so both stayed the backend's, named in the use case's
+`stack` gap. Where the claim is that a tick did nothing (a cancelled day passed and nothing was erased), there is no
+state to wait for: the wait is the server's own day plus a number of ticks, computed, never a fixed sleep.
 
 ### A CR that grows a count checks each stage against the caps the contract already sets
 
@@ -1969,6 +1975,15 @@ generated client sends the header on every call and kept working, while nine sli
 posted the suspension bare went red at once. So a CR that adds an optional body to an existing operation greps its
 route across the test trees, `tests/e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
 contract that the request is JSON either way.
+
+### A required response field's predicted reds come from who RECEIVES the type, not who builds it
+
+cr-switched-off-application-is-erased made `TenantCapabilities.applicationErasures` required and predicted the web's
+reds from `grep "capabilities: \["`. The grep found `SetupStatus` fixtures and `setTenantCapabilities` arguments, and no
+red came: the client's `getTenantCapabilities` unwrapped `.capabilities`, so no fixture typed the response at all, and
+the field reached the client only once that wrapper returned the whole type (then the two suites mocking it needed
+it). So the locator for a new required response field greps the generated type's name and every function that returns
+or unwraps it, and the CR says whether a wrapper must change to pass the field through.
 
 ### A locator for an endpoint's callers greps its route, not only its operation name
 

@@ -1,28 +1,67 @@
 useCase: uc.platform.erase-switched-off-application
 feature: platform
 title: An application left switched off is erased
-# Refined 2026-10-25 (inbox #539; the owner answered the CR's six questions with its recommendations). Nothing is
-# built: changes/cr-switched-off-application-is-erased.md builds it, and its phases 2 (backend), 3 (web) and 4 (L1)
-# turn each gap below into refs. Every criterion is reachable by a coverage surface, so the flip is mechanical.
-status: planned
+# Built 2026-10-26 (inbox #539; owner 2026-10-24 and 2026-10-25). The server's seam is core's ApplicationErasurePurge,
+# which hands each scope's nodes of the application's kinds to the trash purge's erase (NodeSubtreePurge); the day is
+# veyq_application_erasure's, served to a member (applicationErasures) and to the tenant owner (erasureDueAt).
 acceptanceCriteria:
   - id: the-day-is-set-once
     text: "When an application's own entry goes off for a tenant, at either level, the tenant gets one day for it, the moment it went off plus veyq.application.off.retention (default P30D), and a second level switching it off keeps that day; a tenant created while the instance holds it off gets its own day from its creation."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt, ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.aTenantCreatedWhileTheInstanceHoldsAnApplicationOffGetsItsOwnDayAndNoNotice, ApplicationErasureSliceTest.aMissingRowIsOpenedByTheTickFromNowNeverEarlier]
   - id: every-member-is-told-the-day
     text: "Every member of the tenant (pendingConsent = false) is told the day by the banner at the top of veyq, the tenant owner also by the Settings → Capabilities row, and, where the instance has mail, by one notice mail within one purge tick and one reminder mail seven days before the day (none for a window of seven days or less); a member with pendingConsent gets no mail, and without instance mail nothing is sent, the switch is not refused and the day does not move."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.everyAcceptedMemberGetsTheNoticeOnceAndTheReminderOnceSevenDaysBeforeTheDay, ApplicationErasureSliceTest.withoutInstanceMailNothingIsSentAndTheRowStands]
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts, src/views/MemoryHomeView.golden.test.ts, src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts]
   - id: the-day-is-served
     text: "getTenantCapabilities serves each off application's day to a member, and listTenantCapabilitySwitches serves it to the tenant owner beside the entry."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.aMemberReadsTheDayAndTheOwnerReadsItBesideTheEntry]
+      web:
+        unit: [src/app/activeSpace.test.ts, src/shared/state/useCapabilities.test.ts]
   - id: on-the-day-its-nodes-are-erased
     text: "On the day, in every scope of the tenant (personal spaces, groups, a group in its grace), every node of the application's kinds made before the day is erased through the trash purge's erase, trashed ones included, with its media, derivatives, covers, records, item marks, guest-write records and links; a core folder that held one stays, and another application's nodes and another tenant's stay."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSweepTest.memoriesOffPastItsDayIsErasedInEveryScopeAndNothingElseIs, ApplicationErasureSweepTest.depotAndExpensesOffPastTheirDayAreErasedAndMemoriesStays, ApplicationErasureSliceTest.aCoreFolderIsNeverErased]
   - id: nothing-of-it-is-left
     text: "A sweep derived from every table the applications' migrations create and every core table a NodeSubtreeEraser writes finds no row that names an erased node; dropping one eraser from the erase makes it red and name the table."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSweepTest.memoriesOffPastItsDayIsErasedInEveryScopeAndNothingElseIs, ApplicationErasureSweepTest.theSweepNamesTheTableOfAnEraserLeftOut]
   - id: the-ledger-and-the-holds-apply
     text: "The erasure ledger holds one NODE line per erased node, and its replay erases a re-inserted node again; a held medium's blob and its hold rows stay, while an unheld medium's blob is reclaimed."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSweepTest.memoriesOffPastItsDayIsErasedInEveryScopeAndNothingElseIs, ApplicationErasureSweepTest.aRestoreThatBringsAnErasedMemoryBackErasesItAgain]
   - id: switched-on-before-the-day-nothing-is-lost
-    text: "Switched on before the day, nothing is erased and the day is cancelled; switched on after it, what existed is erased and what was made after the switch-on stays; off again once the erasure finished, a fresh day starts and a fresh notice goes."
+    text: "Switched on before the day, nothing is erased and the day is cancelled; switched on after it, what existed is erased with its whole subtree and a node of its own made after the switch-on (a new Memory) stays; off again once the erasure finished, a fresh day starts and a fresh notice goes."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt, ApplicationErasureSliceTest.aSwitchOnFromTheDayKeepsTheRowUntilThePurgeEndsItAndAStillOffApplicationStartsAgain, ApplicationErasureSweepTest.switchedOnAfterTheDayWhatExistedGoesAndAMemoryMadeAfterwardsStays]
+      web:
+        unit: [src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts]
   - id: an-instance-switch-gives-each-tenant-its-day
     text: "Switched off for the instance, every tenant gets its own day, a tenant already off keeps its earlier one, and the notice names the operator as the only one who can switch it on again; switched on for the instance, each day ends except where the tenant's own switch holds it off, and two levels switching at once leave the record the final state implies."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.anInstanceSwitchNoticeNamesTheOperatorAsTheOnlyOneWhoCanSwitchItOn, ApplicationErasureRaceSliceTest.aTenantSwitchOnOverlappingAnInstanceSwitchOnLeavesNoRow, ApplicationErasureRaceSliceTest.anInstanceSwitchOnOverlappingATenantSwitchOnLeavesNoRow, ApplicationErasureRaceSliceTest.aTenantCreatedOverlappingAnInstanceSwitchOffGetsItsRow]
+      web:
+        unit: [src/features/tenant/tenantCapabilities.test.ts]
 gaps:
-  backend: "Nothing is built: the window's record, the purge, the two mails and the served day are cr-switched-off-application-is-erased phase 2, whose slice tests (a)-(h) become the refs."
-  web: "Built in cr-switched-off-application-is-erased phase 3 (the dated banner, the tenant owner's day); its refs (src/shared/state/useCapabilities.test.ts, src/views/MemoryHomeView.golden.test.ts, src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts, src/app/activeSpace.test.ts) move under the criteria when phase 4 turns the use case from planned to built."
-  stack: "Nothing is built: application-erasure.spec.ts (a short window in the e2e overlay, Mailpit's notice, the file gone after it) is cr-switched-off-application-is-erased phase 4."
+  stack: >-
+    Lane L1's browser pass (`tests/e2e/tests/features/application-erasure.spec.ts`, its own Playwright project after every
+    feature scenario) drives the-day-is-set-once, every-member-is-told-the-day, the-day-is-served,
+    on-the-day-its-nodes-are-erased and switched-on-before-the-day-nothing-is-lost against the release candidate, with
+    the overlay's two-minute window and a five-second tick: a tenant owner switches Depot off; the confirmation, the
+    owner's row and the member's banner (EN and DE) name the day, and the notice reaches Mailpit; switched on before it,
+    nothing is erased when it passes; left off, the files in the shared and the personal space go, while the core
+    folders and a Memory stay, and a fresh day and notice follow. Not driven there: the reminder (a window short enough
+    to wait out has none), a switch-on after the day (a race with the tick's phase, not a state a browser can hold), an
+    instance switch, the sweep, the ledger and the holds; the backend's tests hold those. Green only in local runs of
+    `scripts/run_stack_e2e.py`, and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

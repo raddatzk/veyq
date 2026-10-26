@@ -1,7 +1,7 @@
 # UC: An application left switched off is erased
 
 - **ID:** uc.platform.erase-switched-off-application
-- **Status:** **planned** (`changes/cr-switched-off-application-is-erased.md`, inbox #539).
+- **Status:** **built** (2026-10-26, inbox #539).
 - **Primary actor:** Every **member** of a tenant where an application — Memories, Depot, Expenses — is switched off:
   the people whose content in it goes.
 - **Secondary actor:** The **tenant owner** (for the tenant, [uc.admin.tenant-switch-capabilities](../../admin/use-cases/uc.admin.tenant-switch-capabilities.md))
@@ -53,7 +53,9 @@
 
 - **A1 — switched on before the day:** nothing is erased, the day is cancelled and the banner goes.
 - **A2 — switched on after the day:** the erasure was committed on the day and completes. What members make after the
-  switch-on stays, because only what was made before the day is erased.
+  switch-on as a node of its own (a new Memory, file or Pot) stays, because only what was made before the day is
+  erased; what they add under a node made before it (a Chapter in an existing Memory) goes with that node, because a
+  node is erased with its whole subtree.
 - **A3 — switched off for the instance:**
   - every tenant gets its own window from that moment, and a tenant already off keeps its earlier day;
   - every member of each tenant is mailed;
@@ -116,4 +118,9 @@ day by banner and, where the instance sends mail, by mail, and has until then to
   [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 4 and § Still open, [ADR 0097](../../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decision 3.
-- **On the docs site:** nothing yet; the pages that say nothing is erased change when it is built (the CR's phase 4).
+- **On the docs site:** [What your space offers](../../../../site/src/content/docs/space-owners/capabilities.mdx) (the
+  tenant owner's switch and its day, EN and DE), [Applications](../../../../site/src/content/docs/applications/index.mdx)
+  (the banner a member sees, EN and DE), [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx) (the
+  Server Owner's), [Configuration](../../../../site/src/content/docs/run/configuration.md) (the window's property) and
+  [Data protection](../../../../site/src/content/docs/run/data-protection.md) (how long content is kept) and
+  [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md) (the instance mail that sends the notices).

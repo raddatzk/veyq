@@ -40,7 +40,9 @@ class ApplicationErasureEntity : PanacheEntityBase {
     @Column(name = "application", length = 64)
     lateinit var application: String
 
-    /** The level that made the row ([SwitchLevel] by name), for the notice's words: who switched it off. */
+    /** The level that made the row ([SwitchLevel] by name), for the notice's words: who switched it off. The column is
+     *  `switch_level`, never `switched_by`: `validate_account_erasure_arity.py` reads a `*_by` column as one naming an
+     *  account, and this one holds `TENANT` or `INSTANCE`. */
     @Column(name = "switch_level", nullable = false, length = 16)
     lateinit var switchedBy: String
 
