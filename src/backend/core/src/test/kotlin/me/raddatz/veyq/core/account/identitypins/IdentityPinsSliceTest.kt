@@ -230,7 +230,10 @@ class IdentityPinsSliceTest {
         val all = (1..25_000).map { pin(it) }
         val body = writeBody(0, HEAD_1, all, emptyList(), false)
         val limit = ConfigProvider.getConfig().getValue("quarkus.http.limits.max-body-size", MemorySize::class.java)
-        println("identity-pins: a write of 25,000 entries is ${body.length} bytes; the body limit is ${limit.asLongValue()}")
+        println(
+            "identity-pins: a write of 25,000 entries is ${body.length} bytes, a rotation carrying it at most " +
+                "${body.length + ROTATION_OVERHEAD}; the body limit is ${limit.asLongValue()}",
+        )
         assertTrue(body.length + ROTATION_OVERHEAD < limit.asLongValue(), "the rotation's whole body fits the limit")
         send(token, body).then().statusCode(200).body("revision", equalTo(1))
         assertEquals(25_000L, count(user))
@@ -315,9 +318,23 @@ class IdentityPinsSliceTest {
         private const val HEAD_1 = "c2VhbGVkLWhlYWQtb25l"
         private const val HEAD_2 = "c2VhbGVkLWhlYWQtdHdv"
 
-        /** What a rotation request carries besides its pins: a new identity bundle and its wrapped private key, two
-         *  rewritten cold wraps, a signature and the device register (each field's contract cap, summed generously). */
-        private const val ROTATION_OVERHEAD = 8_192 + 8_192 + 4 * 1_024 + 128 + 65_532 + 1_024
+        /** The rotation's JSON around its fields (`RotateAccountKeysRequest`), every value left out. */
+        private val ROTATION_ENVELOPE = (
+            """{"identityPublicKey":"","wrappedIdentityPrivateKey":"","passwordWrap":{"wrappedKey":"","kdfParams":""},""" +
+                """"recoveryWrap":{"wrappedKey":"","kdfParams":""},"secretKeyProofSignature":"","identityPins":,""" +
+                """"deviceRegister":{"blob":"","revision":}}"""
+            ).length
+
+        /** The longest revision on the wire: an int64's 19 digits. */
+        private const val REVISION_DIGITS = 19
+
+        /** What a rotation request carries besides the pin write this test sends, every field at its contract cap — the
+         *  worst case, not a typical one: the identity bundle and its wrapped private key (8,192 each), two cold wraps
+         *  (`RotatedWrap`: 8,192 + 1,024 each), the signature (128), the device register (65,532 and its revision),
+         *  and what the pin write itself can carry beyond this test's: a head at its 1,024 and a 19-digit revision. A
+         *  real rotation at the cap measured 9,602,700 bytes, about 2,700 of them beside the entries (ADR 0104 § Consequences). */
+        private val ROTATION_OVERHEAD = ROTATION_ENVELOPE + 8_192 + 8_192 + 2 * (8_192 + 1_024) + 128 +
+            65_532 + REVISION_DIGITS + (1_024 - HEAD_1.length) + (REVISION_DIGITS - 1)
 
         /** The `n`-th pin: its id 64 lowercase hex characters, its entry the 296 base64 characters every real one
          *  seals to (a 192-byte padded plaintext + 29 bytes of seal). */
