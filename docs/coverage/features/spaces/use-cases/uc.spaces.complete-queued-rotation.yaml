@@ -68,10 +68,12 @@ acceptanceCriteria:
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
   - id: an-unfinished-rekey-resumes
     text: >
-      E10: while a node lags, an owner's own scope row carries rekeying, derived from the node rows and never on a
-      plain member's row; each run of an owner's worker resumes every scope reading rekeying before it claims
-      anything, and a job whose epoch an earlier lease committed completes once the re-key is done, without a second
-      rotation.
+      E10: while a node lags, every member's own scope row carries rekeying, derived from the node rows; each run of
+      any member's worker resumes every scope reading rekeying before it claims anything, and a job whose epoch an
+      earlier lease committed completes once the re-key is done, without a second rotation.
     coverage:
-      backend: { integration: [RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags] }
+      backend:
+        integration:
+          - RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags
+          - RekeyCoreSliceTest.aMembersScopeRowReadsRekeyingWhileANodeLags
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }

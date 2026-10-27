@@ -60,8 +60,9 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 3. New content (names, `slug_token`s, `K_node`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
 4. The same device re-keys every existing node of the scope under `E_{n+1}`, top-down: a fresh key per node, every
    field sealed under the old one re-sealed, each `K_blob` re-wrapped, nothing re-encrypted in the store
-   ([uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md)). A write into a node not yet
-   re-keyed waits (`409 node_rekey_pending`).
+   ([uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md)); every member's device
+   continues it in the background. A write into a node not yet re-keyed is `409 node_rekey_pending`: a member's client
+   re-keys that node's path and retries at once, a guest's waits.
 5. The removed member holds ≤ `E_n` and the node keys from before → decrypts pre-removal content, never what is
    added afterwards, except through a link they could rebuild, until it is re-issued.
 

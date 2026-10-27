@@ -70,9 +70,10 @@
   ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E3).
 - **E9 — a lease expires and is reclaimed mid-completion.** The reclaiming owner keeps the job; the stale holder's
   completion writes nothing and is answered `409 not_lease_holder`.
-- **E10 — the re-key stops halfway.** The scope reads `rekeying` on every owner's row, derived from the node rows,
-  and writes into a node not yet re-keyed wait. The next run of any owner's worker resumes the re-key before it
-  claims anything; a job whose epoch an earlier lease committed completes once the re-key is done, without a second
+- **E10 — the re-key stops halfway.** The scope reads `rekeying` on every member's row, derived from the node rows,
+  and a guest's writes into a node not yet re-keyed wait (a member's re-key their path first,
+  [uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). The next run of any member's worker resumes
+  the re-key before it claims anything; a job whose epoch an earlier lease committed completes once the re-key is done, without a second
   rotation.
 
 ## Quality notes

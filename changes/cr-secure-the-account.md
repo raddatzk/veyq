@@ -39,7 +39,8 @@ Under ADR 0111 the rotation becomes **self-service and complete**:
 3. **The rotator mints the next epoch of every such scope itself**, from any unlocked device of the account, and
    grants it to every member whose key its client anchors and to its own new identity — never to the old one, which
    the server refuses. Every member it does not grant is declared pending.
-4. **Any member re-keys the nodes** (built by `changes/cr-any-member-re-keys.md`, which lands first).
+4. **Any member re-keys the nodes** (ADR 0111 decision 11, built 2026-10-27: `RekeyAccess` refuses a member only on
+   a node `OwnerOnlyRekey` names, and a member's write pulls its path through `pullRekeyPath`).
 
 Other members' clients accept the rotator's new key **without a review**, because the key chain reaches it from the
 head they pinned; a key the chain does not reach is an anomaly nobody wraps to.
@@ -61,16 +62,17 @@ in this refine was read here or by a delegated read that cited it. A claim held 
 
 ```mermaid
 flowchart LR
-  R["cr-any-member-re-keys<br/>(0111 D11)"] --> A["cr-secure-the-account<br/>(D6–D10, D16 counter)"]
+  R["any member re-keys<br/>(0111 D11, built)"] --> A["cr-secure-the-account<br/>(D6–D10, D16 counter)"]
   B["cr-invite-is-a-placeholder-member<br/>(D1–D5)"] --> A
   A --> C["cr-trust-records-in-the-tenant<br/>(D12–D15, D13, D16 rest, D17)"]
   B --> C
   C --> D["cr-join-records-for-existing-members<br/>(D18, stub)"]
 ```
 
-- **After `cr-any-member-re-keys` (planned).** Step 3 makes any member the committer of a shared epoch. Under today's
-  owner-only re-key (`RekeyAccess.kt:47`, `not_scope_owner`) every write into an existing node would then answer
-  `409 node_rekey_pending` until an owner is online — goal 3 broken for everyone, by every rotation.
+- **After the any-member re-key (ADR 0111 decision 11, built 2026-10-27).** Step 3 makes any member the committer of a
+  shared epoch. Under the owner-only re-key it replaced, every write into an existing node would then have answered
+  `409 node_rekey_pending` until an owner was online — goal 3 broken for everyone, by every rotation. Its
+  `rotation_excluded` refusal (`RekeyAccess.check`) stays for this CR to remove with the exclusion machinery.
 - **After `cr-invite-is-a-placeholder-member` (planned).** A rotation of the tenant scope must carry every open invite:
   today it re-tags their admissions (`commitRotation` reads `listMemberInvites`, `scopes.ts:652-654`; the server
   refuses `AdmissionsIncomplete`, `RotationPolicy.kt:118-120`), and `listMemberInvites` answers only an owner
@@ -219,7 +221,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    - **Publish.** One request, one transaction (decisions 2, 3, 6, 7).
    - **New epochs.** Each self-granted scope gets `E_{n+1}`, minted by the account from any unlocked device
      (decision 4).
-   - **Nodes.** Each scope's nodes are re-keyed by any member (`cr-any-member-re-keys`).
+   - **Nodes.** Each scope's nodes are re-keyed by any member (ADR 0111 decision 11, built).
    - **Nothing private of the old identity is kept.** `E_n` suffices: every older epoch is reachable from it through
      the links. The key chain keeps the retired **public** keys, which is its purpose.
 2. **The key-chain step (ADR 0111 decision 7).**
@@ -303,7 +305,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      state reads `secured` or `rekeying` (decision 8). The account's grant at the new epoch, or its declared pending
      status, is that committer's.
    - **A scope in another tenant.** The epoch commits from anywhere; its node re-key is any member's
-     (`cr-any-member-re-keys`).
+     (ADR 0111 decision 11, built).
 5. **A plan read, Host-independent: `getAccountRotationPlan`** (`GET /api/account/rotation/plan`, tag
    `account-rotation`). Per scope the account holds a membership on, across every tenant: `scopeId`, `kind`,
    `tenantId`, `currentEpoch`, `blocked` (`tenant_suspended`, `scope_deleting`, or absent), and the caller's own grant
@@ -429,8 +431,8 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
 
 - **ADR 0111 decisions 12–15's display and 13, 14, 16's personal-verified part, 17** →
   `changes/cr-trust-records-in-the-tenant.md` (join record as anchor, signed verifications, the closing list, the head
-  in the compare). Decisions 1–5 → `changes/cr-invite-is-a-placeholder-member.md`. Decision 11 →
-  `changes/cr-any-member-re-keys.md`. Decision 18 → `changes/cr-join-records-for-existing-members.md`.
+  in the compare). Decisions 1–5 → `changes/cr-invite-is-a-placeholder-member.md`. Decision 11 is
+  built (2026-10-27). Decision 18 → `changes/cr-join-records-for-existing-members.md`.
 - **A password holder acting after the publish** without the Secret Key: a session is all `rotateScope` asks, so they
   could commit an epoch of their own on a scope they own; that denies, it discloses nothing new (ADR 0060 Decision 2).
   Securing the account with a new password (pre-selected) closes it.
