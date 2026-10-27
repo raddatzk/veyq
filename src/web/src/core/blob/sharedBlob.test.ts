@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
 import { CHUNK_SIZE, planBlob, readBlobMeta, unwrapBlobKey } from './transport'
-import { contentDigest, findEqual, sealedByteSize, shareBlob } from './sharedBlob'
+import { contentDigest, findEqual, rememberDigest, sealedByteSize, shareBlob } from './sharedBlob'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const NODE = '22222222-2222-4222-8222-222222222222'
@@ -34,6 +34,40 @@ describe('contentDigest', () => {
     const ctl = new AbortController()
     ctl.abort()
     await expect(contentDigest(new Blob([new Uint8Array(10)]), ctl.signal)).rejects.toThrow('Upload cancelled')
+  })
+})
+
+describe('rememberDigest: the digest core computed over a Blob it handed out (inbox #555)', () => {
+  it('answers that very object without a read; a copy over the same bytes is read', async () => {
+    const bytes = new Uint8Array([4, 5, 6])
+    const blob = new Blob([bytes])
+    const sha = v1.sha256Digest(bytes)
+    rememberDigest(blob, sha)
+    const slice = vi.spyOn(blob, 'slice')
+    expect(await contentDigest(blob)).toBe(b64url(sha))
+    expect(slice, 'remembered: no read').not.toHaveBeenCalled()
+    // control: another object over the same bytes misses the memo and is hashed
+    const copy = new Blob([blob])
+    const copySlice = vi.spyOn(copy, 'slice')
+    expect(await contentDigest(copy)).toBe(b64url(sha))
+    expect(copySlice).toHaveBeenCalled()
+  })
+
+  it('an already-aborted signal rejects with an AbortError, remembered or not', async () => {
+    const blob = new Blob([new Uint8Array([1])])
+    rememberDigest(blob, new Uint8Array(32).fill(3))
+    const ctl = new AbortController()
+    ctl.abort()
+    await expect(contentDigest(blob, ctl.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    // control: unaborted, the same call resolves the remembered value
+    expect(await contentDigest(blob, new AbortController().signal)).toBe(b64url(new Uint8Array(32).fill(3)))
+  })
+
+  it('takes a SHA-256 only: 31 or 33 bytes throw', () => {
+    const blob = new Blob([new Uint8Array([1])])
+    expect(() => rememberDigest(blob, new Uint8Array(31))).toThrow('digest_not_sha256')
+    expect(() => rememberDigest(blob, new Uint8Array(33))).toThrow('digest_not_sha256')
+    expect(() => rememberDigest(blob, new Uint8Array(32))).not.toThrow()
   })
 })
 

@@ -69,6 +69,7 @@ import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
 import { planBlob, readBlobMeta, unwrapBlobKey } from '../../core/blob/transport'
+import { rememberDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
@@ -1235,6 +1236,23 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
     const digest = [0, 1, 2].map((i) => [i * CHUNK_SIZE, Math.min(size, (i + 1) * CHUNK_SIZE)])
     const pump = [0, 1, 2].map((i) => [i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE])
     expect(source.slice.mock.calls).toEqual([...digest, ...pump])
+  })
+
+  it('an original whose digest core remembered (an imported payload, inbox #555) is read by the pump alone', async () => {
+    const source = spiedSource(3)
+    // a value no hash of these bytes gives: the sealed `sha256` can only have come from what core remembered
+    const remembered = new Uint8Array(32).fill(0xa5)
+    rememberDigest(source.blob, remembered)
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: source.blob, mediaType: 'application/pdf' }, stubDeriver())
+    const pump = [0, 1, 2].map((i) => [i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE])
+    expect(source.slice.mock.calls, 'no digest pass: only the pump reads the original').toEqual(pump)
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(originalBlobMeta(SCOPE_ID, memoryKey, item)?.sha256).toBe(b64url(remembered))
   })
 
   it('never has more than PUMP_IN_FLIGHT PUTs in flight for a many-chunk blob', async () => {

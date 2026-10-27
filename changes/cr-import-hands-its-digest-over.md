@@ -281,4 +281,41 @@ without a manifest `sha256` (Q2), the check's own main-thread pass is inbox #557
 
 ## Retrospective
 
-_Filled by the implementer._
+Implemented on `worktree-agent-a649f4328f29e673f`, fast-forwarded to `main` at `5a6c23679`.
+
+- **Built as decided, no deviation.** `sharedBlob.ts`: a module-private `WeakMap<Blob, string>`, `rememberDigest` (32 bytes
+  or `digest_not_sha256`), and `contentDigest` answering a remembered `Blob` from it (an already-aborted signal rejects
+  `AbortError` first). `archivePayload` calls `hasher.digest()` once, compares its hex where the manifest names a
+  `sha256`, then builds the `File` and remembers the digest for it. Decision 1's locator lists only the definition and
+  `importSubtree.ts`. Comments corrected: `importSubtree.ts` (header, `archivePayload`), `hooks.ts` (`payload`),
+  `sharedBlob.ts` (`contentDigest`), Memories' `restoreBanner` and `addOriginal` (each names that a re-wrapped `File` is
+  hashed again - the one way to lose the hand-over, which fails safe), and the comment above `uploadMediaVia`'s digest.
+  No application code changed beyond comments.
+- **Baseline (`npm run check` on `main`, before the first edit): exit 1**, lint and typecheck green, one test red by
+  timeout only: `FileViewer.pdf.test.ts` "loads pdf.js only through a dynamic import" ran 9.7 s against vitest's 5 s
+  default, load 7.20 at the start and 17.35 at the end. **The baseline's substrate was not clean:** it ran in the
+  background and the first two edits (`sharedBlob.ts`, `importSubtree.ts`) landed while its test stage ran, so its
+  test stage may have read them. The red test reads neither. Harvested as a sentence under `docs/ai/README.md`
+  § The pipeline, "A measurement is only as true as the tree it ran against".
+- **After: `npm run check` green** (exit 0; 457 files, 5085 tests), load 6.99 at the start, 17.41 at the end. The
+  timeout above did not recur. `src/admin-web` was not run: the diff touches nothing under it or `src/packages/`.
+- **Bites** (each a snapshot and an Edit back, the restored files `diff`-equal to the snapshot):
+  1. Remember the manifest's hex-decoded `sha256` instead, skipping where absent: the two "manifest without a sha256"
+     cases (ZIP, directory) went red, `slice` called once. The four with a `sha256` stayed green, which is the point:
+     only the absent claim tells computed from claimed.
+  2. Remove the comparison: the new `checksum` case, `importHardening`'s existing one and `subtree.test.ts:273` went red.
+  3. Disable the ZIP CRC check (`zip.ts`): the new CRC case went red (`cause` undefined). The manifest has no `sha256`
+     there, so the CRC is the only detector.
+  4. Drop the lookup in `contentDigest`: 8 red - the memo's own two, the four hand-over cases, the media read-order
+     test and the banner test.
+  5. Skip the abort check for a remembered digest: the `AbortError` case went red (resolved).
+  6. Re-wrap the original in `addOriginal` and the banner's file at its `contentDigest` (`new File([file])`): both new
+     `exportImport.test.ts` cases went red.
+- **What the tests learned.** A test fake whose payload is a fresh `File` per call hides object identity; the two
+  Memories tests remember a marker digest no hash of the bytes gives, so the sealed `sha256` can only have come
+  from the memo. The banner test's export puts the media's payloads first, so the banner's file is found by name, not
+  by index (the first run compared against `a.jpg`).
+- **No code trap left to move:** the one trap (a re-wrapped `File` loses the remembered digest) is at the two
+  Memories call sites and in `hooks.ts`'s `payload` doc.
+- **For an inbox row (reported, not filed):** the `FileViewer.pdf.test.ts` source walk reads every `src/` file
+  synchronously and is close to vitest's 5 s default under load; it is the one timeout the baseline showed.

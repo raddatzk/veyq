@@ -10,7 +10,9 @@
 // named in the result - or cancels, and a cancel writes nothing.
 //
 // Each payload is verified (its SHA-256 against the manifest, and a ZIP entry's own CRC) by one pass over its bytes BEFORE a
-// kind's hook uploads it, then handed to the hook as a lazy `File` - seekable, as the upload pump needs. The server offers no
+// kind's hook uploads it, then handed to the hook as a lazy `File` - seekable, as the upload pump needs - whose digest that
+// pass computed is remembered for it (`sharedBlob.ts` `rememberDigest`), so an upload's `blob-meta` `sha256` is not read
+// again (inbox #555). The server offers no
 // multi-node atomicity, so an import is a sequence of ordinary writes; a failure trashes the top-level node it created (its
 // subtree goes with it, ADR 0061) and reports how far it got.
 import * as v1 from '@veyq/crypto/v1'
@@ -26,6 +28,7 @@ import {
   type Manifest, type ManifestNode, type ManifestPayload,
 } from './manifest'
 import type { PayloadFile } from './hooks'
+import { rememberDigest } from '../blob/sharedBlob'
 
 export type OpenedExport = { source: ImportSource; manifest: Manifest }
 
@@ -247,7 +250,9 @@ export const createdKind = (n: { kind: string }): string => {
 }
 
 /** The payload resolver of a download (decision 10): the path checked, the size the manifest says, and its SHA-256 (and a
- *  ZIP entry's CRC) verified by one pass over its bytes BEFORE a hook uploads it, then handed out as a lazy `File`. */
+ *  ZIP entry's CRC) verified by one pass over its bytes BEFORE a hook uploads it, then handed out as a lazy `File` with the
+ *  digest that pass computed remembered for it (`rememberDigest`) - the hasher's own bytes, also where the manifest names
+ *  no `sha256`, and never the manifest's hex, which is only compared (inbox #555). */
 function archivePayload(opened: OpenedExport, signal?: AbortSignal): PayloadResolver {
   const { source, manifest } = opened
   return async (ref, fileName) => {
@@ -264,8 +269,11 @@ function archivePayload(opened: OpenedExport, signal?: AbortSignal): PayloadReso
     } catch (e) {
       throw asExportError(e, ref.path)
     }
-    if (ref.sha256 && hex(hasher.digest()) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
-    return new File([source.blob(ref.path, ref.mediaType)], fileName, { type: ref.mediaType, lastModified: ref.modifiedAt })
+    const digest = hasher.digest()
+    if (ref.sha256 && hex(digest) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
+    const file = new File([source.blob(ref.path, ref.mediaType)], fileName, { type: ref.mediaType, lastModified: ref.modifiedAt })
+    rememberDigest(file, digest)
+    return file
   }
 }
 

@@ -418,7 +418,9 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
   }
 }
 
-/** A download's medium: its original through the ordinary upload, which decodes it to derive the tiers. */
+/** A download's medium: its original through the ordinary upload, which decodes it to derive the tiers. The payload goes on
+ *  as the very object `ctx.payload` returned: core remembered the digest its check computed for that object, so the
+ *  upload's `blob-meta` `sha256` costs no second read - a re-wrapped `File` would be hashed again (inbox #555). */
 async function addOriginal(
   ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
 ): Promise<{ mediaId: string }> {
@@ -454,8 +456,10 @@ async function restoreCover(ctx: ImportNodeContext, nodeId: string, nodeKey: Uin
 }
 
 /** The banner's files uploaded as they are (a download's and a copy's alike: the archive holds the banner's own bytes),
- *  then the one write of slots and meta. A video's file is the banner's original, so its digest is read again here (the
- *  banner's `sha256`, its `blob-meta`'s); an image's file is the derived JPEG, whose source the archive does not hold. */
+ *  then the one write of slots and meta. A video's file is the banner's original, so its digest is the banner's `sha256`
+ *  (its `blob-meta`'s): a download's payload answers it from the digest core's check computed, as long as `file` is handed
+ *  to `contentDigest` as the object `ctx.payload` returned (inbox #555); a copy's is read again. An image's file is the
+ *  derived JPEG, whose source the archive does not hold. */
 async function restoreBanner(ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, banner: ExportedBanner): Promise<void> {
   const file = await ctx.payload(banner.file, banner.file.path.split('/').pop() ?? 'banner')
   const prepared = banner.medium === 'image'

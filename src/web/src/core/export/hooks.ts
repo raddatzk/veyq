@@ -74,7 +74,9 @@ export type ImportNodeContext = {
   name: string
   node: ManifestNode
   /** A payload, seekable, named `fileName`: from a download its checksum verified first (refuses - throws - a payload that
-   *  fails it); in a copy the original read by frame, each frame checked against the size the walk declared. */
+   *  fails it), and the SHA-256 that check computed remembered for the returned object, so `contentDigest` answers it
+   *  without a read while the hook hands that very object on (a re-wrapped copy is read again); in a copy the original
+   *  read by frame, each frame checked against the size the walk declared. */
   payload(ref: ManifestPayload, fileName: string): Promise<PayloadFile>
   signal?: AbortSignal
   /** Fraction of THIS node's bytes uploaded. */
