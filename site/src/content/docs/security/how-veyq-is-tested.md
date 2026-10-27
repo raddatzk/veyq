@@ -88,11 +88,17 @@ per scenario at CPU throttle 1 and 4):
 - **Unlock** takes 2.9–3.5 s, and the page's main thread is about 94 % idle meanwhile: it waits on the Argon2id worker,
   whose cost is the password hardening itself
   ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
-- **An upload** of 50 photos of about 3.6 MB takes about 41 s, and the network is 9.5 % of it. The content encryption
-  runs in JavaScript on the main thread: its authentication step alone took 1.9 s. In the same browser, the browser's
-  own AES-256-GCM is about 18 times faster on a whole buffer and about 35 times on veyq's framed chunks, both matching
-  the published test vectors; moving bulk encryption there is tracked, and changes the cryptographic suite only through
-  an ADR.
+- **An upload** of 50 photos of about 3.6 MB took about 41 s, and the network was 9.5 % of it. The content encryption
+  ran in JavaScript on the page's main thread: 12.4 s of its 24 s of work at throttle 1, about 51 s at throttle 4. In
+  the same browser, the browser's own AES-256-GCM is about 18 times faster on a whole buffer and about 35 times on
+  veyq's framed chunks, both matching the published test vectors. veyq keeps one implementation of each primitive and
+  did not switch ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
+  Instead, a blob's chunks are now sealed and opened, by the same code, in a worker beside the page. Read again on
+  2026-10-27, on a busier machine (load average 8 to 17, Microsoft Defender busy throughout): the same upload takes
+  30.2–31.1 s at throttle 1 and 90–96 s at throttle 4, against 133–135 s before. The main thread's share of the
+  encryption fell to under 0.1 s, the worker spends 5.1–5.4 s on it, and the network is now 14–16 % of the upload.
+  Hashing each original (SHA-256) is still on the main thread: 3.7–3.9 s at throttle 1, which is tracked. Opening a
+  20 MB original or downloading a 64 MB file put no task longer than 50 ms on the main thread.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
   about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.

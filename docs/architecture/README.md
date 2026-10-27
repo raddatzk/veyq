@@ -307,7 +307,11 @@ CPU profile of the main thread and a trace of every thread, three runs each at C
 under JFR with its environment and system-property events off, beside the SQL statements per request. Nothing it
 records can turn red; a hotspot it finds becomes an inbox row with its number. Its first reading (2026-10-23/24) bore out
 the sentence above: the server's JVM averaged under 1 % CPU, unlock waits on the Argon2id worker by design, and the
-client's largest avoidable cost is sealing an upload's blobs in pure JS on the main thread (inbox #536). The method,
+client's largest avoidable cost was sealing an upload's blobs in pure JS on the main thread: 12.4 s of the main thread's
+24 s in the 41 s upload at throttle 1. Those chunk frames are now sealed and opened in core's frame worker
+(`src/web/src/core/blob/frames.worker.ts`), on the same `@noble` code (ADR 0017 decision 1). Its after-reading
+(2026-10-27) put the upload at 30–31 s, with the frames' work under 0.1 s on the main thread and 5.1–5.4 s in the worker.
+The largest main-thread cost left in an upload is the SHA-256 of each original (inbox #554). The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
