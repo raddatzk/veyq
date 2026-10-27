@@ -1692,6 +1692,15 @@ share one refresh cookie and the second "device" opens on the first one's sessio
 `VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
 its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
 8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
+An instance needs no shared container at all (cr-rotation-refused-as-too-large, 2026-10-27): a MariaDB and a Garage of
+its own, run from the dev stack's images by id (`docker inspect veyq-mariadb --format "{{.Image}}"`, so nothing is
+pulled), the jar under its default `%prod` profile — `%e2e`'s store hint names the owner's Garage on 19000 — with the
+`VEYQ_BUNDLED_STORE_*` env pointed at its own, a Vite of its own (`VITE_PORT`, `VEYQ_API_TARGET`, `VEYQ_STORE_TARGET`),
+and `bootstrap:user` with `VEYQ_BASE`, `VEYQ_ADMIN_BASE` and a dead `VEYQ_MAILPIT`. From a worktree, the seeder's
+`.run/.env` is the worktree's own, so nothing of the owner's is snapshotted; it is deleted after.
+A server setting the screen's failure depends on (a request limit) is lowered **after** the sign-in, by restarting the
+jar with it: the tab keeps its session and its unlocked vault, so a `413` is reached on a fresh account without seeding
+a body of that size.
 The capability register's texts are compiled into the backend (buildSrc generates `CapabilityTexts.kt` from
 `contracts/platform/capabilities.json`, and both clients read them over the API), so a live proof of a changed register
 text boots a jar rebuilt after the edit; a Vite reload shows the old text (cr-copy-follows-the-rule, 2026-10-23).

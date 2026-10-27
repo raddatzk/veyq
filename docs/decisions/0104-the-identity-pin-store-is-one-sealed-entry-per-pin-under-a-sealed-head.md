@@ -88,6 +88,10 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   signature, the device register, the head — it would send about **9.70 MB (92.5 %)**, so the limit carries
   **≈ 27,000 pins** even then (`IdentityPinsSliceTest` holds that worst case against the configured limit). A body past
   the limit is `413 request_too_large`, answered on its `Content-Length` before authentication, and nothing is written.
+  A browser reads that answer while it is still sending (**measured 2026-10-27**, inbox #553: headless Chrome 156 over
+  HTTP/1.1, bodies of 1.1×, 2× and 10× the limit, 30 of 30 direct to the jar, 29 of 30 through a Traefik v3.6 whose
+  thirtieth was its own `502`; no `fetch` rejected), so the client maps it to a refusal of its own that names the Server
+  Owner (uc.account.rotate-keys E10). undici, still sending, sees `ECONNRESET` instead.
   **The cap and the one request stay** (owner, 2026-10-26): the measured margin is 883 KB. Above it a rotation would
   need a staged write, which is not built. One new pin writes about 400 bytes instead of the whole store.
 - **What the operator learns per write changes shape, not amount.** It sees which entry was written; today it sees that
@@ -109,3 +113,5 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   its own in a pre-authentication filter).
 
 Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../site/src/content/docs/security/protocols.mdx), [Threat model](../../site/src/content/docs/security/threat-model.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).
+
+For Server Owners, why the request limit carries the cap: [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md).

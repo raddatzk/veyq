@@ -161,6 +161,8 @@ function fakeServer(
     /** How many rotate calls answer `409 stale_revision` first — each as if another device had just written the
      *  pin store (its revision moves one up, still sealed under the current key). */
     staleRotations?: number
+    /** What every rotate call throws instead of answering — a failure that is not a stale document. */
+    rotateFails?: unknown
   } = {},
 ) {
   const getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>(async () => ({
@@ -188,6 +190,7 @@ function fakeServer(
   let staleLeft = opts.staleRotations ?? 0
   const rotateAccountKeys = vi.fn<AccountRotationApi['rotateAccountKeys']>(async (body) => {
     const req = body.rotateAccountKeysRequest
+    if (opts.rotateFails !== undefined) throw opts.rotateFails
     if (staleLeft > 0) {
       staleLeft -= 1
       pinServer.become(sealedPins(pins.revision + 1)) // another device wrote meanwhile
@@ -665,6 +668,35 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
     await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toMatchObject({ message: 'http 409 stale_revision' })
 
     expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(5)
+    expect(vi.mocked(setUnlocked)).not.toHaveBeenCalled()
+  })
+
+  // uc.account.rotate-keys E10: a 413 means the server read none of the body, and the same body fails the same way
+  // again, so it is a refusal of its own and never retried. By status alone — a proxy's own 413 carries no code.
+  it.each([
+    ['coded', httpError(413, 'request_too_large')],
+    ['bare', httpError(413)],
+  ])('a %s 413 on the publish is refused as too large, once, and the vault keeps the old key', async (_kind, failure) => {
+    const srv = fakeServer({ pins: sealedPins(3), register: sealedRegister(2), rotateFails: failure })
+
+    await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toMatchObject({ name: 'RotationRefused', reason: 'requestTooLarge' })
+
+    expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(setUnlocked)).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    // No answer at all (the generated runtime's FetchError around the browser's bare TypeError): the client cannot
+    // know the body was too large — it may be offline — so it must not say so.
+    ['a fetch that rejected', () => Object.assign(new Error('The request failed and the interceptors did not return an alternative response'), { name: 'FetchError', cause: new TypeError('Failed to fetch') })],
+    ['a 500', () => httpError(500)],
+  ])('control: %s is rethrown as it is, never as too large', async (_kind, make) => {
+    const failure = make()
+    const srv = fakeServer({ pins: sealedPins(3), register: sealedRegister(2), rotateFails: failure })
+
+    await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toBe(failure)
+
+    expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(1)
     expect(vi.mocked(setUnlocked)).not.toHaveBeenCalled()
   })
 

@@ -27,7 +27,7 @@
 // Master Key. Its bite is the server's own limit, passed to the jar through the orchestrator's environment:
 // `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE=9601500` lets the seed of 25,000 entries land and refuses the cap's rotation with
 // `413 request_too_large` (measured 2026-10-26, inbox #538). A lower limit refuses the seed already, which an undici
-// client still sending sees as `ECONNRESET`, not as the 413.
+// client still sending sees as `ECONNRESET`, not as the 413 — a browser reads the 413 (ADR 0104 § Consequences, inbox #553).
 import { beforeAll, describe, it, expect } from 'vitest'
 import { fromB64std } from '@veyq/crypto/base64'
 import { createHash } from 'node:crypto'

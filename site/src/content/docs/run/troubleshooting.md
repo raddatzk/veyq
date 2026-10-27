@@ -1,11 +1,13 @@
 ---
 title: Troubleshooting
-description: What to check when uploads are refused, a certificate does not come, the config-secret key reads ABSENT or MISMATCH, the console cannot be reached, a tenant's domain does not answer, mail is refused, or a user reports an error id.
+description: What to check when uploads are refused, replacing keys is refused as too large, a certificate does not come, the config-secret key reads ABSENT or MISMATCH, the console cannot be reached, a tenant's domain does not answer, mail is refused, or a user reports an error id.
 sources:
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.configure-object-store.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md
 ---
 
 Most failures in veyq are loud by design: a refusal names its reason, and a missing setting stops the thing that
@@ -28,6 +30,18 @@ needs it, not the whole instance. Start with the admin console's **Server** sect
 where the deployment brings its Garage the server has set the bundled store and checked it itself, and the page names
 the step that failed; otherwise save a store of your own. Fix the named step and run **Check store**
 ([uc.admin.configure-object-store](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.configure-object-store.md)).
+
+## Replacing keys is refused as too large
+
+A member who replaces their keys is told the request is larger than this server accepts, and to ask you. Nothing was
+changed on their account. The request carries their whole list of checked contacts, so it grows with that list.
+
+- **Cause:** the instance's request limit, `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE`, is set below its default of
+  10,240 KiB, or a proxy in front of the instance has a lower limit of its own.
+- **What to do:** raise the limit to at least the default, on the instance and on every proxy in front of it. Then
+  the member tries again.
+- **Why the default:** it is sized so that a key replacement still fits when the list holds its cap of 25,000
+  contacts ([ADR 0104](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)).
 
 ## A certificate does not come
 

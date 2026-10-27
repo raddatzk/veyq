@@ -88,6 +88,14 @@ acceptanceCriteria:
           - RotationSliceTest.aStalePinStoreRevisionRollsTheWholeRotationBack
           - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: too-large-is-refused-without-a-retry
+    # uc §E10, inbox #553. Measured in headless Chrome: a body past the limit reads the server's 413 (59/60; one 502
+    # through Traefik, which stays the generic failure). Bitten: without the branch both 413 cases fail; mapping a
+    # response-less rejection, or a 500, to the refusal reddens its control; the panel without its arm, or with the
+    # new copy for every failure, reddens its test.
+    text: A 413 on the rotation's publish, coded or a proxy's bare one, is refused as too large — once, never retried, and the vault keeps the old key — and the panel says that trying again won't help and to ask the Server Owner; a fetch that got no answer, or a 500, keeps the generic failure.
+    coverage:
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/account/rotation/KeyRotationPanel.test.ts] }
   - id: nothing-outlives-the-rotation-it-raced
     text: A device wrap or a pairing delegation racing the rotation either committed before it — and is deleted, superseded or cut by it — or decides after it and is refused, so no channel bound under the old Master Key survives it; a rotation from a session a password change revoked while it waited writes nothing.
     coverage:

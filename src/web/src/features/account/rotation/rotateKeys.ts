@@ -18,7 +18,7 @@ import { accountRotationApi } from '../../../api/client'
 import type { RotationScopeState } from '../../../api/generated/account'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
-import { isCodedError, HttpStatus } from '../../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../../shared/httpError'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { pinStoreDocument, type PinStoreWrite } from '../identityPins'
 import { registry } from '../../../core/applications/registry'
@@ -47,6 +47,9 @@ export type RotationRefusal =
    *  new key would launder a rollback into it, or carry an unreadable one across as empty; the way back is the
    *  user's reset in the settings hub, not a rotation. */
   | 'trustStateRefused'
+  /** E10 — the publish is larger than the server accepts (`413`, answered before the body is read). Nothing was
+   *  written, and the same body fails the same way again: the remedy is the Server Owner's request limit. */
+  | 'requestTooLarge'
 
 /** Thrown before any write. A rotation that refuses has changed nothing, anywhere. */
 export class RotationRefused extends Error {
@@ -203,6 +206,9 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
         break
       } catch (e) {
         if (attempt < MAX_PUBLISH_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_revision'))) continue
+        // By status alone: a proxy in front answers its own limit with a bare 413 and no veyq body, and the remedy
+        // is the same. A fetch that rejected is NOT this — the client cannot know why it got no answer.
+        if (isHttpStatus(e, HttpStatus.contentTooLarge)) throw new RotationRefused('requestTooLarge')
         throw e
       }
     }
