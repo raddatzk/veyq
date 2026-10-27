@@ -17,10 +17,11 @@ invariants in [CLAUDE.md](../../CLAUDE.md) override everything here.
 
 **The owner reviews in conversation, before the work — not by reading `docs/`.** So: describe what a refinement
 or a CR is *actually about*, in two sentences, and let them stop it. That exchange is the review loop, and it is
-the only check that can ask **"do we need this at all?"** — no validator can. The prose-to-product ratio is
-currently healthy (~12k lines of docs against ~50k of source), and it is worth knowing what that cost: it was
-last corrected by **deleting** ~2.6k lines in one pass, not by writing carefully. Prose grows by default; only
-that question shrinks it.
+the only check that can ask **"do we need this at all?"** — no validator can. The prose-to-product ratio is the
+number to watch: `docs/` holds ~38k lines against ~156k of source outside the tests (`git ls-files`, `*.md` against
+`*.kt`/`*.ts`/`*.vue`/`*.py`), and nearly half of that prose is ADRs (~18k lines) — where a model narrated in a
+record instead of its current-picture doc keeps growing. The ratio was last corrected by **deleting** ~2.6k lines
+in one pass, not by writing carefully. Prose grows by default; only that question shrinks it.
 
 Five rules follow:
 

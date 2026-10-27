@@ -21,12 +21,20 @@ something is the way it is. One file per decision: `NNNN-kebab-title.md`, number
   (a change-log belongs in git, not the doc). Keep the full current reasoning + rejected alternatives. Canonical
   rule: [`../README.md`](../README.md).
 
+- **What is true now lives in the topic's current-picture doc**, named by `- Model:` and listed under
+  [Topics](#topics); an ADR keeps the choice and its why. A decision that changes part of an earlier ADR edits
+  that doc and gives the earlier ADR one `- Replaced in part:` line, never a mark in its body. Canonical rule:
+  [`../README.md`](../README.md).
+
 ## Format
 
 ```
 # ADR NNNN — Title
 - Status: Accepted
+- Built: partly (not built: § 3, decision 7)
 - Date: YYYY-MM-DD
+- Model: <a link to the topic's current-picture doc>
+- Replaced in part: § 2, § 4 by ADR NNNN (not built)
 
 ## Context
 What forces the decision.
@@ -37,3 +45,17 @@ What we chose.
 ## Consequences
 What follows — including the costs and the alternatives rejected.
 ```
+
+The header lines, each one line:
+
+- **`Status`** — `Proposed`, `Accepted` or `Superseded by NNNN`, and nothing else.
+- **`Built`** — `yes`, `no` or `partly (not built: …)`, naming the parts still missing as the ADR numbers them. A
+  decision about method or documentation is built once it is followed. It says *what* is missing, never how the
+  rest was built — the code, its tests and `coverage/` hold that.
+- **`Date`** — the day it was decided, alone.
+- **`Model`** — the topic's current-picture doc; left out while the topic has none.
+- **`Replaced in part`** — only when a later ADR replaced part of this one; one line naming every such ADR.
+
+None of them carries a date beyond `Date`, a CR id or an owner's answer. An answer that still binds is part of
+the decision: it goes into the body, as an obligation.
+
