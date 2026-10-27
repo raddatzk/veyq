@@ -95,43 +95,53 @@ class RekeyCoreSliceTest {
     }
 
     /**
-     * ADR 0111 decision 11, last bullet (ADR 0080 Decision 11): a drop box root, a guest's identity folder and a node
-     * below one are re-keyed by an owner only. The listing marks them `ownerOnly` for everyone; a member is refused
-     * `not_scope_owner` at their parts, stage and commit and nothing moves, while a plain node beside them is the
-     * member's (the control on the same predicate). An owner then re-keys each, top-down.
+     * ADR 0111 decision 11, last bullet (ADR 0080 Decision 11): a guest's identity folder and a node below one are
+     * re-keyed by an owner only. The listing marks them `ownerOnly` for everyone; a member is refused `not_scope_owner`
+     * at their parts, stage and commit and nothing moves — after it re-keyed their parent, so the refusal is not the
+     * parent's `node_rekey_pending`. An owner then re-keys each, top-down. (A drop box's own kind is `DropBoxRekeySliceTest`'s:
+     * core alone declares none.)
+     *
+     * The parent is the control on the same predicate, and the narrowing's own case: a node that merely **carries a drop
+     * key** — its WRITE_ONLY link's, as a Memory with an uploader link does — is any member's. Its re-key, the drop key
+     * replaced, the link's drop public key and the guest's `K_up` re-sealed (ADR 0109 point 5), lands from a member.
+     * (Red under the drop-key predicate: `not_scope_owner` at the box.)
      */
     @Test
-    fun aMemberIsRefusedADropBoxItsIdentityFolderAndWhatLiesBelowAndAnOwnerReKeysEach() {
+    fun aMemberReKeysADropKeyedNodeButIsRefusedAnIdentityFolderAndWhatLiesBelow() {
         val d = dropBoxWorld()
         val member = seedScopeMember(d.w.scopeId, grantedEpoch = 1)
         val listing = get(d.w, "/rekey/nodes", caller = member).statusCode(200)
-        for (n in listOf(d.box, d.folder, d.inner)) listing.body("nodes.find { it.id == '$n' }.ownerOnly", equalTo(true))
-        listing.body("nodes.find { it.id == '${d.plain}' }.ownerOnly", equalTo(false))
-        for (n in listOf(d.box, d.folder, d.inner)) {
+        for (n in listOf(d.folder, d.inner)) listing.body("nodes.find { it.id == '$n' }.ownerOnly", equalTo(true))
+        listing.body("nodes.find { it.id == '${d.box}' }.ownerOnly", equalTo(false))
+
+        // the drop-keyed node is the member's: its parts read, staged and committed
+        get(d.w, "/rekey/nodes/${d.box}", caller = member).statusCode(200)
+            .body("shares[0].hasDropPublicKey", equalTo(true)).body("identities[0].wrappedIdentityKey", equalTo("b2xkLWstdXA="))
+        val boxRekey = UUID.randomUUID()
+        post(d.w, "/rekey/nodes/${d.box}/$boxRekey/parts", d.boxParts(), caller = member).statusCode(204)
+        d.commitBox(boxRekey, caller = member).statusCode(204)
+        assertEquals(listOf<Any?>(1, "bmV3LWRyb3AtcHJpdg=="), listOf(row(d.box).epoch, row(d.box).sealedDropPrivateKey))
+        QuarkusTransaction.requiringNew().run {
+            assertEquals("bmV3LWRyb3AtcHVi", ShareEntity.findById(d.w.shareId)!!.sealedDropPublicKey)
+            assertEquals("bmV3LWstdXA=", ShareIdentityEntity.findById(d.w.identityId)!!.wrappedIdentityKey)
+        }
+
+        // the identity folder and what lies below it are an owner's
+        for (n in listOf(d.folder, d.inner)) {
             get(d.w, "/rekey/nodes/$n", caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
             post(d.w, "/rekey/nodes/$n/${UUID.randomUUID()}/parts", """{"fromEpoch":0}""", caller = member)
                 .statusCode(403).body("code", equalTo("not_scope_owner"))
         }
-        d.commitBox(UUID.randomUUID(), caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
         d.commitFolder(UUID.randomUUID(), caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
         d.commitInner(caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
-        assertEquals(listOf(0, 0, 0), listOf(d.box, d.folder, d.inner).map { row(it).epoch }, "a refused re-key moves nothing")
-        // control: the plain node beside the drop box is the member's
-        get(d.w, "/rekey/nodes/${d.plain}", caller = member).statusCode(200)
-        post(d.w, "/rekey/nodes/${d.plain}/${UUID.randomUUID()}", plainCommit(), caller = member).statusCode(204)
-        assertEquals(1, row(d.plain).epoch)
+        assertEquals(listOf(0, 0), listOf(d.folder, d.inner).map { row(it).epoch }, "a refused re-key moves nothing")
 
-        // an owner re-keys each of them: the box (its link's drop public key and the guest's K_up staged), then the
-        // identity folder (its child's entry staged), then the node below it
-        get(d.w, "/rekey/nodes/${d.box}").statusCode(200)
-        val boxRekey = UUID.randomUUID()
-        post(d.w, "/rekey/nodes/${d.box}/$boxRekey/parts", d.boxParts()).statusCode(204)
-        d.commitBox(boxRekey).statusCode(204)
+        // an owner re-keys them: the identity folder (its child's entry staged), then the node below it
         val folderRekey = UUID.randomUUID()
         post(d.w, "/rekey/nodes/${d.folder}/$folderRekey/parts", d.folderParts()).statusCode(204)
         d.commitFolder(folderRekey).statusCode(204)
         d.commitInner(placementRevision = 1).statusCode(204)
-        assertEquals(listOf(1, 1, 1), listOf(d.box, d.folder, d.inner).map { row(it).epoch })
+        assertEquals(listOf(1, 1), listOf(d.folder, d.inner).map { row(it).epoch })
     }
 
     /** Two members re-keying the same node at once leave one commit and no lost write: each stages under its own re-key
@@ -485,26 +495,20 @@ class RekeyCoreSliceTest {
         return """{$parent$epoch"nodeEpoch":$nodeEpoch,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"$wrap"}"""
     }
 
-    /** A childless root folder's commit body (the drop box world's plain node). */
-    private fun plainCommit(): String =
-        """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"cGxhaW4=","slugToken":"${slug()}","wrappedContentKey":"cGxhaW4td3JhcA=="}"""
-
     /**
-     * An owner's GROUP scope rotated to epoch 1: a drop box root `box` (a drop key, one WRITE_ONLY link, one guest
-     * identity), that guest's identity folder `folder` under it (entry under the guest's `K_up`), a folder `inner` the
-     * guest made inside it, and a `plain` root folder beside the box. Every node still at epoch 0.
+     * An owner's GROUP scope rotated to epoch 1: a drop-keyed node `box` (a drop key, one WRITE_ONLY link, one guest
+     * identity — a `FOLDER`, since core alone declares no drop box kind), that guest's identity folder `folder` under it
+     * (entry under the guest's `K_up`), and a folder `inner` the guest made inside it. Every node still at epoch 0.
      */
     private inner class DropBox {
         val w: World
         val box: String
         val folder: String
         val inner: String
-        val plain: String
 
         init {
             val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
             box = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
-            plain = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val shareId = Base64.getUrlEncoder().withoutPadding().encodeToString(UUID.randomUUID().toString().toByteArray()).take(43)
             val identityId = UUID.randomUUID().toString()
             QuarkusTransaction.requiringNew().run {

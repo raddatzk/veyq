@@ -601,7 +601,7 @@ paths:
         "403":
           description: >
             As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
-            a drop box root, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -645,7 +645,7 @@ paths:
         "403":
           description: >
             As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
-            a drop box root, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -725,7 +725,7 @@ paths:
         "403":
           description: >
             As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
-            a drop box root, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -1458,10 +1458,13 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            Only an owner of the scope re-keys this node: it is a drop box root (it carries a `sealedDropPrivateKey`), a
-            guest's identity folder (`shareIdentityId`), or below one (ADR 0111 decision 11, ADR 0080 Decision 11). Any
-            other member's re-key skips it, and what lies below it waits until an owner re-keyed it; its parts, stage and commit refuse that member
-            `403 not_scope_owner`. Derived from the rows the server serves here anyway.
+            Only an owner of the scope re-keys this node, one where members place nothing of their own: it is a drop box
+            (a kind whose write-only guests get identity folders, e.g. Depot's `DEPOT_DROPBOX`), a guest's identity folder
+            (`shareIdentityId`), or below one (ADR 0111 decision 11, ADR 0080 Decision 11). A drop key alone does not make
+            a node owner-only: a Memory or chapter carrying a `sealedDropPrivateKey` for its uploader link is any member's
+            to re-key. Any other member's re-key skips an owner-only node, and what lies below it waits until an owner
+            re-keyed it; its parts, stage and commit refuse that member `403 not_scope_owner`. Derived from the rows the
+            server serves here anyway.
           example: false
         epoch:
           x-veyq-visibility: structure
