@@ -1,13 +1,9 @@
 # ADR 0016 — Reverse geocoding: third-party-only, provider-neutral, consented per space (Nominatim reference)
 
 - Status: Accepted
-- Date: 2026-07-01 (revised 2026-07-02)
-
-> **Revision (2026-07-02, cr-0069 build).** The seam **returns the address hierarchy**, not a single name: the
-> client picks the granularity **level** (Straße…Land) from the returned levels, decoupling *where* (the map
-> position) from *how specific the name is*. So the request no longer carries a granularity `zoom` — it asks for
-> the full breakdown once, and the UI offers a level picker. The principle below is unchanged (reverse-only,
-> coordinate-first, third-party, veyq-blind); only the seam's return shape is refined from `→ name` to `→ level[]`.
+- Built: partly (not built: the per-space consent of a group, the tenant language for shared names)
+- Date: 2026-07-01
+- Model: [Applications](../apps/README.md)
 
 ## Context
 
@@ -52,8 +48,9 @@ Considered and rejected:
 - **The seam is `reverse(lat, lng, lang) → level[]`** (the address hierarchy, finest→coarsest — road, suburb,
   city, county, state, country). The client **picks the granularity level** (and may type its own name); `lang` =
   the resolving language (see *tenant language* below). Providers map their address components onto these levels.
-  *(Originally `reverse(lat,lng,zoom,lang)→name` with `zoom`=granularity; refined per the revision note above so
-  granularity is a deliberate pick, not a side-effect of the map zoom.)*
+  The request carries **no granularity `zoom`**: it asks for the full breakdown once and the UI offers a level
+  picker (Straße…Land), so *where* (the map position) is decoupled from *how specific the name is* — granularity
+  is a deliberate pick, never a side-effect of the map zoom.
 - **Third-party only, veyq-blind by construction.** The request goes **client-direct to a third-party provider**
   (public Nominatim/OSM or another the operator points at that it does **not** run), **never through the veyq
   backend and never to an operator-run instance**. It carries **no veyq identity and no Memory context** — a bare
@@ -82,8 +79,7 @@ Considered and rejected:
 
 ### Request discipline — the provider's policy is part of the decision, not an optimisation
 
-**Added 2026-09-20, when the first caller that can generate volume was built** (a per-photo resolved name in the
-lightbox). Everything above is about *who* may see a coordinate; nothing said *how often* we may ask. The
+A caller can generate volume (a per-photo resolved name in the lightbox). Everything above is about *who* may see a coordinate; nothing said *how often* we may ask. The
 reference provider's own policy does, and it is not silent — public Nominatim (measured 2026-09-20 against
 <https://operations.osmfoundation.org/policies/nominatim/>) sets an **absolute maximum of 1 request per second**,
 says bulk geocoding **is not encouraged**, requires that results **must be cached** on our side, and warns that a
@@ -131,8 +127,3 @@ into the tier the medoid already reads.
   blind option — it calls its own vendor.
 - **Limitation (honest).** With a third-party provider enabled, the geocoder learns a bare coordinate + client
   IP — a *consented, non-veyq* boundary, documented in [security-model](../crosscutting/security-model.md).
-
-> The **personal-space** two-stage toggle lands with the set-location slice of `uc.memory.place` (cr-0069). The
-> **group** consent state-machine (owner-enable, per-member notice/consent, unanimity-binds, leave-to-withdraw)
-> and the **tenant language** land with groups/shared spaces — this ADR fixes the principle; the mechanics are
-> built then.

@@ -1,6 +1,7 @@
 # ADR 0073 — A storage quota belongs to whoever pays for the store
 
 - Status: Accepted
+- Built: partly (not built: decision 1, the ceiling of a tenant on its own bucket)
 - Date: 2026-09-24
 
 ## Context

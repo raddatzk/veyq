@@ -1,6 +1,7 @@
 # ADR 0030 — Contributor public share: a sealed anonymous share identity + a share-scoped upload path
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-07
 
 ## Context
@@ -19,8 +20,8 @@ blind upload the curator performs ([en.memory.media](../features/memory/enablers
 the role, the mandatory contributor **display name** (and how it stays operator-blind), the **anonymous identity**
 that owns a contributor's uploads, the **share-scoped upload endpoints**, and where contributed media lands.
 
-The **display name is mandatory** — a product decision. A contributor names themselves on a pre-screen before
-contributing. The name is not decoration: it is the **forward-compatible hook for buckets** (a later slice),
+The **display name is mandatory** — a product decision. A contributor names themselves before their first
+contribution. The name is not decoration: it is the **forward-compatible hook for buckets** (a later slice),
 which group each contributor's uploads into a named per-contributor **bucket**, seeded from that display name.
 Without it, attribution has nothing to key on and buckets would need a migration to add later. v1 does not build
 the buckets UI, but it **captures the name into a sealed anonymous identity now** so buckets fall out of it later
@@ -33,13 +34,16 @@ anonymous identity and a share-scoped upload path. **v1 is deliberately narrow: 
 direct-append, personal scope.**
 
 1. **A READ_WRITE role on the share.** The share record's plaintext `role` (READ in ADR 0029) gains
-   **READ_WRITE** = *view + append-upload* (renamed 2026-10-06 from `CONTRIBUTOR` —
+   **READ_WRITE** = *view + append-upload* (one of
    [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes). The curator opts in at create time. v1 builds **only** READ_WRITE;
    the pre-E2EE product's **MANAGER** (edit/delete) role is deferred; the **WRITE_ONLY** (write-only drop-box) is
    decided separately in [ADR 0031](0031-uploader-public-share.md) (it builds on this identity + upload path).
 
 2. **A mandatory, sealed display name → an anonymous share identity.** Before contributing, the visitor must
-   enter a **display name**. The client **seals it under a field key derived from `K_node`** (which it holds) and creates an anonymous
+   enter a **display name** — asked at the first contribution, not in front of the Memory. A share view is the
+   member view with functions removed ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
+   Consequences), so a READ_WRITE link opens on the Memory itself, and its visitor names itself in the share page's
+   one naming dialog when it first adds a photo; a visitor who only looks is never asked. The client **seals it under a field key derived from `K_node`** (which it holds) and creates an anonymous
    **share identity**: the server stores a `veyq_share_identity` row — an opaque `identityId`, the shared
    `shareId`, the **sealed display name** (ciphertext), and the hash of an unguessable **contributor
    token** returned to the client. The server **never** sees the name, and serves it back only to the Memory's
@@ -85,7 +89,7 @@ direct-append, personal scope.**
    is decryptable — and, with the database the operator holds, so are its guests' names (point 8). Intended, not
    a leak.
 
-8. **A guest's name is for the Memory's members (owner's call, 2026-09-28).** No share link is served the name
+8. **A guest's name is for the Memory's members.** No share link is served the name
    any guest gave; the Memory's members read it through their bucket list, as before.
    - **What a guest is served about an identity:** a WRITE_ONLY identity's `{identityId, wrappedIdentityKey}`,
      and only because a reader needs it to open that identity's media
@@ -123,11 +127,6 @@ direct-append, personal scope.**
 - **Deferred, each its own slice:** the **buckets UI** (per-contributor grouping/display), **MANAGER** /
   contributor edit + delete, **password protection**, **moderation** (review-before-
   publish), and per-contributor **delete-your-own-upload**.
-- **Amended 2026-10-11 (inbox #401 S5): the name is asked at the first contribution, not in front of the Memory.** A
-  share view is the member view with functions removed ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
-  Consequences), so a READ_WRITE link opens on the Memory itself and its visitor names itself in the share page's one
-  naming dialog when it first adds a photo — still mandatory before any contribution (point 2), never asked of a
-  visitor who only looks. Point 2's identity, seal and buckets hook are unchanged.
 
 ## Alternatives considered
 

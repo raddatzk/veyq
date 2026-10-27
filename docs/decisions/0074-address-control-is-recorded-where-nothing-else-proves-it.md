@@ -1,6 +1,7 @@
 # ADR 0074 — Address control is recorded where nothing else proves it, and gates nothing
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-28
 
 ## Context

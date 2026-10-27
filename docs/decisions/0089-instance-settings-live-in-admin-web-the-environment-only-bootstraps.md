@@ -1,7 +1,7 @@
 # ADR 0089 — Instance settings live in admin-web; the environment only bootstraps
 
-- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`), decision 3's second paragraph
-  with `cr-bundled-store-adopts-itself`
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-15
 
 ## Context
@@ -45,8 +45,8 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    it runs on.
 
    **Where the hint exists and the instance holds no store setting — none in use and none pending — the server
-   chooses the bundled store itself** *(amended 2026-10-22, owner: the bundled store is preconfigured, so it should
-   need no step of the Server Owner's)*. The hint exists only where the operator opted into the bundled
+   chooses the bundled store itself**: the bundled store is preconfigured, so it needs no step of the Server
+   Owner's. The hint exists only where the operator opted into the bundled
    Garage (the Compose default, the chart's `garage.enabled`), so there is nothing left for the Server Owner to
    decide, and a step they have to click is a step that only delays the first tenant. After its boot provisioning of
    the bundled Garage has finished, the server saves the bundled store as the pending setting and runs **the same
@@ -69,8 +69,7 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    replaces it. A typo in a credential or an endpoint therefore reaches the check, never a running instance's media;
    a failed pending setting is corrected or discarded. Until a store has passed its check, the instance runs,
    answers `/api/setup`, and refuses uploads with a reason — never the silent in-memory store, which stays a
-   `%test` tool. *(Edited when it was built, 2026-10-16: the first build applied a saved setting at once and only
-   cleared its check, which [inbox #451](../inbox.md) found against the use-case's A2; the owner chose this.)*
+   `%test` tool.
 6. **A working store is the precondition for a tenant.** Creating a tenant is refused until the current store
    setting has passed its check; nothing else in the console is gated by it. Once the first blob is stored the store
    is fixed: moving an instance's blobs to another store is out of scope here.
@@ -101,7 +100,7 @@ Garage, so using one means editing the compose file, and under Helm it is not po
   check, and no external store under Helm); keeping only the credentials in the environment and the rest in
   admin-web (two places for one setting); a mandatory store step right after the first login (the console has
   more to offer than tenants, and only tenants need a store); a bundled store that is in use without a check
-  (decision 3's amendment: its public path is exactly what an operator's domain, proxy and certificate can break); a backup tool that asks the running app for presigned
+  (decision 3's second paragraph: its public path is exactly what an operator's domain, proxy and certificate can break); a backup tool that asks the running app for presigned
   URLs (the capture is cold, so no app is running to sign); an admin endpoint that hands out store credentials
   (a surface whose only job is to leak a secret).
 

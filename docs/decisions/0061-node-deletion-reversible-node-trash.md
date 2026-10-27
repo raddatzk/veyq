@@ -1,7 +1,10 @@
 # ADR 0061 — Deleting a Memory is reversible: a hidden node trash, filtered on read
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-17
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Replaced in part: decision 7 by ADR 0062 (built)
 
 ## Context
 
@@ -64,8 +67,8 @@ deleted **root's** `slug_token` to its own id — unique by construction, and bl
 a slug token at all (it is an HMAC of the slug in the parent's slot, keyed under the parent's content key — `K_SC`
 at the scope root, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 2). Only the root:
 its descendants' names live under a parent that is trashed too, where nothing can claim them while it stays so, so
-they keep their tokens and come back valid (corrected 2026-10-06, inbox #357 — freeing every node returned each
-descendant holding no name, beside which a same-named sibling could be created). **Restore carries a
+they keep their tokens and come back valid (freeing every node would return each descendant holding no name,
+beside which a same-named sibling could be created). **Restore carries a
 freshly computed `slugToken` from the client**, and a collision with a node created in the meantime is an
 ordinary disambiguation, the same one a create already handles — which means the restore must also be able to
 carry a **re-sealed `encryptedName`**, in the *same* request. The retry is "put it back under a different name",
@@ -81,10 +84,8 @@ soft-delete precedents.
 
 **7. Row-then-object ordering, via the shared per-media body.** The purge routes through
 `MediaStore.purgeMediaRows` (rows in FK order inside the transaction, and the store objects recorded for reclaim
-in that same transaction — [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) replaced the
-best-effort post-commit delete this decision originally specified, and `ScopePurge.eraseScope` lost its
-objects-first exception at the same time) rather than the set-based shape of `ScopePurge.eraseScope`.
-`ScopePurge`'s own docstring says why it is the exception: it erases set-based *by scope*, and its final
+in that same transaction, [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)) rather than the
+set-based shape of `ScopePurge.eraseScope`. `ScopePurge`'s own docstring says why it is the exception: it erases set-based *by scope*, and its final
 scope-row delete lets the database cascade the rest. A node subtree is not a scope — neighbouring nodes, buckets and the scope row all survive — so the
 FK-ordered shared body is the correct shape, and a set-based copy would be the fourth copy that docstring warns
 against.
@@ -106,8 +107,8 @@ against.
   around them is still sitting restorable in the trash when it happens. A re-stamped descendant that was such an
   earlier delete's root holds that delete's freed token, so the restore of the folder around it leaves it — and
   its subtree — in the trash on the one marker, a trash root again under the now-live folder, restorable on its own
-  with a fresh token (corrected 2026-10-06, inbox #357: returning it would bring back a node with no name, beside
-  a sibling that may hold its old one). The delete's own scope binding is the
+  with a fresh token (returning it would bring back a node with no name, beside a sibling that may hold its old
+  one). The delete's own scope binding is the
   fourth, and it was found by building rather than by reasoning — gate it on liveness and re-deleting a trashed
   subtree answers 404 instead of the no-op the flow promises, while a foreign node must keep answering the same
   non-enumerable 404; so the delete takes a lookup that sees trashed rows and the *update* path keeps the one

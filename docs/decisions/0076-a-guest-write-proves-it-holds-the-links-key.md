@@ -1,6 +1,7 @@
 # ADR 0076 — A guest write proves it holds the link's key
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-02
 
 ## Context

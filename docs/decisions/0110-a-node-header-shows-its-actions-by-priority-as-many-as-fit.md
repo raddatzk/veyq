@@ -1,9 +1,9 @@
 # ADR 0110 — A node header shows its actions by priority, as many as fit, and the rest in one menu
 
-- Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23);
-  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) built by cr-node-header-layout-by-fit
-  (2026-10-24).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-23
+- Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
 
 ## Context
 

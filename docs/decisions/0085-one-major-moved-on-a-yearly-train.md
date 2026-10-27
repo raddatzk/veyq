@@ -1,6 +1,7 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
-- Status: Accepted; decision 1 is built (2026-10-15, inbox #436), the train and the client window are not (§ Consequences)
+- Status: Accepted
+- Built: partly (not built: decision 2's release order, decision 3's train, decision 5's client window)
 - Date: 2026-10-15
 
 ## Context

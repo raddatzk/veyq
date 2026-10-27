@@ -1,6 +1,7 @@
 # ADR 0071 — Both targets run every container unprivileged, reachable only by the peers it serves
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-23
 
 ## Context

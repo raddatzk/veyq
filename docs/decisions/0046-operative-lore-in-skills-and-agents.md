@@ -1,6 +1,7 @@
 # ADR 0046 — Operative lore lives in `.claude/` skills and agents, not a growing CLAUDE.md
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-21
 
 ## Context

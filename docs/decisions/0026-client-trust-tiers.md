@@ -1,7 +1,9 @@
 # ADR 0026 — Client trust tiers & the operator-blindness boundary
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-06
+- Model: [security-model](../crosscutting/security-model.md)
 
 ## Context
 

@@ -1,7 +1,9 @@
 # ADR 0048 — Tenant invites are sent over per-tenant SMTP, configured as runtime settings
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-24
+- Replaced in part: § 4, § 5 by ADR 0055 (built); § 4 by ADR 0097 (built)
 
 ## Context
 

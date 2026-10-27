@@ -1,7 +1,9 @@
 # ADR 0012 — Content-key hierarchy: per-Memory keys, random and many-wrapped
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-28
+- Replaced in part: decision 1 and the folder key by ADR 0080 (built)
 
 ## Context
 

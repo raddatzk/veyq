@@ -1,15 +1,7 @@
 # ADR 0056 — An instance's durable state has three legs, and it is captured with the writer stopped
 
-- Status: Accepted. §3's store leg as an **index** with an optional, pruned object pool, and §7's object checks (owner
-  2026-10-17): built for every capture — the cluster's backup gate
-  ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)), Compose and `veyqctl` — and held by
-  `src/tools/instance_backup_selftest.py` (groups P and G); proven live on a throwaway Compose project
-  (cr-backup-store-leg-is-an-index). §8 — every capture kept at most B days, and the erasure ledger a restore
-  re-applies, moderation included — is **built** on both targets (2026-10-18, GDPR Art. 5(1)(e) and 17 and the EDPB's
-  erasure report; the owner rule that a legal duty wins over what was decided; cr-backup-erasure-and-retention):
-  held by `ErasureLedgerSliceTest`, `MemoriesErasuresSliceTest`, `src/tools/instance_backup_selftest.py` (groups R and L),
-  `src/tools/veyqctl_selftest.py` and `scripts/chart_meta_check.py` (xvi, xxviii), and run live on a throwaway Compose
-  project.
+- Status: Accepted
+- Built: yes
 - Date: 2026-08-06
 
 ## Context

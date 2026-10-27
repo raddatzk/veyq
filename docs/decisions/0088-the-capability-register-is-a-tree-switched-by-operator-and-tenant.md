@@ -1,15 +1,9 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
-  links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3) and the three external
-  services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
-  [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
-  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
-  was revised 2026-10-21 (no operating mode, so no preset) and that revision is **built** (cr-operating-mode-retires,
-  2026-10-21): the catalog's `modes`, the generated `CapabilityPresets`, the write that set them with the mode and the
-  one entry that carried a preset, `core.public-shares.guest-write-record`, are gone, its stored switch rows deleted by
-  migration.
+- Status: Accepted
+- Built: partly (not built: decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, the register's `download-originals` and its planned entries)
 - Date: 2026-10-15
+- Model: [Applications](../apps/README.md)
 
 ## Context
 
@@ -111,9 +105,9 @@ instance and tenant layers.
     *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and
     the API serves it. `admin-web`, the CLI and `src/web/`'s tenant settings render it from there, and none of them
     keeps its own copy.
-14. **No operating mode reaches the register** (owner, 2026-10-17, retired 2026-10-21;
-    [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). From
-    2026-10-17 a mode, *private* or *club, organisation or company*, was a preset: choosing *private* set
+14. **No operating mode reaches the register**
+    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). A mode,
+    *private* or *club, organisation or company*, was once a preset: choosing *private* set
     `core.public-shares.guest-write-record` off, after which the switch moved on its own. That left two sources of
     truth for one state and let a private instance serve guest writes without their record, the case the record exists
     for and the one an operator-blind Server Owner cannot see. So that entry is gone (the record is kept wherever a
@@ -186,6 +180,8 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Consequences
 
+- **It replaces [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
+  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5**, all three edited to match.
 - **Built today** is the catalog (`contracts/platform/capabilities.json`), never a list here. The server computes the
   AND along the path (`CapabilityRegistry`, every prefix that is an entry, an application's one-segment id included);
   each client reads one leaf.

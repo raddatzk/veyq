@@ -1,7 +1,9 @@
 # ADR 0067 — veyq provisions its own object store, from a declared store type
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-09
+- Replaced in part: decision 3 by ADR 0089 (built)
 
 ## Context
 
@@ -79,10 +81,9 @@ Forces:
    pins `StoreReclaimSweep` as the single caller of `blobStore.delete` precisely so object deletion has exactly
    one arm. Provisioning must not become a second one.
 
-3. **The store configuration never gates the boot, and neither does the network work.** *(Edited when
-   [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) was built; this
-   decision first said a blank endpoint outside `%test` fails startup.)* The store is a Server-Owner setting in
-   the database, so at boot there may be none: the instance starts, answers `/api/setup` and refuses uploads with
+3. **The store configuration never gates the boot, and neither does the network work.** The store is a
+   Server-Owner setting in the database ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
+   so at boot there may be none: the instance starts, answers `/api/setup` and refuses uploads with
    `store_unavailable` until a store is set and has passed its check ([ADR 0013 §1](0013-blob-storage-presigned-direct-to-store.md)'s
    byte path is required of a *working* instance, and a tenant cannot be created without one). What the boot
    still refuses are the local, instant facts about the environment's own part — the bundled hint's bucket

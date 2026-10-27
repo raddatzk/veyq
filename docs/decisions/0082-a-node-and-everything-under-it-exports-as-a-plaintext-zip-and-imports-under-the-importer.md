@@ -1,7 +1,9 @@
 # ADR 0082 — A node and everything under it exports as a plaintext ZIP and imports under the importer
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-13
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
 
 ## Context
 

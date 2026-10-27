@@ -1,17 +1,7 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
-- Status: Accepted 2026-10-16; built: `veyqctl` (decisions 1, 2, 4–7), the producer of a release's assets, and no
-  image carries a recipe (`src/tools/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
-  through it; the publish creating the GitHub Release (decision 3, `ci.yml`'s `publish` job, held by
-  `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote); the Run pages around
-  `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
-  itself and for the manifest (held by assertion 7); the manifest signed by the publish and verified by `veyqctl`
-  before it is trusted, from every source (decisions 3 and 7). What waits on the owner: the remote, immutable releases switched on, the first publish.
-  Built 2026-10-17 (cr-backup-store-leg-is-an-index): `backup` and `upgrade` capture the database and the store's index
-  with an optional, pruned object pool, `restore` checks the objects and copies them only into an empty store, `status`
-  warns while the bundled store has no pool, and `rollback` goes back in place (decisions 1, 5 and 6,
-  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3 and §7) — held by `src/tools/veyqctl_selftest.py`
-  (`test_pool`, `test_rollback`) and run live on a throwaway Compose project.
+- Status: Accepted
+- Built: partly (not built: decision 3's immutable-releases setting and the first published release)
 - Date: 2026-10-16
 
 ## Context
@@ -123,7 +113,9 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
 - **The Run area is rewritten around `veyqctl`** (new-instance's Compose tab, upgrade, backup-and-restore,
   verify-a-release). Each page keeps what the tool runs, so an operator can do any step by hand.
 - **Immutable releases are a repository setting** the owner switches on once the repository has its remote (inbox #26
-  item 1); until then nothing is published and nothing here can run against GitHub.
+  item 1); until then nothing is published and nothing here can run against GitHub. The publish that creates the
+  GitHub Release (`ci.yml`'s `publish` job) exists and has never run: the first publish waits on the remote and that
+  setting, both the owner's.
 - **ADR 0091's L3 archive holds the previous major's last release too** — the one release a new major is entered
   from (decision 5); within a major, every archived backup still opens.
 - **Where `instance_backup.py` goes** — folded into `veyqctl` or shipped beside it — is the CR's call.

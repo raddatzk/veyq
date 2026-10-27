@@ -1,6 +1,7 @@
 # ADR 0062 — Store-object reclaim is a durable work list, not a best-effort call
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-18
 
 ## Context
@@ -113,9 +114,8 @@ messaging pattern this codebase does not have.
   delete and the sweep tick that drains it legitimately holds objects whose rows are gone — so the asymmetry
   stands, but because reclaim is *pending*, not because deletion is *unreliable*.
 - **A bucket-versus-database reconcile counts the objects no row claims, and reclaims them only after a grace, on a
-  bucket the Server Owner confirmed is this instance's alone** (owner 2026-10-17, inbox #134; built by
-  cr-bucket-reconcile: `StoreReconcileSweep`, read and switched under the console's **Server → Object store** and by
-  `veyq-admin store reconcile`). Until this ADR an orphaned object was the documented steady state, so a report of them asserted
+  bucket the Server Owner confirmed is this instance's alone** (`StoreReconcileSweep`, read and switched under the
+  console's **Server → Object store** and by `veyq-admin store reconcile`). Until this ADR an orphaned object was the documented steady state, so a report of them asserted
   nothing; once reclaim is guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning.
   What made it worth building is that veyq itself now produces them: an in-place rollback
   ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §7) empties the database and restores the

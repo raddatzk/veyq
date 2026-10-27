@@ -1,7 +1,9 @@
 # ADR 0053 — The wire is the oracle: a canary sweep for operator-blindness
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-31
+- Model: [security-model](../crosscutting/security-model.md)
 
 ## Context
 

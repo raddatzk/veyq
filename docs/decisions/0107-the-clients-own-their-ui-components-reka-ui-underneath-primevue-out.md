@@ -1,7 +1,9 @@
 # ADR 0107 — The clients own their UI components; Reka UI underneath, PrimeVue out
 
-- Status: Accepted 2026-10-22 (owner: Reka UI behind a wrapper layer of our own); built 2026-10-23 (cr-own-ui-components-on-reka): `src/web/` in the steps decision 7 names, `src/admin-web/` in one, its layer written on Reka directly with its call sites moved alongside. No PrimeVue, `@primeuix/*` or `primeicons` package is left in the repository.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-22
+- Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
 
 ## Context
 
@@ -55,7 +57,9 @@ users see is a dependency on PrimeTek inside every instance.
 7. **The layer comes first, the library swap second.** The wrappers are introduced on PrimeVue 4.5.5 and every call
    site moves onto them while the screens stay unchanged; only then is each wrapper's inside replaced by Reka UI or
    plain markup, one component at a time, and PrimeVue is removed once nothing imports it. Each step leaves both
-   clients working.
+   clients working. `src/admin-web/`, the smaller client, takes it in one step: its layer is written on Reka
+   directly, its call sites moved alongside. No PrimeVue, `@primeuix/*` or `primeicons` package is left in the
+   repository.
 
 ## Behaviour changed on purpose
 
@@ -92,7 +96,7 @@ component that cites "behaviour changed on purpose" means one of them:
 - **The CSP's stated reason for `style-src 'unsafe-inline'` goes away** ([cc.security.csp](../crosscutting/cc.security.csp.md)):
   it names PrimeVue's and `@primeuix`'s runtime `<style>` tags. Whether the remaining `:style` bindings still need
   it is a measurement after the swap, and tightening the policy is a change of its own. Measured and tightened
-  2026-10-23 (inbox #523): the bindings go through the CSSOM, and `style-src` is `'self'` plus the hashes of reka-ui's
+  after the swap: the bindings go through the CSSOM, and `style-src` is `'self'` plus the hashes of reka-ui's
   fixed `<style>` texts.
 - **Guards that read PrimeVue move with it**: `scripts/validate_web_contrast.py` pairs read `--p-*` variables, and
   the stylesheet-anchor guard sees every `.p-*` rule as anchored only while PrimeVue renders that class.

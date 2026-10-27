@@ -1,11 +1,13 @@
 # ADR 0008 — Centralized HTTP authentication & annotation-driven authorization
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-26
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 ## Context
 
-Through cr-0009 the backend authenticated **per resource, by hand**: each `…Resource` read the
+At first the backend authenticated **per resource, by hand**: each `…Resource` read the
 `Authorization` header (`@Context HttpHeaders` + `bearerToken(...)`), passed the raw token to its handler,
 and carried a private `unauthorized()` (and `forbidden()`); the handler resolved the token
 (`SessionService.resolveUserId`, [ADR 0004](0004-session-tokens.md)) and threaded `Unauthenticated`/`NotOwner`

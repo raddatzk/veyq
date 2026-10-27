@@ -1,6 +1,7 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and eight feature scenarios (the capability off states; every field read back after a reload and on a second device; a guest's take-back; the release check, its notices and instance mail; moderators sharing the moderation key; Depot's streamed download through each save target; Depot's file section; its live updates and a drop box across separate browser contexts, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `tests/e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
+- Status: Accepted
+- Built: partly (not built: decision 2's push gate on the published snapshot's digests, decision 7's boot of L2's predecessor and L3's restores)
 - Date: 2026-10-16
 
 ## Context
@@ -194,7 +195,11 @@ What a green run proves today stops short of what a Server Owner runs:
 
 - **Nothing is proven before the repository has a remote.** Until then the proof is a local run of
   `scripts/run_stack_e2e.py` against locally built images, and — ADR 0040 — no coverage ref may point at `tests/e2e/`
-  until a CI run's log shows the test executed.
+  until a CI run's log shows the test executed. The lane runs locally only; no CI run exists, which awaits the remote.
+- **Until a push publishes the snapshot** ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+  decision 5), lane L1's job (`ci.yml`'s `stack`, per architecture after the build, the publish waiting on it) pulls
+  `build-<sha>-<arch>` by digest only where a run pushed it — today the dispatch — and builds the images in its own job
+  where none did.
 - **The coverage model gains a surface, `stack`** (answer 2), unadmitted until a CI run executed it.
 - **The harness follows the operator's tool.** With [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), L1 is `veyqctl install` and ADR 0091's L2 and L3 are
   `veyqctl upgrade` and `veyqctl restore`; a defect in the tool an operator runs is then a red lane, not a gap

@@ -1,7 +1,9 @@
 # ADR 0013 — Blob storage: S3-only, presigned direct-to-store, a stored object shared only inside one node
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-08
+- Replaced in part: § 4 by ADR 0063 (built)
 
 ## Context
 
@@ -34,13 +36,13 @@ This ADR decides it **trimmed to what the first media slice needs** and aligned 
 endpoint via the **vendor-neutral AWS SDK for Java v2** (not any single vendor's client) — AWS S3, Cloudflare
 R2, Backblaze B2, Wasabi, Garage, … — or the **bundled Garage** an operator runs alongside the stack
 (`docker compose --profile s3`; **Garage** is S3-compatible, AGPL, and built for self-hosting — it replaced
-MinIO when the latter's OSS server was archived in 2026 and its successor AIStor went commercial, cr-0029).
+MinIO when the latter's OSS server was archived in 2026 and its successor AIStor went commercial).
 A configured S3 store is a **hard requirement of any real instance**: outside `%test` an instance with no
 store set refuses every upload with `store_unavailable` and cannot create a tenant until a store has passed its check
 (media is not an optional feature — an instance without a byte path is misconfigured, not gracefully degraded).
-*(Edited when [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) was built: the
-store is a Server-Owner setting now, so the boot no longer fails on a blank endpoint, and the `veyq.blob-store.*`
-keys named below are the setting's fields.)* The `InMemoryBlobStore` survives **only in the
+The store is a Server-Owner setting ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
+so the boot does not fail on a blank endpoint, and the `veyq.blob-store.*` keys named below are the setting's
+fields. The `InMemoryBlobStore` survives **only in the
 `%test` profile** for the hermetic slice suite (metadata + wraps + the declare/verify control plane, no byte
 transport) — it is **never** a dev/prod fallback. Store credentials are entered by the Server Owner and persisted
 only **sealed** under the config-secret key ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
@@ -220,8 +222,7 @@ it), so it learns the scope-internal equality structure ("these two media are th
 the *sharing of storage*, not in the *detection*. On a self-hostable app the operator pays for their own storage,
 so the savings do not buy that leak across a whole space. The `dedup_token` vector in `v1.json` stays **unused**.
 
-**Inside one node, for three slots, the client shares** (owner decision 2026-10-19,
-cr-cover-banner-upload-only-and-dedup). A cover and a banner are set only by an upload in their dialogs; where the
+**Inside one node, for three slots, the client shares.** A cover and a banner are set only by an upload in their dialogs; where the
 picked file equals what the node's gallery already stores - or a gallery upload equals the node's video banner -
 the new slot is a **second blob row on the same stored object** instead of a second upload:
 

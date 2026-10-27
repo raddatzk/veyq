@@ -1,9 +1,9 @@
 # ADR 0077 — A write that re-sends what its writer did not edit carries the revision it read
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the counter is a **revision**
-  (`metaRevision`, `placementRevision`, the `revision` mode), and its conflict is `stale_revision` (was
-  `stale_version`). The file name keeps the old word so its links hold.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-03
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
 
 ## Context
 
@@ -89,6 +89,7 @@ one-element set over the stored one.
 - A blob that never opens now blocks edits to that one Memory or media instead of being silently replaced. That
   is a corrupted or substituted blob (the key opened, the blob did not); refusing is the honest answer, and an
   explicit "reset" is not built.
+- The file name says *version*, the old word for the revision. The file name keeps the old word so its links hold.
 - **Rejected: `If-Match` → `412`.** The repo's one ETag (`mediaRevision`) validates a read cache for a whole list;
   a per-item precondition header would be a second vocabulary beside the body `revision` the pins already use and
   the generated clients already type.

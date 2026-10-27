@@ -1,6 +1,7 @@
 # ADR 0034 — Media uploader buckets: an `owner_key`-keyed bucket table (operator-blind)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-09
 
 ## Context
@@ -42,12 +43,12 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
    [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md).
 
 3. **One opaque `owner_key` string** identifies the uploader: `user:{userId}` (member) /
-   `share:{shareIdentityId}` (contributor, **reusing the cr-0101 identity** as the grouping key). It is
+   `share:{shareIdentityId}` (contributor, **reusing ADR 0030's identity** as the grouping key). It is
    **operator-visible** (like membership + the existing `share_identity_id`), lets the server **scope grouping
    and moves** by that one opaque key without knowing identity semantics (it is **not** the authz gate — see §6),
-   and **collapses** the fragile pre-E2EE two-column `uploader_user_id`/`share_identity_id` XOR into one field. The shipped `media.share_identity_id`
-   (cr-0101) is **left untouched** — mildly redundant with `created_by` for contributors, cleaned when the
-   sharing surface is next worked, **not** in this CR.
+   and **collapses** the fragile pre-E2EE two-column `uploader_user_id`/`share_identity_id` XOR into one field. `media.share_identity_id`
+   (ADR 0030) is **left untouched** — mildly redundant with `created_by` for contributors, cleaned when the
+   sharing surface is next worked.
 
 4. **Virtual-until-upload primary; names sealed under a field key derived from `K_node`.** A primary bucket materializes **lazily** (a
    find-or-create on `(node, owner_key)` on the first upload / first sub-bucket); uploaders with no media have no
@@ -73,35 +74,34 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
    a **sub-bucket** and **move media** are **server-gated to scope membership** — **any member** may curate **any
    owner-root's** sub-buckets (its own *or* a contributor's), **never a primary**, and a move stays **within one
    owner-root** (never across owners). **Delete-media** and **edit capture time** stay **any key-holder**
-   (unchanged from the media data layer). *(cr-0123 relaxed the authz from the original owner-only gate —
-   `owner_key == caller` — to member, so a curator can tidy a contributor's uploads; a reader must not infer the
-   stronger owner-only guarantee, which the code does not give.)*
+   (unchanged from the media data layer). The gate is membership, not `owner_key == caller`, so a curator can tidy
+   a contributor's uploads; a reader must not infer an owner-only guarantee, which the code does not give.
 
 7. **V1 scope = full data layer + backend + the "Beiträge" organizer.** Build the table + `owner_key` +
    `bucket_id`/`created_by` + the lazy primary + the sub-bucket **endpoints** (list, create, rename, delete-with-
-   reparent, move) + sub-bucket authz (owner-gated at cr-0113, **member-gated since cr-0123** — §6); and the web **"Beiträge" tab** as the full **organizer** — a hierarchy
+   reparent, move) + sub-bucket authz (**member-gated**, §6); and the web **"Beiträge" tab** as the full **organizer** — a hierarchy
    picker (your primary + sub-buckets), create/rename/delete sub-buckets, move media between your own buckets, a
    **virtual own-primary** that materializes on first use — **always available**. **Deferred:** uploading directly
    into a *selected* sub-bucket (an upload lands in the uploader's primary and a move files it; the complete call
    carries no target bucket, so building it adds one, with the bucket's lock `moveMedia` takes), a **camera/source filter** + a **capture-time-shift** tool (the EXIF metadata isn't
    surfaced in the fresh client), and group/tenant **self-identification** in the organizer UI — now a pure UI
-   nicety, not an authz need: cr-0123 relaxed the server gate to **member**, so there is no own-bucket gate to
+   nicety, not an authz need: the server gate is **membership**, so there is no own-bucket gate to
    self-identify against.
 
 ## Consequences
 
 - **Operator-visible surface, all opaque:** `owner_key`s, the **bucket structure** (node, parentage,
   `is_primary`, per-bucket counts), and `bucket_id`/`created_by` on media — coarse operational metadata,
-  consistent with membership + the cr-0101 contributor stamp; recorded in the
+  consistent with membership + ADR 0030's contributor stamp; recorded in the
   [security-model](../crosscutting/security-model.md). **Sealed names and all content stay blind.** A personal
   space **with no share** is wholly confidential — its only `owner_key` is the account owner's.
 - **ADR 0030's forward-compat is spent as intended.** Contributor grouping falls out of `share:{shareIdentityId}`
   with **no migration** on the sharing half; the sealed contributor name becomes the primary's sealed name.
 - **We diverge deliberately from how buckets worked before E2EE.** Cascade-delete → **reparent-to-primary**; no
-  bucket ownership → **`owner_key`-structured, member-gated sub-bucket authz** (cr-0123); cleartext names + server-side uniqueness → **sealed names +
+  bucket ownership → **`owner_key`-structured, member-gated sub-bucket authz**; cleartext names + server-side uniqueness → **sealed names +
   primary-only uniqueness**. These are behavior/blindness changes, not just crypto.
-- **One redundant column, deliberately.** `media.share_identity_id` (cr-0101) overlaps `created_by` for
-  contributors; kept to avoid churning the shipped sharing feature in this CR, flagged for cleanup when sharing is
+- **One redundant column, deliberately.** `media.share_identity_id` (ADR 0030) overlaps `created_by` for
+  contributors; kept to avoid churning the sharing feature, flagged for cleanup when sharing is
   next touched.
 - **Migration adds** the `veyq_bucket` table + `media.bucket_id` + `media.created_by`; existing media backfill to
   `created_by = user:{owner}` (or their `share:{id}`) and `bucket_id = null` (→ their primary, lazy). That list-time
@@ -118,7 +118,7 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
 - **Materialize every primary eagerly.** Rejected — **virtual-until-upload** (lazy find-or-create) avoids empty
   rows + create/delete lifecycle churn; a primary appears exactly when its uploader has media.
 - **Cascade-delete a bucket's media** (the pre-E2EE code). Rejected — **reparent-to-primary** never loses media;
-  destructive delete belongs to the explicit media delete/trash path (cr-0110/0111), not to tidying a folder.
+  destructive delete belongs to the explicit media delete/trash path, not to tidying a folder.
 - **Cleartext names + server-side name uniqueness** (the pre-E2EE code). Rejected — breaks operator-blindness;
   names are **sealed**, sub-bucket names carry **no** uniqueness (ciphertext), only the content-blind
   primary uniqueness remains.

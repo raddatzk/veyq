@@ -1,61 +1,9 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
-- Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), and
-  so is § 9 (every field purpose seals under its own `K_field`). §§ 1, 2, 4 and 5 are built for the report and the
-  hold (cr-report-and-hold, 2026-10-17; [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
-  [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)): the report share and its sealed part,
-  one case per item, the new-case mail and the reporter's receipt, the snapshot and the pin, and a case-open hold's
-  90-day end. A field on its own is built for a node's name (item `NAME`, its name's `K_field` alone; a hold of the
-  node's one row), and "everything by this uploader" as a moderator's step (`UPLOADER_CONTENT`: the items the uploader
-  had uploaded to the space, counted from the clear attribution, blocked and held), both by
-  cr-report-a-name-and-an-uploader (2026-10-20; uc.moderation.report A8, uc.moderation.take-a-measure A8); the other
-  fields on their own and the reporter's handover of a guest's identity key (§ 1) are not. §§ 3 and 6 are built — the queue,
-  the review in moderation mode, and every step and its lift, the Server Owner's taken on the admin channel — with § 4's
-  other ends of a case and § 5's bar of a reporter (cr-moderation-review-and-measures, 2026-10-18;
-  [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
-  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). § 7 is built
-  (cr-statement-of-reasons-and-objection, 2026-10-18;
-  [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
-  moderator's measure carries its statement, to its recipients in the app and by
-  instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
-  measure's hold counts from the statement (§ 4); a guest is told nothing in the app for a moderator's measure (it
-  has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). The four legal gaps the audit of
-  2026-10-18 found in § 7 and § 12 are built (cr-statement-legal-gaps, 2026-10-18): the reporter's redress in the
-  decision mail (DSA Art. 16(5), Art. 53), a statement for the Server Owner's own steps over content by mail with the
-  facts (Art. 17(1)(c), (d); owner Q24–Q25), the provision or clause a ground relies on and the territorial sentence
-  (Art. 17(3)(a), (d), (e)), and a guest uploader's notice of a removal on an authority's order (TCO Art. 11(1)) — every
-  text a draft until a qualified review. A tenant's deletion over content carries it too (with `cr-account-erasure`,
-  2026-10-18: a `TENANT_DELETED` record a stop lifts and the tenant's purge ends), and each such step's answer reports
-  whom its statement's mail reached (cr-statement-delivery-report, 2026-10-21). §§ 12 and 13, § 7's
-  deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
-  [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
-  [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
-  an order from either door blocks by id and holds to the end it sets, which no extension, lift or decision shortens;
-  the authority defers a statement for six weeks, renewed once; the moderation surface exports an Art. 18 report's
-  clear fields as text, records the handover and warns before a child-sexual-abuse case opens. § 4's child-sexual-abuse
-  end and § 11's retention of every moderation record are built (owner 2026-10-18, "legal duties win"; the
-  moderation-retention follow-up of inbox #462): such a case's hold ends at the recorded handover, at the latest 90 days
-  after the report, and no measure or statement moves it further; a closed case's records go with its log, never while a
-  measure of it is in force; the reporter's contact is sealed apart and goes six months after the decision was told.
-  One part waits on § Legal basis, Still open 2 and is not built: an authority's link to a snapshot; nor is a hold that
-  runs until the handover beyond 90 days (Still open 1). The order forms and the warning are drafts until a qualified
-  review. The rest is not built. Who moderates — moderators the
-  Server Owner appoints, sharing one instance moderation key — is
-  [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
-  and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
-  in §§ 1–3, 6–7 and 11–13. § 14 as revised 2026-10-21 (no operating mode, one form of each text, nothing required,
-  what an operator may owe told as information at setup, in the operator settings and in the Run docs) is **built**
-  (cr-operating-mode-retires, 2026-10-21). § 11's instance contact is built with its
-  notification address's code confirmation ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  § 10's guest-write record is built, kept wherever a guest may write with no switch of its own (built by
-  cr-guest-write-record, 2026-10-17, its switch removed by cr-operating-mode-retires, 2026-10-21;
-  [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
-  N with its two-limit purge, the hold's copy, the backup without its rows and the
-  first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
-  instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, built by cr-instance-privacy-notice,
-  2026-10-19; a draft until a qualified review), to which the operator section of the terms (decision 6, built by
-  cr-operator-section-of-the-terms, 2026-10-18, in one form since cr-operating-mode-retires) points. It is on the V1 line (owner
-  2026-10-16, [inbox](../inbox.md) #462).
+- Status: Accepted
+- Built: partly (not built: § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
+  identity key; § 11 the records' extension while proceedings are pending; § Legal basis, Still open 1 a hold until
+  the handover beyond 90 days, and Still open 2 an authority's link to a snapshot)
 - Date: 2026-10-16
 
 Provenance: **(M)** is measured in this worktree (file and line named); **(S)** comes from a read-only sweep of the
@@ -121,7 +69,11 @@ Five facts shape the design:
 ## Decision
 
 The mechanism lives in **core** ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)): node,
-share, report and hold are platform terms, and Depot needs them as much as Memories.
+share, report and hold are platform terms, and Depot needs them as much as Memories. Who moderates — moderators the
+Server Owner appoints, sharing one instance moderation key — is
+[ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s; §§ 1–3, 6–7 and 11–13
+state what it means here. Every fixed text this ADR adds — the statement and its passages (§ 7), the disclosure
+(§ 10), the order forms (§ 12) and the child-sexual-abuse warning (§ 13) — is a draft until a qualified legal review.
 
 ### 1. Every report is a report share plus a hold
 
@@ -154,6 +106,9 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   password changed) or to the tenant (suspended).
 - **Context is not evidence.** The reporter's client may add what it saw (a note's text) as context; evidence is
   only what the moderator opens from the held ciphertext.
+- **Where the reporter hands over no identity key**, "everything by this uploader" is a moderator's step taken from
+  the case (§ 6): the items that uploader had uploaded to the space, counted from the clear attribution, blocked and
+  held. The flow is [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md).
 
 ### 2. A report is sealed to the moderation key
 
@@ -228,8 +183,10 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   — and **the server checks it**: such an extension must carry `AUTHORITY_REFERENCE` or `ART18_REPORT_IN_PROGRESS` and
   is refused otherwise (`409 extension_reason_not_allowed`, owner 2026-10-18); the handover still ends the hold. On
   every other case the type is optional and nothing about it is refused.
+- **An authority's order holds to the end it sets**: no extension, lift or decision shortens it, from either door
+  (§ 12).
 - **At the end** the snapshot is dropped, the pins released, and the sweep catches up. The same purge that runs at
-  startup (§ 10) ends an expired hold.
+  startup (§ 10) ends an expired hold. The model is [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md).
 
 ### 5. Bounds against misuse
 
@@ -272,7 +229,9 @@ again as the Memory's cover or banner. The same holds for a step taken **after**
 it does not end at once where another row still holds the item's object — it hangs on that object, read from its
 case's hold since the item's own rows are gone (`MeasureTargets.survivingObjects`), so deleting a reported photo before
 the decision does not leave its bytes served as the banner either. Where no hold holds the item, nothing names its
-objects, and the step ends at once.
+objects, and the step ends at once. The review and the steps are
+[uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md) and
+[uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md).
 
 ### 7. Statement of reasons, and objection
 
@@ -282,6 +241,8 @@ objects, and the step ends at once.
   the terms relied on**, required, with the facts explaining why the content falls under it
   (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
   (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter.
+  A guest is told nothing in the app for a moderator's measure: it has no account, so a guest uploader counts as
+  nobody to tell (DSA Art. 17(2)); an authority's removal order is the exception (§ 12).
   There is one form on every instance (§ 14): the reduced form a *private* mode served until 2026-10-21 is gone, so a
   moderator always states the facts and the provision or clause.
 - **The facts are sealed once, and per affected member only their key** (owner 2026-10-19). The moderator's browser
@@ -300,7 +261,8 @@ objects, and the step ends at once.
 - **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in
   block (Art. 17(1)(d)), a tenant taken offline or deleted (Art. 17(1)(c)) — in the same template and form, entered
   with the step in admin-web or `veyq-admin` (a step from a case's proposal always; a step without a case, when the
-  Server Owner says it is over content). Its recipients are the blocked member, and the tenant's owners for a tenant;
+  Server Owner says it is over content); a tenant's deletion over content is recorded as a step of its own
+  (`TENANT_DELETED`), which stopping the deletion lifts and the tenant's purge ends. Its recipients are the blocked member, and the tenant's owners for a tenant;
   a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
   address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
   moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
@@ -335,7 +297,8 @@ objects, and the step ends at once.
   ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): the server
   refuses a decision on it from the account that took the measure while another accepted moderator holds the key,
   and the log records the reviewer. With one moderator the objection does not wait: the decider reviews it, the log
-  marks the review as theirs, and the answer to the objector says so.
+  marks the review as theirs, and the answer to the objector says so. The flow is
+  [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md).
 
 ### 8. Every sealed field records its last editor
 
@@ -432,7 +395,9 @@ range and its no-extension rule (§ 2 there).
   authority, and that a guest who does not want this can view but not add. **The right to object (Art. 21) is
   stated separately** from the rest (Art. 21(4)), on the page as in the text; a guest names the identity it objects
   for by the guest id its own view shows, and an objection erases the rows so far without stopping later writes from
-  being recorded (owner 2026-10-18).
+  being recorded (owner 2026-10-18). The first-layer sentence's wording waits on counsel (§ Legal basis, Still open 4
+  and 10). The model is
+  [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md).
 
 ### 11. The moderation log, and the instance contact
 
@@ -476,9 +441,11 @@ range and its no-extension rule (§ 2 there).
   The purge that computes each case's date at closure is the log's reader for `EveryStoredTimeHasAReaderTest`.
 - **An instance contact**, set in admin-web and the CLI: the single point of contact for users and authorities
   (DSA Art. 11–12) and the TCO contact point for removal orders (TCO Art. 15), with the languages it answers in;
-  the notification address; and the address the disclosures and statements name. It is public, in the operator
-  section of the terms. It is never required and nothing warns about it (§ 14): an empty contact renders as "not
-  stated by this operator" wherever a text names it, so the gap is visible to whoever reads it.
+  the notification address, confirmed by a code sent to it before it receives anything; and the address the
+  disclosures and statements name. It is public, in the operator section of the terms. It is never required and
+  nothing warns about it (§ 14): an empty contact renders as "not stated by this operator" wherever a text names it,
+  so the gap is visible to whoever reads it. The flow is
+  [uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md).
 
 ### 12. An authority's order acts on ids, within the hour, without a key and without a report
 
@@ -505,6 +472,7 @@ range and its no-extension rule (§ 2 there).
   holds this back exactly as it holds the statement. This overrides the earlier owner answer that a guest is told
   nothing, for an authority's removal order only, by the rule that a legal duty wins; for a moderator's measure the
   DSA Art. 17(2) reasoning stands.
+- The flow is [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md).
 
 ### 13. Art. 18 reports, and child sexual abuse material
 
@@ -520,7 +488,8 @@ range and its no-extension rule (§ 2 there).
   serving it on is a making-available of the host's own. A human still decides (§ 2). The hold ends at the
   handover, at the latest 90 days after the report (§ 4), so it serves the reporting duty and nothing else (§ 184b(5)
   StGB, L): recording the handover ends it, and the moderation surface says so before it is recorded. A file or a
-  screenshot never goes by mail or to a hotline.
+  screenshot never goes by mail or to a hotline. The flow is
+  [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md).
 
 ### 14. No operating mode: every instance carries the full texts, and the Server Owner fills in what applies
 

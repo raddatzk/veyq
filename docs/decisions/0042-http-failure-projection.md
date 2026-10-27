@@ -1,7 +1,9 @@
 # ADR 0042 — HTTP failure projection: one shared envelope, self-describing failure variants
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-14
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 ## Context
 
@@ -11,7 +13,7 @@ variants to an HTTP response with a `when(outcome)` ladder **and constructs the 
 duplications result (audit finding **P3b**, [inbox #72](../inbox.md)):
 
 1. **Envelope construction is copy-pasted in 4 idioms across 17 sites.** The generated wire contract
-   `ErrorResponse{code}` (required `code`, optional `message`; identical in all 9 specs, guarded by
+   `ErrorResponse{code}` (required `code`, optional `message`; single-sourced in `_common`,
    [ADR 0038](0038-contracts-shared-components-bundling.md))
    is built via: an overloaded `private fun error(status, code)` (5 resources), named per-code helpers
    (`forbidden`/`notFound`/`conflict`, 2 resources), fully-inline `Response.status(…).entity(ErrorResponse(code=…))`

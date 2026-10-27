@@ -1,6 +1,7 @@
 # ADR 0037 — Password-protected public shares (operator-blind access-control gate)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-10
 
 ## Context
@@ -81,7 +82,7 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
   corollary in the [security model](../crosscutting/security-model.md)). For the realistic self-hosted / trusted
   case (operator = curator, or a trusted instance) the gate is fully effective. The stronger crypto-gate is a
   possible future upgrade for the malicious-operator case; it is deliberately not built here.
-- **Brute-force is honestly bounded — per share, on wrong attempts (cr-0165).** A link-holder (who has `pw_salt`
+- **Brute-force is honestly bounded — per share, on wrong attempts.** A link-holder (who has `pw_salt`
   from the locked resolve) can brute-force the password offline against nothing — they'd have to guess against the
   *server* (online), since the verifier isn't served. That online path is bounded by a **per-share limit on wrong
   attempts** ([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md)): each `share_password_incorrect`
@@ -108,8 +109,8 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
   reveal all keep the same link — none of the crypto-gate's link-key machinery, recoverable second key, nested
   wraps, or migration pain.
 - **Reuses the `contributorToken` shape.** A server-checked, share-scoped bearer credential is already how
-  contribution is gated (cr-0101); the password token is the same pattern, so it slots into `activeShare(...)`.
-- **`updateShare` grows a tri-state password patch** on top of cr-0119's optional `role` — the op now edits note +
+  contribution is gated ([ADR 0030](0030-contributor-public-share.md)); the password token is the same pattern, so it slots into `activeShare(...)`.
+- **`updateShare` grows a tri-state password patch** on top of ADR 0036's optional `role` — the op now edits note +
   name (full replace) + role (optional) + password (tri-state). All owner-gated, all leaving `K_share`/the link
   intact.
 

@@ -1,7 +1,10 @@
 # ADR 0032 — Capability discovery & version gating (lean core)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-08
+- Model: [Applications](../apps/README.md)
+- Replaced in part: § 2, § 3, § 5 by ADR 0088 (built)
 
 ## Context
 
@@ -117,7 +120,7 @@ the AND along the path being the server's (ADR 0088 decision 2):
 | `core.public-shares` | share-public-viewer | Share affordance hidden; `createShare`, re-activating and re-issuing a READ link → `422`, and by the AND those of the two children below; every existing link answers guests `404` like an unknown one |
 | `core.public-shares.contribute` | share-contributor | the READ_WRITE role is not offered; the same three operations on a READ_WRITE link, and changing a READ link into one, → `422`; an existing READ_WRITE link answers guests `404` |
 | `core.public-shares.drop-box` | share-uploader | the uploader option and the drop-box node are not offered; WRITE_ONLY links and creating a drop-box node → `422`; an existing WRITE_ONLY link answers guests `404` |
-| `core.group-space` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | group creation hidden; `createGroup` → `422` (an existing group stays usable, inbox #440 resolved as a doc fault) |
+| `core.group-space` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | group creation hidden; `createGroup` → `422` (an existing group stays usable) |
 | `core.remember-device` | trust-device, remember-this-device | enrolling a DEVICE wrap → `422`, and by the AND a passwordless one |
 | `core.remember-device.passwordless` | remember-this-device | the "remember this device" toggle hidden; enrolling a DEVICE_KEY wrap → `422` |
 | `core.device-linking` | onboard-device | "sign in with code" and the Settings entry hidden; every `/api/pairing/*` endpoint → `422` |

@@ -1,8 +1,9 @@
 # ADR 0081 — A scope's tree revision is the level view's change signal: the live refresh is a conditional GET
 
-- Status: Accepted (decision 4 reaches a guest's media listing too: 2026-10-19, inbox #497; decision 5's poll runs on every
-  opened node's page too, member and guest, and its fingerprint sees an operator's block: 2026-10-19, inbox #503)
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-12
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
 
 ## Context
 

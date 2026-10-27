@@ -1,7 +1,8 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
-- Status: Accepted; built, except the first GitHub Pages deploy, which runs on the first push to the public remote
-- Date: 2026-10-15 (amended 2026-10-16: the site's root is the project website, point 7)
+- Status: Accepted
+- Built: partly (not built: decision 1's publish to GitHub Pages)
+- Date: 2026-10-15
 
 ## Context
 
@@ -75,7 +76,7 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
 6. **No versioned docs before V1.** The site shows `main`. From V1, versions are built **from release tags**, one
    build per version, never as copied folders; the version granularity is decided then, against
    [ADR 0085](0085-one-major-moved-on-a-yearly-train.md).
-7. **The site's root is the project website** (amended 2026-10-16). `/` and one page per further language (`/de/`)
+7. **The site's root is the project website.** `/` and one page per further language (`/de/`)
    are plain Astro pages, not Starlight ones (`site/src/pages/`, words and layout in `site/src/components/website/`);
    the Use area's start page moved to `/start/`, every other URL is unchanged. The website says what veyq is — a
    platform, not one application —, which applications are built, why it is needed, and links into the three areas.
@@ -88,6 +89,8 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
 
 ## Consequences
 
+- **The first GitHub Pages deploy runs on the first push to the public remote.** Until then the site is built and
+  checked, and nothing is published.
 - `wiki/`, `wiki-sync.yml` and the GitHub Wiki go away. In-app links to the wiki move to the site
   (`src/web/src/views/ShareView.vue` links `is-my-data-safe` today), and the German one loses its translated slug.
 - The guards follow the content: `validate_wiki_sources.py` reads `sources:` from frontmatter and pairs by

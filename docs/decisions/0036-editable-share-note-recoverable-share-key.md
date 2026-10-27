@@ -1,6 +1,7 @@
 # ADR 0036 — A curator note on a share, editable in place via a member-recoverable share key
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-10
 
 ## Context
@@ -46,7 +47,7 @@ parts.
    share page — reusing the safe escape-first renderer added for tenant terms (`src/web/src/shared/markdown.ts`,
    [ADR 0035](0035-server-terms-of-service.md) follow-up). For a WRITE_ONLY share (no gallery) it is the primary
    instruction above the name field; for READ/READ_WRITE it is a banner under the title. **The curator can ask the
-   visitor to accept the note before anything else is shown** (a per-share switch, owner decision 2026-10-14): the
+   visitor to accept the note before anything else is shown** (a per-share switch): the
    switch travels **inside** the sealed note (its plaintext gains a field beside the per-locale texts), so the
    operator does not learn which links ask for acceptance. The acceptance is recorded **on the visitor's device
    only**, as the tenant terms' is (uc.sharing.share-accept): the server records nothing about an accountless
@@ -60,8 +61,8 @@ parts.
    dialog (which holds the scope's epoch keys), lists their shares (the list now also returns `sealed_note` +
    `sealed_share_key` with its epoch),
    recovers `K_share`, re-seals the new note, and PATCHes it — **the link stays valid**. The op is deliberately
-   extensible: cr-0116 added the private **`sealedShareName`** (both sealed fields are a full replace), and
-   **cr-0119** added an optional **`role`** — the first *grant-affecting* field, a **pure server-side authorization
+   extensible: it also carries the private **`sealedShareName`** (both sealed fields are a full replace) and
+   an optional **`role`** — the first *grant-affecting* field, a **pure server-side authorization
    change** (no re-crypto: READ and READ_WRITE share one `symWrap(K_share, K_node)`, so the wrap/`K_share`/link
    are untouched). The role change is restricted to **READ ↔ READ_WRITE** (a `422 invalid_role_change` rejects
    setting `role = WRITE_ONLY` or changing a WRITE_ONLY share's role — a write-only drop-box's "cannot see" promise

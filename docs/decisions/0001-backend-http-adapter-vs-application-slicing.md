@@ -1,7 +1,9 @@
 # ADR 0001 — Backend: resource-shaped HTTP adapters, use-case-sliced application services
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-25
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 ## Context
 

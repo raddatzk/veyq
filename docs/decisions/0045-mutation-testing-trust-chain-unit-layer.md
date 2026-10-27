@@ -1,6 +1,7 @@
 # ADR 0045 — Mutation testing is the trust chain's last link, measured on the unit layer
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-16
 
 ## Context

@@ -1,6 +1,7 @@
 # ADR 0055 — A one-time link travels by mail or not at all: a mailer is a precondition, not a capability
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-06
 
 ## Context

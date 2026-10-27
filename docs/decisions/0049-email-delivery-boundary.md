@@ -1,6 +1,7 @@
 # ADR 0049 — Sending mail is a send-time metadata + third-party boundary; a mail carries only delivery essentials
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-24
 
 ## Context

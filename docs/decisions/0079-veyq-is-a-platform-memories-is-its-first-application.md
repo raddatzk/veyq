@@ -1,7 +1,10 @@
 # ADR 0079 — veyq is a platform; Memories is its first application
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-03
+- Model: [Applications](../apps/README.md)
+- Replaced in part: decision 8 by ADR 0088 (built)
 
 ## Context
 

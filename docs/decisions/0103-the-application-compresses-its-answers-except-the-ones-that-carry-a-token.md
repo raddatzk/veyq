@@ -1,9 +1,9 @@
 # ADR 0103 — The application compresses its answers, except the ones that carry a token
 
-- Status: Accepted 2026-10-19 (built by `cr-gallery-list-paging`: `quarkus.http.enable-compression` and its neighbours in
-  `:core`'s `application.properties`, `@Uncompressed` written by the build on every token answer's generated endpoint,
-  `TokenAnswersAreNotCompressedTest`).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-19
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 Provenance: **(M)** measured — by the commands this ADR or the test it names carries; **(R)** remembered, not measured.
 

@@ -1,7 +1,9 @@
 # ADR 0059 — Device linking: the grant carries key *and* session, and each direction earns its own binding step
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-12
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 

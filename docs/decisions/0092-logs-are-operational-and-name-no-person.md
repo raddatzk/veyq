@@ -1,39 +1,7 @@
 # ADR 0092 — Logs are operational and name no person; evidence never rides a log
 
-- Status: **Accepted 2026-10-18 and built 2026-10-19** (cr-logging), with the owner's answers Q29–Q33 as recommended
-  (proposed 2026-10-16; re-grounded 2026-10-18 after moderation landed, inbox #462).
-  **Built:** § 1's separation, held by `ModerationLogSliceTest` (no moderation event in a log line) and
-  `GuestWriteRecordCoreSliceTest` (neither the recorded nor a forged address in a log line); § 2 whole, by
-  cr-guest-write-record and ADR 0093 § 10; § 3 at every site that handles a person's value, each pinned by a
-  log-capture test with its control — the mail and invite lines (`SmtpDeliveryLogTest`, `TenantInviteMailerLogTest`),
-  the recovery worker (`RecoveryDeliveryLogTest`), the unknown wrap method by its length
-  (`AccountKeyMaterialSliceTest`), Garage's admin errors by status and code (`GarageStoreProvisionerTest`); § 4's
-  catch-all and Hibernate's silenced statement log (`UnexpectedErrorLogSliceTest`), the proxy's posture
-  (`validate_compose_posture.py` assertion 6) and the e2e sweep's `pii` needle set
-  ([cc.security.wire-assertion](../crosscutting/cc.security.wire-assertion.md)); § 5 whole — the size bound on every
-  Compose service and `garage=warn` on both targets (`validate_compose_posture.py` assertion 6,
-  `chart_meta_check.py` (xxvii)), Traefik at `ERROR` with no access log, the admin console's access log without the
-  reader (`src/admin-web/src/shared/security/accessLog.test.ts`), the rate limiters' pass by time
-  (`TokenBucketCounterTest`); and the Run and Security pages:
-  [Operations § Logs](../../site/src/content/docs/run/operations.md#logs),
-  [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
-  [Data protection](../../site/src/content/docs/run/data-protection.md),
-  [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
-  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Closed after the build
-  found it (2026-10-19):** a constraint violation raised at **commit** (not at an explicit flush) is logged once more
-  by Narayana — `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with the converted exception whose text carried the
-  driver's message (measured in `./gradlew check`'s output: two racing email changes in `EmailChangeSliceTest` put the
-  colliding address there). The category is not silenced, since it also carries the transaction reaper's timeout
-  warnings; `CommitFailureLogFilter`, a filter on that logger (so every handler gets the rewritten record), writes
-  that one message as its class chain, SQLState and vendor code and lets every other record pass — held by
-  `CommitFailureLogSliceTest` (a duplicate committed without a flush leaves no address in any record; the reaper's
-  warning keeps its parameters). **Acceptance commits to:** §§ 1–8
-  as the rule for every log veyq writes or its recipes configure, on both deployment targets; § 6's Still open taken
-  as met until veyq is offered as a service. It does not commit to JSON logs, a request id, a static log guard or a
-  time-bounded retention. The owner's answers: the admin console's access log keeps no reader (Q29); no Traefik access
-  log, held by the posture guard (Q30); the full exception at DEBUG under its own category, off by default (Q31); the
-  period stated as its criterion, Compose at 10m × 3 and the kubelet's default (Q32); no `CLAUDE.md` line — the tests
-  bite on the value (Q33).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-16
 
 Provenance: **(Mn)** is a command in § Measurement ledger, run on this worktree (branch
@@ -69,6 +37,8 @@ database, so no log is needed for it. Which address a request has is
 Only the guest-write record's table stores a client address, and no table stores a User-Agent (M14).
 
 ## Decision
+
+§§ 1–8 are the rule for every log veyq writes or its recipes configure, on both deployment targets.
 
 ### 1. Three kinds of data, never mixed
 
@@ -117,7 +87,8 @@ always for an unexpected error, it is logged by its class chain.
 
 - **A log-capture test per site that handles a person's value**, after `SmtpDeliveryLogTest`: it asserts the line
   **is** emitted (the positive control) and does not carry the value, on one capture of the root logger
-  (`LogCapture`, whose own control record proves it is attached). Built for every such site (the status line).
+  (`LogCapture`, whose own control record proves it is attached). Built for every such site: the mail and invite
+  lines, the recovery worker, the unknown wrap method by its length, Garage's admin errors by status and code.
 - **A catch-all for unexpected errors**, one formatter (`UnexpectedError`) behind one Vert.x failure handler ordered
   just ahead of Quarkus's own, so no failure reaches the default handler's line (M6). A JAX-RS resource and a Vert.x
   route both reach it: Quarkus REST hands an exception no mapper matches to the routing context's failure, and a
@@ -133,9 +104,12 @@ always for an unexpected error, it is logged by its class chain.
   `UnexpectedErrorLogSliceTest`.
 - **Hibernate's statement error log is silenced**: `org.hibernate.orm.jdbc.error` is set to ERROR, so the WARN line
   that carries the driver's message is not written (M7). The catch-all keeps the SQLState and vendor code.
-- **Narayana's commit-failure warning is rewritten, not silenced**: `ARJUNA012125` on `com.arjuna.ats.arjuna` loses
-  its exception and keeps the class chain, SQLState and vendor code (`CommitFailureLogFilter`, on the logger); the
-  category's other warnings — the reaper's timeouts among them — pass unchanged.
+- **Narayana's commit-failure warning is rewritten, not silenced**: a constraint violation raised at **commit** (not
+  at an explicit flush) is logged once more by Narayana, as `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with
+  the converted exception whose text carries the driver's message — a colliding email address. That record loses its
+  exception and keeps the class chain, SQLState and vendor code (`CommitFailureLogFilter`, a filter on the logger, so
+  every handler gets the rewritten record); the category is not silenced, because its other warnings — the
+  transaction reaper's timeouts among them — pass unchanged.
 - **The e2e sweep, widened.** `scripts/e2e_sweeps.py` already fails a run on any sealed value or token in any log
   (M17). It gains a third needle set, `pii`: every email address the run's suites signed up with, searched in every
   boot and container log and nowhere else, since the database dump, the statement log, the HTTP recording and the
@@ -146,7 +120,7 @@ always for an unexpected error, it is logged by its class chain.
   proxy sets no access log, by flag or variable, and its own level, `ERROR`. The chart has no proxy; its store is
   `chart_meta_check.py` (xxvii).
 - No static scan of log statements. A grep for `email` in a log call is easy to evade and would turn red on a comment.
-  The tests above bite on the value instead.
+  The tests above bite on the value instead, and for the same reason no `CLAUDE.md` line restates the rule.
 
 ### 5. Retention and rotation, per source and target
 
@@ -228,6 +202,12 @@ backup are **outside a hold's reach**, and the Run docs say so for each source. 
   on purpose, and the troubleshooting page says to set it back.
 - The Garage request log is quiet in production; a store problem is diagnosed by raising the level.
 - A log's age is not bounded, only its size. The Run docs state that criterion for the record of processing.
+- The Run and Security pages carry the rule for the reader:
+  [Operations § Logs](../../site/src/content/docs/run/operations.md#logs),
+  [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
+  [Data protection](../../site/src/content/docs/run/data-protection.md),
+  [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
+  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).
 
 ## Measurement ledger
 

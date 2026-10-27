@@ -1,7 +1,9 @@
 # ADR 0021 — Operator-blind background tasks (pull-based job mechanism, equal worker pool)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-04
+- Model: [background-tasks](../crosscutting/background-tasks.md)
 
 ## Context
 
@@ -54,8 +56,8 @@ result**.
    is `veyq.tasks.lease.ttl`, **2 min** by default, and a worker renews it every **30 s** while it works (the web's
    `LEASE_RENEW_MS`), so a hidden tab whose timers the browser throttles to one a minute still keeps it. A Server
    Owner who sets the lease below about **60 s** defeats the renewal: such a tab loses a job it is still working on.
-   A worker that stops — a tab closed, reloaded or navigated away — frees its job only when the lease runs out. By
-   owner decision (2026-10-24) there is **no release endpoint** called on `pagehide`, and a holder does **not take
+   A worker that stops — a tab closed, reloaded or navigated away — frees its job only when the lease runs out. There
+   is **no release endpoint** called on `pagehide`, and a holder does **not take
    over its own** still-valid lease: the same user's next page claims the job like any other worker, after the
    expiry. A crashed worker's lease **expires → lazy reclaim** (the claim query treats `leased ∧ expiry<now` as
    free).

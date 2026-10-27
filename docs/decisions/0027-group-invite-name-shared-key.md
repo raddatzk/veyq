@@ -1,15 +1,14 @@
 # ADR 0027 — Group invite name via a name key derived from the name's epoch key, not a one-off owner seal
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-06
-
-> Supersedes the one-off name-seal mechanism in [ADR 0014](0014-group-scopes-and-governance.md) §5. cr-0096
-> carried the behaviour change (see *Resolved / still open* below); the one-off seal is gone.
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 
-The consent-add flow (cr-0094, ADR 0014 §5) shows a pending invitee the group's name so they "decide informed",
-**before** they hold `K_SC`. cr-0094 does this with a **one-off seal**: the owner's device reads the plaintext
+The consent-add flow ([ADR 0014](0014-group-scopes-and-governance.md) §5) shows a pending invitee the group's name
+so they "decide informed", **before** they hold `K_SC`. Its first form did this with a **one-off seal**: the owner's device reads the plaintext
 group name and `asymWrap`s it to the invitee's identity under the `group-name` AAD context. A security review
 surfaced the weakness: this sealed name is **arbitrary owner-supplied plaintext, not bound to the group's real
 `encryptedName`**. Nothing enforces that the two agree, and the invitee *cannot* verify it — they hold no `K_SC`,
@@ -24,16 +23,22 @@ to check a binding against pre-accept. The only robust construction that lets a 
 ## Decision
 
 Seal the group name under a dedicated **name key `K_name`** derived from the epoch it was set under, and hand
-`K_name` (not a name copy) to a pending invitee so they read the **canonical** name ciphertext.
+`K_name` (not a name copy) to a pending invitee so they read the **canonical** name ciphertext. This replaces the
+one-off name seal of [ADR 0014](0014-group-scopes-and-governance.md) §5; that seal is gone.
 
 1. **`K_name` is derived from the name's content-epoch key** ([ADR 0024](0024-scope-key-rotation.md)):
-   `K_name_e = hkdfSha256(E_e, salt, info = "group-name-key", 32)`, where `E_e` is the epoch the name was last
-   **set or renamed** under. The scope row carries a small **server-visible name-epoch index** — exactly like every
+   `K_name_e = HKDF-SHA256(E_e, salt = "", info = utf8("veyq/v1/group-name-key"), 32)`, where `E_e` is the epoch
+   the name was last **set or renamed** under. The derivation, the name's seal and the key's wrap are pinned as
+   conformance vectors ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md): `group_name_key`,
+   `seal.sym.group-name`, `seal.asym.group-name-key`). The scope row carries a small **server-visible name-epoch index** — exactly like every
    node name already does (ADR 0024 §2). `E_e` is not recoverable from `K_name_e` (HKDF one-way), so handing out
    `K_name_e` leaks the name and nothing else (no content, no dedup key).
 2. **The group name seals under its epoch's `K_name`:** `encryptedName = symEncrypt(K_name_e, name)` on the scope
-   row (replacing today's seal under the birth `K_SC`). A **rename re-seals under the current epoch** and updates
-   the name-epoch index; a **plain rotation does not touch the name** (it keeps its epoch). Members hold the latest
+   row (not under the birth `K_SC`), under a seal purpose of its own bound to the group
+   ([ADR 0072](0072-a-seal-binds-its-object.md)). A **rename re-seals under the current epoch** and updates
+   the name-epoch index — its own operation, [uc.spaces.rename-group](../features/spaces/use-cases/uc.spaces.rename-group.md):
+   owner-gated, name-only (no `K_SC` rotation), and the server rejects a stale `nameEpoch` with `409`; a **plain
+   rotation does not touch the name** (it keeps its epoch). Members hold the latest
    epoch, peel the chain to `E_e`, derive `K_name_e` and read. The blind server is **agnostic** to which key
    `encryptedName` is under — the column stays opaque base64; only the small epoch index is new.
 3. **A pending invitee is handed `K_name_e`, and reads the canonical `encryptedName`:** the owner's device derives
@@ -65,26 +70,13 @@ name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape
 - **One fail-safe edge:** if the name is **renamed** between an invite and its accept, the invitee's `K_name_e`
   no longer opens the re-sealed name — the preview shows "unnamed" and they can still accept (then see the real
   current name). A plain rotation does **not** trigger this (the name keeps its epoch). Rare and harmless.
-- **Alternatives rejected:** (a) *one-off seal, framed as owner-claimed* (cr-0094 today) — an unverifiable claim
+- **Orthogonal to the fingerprint/TOFU seam** (ADR 0014 §5): that closes an operator-key MITM, not the
+  modified-owner name-lie. The name-key wrap runs [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s pin
+  gate like every other foreign wrap.
+- **Alternatives rejected:** (a) *one-off seal, framed as owner-claimed* (the first form) — an unverifiable claim
   that looks like assurance; (b) *drop the pre-accept name, decide on `addedBy`* — honest and cheapest, but loses
   the name preview as a product feature (we chose to keep it); (c) *`K_name` derived from `E₀`, static forever* —
   simpler (no name-epoch index), but makes the group name the **one name that is never forward-secret** (any past
   member reads all future renames), an inconsistency with node names we chose not to bake in; (d) *stored random
   `K_name` wrapped `symWrap(K_SC, K_name)`* — a needless extra column + ciphertext; (e) *bind the one-off seal to
   `encryptedName`* — unverifiable pre-accept without a name key, i.e. it collapses into this decision.
-
-## Resolved / still open
-
-- **Resolved (cr-0096).** The HKDF `salt`/`info` and the AAD contexts are pinned as conformance vectors
-  ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md)): `K_name = HKDF-SHA256(E_e, salt="",
-  info=utf8("veyq/v1/group-name-key"), 32)`; the name seals under a purpose of its own, bound to the group
-  ([ADR 0072](0072-a-seal-binds-its-object.md)), and `K_name` wraps under the distinct
-  **`group-name-key`** `asymWrap` context (`group_name_key` / `seal.sym.group-name` / `seal.asym.group-name-key`
-  vectors).
-- **Resolved (refined → cr-0097).** The **rename** endpoint (re-seal under the **current** epoch + bump the
-  name-epoch index) is its own feature — [uc.spaces.rename-group](../features/spaces/use-cases/uc.spaces.rename-group.md),
-  owner-gated, name-only (no `K_SC` rotation), server rejects a stale `nameEpoch` (`409`). cr-0096 landed the
-  epoch-indexed name at epoch 0 (FS-ready) + the invite-name change; cr-0097 lands rename.
-- **Resolved elsewhere.** The **fingerprint/TOFU** authenticity seam (ADR 0014 §5) is orthogonal to the
-  name-binding (it closes an operator-key MITM, not the modified-owner name-lie); the name-key wrap runs
-  [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s pin gate like every other foreign wrap.

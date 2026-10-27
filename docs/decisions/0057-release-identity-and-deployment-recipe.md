@@ -1,13 +1,9 @@
 # ADR 0057 — A release is identified by the tree, and the deployment recipe is its assets
 
-- Status: Accepted; built as a hand-dispatched publish that builds again for a release. §1's snapshot per green push and
-  its promotion to a release, and §7's stack lanes, are decided ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
-  and not built: the publish still runs on `workflow_dispatch` only. It lives in [`ci.yml`](../../.github/workflows/ci.yml)
-  since 2026-10-16, the one pipeline per commit of ADR 0091 decision 2 (`container.yml`, where it was built, is folded
-  into it), where it waits on every stage of that pipeline and signs as `ci.yml` (§3) — the images, the chart,
-  `veyqctl` and the manifest; `veyqctl` verifies the manifest's signature before it trusts it, and none of it has run
-  against a real publish (there is no remote).
+- Status: Accepted
+- Built: partly (not built: § 1's snapshot per green push and its promotion to a release, § 7's stack lanes)
 - Date: 2026-08-10
+- Replaced in part: § 1, § 7 by ADR 0091 (not built); § 3 by ADR 0096 (built)
 
 ## Context
 
@@ -220,6 +216,11 @@ push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Un
   [ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md)).
   The publish path stays an explicitly stated gap, in the same shape as the coverage flip that
   [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) leaves owed.
+- **Until § 1's snapshot and promotion are built, a publish is dispatched by hand and builds again for a release.**
+  It runs on `workflow_dispatch` only, in [`ci.yml`](../../.github/workflows/ci.yml), the one pipeline per commit of
+  ADR 0091 decision 2, where it waits on every stage of that pipeline and signs as `ci.yml` (§3) the images, the
+  chart, `veyqctl` and the manifest; `veyqctl` verifies the manifest's signature before it trusts it. None of it has
+  run against a real publish: there is no remote.
 - **A pin trades silent patches for explicit ones.** A tag-pinned `mariadb:11.4` picked up patch releases on
   the next pull; a digest-pinned one does not until the release bumps it. That is the intended trade: the
   same silent path would deliver a compromised tag just as quietly. The bump needs an updater:

@@ -1,12 +1,7 @@
 # ADR 0098 — On Kubernetes, the start that would migrate backs up first
 
-- Status: Accepted 2026-10-16 (owner: every recommendation of the former § Open for the owner taken, and the store
-  leg is its index only); built (cr-kubernetes-backup-gate): `src/tools/instance_backup.py gate` and its index capture in
-  the third released image `veyq-tools` (`infra/kubernetes/tools/Dockerfile`), the chart's `backup.*` values and init container
-  `backup-gate`, held by `src/tools/instance_backup_selftest.py` and `scripts/chart_meta_check.py` (xxiv)–(xxvi), and run
-  once on a kind cluster (M13). It is the Kubernetes-native backup decision
-  [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers; the owner's starting idea was a Helm `pre-upgrade` hook,
-  and this ADR keeps it as the rejected shape with its costs (§ Decided with the owner, 1).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-16
 
 Provenance: a claim marked **(Mn)** was measured — a command or a primary document fetched on 2026-10-16, listed in
@@ -19,7 +14,8 @@ backup first, into a volume the operator provides. Under Compose that order is a
 ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 5, step 4); decision 8 there
 leaves Kubernetes to `helm upgrade` and the operator's GitOps tooling. On a cluster today the backup is a hand
 procedure — `kubectl cp` of the key, `kubectl scale --replicas=0`, captures through port-forwards — that a GitOps
-deploy never runs (the Run area's Upgrade page, Kubernetes tab (M8)). Five facts constrain the answer.
+deploy never runs (the Run area's Upgrade page, Kubernetes tab (M8)). This ADR is the Kubernetes-native backup
+decision [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers. Five facts constrain the answer.
 
 **1. Helm hooks are lifecycle events, and every GitOps tool reads them differently.** Helm waits for a `pre-upgrade`
 Job to complete, and a failed hook fails the release, before any resource is updated (M1); but `--no-hooks` skips
@@ -84,7 +80,7 @@ capture names as `app.version` is the record's, since there is no Docker to ask 
   plus a restore).
 - **A target more than one major ahead** — ADR 0096 decision 5's *no run crosses more than one major*.
 - **A major entered from anything but the release it was tested from** — how the gate knows that release is
-  § Open for the owner, 5.
+  § Decided with the owner, 5.
 
 **4. The legs.** (a) The database is dumped into the capture, as today. (b) **The store leg is its index only** (owner 2026-10-16:
 "nur Datenbank + Index"): the object keys with their sizes and MD5s, read through the S3 API in one listing, never the objects (rclone reads
@@ -178,8 +174,8 @@ CRD or a cluster-scoped object.
 
 ## Rejected alternatives
 
-- **A Helm `pre-upgrade` hook Job** — the owner's starting shape, kept open as § Open 1 because it is a real
-  option; its costs are listed there.
+- **A Helm `pre-upgrade` hook Job** — the owner's starting shape; its costs are listed under § Decided with the
+  owner, 1.
 - **A hot capture, leaving the old app running.** Gives up ADR 0056 §2's whole consistency argument for minutes a
   household instance does not need.
 - **Copying the key into the capture, or a `Secret` for it.** The first is the leaked backup ADR 0056 §1 exists to

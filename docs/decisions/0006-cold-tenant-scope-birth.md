@@ -1,7 +1,9 @@
 # ADR 0006 — A tenant's root scope is born cold by the invited owner
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-26
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 

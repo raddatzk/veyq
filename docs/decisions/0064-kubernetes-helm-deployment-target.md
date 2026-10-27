@@ -1,7 +1,7 @@
 # ADR 0064 — Kubernetes is a first-class deployment target (Helm chart)
 
-- Status: Accepted. The bundled store is opt-in on this target and stays the default on Compose (owner
-  2026-10-21, inbox #521).
+- Status: Accepted
+- Built: yes
 - Date: 2026-09-07
 
 ## Context

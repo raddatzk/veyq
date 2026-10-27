@@ -1,7 +1,7 @@
 # ADR 0033 — Live item lists: a per-node revision counter + conditional GET + keyset delta, short-polled
 
-- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`; decision 7, a guest's poll: 2026-10-19, inbox #497; a node block is the tree's signal, not this one's: 2026-10-19,
-  inbox #503)
+- Status: Accepted
+- Built: yes
 - Date: 2026-07-09
 
 ## Context

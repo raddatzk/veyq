@@ -1,7 +1,9 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
-- Status: Accepted 2026-10-23 (owner, in refinement of inbox #325); on the V1 line. Decisions 1–6 and 9 are built by cr-expenses-ledger, decision 7 (receipts) by cr-expenses-receipts and decision 8 (the day's exchange rates) by cr-expenses-exchange-rates (all 2026-10-25; their browser pass is lane L1's `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-23
+- Model: [Application: Expenses](../apps/expenses.md)
 
 ## Context
 
@@ -120,7 +122,7 @@ under the Pot's key and bound to the blob, the node and the role as Depot's is, 
 server enforces the size, which it sees; only the client can enforce the type, which is sealed — an honest client
 offers anything else for download and never renders it. No previews are made. A revision that drops a receipt names it
 to the server, and a receipt nothing holds any more, or whose entry is deleted, is erased after the trash retention.
-Built (cr-expenses-receipts) with these choices, the mechanics in [docs/apps/expenses.md](../apps/expenses.md) § Receipts:
+Built with these choices, the mechanics in [docs/apps/expenses.md](../apps/expenses.md) § Receipts:
 the cap is the role's, a seam core's upload start asks of every application (`MemberBlobRoles.maxBytes`), never a size
 core names for one; the retention is core's node trash retention, and a deleted entry past it is offered no restore;
 a dropped receipt is never held again; a moderator's content block of a receipt or of its entry answers `451` for its
@@ -165,7 +167,7 @@ every device computes the same balance from the same entries.
 - **New on the platform:** the first blobless record list (decision 3), the first guest write that is a record
   (decision 6), two seal purposes (decision 4), the second record type with its own blobs after media (decision 7). A
   generic "record with attachments" primitive in core waits for a third concrete user (Inventory is a concept).
-- **Built (cr-expenses-exchange-rates, 2026-10-25),** the instance privacy notice (GDPR Art. 13) names the rate provider
+- **The instance privacy notice** (GDPR Art. 13) names the rate provider
   in a passage of its own (`exchange-rates`, beside the breached-password check's, switched by the entry), and the
   security model lists the fetch beside the breached-password check; the mechanics are in
   [docs/apps/expenses.md](../apps/expenses.md) § Exchange rates.

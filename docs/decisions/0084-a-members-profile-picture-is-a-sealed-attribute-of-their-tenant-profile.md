@@ -1,9 +1,9 @@
 # ADR 0084 — A member's profile picture is a sealed attribute of their per-tenant profile
 
-- Status: Accepted; built 2026-10-13 (contract, crypto, backend, web); amended 2026-10-16 by
-  [ADR 0086](0086-one-word-per-meaning.md): the counter is a **revision** (`avatarRevision`, `avatar_revision`, was
-  `avatarVersion`, `avatar_version`).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-13
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 

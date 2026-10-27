@@ -1,7 +1,9 @@
 # ADR 0086 — One word per meaning: platform, application, app, capability, rights, revision, format
 
-- Status: Accepted; the word rules bind, and the renames they called for are built (§ Consequences)
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-15
+- Model: [Applications](../apps/README.md)
 
 ## Context
 

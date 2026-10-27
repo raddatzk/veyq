@@ -1,7 +1,7 @@
 # ADR 0072 — A seal binds the object it belongs to, not only its purpose
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the counter a store binds is a
-  **revision** (the `identity-pins` / `device-register` binding field `revision`, was `version`).
+- Status: Accepted
+- Built: yes
 - Date: 2026-09-23
 
 ## Context

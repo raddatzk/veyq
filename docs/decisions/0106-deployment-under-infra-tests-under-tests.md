@@ -1,12 +1,7 @@
 # ADR 0106 — Deployment lives under `infra/`, the test harnesses under `tests/`, the code under `src/`
 
-- Status: Accepted 2026-10-20 (owner: the layout of stage 1, and stage 2's direction with its naming constraint);
-  stage 1 built 2026-10-20 (cr-repo-layout-infra-and-tests): the script-side paths live once in
-  `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
-  its selftest). Stage 2 decided by the owner the same day (decision 5) and built the same day (cr-repo-layout-src): the code
-  surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout. Stage 3 decided by the owner
-  2026-10-21 (decision 8) and built the same day (cr-tools-under-src): `scripts/repo_layout.py` names the tools, and
-  the scripts that import one put their directory on `sys.path` through it.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-20
 
 ## Context
@@ -74,6 +69,10 @@ every open worktree branch conflicts with a move of the files it touches.
 
 ## Consequences
 
+- **The script-side paths live once in `scripts/repo_layout.py`** — deployment and tests, the code surfaces (a
+  predecessor's in either layout, decision 7) and the tools, whose directory a script that imports one puts on
+  `sys.path` through it — except in what ships alone: `instance_backup.py` spells its own, and its selftest compares
+  them.
 - After stage 2 the root lists `changes/ contracts/ docs/ infra/ launcher/ scripts/ site/ src/ tests/` and the
   launcher's files.
 - IntelliJ links the backend's own Gradle build per checkout; after stage 2 it is re-linked at `src/backend/`. Ignored
