@@ -17,7 +17,8 @@ import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
 import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, BlobSource, ChunkPut, ReservedUpload, WindowFn } from './types'
 import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
-import { blobKeyContext, openFrames, unwrapBlobKey } from './keys'
+import { blobKeyContext, unwrapBlobKey } from './keys'
+import { openFrameRunOff, openFramesOff, sealFrameOff } from './frameWorker'
 import { PRESIGN_BATCH_MAX, PRESIGN_REFRESH_MS, PresignExpired, readScheduler, type Presigned, type ReadOpts } from './readScheduler'
 
 // The wrap's binding, its unwrap, a listed blob's meta and the frames' open are pure, and live in `keys.ts` so a Worker
@@ -47,13 +48,16 @@ export function planBlob(
   return plan
 }
 
-/** Read and seal frame `index` of a planned blob — one [CHUNK_SIZE] slice of the source, never more. */
+/** Read frame `index`'s plaintext of a planned blob — one [CHUNK_SIZE] slice of the source, never more. The page reads
+ *  it (async I/O, no main-thread work); a `BlobSource` answers a fresh buffer, which the seal then hands over. */
+async function readSlice(plan: BlobPlan, index: number): Promise<Uint8Array> {
+  return new Uint8Array(await plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE).arrayBuffer())
+}
+
+/** Read and seal frame `index` of a planned blob in core's frame worker (`frameWorker.ts`, inbox #536): the slice is
+ *  read here and transferred, the sealed frame comes back transferred. */
 async function sealFrameAt(plan: BlobPlan, index: number): Promise<Uint8Array> {
-  const slice = plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
-  const plain = new Uint8Array(await slice.arrayBuffer())
-  // Outside the typed seal union on purpose (ADR 0072 Decision 2): the frame key is this blob's own K_blob, so the
-  // key is the object binding; the AAD binds only the frame's position (index ‖ total).
-  return v1.sealFrame(plan.blobKey, index, plan.chunkCount, plain, v1.randomBytes(12))
+  return sealFrameOff(plan.blobKey, index, plan.chunkCount, await readSlice(plan, index), () => readSlice(plan, index))
 }
 
 /** Throw an AbortError if the caller cancelled — the upload queue maps it to a cancelled (not failed) upload. */
@@ -200,8 +204,9 @@ export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: s
 /** A blob's presigned per-chunk GET URLs, in chunk order, scheduled as `opts` says. */
 export type PresignUrls = (opts: ReadOpts) => Promise<string[]>
 
-/** Opens a whole blob's fetched frames under its `K_blob` somewhere other than this thread (a grid's thumbnails in
- *  Memories' listing opener, inbox #489); rejects as `openFrames` would. Absent: opened here, by [openFrames]. */
+/** Opens a whole blob's fetched frames under its `K_blob` in an application's own worker (a grid's thumbnails in
+ *  Memories' listing opener, inbox #489, ADR 0105 decision 3); rejects as `openFrames` would. Absent: opened in core's
+ *  frame worker, by `frameWorker.ts` `openFramesOff` (inbox #536). */
 export type FrameOpener = (blobKey: Uint8Array, frames: Uint8Array[]) => Promise<Uint8Array>
 
 /** How a whole-blob read is scheduled ([ReadOpts]) and where its frames are opened. */
@@ -249,7 +254,7 @@ async function readFrames(presign: PresignUrls, opts: ReadOpts): Promise<Uint8Ar
 export async function openBlobWithKey(blobKey: Uint8Array, presign: PresignUrls, opts: OpenOpts = {}): Promise<Uint8Array> {
   const { openFrames: open, ...read } = opts
   const frames = await readFrames(presign, read)
-  return open ? open(blobKey, frames) : openFrames(blobKey, frames)
+  return open ? open(blobKey, frames) : openFramesOff(blobKey, frames, read.signal)
 }
 
 /**
@@ -368,7 +373,8 @@ export function makeChunkProvider(
       }
       // AAD trap (load-bearing): `total` is the WHOLE blob's chunkCount, never the streamed range subset —
       // openFrame binds `index‖total` (v1.ts), so a subset `total` fails every open. See the CR Slice-2 §5b.
-      return v1.openFrame(blobKey, index, ref.chunkCount, frame)
+      // Opened in core's frame worker as a run of one frame at its own index (inbox #536).
+      return openFrameRunOff(blobKey, ref.chunkCount, index, [frame])
     },
   }
 }

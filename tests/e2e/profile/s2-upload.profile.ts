@@ -6,7 +6,11 @@
 //
 // The stage split is read afterwards, not timed here: decode and derivatives, sealing (AES-GCM) and
 // hashing from the CPU profile and the trace (workers included); presign and the server's commit from the window's API
-// requests; the wire (#261) from its store requests, the presigned PUTs.
+// requests; the wire (#261) from its store requests, the presigned PUTs. Attribute the profile's functions to their
+// sources through a source map of the same build (`vite build --sourcemap` emits the same chunk hashes), never by the
+// minified names that survive: the first reading counted only GHASH's `_updateBlock` (1.9 s) and missed `@noble`'s input
+// copy (`Uint8Array.from`) under a two-letter name, so the main thread's frame AEAD was 12.4 s, not 1.9 s (#536).
+// Since #536 the frames are sealed in core's frame worker: its thread is the one whose samples run `frames.worker-*.js`.
 import { test, expect } from '@playwright/test'
 import { readdirSync } from 'node:fs'
 import { OUT, instance, memoryWithChapter, chapterCard, profiled, raiseResourceBuffer, signIn, spec, uploadsSettled } from './profiling'
