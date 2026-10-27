@@ -25,10 +25,8 @@ dedicated worker of core's blob transport, through the same `v1.sealFrame` / `v1
 the wire, in the suite or in `@veyq/crypto` changes. WebCrypto's AES-GCM is recorded as rejected for now, with its
 numbers, in ADR 0017. A worker could switch to it later without a wire change.
 
-**This CR is not ready to implement until the owner has answered § Open questions and phase 0 has edited ADR 0017**
-(`docs/ai/README.md` § Refined state comes before the CR). The decisions below are written on the recommended answers;
-an answer that differs is edited into every decision and phase it changes (`changes/README.md` § An owner's answer
-that reverses a decision).
+**Ready to implement.** The owner took both recommendations of § Open questions (2026-10-27), so the decisions below
+stand as written, and phase 0 has edited ADR 0017.
 
 ## Context & constraints
 
@@ -116,7 +114,7 @@ the derive worker are tested today.
 - an export and an import (`exportSubtree.ts:207`, `importSubtree.ts:258`).
 
 It reads 256 KiB at a time, so no single call is a long task, but its total is main-thread work. Its cost was never
-measured. This is Q2.
+measured. Q2 filed it as inbox #554, numbered by phase 1's re-read.
 
 ## Decisions this CR takes
 
@@ -213,23 +211,28 @@ measured. This is Q2.
   `git grep -n "sealFrame\|openFrame\|CHUNK_FRAME" -- src/admin-web/src tests/e2e/src` is empty: neither seals a
   frame, and both keep importing `@veyq/crypto/v1` untouched.
 
-### Draft: the edit to ADR 0017 (applied in place in phase 0, no addendum — `docs/decisions/README.md`)
+### The edit to ADR 0017 (applied in place in phase 0, 2026-10-27, no addendum — `docs/decisions/README.md`)
 
 The suite does not change, and where a frame runs is placement, which ADR 0017 does not decide (the Argon worker isn't
 in it either). Two things in it do bind a future decision, and only those go in:
 
 **Decision 1**, after "AES-256-GCM-class AEAD (already quantum-resistant at 256-bit).", insert:
 
-> Each primitive has one implementation in the suite, `@noble` (owner 2026-10-26). The conformance vectors therefore
-> pin the code that runs, and no second implementation's agreement has to be proven in every browser.
+> Each primitive of the suite has one implementation, `@noble` (owner 2026-10-26), so the conformance vectors pin the
+> code that runs, and no second implementation's agreement has to be proven in every browser. A key the browser keeps
+> only for itself is the one exception, because only WebCrypto makes it non-extractable: the device-local seals of
+> ADR 0005 never reach the wire, and the same browser unwraps what it wrapped.
+
+The exception was added when phase 0 applied the draft: `deviceKeyWrap.ts` and `sessionVault.ts` already seal with
+WebCrypto's AES-GCM under a non-extractable key, so the sentence without it was false.
 
 **Consequences**, after "Rejected for now — HPKE with a post-quantum KEM", a new bullet:
 
 > - **Rejected for now — the platform's WebCrypto AES-GCM for a blob's chunk frames.** In Chromium (2026-10-23),
 >   `@noble` sealed and opened frames at about 60 MiB/s. WebCrypto ran at about 1,080 MiB/s over a whole buffer and
 >   about 2,200 MiB/s over 256 KiB frames, gave the v1 vectors' bytes and `@noble`'s, and slowed with the main thread
->   under CPU throttling. Rejected because it is a second implementation of one primitive. Its agreement would need a
->   proof in every engine, and a disagreement writes frames only that engine opens. The frames' cost is answered by
+>   under CPU throttling. Rejected because it is a second implementation of a primitive of the suite. Its agreement
+>   would need a proof in every engine, and a disagreement writes frames only that engine opens. The frames' cost is answered by
 >   placement instead: they are sealed and opened in a worker of core's blob transport
 >   (`src/web/src/core/blob/frames.worker.ts`), off the page's main thread. The worker is also where WebCrypto could
 >   come in without a wire change, because the bytes are the same. Re-ask when a reading shows that the frame worker,
@@ -253,9 +256,9 @@ in it either). Two things in it do bind a future decision, and only those go in:
 
 ## Phases
 
-0. **Refine close (the refining conversation, not the implementer).** Once the owner has answered: edit ADR 0017 in
-   place with the draft above, and write the answers into this CR's decisions. **Done when:** every
-   `scripts/validate_*.py` exits `0`.
+0. **Refine close (the refining conversation, not the implementer).** *Done 2026-10-27.* Once the owner has
+   answered: edit ADR 0017 in place with the draft above, and write the answers into this CR's decisions. **Done
+   when:** every `scripts/validate_*.py` exits `0`.
 
    **Contracts, backend and `@veyq/crypto`: empty, on purpose** (decision 7, the Inventory). No byte moves, and the
    backend performs no content crypto (`src/backend/CLAUDE.md`).
@@ -288,7 +291,7 @@ in it either). Two things in it do bind a future decision, and only those go in:
 
    **The after-reading:** `scripts/profile_hot_paths.py` re-run for S2 at throttle 1 and 4, three runs each. Record
    the upload's total, the main thread's self time and its frame AEAD share, the worker's busy time, and SHA-256's
-   main-thread self time (Q2). Report a result that contradicts § Expected effect with the numbers. Never fix it in
+   main-thread self time (Q2: the number #554 is decided on). Report a result that contradicts § Expected effect with the numbers. Never fix it in
    place.
 2. **Docs and site.**
    - `how-veyq-is-tested.md`'s upload bullet gets the after-reading and the worker.
@@ -324,6 +327,8 @@ at under 10 %, and it should be decided on the measured share, not on this estim
 - Inbox #536 is deleted.
 
 ## Open questions (owner)
+
+**Decided.** Owner 2026-10-27 ("Passt"): both recommendations are taken. Q1 is (a), Q2 is (a), filed as inbox #554.
 
 1. **When the frame worker cannot run, what happens?** Cases: a mis-bundled chunk, a CSP refusal, a worker that
    crashes. Vitest, which has no `Worker`, is the same case.

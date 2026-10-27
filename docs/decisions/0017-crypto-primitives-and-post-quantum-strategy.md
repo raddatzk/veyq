@@ -17,8 +17,12 @@ strategy; they do not choose it.
 ## Decision
 
 1. **Standard, well-reviewed primitives only — no home-grown crypto.** Symmetric content encryption is an
-   AES-256-GCM-class AEAD (already quantum-resistant at 256-bit). Wrapping to a public key is a KEM-DEM
-   composition per recipient: the KEM's shared secret goes through HKDF-SHA256 with the seal's context into an
+   AES-256-GCM-class AEAD (already quantum-resistant at 256-bit). Each primitive of the suite has one
+   implementation, `@noble` (owner 2026-10-26), so the conformance vectors pin the code that runs, and no second
+   implementation's agreement has to be proven in every browser. A key the browser keeps only for itself is the one
+   exception, because only WebCrypto makes it non-extractable: the device-local seals of
+   [ADR 0005](0005-unlock-methods-and-device-trust.md) never reach the wire, and the same browser unwraps what it
+   wrapped. Wrapping to a public key is a KEM-DEM composition per recipient: the KEM's shared secret goes through HKDF-SHA256 with the seal's context into an
    AES-256-GCM key. That is HPKE-like in shape and **not** RFC 9180 HPKE, and the docs say so.
 2. **Post-quantum from the start, by intent** — because decade-lived memories make **harvest-now-decrypt-later
    (HNDL)** a real threat. Key wrapping uses a **hybrid KEM (X25519 + ML-KEM-768)** — secure if *either*
@@ -100,6 +104,15 @@ strategy; they do not choose it.
 - **Rejected for now — HPKE with a post-quantum KEM (`draft-ietf-hpke-pq`):** it would standardise the wrap
   layer as well, but it is a working-group draft still moving, and the wrap layer above X-Wing is the common
   KEM-DEM composition (HKDF, then AES-256-GCM). Worth re-asking when that draft is an RFC.
+- **Rejected for now — the platform's WebCrypto AES-GCM for a blob's chunk frames.** In Chromium (2026-10-23),
+  `@noble` sealed and opened frames at about 60 MiB/s. WebCrypto ran at about 1,080 MiB/s over a whole buffer and
+  about 2,200 MiB/s over 256 KiB frames, gave the v1 vectors' bytes and `@noble`'s, and slowed with the main thread
+  under CPU throttling. Rejected because it is a second implementation of a primitive of the suite. Its agreement
+  would need a proof in every engine, and a disagreement writes frames only that engine opens. The frames' cost is
+  answered by placement instead: they are sealed and opened in a worker of core's blob transport
+  (`src/web/src/core/blob/frames.worker.ts`), off the page's main thread. The worker is also where WebCrypto could
+  come in without a wire change, because the bytes are the same. Re-ask when a reading shows that the frame worker,
+  and not the wire, bounds an upload.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories
   make HNDL a real present threat; accepted (for now) only for *signatures*, per the asymmetry above.
 - **Applied by [ADR 0012](0012-content-key-hierarchy.md)** (the key hierarchy this crypto protects); the
