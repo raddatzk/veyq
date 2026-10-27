@@ -7,7 +7,9 @@ import { nodeMetaState } from './nodeMeta'
 import type { NodeMetaReread, WriteNodeMetaOptions } from './nodeMetaWrite'
 import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
 import { loadTree, treeStore } from './treeStore'
-import type { NodeParent } from './tree'
+import { pullRekeyPath } from './rekey/rekeyScope'
+import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
+import type { CreateNodeOptions, NodeParent } from './tree'
 
 /** The node is not in the active scope's tree any more, or its key chain does not open: nothing to rebuild under. */
 export class NodeRereadError extends Error {
@@ -40,9 +42,14 @@ export function rereadMemberNode(scopeId: string, nodeId: string): NodeMetaRerea
 }
 
 /** What a member's meta write under `nodeId` of the active scope passes {@link writeNodeMeta}: the floor before each
- *  attempt and the re-read after an epoch refusal. Only for a writer whose edit carries nothing sealed under the old key. */
+ *  attempt, the pull of the node's path on the first epoch refusal (ADR 0111 decision 11) and the re-read after it.
+ *  Only for a writer whose edit carries nothing sealed under the old key. */
 export function memberNodeMetaOptions(scopeId: string, nodeId: string): WriteNodeMetaOptions {
-  return { atFloor: (epoch) => assertActiveScopeFloor(scopeId, { id: nodeId, epoch }), reread: rereadMemberNode(scopeId, nodeId) }
+  return {
+    atFloor: (epoch) => assertActiveScopeFloor(scopeId, { id: nodeId, epoch }),
+    reread: rereadMemberNode(scopeId, nodeId),
+    pull: pullRekeyPath(scopeId, [nodeId]),
+  }
 }
 
 /** Re-read the parent `parentId` of a create in the ACTIVE scope `scopeId` (`createContentNode`'s `reread`): its key and
@@ -58,7 +65,36 @@ export function rereadMemberParent(scopeId: string, parentId: string): () => Pro
   }
 }
 
-/** A member's create under `parent` in the active scope: re-read the parent after an epoch refusal; none at the root. */
-export function memberCreateOptions(scopeId: string, parent: NodeParent): { reread?: () => Promise<NodeParent> } {
-  return parent ? { reread: rereadMemberParent(scopeId, parent.id) } : {}
+/** Re-read `nodeId`'s key and epoch in the ACTIVE scope `scopeId` for a write that seals under it after an epoch refusal
+ *  (an upload into it, an edit of what it holds): {@link rereadMemberParent} by another name. */
+export function rereadMemberKey(scopeId: string, nodeId: string): () => Promise<{ key: Uint8Array; epoch: number }> {
+  const reread = rereadMemberParent(scopeId, nodeId)
+  return async () => {
+    const at = (await reread())!
+    return { key: at.key, epoch: at.epoch }
+  }
+}
+
+/**
+ * A member's write sealed under `nodeId`'s key in the ACTIVE scope `scopeId`, built by `write` from `at` (the key and
+ * epoch it read): the device floor before each attempt, and on an epoch refusal the node's path pulled forward on this
+ * device (ADR 0111 decision 11) — or waited for, when it cannot — the key re-read and the write rebuilt under it
+ * (`writeAtNodeEpoch`). Only for a write whose payload is sealed afresh from plaintext each time, never one carrying a
+ * ciphertext read under the old key.
+ */
+export function writeUnderMemberNode<T>(
+  scopeId: string, nodeId: string, at: { key: Uint8Array; epoch: number }, write: (at: { key: Uint8Array; epoch: number }) => Promise<T>,
+): Promise<T> {
+  const reread = rereadMemberKey(scopeId, nodeId)
+  return writeAtNodeEpoch(async (again) => {
+    const now = again ? await reread() : at
+    assertActiveScopeFloor(scopeId, { id: nodeId, epoch: now.epoch })
+    return write(now)
+  }, { pull: pullRekeyPath(scopeId, [nodeId]) })
+}
+
+/** A member's create under `parent` in the active scope: pull the parent's path forward on an epoch refusal (ADR 0111
+ *  decision 11) and re-read the parent; none at the root (a create there states no parent epoch). */
+export function memberCreateOptions(scopeId: string, parent: NodeParent): CreateNodeOptions {
+  return parent ? { reread: rereadMemberParent(scopeId, parent.id), pull: pullRekeyPath(scopeId, [parent.id]) } : {}
 }

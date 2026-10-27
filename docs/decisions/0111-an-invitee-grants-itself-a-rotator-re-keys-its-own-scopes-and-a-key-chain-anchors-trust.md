@@ -1,7 +1,8 @@
 # ADR 0111 — An invitee grants itself, a rotator re-keys its own scopes, and a signed key chain anchors who is who
 
 - Status: Accepted 2026-10-27 (owner, the design as a whole, its four owner decisions under § Consequences included);
-  **nothing of it is built.** What is built is what [ADR 0020](0020-grant-distribution-invite-wrap.md),
+  **decision 11 is built** (2026-10-27: any member re-keys, a member's write pulls its path forward, a drop box stays
+  an owner's — ADR 0109 point 7 states it), **nothing else of it is.** What is built besides is what [ADR 0020](0020-grant-distribution-invite-wrap.md),
   [ADR 0024](0024-scope-key-rotation.md), [ADR 0028](0028-identity-authenticity-tofu-verification.md),
   [ADR 0060](0060-key-rotation-after-compromise.md) and [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
   describe; each of them marks in place the part this record replaces, and that part stays true of the running code
@@ -35,7 +36,7 @@ What today's model makes hard:
 - **After a rotation the rotator is outside every shared scope** until another key-holder accepts the new key
   (ADR 0060 Decisions 4 and 6). An owner who rotated and then commits a scope's rotation is refused by every other
   member as `granter_key_changed` once that member has accepted the new key (ADR 0028 § What is still open).
-- **Only an owner re-keys a node.** The re-key endpoint refuses anyone else (`RekeyAccess.check`, `not_scope_owner`),
+- **Only an owner re-keys a node** (until decision 11, built 2026-10-27). The re-key endpoint refused anyone else (`RekeyAccess.check`, `not_scope_owner`),
   and a scope's *re-keying* status is served to owners only (`ScopesStore.kt`, the `rekeying` field of a scope row).
   A write into a node not yet re-keyed is `409 node_rekey_pending` (ADR 0109 point 6). So after any rotation a member
   cannot write into an existing Memory until an owner has been online long enough — goal 3 broken.
@@ -256,7 +257,7 @@ Facts the design rests on, read in the code on 2026-10-27:
   issues the new one.
 - **A signature of the old identity alone on a rotation.** A rotation happens when that identity may be stolen, so its
   signature proves the least exactly then.
-- **Owner-only re-key** (today's ADR 0109 point 7). Members could not write into an existing Memory until an owner is
+- **Owner-only re-key** (ADR 0109 point 7 before decision 11). Members could not write into an existing Memory until an owner is
   online — goal 3 broken.
 - **A purely lazy re-key** — still rejected for ADR 0109's reason: every write path of every application would re-key
   ancestors, and a guest cannot.

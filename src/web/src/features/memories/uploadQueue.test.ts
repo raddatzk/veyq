@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./media', () => ({ addMedia: vi.fn() }))
 
 import { addMedia } from './media'
+import { NodeRekeyPendingError } from '../../shared/rekeyRetry'
 import {
   enqueueUploads,
   cancelFile,
@@ -154,6 +155,34 @@ describe('uploadQueue — runner', () => {
 
   it('returns null for an empty pick', () => {
     expect(enqueueUploads(TARGET, [], { label: '0' })).toBeNull()
+  })
+})
+
+describe('uploadQueue — a member\'s file into a node not re-keyed yet (ADR 0111 decision 11)', () => {
+  const newKey = new Uint8Array(32).fill(7)
+
+  it('pulls the node\'s path forward, re-reads its key and epoch, and uploads again under them at once', async () => {
+    vi.mocked(addMedia)
+      .mockRejectedValueOnce(new NodeRekeyPendingError()) // the completion's per-item refusal
+      .mockResolvedValue({ blobId: 'b', mediaId: 'm' })
+    const pull = vi.fn(async () => true)
+    const reread = vi.fn(async () => ({ key: newKey, epoch: 1 }))
+    const floors: number[] = []
+    const { batches } = useUploadQueue()
+    enqueueUploads({ ...TARGET, nodeEpoch: 0, atFloor: (e) => floors.push(e), pull, reread }, [sel(png())], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+    expect(pull).toHaveBeenCalledOnce()
+    expect(vi.mocked(addMedia).mock.calls.map((c) => [c[2], c[5]?.nodeEpoch])).toEqual([[TARGET.memoryKey, 0], [newKey, 1]])
+    expect(floors, 'the floor runs before each attempt, at the epoch it seals at').toEqual([0, 1])
+  })
+
+  it('a target with no re-read (a guest\'s, or an older caller) is sent once, as before (control)', async () => {
+    vi.mocked(addMedia).mockRejectedValue(new NodeRekeyPendingError())
+    const pull = vi.fn(async () => true)
+    const { batches } = useUploadQueue()
+    enqueueUploads({ ...TARGET, pull }, [sel(png())], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('failed'))
+    expect(pull).not.toHaveBeenCalled()
   })
 })
 

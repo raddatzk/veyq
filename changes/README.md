@@ -2103,6 +2103,17 @@ them in the inventory as affected. The quiet case of it: a call site that starts
 (`void f()` becoming `f().catch(…)`) reddens every `vi.fn()` mock of `f` that returns `undefined` — four component
 tests in `cr-item-marks-binary-ids`.
 
+### A refine that makes writes retry under a NEW key sorts each write path by what it carries across the retry
+
+`cr-any-member-re-keys` decided that every member write meeting `node_rekey_pending` pulls its path forward and
+retries, and its inventory paired each `409` site with its web caller. What it did not ask is what each attempt
+carries over: a write rebuilt from plaintext (a name, a meta edit from fields, a bucket name) re-seals under the key a
+re-read hands it, but a write that carries ciphertext made under the OLD key — a cover or banner whose blob was
+uploaded wrapped under it, a medium's meta edit whose base is the sealed meta as read, an import's own steps — cannot
+be retried after the key changed without re-uploading or re-reading the item. Five such paths surfaced only at
+implement time and went to inbox #563. So when a CR adds a retry after a key change, the inventory sorts every path
+into *re-sealable from plaintext* and *carries old ciphertext*, and the second kind gets its own decision.
+
 ### A refine that removes a control lists every role and share root that reaches it
 
 `cr-move-browser-and-replace-by-upload` removed the replace from every surface, the opened file's included, after

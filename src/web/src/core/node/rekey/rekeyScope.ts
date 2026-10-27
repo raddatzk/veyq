@@ -1,8 +1,14 @@
 // A scope's RE-KEY after a rotation (ADR 0109, uc.spaces.rekey-after-rotation): every node of the scope, live and
 // trashed, gets a fresh key minted at the scope's current epoch, top-down, one node per transaction. Run by the device
 // that committed the epoch (the remover's, the rotator's for the personal scope, an owner's scope-rotation worker for a
-// queued rotation) and by any owner's worker that finds the scope still re-keying (resumed from the server's derived
-// state: a node below the current epoch still carries its key from before).
+// queued rotation) and by ANY member's worker that finds the scope still re-keying (resumed from the server's derived
+// state: a node below the current epoch still carries its key from before) — ADR 0111 decision 11: a re-key is not
+// governance, so every member holding the current epoch runs it, except on the nodes only an owner re-keys (a drop box
+// root, a guest's identity folder and below, `RekeyNode.ownerOnly`), which a member's run leaves for an owner.
+//
+// A member's write that meets `node_rekey_pending` pulls its own path forward ({@link pullRekeyPath}): the same per-node
+// commit, run on the written node and its lagging ancestors only, so the write is delayed by its path's re-key and
+// never refused (`shared/rekeyRetry.ts` `pull`).
 //
 // Per node (`rekeyNode`), everything sealed under its OLD key moves to the NEW one, and nothing else changes:
 //   - its own entry under its parent's current key (`K_SC` at the current epoch at the root; a guest's `K_up` for an
@@ -20,13 +26,14 @@
 //
 // Resumable: nothing is kept between runs. Each round re-lists the scope and re-keys the frontier — the lagging nodes
 // whose parent is current — so an interrupted run leaves a tree that opens as it stands, and the next run continues
-// where the rows say (E1). A conflict (a writer won the node's lock, another owner committed it) re-lists.
+// where the rows say (E1). A conflict (a writer won the node's lock, another member committed it) re-lists.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { rekeyApi } from '../../../api/client'
 import type { RekeyNode } from '../../../api/generated/content'
 import { withRefresh } from '../../../app/sessionRefresh'
-import { openScopeById } from '../../../features/spaces/scopes'
+import { activeEpochKeys, activeSpace, refreshActiveScope } from '../../../app/activeSpace'
+import { openScopeById, type OpenedScope } from '../../../features/spaces/scopes'
 import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { registry } from '../../applications/registry'
@@ -45,8 +52,8 @@ export const STAGE_BATCH = 256
 /** Conflicts a run absorbs (each re-lists) before it gives up; the next run resumes. */
 const MAX_CONFLICTS = 8
 
-/** How a run ended: every node at the scope's current epoch, and how many this run committed. */
-export type RekeyScopeResult = { done: boolean; committed: number }
+/** How a run ended: every node it wanted at the scope's current epoch, how many this run committed, and that epoch. */
+export type RekeyScopeResult = { done: boolean; committed: number; current?: number }
 
 /** The codes after which the scope is re-listed and the run goes on: the rows moved under it. */
 const CONFLICTS = ['stale_epoch', 'node_rekey_pending', 'rekey_parts_stale', 'rekey_parts_missing', 'stale_placement', 'stale_revision']
@@ -57,14 +64,113 @@ async function isConflict(e: unknown): Promise<boolean> {
 }
 
 /**
- * Re-key every node of [scopeId] that lags its current epoch. Returns `done` once none lags. Throws when this device
- * cannot (its grant lags, a node's key does not open, a kind registers no re-key) — the scope then stays *re-keying*
- * for an owner's worker to resume.
+ * Re-key every node of [scopeId] that lags its current epoch and this device may re-key: an owner every one, a member
+ * every one but those only an owner re-keys (and what lies below them, top-down). Returns `done` once none lags — a
+ * member's run that left only owner-only nodes lagging returns `done: false` and throws nothing. Throws when this device
+ * cannot (its grant lags, a node's key does not open, a kind registers no re-key) — the scope then stays *re-keying* for
+ * another member's worker to resume.
  */
 export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal } = {}): Promise<RekeyScopeResult> {
-  const opened = await openScopeById(scopeId)
+  return runRekey(scopeId, opts, ({ rows, byId, current, owner }) => {
+    const lagging = rows.filter((n) => n.epoch < current)
+    if (!lagging.length) return 'done'
+    const frontier = lagging.filter((n) => (owner || !n.ownerOnly) && parentCurrent(n, byId, current))
+    if (frontier.length) return frontier
+    // a member's run: what still lags is an owner's (or waits below one) — not this device's to finish
+    if (!owner && lagging.some((n) => n.ownerOnly)) return 'not-mine'
+    throw new Error('rekey: no node of the scope can be re-keyed (a parent lags that is not listed)')
+  })
+}
+
+/** A path this device may not bring forward: it runs through a node only an owner re-keys, and the caller is none. */
+export class RekeyPathNotMineError extends Error {
+  constructor(readonly nodeId: string) {
+    super(`rekey_path_not_mine: ${nodeId}`)
+    this.name = 'RekeyPathNotMineError'
+  }
+}
+
+/**
+ * Re-key only [nodeIds] and their lagging ancestors, top-down — a member's write pulling its own path forward (ADR 0111
+ * decision 11) — with every node of their subtrees too when `subtree` is set (a restore, whose server gate asks every
+ * node it brings back to be current). The same per-node commit as {@link rekeyScope}. `done` once nothing on the path
+ * lags; throws {@link RekeyPathNotMineError} when the path runs through a node only an owner re-keys and the caller is
+ * no owner.
+ */
+export async function rekeyPath(
+  scopeId: string, nodeIds: readonly string[], opts: { subtree?: boolean; signal?: AbortSignal } = {},
+): Promise<RekeyScopeResult> {
+  return runRekey(scopeId, opts, ({ rows, byId, current, owner }) => {
+    const wanted = pathOf(nodeIds, rows, byId, opts.subtree === true)
+    const lagging = rows.filter((n) => wanted.has(n.id) && n.epoch < current)
+    if (!lagging.length) return 'done'
+    const frontier = lagging.filter((n) => parentCurrent(n, byId, current))
+    if (!frontier.length) throw new Error('rekey: no node of the path can be re-keyed (a parent lags that is not listed)')
+    const notMine = owner ? undefined : frontier.find((n) => n.ownerOnly)
+    if (notMine) throw new RekeyPathNotMineError(notMine.id)
+    return frontier
+  })
+}
+
+/**
+ * The `pull` a MEMBER's write passes `retryWhileRekeying` / `writeAtNodeEpoch` (`shared/rekeyRetry.ts`): bring
+ * [nodeIds]' path to the scope's current epoch on this device ({@link rekeyPath}), true when it did. False — the write
+ * then falls back to the waits — when the path is an owner's to re-key or the re-key cannot run here; any failure is
+ * the waits', never the write's.
+ *
+ * When the scope is the active one and the device still holds it at an older epoch (another member rotated it, and
+ * nothing re-opened it here since), the active scope is re-opened after the pull: the write's re-read derives the
+ * re-keyed node's key from the active scope's epochs, which must reach the one the node now carries.
+ */
+export function pullRekeyPath(scopeId: string, nodeIds: readonly string[], opts: { subtree?: boolean } = {}): () => Promise<boolean> {
+  return async () => {
+    try {
+      const run = await rekeyPath(scopeId, nodeIds, opts)
+      if (!run.done) return false
+      const held = activeSpace.scopeId === scopeId ? activeEpochKeys()?.current : undefined
+      if (held !== undefined && run.current !== undefined && held < run.current) await refreshActiveScope()
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+/** The ids of [nodeIds], every ancestor of each, and — with [subtree] — every descendant of each. */
+function pathOf(nodeIds: readonly string[], rows: Row[], byId: Map<string, Row>, subtree: boolean): Set<string> {
+  const wanted = new Set<string>()
+  for (const id of nodeIds) {
+    for (let cur = byId.get(id); cur && !wanted.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) wanted.add(cur.id)
+  }
+  if (subtree) {
+    const below = new Set(nodeIds)
+    for (let grew = true; grew;) {
+      grew = false
+      for (const r of rows) if (r.parentId && below.has(r.parentId) && !below.has(r.id)) { below.add(r.id); grew = true }
+    }
+    for (const id of below) wanted.add(id)
+  }
+  return wanted
+}
+
+const parentCurrent = (n: Row, byId: Map<string, Row>, current: number) =>
+  n.parentId === null || (byId.get(n.parentId)?.epoch ?? -1) >= current
+
+/** One round's view: the rows as listed, the scope's current epoch, and whether the caller owns the scope. */
+type Round = { rows: Row[]; byId: Map<string, Row>; current: number; owner: boolean }
+
+/**
+ * The driver both runs share: open the scope, then round by round list its nodes and re-key what [pick] chooses —
+ * `'done'` when nothing it wants lags, `'not-mine'` when what lags is not this device's — until one of those. A conflict
+ * (a writer won the node's lock, another member committed it) re-lists.
+ */
+async function runRekey(
+  scopeId: string, opts: { signal?: AbortSignal }, pick: (round: Round) => Row[] | 'done' | 'not-mine',
+): Promise<RekeyScopeResult> {
+  const opened: OpenedScope | null = await openScopeById(scopeId)
   if (!opened) throw new Error('rekey: cannot open the scope')
   const epochs = opened.epochs
+  const owner = opened.role === 'OWNER'
   // The old and new key of each link root this run re-keyed, for a copy a link's guest sealed under its root.
   const shareRoots = new Map<string, { oldKey: Uint8Array; newKey: Uint8Array }>()
   let committed = 0
@@ -76,13 +182,13 @@ export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal }
       const current = list.currentEpoch
       if (epochs.current < current) throw new Error('rekey: this device does not hold the scope\'s current epoch')
       const rows = list.nodes.map((n) => ({ ...n, parentId: n.parentId ?? null }))
-      if (!rows.some((n) => n.epoch < current)) return { done: true, committed }
       const byId = new Map(rows.map((r) => [r.id, r]))
+      const picked = pick({ rows, byId, current, owner })
+      if (picked === 'done') return { done: true, committed, current }
+      if (picked === 'not-mine') return { done: false, committed, current }
       const keys = openKeys(scopeId, epochs, rows)
-      const frontier = rows.filter((n) => n.epoch < current && (n.parentId === null || (byId.get(n.parentId)?.epoch ?? -1) >= current))
-      if (!frontier.length) throw new Error('rekey: no node of the scope can be re-keyed (a parent lags that is not listed)')
       try {
-        for (const node of frontier) {
+        for (const node of picked) {
           opts.signal?.throwIfAborted()
           await rekeyNode({ scopeId, epochs, current, rows, byId, keys, shareRoots, signal: opts.signal }, node)
           committed++

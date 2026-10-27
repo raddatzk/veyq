@@ -154,6 +154,21 @@ object TestFixtures {
         return MemberScope(userId, scopeId, tenantId)
     }
 
+    /** A fresh user added to [scopeId] as a plain MEMBER whose grant stands at [grantedEpoch], joined to the tenant
+     *  root as every writer must be; returns the user id. */
+    fun seedScopeMember(scopeId: String, grantedEpoch: Int): String {
+        val userId = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            val tenantId = ScopeEntity.findById(scopeId)!!.tenantId
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId; this.scopeId = scopeId
+                role = MembershipEntity.MEMBER; wrappedGrant = GRANT; this.grantedEpoch = grantedEpoch; createdAt = Instant.now()
+            }.persist()
+            TenantRoots.join(userId, tenantId)
+        }
+        return userId
+    }
+
     /**
      * Persist a node and return its id. [kind] has no default on purpose: core knows no kind but `FOLDER`, and a
      * default `MEMORY` here would make core's fixtures name an application's kind (ADR 0079) — so each call site says

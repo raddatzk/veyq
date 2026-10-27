@@ -1882,10 +1882,11 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            **Owner-only** (absent for anyone else): the scope's epoch moved and a live or trashed node of it still
-            carries a key from before — its rotation's re-key is unfinished (ADR 0109 point 7). Derived from the node rows
-            the server holds (`veyq_node.epoch` below `currentEpoch`), never stored. An owner's scope-rotation worker
-            reads it to resume the re-key; the space shows *Fitting the new lock* meanwhile.
+            Served to every member: the scope's epoch moved and a live or trashed node of it still carries a key from
+            before — its rotation's re-key is unfinished (ADR 0109 point 7). Derived from the node rows the server holds
+            (`veyq_node.epoch` below `currentEpoch`), never stored. Every member's device reads it to continue the re-key
+            in the background ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+            decision 11); an owner's space shows *Fitting the new lock* meanwhile.
           example: false
 
     # A local alias to the _common source, shared with the tenants spec (the ErrorResponse pattern).

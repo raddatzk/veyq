@@ -175,7 +175,7 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 - **Every rotated scope re-keys its nodes**, so the old identity reads nothing added afterwards, inside an existing
   folder or Memory included ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)): `O(nodes + media)`
   symmetric re-seals on the device that commits each scope's epoch — the rotator's own for the personal scope, the
-  completing owner's elsewhere (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11, not built, any member's) — and nothing re-encrypted in the
+  completing owner's elsewhere, and any member's device finishes it ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11) — and nothing re-encrypted in the
   store. A space reads *secured* only once its re-key
   is done. What stays in the old identity's reach is what existed at the rotation and every link it could rebuild,
   until re-issued; the result screen says both.

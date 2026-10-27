@@ -442,17 +442,21 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
    Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
 5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
    its per-scope **epoch floor** and never seals under a lower epoch again, whatever epoch the server reports.
-6. The owner's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
+6. The remover's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
    ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key minted at `n+1`, the node's own entry under its parent's new key (under
    `E(n+1)` at the root), each child's entry, the node's meta, its media's meta and EXIF and every `K_blob` wrap
    re-sealed under the new key, `K_blob` itself kept. A node with a drop key gets a new keypair, and its guests'
    identity keys are re-sealed to it. Each link rooted on the node gets the new key wrapped under its unchanged
    `K_share`, opened from its recovery copy, which stays at its epoch. A large node's fields go up in staged parts
    first, and the commit swaps them in one transaction.
-7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending` and retried; a write
+7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending`: a member's client
+   re-keys that node and its lagging ancestors itself and retries at once, a guest's client waits and retries. A write
    stating a node key from before is `409 stale_epoch` and re-reads. A member's device also seals nothing under a node
-   key from before the highest epoch it holds. An interrupted re-key reads *re-keying* and is resumed by the next
-   owner's worker; a queued rotation completes only once no node lags (`409 rekey_incomplete`).
+   key from before the highest epoch it holds. An interrupted re-key reads *re-keying* on every member's scope row and
+   is resumed by the next member's worker: any member holding the current epoch may re-key a node, except one carrying
+   a drop key, a guest's identity folder and what lies below one, which only an owner re-keys (`403 not_scope_owner`,
+   [ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 11). A queued rotation completes only once no node lags (`409 rekey_incomplete`).
 
 <Mermaid code={`
 sequenceDiagram

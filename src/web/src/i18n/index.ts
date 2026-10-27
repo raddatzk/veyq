@@ -310,7 +310,7 @@ const en = {
     },
     statusHint: {
       secured: 'What is added here from now on is closed to the old key. Links made before stay open to it until you renew them.',
-      rekeying: 'The new lock is going in. Adding things here waits until it’s done.',
+      rekeying: 'The new lock is going in. Adding something here takes a moment longer until it’s done.',
       failed: 'This space still has its old lock. Try again.',
     },
     queuedTitle: 'Shared spaces',
@@ -2290,7 +2290,7 @@ const de: typeof en = {
     },
     statusHint: {
       secured: 'Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für ihn offen, bis du sie erneuerst.',
-      rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.',
+      rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen dauert hier etwas länger, bis das fertig ist.',
       failed: 'Dieser Bereich hat noch sein altes Schloss. Versuch es noch einmal.',
     },
     queuedTitle: 'Geteilte Bereiche',

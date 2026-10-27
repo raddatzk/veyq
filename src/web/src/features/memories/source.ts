@@ -67,7 +67,8 @@ import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { setMemoryParticipants } from './memoryParticipants'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import type { NodeMetaState } from '../../core/node/nodeMeta'
-import { assertActiveScopeFloor, memberNodeMetaOptions } from '../../core/node/rereadNode'
+import { assertActiveScopeFloor, memberNodeMetaOptions, rereadMemberKey, writeUnderMemberNode } from '../../core/node/rereadNode'
+import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
   addSharePhoto,
@@ -309,7 +310,10 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       target: (nodeId, key, nodeEpoch) => ({
         scopeId: scope(), nodeId, memoryKey: key, nodeEpoch,
         // the device floor before anything is sealed under the node's key (ADR 0109 point 6, layer 2)
-        atFloor: () => assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch }),
+        atFloor: (epoch) => assertActiveScopeFloor(scope(), { id: nodeId, epoch }),
+        // a member's upload pulls the node's path forward on an epoch refusal and seals again (ADR 0111 decision 11)
+        pull: pullRekeyPath(scope(), [nodeId]),
+        reread: rereadMemberKey(scope(), nodeId),
       }),
       viaLink: false,
     },
@@ -365,14 +369,12 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
           return [] // a chain that does not open: only the node's own key
         }
       },
-      create: (nodeId, key, nodeEpoch, name, parent) => {
-        assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch })
-        return createBucket(scope(), nodeId, key, nodeEpoch, name, parent)
-      },
-      rename: (nodeId, key, nodeEpoch, bucketId, name) => {
-        assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch })
-        return renameBucket(scope(), nodeId, key, nodeEpoch, bucketId, name)
-      },
+      // a bucket's name is sealed afresh under the node's key: after an epoch refusal the node's path is pulled forward
+      // and the name sealed again under its key now (ADR 0111 decision 11); the floor runs before each attempt
+      create: (nodeId, key, nodeEpoch, name, parent) =>
+        writeUnderMemberNode(scope(), nodeId, { key, epoch: nodeEpoch }, (at) => createBucket(scope(), nodeId, at.key, at.epoch, name, parent)),
+      rename: (nodeId, key, nodeEpoch, bucketId, name) =>
+        writeUnderMemberNode(scope(), nodeId, { key, epoch: nodeEpoch }, (at) => renameBucket(scope(), nodeId, at.key, at.epoch, bucketId, name)),
       remove: (nodeId, bucketId) => deleteBucket(scope(), nodeId, bucketId),
       move: (nodeId, mediaIds, target) => moveBucketMedia(scope(), nodeId, mediaIds, target),
       trash: (mediaId) => deleteMedia(scope(), mediaId),

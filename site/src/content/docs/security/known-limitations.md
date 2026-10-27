@@ -301,7 +301,7 @@ can retract content a recipient already downloaded and decrypted; rotation prote
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
 - **A rotation closes what is added afterwards, not everything.** It re-keys every live and trashed node of the
-  scope ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)); writes into a node not yet re-keyed wait. What stays in the excluded party's reach:
+  scope ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)); a member's write into a node not yet re-keyed re-keys its path first, a guest's waits. What stays in the excluded party's reach:
   - what existed at the rotation;
   - every link they could rebuild, until it is re-issued: the re-key re-wraps it to the new key
     ([above](#departed-members-and-the-links-they-could-copy));

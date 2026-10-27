@@ -19,6 +19,9 @@ export type WriteNodeMetaOptions = {
    * its wrap is not under, so it passes none and the refusal is its caller's.
    */
   reread?: NodeMetaReread
+  /** A MEMBER's write only, with `reread`: on the first epoch refusal, bring the node's path to the current epoch on
+   *  this device and retry at once (`shared/rekeyRetry.ts`, ADR 0111 decision 11) — core's `pullRekeyPath`. */
+  pull?: () => Promise<boolean>
   /** The device floor (`rekey/floor.ts`, layer 2), run before each attempt with the epoch it states: a member's writer
    *  refuses a node whose key is from before the last rotation it holds (`NodeKeyBelowFloorError`, retried as pending). */
   atFloor?: (nodeEpoch: number) => void
@@ -67,5 +70,5 @@ export function writeNodeMeta(
     if (!again) return once(nodeKey, base)
     const fresh = await reread()
     return once(fresh.nodeKey, fresh.state)
-  })
+  }, { pull: opts.pull })
 }

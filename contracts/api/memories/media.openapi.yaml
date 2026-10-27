@@ -212,7 +212,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          description: The caller may not re-key the node — its grant lags (`grant_behind`), a live rotation job excludes it (`rotation_excluded`), or the node is one only an owner re-keys (core's `RekeyNode.ownerOnly`) and the caller is no owner (`not_scope_owner`) — or the tenant is suspended.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -254,7 +254,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The caller may not re-key the scope (`not_scope_owner`, `rotation_excluded`, `grant_behind`), or the tenant is suspended.
+          description: The caller may not re-key the node — its grant lags (`grant_behind`), a live rotation job excludes it (`rotation_excluded`), or the node is one only an owner re-keys (core's `RekeyNode.ownerOnly`) and the caller is no owner (`not_scope_owner`) — or the tenant is suspended.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":

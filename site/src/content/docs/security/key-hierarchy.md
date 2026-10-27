@@ -80,8 +80,11 @@ commits the epoch then re-keys every live and trashed node of the scope, top-dow
 fresh node key minted at the new epoch, every field sealed under the old key re-sealed under it, each `K_blob`
 re-wrapped and kept, no store object read or written ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)). Per node that is one key and its children's
 entries, per medium its blob wraps and two field seals, all symmetric and all in the database: a Chapter of 1,000
-photos is about 5,000 seals, about 20 requests. Until a node is re-keyed, a write into it waits
-(`409 node_rekey_pending`); a write stating a node key from before is refused (`409 stale_epoch`). ADR 0024 rejected
+photos is about 5,000 seals, about 20 requests. Until a node is re-keyed, a write into it is refused
+`409 node_rekey_pending`: a member's client re-keys that node's path itself and retries, a guest's waits; a write
+stating a node key from before is refused (`409 stale_epoch`). Any member holding the new epoch may re-key, except a
+node carrying a drop key, a guest's identity folder and what lies below one, which only an owner re-keys
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11). ADR 0024 rejected
 full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but unopened) and a
 flat set of independent epoch keys (each new member would need one wrap per epoch; the backward chain makes it one).
 What the re-key leaves in the excluded party's reach: what existed at the rotation, and every link they could

@@ -22,7 +22,6 @@ import type { ContentApi, NodeSummary } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { treeNode } from '../../test/models'
-import { NodeKeyBelowFloorError } from './rekey/floor'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
@@ -290,10 +289,19 @@ describe('restoreNode', () => {
     // an ordinary restore leaves the stored name alone
     expect(req.encryptedName).toBeUndefined()
 
-    // one still at epoch 0 is behind the device floor (ADR 0109 point 6): refused before anything is sent
+    // one still at epoch 0 is behind the device floor (ADR 0109 point 6): refused before anything is sent. A member's
+    // restore then pulls the subtree forward and re-reads it (ADR 0111 decision 11) — here no scope opens, so neither
+    // brings it current, and nothing is ever sent under the key from before
     restore.mockClear()
-    await expect(restoreNode(SCOPE_ID, epochs, [], { id: 'n2', parentId: null, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' }))
-      .rejects.toBeInstanceOf(NodeKeyBelowFloorError)
+    vi.useFakeTimers()
+    try {
+      const run = expect(restoreNode(SCOPE_ID, epochs, [], { id: 'n2', parentId: null, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' }))
+        .rejects.toBeInstanceOf(v1.OpenRefused)
+      await vi.advanceTimersByTimeAsync(2_000) // the first wait, after the pull could not run
+      await run
+    } finally {
+      vi.useRealTimers()
+    }
     expect(restore).not.toHaveBeenCalled()
   })
 
