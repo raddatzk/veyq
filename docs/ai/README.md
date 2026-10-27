@@ -98,7 +98,9 @@ Five rules follow:
    save. Two consequences: a measurement whose substrate is *named* can be re-run, one whose substrate is
    *assumed* cannot be checked at all; and where the question is a **status** ("is this built?"), the substrate
    is the **whole branch** — `git log --all --grep` plus the files' existence — never the recent log window,
-   which is how the 2026-07-22 sweep found seven rows that had been stale for weeks.
+   which is how the 2026-07-22 sweep found seven rows that had been stale for weeks. A check run in the background
+   measures the tree for **as long as it runs**: a baseline "before the first edit" holds only once it has ended
+   (#555's baseline `npm run check` read the tree while its first two edits landed).
 
    **The same rule reaches a LIVE verification, where a wrong substrate reads as a product bug.** On 2026-09-20
    a hand pass against the running app reported "the sidebar shows no cover" twice. Neither reading was about
