@@ -23,8 +23,8 @@ export interface Spec {
   /**
    * `false` leaves CDP's `Profiler` out of the window (`profile_hot_paths.py --no-cpu-profile`, inbox #554): its 100 µs
    * sampling of the main thread is overhead a worker escapes, so a profiled total overstates a move off the main thread.
-   * The trace still runs, and its `disabled-by-default-v8.cpu_profiler` category keeps V8's own sampler on every thread,
-   * so "unprofiled" means without the main thread's 100 µs profiler, not without any sampling.
+   * The trace still runs, and its `disabled-by-default-v8.cpu_profiler` category keeps V8's own sampler on every thread
+   * (every 0.2 ms, measured), so "unprofiled" means without the main thread's 100 µs profiler, not without any sampling.
    */
   cpuProfile?: boolean
 }

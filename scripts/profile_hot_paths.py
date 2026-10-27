@@ -32,7 +32,9 @@ harness, which `cr-volume-measurement-cax` deletes.
     worker with that overhead too. The unprofiled total is the one to compare across such a move; the profiled run is
     the one that says where the time went. The switch's own control is one profiled run beside the unprofiled ones,
     whose total must be the larger. The trace's `disabled-by-default-v8.cpu_profiler` category still samples every
-    thread, so this removes the main thread's profiler, not all sampling.
+    thread, every 0.2 ms (its ProfileChunks' median interval, 2026-10-27), so this removes the main thread's profiler,
+    not all sampling. Its first use (#554) found the profiler's cost small: S2 at throttle 1 took 33.9 s profiled
+    against 31.4–32.9 s without, and `@noble`'s SHA-256 cost the same 3.1 s in a worker as on the profiled main thread.
   - **Server.** JFR with the `profile` settings, its execution and allocation SAMPLES — no heap dump on either side —
     and the events that record the process environment and the system properties OFF (`jdk.InitialEnvironmentVariable`,
     `jdk.InitialSystemProperty`): the recipe hands the app `QUARKUS_DATASOURCE_PASSWORD` and the store's admin token in
@@ -110,7 +112,7 @@ PROFILE_CONFIG = (repo_layout.E2E_DIR / "profile" / "playwright.config.ts").rela
 SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "crypto": "crypto-aead"}
 # What a scenario needs on the instance before its first run, run once and never profiled.
 SEEDS = {"s3": "s3-seed"}
-# The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, about 4 MB),
+# The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, 5.2 MB each, measured),
 # S3's smaller, since S3 reads the grid's thumbnails and not the originals.
 PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4)}
 LOAD_LIMIT = 3.0

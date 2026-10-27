@@ -1,4 +1,4 @@
-// S2 upload (cr-profile-where-the-time-goes): 50 phone-sized photos (about 4 MB each) uploaded into one
+// S2 upload (cr-profile-where-the-time-goes): 50 phone-sized photos (5.2 MB each, measured) uploaded into one
 // Chapter. The photos are synthetic — `scripts/profile_hot_paths.py` renders them with ffmpeg into the run directory's
 // `fixtures/s2/` before the first run — and are handed to the picker by path, so Playwright copies no bytes. Per run a
 // fresh Memory with one Chapter is made before the window opens; the window runs from handing the 50 files to the

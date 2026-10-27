@@ -1196,6 +1196,13 @@ at once, so a pump that asked only when it held no URL still reached chunk 10 wh
 **time** (each PUT held a few ms) and an assertion with room in it (`window:10` before `put:6`, a whole in-flight
 of signed chunks still unsent) — then the lever reddened and the fix did not. Where the claim is an order between
 concurrent steps, run the lever once before trusting the green; an instant fake orders things for you.
+**An OVERLAP assertion gates both sides.** cr-content-digest-off-the-main-thread wanted "the digest runs beside the
+derivation" proven by a deriver that resolves only once the digest has started reading. Run the old way (the digest
+first, then the derivation), that test is green: the digest has long started when the deriver asks. Only a pair of
+gates bites, each side waiting on the other's start (`media.test.ts`, the digest beside the derivation), so a test
+that settles proves they ran together. The same CR's abort case asserted "reserves nothing", which the pump's own
+abort check already guarantees; what was the CR's to prove was that the upload rejects without waiting for a
+derivation that never ends.
 
 **A structured config file has its own way of swallowing a lever: the duplicate key.** Injecting into YAML or
 JSON by inserting a block near an anchor can produce a second `properties:` (or any key) beside the real one,

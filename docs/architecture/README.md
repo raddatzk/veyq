@@ -311,7 +311,10 @@ client's largest avoidable cost was sealing an upload's blobs in pure JS on the 
 24 s in the 41 s upload at throttle 1. Those chunk frames are now sealed and opened in core's frame worker
 (`src/web/src/core/blob/frames.worker.ts`), on the same `@noble` code (ADR 0017 decision 1). Its after-reading
 (2026-10-27) put the upload at 30–31 s, with the frames' work under 0.1 s on the main thread and 5.1–5.4 s in the worker.
-The largest main-thread cost left in an upload is the SHA-256 of each original (inbox #554). The method,
+Each original's SHA-256 is now read in core's digest worker (`src/web/src/core/blob/digest.worker.ts`), on the same
+`@noble` code, while the original's tiers are derived, so it is off the main thread and off the upload's critical path:
+read without the CPU profiler, the upload took 25.8 s at throttle 1 against 32.0 s before (2026-10-27). At throttle 4
+what bounds it is the main thread's own work, the pump's requests among it (inbox #220). The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
