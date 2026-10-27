@@ -21,7 +21,8 @@
     "verify:pdf-worker": "node scripts/assert-pdf-worker-in-dist.mjs",
     "verify:listing-worker": "node scripts/assert-listing-worker-in-dist.mjs",
     "verify:frame-worker": "node scripts/assert-frame-worker-in-dist.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:argon-worker && npm run verify:media-worker && npm run verify:pdf-worker && npm run verify:listing-worker && npm run verify:frame-worker"
+    "verify:digest-worker": "node scripts/assert-digest-worker-in-dist.mjs",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:argon-worker && npm run verify:media-worker && npm run verify:pdf-worker && npm run verify:listing-worker && npm run verify:frame-worker && npm run verify:digest-worker"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",

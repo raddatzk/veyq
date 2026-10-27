@@ -11,6 +11,8 @@
 // minified names that survive: the first reading counted only GHASH's `_updateBlock` (1.9 s) and missed `@noble`'s input
 // copy (`Uint8Array.from`) under a two-letter name, so the main thread's frame AEAD was 12.4 s, not 1.9 s (#536).
 // Since #536 the frames are sealed in core's frame worker: its thread is the one whose samples run `frames.worker-*.js`.
+// Since #554 each original's SHA-256 is read in core's digest worker, beside the derivation: its thread runs
+// `digest.worker-*.js`, and only the trace sees it (the CPU profile is the main thread's).
 import { test, expect } from '@playwright/test'
 import { readdirSync } from 'node:fs'
 import { OUT, instance, memoryWithChapter, chapterCard, profiled, raiseResourceBuffer, signIn, spec, uploadsSettled } from './profiling'

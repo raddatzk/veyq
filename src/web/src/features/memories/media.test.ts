@@ -481,6 +481,94 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
   })
 })
 
+describe('addMedia — the digest beside the derivation (inbox #554)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  /** An image whose reads are gated: each slice's `arrayBuffer` says it started (`onRead`) and then waits for `gate`. */
+  function gatedImage(bytes: Uint8Array, gate: Promise<void>, onRead: () => void) {
+    const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
+    const slice = blob.slice.bind(blob)
+    vi.spyOn(blob, 'slice').mockImplementation((start, end, type) => {
+      const part = slice(start, end, type)
+      return Object.assign(part, {
+        arrayBuffer: async () => {
+          onRead()
+          await gate
+          return Blob.prototype.arrayBuffer.call(part)
+        },
+      })
+    })
+    return blob
+  }
+  const setUp = () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    return store
+  }
+
+  // The digest's first read waits until the derivation has started, and `deriveImage` resolves only once the digest has
+  // started reading: an upload that awaits either before starting the other never settles. Bite: await the digest
+  // before `deriveTiers` again, and this goes red with 'stuck'.
+  it('starts the digest and the derivation together: each waits on the other, and the upload settles', async () => {
+    setUp()
+    let derivationStarted!: () => void
+    const deriving = new Promise<void>((r) => (derivationStarted = r))
+    let digestReading!: () => void
+    const reading = new Promise<void>((r) => (digestReading = r))
+    const deriver = stubDeriver()
+    const derive = deriver.deriveImage
+    deriver.deriveImage = vi.fn(async (blob: Blob, spec: { maxEdge: number; quality: number }) => {
+      derivationStarted()
+      await reading
+      return derive(blob, spec)
+    })
+    const bytes = new Uint8Array(CHUNK_SIZE + 9).fill(3)
+    const source = gatedImage(bytes, deriving, digestReading)
+    const upload = addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: source, mediaType: 'image/png' }, deriver)
+    expect(await Promise.race([upload.then(() => 'settled'), sleep(1000).then(() => 'stuck')])).toBe('settled')
+    expect(deriver.deriveImage).toHaveBeenCalledTimes(2) // both tiers, so the derivation's result was kept
+  })
+
+  // The derivation here never finishes, so the upload can end only by the digest's own rejection: one that waited for
+  // both (or swallowed the digest's abort) hangs. Bite: `.catch()` the digest's rejection, and this goes red with 'stuck'.
+  it('an abort while the digest reads rejects AbortError without waiting for the derivation, and reserves nothing', async () => {
+    const store = setUp()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let reads = 0
+    const ctl = new AbortController()
+    const deriver = stubDeriver()
+    deriver.deriveImage = vi.fn(() => new Promise<never>(() => {}))
+    const source = gatedImage(new Uint8Array(3 * CHUNK_SIZE).fill(4), gate, () => (reads += 1))
+    const upload = addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: source, mediaType: 'image/png' }, deriver, { signal: ctl.signal })
+    const outcome = upload.then(() => 'resolved', (e: unknown) => e)
+    await sleep(5)
+    expect(reads).toBe(1) // the digest is in its first read
+    expect(deriver.deriveImage).toHaveBeenCalledTimes(1) // and the derivation runs beside it
+    ctl.abort()
+    release()
+    expect(await Promise.race([outcome, sleep(1000).then(() => 'stuck')])).toMatchObject({ name: 'AbortError' })
+    expect(store.blob.startBlobUploads).not.toHaveBeenCalled()
+    expect(store.api.completeMedia).not.toHaveBeenCalled()
+  })
+
+  it('control: the same upload, unaborted, reserves once', async () => {
+    const store = setUp()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let reads = 0
+    const source = gatedImage(new Uint8Array(3 * CHUNK_SIZE).fill(4), gate, () => (reads += 1))
+    const upload = addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: source, mediaType: 'image/png' }, stubDeriver(), { signal: new AbortController().signal })
+    await sleep(5)
+    expect(reads).toBe(1)
+    release()
+    await upload
+    expect(store.blob.startBlobUploads).toHaveBeenCalledTimes(1)
+    expect(store.api.completeMedia).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () => {
   const CAPTURED_AT = Date.UTC(2021, 4, 1, 10, 0, 0) // 2021-05-01T10:00:00Z
 

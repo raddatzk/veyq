@@ -9,12 +9,14 @@
 // read the file anyway - can confirm a file by it. What the server learns is which existing blob the new row shares,
 // the accepted residual of ADR 0102 § What the server sees.
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, b64url } from '@veyq/crypto/base64'
+import { b64std } from '@veyq/crypto/base64'
 import type { BlobMeta } from './meta'
 import { blobKeyContext, unwrapBlobKey, type WrappedBlobKey } from './keys'
+import { digestHere } from './digest'
+import { digestOff } from './digestWorker'
 import type { BlobRef, BlobRole, BlobSource } from './types'
 
-/** Plaintext bytes per frame (the contract's frame size): the unit a digest reads a source in, never the whole. */
+/** Plaintext bytes per frame (the contract's frame size). */
 const FRAME = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 /** The sealed size of `plaintextBytes` as a blob - the `byteSize` a stored blob of the same plaintext carries. */
@@ -23,14 +25,15 @@ export function sealedByteSize(plaintextBytes: number): number {
   return plaintextBytes + chunkCount * v1.FRAME_OVERHEAD
 }
 
-/** The SHA-256 of a source's plaintext as `blob-meta`'s `sha256` carries it (base64url, no padding), read frame by frame. */
-export async function contentDigest(source: BlobSource, signal?: AbortSignal): Promise<string> {
-  const hasher = v1.sha256Stream()
-  for (let at = 0; at < source.size; at += FRAME) {
-    if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError')
-    hasher.update(new Uint8Array(await source.slice(at, Math.min(source.size, at + FRAME)).arrayBuffer()))
-  }
-  return b64url(hasher.digest())
+/**
+ * The SHA-256 of a source's plaintext as `blob-meta`'s `sha256` carries it (base64url, no padding), read frame by frame:
+ * the one door production code hashes a file through (inbox #554). A `Blob` (a picked `File`, a ZIP entry) is hashed in
+ * core's digest worker (`digestWorker.ts`), any other source on the page thread, by the same `digest.ts` loop either way.
+ * The one other source today is a copy's payload, whose slices open frames through the chunk provider and cannot be
+ * structured-cloned (`core/export/copySource.ts`). Rejects with an `AbortError` when `signal` aborts.
+ */
+export function contentDigest(source: BlobSource, signal?: AbortSignal): Promise<string> {
+  return source instanceof Blob ? digestOff(source, signal) : digestHere(source, signal)
 }
 
 /** The wire's `SharedBlob`: in place of an upload id. */
