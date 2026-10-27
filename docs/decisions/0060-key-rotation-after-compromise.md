@@ -1,6 +1,10 @@
 # ADR 0060 — Key rotation after a compromise: one mode, a cold-credential gate, re-admission by human review
 
-- Status: Accepted
+- Status: Accepted, and built. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) decides anew three parts, each marked in
+  place: a rotation replaces the Secret Key too and is a key-chain step signed by the old identity and the old
+  Secret-Key proof key (Decision 2, § Consequences); the rotator mints every shared epoch itself and any member
+  finishes the re-key (Decisions 4, 6 and 7 go, and with them the human re-admission and the queued completion by
+  another owner). Until it is built, this record describes the code.
 - Date: 2026-08-15
 
 ## Context
@@ -66,7 +70,8 @@ cold credential — rotation, change-password, recovery completion ([ADR 0054](0
 and a change of the sign-in address ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md) Decision 8) — carries a signature of that key over what the flow installs and the state it replaces. The server verifies
 the signature against the stored public key and refuses the request otherwise.
 - **The public key reveals nothing.** The Secret Key is 256 random bits.
-- **It never changes in these flows.** None of them rotates the Secret Key. Re-issuing an Emergency Kit, a
+- **It never changes in these flows.** None of them rotates the Secret Key. ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 6, not built: a rotation
+  replaces the Secret Key, and its new proof key is named in a step the old one signs.) Re-issuing an Emergency Kit, a
   capability that does not exist yet (ADR 0054 § Consequences), would register a new proof key under a
   signature of the old one.
 - **It does not replace the client's refusal.** That refusal proves the password half, now. The server's check
@@ -100,7 +105,9 @@ retracts it — the same shape [ADR 0058](0058-revoke-never-takes-key-material.m
 [ADR 0025](0025-forward-secrecy-policy-per-scope.md) for a removal, one layer up. No copy on any surface may
 imply that rotating undoes a compromise; it ends it.
 
-**4. The rotator does not re-admit themselves.** The scope rotation that excludes the old identity must be
+**4. The rotator does not re-admit themselves.** (Reversed by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 8, not built: the rotator mints every
+shared epoch itself, because a step signed by the old Secret-Key proof key is one a holder of the old identity cannot
+make; the refusals below go with it.) The scope rotation that excludes the old identity must be
 performed by a **different** key-holder, and per-scope re-admission runs through the human change-review
 ([ADR 0028](0028-identity-authenticity-tofu-verification.md) (2)+(3)). Two independent reasons, either
 sufficient: `rotateScope` is owner-gated, so a rotating plain member cannot drive it at all; and if the rotator
@@ -125,7 +132,8 @@ rotate too, self-served (one member, who is the owner) — the *"personal scopes
 removal, where there is nobody to rotate away from, and does not survive a compromise, where the old identity
 is exactly that somebody.
 
-**6. The state in between is stated, not hidden.** Between rotating and being re-admitted, the rotator is
+**6. The state in between is stated, not hidden.** (Under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md), not built, there is no state in between: the
+rotator holds every new epoch from its own publish, and a re-key's progress is any member's to continue.) Between rotating and being re-admitted, the rotator is
 **outside every shared scope**: their new key is `changed` for every contact, the worker declines delivery to
 them, and the re-grant loop skips them while the rotation proceeds. That is not a defect to smooth over — it is
 the property that stops an attacker rotating their way back in, and the honest surface is a per-scope status,
@@ -135,7 +143,8 @@ and re-readable at any time — `waiting`, `stalled` (no owner left who may comp
 again, by the rotator (still excluded) or by any owner of the scope, whose own scope row shows them the `stalled`
 and `failed` states.
 
-**7. Accepting a changed key must clear that worker's decline.** A worker that declined `identity_changed` is
+**7. Accepting a changed key must clear that worker's decline.** (Under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md), not built, a key the doubly signed
+chain reaches needs no acceptance, and delivery is left only for a member a rotation declared pending.) A worker that declined `identity_changed` is
 excluded from the job **permanently** — no code deletes a decline row — so ADR 0028 (2)'s promise that on accept
 *"the wrap then proceeds"* does not hold today. Nothing exercised it before, because a changed key could until
 now only be an attack. Rotation is what makes a legitimate change routine, so this is on the critical path: a
@@ -150,8 +159,10 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
   happen. Re-sealing them after the publish would leave both under a key that no longer exists whenever the
   re-seal failed, and every device refuses a document that does not open
   ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7). The Secret-Key proof key survives
-  unchanged (Decision 2), so recovery keeps working without a re-registration.
-- **The Emergency Kit stays valid.** The Secret Key is not rotated: the `PASSWORD` and `RECOVERY` wraps are
+  unchanged (Decision 2), so recovery keeps working without a re-registration — until [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) is built, which replaces
+  it with the Secret Key.
+- **The Emergency Kit stays valid** (until [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 6 is built: then a rotation issues a new Secret Key, and
+  with it a new Emergency Kit). The Secret Key is not rotated: the `PASSWORD` and `RECOVERY` wraps are
   rewritten under the *same* KEK. Rotating the Secret Key is a separate operation
   ([ADR 0054](0054-password-recovery-two-factor-release.md)), and folding it in would make the one operation
   that requires the kit also invalidate it.
@@ -164,7 +175,8 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 - **Every rotated scope re-keys its nodes**, so the old identity reads nothing added afterwards, inside an existing
   folder or Memory included ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)): `O(nodes + media)`
   symmetric re-seals on the device that commits each scope's epoch — the rotator's own for the personal scope, the
-  completing owner's elsewhere — and nothing re-encrypted in the store. A space reads *secured* only once its re-key
+  completing owner's elsewhere (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11, not built, any member's) — and nothing re-encrypted in the
+  store. A space reads *secured* only once its re-key
   is done. What stays in the old identity's reach is what existed at the rotation and every link it could rebuild,
   until re-issued; the result screen says both.
 - **A pending group invitation does not survive the rotation.** The invitee's `sealed_name_key` is wrapped to
@@ -190,7 +202,7 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
   because a password leaks in a breach and is used silently, which is ADR 0059's own reasoning for preferring
   the transcribed code over a password; for an operation this destructive the two-secret floor is the right bar.
 - **(d) Letting the rotator drive their own scope re-grant** — Decision 4; it converts the exclusion into the
-  attacker's finishing move.
+  attacker's finishing move. Taken by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 8 (not built), once a rotation is a step the attacker cannot sign.
 - **(h) A signature of the identity key as the server's gate.** It proves an unlocked vault, and the
   device-link holder has one.
 - **(i) A proof key derived from the `PASSWORD` floor's KEK** (password + Secret Key). That puts two factors in

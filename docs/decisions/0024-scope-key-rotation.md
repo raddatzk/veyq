@@ -1,6 +1,8 @@
 # ADR 0024 — Scope-key rotation: content-key epochs, rotate-forward on removal
 
-- Status: Accepted
+- Status: Accepted, and built. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) changes three things, each marked in place:
+  a rotation carries no admission tag, re-grant delivery shrinks to the members a rotation declared pending, and an
+  account rotation's scope rotations are the rotator's own rather than queued to an owner.
 - Date: 2026-07-05
 
 ## Context
@@ -56,7 +58,8 @@ members; new content seals under it. Nothing is re-encrypted.**
    (a) mints `E_{n+1}`, posts the chain-link `symWrap(E_{n+1}, E_n)`;
    (b) re-grants `E_{n+1}` to the remaining members — the members it read **before** the removal, minus the one
    it removes (`asymWrap` to each identity) — carrying each one's admission tag forward, verified under `E_n` and
-   re-tagged under `E_{n+1}` ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6);
+   re-tagged under `E_{n+1}` ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6; under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md), not built, no tag:
+   a member whose key the remover cannot anchor is declared pending instead);
    (c) names the removed member **in the same request**, and the server deletes that membership and commits the
    new epoch in one transaction (instant layer-1 access cut — a 403 on the scope).
    The removed member is excluded by the remover's own choice, never by a member list read afterwards: a server
@@ -76,7 +79,8 @@ members; new content seals under it. Nothing is re-encrypted.**
    or Memory seals under a key the removed member never held. The removed member keeps ≤ `E_n` and the node keys of
    before → reads pre-removal content, **never** post-removal content — against whom, § Guarantee states.
 
-5. **Re-granting existing members reuses grant-delivery, generalized.** Today grant-delivery reconciles
+5. **Re-granting existing members reuses grant-delivery, generalized** (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 9, not built, delivery
+   remains only for a member a rotation declared pending, and new members grant themselves). Today grant-delivery reconciles
    **grant-less** memberships ([ADR 0020](0020-grant-distribution-invite-wrap.md)/[ADR 0021](0021-operator-blind-background-tasks.md)).
    Rotation makes remaining members' grants **stale** (they wrap an old epoch), not absent. The reconciler
    generalizes its trigger from *"grant is null"* to *"grant is null **or** its epoch < the scope's current
@@ -110,7 +114,8 @@ does not cover, stated rather than hidden:
   member's client keeps writing under the old one, and nothing on the wire tells it otherwise; a floor only stops
   a client going *back* from what it has seen. Detecting a fork needs a transparency mechanism.
 - **Rotations queued to another key-holder.** A tenant-member removal that cuts a co-shared group, and an
-  account rotation after a compromise ([ADR 0060](0060-key-rotation-after-compromise.md)), are completed by
+  account rotation after a compromise ([ADR 0060](0060-key-rotation-after-compromise.md); under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 8, not
+  built, the rotator mints those epochs itself and only the first case stays queued), are completed by
   whichever **owner** of the scope is next online, and that client knows only the member list the server returns.
   There is nothing of its own to exclude by, so these hold against an honest operator only. Within that bound the
   queue keeps two promises: an event **joins** a queued job only while nobody has claimed it (a claimed job's

@@ -1,6 +1,10 @@
 # ADR 0020 — Distributing a scope grant to another member (invite + wrap-to-foreign identity)
 
-- Status: Accepted
+- Status: Accepted, and built as stated below. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) replaces moves 3, 5 and 6
+  for new members: an invite becomes a placeholder member holding a grant to an owner-signed invite key, the invitee
+  grants itself and writes an owner-rooted join record, and the admission tag, the grant-delivery worker for new
+  members and *awaiting access* go. It also takes two alternatives rejected below. Each place says so; until ADR 0111
+  is built, this record describes the code.
 - Date: 2026-07-04
 
 ## Context
@@ -52,7 +56,7 @@ key, wraps, or unwraps.** Concretely:
    who may wrap to it does not widen the operator's view (it never yields a key). This is a directory scoped to
    *a scope's own members*, not a global user-search.
 
-3. **A two-phase handshake, but only one human action** — the newcomer has no identity until they join, and
+3. **A two-phase handshake, but only one human action** (replaced by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–5, not built) — the newcomer has no identity until they join, and
    only a key-holder (not the server) can wrap, so there are two *moments*; there need not be two *decisions*:
    - **(a) Onboard.** An OWNER mints a **member invite** (email + `role = MEMBER`) from an unlocked vault, and
      the invite carries the **admission tag** that only a key-holder can compute (move 6). The invitee
@@ -99,7 +103,8 @@ key, wraps, or unwraps.** Concretely:
    The *owner-only* half of admission is server policy, enforced by an honest operator; the *key-holder* half is
    cryptographic (move 6).
 
-6. **Admission is a key-holder act: the admission tag.** An owner's **session** proves a password, not a key —
+6. **Admission is a key-holder act: the admission tag** (gone with [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 5, not built; its replay hypothesis
+   there is untested). An owner's **session** proves a password, not a key —
    and a session alone must never lead to a grant ([security-model](../crosscutting/security-model.md), *"a
    session + operational metadata, never content"*). So every membership that is to receive a grant carries an
    **admission tag**: an HMAC under a key derived from the scope's **current epoch key**, over the scope id, that
@@ -190,6 +195,8 @@ key, wraps, or unwraps.** Concretely:
   person has no identity until they register, so there is nothing to wrap to at invite time. The two-phase
   handshake is not a choice, it is forced by cold-birth.
 - **Rejected — the invite carries the *wrapped key* so the newcomer self-serves (no key-holder needed later).**
+  Taken by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 1 (not built), with an optional password and the reasons there; what follows is why it was
+  rejected here.
   This would remove even the "some key-holder online" requirement: the owner wraps `K_SC` to a secret derived
   from the invite at invite time, and the joiner unwraps it and re-wraps to their own identity. But it makes the
   **invite link itself key-bearing** — anyone who intercepts the (emailed) invite gains scope content, not just
@@ -197,7 +204,8 @@ key, wraps, or unwraps.** Concretely:
   operator-blind product must not do over an insecure channel. Deferred unless paired with an out-of-band second
   factor; the automatic first-online-wins delivery (move 3b) covers the latency concern without it.
 - **Rejected — the owner signs the admission with their identity key, and workers verify it against the
-  owner's pinned key.** The worker learns *who the owner is* from the server. A malicious operator names an
+  owner's pinned key.** Taken in another form by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 3 (not built): the newcomer learns the owner from the
+  link, not from the server; the removed-owner point below stays open there. The worker learns *who the owner is* from the server. A malicious operator names an
   identity it generated as owner, signs with it, and every worker that never pinned the real owner accepts it on
   first sight. Closing that needs a signed role chain back to the scope's genesis, a TOFU pin on the genesis, and
   signed removals, because a removed owner's old signatures would otherwise stay valid. That is a membership

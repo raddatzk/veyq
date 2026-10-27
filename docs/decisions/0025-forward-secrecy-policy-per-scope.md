@@ -55,7 +55,8 @@ vault") is an explicit, rare action. This is the established practice for per-us
    device stolen), where the `O(N)` re-grant is justified and rare. When invoked it runs **async and distributed**
    via grant-delivery ([ADR 0021](0021-operator-blind-background-tasks.md) / [ADR 0024](0024-scope-key-rotation.md) §5 —
    the reconciler already re-grants *stale-epoch* members, first-online-wins), so no single device bears a
-   synchronous `O(N)` burst.
+   synchronous `O(N)` burst. Under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (not built) an account rotation re-keys the tenant on the rotator's own
+   device and grants every member from there; only the node re-key is spread across members' devices.
 
 3. **Personal — never** (a single member; nothing to rotate away from).
 
