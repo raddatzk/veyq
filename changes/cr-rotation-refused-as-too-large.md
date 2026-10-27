@@ -251,6 +251,11 @@ Decisions 1 to 6.
 
 ## Open questions (owner)
 
+**Decided** (owner 2026-10-27): every recommendation below is taken — measure first, so phase 1 runs (Q1); no
+pre-flight check (Q2); match by status (Q3); the lost answer after a committed publish is inbox #556, not this CR
+(Q4); the EN and DE copy as proposed (Q5). **Ready to implement.**
+
+
 **Q1 — Measure what a browser sees before mapping, or map the 413 and stop?**
 - **Recommendation: measure (phase 1). It is cheap: pre-authentication, no account, a built jar.**
 - **Reason:** if browsers mostly lose the `413` to a reset, decision 1 helps almost nobody. Then the honest fix is on the

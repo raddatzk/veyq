@@ -401,6 +401,11 @@ with the bucket table, and this CR's status stays `planned`. On C, #220 is delet
 
 ## Open questions (owner)
 
+**Decided** (owner 2026-10-27): every recommendation below is taken — the exit rule as written (Q1), the reader as
+a permanent script (Q2), on B a CR of its own (Q3), `preparing` for a file prepared ahead (Q4), and decisions 1, 2,
+5, 7 and 8 as taken. **Ready to implement**, phase 0 first.
+
+
 - **Q1. The exit rule:** the 10 % bars and the rule's order, B before A when both hold. **Recommended: as written.**
   Relief moves the throttle-4 case, which an overlap cannot, and it raises the overlap's own ceiling.
 - **Q2. The reader as a permanent script**, `scripts/profile_attribute.py` with a selftest, against a one-off in

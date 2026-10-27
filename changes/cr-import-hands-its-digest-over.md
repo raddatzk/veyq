@@ -238,6 +238,11 @@ So the hand-over is valid wherever `archivePayload` produced the `File`: every d
 
 ## Open questions (owner)
 
+**Decided** (owner 2026-10-27): every recommendation below is taken — (a) core remembers the digest (Q1), also
+without a manifest `sha256` (Q2), the check's own main-thread pass is inbox #557 (Q3), and no reading first (Q4).
+**Ready to implement.**
+
+
 1. **How does the digest reach the upload?**
    - (a) **Core remembers it for the `File` it hands out, and `contentDigest` answers from that** (decision 1). No hook
      type and no application changes, and the video banner is covered by the same line. A copy or a re-wrap misses
