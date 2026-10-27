@@ -30,8 +30,9 @@ So: `contentDigest` keeps its signature and becomes a front door. A `Blob` is ha
 `core/blob`, by the same `v1.sha256Stream` loop. Any other source is hashed on the page as today. Memories' upload starts
 the digest and the derivation together. Nothing on the wire changes, and the digest's bytes do not change.
 
-**Not ready to implement.** § Open questions holds four questions for the owner. Q1 and Q2 decide the shape. The
-decisions below are written as recommended.
+**Ready to implement.** The owner took all four recommendations of § Open questions (2026-10-27), so the decisions
+below stand as written. Q3 was widened: phase 1's unprofiled before-reading is also taken on the last commit before #536,
+so #536's gain gets an unprofiled number too.
 
 ## Context & constraints
 
@@ -237,7 +238,7 @@ All figures here are *derived* from the measured stages above, which are one run
 - **An import hashes every original twice.** `archivePayload` verifies the entry's SHA-256 against the manifest
   (`importSubtree.ts:251-266`). Then `addMedia` reads the same bytes again for `blob-meta` (`media.ts:613`, via
   `exportImport.ts:426`). The verified hex digest is that digest. Handing it over would remove one pass per imported
-  original. Q4.
+  original. Filed as inbox #555 (Q4).
 - **A copy's video banner** is hashed again (`exportImport.ts:465`), although the source node's sealed meta already
   carries its `sha256` (ADR 0102). Nothing reads its cost.
 - **The pump's `fetch`** has 2.35 s of main-thread self time at throttle 1. It is #220's to read, not this CR's.
@@ -261,16 +262,20 @@ All figures here are *derived* from the measured stages above, which are one run
 
 ## Phases
 
-0. **Refine close (the refining conversation, not the implementer).** Write the owner's answers into this CR's
+0. **Refine close (the refining conversation, not the implementer).** *Done 2026-10-27.* Write the owner's answers into this CR's
    decisions. No ADR is edited: ADR 0017 decision 1 already decides the primitive, and placement is decided in no ADR,
    as for the frame worker. **Done when:** every `scripts/validate_*.py` exits `0`.
 
    **Contracts, backend and `@veyq/crypto`: empty, on purpose** (§ Inventory). Not one byte moves, and the backend never
    reads the digest.
-1. **The before-reading without the CPU profiler** (only if Q3 is (a)). On `main`, before the first web edit:
+1. **The before-reading without the CPU profiler** (Q3 (a), owner 2026-10-27). On `main`, before the first web edit:
    - add a switch that leaves `Profiler.start` out of `profiled` (`tests/e2e/profile/profiling.ts:111-127`), and pass it
      from `profile_hot_paths.py`;
-   - read S2 at throttle 1 and 4, three runs each, with the trace on, and record the upload's total.
+   - read S2 at throttle 1 and 4, three runs each, with the trace on, and record the upload's total;
+   - read the same, unprofiled, on the last commit before #536 (`a0e3a2884`, the first parent of its merge
+     `86a2a7852`): images built from a throwaway worktree of that commit with only the switch applied. Beside the
+     reading above, it gives #536's gain without the profiler's overhead, which the profiled 25–30 % may overstate
+     (§ Measured).
 
    The switch's own control: one profiled run beside it, whose total must be the larger. **Done when:** the numbers are
    in this CR, and every `scripts/validate_*.py` exits `0`.
@@ -320,7 +325,8 @@ All figures here are *derived* from the measured stages above, which are one run
 
    Report a result that contradicts § Expected effect with its numbers. Never fix it in place.
 3. **Docs and site.**
-   - `how-veyq-is-tested.md` gets the after-reading and the photos' measured size.
+   - `how-veyq-is-tested.md` gets the after-reading and the photos' measured size, and its #536 sentence gets the
+     unprofiled before/after of phase 1 beside the profiled one.
    - Architecture §10's sentence is made true.
    - #220 gets the numbers.
    - #554 is deleted.
@@ -331,7 +337,7 @@ All figures here are *derived* from the measured stages above, which are one run
 
 - A `Blob`'s digest is read in core's digest worker by the same `@noble` loop. It runs on the page thread only for a
   non-`Blob` source, or while that worker cannot run.
-- With Q2 (a), Memories' upload reads the digest beside the derivation.
+- Memories' upload reads the digest beside the derivation (Q2).
 - The digest's bytes, the wire, `@veyq/crypto` and the backend are unchanged.
 - `verify:digest-worker` guards the build.
 - The after-reading is published, and #220 carries it.
@@ -341,6 +347,9 @@ All figures here are *derived* from the measured stages above, which are one run
 - Inbox #554 is deleted.
 
 ## Open questions (owner)
+
+**Decided.** Owner 2026-10-27 ("ja"): all four recommendations are taken. Q1 is (a), Q2 is (a), Q3 is (a) widened to a
+reading before #536 as well (phase 1), and Q4 is filed as inbox #555.
 
 1. **Where does the digest run?**
    - (a) **A digest worker of its own in `core/blob`, handed the `Blob`** (decisions 1–4). One request per digest,
