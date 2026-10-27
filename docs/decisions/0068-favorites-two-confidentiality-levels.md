@@ -1,7 +1,9 @@
 # ADR 0068 — Favorites are two objects: a private node pin and a shared item mark
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-20
+- Model: [Application: Memories](../apps/memories.md)
 
 ## Context
 
@@ -182,35 +184,20 @@ version of one member's set) and still leaves R1, R2 and R4 open. **Re-open (C)*
 `E_0` (so a former member can no longer forge) **and** a freshness floor covers them: replay is then the last power
 over the count. The plaintext is JSON, so a later optional field is additive.
 
-**10. The pin is core's, and covers every node (2026-10-12, inbox #409).** The pin is a private preference about a
-*node*, and a node is core's: a folder, a file, a Memory and a drop box are all nodes, and the data already fitted any
-of them — a bare id array, sealed under the Master Key, knows no kind. Keeping it in Memories meant the one application
-that happened to draw a heart owned a function every kind needs, and a Depot user could not favorite a file. So the pin
-object moved **out of the Memories module into the platform's**:
+**10. The pin is core's, and covers every node.** The pin is a private preference about a *node*, and a node is
+core's: a folder, a file, a Memory and a drop box are all nodes, and the data already fitted any of them — a bare id
+array, sealed under the Master Key, knows no kind. Kept in Memories, the one application that happened to draw a heart
+would own a function every kind needs, and a Depot user could not favorite a file. So the pin is the platform's: its
+contract, table and heart are core's, the seal purpose `favorites`, the plaintext and the last-write-wins rule are
+those of §1, and the heart is member-only on every kind (share view = member view with the function removed). Where it
+lives is [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)'s.
 
-- **Contract and storage.** `contracts/api/favorites.openapi.yaml` (core's; Memories keeps
-  `memories/item-favorites.openapi.yaml`, the item marks) with the same two operations, the same
-  `GET`/`PUT /api/scopes/{scopeId}/favorites`, the same body `{ciphertext}` and the same 65 536-char ceiling;
-  `veyq_scope_favorites` moved from the Memories baseline to the core baseline (both baselines are editable before the
-  first release, pinned together; a database created before the move is recreated). Core's `favorites` package holds the
-  entity, store, handler, resource and the scope eraser (phase 600, as before). The seal purpose `favorites`, the
-  plaintext (a bare id array) and the last-write-wins rule are **unchanged**, so every crypto vector stays valid and a pin
-  set stored by the Memories-era client opens as it did.
-- **Surfaces.** The heart is a **core action** — `favoriteRights(access, node)` (member only, fail closed: no
-  guest in any role, no scope root, no kind this client cannot draw) contributed through `NodeHeader`'s `coreActions` and
-  the level list's `coreRowActions`, so every kind gets the same heart with no change to its application; the sidebar
-  Favorites section is core's too and lists every kind's pinned nodes, each with its kind's registry icon (the Memory
-  cover it used to show is a Memories concern; inbox #411 brings a cover to any node). A share guest has no heart and the
-  server has no guest route: share view = member view with the function removed.
 - **A pinned id that no longer resolves is inert, not pruned.** The server cannot read the set, so a purged node's id
-  stays in the blob; every view resolves ids against the loaded tree and skips what is not there, so a dangling id never
-  renders a broken row. A *trashed* node's pin survives on purpose — restoring it hands the heart back. A client-side
-  prune was rejected: it cannot tell "purged" from "not loaded yet", and a prune on the wrong reading is a lost pin. The
-  cost is the ceiling (about 1 600 ids), the same as before.
-- **A pending deletion keeps the heart**, as Memories always kept it (a pin is a preference, not a write to the scope's
-  tree). The server's put takes the READ gate (owner decision 2026-10-12; it took WRITE before, so the toggle was refused with
-  `scope_deleting` and the heart bounced back): a pin is the member's own sealed preference, so a space waiting for its
-  deletion still stores it. The put no longer has a `409 scope_deleting`.
+  stays in the blob and every view skips what the loaded tree does not hold; a *trashed* node's pin survives on
+  purpose, so a restore hands the heart back. A client-side prune was rejected: it cannot tell "purged" from "not
+  loaded yet", and a prune on the wrong reading is a lost pin. The cost is the ceiling (about 1 600 ids).
+- **A pending deletion keeps the heart.** A pin is the member's own sealed preference, not a write to the scope's
+  tree, so its put takes the READ gate and a space waiting for its deletion still stores it.
 - **The mark stays Memories'** (`item-favorites`): it names a `veyq_media` id and lives only in a Memory's gallery.
 
 ## Consequences

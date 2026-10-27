@@ -1,8 +1,9 @@
 # ADR 0083 — Memory participants are a sealed list in the Memory's metadata
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the conflict is `stale_revision`
-  (was `stale_version`).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-13
+- Model: [Application: Memories](../apps/memories.md)
 
 ## Context
 
@@ -18,8 +19,8 @@ A Memory already has the right home for sealed per-Memory facts: the `wrappedMet
 
 ## Decision
 
-Decided by the owner, 2026-10-13. The sealed variant of decision 2 is the owner's choice after the leak was weighed; see
-the first Consequence for what it costs.
+The sealed variant of decision 2 is the owner's choice after the leak was weighed; the first Consequence says what it
+costs.
 
 **1. Who can be a participant.** Anyone **in the scope** of the Memory: tenant members for a Memory in the tenant scope,
 group members for one in a group scope. A Memory in a personal scope has no participants feature (one member only). The
@@ -51,8 +52,7 @@ a guest and a member; whether it shows the participants is a right in `memoryRig
 or Memory link) renders the section, its controls or a profile link. This is an exception the owner chose to the
 "share = member view" principle: rights only remove functions, but a participant list is a statement about *other
 members*, who agreed to be in the space, not to be named to a link holder.
-*Corrected 2026-10-13.* The first draft said the participants are "stripped from every meta re-sealed for a share" and
-that the exclusion is cryptographic. That was wrong: **no meta is re-sealed for a share.** A share serves the node's
+The exclusion is **not** cryptographic, because **no meta is re-sealed for a share**: a share serves the node's
 `wrappedMeta` unchanged (`ShareNode.wrappedMeta`, [sharing.openapi.yaml](../../contracts/api/sharing.openapi.yaml)) and the
 guest holds the node's `K_node` through the key chain, so a link holder can open the very blob a member writes. Making the
 exclusion cryptographic would need a new AEAD purpose (a nested seal under a key guests lack) or a share-specific meta
@@ -72,8 +72,8 @@ A per-share opt-in is a possible later decision, **not made now**.
 `segmentsOf` numbers a folder, file or drop box called "People" at a scope root `people-2`, so no node ever has the profile's path.
 Not `~people` (the `~` prefix is the personal-scope token), and not a history-mode path: those reach the server's access
 logs, a fragment does not.
-The comment on `isPersonalScope` in `location.ts` that called a foreign `~username` "the later profile view" is corrected:
-it stays a personal-scope token and the profile is `#people/<id>`.
+A foreign `~username` stays a personal-scope token, never a profile
+([ADR 0015](0015-operator-blind-readable-urls.md)).
 
 **6. Profile content.** The **display name** (the sealed real name, falling back to the username — the rule in decision
 9), an **avatar** (the member's picture, [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md), else a letter), and below them **every Memory in which
@@ -91,30 +91,22 @@ the uploader of a member-uploaded photo stays **unresolved** — nothing is show
 photo's `share:` key resolves for members only, as a non-clickable name. The bucket tab keeps usernames until it is aligned
 with the display-name rule.
 
-**8. A file's page names its uploader.** Depot got its uploader as a slice of its own, with its own contract and backend
-field (decided by the coordinator on the owner's behalf, 2026-10-14, confirmed by the owner 2026-10-15, inbox #415;
-[uc.depot.view-file](../features/depot/use-cases/uc.depot.view-file.md) step 0).
+**8. A file's page names its uploader.** Depot's file page names whoever uploaded the file's **current** content (a
+replace moves it; who created the node is not recorded), to members only. Its mechanism — the attachment's
+`uploader_user_id` / `share_identity_id`, the listing's `uploaderKey` and `uploaderName`, the guest's listing without
+either — is [Depot](../apps/depot.md)'s, and the flow is [uc.depot.view-file](../features/depot/use-cases/uc.depot.view-file.md).
+What is decided here:
 
-- **The uploader is whoever uploaded the file's current content.** A replace moves it, as a guest's attribution already
-  moves with the attachment (`veyq_node_attachment.share_identity_id`). Who created the node is not recorded.
-- **A member's upload is recorded by the server**, as a user id on the attachment beside the guest identity: exactly one
-  of the two is set (`veyq_node_attachment.uploader_user_id` / `share_identity_id`, held by the check constraint
-  `ck_attachment_uploader`), written from the upload's opener by core's `AttachmentStore.attach`, so a cover's attachment
-  records its uploader too. This is a new row of the class Memories already discloses (a medium's `owner_key`,
+- **A member's upload is recorded by the server**, as a user id on the attachment beside the guest identity, exactly
+  one of the two set. This is a new row of the class Memories already discloses (a medium's `owner_key`,
   [ADR 0034](0034-media-uploader-buckets.md)), taken for the same reasons; what it discloses is a Consequence below. A
   sealed uploader inside the blob meta was rejected, because an uploader could claim anyone.
-- **Shown on the file's page header, to members only.** A member is named by decision 9's rule and links to the profile;
-  one who left is a "former member". A link's guest is named by the name it gave itself, without a link (inbox #431,
-  decided 2026-10-14 by the coordinator on the owner's behalf): the member's listing serves the identity's sealed display
-  name and its share beside the `share:` key (`uploaderName`) — a ciphertext the server already stores, to a member it
-  already serves, so no new plaintext and no new relation — opened under the file's key or the nearest ancestor key the
-  member holds (core's reader, which Memories' buckets use too). A drop-box guest is named by its identity folder; a
-  guest of a deleted link stays named; "a guest" shows only where the name does not open. Wherever a member reads a guest's
-  name - here, Memories' lightbox and buckets - it is marked as a guest's, "Ben (guest)" (inbox #433, confirmed by the owner 2026-10-15; core's
-  `guestDisplayName`), because a guest names itself freely and could otherwise pass for a member.
-- **A share guest's listing carries no uploader field** ([inbox #190](../inbox.md)): the contract keeps it off the
-  share's file listing, which has an item schema of its own (`ShareFileListItem`), so the member's
-  `FileListItem.uploaderKey` cannot reach it by accident.
+- **A member is named by decision 9's rule and links to the profile**; one who left is a "former member". A link's
+  guest is named by the name it gave itself, without a link, and wherever a member reads a guest's name it is marked
+  as a guest's ("Ben (guest)"), because a guest names itself freely and could otherwise pass for a member. Its sealed
+  name reaches a member as a ciphertext the server already stores, so no new plaintext and no new relation.
+- **A share guest's listing carries no uploader** ([inbox #190](../inbox.md)): it has an item schema of its own, so the
+  member's uploader field cannot reach it by accident.
 
 **9. Display-name rule.** The **real name** when it opens, else the **username**.
 

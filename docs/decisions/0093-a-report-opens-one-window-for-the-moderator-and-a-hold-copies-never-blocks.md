@@ -126,7 +126,11 @@ state what it means here. Every fixed text this ADR adds — the statement and i
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7): category and "new
   case", and where the moderation page is as plain text — Settings → Moderation, or `/moderation` on a space's address
   (owner 2026-10-22) — never a key, a host or a link; the first three categories of § 1 at once, the rest bundled. A
-  reporter who left a contact gets a receipt and, later, the decision (DSA Art. 16(4)–(5), L).
+  reporter who left a contact gets a receipt and, later, the decision (DSA Art. 16(4)–(5), L). Both go by instance
+  mail ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3), and the server
+  never stores the address in the clear: the reporter's client sends it once beside the sealed copy and the server
+  mails the receipt from memory, bounded per address; for the decision, the deciding moderator's client opens the
+  sealed copy and sends the address once the same way (§ 7).
 - **Nothing is blocked by a report.** A human decides.
 
 ### 3. Review is a share view in moderation mode; deciding is the moderation surface's
@@ -241,7 +245,9 @@ objects, and the step ends at once. The review and the steps are
   the terms relied on**, required, with the facts explaining why the content falls under it
   (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
   (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter.
-  A guest is told nothing in the app for a moderator's measure: it has no account, so a guest uploader counts as
+  The statement and the answer to an objection reach each affected member in the app and by instance mail at their
+  account address ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3); a
+  reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest is told nothing in the app for a moderator's measure: it has no account, so a guest uploader counts as
   nobody to tell (DSA Art. 17(2)); an authority's removal order is the exception (§ 12).
   There is one form on every instance (§ 14): the reduced form a *private* mode served until 2026-10-21 is gone, so a
   moderator always states the facts and the provision or clause.
