@@ -55,11 +55,12 @@
   excluded party can rebuild its `K_share`. Its re-issue closes it.
 - **E6 — a node a moderation hold copied.** The hold is a snapshot of the stored ciphertext and stays as it is; the
   report's keys keep opening what was reported.
-- **E7 — a drop box.** A node carrying a drop key (a drop box, or a node a write-only link is rooted on), a guest's
-  identity folder and what lies below one are an **owner's** to re-key ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+- **E7 — a drop box.** A drop box (Depot's: its guests get identity folders), a guest's identity folder and what lies
+  below one are an **owner's** to re-key ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   Decision 11): the listing marks them, a member's worker skips them (the scope then stays *re-keying* until an
   owner's device runs), a member's operation on one is `403 not_scope_owner`, and a member's write into one waits
-  like a guest's.
+  like a guest's. A Memory or chapter with an uploader link carries a drop key too, but members write into it: any
+  member re-keys it, its drop key included (ADR 0111 decision 11).
 - **E8 — a member's write that carries ciphertext under the old key.** A cover, a banner and a medium's meta edit
   hold a wrap or a sealed copy under the node's key from before, and an import writes through its own steps: these
   are not pulled forward yet and wait for the background re-key or are refused at the device floor (inbox #563).

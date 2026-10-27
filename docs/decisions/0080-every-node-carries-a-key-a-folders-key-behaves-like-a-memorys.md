@@ -152,10 +152,12 @@ Memory, an expense and a file side by side).
     nodes); this rule is for nodes guests create, built with the first application that needs it (Depot). Since a
     re-key re-seals what lies under a node's key, it is a write onto the node: while any member re-keys a node after a
     rotation ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-    decision 11), a node carrying a drop key (a drop box, or any node a `WRITE_ONLY` link is rooted on), its guests'
-    identity folders and what lies below one are re-keyed **by an owner only** — the server marks them `ownerOnly` in
-    the re-key's listing and refuses a member `403 not_scope_owner` (`OwnerOnlyRekey`) — and their guests, and a
-    member's write into one, wait for an owner.
+    decision 11), a drop box (its kind takes identity folders, which its application declares through
+    `WriteOnlyGuestKinds`), its guests' identity folders and what lies below one are re-keyed **by an owner only** —
+    the server marks them `ownerOnly` in the re-key's listing and refuses a member `403 not_scope_owner`
+    (`OwnerOnlyRekey`) — and their guests, and a member's write into one, wait for an owner. A Memory or chapter that
+    carries a drop key for its uploader share is no drop box: members write into it, so any member re-keys it, drop
+    key included (ADR 0111 decision 11 says why that opens no write a member lacks).
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
     become required in `CreateShareRequest`, so every member can always re-show and edit a link. The columns and
     `ShareSummary` stay nullable: a tombstoned share clears them (`SharingStore.tombstone`), so the baseline does not
