@@ -88,7 +88,7 @@ per scenario at CPU throttle 1 and 4):
 - **Unlock** takes 2.9–3.5 s, and the page's main thread is about 94 % idle meanwhile: it waits on the Argon2id worker,
   whose cost is the password hardening itself
   ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
-- **An upload** of 50 photos of about 3.6 MB took about 41 s, and the network was 9.5 % of it. The content encryption
+- **An upload** of 50 photos of about 5.2 MB each took about 41 s, and the network was 9.5 % of it. The content encryption
   ran in JavaScript on the page's main thread: 12.4 s of its 24 s of work at throttle 1, about 51 s at throttle 4. In
   the same browser, the browser's own AES-256-GCM is about 18 times faster on a whole buffer and about 35 times on
   veyq's framed chunks, both matching the published test vectors. veyq keeps one implementation of each primitive and
@@ -96,9 +96,16 @@ per scenario at CPU throttle 1 and 4):
   Instead, a blob's chunks are now sealed and opened, by the same code, in a worker beside the page. Read again on
   2026-10-27, on a busier machine (load average 8 to 17, Microsoft Defender busy throughout): the same upload takes
   30.2–31.1 s at throttle 1 and 90–96 s at throttle 4, against 133–135 s before. The main thread's share of the
-  encryption fell to under 0.1 s, the worker spends 5.1–5.4 s on it, and the network is now 14–16 % of the upload.
-  Hashing each original (SHA-256) is still on the main thread: 3.7–3.9 s at throttle 1, which is tracked. Opening a
-  20 MB original or downloading a 64 MB file put no task longer than 50 ms on the main thread.
+  encryption fell to under 0.1 s, and the worker spends 5.1–5.4 s on it. The CPU profiler samples only the main
+  thread, so a profiled reading could credit a move into a worker with the profiler's own cost; read again the same
+  day without it, three runs before and after, interleaved, the upload took 42.5 s before and 32.0 s after at
+  throttle 1 (medians): the same 25 %. Then each original's SHA-256, which the main thread had spent 3.1–3.2 s on, moved
+  into a worker of its own as well, and now runs while the photo's smaller versions are made instead of before them.
+  Without the profiler, the upload takes 25.8 s at throttle 1 (25.7–26.7 s) and 72.9 s at throttle 4 (72.7–73.3 s),
+  against 32.0 s (31.4–32.9 s) and 93.4 s (88.5–93.7 s) just before; with it, 24.6–27.2 s and 71.1–78.5 s. The main
+  thread no longer hashes, the hashing worker spends 4.4–4.5 s on it, about what the main thread had spent, and the
+  network is now 18 % of the upload at throttle 1 and 8 % at throttle 4. Opening a 20 MB original or downloading a
+  64 MB file put no task longer than 50 ms on the main thread.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
   about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.
@@ -106,7 +113,8 @@ per scenario at CPU throttle 1 and 4):
 **Its limits.** One machine, which Microsoft Defender kept busy during several runs (each reading is marked); Chromium
 only; synthetic content; a loopback network through Docker's virtual machine. Chromium's CPU throttle slows the page's
 main thread and never a worker: the Argon2id worker took 5,354 ms at throttle 1 and 5,413 ms at throttle 4 while the
-main thread grew 4.5 times, so a throttle-4 number is a slower main thread, never a slower device. Java Flight Recorder
+main thread grew 4.5 times, so a throttle-4 number is a slower main thread, never a slower device. A reading without
+the CPU profiler still records the trace, whose own sampler visits every thread every 0.2 ms. Java Flight Recorder
 samples only the server's own process, and the SQL counts are the database's global ones.
 
 ## Where and when each stage runs

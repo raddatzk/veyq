@@ -6,6 +6,7 @@ claim (ADR 0040). Run by hand on one quiet machine; no CI job runs it. What it c
 unsafe or meaningless — a busy machine, a profile file holding a secret, a recording whose secret filter is unarmed.
 
     profile_hot_paths.py --app IMG --admin IMG [--scenario s1,s2,s3,crypto] [--runs 3] [--throttles 1,4] [--keep] [--ignore-load]
+                         [--no-cpu-profile]
 
 **What it profiles on.** A throwaway instance of the PRODUCTION recipe booted from the two candidate images, exactly as
 lane L1 installs it — `scripts/run_stack_e2e.py`'s own stages (assets, release mirror, Pebble, `veyqctl install
@@ -25,6 +26,15 @@ harness, which `cr-volume-measurement-cax` deletes.
     the CPU throttle start, the operation runs, and all three stop. `--runs` runs at each of `--throttles`, one
     Playwright invocation per run, so the server side can be read per run. The machine idle at the start: the 1-minute
     load at most 3, or the run is refused (`--ignore-load` takes it anyway and marks it `quiet: false`).
+  - **Without the CPU profiler** (`--no-cpu-profile`, inbox #554): the same runs with CDP's `Profiler` left out, so no
+    `<stem>.cpuprofile`; the trace and the throttle are unchanged. The profiler samples the page's main thread every
+    100 µs and never a worker, so its overhead lands on the main thread alone, and a profiled total credits a move into a
+    worker with that overhead too. The unprofiled total is the one to compare across such a move; the profiled run is
+    the one that says where the time went. The switch's own control is one profiled run beside the unprofiled ones,
+    whose total must be the larger. The trace's `disabled-by-default-v8.cpu_profiler` category still samples every
+    thread, every 0.2 ms (its ProfileChunks' median interval, 2026-10-27), so this removes the main thread's profiler,
+    not all sampling. Its first use (#554) found the profiler's cost small: S2 at throttle 1 took 33.9 s profiled
+    against 31.4–32.9 s without, and `@noble`'s SHA-256 cost the same 3.1 s in a worker as on the profiled main thread.
   - **Server.** JFR with the `profile` settings, its execution and allocation SAMPLES — no heap dump on either side —
     and the events that record the process environment and the system properties OFF (`jdk.InitialEnvironmentVariable`,
     `jdk.InitialSystemProperty`): the recipe hands the app `QUARKUS_DATASOURCE_PASSWORD` and the store's admin token in
@@ -102,7 +112,7 @@ PROFILE_CONFIG = (repo_layout.E2E_DIR / "profile" / "playwright.config.ts").rela
 SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "crypto": "crypto-aead"}
 # What a scenario needs on the instance before its first run, run once and never profiled.
 SEEDS = {"s3": "s3-seed"}
-# The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, about 4 MB),
+# The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, 5.2 MB each, measured),
 # S3's smaller, since S3 reads the grid's thumbnails and not the originals.
 PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4)}
 LOAD_LIMIT = 3.0
@@ -268,7 +278,7 @@ def seed_run(compose: list[str], workdir: Path, scenario: str) -> None:
     """The scenario's seed, once, unprofiled: the same browser leg with the seed's spec file."""
     seed = SEEDS[scenario]
     (workdir / "profile-spec.json").write_text(json.dumps(
-        {"scenario": seed, "run": 0, "throttle": 1, "stem": seed}), encoding="utf-8")
+        {"scenario": seed, "run": 0, "throttle": 1, "stem": seed, "cpuProfile": False}), encoding="utf-8")
     cmd = [*compose, "run", "--rm", "--no-deps", "-T", "-e", f"VEYQ_PROFILE_DOMAIN={stack.DOMAIN}",
            "browser", "-c", str(PROFILE_CONFIG), seed]
     started = time.monotonic()
@@ -281,10 +291,11 @@ def seed_run(compose: list[str], workdir: Path, scenario: str) -> None:
     say(f"{seed}: seeded in {time.monotonic() - started:.0f}s")
 
 
-def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, throttle: int) -> dict:
+def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, throttle: int, cpu_profile: bool) -> dict:
     stem = f"{scenario}-t{throttle}-r{run}"
     (workdir / "profile-spec.json").write_text(json.dumps(
-        {"scenario": scenario, "run": run, "throttle": throttle, "stem": stem}), encoding="utf-8")
+        {"scenario": scenario, "run": run, "throttle": throttle, "stem": stem, "cpuProfile": cpu_profile}),
+        encoding="utf-8")
     cmd = [*compose, "run", "--rm", "--no-deps", "-T", "-e", f"VEYQ_PROFILE_DOMAIN={stack.DOMAIN}",
            "browser", "-c", str(PROFILE_CONFIG), SCENARIOS[scenario]]
     with (workdir / "profile-browser.log").open("a", encoding="utf-8") as log:
@@ -295,7 +306,13 @@ def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, thro
     if status != 0 or not window.is_file():
         raise Refused(f"{stem}: Playwright exited {status}" + ("" if window.is_file() else " and wrote no window")
                       + " — profile-browser.log in the run directory says why")
-    return {"stem": stem, **json.loads(window.read_text(encoding="utf-8"))}
+    recorded = {"stem": stem, **json.loads(window.read_text(encoding="utf-8"))}
+    # The switch's own check: the run was taken the way it was asked, by the window's word and by the files it left.
+    profiled_file = (workdir / f"{stem}.cpuprofile").is_file()
+    if recorded.get("cpuProfile", True) != cpu_profile or profiled_file != cpu_profile:
+        raise Refused(f"{stem}: asked for cpuProfile={cpu_profile}, the window says {recorded.get('cpuProfile')} and a "
+                      f".cpuprofile {'exists' if profiled_file else 'does not exist'}")
+    return recorded
 
 
 def signed_out_boot(entry: str) -> bool:
@@ -325,9 +342,9 @@ def request_failures(window: dict, aborted_refuses: bool = ABORTED_REFUSES) -> t
     return refusing, aborted
 
 
-def client_files_clean(workdir: Path, stem: str, owner: dict) -> None:
+def client_files_clean(workdir: Path, stem: str, owner: dict, cpu_profile: bool) -> None:
     needles = {"password": owner["password"], "Secret Key": owner["secretKey"]}
-    for suffix in (".cpuprofile", ".trace.json", ".window.json"):
+    for suffix in ((".cpuprofile",) if cpu_profile else ()) + (".trace.json", ".window.json"):
         found = hits(workdir / f"{stem}{suffix}", needles)
         if found:
             raise Refused(f"{stem}{suffix} contains the owner's {' and '.join(found)} — the file is not one to keep")
@@ -353,6 +370,7 @@ def meta(args: argparse.Namespace, load: float, canary_var: str) -> dict:
                    for name, ref in (("app", args.app), ("admin", args.admin))},
         "load1AtStart": load,
         "quiet": load <= LOAD_LIMIT,
+        "cpuProfile": not args.no_cpu_profile,
         "scenario": args.scenario,
         "runs": args.runs,
         "throttles": args.throttles,
@@ -374,6 +392,8 @@ def main() -> int:
     parser.add_argument("--keep", action="store_true", help="leave the instance running (no teardown)")
     parser.add_argument("--ignore-load", action="store_true",
                         help="profile on a busy machine anyway; the run is marked quiet: false")
+    parser.add_argument("--no-cpu-profile", action="store_true",
+                        help="leave the main thread's CPU profiler out (the trace stays): totals free of its overhead")
     args = parser.parse_args()
     unknown = [s for s in args.scenario if s not in SCENARIOS]
     if unknown:
@@ -393,8 +413,8 @@ def main() -> int:
     canary = f"veyq-profile-canary-{secrets.token_hex(12)}"
     os.environ.setdefault("VEYQ_STACK_WAIT_SECS", "900")
     os.environ.setdefault("VEYQ_STACK_CERT_SECS", "300")
-    say(f"profile run {stamp}: {', '.join(args.scenario)}, {args.runs} run(s) at throttle {args.throttles}, load {load:.2f}; "
-        f"files in {workdir.relative_to(ROOT)}")
+    say(f"profile run {stamp}: {', '.join(args.scenario)}, {args.runs} run(s) at throttle {args.throttles}, load {load:.2f}, "
+        f"{'without' if args.no_cpu_profile else 'with'} the CPU profiler; files in {workdir.relative_to(ROOT)}")
 
     verdicts: list[str] = []
     started = False
@@ -434,9 +454,9 @@ def main() -> int:
             for throttle in args.throttles:
                 for run in range(1, args.runs + 1):
                     c0 = counters(installed.compose)
-                    window = browser_run(installed.compose, workdir, scenario, run, throttle)
+                    window = browser_run(installed.compose, workdir, scenario, run, throttle, not args.no_cpu_profile)
                     c1 = counters(installed.compose)
-                    client_files_clean(workdir, window["stem"], owner)
+                    client_files_clean(workdir, window["stem"], owner, not args.no_cpu_profile)
                     refusing, aborted = request_failures(window)
                     if refusing:
                         raise Refused(f"{window['stem']}: {len(refusing)} request(s) of the window failed, "

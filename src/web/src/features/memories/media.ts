@@ -596,8 +596,8 @@ export type MediaUploadTransport = {
  *
  * The seam to core (cr-files-application B1): planning each blob ([planBlob]) and reserving + pumping them
  * ([reserveAndPump]) are core's blob transport; deriving the tiers, sealing the metadata and the complete are this
- * application's. The order — derive, seal metadata, plan, reserve + pump every blob, complete — is pinned on the wire
- * by `uploadWire.characterisation.test.ts`.
+ * application's. The order — the digest beside the derivation, seal metadata, plan, reserve + pump every blob,
+ * complete — is pinned on the wire by `uploadWire.characterisation.test.ts`.
  */
 export async function uploadMediaVia(
   scopeId: string,
@@ -609,14 +609,19 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   throwIfAborted(opts.signal)
   const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
-  // The original's digest (its `blob-meta` `sha256`): read once more, frame by frame, before anything is planned.
-  const sha256 = await contentDigest(typed.blob, opts.signal)
+  // The original's digest (its `blob-meta` `sha256`, read frame by frame in core's digest worker) and its tiers, started
+  // TOGETHER (inbox #554): the derivation does not need the digest, and run first and alone the digest was the upload's
+  // critical path while every worker waited. ONE decode of the original: `deriveTiers` produces both tiers from it and
+  // hands back the geometry it already measured, so `sealMetadata` has nothing left to probe for an image.
+  // `deriveTiers` never rejects (its catch makes the upload original-only), so only the digest's abort or a read the
+  // browser refuses ends the upload here; that drops at most one derivation, and nothing is reserved yet.
+  const [sha256, { derivatives: tiers, dimensions }] = await Promise.all([
+    contentDigest(typed.blob, opts.signal),
+    deriveTiers(typed, deriver),
+  ])
   const stored = opts.storedOriginal?.(sha256, sealedByteSize(typed.blob.size)) ?? null
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
-  // ONE decode of the original: `deriveTiers` produces both tiers from it and hands back the geometry it
-  // already measured, so `sealMetadata` has nothing left to probe for an image.
-  const { derivatives: tiers, dimensions } = await deriveTiers(typed, deriver)
   const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order.

@@ -13,12 +13,20 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 export const OUT = process.env.VEYQ_PROFILE_OUT ?? '/out'
 
-/** What the driver hands one run (`profile-spec.json`): which run, under which throttle, and the files' stem. */
+/** What the driver hands one run (`profile-spec.json`): which run, under which throttle, the files' stem, and whether
+ *  the main thread's CPU profile is taken (absent: it is). */
 export interface Spec {
   scenario: string
   run: number
   throttle: number
   stem: string
+  /**
+   * `false` leaves CDP's `Profiler` out of the window (`profile_hot_paths.py --no-cpu-profile`, inbox #554): its 100 µs
+   * sampling of the main thread is overhead a worker escapes, so a profiled total overstates a move off the main thread.
+   * The trace still runs, and its `disabled-by-default-v8.cpu_profiler` category keeps V8's own sampler on every thread
+   * (every 0.2 ms, measured), so "unprofiled" means without the main thread's 100 µs profiler, not without any sampling.
+   */
+  cpuProfile?: boolean
 }
 
 /** The tenant owner L1's bootstrap activated (`instance.json`, written by tests/e2e/tests/setup/first-run.setup.ts). */
@@ -69,6 +77,8 @@ export interface Window {
   scenario: string
   run: number
   throttle: number
+  /** Whether the main thread's CPU profiler ran in the window (the spec's `cpuProfile`). */
+  cpuProfile: boolean
   browserVersion: string
   /** Epoch milliseconds, for cutting the server's recording to the window. */
   startedAt: number
@@ -91,10 +101,11 @@ export interface Window {
 /**
  * Runs `operation` (the action that starts what is profiled, and the wait for the state that ends it) under the
  * profiler, the trace and the throttle, and writes `<stem>.cpuprofile`, `<stem>.trace.json` and `<stem>.window.json`.
- * Everything the operation needs typed is typed BEFORE this is called, so no keystroke is inside the window.
+ * With the spec's `cpuProfile: false` the profiler is left out and no `.cpuprofile` is written; the trace and the throttle
+ * are the same. Everything the operation needs typed is typed BEFORE this is called, so no keystroke is inside the window.
  */
 export async function profiled(browser: Browser, page: Page, cdp: CDPSession, operation: () => Promise<void>): Promise<Window> {
-  const { scenario, run, throttle, stem } = spec()
+  const { scenario, run, throttle, stem, cpuProfile = true } = spec()
   const failed: string[] = []
   const httpErrors: string[] = []
   page.on('requestfailed', (r) => {
@@ -108,13 +119,15 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   })
 
   await cdp.send('Performance.enable')
-  await cdp.send('Profiler.enable')
-  // 100 µs: DevTools' own default; fine enough to see a function of a few milliseconds in three runs.
-  await cdp.send('Profiler.setSamplingInterval', { interval: 100 })
+  if (cpuProfile) {
+    await cdp.send('Profiler.enable')
+    // 100 µs: DevTools' own default; fine enough to see a function of a few milliseconds in three runs.
+    await cdp.send('Profiler.setSamplingInterval', { interval: 100 })
+  }
   // Whether the throttle reaches the workers too is read from the readings (a worker's time at 4 against 1), never assumed.
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle })
   await browser.startTracing(page, { path: `${OUT}/${stem}.trace.json`, categories: TRACE_CATEGORIES, screenshots: false })
-  await cdp.send('Profiler.start')
+  if (cpuProfile) await cdp.send('Profiler.start')
 
   const startedAt = Date.now()
   const t0 = await page.evaluate(() => performance.now())
@@ -122,10 +135,10 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   const t1 = await page.evaluate(() => performance.now())
   const endedAt = Date.now()
 
-  const { profile } = await cdp.send('Profiler.stop')
+  const profile = cpuProfile ? (await cdp.send('Profiler.stop')).profile : null
   await browser.stopTracing()
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
-  writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
+  if (profile) writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
 
   const { metrics } = await cdp.send('Performance.getMetrics')
   const { apiRequests, storeRequests } = await page.evaluate(([from, to]) => {
@@ -140,7 +153,7 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   }, [t0, t1] as const)
 
   const window: Window = {
-    scenario, run, throttle,
+    scenario, run, throttle, cpuProfile,
     browserVersion: browser.version(),
     startedAt, endedAt,
     operationMs: t1 - t0,
