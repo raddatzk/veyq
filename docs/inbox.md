@@ -9,7 +9,7 @@ When a topic is refined, its ideas move into durable state under [`features/`](f
 > features and coverage it changed, and its history in git (`git log -S'| <n> |' -- docs/inbox.md`). A row that is
 > built but still owes a measurement or a proof is not done. **Row numbers stay reserved and are never reused** — a
 > citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 554** —
-> the next row is 554; raise this line with every new row.
+> the next row is 555; raise this line with every new row.
 >
 > An open row holds its title, tags, status, the next step and the links that matter — no history. Its status names
 > where it stands against V1: **V1** (on the V1 line), **end of V1** (needs a remote or a release, done at the very
