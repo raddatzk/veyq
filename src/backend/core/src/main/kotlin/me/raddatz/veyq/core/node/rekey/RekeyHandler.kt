@@ -32,7 +32,8 @@ sealed interface RekeyOutcome {
 
 /**
  * A scope's re-key after a rotation (ADR 0109, uc.spaces.rekey-after-rotation): list, a node's parts, stage, commit.
- * Every operation asks [RekeyAccess] first — an owner holding the current grant, not excluded by a live rotation job.
+ * Every operation asks [RekeyAccess] first — any member holding the current grant, not excluded by a live rotation job,
+ * and an owner for a node only an owner re-keys ([OwnerOnlyRekey]).
  * An application stages its own fields through [stagePart] under the same re-key id and commits through core's commit,
  * where its [NodeRekeyParticipant] swaps them in.
  */
@@ -40,20 +41,21 @@ sealed interface RekeyOutcome {
 class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStore, private val stage: NodeRekeyStage) {
 
     fun list(userId: String, scopeId: String): RekeyOutcome {
-        refusal(userId, scopeId, READ)?.let { return it }
+        refusal(userId, scopeId, READ, nodeId = null)?.let { return it }
         val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
         return RekeyOutcome.Nodes(current, store.listNodes(scopeId))
     }
 
     fun parts(userId: String, scopeId: String, nodeId: String): RekeyOutcome {
-        refusal(userId, scopeId, READ)?.let { return it }
+        refusal(userId, scopeId, READ, nodeId)?.let { return it }
         store.node(scopeId, nodeId) ?: return RekeyOutcome.NotFound
         return RekeyOutcome.Parts(store.parts(scopeId, nodeId))
     }
 
-    /** The caller's re-key right as a refusal, or null when granted. */
-    fun refusal(userId: String, scopeId: String, mode: AccessMode): RekeyOutcome? =
-        rights.check(userId, scopeId, mode) as? RekeyOutcome
+    /** The caller's re-key right as a refusal, or null when granted — at [nodeId] when the operation names one (an
+     *  application's participant passes its node too, so an owner-only node refuses there as here). */
+    fun refusal(userId: String, scopeId: String, mode: AccessMode, nodeId: String?): RekeyOutcome? =
+        rights.check(userId, scopeId, mode, nodeId) as? RekeyOutcome
 
     /** Core's own staged parts ([RekeyStore.CHILD_NAME] … [RekeyStore.IDENTITY_NAME]). */
     fun stage(userId: String, scopeId: String, nodeId: String, rekeyId: String, fromEpoch: Int, values: Map<NodeRekeyStage.Key, NodeRekeyStage.Value>): RekeyOutcome =
@@ -62,13 +64,13 @@ class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStor
     /**
      * Stage [values] of [part] (core's, or an application's — its participant's [NodeRekeyParticipant.part]) for
      * [nodeId] under [rekeyId], after the re-key rights and a check that the node still lags at [fromEpoch]: a node
-     * another owner re-keyed meanwhile has nothing left to stage ([RekeyStageOutcome.Stale]).
+     * another member re-keyed meanwhile has nothing left to stage ([RekeyStageOutcome.Stale]).
      */
     fun stagePart(
         userId: String, scopeId: String, nodeId: String, rekeyId: String, fromEpoch: Int, part: String,
         values: Map<NodeRekeyStage.Key, NodeRekeyStage.Value>,
     ): RekeyOutcome {
-        refusal(userId, scopeId, WRITE)?.let { return it }
+        refusal(userId, scopeId, WRITE, nodeId)?.let { return it }
         val node = store.node(scopeId, nodeId) ?: return RekeyOutcome.NotFound
         val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
         if (node.epoch != fromEpoch || node.epoch >= current) return RekeyOutcome.Stale
@@ -83,7 +85,7 @@ class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStor
      */
     fun commit(userId: String, scopeId: String, nodeId: String, rekeyId: String, c: RekeyCommit): RekeyOutcome {
         if (c.parentId == scopeId || (c.parentId != null && c.parentEpoch == null)) return RekeyOutcome.InvalidRequest
-        refusal(userId, scopeId, WRITE)?.let { return it }
+        refusal(userId, scopeId, WRITE, nodeId)?.let { return it }
         return store.commit(scopeId, nodeId, rekeyId, c)
     }
 }

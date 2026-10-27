@@ -52,7 +52,7 @@ object PotRekeyRows {
 /**
  * The Expenses half of a Pot's re-key (ADR 0109 point 2, ADR 0108 decision 4): the listing a re-keyer reads — every
  * revision's `K_rev` wrap and nothing else — and the staging it writes through, under core's re-key rights
- * ([RekeyHandler]): an owner with the current grant, not excluded.
+ * ([RekeyHandler]): any member with the current grant, not excluded (an owner on an owner-only node).
  */
 @ApplicationScoped
 class PotRekeyHandler(private val rekey: RekeyHandler, private val store: PotRevisionStore, private val receipts: PotReceiptStore) {
@@ -63,7 +63,7 @@ class PotRekeyHandler(private val rekey: RekeyHandler, private val store: PotRev
      * (or none) starts with the revisions past its revision.
      */
     fun list(userId: String, scopeId: String, nodeId: String, since: ItemsCursor?, limit: Int): PotRekeyListOutcome {
-        rekey.refusal(userId, scopeId, READ)?.let { return PotRekeyListOutcome.Refused(it as HttpFailure) }
+        rekey.refusal(userId, scopeId, READ, nodeId)?.let { return PotRekeyListOutcome.Refused(it as HttpFailure) }
         potOf(scopeId, nodeId) ?: return PotRekeyListOutcome.Refused(RekeyOutcome.NotFound)
         val inReceipts = since?.position == PotRekeyRows.RECEIPTS
         val revisions = if (inReceipts) ItemsPage(emptyList(), false) else store.pageByAddress(nodeId, since?.let { RevisionRef.parse(it.id) }, limit)
@@ -83,7 +83,7 @@ class PotRekeyHandler(private val rekey: RekeyHandler, private val store: PotRev
         userId: String, scopeId: String, nodeId: String, rekeyId: String, fromEpoch: Int, wraps: Map<RevisionRef, String>,
         receiptWraps: Map<String, String>,
     ): RekeyOutcome {
-        rekey.refusal(userId, scopeId, WRITE)?.let { return it }
+        rekey.refusal(userId, scopeId, WRITE, nodeId)?.let { return it }
         potOf(scopeId, nodeId) ?: return RekeyOutcome.NotFound
         val values = wraps.entries.associate { (ref, wrap) -> Key(ref.key(), PotRekeyRows.WRAP) to Value(wrap, null) } +
             receiptWraps.entries.associate { (id, wrap) -> Key(id, PotRekeyRows.RECEIPT_WRAP) to Value(wrap, null) }
@@ -108,7 +108,7 @@ class PotRekeyHandler(private val rekey: RekeyHandler, private val store: PotRev
  * - every staged value is a wrap of a revision or a receipt the Pot still holds ([NodeRekeyParticipant.Verdict.STALE] if
  *   not): a revision erased or a receipt purged since, and **anything that is not a wrap** — a re-key changes no body
  *   and no blob, so a part naming any other field lands nothing, the wraps beside it included (ADR 0108 decision 4: not
- *   even the owner who re-keys rewrites the history).
+ *   even the member who re-keys rewrites the history).
  *
  * Only then it writes the wraps (a receipt's into its blob row: `K_blob` is re-wrapped, never re-encrypted, ADR 0109
  * decision 3), moves the Pot's item revision once and gives every revision that position, so an open list's next poll

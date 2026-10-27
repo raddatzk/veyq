@@ -11,7 +11,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - RekeyCoreSliceTest.theListingServesEveryNodeTrashedIncludedAndOnlyToAnOwnerWithTheCurrentGrant
+          - RekeyCoreSliceTest.theListingServesEveryNodeTrashedIncludedAndOnlyWithTheCurrentGrant
           - RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction
           - RekeyCoreSliceTest.aTrashedNodeIsRestoredOnlyOnceTheReKeyReachedIt
           - MediaNodeRekeySliceTest.theListingServesEveryKeySealedRowButAWriteOnlyGuestsInPages
@@ -52,7 +52,7 @@ acceptanceCriteria:
           - MediaEpochGateSliceTest.aGuestsCompletionStatesTheTargetsEpochForTheBatch
       web: { unit: [src/shared/rekeyRetry.test.ts, src/core/node/tree.epoch.wire.test.ts] }
   - id: resumable
-    text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any owner holding it; a queued rotation completes only once no node lags, and reads secured only then.
+    text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any member holding it, every member's scope row reading the re-key unfinished; a queued rotation completes only once no node lags, and reads secured only then.
     coverage:
       backend:
         unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying]
@@ -61,6 +61,7 @@ acceptanceCriteria:
           - RekeyCoreSliceTest.aStagedChildThatMovedSinceIsStale
           - RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone
           - RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags
+          - RekeyCoreSliceTest.aMembersScopeRowReadsRekeyingWhileANodeLags
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts] }
   - id: links-follow-and-stay-marked
     text: A link from before shows what is added after the re-key and stays marked reissueRequired; its re-issue's key does not open what the old recovery copy's key reaches.
@@ -69,6 +70,18 @@ acceptanceCriteria:
         integration:
           - RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction
           - ShareEpochGateCoreSliceTest.theResolveServesTheRootsEpochForEveryUnlockedRoleAndItsTagMovesWithIt
+      web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
+  - id: any-member-rekeys
+    text: Any member holding the scope's current epoch lists, stages and commits a node's re-key, an application's part included; a member whose grant lags is refused; two members re-keying one node leave one commit and the second is told the node moved; a drop box root, a guest's identity folder and what lies below one are marked owner-only and refused to a member, and an owner re-keys each.
+    coverage:
+      backend:
+        integration:
+          - RekeyCoreSliceTest.aMemberWithTheCurrentGrantReKeysANode
+          - RekeyCoreSliceTest.aMemberWithAGrantBehindIsRefused
+          - RekeyCoreSliceTest.aMemberIsRefusedADropBoxItsIdentityFolderAndWhatLiesBelowAndAnOwnerReKeysEach
+          - RekeyCoreSliceTest.twoMembersReKeyingTheSameNodeLeaveOneCommit
+          - PotRekeySliceTest.aMemberWithTheCurrentGrantReKeysAPot
+          - MediaNodeRekeySliceTest.aMemberWithTheCurrentGrantReKeysAMemory
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
   - id: drop-key-replaced
     text: A node's drop key is replaced and its guest identities' keys re-sealed to the new public key; an upload after the re-key does not open with the drop private key from before.
