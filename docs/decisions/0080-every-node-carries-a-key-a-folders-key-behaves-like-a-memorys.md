@@ -149,7 +149,10 @@ Memory, an expense and a file side by side).
     the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
     folders it writes by the URL-segment rule above, so it stays unambiguous inside a drop box too. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
-    nodes); this rule is for nodes guests create, built with the first application that needs it (Depot).
+    nodes); this rule is for nodes guests create, built with the first application that needs it (Depot). Since a
+    re-key re-seals what lies under a node's key, it is a write onto the node: once [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) lets any member re-key (not
+    built; today every re-key is an owner's), a drop box, its drop key and its guests' identity folders stay re-keyed
+    by an owner only, and their guests wait for one.
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
     become required in `CreateShareRequest`, so every member can always re-show and edit a link. The columns and
     `ShareSummary` stay nullable: a tombstoned share clears them (`SharingStore.tombstone`), so the baseline does not

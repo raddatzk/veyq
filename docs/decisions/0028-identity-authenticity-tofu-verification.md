@@ -3,7 +3,11 @@
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the pin store's and the device
   register's counter is a **revision** (`revision`, was `version`); by [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
   (2026-10-19): the pin store is one sealed entry per pin under a sealed head — Decision 1's *what is pinned* and
-  Decision 7's *which revision is marked* say so in place.
+  Decision 7's *which revision is marked* say so in place. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) decides anew how a
+  key change is judged and who re-grants after a rotation: a key is trusted when a doubly signed key chain reaches it
+  from an owner-rooted join record, a *verified* mark becomes a signed statement per tenant, and the device keeps the
+  highest chain head seen. Decisions 1, 2, 3, 5 and 6 say in place what it replaces; until it is built they describe
+  the code.
 - Date: 2026-07-07
 
 ## Context
@@ -34,7 +38,8 @@ is "**attack OR legitimate rotation**", indistinguishable on-wire. And the whole
 Adopt **trust-on-first-use (TOFU) pinning + out-of-band safety-number verification**, with the change-response
 split by whether a human is present. Key Transparency stays the (out-of-scope) end-state.
 
-1. **Pin on first use.** The first time a client wraps to a member's identity key it **pins** it (state:
+1. **Pin on first use** (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 16, not built, the store holds the highest key-chain head seen per
+   person instead, and a key change is judged by the chain). The first time a client wraps to a member's identity key it **pins** it (state:
    *pinned, unverified*) and proceeds. What is pinned is the **fingerprint hash of the full identity public
    bundle** (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519) — the domain-separated
    SHA-256 the safety number and its QR already are (Decision 3) — keyed by `userId` (identity is account-global, so
@@ -46,7 +51,9 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    and never sees a pin, a contact or the trust graph (operator-blind). It does see how many pins there are, as it
    always could (ADR 0104 decision 5).
 
-2. **A key ≠ pin is surfaced, not silently trusted — response depends on the path:**
+2. **A key ≠ pin is surfaced, not silently trusted — response depends on the path** (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 15, not
+   built, a change the doubly signed chain reaches is shown as *new identity, signed by the previous key* and needs
+   no review; one it does not reach is an anomaly nobody wraps to):
    - **Human path (UI):** a **notice**, *not* a hard block (a legitimate rotation must not lock a contact out).
      The user reviews and, on **accept**, re-pins (`pin := key`). The accept decision is informed by (3).
    - **Automated path (the grant-delivery worker — no human):** **block** — do **not** wrap `K_SC` to a changed
@@ -54,7 +61,9 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
      job to me") and raises a **human-review flag**; a human resolves it in the UI (accept → re-pin → the wrap
      then proceeds).
 
-3. **Verification (elevate *pinned* → *verified*).** Two users compare the **safety number** out-of-band; the
+3. **Verification (elevate *pinned* → *verified*)** (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 12–14, not built, a verification is a
+   statement signed by the verifier in the tenant, naming the chain head it confirms, and the compare shows that
+   head). Two users compare the **safety number** out-of-band; the
    ergonomic form is **QR** — scan the other device's fingerprint, the app **compares it against the pin and gives
    the user feedback** (matches / differs). Verification is optional trust elevation in the default flow, and it
    is the **way to accept a legitimately rotated key** (re-verify → re-pin as *verified*). Reuses the existing
@@ -93,6 +102,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    identity-only rotation is (d) below. What this record still owns is the half rotation depends on — the
    **other members must rotate every shared `K_SC`** to exclude the old identity, and the rotator may **not**
    drive that re-grant themselves, or an attacker holding the old identity would re-admit only their new one.
+   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 8 (not built) reverses this half: the rotator mints every shared epoch itself, because a rotation
+   step signed by the old Secret-Key proof key is one that attacker cannot make.
 
 6. **Every grant is signed by its granter, and the recipient checks the signature before opening it.** The
    decisions above protect the *wrapper*, who needs to know that the key it wraps to is the right one. They say
@@ -165,7 +176,9 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** (the compare of
   Decision 3) or Key Transparency. TOFU cannot detect a lie told before first sight. The gap is narrower since two later changes.
   It no longer lets the operator *invent* a member: every wrap to someone else needs an admission tag that only
-  a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6). And it no longer reaches
+  a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6). [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (not built) replaces the
+  tag with a join record rooted at the tenant's owner, which closes the gap inside a tenant for an invite sealed
+  under a password. And it no longer reaches
   the personal scope at all (Decision 6).
 - **Grant-delivery is first-online-wins across key-holders, so a worker block is per key-holder — keyed on the
   declining account, not on the browser it declined from — and not a global veto.**
@@ -214,7 +227,8 @@ any other key the server serves. What the copy buys is that a granter who rotate
 recipient's existing pin until the covering rotation replaces them. Serving the granter's *current* key would fail
 every one of those grants as `bad_signature` before any pin is read, so an owner holding one could not open the
 scope to perform the very rotation that replaces it. Two limits stay:
-- **A recipient who accepts the granter's new key before the covering rotation reached them** refuses those grants
+- **A recipient who accepts the granter's new key before the covering rotation reached them** (gone under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md),
+  not built: the granter's new key is reached by the chain from the old one) refuses those grants
   as `granter_key_changed`, because their pin no longer holds the key that signed them. The retired key is never
   trusted again for them. Accepting a changed key therefore first runs one pass of the scope-rotation worker, so an
   owner who is online covers the scope before their pin moves

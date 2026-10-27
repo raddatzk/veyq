@@ -1,6 +1,8 @@
 # ADR 0109 — A scope rotation re-keys every node below it
 
-- Status: Accepted 2026-10-23 (owner); built 2026-10-23 (cr-scope-rotation-rekeys-nodes: contracts, backend, web)
+- Status: Accepted 2026-10-23 (owner); built 2026-10-23 (cr-scope-rotation-rekeys-nodes: contracts, backend, web).
+  [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) changes who runs the re-key — any member where it may write, a drop box an
+  owner only — and keeps it eager; point 7 and § Consequences say so in place.
 - Date: 2026-10-23
 
 ## Context
@@ -79,7 +81,10 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
    has held for the scope. A create off the scope root states the current epoch; one below it is `409 stale_epoch`
    (this narrows ADR 0080 Decision 6's *at or below*, whose reason — a server-chosen epoch that left names
    unopenable — does not arise when the writer is told to re-read).
-7. **The client that commits the epoch runs the re-key; any owner holding the current epoch finishes it.** The
+7. **The client that commits the epoch runs the re-key; any owner holding the current epoch finishes it.** (Under
+   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11, not built: **any member** holding the current epoch re-keys, in the background and on its own
+   write's `node_rekey_pending` for that write's path, except a drop box and its guests' identity folders, which stay
+   an owner's; and an account's rotator commits its shared epochs itself, so the last sentence below goes.) The
    remover's device right after its removal; the scope-rotation worker of the owner completing a queued rotation;
    the rotator's own device for the personal scope. A rotation whose re-key is incomplete is unfinished work the
    scope-rotation worker picks up, for every trigger alike. A queued job is `done` only once no node of the scope
@@ -107,7 +112,8 @@ for a group removal on the remover's (it was `O(members)`, it becomes `O(members
 - **ADR 0080 Decision 5's accepted residual narrows** to exactly that list: a removed group member's reach ends at the
   removal's rotation, but for links.
 - **Writing waits per node while a rotation re-keys.** A writer meets `node_rekey_pending` on a node not yet reached
-  and retries; a crashed re-key leaves the unreached nodes waiting until an owner's worker resumes it.
+  and retries; a crashed re-key leaves the unreached nodes waiting until an owner's worker resumes it (under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md),
+  not built, any member's client, and a member's own write re-keys its path first).
 - **Slug keys change with each rotation.** ADR 0080 Decision 2's "stable per parent key" holds between rotations; the
   re-key recomputes every token under the new key in the same commit.
 - **New write paths.** Fields that only an insert wrote so far are rewritten in place: `wrapped_blob_key`,
@@ -121,7 +127,8 @@ for a group removal on the remover's (it was `O(members)`, it becomes `O(members
   uniqueness would split across generations — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   rejected per-node chains, and re-wrapping fields is cheap enough to keep readers as they are.
 - **Re-key lazily, on the first write into a node.** No upfront cost, but every write path of every application, and
-  every guest, would re-key ancestors, and a guest cannot (it holds no key above its root).
+  every guest, would re-key ancestors, and a guest cannot (it holds no key above its root). Still rejected by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md): its
+  member-driven re-key stays eager, and only a member's own blocked write pulls its path forward, in one central place.
 - **Re-key only on a compromise rotation.** It would leave ADR 0024's removal guarantee false.
 - **Switch every link off, or re-issue every link, with the rotation** (owner 2026-10-23): it breaks every guest; the
   `reissueRequired` mark and the result screen leave the choice per link.

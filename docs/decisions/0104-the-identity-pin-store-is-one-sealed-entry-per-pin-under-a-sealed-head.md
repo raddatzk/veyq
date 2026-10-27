@@ -4,7 +4,10 @@
   the fingerprint hash per entry (decision 3), the count named openly (decision 5), no read path for the single-blob
   store (decision 7: veyq was not live) and keeping the cap and the rotation's one request once it was measured
   (§ Consequences, 2026-10-26). [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decisions 1 and 7
-  say what is pinned and which revision is marked in place.
+  say what is pinned and which revision is marked in place. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) keeps this
+  store's shape and its rollback rules and changes what an entry holds: per person, the highest key-chain head this
+  account has seen, in place of the fingerprint a key change is judged against and the personal *verified* state
+  (decision 2's plaintext), which becomes a signed statement in the tenant.
 - Date: 2026-10-19
 
 Provenance: **(M)** measured when the store was built (`IdentityPinsSliceTest`, on H2 and on MariaDB); **(R)**

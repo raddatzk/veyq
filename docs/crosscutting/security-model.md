@@ -543,7 +543,16 @@ server-blind token makes this work without the server ever seeing a name:
 
 Wrapping a content key to "Bob" needs Bob's identity public key, which the operator-blind server relays
 from its directory. A malicious server could serve an attacker's key instead (key-substitution / MITM)
-and read what is wrapped to it. The defense is **trust-on-first-use pinning + safety-number verification**:
+and read what is wrapped to it. The defense is **trust-on-first-use pinning + safety-number verification**.
+
+**What this section describes is built.** [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) decides its successor: a
+tenant's trust root is its owner, handed to a newcomer through an invite whose key the owner signed, so each member's
+key is anchored by an owner-rooted join record; a rotation is a step of a key chain signed by the old identity **and**
+the old Secret-Key proof key, which a stolen device cannot make, so a contact's client follows it with no review and
+the rotator re-keys its own scopes; a key the chain does not reach is an anomaly nobody wraps to, never a block on a
+write; *verified* is a signed statement per tenant naming the chain head, and the safety-number compare shows that
+head. The bullets below say where they change.
+
 
 - **Pin on first use (TOFU).** The first time a client wraps to Bob's identity key it **pins** the fingerprint
   hash of the full identity public bundle (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign`
@@ -586,7 +595,8 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   if the signature verifies — for the personal scope only under its **own** key, so the server cannot plant a
   personal scope key; for a shared scope under the granter's pinned key
   ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
-- **The operator cannot invent a member.** A wrap to anyone else needs an admission tag that only a holder of
+- **The operator cannot invent a member.** (Under [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md), not built, an owner-rooted join record replaces the tag.)
+  A wrap to anyone else needs an admission tag that only a holder of
   the scope's current epoch key computes, so what TOFU leaves open is a substituted key on an admission the
   owner really made — not a member made up by the server ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6).
 - **Rotation is how a compromise ends, and it is the only remedy that reaches key material.** A revoke takes
@@ -596,7 +606,9 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   what was already read stays read — it is gated on the **Secret Key**, checked by the server, so the attacker
   it defends against cannot rotate first, and re-admission to each shared scope runs through the human
   change-review above, which
-  is what stops a stolen identity rotating its way back in.
+  is what stops a stolen identity rotating its way back in. (Under [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md), not built, the rotator re-admits itself:
+  the step its old Secret-Key proof key signs is what a stolen identity cannot make, and the Secret Key is replaced
+  with the rest.)
 - **First consumer:** adding a member to a shared scope ([uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md),
   [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) is the first flow to wrap a scope key to
   *another* member via this directory; it adopts the model above.
