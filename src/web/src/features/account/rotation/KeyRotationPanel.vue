@@ -145,7 +145,9 @@ const { run, pending: busy } = useAsyncAction(
               ? t('rotation.errorLocked')
               : e.reason === 'trustStateRefused'
                 ? t('rotation.errorTrustState')
-                : t('rotation.errorCredential')
+                : e.reason === 'requestTooLarge'
+                  ? t('rotation.errorTooLarge')
+                  : t('rotation.errorCredential')
           : t('rotation.errorFailed')
     },
   },

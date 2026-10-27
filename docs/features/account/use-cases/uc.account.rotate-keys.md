@@ -46,7 +46,7 @@
    written in the same transaction — so a rotation that cannot re-seal them does not happen, rather than
    leaving them under a key that no longer exists. Each is opened under the old key through this device's
    trust-state marks first (E8), and a `stale_revision` on either fails that attempt whole: the client re-reads,
-   re-seals and resubmits. The Memory pins are re-sealed under `MK'` and the caller's own item marks re-tagged —
+   re-seals and resubmits; a request past the server's limit is refused whole and not resubmitted (E10). The Memory pins are re-sealed under `MK'` and the caller's own item marks re-tagged —
    their self-tag's key derives from the Master Key, and only a mark whose tag verifies under the old key is
    carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9); these two run
    best-effort once the server has accepted the request. The request carries a signature of the **Secret-Key
@@ -162,6 +162,12 @@ sequenceDiagram
   for them until another owner completes it, and the review dialog says so before the accept. The covering
   rotation itself never needs the new key accepted: its re-grant skips a member whose key reads `changed`, and
   this account's re-admission follows by grant-delivery once somebody accepts.
+- **E10 — the rotation is larger than the server accepts.** The publish carries the whole pin store (ADR 0104), and a
+  body past the instance's request limit is answered `413` before it is read or the caller is authenticated, so
+  nothing is written. Trying again sends the same body and fails the same way, so the screen says so and names the
+  Server Owner, whose request limit (or a proxy's in front of it) is the remedy; at the default limit a rotation at the
+  pin store's cap fits. Any `413` counts, a proxy's bare one included. A failure with no answer (the request never
+  got one) is never called too large: the client cannot tell it from being offline.
 
 ## Quality notes
 
@@ -205,3 +211,4 @@ new lock they cannot read what is added there, except through a link made before
   [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the re-admission review),
   [uc.account.recover-access](uc.account.recover-access.md) (the other cold path)
 - End-user view (docs site): [Replace your keys](../../../../site/src/content/docs/account/replace-your-keys.mdx)
+- Run area of the docs site (E10's remedy): [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)

@@ -27,6 +27,9 @@ export const HttpStatus = {
   notFound: 404,
   conflict: 409,
   gone: 410,
+  /** RFC 9110's "Content Too Large": a body past the request limit, which the same request cannot get past again
+   *  (a key rotation's publish, uc.account.rotate-keys E10). */
+  contentTooLarge: 413,
   unprocessable: 422,
   tooManyRequests: 429,
   /** The tenant cannot send mail, so a mail-only action is refused (ADR 0055). */

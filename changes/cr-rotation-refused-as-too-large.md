@@ -330,3 +330,21 @@ it is for; the backend CR of decision 2 is not needed for Chrome over HTTP/1.1.
   answered `502` itself. It stays `rotation.errorFailed` (decision 2: a `502` is never "too large"), which tells a
   user to try again — and the retry most likely reads the `413`.
 - undici's `ECONNRESET` on the seed write (`rotationAtPinCap.measure.e2e.test.ts:29-30`) is not what Chrome does.
+
+### Phase 2 — the refusal, its proof and its pass (2026-10-27)
+
+- **Bites** (snapshot-and-restore, restore checked by `cmp` against the snapshot and `git status --porcelain` before
+  and after):
+  1. The `413` branch removed: both `a coded|bare 413 on the publish is refused as too large` red.
+  2. Widened to every rejection without a `response`: `control: a fetch that rejected …` red, the `500` control green.
+  3. Widened to `|| isHttpStatus(e, 500)`: `control: a 500 …` red, the fetch control green.
+  4. The panel's `requestTooLarge` arm removed: `a refusal as too large shows the copy …` red.
+  5. The panel's fallback switched to `errorTooLarge`: `control: any other failure keeps the generic copy` red.
+- **Browser pass**, headless installed Chrome, `locale: de-DE`, on an instance of its own (own MariaDB and Garage from
+  the dev images by id, this worktree's jar under `%prod`, its own Vite on `veyq.localhost:48553`, a throwaway owner
+  from `bootstrap:user`). A first press with the request aborted in the browser (3,021 bytes) showed the generic
+  `errorFailed` — the `FetchError` control, live. The jar was then restarted with
+  `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE=2800`; two presses each got a real `413` and showed the DE text of
+  `rotation.errorTooLarge` in the confirm dialog and on the page. The request went through Vite's dev proxy.
+- **Checks:** `npm run check` in `src/web/` green (load 6.9 at start); the trust-chain guards without
+  `validate_guard_gaps.py` green after the two back-links `validate_wiki_sources.py` asked for; the site builds.

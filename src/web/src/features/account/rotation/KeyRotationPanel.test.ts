@@ -8,7 +8,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('./rotateKeys', () => ({
   rotateKeys: vi.fn(),
-  RotationRefused: class extends Error {},
+  // Keeps `reason`, so the panel's per-reason arms can be reached.
+  RotationRefused: class extends Error {
+    constructor(public readonly reason: string) {
+      super(`rotation refused: ${reason}`)
+    }
+  },
   listQueuedRotations: vi.fn(),
   requeueQueuedRotation: vi.fn(),
 }))
@@ -17,7 +22,7 @@ vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn(), listMyScopes: vi
 vi.mock('./soleOwnerSpaces', () => ({ soleOwnerSpaces: vi.fn() }))
 
 import KeyRotationPanel from './KeyRotationPanel.vue'
-import { listQueuedRotations, requeueQueuedRotation, rotateKeys } from './rotateKeys'
+import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused } from './rotateKeys'
 import { listMyScopes, listMyTenants } from '../../spaces/scopes'
 import { soleOwnerSpaces } from './soleOwnerSpaces'
 import { forgetGroupNamesSeen, rememberGroupName } from '../../spaces/groupNamesSeen'
@@ -219,5 +224,44 @@ describe('KeyRotationPanel — the spaces this account owns alone, before the bu
     await flushPromises()
     expect(line(w).exists()).toBe(false)
     expect(w.text()).toContain(t('rotation.factLinks')) // control: the facts did render
+  })
+})
+
+// uc.account.rotate-keys E10: a rotation the server refused as too large says so, with copy that does not ask for a
+// retry; every other failure keeps the generic copy.
+describe('KeyRotationPanel — what a failed rotation says', () => {
+  const field = { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)">' }
+  const rotatingStubs = { ...stubs, VeyqPassword: field, SecretKeyField: field, VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' } }
+
+  async function rotateFailing(failure: unknown) {
+    vi.mocked(listQueuedRotations).mockResolvedValue([])
+    vi.mocked(rotateKeys).mockRejectedValue(failure)
+    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs: rotatingStubs } })
+    await flushPromises()
+    const [pw, sk] = w.findAll('input')
+    await pw.setValue('pw')
+    await sk.setValue('secret')
+    await w.findAll('button').find((b) => b.text() === t('rotation.action'))!.trigger('click')
+    await w.findAll('button').filter((b) => b.text() === t('rotation.action')).at(-1)!.trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listMyTenants).mockResolvedValue([])
+    vi.mocked(listMyScopes).mockResolvedValue([])
+  })
+
+  it('a refusal as too large shows the copy that names the Server Owner', async () => {
+    const w = await rotateFailing(new (RotationRefused as unknown as new (r: string) => Error)('requestTooLarge'))
+    expect(w.text()).toContain(t('rotation.errorTooLarge'))
+    expect(w.text()).not.toContain(t('rotation.errorFailed'))
+  })
+
+  it('control: any other failure keeps the generic copy', async () => {
+    const w = await rotateFailing(new Error('offline'))
+    expect(w.text()).toContain(t('rotation.errorFailed'))
+    expect(w.text()).not.toContain(t('rotation.errorTooLarge'))
   })
 })

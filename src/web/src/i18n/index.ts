@@ -298,6 +298,8 @@ const en = {
     errorCredential: 'That password or Secret Key didn’t match. Nothing was changed.',
     errorNoFloor: 'This account has no password sign-in to check against, so its keys can’t be replaced here.',
     errorFailed: 'Your keys could not be replaced. Nothing was changed — please try again.',
+    errorTooLarge:
+      'Your keys could not be replaced, because the request is larger than this server accepts. Nothing was changed, and trying again won’t help. Ask the Server Owner to raise the server’s request limit.',
     doneNotRepair: 'Your keys are replaced. Below, each space shows whether its new lock is in.',
     status: {
       secured: 'New lock',
@@ -2276,6 +2278,8 @@ const de: typeof en = {
     errorNoFloor:
       'Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lassen sich die Schlüssel hier nicht ersetzen.',
     errorFailed: 'Deine Schlüssel konnten nicht ersetzt werden. Es wurde nichts geändert — bitte versuche es erneut.',
+    errorTooLarge:
+      'Deine Schlüssel konnten nicht ersetzt werden, weil die Anfrage größer ist, als dieser Server annimmt. Es wurde nichts geändert, und ein neuer Versuch hilft nicht. Bitte die Person, die den Server betreibt, die Grenze für Anfragen anzuheben.',
     doneNotRepair: 'Deine Schlüssel sind ersetzt. Unten steht bei jedem Bereich, ob sein neues Schloss drin ist.',
     status: {
       secured: 'Neues Schloss',
