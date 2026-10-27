@@ -164,7 +164,8 @@ export function contentApi(): ContentApi {
 }
 
 // A scope's re-key after a rotation (ADR 0109, core's `rekey` tag): list every node with its epoch, a node's core parts,
-// stage, commit. Only an owner holding the current grant reaches it.
+// stage, commit. Any member holding the current grant reaches it, the nodes only an owner re-keys excepted (ADR 0111
+// decision 11).
 export function rekeyApi(): RekeyApi {
   return new RekeyApi(new ContentConfiguration(bearerParams()))
 }
