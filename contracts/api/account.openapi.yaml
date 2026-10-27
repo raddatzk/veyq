@@ -1844,7 +1844,7 @@ components:
           type: string
           description: >
             `waiting` — an owner who may complete it exists; `stalled` — no owner may (promote a co-owner);
-            `rekeying` — the new epoch is in, and an owner's device is re-keying the scope's nodes (some still carry
+            `rekeying` — the new epoch is in, and a member's device is re-keying the scope's nodes (some still carry
             a key from before, ADR 0109); `secured` — the old identity holds no grant to the scope's current epoch and
             every node of the scope is re-keyed; `failed` — the job dead-lettered, and it can be queued again.
           enum: [waiting, stalled, rekeying, secured, failed]
