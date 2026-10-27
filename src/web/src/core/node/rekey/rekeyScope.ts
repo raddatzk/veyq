@@ -3,8 +3,9 @@
 // that committed the epoch (the remover's, the rotator's for the personal scope, an owner's scope-rotation worker for a
 // queued rotation) and by ANY member's worker that finds the scope still re-keying (resumed from the server's derived
 // state: a node below the current epoch still carries its key from before) — ADR 0111 decision 11: a re-key is not
-// governance, so every member holding the current epoch runs it, except on the nodes only an owner re-keys (a drop box
-// root, a guest's identity folder and below, `RekeyNode.ownerOnly`), which a member's run leaves for an owner.
+// governance, so every member holding the current epoch runs it, except on the nodes only an owner re-keys (a drop box,
+// a guest's identity folder and below — not a Memory merely carrying a drop key — `RekeyNode.ownerOnly`), which a
+// member's run leaves for an owner.
 //
 // A member's write that meets `node_rekey_pending` pulls its own path forward ({@link pullRekeyPath}): the same per-node
 // commit, run on the written node and its lagging ancestors only, so the write is delayed by its path's re-key and

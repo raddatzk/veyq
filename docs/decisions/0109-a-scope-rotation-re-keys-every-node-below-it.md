@@ -92,9 +92,13 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
    `node_rekey_pending` re-keys that write's path first (the node and its lagging ancestors, top-down) and retries at
    once, in the client's one retry helper: for a member a write is delayed by its path's re-key, not refused. A re-key
    re-seals what the server cannot check, so it is a write onto the node and runs only where the caller may write: a
-   drop box root, a guest's identity folder and what lies below one are re-keyed **by an owner only** (the listing
-   marks them `ownerOnly`; a member's operation on one is `403 not_scope_owner`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-   Decision 11), and a guest — holding no key above its root — and a member writing into such a node wait. A queued
+   drop box (a kind whose guests get identity folders, Depot's), a guest's identity folder and what lies below one —
+   where members place nothing — are re-keyed **by an owner only** (the listing marks them `ownerOnly`; a member's
+   operation on one is `403 not_scope_owner`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+   Decision 11), and a guest — holding no key above its root — and a member writing into such a node wait. A node
+   that only carries a drop key, a Memory or chapter with an uploader link, is any member's: point 5's replacement needs
+   only the node's old key, which opens the drop private key and through it each guest's `K_up`, and each link's
+   recovery copy, and a member already sets that drop key with a first link and trashes any guest's upload. A queued
    job is `done` only once no node of the scope lags (the completion is refused before). The rotator of an account
    rotation never runs it in a shared scope: they hold no current grant there ([ADR 0060](0060-key-rotation-after-compromise.md)
    Decision 4; under ADR 0111 decisions 6–10, not built, the rotator commits its shared epochs itself, and this

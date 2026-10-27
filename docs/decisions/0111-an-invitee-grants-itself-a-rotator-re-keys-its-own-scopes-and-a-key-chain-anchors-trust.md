@@ -135,7 +135,14 @@ Facts the design rests on, read in the code on 2026-10-27:
       so a member's re-key gains a member nothing — **except** in a drop box's per-guest-identity folders, where
       members place nothing (ADR 0080 Decision 11). **Those folders, and the drop box with its drop key, are re-keyed by
       an owner only**; their guests wait for an owner rather than for any member — the case where only guests write
-      anyway.
+      anyway. The drop box is the kind whose guests get identity folders (Depot's), not every node with a drop key: a
+      Memory or chapter gets one with its first uploader link, which any member may make, and members write into it,
+      so it is any member's to re-key. Its drop key's replacement (ADR 0109 point 5) needs only what such a member
+      holds — the node's old key opens the drop private key, which opens each guest's `K_up`, and each link's
+      `K_share` comes from its recovery copy — and writes nothing a member could not already write there: a member sets
+      the drop key with a first link, seals its public half under every link it makes, and trashes any guest's upload.
+      Owner-only there, a member's photo into an ordinary Memory with an uploader link would wait for an owner — goal 3
+      broken.
 
 ### Trust: facts live with the person, verdicts are signed, the device keeps a counter
 

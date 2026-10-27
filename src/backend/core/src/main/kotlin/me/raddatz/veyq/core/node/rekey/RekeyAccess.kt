@@ -10,7 +10,9 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
 import me.raddatz.veyq.core.tasks.TasksStore
+import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Why a caller may not re-key a scope or one of its nodes, or that it may. Every refusal is a [RekeyOutcome] too: an operation answers it
@@ -31,14 +33,14 @@ sealed interface RekeyRight {
  * membership nor content nor who holds a link (re-wrapping a share from its recovery copy keeps it working), so it
  * needs only the current epoch, which every such member holds. It is still a write path onto the node (it re-seals
  * names, meta and EXIF the server cannot check), so it is open where the caller may write: everywhere a member may,
- * **except** a node only an owner re-keys ([OwnerOnlyRekey]: a drop box root, a guest's identity folder or below one,
- * where members place nothing, ADR 0080 Decision 11) — there a member is [RekeyRight.NotOwner]. An account that rotated
+ * **except** a node only an owner re-keys ([OwnerOnlyRekey]: a drop box, a guest's identity folder or below one, where
+ * members place nothing, ADR 0080 Decision 11) — there a member is [RekeyRight.NotOwner]. An account that rotated
  * its keys after a compromise is excluded until re-admitted (ADR 0060 Decision 4), so the old identity never re-keys.
  * The scope-access gate first, as everywhere (ADR 0042): a non-member learns nothing; a read of a deleting group is
  * answered, a write refused.
  */
 @ApplicationScoped
-class RekeyAccess(private val access: ScopeAccess, private val tasks: TasksStore) {
+class RekeyAccess(private val access: ScopeAccess, private val tasks: TasksStore, private val ownerOnly: OwnerOnlyRekey) {
 
     /** The caller's right to re-key [scopeId] — at [nodeId] when the operation names a node (null for the listing, which
      *  serves every node and marks the owner-only ones instead). */
@@ -54,34 +56,52 @@ class RekeyAccess(private val access: ScopeAccess, private val tasks: TasksStore
         if (tasks.isRotationExcluded(scopeId, userId)) return RekeyRight.Excluded
         val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
         if (membership.wrappedGrant == null || membership.grantedEpoch < current) return RekeyRight.GrantBehind
-        if (membership.role != MembershipEntity.OWNER && nodeId != null && OwnerOnlyRekey.at(scopeId, nodeId)) return RekeyRight.NotOwner
+        if (membership.role != MembershipEntity.OWNER && nodeId != null && ownerOnly.at(scopeId, nodeId)) return RekeyRight.NotOwner
         return RekeyRight.Granted
     }
 }
 
 /**
- * The nodes only an owner of the scope re-keys (ADR 0111 decision 11, last bullet; ADR 0080 Decision 11): a drop box
- * root of any kind (it carries a drop private key, [NodeEntity.sealedDropPrivateKey]), a guest's identity folder
- * ([NodeEntity.shareIdentityId]) and everything below one — the walk `NodesStore.identityFolderOwner` takes. A node a
- * member placed directly in a drop box root is no identity folder and stays any member's to re-key, once an owner
- * re-keyed the root above it (top-down). Served to the client as `RekeyNode.ownerOnly`, so a member's re-key skips them.
+ * The nodes only an owner of the scope re-keys (ADR 0111 decision 11, last bullet; ADR 0080 Decision 11): where members
+ * place nothing of their own. That is a **drop box** — a node of a kind whose `WRITE_ONLY` guests get identity folders,
+ * as the kind's application declares through [WriteOnlyGuestKinds] (Depot's `DEPOT_DROPBOX`; one implementation claiming
+ * the kind is enough, fail closed toward the owner) — and a guest's identity folder ([NodeEntity.shareIdentityId]) with
+ * everything below one, the walk `NodesStore.identityFolderOwner` takes.
+ *
+ * **A drop key alone does not make a node owner-only**: a Memory or chapter gets one with its first `WRITE_ONLY` link,
+ * which any member may make, and members write into it. Its re-key re-seals only what a member holding the current
+ * epoch opens — the drop private key under the node's key, each guest's `K_up` through it, each link's
+ * `K_share` from its recovery copy (ADR 0109 point 5) — and writes nothing a member could not already write there: a
+ * member sets a node's drop key with its first link, seals the public half under every link it makes, and trashes any
+ * guest's upload. Served to the client as `RekeyNode.ownerOnly`, so a member's re-key skips them.
  */
-object OwnerOnlyRekey {
+@ApplicationScoped
+class OwnerOnlyRekey(
+    // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
+    @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
+) {
     /** Whether [node] is owner-only; [parentOf] answers a parent id with its row in the same scope, null at the root. */
-    fun of(node: NodeEntity, parentOf: (String) -> NodeEntity?): Boolean {
-        if (node.sealedDropPrivateKey != null) return true
-        var cur: NodeEntity? = node
-        while (cur != null) {
-            if (cur.shareIdentityId != null) return true
-            cur = parentOf(cur.parentId)
-        }
-        return false
-    }
+    fun of(node: NodeEntity, parentOf: (String) -> NodeEntity?): Boolean = of(node, ::isDropBox, parentOf)
 
     /** [of] for the node [nodeId] of [scopeId], read row by row; false for a node not in the scope (the operation then
      *  answers its own `node_not_found`). */
     fun at(scopeId: String, nodeId: String): Boolean {
         val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId } ?: return false
         return of(node) { id -> NodeEntity.findById(id)?.takeIf { it.scopeId == scopeId } }
+    }
+
+    private fun isDropBox(kind: String): Boolean = writeOnlyKinds.any { it.creatable(kind) != null }
+
+    companion object {
+        /** The rule itself, boot-free: [dropBox] answers whether a node of a kind is a drop box. */
+        fun of(node: NodeEntity, dropBox: (String) -> Boolean, parentOf: (String) -> NodeEntity?): Boolean {
+            if (dropBox(node.kind)) return true
+            var cur: NodeEntity? = node
+            while (cur != null) {
+                if (cur.shareIdentityId != null) return true
+                cur = parentOf(cur.parentId)
+            }
+            return false
+        }
     }
 }

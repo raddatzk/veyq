@@ -43,13 +43,17 @@ const server = {
   epochs: null as EpochKeys | null,
   /** The caller's role in the scope, as its row says: an owner re-keys every node, a member all but the owner-only ones. */
   role: 'OWNER' as 'OWNER' | 'MEMBER',
+  /** The nodes whose kind the server's applications declare a drop box (Depot's `DEPOT_DROPBOX`); this core-only world
+   *  keeps every node a `FOLDER`, so the server's answer stands in for the kind. */
+  dropBoxes: new Set<string>(),
   /** Every commit, in order: who re-keyed what. */
   commits: [] as string[],
 }
 
-/** The backend's `OwnerOnlyRekey`: a drop box root, a guest's identity folder, or below one. */
+/** The backend's `OwnerOnlyRekey`: a drop box (by its kind, which an application declares — a drop key alone is not
+ *  one), a guest's identity folder, or below one. The client never derives it; it reads `ownerOnly`. */
 function ownerOnly(n: Row): boolean {
-  if (n.sealedDropPrivateKey) return true
+  if (server.dropBoxes.has(n.id)) return true
   for (let cur: Row | undefined = n; cur; cur = cur.parentId ? server.nodes.get(cur.parentId) : undefined) if (cur.shareIdentityId) return true
   return false
 }
@@ -170,6 +174,7 @@ beforeEach(() => {
   server.nodes.set(ids.root, node(ids.root, null, E0, K.root, 'root', { wrappedMeta: meta }))
   server.nodes.set(ids.child, node(ids.child, ids.root, K.root, K.child, 'child', { trashed: true }))
   server.nodes.set(ids.box, node(ids.box, null, E0, K.box, 'box', { sealedDropPrivateKey: OLD_DROP_PRIVATE }))
+  server.dropBoxes = new Set([ids.box])
   server.blobs = [{ blobId: ids.cover, nodeId: ids.root, role: 'COVER', wrappedBlobKey: coverWrap }]
   K_SHARE = v1.randomBytes(32)
   K_DROP_SHARE = v1.randomBytes(32)
@@ -278,6 +283,24 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     server.role = 'OWNER'
     expect((await rekeyScope(SCOPE)).done).toBe(true)
     expect(server.nodes.get(ids.box)!.epoch).toBe(1)
+  })
+
+  it('a member re-keys a node its uploader link gave a drop key: the drop key replaced, the guest\'s K_up re-sealed to it', async () => {
+    // the same drop-keyed node, of no drop box kind (a Memory with an uploader link): members write into it, so the
+    // server leaves it any member's, and a member's device holds everything its re-key needs
+    server.dropBoxes.clear()
+    server.role = 'MEMBER'
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    const memory = server.nodes.get(ids.box)!
+    expect(memory.epoch).toBe(1)
+    expect(memory.sealedDropPrivateKey).not.toBe(OLD_DROP_PRIVATE)
+    // everything the member's device needed it holds: the node's old key opened the old drop key, which opened K_up
+    const newDrop = openDropKey(SCOPE, ids.box, keyOf(ids.box), memory.sealedDropPrivateKey!)
+    const guest = server.identities.find((i) => i.identityId === ids.guest)!
+    expect(openIdentityKey(SCOPE, ids.box, newDrop, ids.guest, guest.wrappedIdentityKey!)).toEqual(K_UP)
+    const link = server.shares.find((s) => s.shareId === ids.drop)!
+    expect(v1.serializeHybridPublic(openDropPublicKey(K_DROP_SHARE, link.sealedDropPublicKey!)))
+      .toEqual(v1.serializeHybridPublic(v1.dropKeyPublic(newDrop)))
   })
 
   it('a path pull re-keys the written node and its lagging ancestors top-down, and nothing else', async () => {

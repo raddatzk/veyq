@@ -85,16 +85,22 @@ acceptanceCriteria:
           - ShareEpochGateCoreSliceTest.theResolveServesTheRootsEpochForEveryUnlockedRoleAndItsTagMovesWithIt
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
   - id: any-member-rekeys
-    text: Any member holding the scope's current epoch lists, stages and commits a node's re-key, an application's part included; a member whose grant lags is refused; two members re-keying one node leave one commit and the second is told the node moved; a drop box root, a guest's identity folder and what lies below one are marked owner-only and refused to a member, and an owner re-keys each.
+    text: Any member holding the scope's current epoch lists, stages and commits a node's re-key, an application's part included; a member whose grant lags is refused; two members re-keying one node leave one commit and the second is told the node moved; a drop box, a guest's identity folder and what lies below one are marked owner-only and refused to a member, and an owner re-keys each; a Memory or other node that only carries a drop key for its uploader link is any member's, drop key and guests' identity keys included.
     coverage:
       backend:
+        unit:
+          - OwnerOnlyRekeyTest.aDropKeyedNodeOfNoDropBoxKindIsAnyMembers
+          - OwnerOnlyRekeyTest.aDropBoxIsAnOwnersWithOrWithoutItsKey
+          - OwnerOnlyRekeyTest.anIdentityFolderAndWhatLiesBelowAreAnOwners
         integration:
           - RekeyCoreSliceTest.aMemberWithTheCurrentGrantReKeysANode
           - RekeyCoreSliceTest.aMemberWithAGrantBehindIsRefused
-          - RekeyCoreSliceTest.aMemberIsRefusedADropBoxItsIdentityFolderAndWhatLiesBelowAndAnOwnerReKeysEach
+          - RekeyCoreSliceTest.aMemberReKeysADropKeyedNodeButIsRefusedAnIdentityFolderAndWhatLiesBelow
+          - DropBoxRekeySliceTest.aMemberIsRefusedTheDropBoxAndItsIdentityFolderAndAnOwnerIsNot
           - RekeyCoreSliceTest.twoMembersReKeyingTheSameNodeLeaveOneCommit
           - PotRekeySliceTest.aMemberWithTheCurrentGrantReKeysAPot
           - MediaNodeRekeySliceTest.aMemberWithTheCurrentGrantReKeysAMemory
+          - MediaNodeRekeySliceTest.aMemberReKeysAMemoryAContributorLinkGaveADropKey
       web:
         unit: [src/core/node/rekey/rekeyScope.test.ts]
         e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts]

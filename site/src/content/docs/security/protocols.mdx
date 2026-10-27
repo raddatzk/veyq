@@ -453,8 +453,9 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
    re-keys that node and its lagging ancestors itself and retries at once, a guest's client waits and retries. A write
    stating a node key from before is `409 stale_epoch` and re-reads. A member's device also seals nothing under a node
    key from before the highest epoch it holds. An interrupted re-key reads *re-keying* on every member's scope row and
-   is resumed by the next member's worker: any member holding the current epoch may re-key a node, except one carrying
-   a drop key, a guest's identity folder and what lies below one, which only an owner re-keys (`403 not_scope_owner`,
+   is resumed by the next member's worker: any member holding the current epoch may re-key a node, a Memory's drop key
+   included, except where members place nothing — a drop box, a guest's identity folder and what lies below one — which
+   only an owner re-keys (`403 not_scope_owner`,
    [ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decision 11). A queued rotation completes only once no node lags (`409 rekey_incomplete`).
 

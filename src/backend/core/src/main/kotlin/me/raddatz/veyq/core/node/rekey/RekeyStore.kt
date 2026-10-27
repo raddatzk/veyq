@@ -57,6 +57,7 @@ data class RekeyCommit(
 class RekeyStore(
     private val nodes: NodesStore,
     private val stage: NodeRekeyStage,
+    private val ownerOnly: OwnerOnlyRekey,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val participants: MutableList<NodeRekeyParticipant>,
 ) {
@@ -67,7 +68,7 @@ class RekeyStore(
         val all = NodeEntity.find("scopeId", scopeId).list()
         val wrapped = nodes.identityKeys(all.mapNotNull { it.shareIdentityId })
         val byId = all.associateBy { it.id }
-        return all.map { RekeyNodeRow(it, it.deletedAt != null, it.shareIdentityId?.let(wrapped::get), OwnerOnlyRekey.of(it, byId::get)) }
+        return all.map { RekeyNodeRow(it, it.deletedAt != null, it.shareIdentityId?.let(wrapped::get), ownerOnly.of(it, byId::get)) }
     }
 
     /** The node in [scopeId], live or trashed; null for none. */
