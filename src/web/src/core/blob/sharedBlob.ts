@@ -9,7 +9,7 @@
 // read the file anyway - can confirm a file by it. What the server learns is which existing blob the new row shares,
 // the accepted residual of ADR 0102 § What the server sees.
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
+import { b64std, b64url } from '@veyq/crypto/base64'
 import type { BlobMeta } from './meta'
 import { blobKeyContext, unwrapBlobKey, type WrappedBlobKey } from './keys'
 import { digestHere } from './digest'
@@ -25,15 +25,37 @@ export function sealedByteSize(plaintextBytes: number): number {
   return plaintextBytes + chunkCount * v1.FRAME_OVERHEAD
 }
 
+/** The digests core computed itself over the bytes of a `Blob` it handed out (inbox #555), keyed by that very object. */
+const remembered = new WeakMap<Blob, string>()
+
+/**
+ * Remember `sha256` - the raw 32 bytes core's own `v1.sha256Stream` produced over `file`'s plaintext - as `file`'s digest,
+ * so {@link contentDigest} answers that object without reading it again. The caller vouches that the bytes are that
+ * object's own and that core's hasher read them: never a claim (a manifest's `sha256`, a stored `blob-meta`), because what
+ * is remembered here is sealed into a new blob's `blob-meta`, and a wrong value there silently makes a later cover or banner
+ * a row on another stored object (`storedMatch.ts`). So the one caller is core's import check (`importSubtree.ts`
+ * `archivePayload`), after the stream ended (a ZIP entry's CRC) and the manifest's `sha256` compared. Keyed by the object:
+ * a slice or a re-wrapped copy misses and is read, which fails safe. Throws on anything but 32 bytes.
+ */
+export function rememberDigest(file: Blob, sha256: Uint8Array): void {
+  if (sha256.length !== 32) throw new Error('digest_not_sha256')
+  remembered.set(file, b64url(sha256))
+}
+
 /**
  * The SHA-256 of a source's plaintext as `blob-meta`'s `sha256` carries it (base64url, no padding), read frame by frame:
- * the one door production code hashes a file through (inbox #554). A `Blob` (a picked `File`, a ZIP entry) is hashed in
- * core's digest worker (`digestWorker.ts`), any other source on the page thread, by the same `digest.ts` loop either way.
- * The one other source today is a copy's payload, whose slices open frames through the chunk provider and cannot be
- * structured-cloned (`core/export/copySource.ts`). Rejects with an `AbortError` when `signal` aborts.
+ * the one door production code hashes a file through (inbox #554). A `Blob` core remembered the digest of (an imported
+ * download's payload, {@link rememberDigest}) is answered from it, without a read; any other `Blob` (a picked `File`, a
+ * slice) is hashed in core's digest worker (`digestWorker.ts`), any other source on the page thread, by the same
+ * `digest.ts` loop either way. The one other source today is a copy's payload, whose slices open frames through the chunk
+ * provider and cannot be structured-cloned (`core/export/copySource.ts`). Rejects with an `AbortError` when `signal`
+ * aborts - at once when it already has, remembered or not.
  */
 export function contentDigest(source: BlobSource, signal?: AbortSignal): Promise<string> {
-  return source instanceof Blob ? digestOff(source, signal) : digestHere(source, signal)
+  if (!(source instanceof Blob)) return digestHere(source, signal)
+  const known = remembered.get(source)
+  if (known === undefined) return digestOff(source, signal)
+  return signal?.aborted ? Promise.reject(new DOMException('Upload cancelled', 'AbortError')) : Promise.resolve(known)
 }
 
 /** The wire's `SharedBlob`: in place of an upload id. */

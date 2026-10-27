@@ -21,7 +21,11 @@ import { pickedDirectory, type DirectoryFile, type ImportInput } from './importS
 import { LIMITS, MAX_DEPTH, MAX_NODES, type ManifestPayload } from './manifest'
 import { ZipWriter, openZip } from './zip'
 import * as v1 from '@veyq/crypto/v1'
+import { b64url } from '@veyq/crypto/base64'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { contentDigest } from '../blob/sharedBlob'
+// on purpose the page-thread loop over the object's own bytes: what it answers is what those bytes hash to
+import { digestHere } from '../blob/digest'
 
 const FILE = 'H_FILE'
 const ALBUM = 'H_ALBUM'
@@ -34,6 +38,8 @@ const sha = (s: string) => hex(v1.sha256Digest(text(s)))
 const access = memberAccessOf({ scopeId: 's', epochs })
 
 const created: { kind: string; name: string; parent: string | null; bytes: string }[] = []
+/** Every payload a FILE hook received, as the object `ctx.payload` returned. */
+const grabbed: PayloadFile[] = []
 beforeAll(() => {
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
@@ -44,6 +50,7 @@ beforeAll(() => {
     },
     async importContent(ctx) {
       const f = await ctx.payload(ctx.node.content!.file as ManifestPayload, ctx.name)
+      grabbed.push(f)
       const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, FILE, ctx.name)
       created[created.length - 1].bytes = await textOf(f)
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
@@ -67,6 +74,7 @@ beforeAll(() => {
 /** A fresh server: nothing created, ids from `new1`. */
 function fresh(): void {
   created.length = 0
+  grabbed.length = 0
   let n = 0
   vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
     created.push({ kind, name, parent: parent?.id ?? null, bytes: '' })
@@ -392,6 +400,63 @@ describe('the hardened reader refuses, before anything is written', () => {
       v.setBigUint64(recordAt + 48, BigInt(bytes.length) * 4n, true) // the directory "starts" far past the end
       await refused(bytes, 'damaged_archive', /directory outside the file/)
     })
+  })
+})
+
+// --- inbox #555: the check's digest is handed over with the file it verified ------------------------------------------
+
+describe('the payload check hands the SHA-256 it computed to the upload', () => {
+  const body = 'the payload bytes'
+  const want = b64url(v1.sha256Digest(text(body)))
+  /** A sound archive of one file; `claimed: false` - its manifest names no `sha256` (the contract's field is optional). */
+  function archive(claimed = true) {
+    const n = fileNode('Home/a.txt', body)
+    if (!claimed) delete (n.content.file as { sha256?: string }).sha256
+    return crafted(folder([n]), { 'Home/a.txt': body })
+  }
+  /** The file the hook got answers `contentDigest` from the check's digest, without a read; a copy of it is read. */
+  async function handedOver(input: ImportInput) {
+    await attempt(input)
+    expect(grabbed).toHaveLength(1)
+    const file = grabbed[0] as File
+    const slice = vi.spyOn(file, 'slice')
+    expect(await contentDigest(file)).toBe(want)
+    expect(slice, 'answered from the check\'s digest: the file is not read again').not.toHaveBeenCalled()
+    expect(await digestHere(file), 'the digest of that object\'s own bytes').toBe(want)
+    // control: another object over the same bytes misses the memo, is read, and answers the same digest
+    const copy = new File([file], file.name)
+    const copySlice = vi.spyOn(copy, 'slice')
+    expect(await contentDigest(copy)).toBe(want)
+    expect(copySlice, 'a copy is hashed').toHaveBeenCalled()
+  }
+
+  it('a ZIP\'s payload', async () => handedOver(zipOf(await archive())))
+  it('the same download unpacked into a directory', async () => handedOver(await unpacked(await archive())))
+
+  // Computed, not claimed: with no `sha256` in the manifest there is no claim to hand over, so a remembered digest can
+  // only be the one core's hasher produced.
+  it('a manifest without a sha256: the computed digest is still handed over (ZIP)', async () => handedOver(zipOf(await archive(false))))
+  it('a manifest without a sha256: the computed digest is still handed over (directory)', async () =>
+    handedOver(await unpacked(await archive(false))))
+
+  it('a sha256 of other bytes refuses with `checksum`, and the hook gets no file', async () => {
+    const n = fileNode('Home/a.txt', body)
+    n.content.file.sha256 = sha('other bytes')
+    const err = await attempt(zipOf(await crafted(folder([n]), { 'Home/a.txt': body }))).catch((e) => e)
+    expect(err.cause).toMatchObject({ code: 'checksum' })
+    expect(grabbed, 'no hook received the payload').toEqual([])
+    expect(created.map((c) => c.kind), 'the hook built nothing: only the folder above it').toEqual(['FOLDER'])
+  })
+
+  it('a ZIP entry that fails its CRC refuses with `checksum` (no sha256 to compare), and the hook gets no file', async () => {
+    const bytes = await archive(false)
+    const at = new TextDecoder('latin1').decode(bytes).indexOf(body)
+    expect(at).toBeGreaterThan(0)
+    bytes[at] ^= 0x01 // one flipped bit of the stored payload: the size holds, only the CRC can tell
+    const err = await attempt(zipOf(bytes)).catch((e) => e)
+    expect(err.cause).toMatchObject({ code: 'checksum' })
+    expect(grabbed, 'no hook received the payload').toEqual([])
+    expect(created.map((c) => c.kind)).toEqual(['FOLDER'])
   })
 })
 

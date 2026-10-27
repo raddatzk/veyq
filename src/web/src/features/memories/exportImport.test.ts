@@ -13,8 +13,9 @@ vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<ob
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
 
-import { contentDigest } from '../../core/blob/sharedBlob'
+import { contentDigest, rememberDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
+import { b64url } from '@veyq/crypto/base64'
 import {
   addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPages, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
   rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem,
@@ -243,6 +244,15 @@ describe('importMemoryContent', () => {
     expect(vi.mocked(writeNodeCover), 'a cover is set only by an upload: a photo reference is left out').not.toHaveBeenCalled()
   })
 
+  it('hands each original to the upload as the very object the payload returned, so the digest core remembered for it is read (inbox #555)', async () => {
+    const c = ctx(node())
+    await importMemoryContent(MEMORY_KIND)(c)
+    const returned = await Promise.all(vi.mocked(c.payload).mock.results.map((r) => r.value as Promise<File>))
+    const uploaded = vi.mocked(addMedia).mock.calls.map((call) => call[3].blob)
+    expect(uploaded).toHaveLength(3)
+    uploaded.forEach((blob, i) => expect(blob, `medium ${i}`).toBe(returned[i]))
+  })
+
   it('restores a correction as an override and a place name, only for the media that need it', async () => {
     await importMemoryContent(MEMORY_KIND)(ctx(node()))
     expect(vi.mocked(setMediaMeta)).toHaveBeenCalledTimes(1)
@@ -432,6 +442,25 @@ describe('the banner travels with its Memory', () => {
         frame: 'fit', focal: { x: 0.2, y: 0.7 },
       },
     }))
+  })
+
+  it('a video banner\'s file reaches the digest door as the object the payload returned: its remembered digest is the banner\'s (inbox #555)', async () => {
+    const { ctx } = exportCtx({ banner: stored })
+    const c = importCtx(JSON.parse(JSON.stringify((await exportMemoryContent(ctx))!)) as Record<string, unknown>)
+    // a value no hash of the file gives: the banner's `sha256` can only be what core remembered for that very object
+    const marker = new Uint8Array(32).fill(0x5a)
+    const returned: File[] = []
+    vi.mocked(c.payload).mockImplementation(async (_ref, name) => {
+      const f = new File(['x'], name)
+      rememberDigest(f, marker)
+      returned.push(f)
+      return f
+    })
+    await importMemoryContent(MEMORY_KIND)(c)
+    const prepared = vi.mocked(uploadBanner).mock.calls[0][3]
+    if (prepared.medium !== 'video') throw new Error('expected a video banner')
+    expect((prepared.video as { upload: File }).upload).toBe(returned.find((f) => f.name === 'banner.mov'))
+    expect(prepared.sha256).toBe(b64url(marker))
   })
 
   it('a banner that does not come back is a loss, never a failed import', async () => {

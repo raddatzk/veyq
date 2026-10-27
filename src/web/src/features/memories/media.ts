@@ -609,7 +609,8 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   throwIfAborted(opts.signal)
   const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
-  // The original's digest (its `blob-meta` `sha256`, read frame by frame in core's digest worker) and its tiers, started
+  // The original's digest (its `blob-meta` `sha256`, read frame by frame in core's digest worker - or, for an imported
+  // download's payload, the one core's check already computed, `contentDigest`, inbox #555) and its tiers, started
   // TOGETHER (inbox #554): the derivation does not need the digest, and run first and alone the digest was the upload's
   // critical path while every worker waited. ONE decode of the original: `deriveTiers` produces both tiers from it and
   // hands back the geometry it already measured, so `sealMetadata` has nothing left to probe for an image.
