@@ -302,4 +302,31 @@ pre-flight check (Q2); match by status (Q3); the lost answer after a committed p
 
 ## Retrospective
 
-*(filled at implement time)*
+### Phase 1 — what a browser sees (measured 2026-10-27)
+
+Setup: this worktree at `c75f0616c`, its own fast-jar (`./gradlew quarkusBuild -x test`, load 8.6 at start) under the
+default `%prod` profile, `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE=9601500` (the measurement's own bite value), on
+`127.0.0.1:18553`, against an own throwaway MariaDB container (the dev stack's `mariadb:11.4` image by id, on
+`127.0.0.1:33553`), no object store set. Nothing of the dev compose stack or the owner's backend was touched. Client:
+headless installed Google Chrome 156 (`HeadlessChrome/156.0.0.0`) through the workspace's Playwright, a page on the
+backend's own origin (`/api/setup`), `fetch('/api/account/rotation', { method: 'POST', body: <JSON string> })` — a
+string body, so Chrome sends `Content-Length` and the server answers from the header (`RequestTooLargeRoutes.kt:64-69`),
+over HTTP/1.1. Ten requests per size.
+
+| Body | Direct to the jar | Through Traefik v3.6 |
+|---|---|---|
+| 1.1× (10,561,650 bytes) | 10/10 `413 request_too_large` | 10/10 `413 request_too_large` |
+| 2× (19,203,000 bytes) | 10/10 `413 request_too_large` | 9/10 `413 request_too_large`, 1/10 `502` (no JSON body) |
+| 10× (96,015,000 bytes) | 10/10 `413 request_too_large` | 10/10 `413 request_too_large` |
+
+No `fetch` rejected, in either leg (0/60). So a browser reads the `413` the server sends, and decision 1 helps the case
+it is for; the backend CR of decision 2 is not needed for Chrome over HTTP/1.1.
+
+- **The proxy leg is a stand-in.** The dev stack's Traefik routes only `/blobs/` (`infra/docker/traefik-dev/blobs.yml`),
+  so the API cannot be reached through it without changing a shared container. An own Traefik container from the
+  same image (by id), file provider, one router to the jar, plain HTTP on `127.0.0.1:38553`, was used instead.
+  Production adds TLS and HTTP/2 between the browser and Traefik; that was not measured.
+- **The one `502` is the remembered Go-proxy behaviour, now seen once:** Traefik lost the backend's early answer and
+  answered `502` itself. It stays `rotation.errorFailed` (decision 2: a `502` is never "too large"), which tells a
+  user to try again — and the retry most likely reads the `413`.
+- undici's `ECONNRESET` on the seed write (`rotationAtPinCap.measure.e2e.test.ts:29-30`) is not what Chrome does.
