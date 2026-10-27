@@ -25,6 +25,7 @@ import type { Access, TreeSource } from '../../core/access'
 import type { TreeNode } from '../../core/node/tree'
 import type { EpochKeys } from '../spaces/epochs'
 import { nodeKeyForWrite } from '../../core/node/rekey/floor'
+import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
 import { loadTree, noteScopeGone, treeStore } from '../../core/node/treeStore'
 import { nodeMetaState, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
@@ -243,10 +244,14 @@ export function usePotSession(input: PotSessionInput): PotSession {
     return at
   }
 
-  async function target(): Promise<{ target: PotTarget; key: (reread: boolean) => Promise<PotWriteKey> }> {
+  /** Where a write goes and the key it seals under; a member's also pulls the Pot's path forward on an epoch refusal
+   *  (ADR 0111 decision 11), a guest's waits (it holds no key above its root). */
+  async function target(): Promise<{ target: PotTarget; key: (reread: boolean) => Promise<PotWriteKey>; pull?: () => Promise<boolean> }> {
     const access = input.access()
     const scopeId = input.scopeId()
-    if (access.mode === 'member') return { target: { kind: 'member', scopeId, nodeId: nodeId() }, key: memberKey }
+    if (access.mode === 'member') {
+      return { target: { kind: 'member', scopeId, nodeId: nodeId() }, key: memberKey, pull: pullRekeyPath(scopeId, [nodeId()]) }
+    }
     const guest = await access.requestGuest()
     if (!guest) throw new GuestDeclinedError()
     return {
@@ -272,8 +277,8 @@ export function usePotSession(input: PotSessionInput): PotSession {
   async function write(writes: readonly PotWrite[]): Promise<void> {
     const base = meta.value?.base
     if (!base) throw new PotKeyUnavailableError()
-    const { target: to, key } = await target()
-    await staleReread(() => writeAtNodeEpoch(async (again) => appendPotWrites(to, await key(again), held.value, writes, base)))
+    const { target: to, key, pull } = await target()
+    await staleReread(() => writeAtNodeEpoch(async (again) => appendPotWrites(to, await key(again), held.value, writes, base), { pull }))
     await refresh().catch(() => {})
   }
 
@@ -282,7 +287,10 @@ export function usePotSession(input: PotSessionInput): PotSession {
     if (!base) throw new PotKeyUnavailableError()
     const scopeId = input.scopeId()
     await staleReread(() =>
-      writeAtNodeEpoch(async (again) => eraseParticipant({ kind: 'member', scopeId, nodeId: nodeId() }, await memberKey(again), held.value, participantId, base)),
+      writeAtNodeEpoch(
+        async (again) => eraseParticipant({ kind: 'member', scopeId, nodeId: nodeId() }, await memberKey(again), held.value, participantId, base),
+        { pull: pullRekeyPath(scopeId, [nodeId()]) },
+      ),
     )
     await refresh().catch(() => {})
   }
@@ -303,9 +311,9 @@ export function usePotSession(input: PotSessionInput): PotSession {
     file: ReceiptFile,
     opts: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
   ): Promise<HeldReceipt> {
-    const { target: to, key } = await target()
+    const { target: to, key, pull } = await target()
     // An epoch refusal re-reads and uploads again under the Pot's key now: the wrap of the first upload is under the old one.
-    const receipt = await writeAtNodeEpoch(async (again) => uploadReceipt(to, await key(again), entryId, receiptId, file, opts))
+    const receipt = await writeAtNodeEpoch(async (again) => uploadReceipt(to, await key(again), entryId, receiptId, file, opts), { pull })
     receipts.value = [...receipts.value.filter((r) => r.receiptId !== receipt.receiptId), receipt]
     receiptsDue = true // the listing's tag moved with it
     return receipt

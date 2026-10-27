@@ -165,7 +165,8 @@ export async function enterScope(token: string): Promise<void> {
     if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, opened.kind, activeWriteKey)
     else stopGrantDeliveryPolling()
     // Also drain any queued scope-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — an owner
-    // completes a queued rotation for ANY scope they own (the server offers it to owners only), without opening it. Session-level
+    // completes a queued rotation for ANY scope they own (the server offers it to owners only), without opening it, and
+    // every member's device continues an unfinished re-key of any scope it holds (ADR 0111 decision 11). Session-level
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
   } catch (err) {

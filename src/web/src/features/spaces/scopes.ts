@@ -16,7 +16,7 @@ import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { rememberGroupName } from './groupNamesSeen'
-import { ScopeKind, type CompromiseRotation, type ScopeSummary, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
+import { ScopeKind, type CompromiseRotation, type ScopeSummary, type ScopeSummaryRoleEnum, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
 
 /** The seal context of a scope grant (ADR 0072), re-exported — its home is {@link ./grant}, shared with the
@@ -222,7 +222,11 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
 
 /** An opened scope: its opaque identity + the in-memory **epoch keys** (owned transiently by the caller; `key` is
  *  the write key = the current epoch) + the decrypted display `name` for a named scope (a GROUP; undefined else). */
-export type OpenedScope = { scopeId: string; tenantId: string; kind: ScopeKind; key: Uint8Array; epochs: EpochKeys; nameEpoch: number; name?: string; deletedAt: Date | null; purgeAfter: Date | null }
+export type OpenedScope = {
+  scopeId: string; tenantId: string; kind: ScopeKind; key: Uint8Array; epochs: EpochKeys; nameEpoch: number; name?: string; deletedAt: Date | null; purgeAfter: Date | null
+  /** The caller's own role in the scope, as its row carries it (`OWNER` / `MEMBER`). */
+  role?: ScopeSummaryRoleEnum
+}
 
 /** The caller as a grant's recipient — the account id and the identity bundle the vault holds. */
 const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: self.pubB64 })
@@ -299,7 +303,7 @@ async function toOpenedScope(
   }
   return {
     scopeId: scope.id, tenantId: scope.tenantId, kind: scope.kind, key: writeKey(epochs), epochs, nameEpoch: scope.nameEpoch, name,
-    deletedAt: scope.deletedAt ?? null, purgeAfter: scope.purgeAfter ?? null,
+    deletedAt: scope.deletedAt ?? null, purgeAfter: scope.purgeAfter ?? null, role: scope.role,
   }
 }
 

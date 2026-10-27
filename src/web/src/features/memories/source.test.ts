@@ -276,9 +276,9 @@ describe("the member's source is today's calls, with its scope", () => {
   const key = v1.randomBytes(32)
   const item = mediaItem({ mediaId: 'm-1' })
   const state = { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 }
-  // what a member's meta write hands on beside its arguments: the floor before each attempt and the re-read after an
-  // epoch refusal (ADR 0109 point 6)
-  const metaOpts = { atFloor: expect.any(Function), reread: expect.any(Function) }
+  // what a member's meta write hands on beside its arguments: the floor before each attempt, and the pull of its path and
+  // the re-read after an epoch refusal (ADR 0109 point 6, ADR 0111 decision 11)
+  const metaOpts = { atFloor: expect.any(Function), reread: expect.any(Function), pull: expect.any(Function) }
   const src = memberMemorySource({ scopeId: () => S })
   const edit = () => null
   const gridSignal = new AbortController().signal // a grid's read can be dropped while it waits (inbox #488)
@@ -323,7 +323,9 @@ describe("the member's source is today's calls, with its scope", () => {
 
   it('uploads through the authed `addMedia` target, grouped by the node as before', () => {
     expect(src.upload!.ready()).toBe(true)
-    expect(src.upload!.target('n', key, 2)).toEqual({ scopeId: S, nodeId: 'n', memoryKey: key, nodeEpoch: 2, atFloor: expect.any(Function) })
+    expect(src.upload!.target('n', key, 2)).toEqual({
+      scopeId: S, nodeId: 'n', memoryKey: key, nodeEpoch: 2, atFloor: expect.any(Function), pull: expect.any(Function), reread: expect.any(Function),
+    })
     expect(src.batchKey('n')).toBe('n')
   })
 })

@@ -52,7 +52,7 @@ beforeEach(() => {
   vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
 })
 
-/** An owner's scope row as `listMyScopes` serves it, re-keying or not. */
+/** A scope row as `listMyScopes` serves it, re-keying or not (every member's row carries the flag, ADR 0111 decision 11). */
 const row = (id: string, rekeying: boolean) => ({ id, rekeying }) as unknown as ScopeSummary
 
 describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
@@ -62,6 +62,16 @@ describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
     await runScopeRotationWorker()
     expect(rekeyScope).toHaveBeenCalledWith('g1')
     expect(rekeyScope).not.toHaveBeenCalledWith('g2') // control: a scope that does not lag is left alone
+  })
+
+  it('a plain member\'s device resumes a scope its row reads re-keying too (ADR 0111 decision 11), with no job to claim', async () => {
+    const memberRow = (id: string, rekeying: boolean) => ({ id, rekeying, role: 'MEMBER' }) as unknown as ScopeSummary
+    vi.mocked(listMyScopes).mockResolvedValue([memberRow('g1', true), memberRow('g2', false)])
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValue(null))
+    vi.mocked(rekeyScope).mockResolvedValue({ done: false, committed: 3 }) // what lags beyond is an owner's drop box
+    await runScopeRotationWorker()
+    expect(rekeyScope).toHaveBeenCalledWith('g1')
+    expect(rekeyScope).not.toHaveBeenCalledWith('g2')
   })
 
   it('re-keys after its own rotation and completes only then', async () => {

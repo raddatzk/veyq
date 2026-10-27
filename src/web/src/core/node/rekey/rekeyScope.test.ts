@@ -3,7 +3,11 @@
 // the node's epoch moved). The world is built at epoch 0 with the real seals, then the scope rotates to 1 (E_1 chained to
 // E_0, as a member's device holds them) and `rekeyScope` runs. Each ADR 0109 bite test is a negative with its positive
 // control on the same key.
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+//
+// ADR 0111 decision 11 on the same server: a member's run leaves the nodes only an owner re-keys (`ownerOnly`, which the
+// server derives as the backend's `OwnerOnlyRekey` does), and a member's write pulls its own path forward through
+// `pullRekeyPath` — the same per-node commit, on the written node and its lagging ancestors only — then retries at once.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { EpochKeys } from '../../../features/spaces/epochs'
@@ -37,22 +41,34 @@ const server = {
   stages: new Map<string, Stage>(),
   crashOnCommitOf: null as string | null,
   epochs: null as EpochKeys | null,
+  /** The caller's role in the scope, as its row says: an owner re-keys every node, a member all but the owner-only ones. */
+  role: 'OWNER' as 'OWNER' | 'MEMBER',
+  /** Every commit, in order: who re-keyed what. */
+  commits: [] as string[],
+}
+
+/** The backend's `OwnerOnlyRekey`: a drop box root, a guest's identity folder, or below one. */
+function ownerOnly(n: Row): boolean {
+  if (n.sealedDropPrivateKey) return true
+  for (let cur: Row | undefined = n; cur; cur = cur.parentId ? server.nodes.get(cur.parentId) : undefined) if (cur.shareIdentityId) return true
+  return false
 }
 
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../features/spaces/scopes', () => ({ openScopeById: vi.fn() }))
 vi.mock('../../../api/client', () => ({ rekeyApi: vi.fn() }))
+vi.mock('../../../app/activeSpace', () => ({ activeSpace: { scopeId: null }, activeEpochKeys: () => null, refreshActiveScope: vi.fn() }))
 
 /** The in-memory server behind `rekeyApi` — it applies a commit as `RekeyStore.commit` does — and the member's scope
  *  as `openScopeById` opens it; installed per test. */
 function installServer(): void {
   vi.mocked(openScopeById).mockImplementation(async () => {
     const ek = server.epochs!
-    // only the epochs are read by the driver; the rest of an opened scope is not this test's
-    return { epochs: { current: ek.current, keys: new Map([...ek.keys].map(([e, k]) => [e, k.slice()])) } } as unknown as Awaited<ReturnType<typeof openScopeById>>
+    // only the epochs and the caller's role are read by the driver; the rest of an opened scope is not this test's
+    return { role: server.role, epochs: { current: ek.current, keys: new Map([...ek.keys].map(([e, k]) => [e, k.slice()])) } } as unknown as Awaited<ReturnType<typeof openScopeById>>
   })
   fakeApi(rekeyApi, {
-    listRekeyNodes: async () => ({ currentEpoch: server.current, nodes: [...server.nodes.values()].map((n) => ({ ...n })) }),
+    listRekeyNodes: async () => ({ currentEpoch: server.current, nodes: [...server.nodes.values()].map((n) => ({ ...n, ownerOnly: ownerOnly(n) })) }),
     getNodeRekeyParts: async ({ nodeId }) => {
       const shares = server.shares.filter((s) => s.nodeId === nodeId)
       return {
@@ -71,6 +87,8 @@ function installServer(): void {
     commitNodeRekey: async ({ nodeId, rekeyId, commitNodeRekeyRequest: c }) => {
       if (server.crashOnCommitOf === nodeId) throw new Error('the device stopped')
       const node = server.nodes.get(nodeId)!
+      if (server.role !== 'OWNER' && ownerOnly(node)) throw refusal(403, 'not_scope_owner')
+      server.commits.push(nodeId)
       const st = server.stages.get(rekeyId) ?? { children: [], blobs: [], shares: [], identities: [] }
       for (const ch of st.children) {
         const child = server.nodes.get(ch.nodeId)!
@@ -98,7 +116,13 @@ function installServer(): void {
   })
 }
 
-const { rekeyScope } = await import('./rekeyScope')
+/** A thrown generated-client error carrying `{ code }`, the shape `isCodedError` reads. */
+const refusal = (status: number, code: string) => Object.assign(new Error(code), {
+  response: new Response(JSON.stringify({ code }), { status, headers: { 'Content-Type': 'application/json' } }),
+})
+
+const { rekeyScope, rekeyPath, pullRekeyPath, RekeyPathNotMineError } = await import('./rekeyScope')
+const { retryWhileRekeying, writeAtNodeEpoch } = await import('../../../shared/rekeyRetry')
 const { openScopeById } = await import('../../../features/spaces/scopes')
 const { rekeyApi } = await import('../../../api/client')
 
@@ -133,6 +157,7 @@ beforeEach(() => {
   installServer()
   K = { root: v1.randomBytes(32), child: v1.randomBytes(32), box: v1.randomBytes(32) }
   server.nodes.clear(); server.stages.clear(); server.crashOnCommitOf = null; server.current = 1
+  server.role = 'OWNER'; server.commits = []
   server.epochs = memberEpochs()
   const kBlob = v1.randomBytes(32)
   const coverRef = { blobId: ids.cover, ownerId: ids.root, role: 'COVER' as const }
@@ -236,5 +261,89 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     // the guest from before keeps its K_up, now reached through the new drop key (ADR 0109 point 5)
     const guest = server.identities.find((i) => i.identityId === ids.guest)!
     expect(openIdentityKey(SCOPE, ids.box, newDrop, ids.guest, guest.wrappedIdentityKey!)).toEqual(K_UP)
+  })
+})
+
+describe('any member re-keys (ADR 0111 decision 11)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('a member\'s run re-keys every node but the drop box, which it leaves for an owner without failing', async () => {
+    server.role = 'MEMBER'
+    const run = await rekeyScope(SCOPE)
+    expect(run).toMatchObject({ done: false, committed: 2 })
+    expect([ids.root, ids.child].map((id) => server.nodes.get(id)!.epoch)).toEqual([1, 1])
+    expect(server.nodes.get(ids.box)!.epoch, 'the drop box is an owner\'s').toBe(0)
+    expect(server.commits).not.toContain(ids.box)
+    // control: an owner's run finishes it
+    server.role = 'OWNER'
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    expect(server.nodes.get(ids.box)!.epoch).toBe(1)
+  })
+
+  it('a path pull re-keys the written node and its lagging ancestors top-down, and nothing else', async () => {
+    server.role = 'MEMBER'
+    expect((await rekeyPath(SCOPE, [ids.child])).done).toBe(true)
+    expect(server.commits).toEqual([ids.root, ids.child])
+    expect(server.nodes.get(ids.box)!.epoch).toBe(0)
+  })
+
+  it('a path through a node only an owner re-keys is not a member\'s: refused before any commit, and the pull says so', async () => {
+    server.role = 'MEMBER'
+    await expect(rekeyPath(SCOPE, [ids.box])).rejects.toBeInstanceOf(RekeyPathNotMineError)
+    expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(false)
+    expect(server.commits).toEqual([])
+    server.role = 'OWNER' // control: an owner's pull brings it forward
+    expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(true)
+    expect(server.nodes.get(ids.box)!.epoch).toBe(1)
+  })
+
+  /** The server's gate on a write under [nodeId]'s key: `409 node_rekey_pending` while it lags. */
+  const writeUnder = (nodeId: string, attempts: number[]) => async (n: number) => {
+    attempts.push(n)
+    if (server.nodes.get(nodeId)!.epoch < server.current) throw refusal(409, 'node_rekey_pending')
+    return 'written'
+  }
+
+  it('a member\'s write refused node_rekey_pending pulls its path (parent, then target) and lands on the second attempt with no wait', async () => {
+    server.role = 'MEMBER'
+    vi.useFakeTimers()
+    const attempts: number[] = []
+    const run = retryWhileRekeying(writeUnder(ids.child, attempts), { pull: pullRekeyPath(SCOPE, [ids.child]) })
+    // no timer is advanced: a write that waited would never settle here
+    await expect(run).resolves.toBe('written')
+    expect(attempts, 'the second attempt re-reads').toEqual([0, 1])
+    expect(server.commits).toEqual([ids.root, ids.child])
+    expect(vi.getTimerCount(), 'no wait was scheduled').toBe(0)
+  })
+
+  it('a guest\'s write (no pull) waits as before and re-keys nothing', async () => {
+    const attempts: number[] = []
+    const err = await retryWhileRekeying(writeUnder(ids.child, attempts), { delaysMs: [0, 0] }).catch((e: unknown) => e)
+    expect((err as Error).message).toBe('node_rekey_pending')
+    expect(attempts).toEqual([0, 1, 2])
+    expect(server.commits).toEqual([])
+  })
+
+  it('a member\'s write into the drop box falls back to the waits: its pull is refused, nothing is committed', async () => {
+    server.role = 'MEMBER'
+    const attempts: number[] = []
+    const err = await retryWhileRekeying(writeUnder(ids.box, attempts), { delaysMs: [0, 0], pull: pullRekeyPath(SCOPE, [ids.box]) }).catch((e: unknown) => e)
+    expect((err as Error).message).toBe('node_rekey_pending')
+    expect(attempts, 'the first attempt and one per wait').toEqual([0, 1, 2])
+    expect(server.commits).toEqual([])
+  })
+
+  it('a stale_epoch after the pull is re-read once, as writeAtNodeEpoch does', async () => {
+    server.role = 'MEMBER'
+    const rereads: boolean[] = []
+    const out = await writeAtNodeEpoch(async (reread) => {
+      rereads.push(reread)
+      if (rereads.length === 1) throw refusal(409, 'node_rekey_pending')
+      if (rereads.length === 2) throw refusal(409, 'stale_epoch') // re-keyed again between the pull and the re-read
+      return 'written'
+    }, { delaysMs: [], pull: pullRekeyPath(SCOPE, [ids.child]) })
+    expect(out).toBe('written')
+    expect(rereads).toEqual([false, true, true])
+    expect(server.commits).toEqual([ids.root, ids.child])
   })
 })

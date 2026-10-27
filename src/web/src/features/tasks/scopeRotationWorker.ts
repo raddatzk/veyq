@@ -27,7 +27,7 @@ import type { ClaimedJob } from '../../api/generated/tasks'
  * failed back for the right worker rather than left leased; one whose rotation stays `stale_epoch` is declined.
  */
 export async function runScopeRotationWorker(): Promise<number> {
-  // ADR 0109 point 7: a rotation is done only once every node of the scope is re-keyed. Any owner holding the current
+  // ADR 0109 point 7: a rotation is done only once every node of the scope is re-keyed. Any member holding the current
   // epoch finishes a re-key another device left unfinished (a closed tab, a crash) — the server derives `rekeying`
   // from the node rows, so there is nothing to claim: resume it first, then take the queued jobs.
   await resumeRekeys()
@@ -107,7 +107,8 @@ function renewLeaseWhileWorking(jobId: string): () => void {
   return () => clearInterval(timer)
 }
 
-/** Re-key every scope this owner reads as `rekeying` (its row's derived flag, owner-only). One that fails stays so. */
+/** Re-key every scope this member reads as `rekeying` (its row's derived flag, served to every member — ADR 0111
+ *  decision 11). A member's run leaves the nodes only an owner re-keys; one that fails stays so. */
 async function resumeRekeys(): Promise<void> {
   const scopes = await listMyScopes().catch(() => [])
   for (const s of scopes) {
