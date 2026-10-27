@@ -251,9 +251,9 @@ flowchart TB
 
 ## 9. Architecture Decisions
 
-The decisions that shape the views above, by theme. **This is a reader's path in, not the full set** —
-[decisions/](../decisions/) is the only complete list, and stating its size here would only be one more number
-to keep true.
+The decisions that shape the views above, by theme. **This is a reader's path in, not the full set** — the
+[topic index](../decisions/README.md#topics) is the only complete list, each topic with its current-picture doc,
+and stating its size here would only be one more number to keep true.
 
 | Theme | ADRs |
 |---|---|
