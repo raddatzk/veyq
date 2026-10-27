@@ -27,7 +27,9 @@ export type BlobRef = {
 /**
  * What the pump reads a blob's plaintext from: a `Blob` (a picked `File`, a slice of a ZIP), or a source that answers a
  * byte range on demand without holding the whole (a copy reads its original by chunk, `core/export/copySource.ts`).
- * The pump only ever asks `slice(start, end).arrayBuffer()` of one frame at a time, and the size.
+ * The pump only ever asks `slice(start, end).arrayBuffer()` of one frame at a time, and the size. That buffer must be a
+ * fresh one the pump then owns, as a `Blob`'s is: the pump transfers it to core's frame worker (inbox #536), which
+ * detaches it on the page, so a source that answered a buffer it still reads would lose its own bytes.
  */
 export interface BlobSource {
   readonly size: number

@@ -40,6 +40,22 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/blob-upload-windows",
+      "headers": {
+        "authorization": "<present>",
+        "content-type": "application/json"
+      },
+      "body": {
+        "items": [
+          {
+            "fromChunk": 3,
+            "uploadId": "upload-1"
+          }
+        ]
+      }
+    },
+    {
       "method": "PUT",
       "path": "/bucket/upload-1/0?X-Sig=s",
       "headers": {
@@ -73,22 +89,6 @@
       }
     },
     {
-      "method": "POST",
-      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/blob-upload-windows",
-      "headers": {
-        "authorization": "<present>",
-        "content-type": "application/json"
-      },
-      "body": {
-        "items": [
-          {
-            "fromChunk": 3,
-            "uploadId": "upload-1"
-          }
-        ]
-      }
-    },
-    {
       "method": "PUT",
       "path": "/bucket/upload-1/3?X-Sig=s",
       "headers": {
@@ -97,17 +97,6 @@
       "bytes": {
         "length": 262172,
         "sha256": "eaede14e5abad1866e20a2ee889a5d761f08424dfeb49f1a4f6a8180e73b89e8"
-      }
-    },
-    {
-      "method": "PUT",
-      "path": "/bucket/upload-1/4?X-Sig=s",
-      "headers": {
-        "content-type": "application/octet-stream"
-      },
-      "bytes": {
-        "length": 262172,
-        "sha256": "3911ab603eff47503c1dc5f253ad9538ae97f168c2a2d9218630b538a969a2b8"
       }
     },
     {
@@ -124,6 +113,17 @@
             "uploadId": "upload-1"
           }
         ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/4?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "3911ab603eff47503c1dc5f253ad9538ae97f168c2a2d9218630b538a969a2b8"
       }
     },
     {

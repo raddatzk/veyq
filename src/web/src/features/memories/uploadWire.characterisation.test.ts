@@ -28,6 +28,10 @@
 // (Re-blessed for ADR 0013 § 5: the ORIGINAL's `wrappedBlobMeta` now seals the file's `sha256` - the same length, its
 // padding bucket unchanged, the digest drawing no randomness - and a member's complete item names `originalShared: null`
 // beside `originalUploadId`. Nothing else moved: no wrap, no PUT digest, no path, header, order or count.)
+// (Re-blessed for inbox #536, the frame seal in core's frame worker: a seal is now a job the pump awaits, one hop later
+// than the synchronous seal it replaced (on the page thread here, vitest has no Worker), so the multi-chunk scenario's
+// two look-ahead window POSTs are sent one PUT earlier. The same 13 requests, byte for byte, the same PUT count and the
+// same most in flight; no wrap, digest, path, header or count moved.)
 // Every scenario runs twice and must record the same thing both times — the guard against a recording that depends on
 // scheduling rather than on the code.
 //
