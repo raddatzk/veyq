@@ -8,7 +8,7 @@ import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type O
 import { getTenantTerms } from '../features/tenant/tenantTerms'
 import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
 import { setTenantCapabilities } from '../shared/state/useCapabilities'
-import { zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
+import { copyEpochKeys, zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
@@ -23,6 +23,8 @@ import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/inv
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
 import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
+import { carryProfileForward } from '../features/account/profile/carryProfileForward'
+import { account } from './account'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -171,6 +173,7 @@ export async function enterScope(token: string): Promise<void> {
     // every member's device continues an unfinished re-key of any scope it holds (ADR 0111 decision 11). Session-level
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
+    carryOwnProfile(opened)
   } catch (err) {
     if (mine !== entry) return // superseded: the newer entry (or the clear) owns the status
     // A suspended tenant (uc.spaces.scope-access A7): on this domain's own tenant the router takes over with the
@@ -210,6 +213,16 @@ export async function refreshActiveScope(): Promise<void> {
   // member's master key, not an epoch key — ADR 0068) but are re-read here, because the reset above dropped them.
   if (!favoritesStore.loaded) await loadFavoritesFor(activeSpace.scopeId) // once per reset
   await registry.scopeEntered(activeSpace.scopeId)
+  carryOwnProfile(opened)
+}
+
+/** On entering the TENANT scope (and after its rotation), move the caller's own name and picture forward to its current
+ *  epoch when a rotation left them under an older one (`carryProfileForward`, ADR 0023). Not awaited: the shell never
+ *  waits for it. It runs on a copy of the keys, zeroed when it settles, since the active ones may be zeroed by a switch. */
+function carryOwnProfile(opened: OpenedScope): void {
+  if (opened.kind !== ScopeKind.Tenant || opened.epochs.current === 0) return
+  const epochs = copyEpochKeys(opened.epochs)
+  void carryProfileForward({ tenantId: opened.tenantId, scopeId: opened.scopeId, epochs }, account.userId).finally(() => zeroEpochKeys(epochs))
 }
 
 /** Drop the active space + zero the held key (logout / re-lock). */
