@@ -8,7 +8,7 @@
 // snapshot or a screenshot of an opened space holds what was decrypted in it). They are still the files of a signed-in
 // session — their URLs name the account's objects — so they stay in the run directory under `.run/profiles/`, which git
 // ignores, and the driver checks each for the account's password and Secret Key before it accepts the run.
-import { expect, type Browser, type BrowserContext, type CDPSession, type Page } from '@playwright/test'
+import { expect, type Browser, type BrowserContext, type CDPSession, type Page, type Worker as PwWorker } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 
 export const OUT = process.env.VEYQ_PROFILE_OUT ?? '/out'
@@ -65,7 +65,8 @@ interface ApiRequest {
 /**
  * One request of the window to the object store, by origin and path: a presigned URL, told apart by its `X-Amz-` query,
  * which is dropped (it is the signature). The store is another origin without `Timing-Allow-Origin`, so Resource Timing
- * gives its start and duration, never its size: the wire's share of an upload is read from these intervals (#261).
+ * gives its start and duration, never its size: the wire's share of an upload is read from these intervals (#261). The
+ * page's and its workers' alike: an upload's chunk PUTs are its frame worker's (inbox #220).
  */
 interface StoreRequest {
   url: string
@@ -95,8 +96,21 @@ export interface Window {
   failedRequests: string[]
   /** Every answer of the window with a status of 400 or more, as `METHOD origin+path status` — judged by the driver too. */
   httpErrors: string[]
+  /**
+   * `Performance.getMetrics` right before the window opens and right after it closes (inbox #220): the cumulative
+   * counters (`TaskDuration`, `ScriptDuration`, `LayoutDuration`, `RecalcStyleDuration`, in seconds) of the window are
+   * `metrics` minus `metricsBefore`, so the sign-in before it no longer counts.
+   */
+  metricsBefore: Record<string, number>
   metrics: Record<string, number>
 }
+
+/**
+ * The two marks that tie the trace's clock to the window (inbox #220): `t0` and `t1` are these marks' `startTime`, and
+ * the trace carries each as a `blink.user_timing` event at the same instant on its own clock. Fixed names, nothing of
+ * the content. `scripts/profile_attribute.py` reads them by these names.
+ */
+export const WINDOW_MARKS = { start: 'veyq-profile-window-start', end: 'veyq-profile-window-end' } as const
 
 /**
  * Runs `operation` (the action that starts what is profiled, and the wait for the state that ends it) under the
@@ -118,6 +132,12 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     httpErrors.push(`${r.request().method()} ${url.origin}${url.pathname} ${r.status()}`)
   })
 
+  // A worker keeps its own Resource Timing, with the same 250-entry default as a document, and an init script never
+  // reaches it: its buffer is raised as it appears (core's frame worker sends an upload's chunks, inbox #220).
+  const raiseWorker = (w: PwWorker) => void w.evaluate(() => performance.setResourceTimingBufferSize(200_000)).catch(() => undefined)
+  page.workers().forEach(raiseWorker)
+  page.on('worker', raiseWorker)
+
   await cdp.send('Performance.enable')
   if (cpuProfile) {
     await cdp.send('Profiler.enable')
@@ -129,19 +149,20 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   await browser.startTracing(page, { path: `${OUT}/${stem}.trace.json`, categories: TRACE_CATEGORIES, screenshots: false })
   if (cpuProfile) await cdp.send('Profiler.start')
 
+  const metricsBefore = (await cdp.send('Performance.getMetrics')).metrics
   const startedAt = Date.now()
-  const t0 = await page.evaluate(() => performance.now())
+  const t0 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.start)
   await operation()
-  const t1 = await page.evaluate(() => performance.now())
+  const t1 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.end)
   const endedAt = Date.now()
+  const { metrics } = await cdp.send('Performance.getMetrics')
 
   const profile = cpuProfile ? (await cdp.send('Profiler.stop')).profile : null
   await browser.stopTracing()
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
   if (profile) writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
 
-  const { metrics } = await cdp.send('Performance.getMetrics')
-  const { apiRequests, storeRequests } = await page.evaluate(([from, to]) => {
+  const { apiRequests, storeRequests: pageStore, timeOrigin } = await page.evaluate(([from, to]) => {
     const inWindow = (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
       .filter((e) => e.startTime >= from && e.startTime <= to)
     const api = inWindow.filter((e) => new URL(e.name).origin === location.origin && new URL(e.name).pathname.startsWith('/api/'))
@@ -149,8 +170,17 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     return {
       apiRequests: api.map((e) => ({ path: new URL(e.name).pathname, start: e.startTime - from, duration: e.duration, transfer: e.transferSize })),
       storeRequests: store.map((e) => ({ url: `${new URL(e.name).origin}${new URL(e.name).pathname}`, start: e.startTime - from, duration: e.duration })),
+      timeOrigin: performance.timeOrigin,
     }
   }, [t0, t1] as const)
+  // Each worker's store requests, moved onto the page's clock by the two time origins (a worker's clock starts with it).
+  const workerStore = (await Promise.all(page.workers().map((w) => w.evaluate(([from, to, pageOrigin]) => {
+    const shift = performance.timeOrigin - pageOrigin
+    return (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+      .filter((e) => /[?&]X-Amz-/i.test(new URL(e.name).search) && e.startTime + shift >= from && e.startTime + shift <= to)
+      .map((e) => ({ url: `${new URL(e.name).origin}${new URL(e.name).pathname}`, start: e.startTime + shift - from, duration: e.duration }))
+  }, [t0, t1, timeOrigin] as const).catch(() => [])))).flat()
+  const storeRequests = [...pageStore, ...workerStore].sort((a, b) => a.start - b.start)
 
   const window: Window = {
     scenario, run, throttle, cpuProfile,
@@ -161,6 +191,7 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     storeRequests,
     failedRequests: failed,
     httpErrors,
+    metricsBefore: Object.fromEntries(metricsBefore.map((m) => [m.name, m.value])),
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))
