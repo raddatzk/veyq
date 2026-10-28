@@ -31,6 +31,13 @@ vi.mock('../account/tenantTrust', async (orig) => ({ ...(await orig<typeof impor
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOption: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
+// The tenant keys the active space holds: none unless a test hands it some (then the names open on the device).
+const held = vi.hoisted(() => ({ write: null as Uint8Array | null, epochs: null as EpochKeys | null }))
+vi.mock('../../app/activeSpace', async (orig) => ({
+  ...(await orig<typeof import('../../app/activeSpace')>()),
+  activeScopeKey: () => held.write,
+  activeEpochKeys: () => held.epochs,
+}))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
@@ -44,6 +51,10 @@ import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
 import { formatInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { deriveEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
+import { sealName } from '../account/profile/memberName'
 
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -329,5 +340,38 @@ describe('TenantMembersPanel - make owner (ADR 0101 decision 9)', () => {
     await flushPromises()
     expect(setTenantMemberRole).toHaveBeenCalledWith('t-1', 'u-own', 'MEMBER')
     expect(w.find('.msg').text()).toBe(t('members.lastOwner'))
+  })
+})
+
+describe('TenantMembersPanel - names across a tenant rotation (inbox #573)', () => {
+  const T = '5c09e000-0000-4000-8000-0000000005a3'
+  const OLGA = '5c09e000-0000-4000-8000-00000000b001'
+  const PAUL = '5c09e000-0000-4000-8000-00000000b002'
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = T
+    activeSpace.tenantId = T
+  })
+
+  it('shows the real name a member saved under the epoch before the rotation, opened with the key peeled from the chain', async () => {
+    const e0 = v1.randomBytes(32)
+    const e1 = v1.randomBytes(32)
+    const epochs = deriveEpochKeys(T, e1, 1, [{ epoch: 1, wrappedPrev: b64std(v1.seal(epochLinkContext(T, 1), e1, e0)) }])
+    held.write = epochs.keys.get(1)!
+    held.epochs = epochs
+    try {
+      const members: ScopeMember[] = [
+        { ...MEMBERS[0], userId: OLGA, sealedName: sealName(e0, { scopeId: T, userId: OLGA }, { firstName: 'Olga', lastName: 'Owner' }) },
+        { ...MEMBERS[1], userId: PAUL, sealedName: sealName(e1, { scopeId: T, userId: PAUL }, { firstName: 'Paul', lastName: 'Partner' }) },
+      ]
+      const wrapper = await mountPanel('MEMBER', [], members)
+      const titles = wrapper.findAll('.member-row .veyq-row-title').map((x) => x.text())
+      expect(titles).toEqual(['Olga Owner', 'Paul Partner'])
+    } finally {
+      held.write = null
+      held.epochs = null
+    }
   })
 })

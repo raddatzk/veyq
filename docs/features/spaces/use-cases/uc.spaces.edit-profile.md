@@ -18,7 +18,7 @@
 2. The client loads the member's profile in that tenant: the username, the sealed-name blob and the account-global
    consent preference.
 3. The client opens `K_tenant` from the member's own tenant grant and unseals the name on the device, at the
-   address (tenant scope, own user id).
+   address (tenant scope, own user id), under whichever held tenant epoch it was saved under.
 4. The member edits the username, the first name and/or the last name.
 5. On save, the client seals the first and last name under a field key derived from `K_tenant` at that address. The name may be empty,
    and an empty name is sealed like any other. The client sends the username (trimmed, lower-cased), the sealed
@@ -35,6 +35,10 @@
   alone can still be saved. Once the current grant lands, the name can be set here ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md) E2).
 - **A1 — remove your real name:** empty both name fields and save. An empty name is sealed, and the directory
   shows only `@username` from then on.
+- **A2 — the tenant rotated since the name was saved** (a member secured their account, or one was removed): the name
+  still opens under the older epoch, in the directory of every member and in this form, and the member is not asked to
+  finish a profile they finished. On entering the tenant the member's own client seals it again under the current epoch
+  ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name).
 - **E3 — the profile does not load:** the panel shows a load error instead of the form. A refused session ends
   the way every refused session ends ([uc.account.sign-out](../../account/use-cases/uc.account.sign-out.md) E1).
 

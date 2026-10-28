@@ -30,7 +30,7 @@ import type { MemberVerification } from '../../api/generated/tenants'
 import { ScopeMemberRoleEnum, type ScopeMember } from '../../api/generated/scopes'
 import { withRefresh } from '../../app/sessionRefresh'
 import { identityPrivate } from '../../app/vault'
-import { writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
+import { openUnderHeldEpochs, writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
 import { listScopeMembers } from '../spaces/members'
 import { me } from '../spaces/grantTrust'
 import { listMyScopes, openScopeById, type OpenedScope } from '../spaces/scopes'
@@ -70,19 +70,16 @@ const UNAVAILABLE: Standing = { kind: 'unavailable' }
 const UNANCHORED: Standing = { kind: 'unanchored' }
 
 /** Open a join record with the epoch key it was sealed under — the epoch its invite's grant carried, which the record
- *  does not name, so every epoch this device holds is tried, newest first. Null for one none opens. */
+ *  does not name, so every epoch this device holds is tried, newest first ({@link openUnderHeldEpochs}). Null for one
+ *  none opens. */
 function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs: EpochKeys): invite.JoinRecord | null {
-  const envelope = fromB64std(sealed)
-  for (let e = epochs.current; e >= 0; e--) {
-    const key = epochs.keys.get(e)
-    if (!key) continue
-    try {
-      return invite.openJoinRecord(key, { tenantId, userId }, envelope)
-    } catch {
-      /* another epoch's key, or no record at all */
-    }
+  let envelope: Uint8Array
+  try {
+    envelope = fromB64std(sealed)
+  } catch {
+    return null
   }
-  return null
+  return openUnderHeldEpochs(epochs, (key) => invite.openJoinRecord(key, { tenantId, userId }, envelope))?.value ?? null
 }
 
 /**

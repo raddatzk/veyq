@@ -36,6 +36,9 @@
 - **A3 — skipped at join:** both are optional; once the device holds the tenant key and neither a name nor a picture
   is set, a one-time "finish your profile" notice (and Settings) offers them, until "Not now" or its link dismisses it
   for that user on that browser (a flag, never an image). Nothing unsealed is cached meanwhile.
+- **A5 — the tenant rotated since the picture was saved:** it still opens under the older epoch for every member, and the
+  member's own client seals it again under the current epoch on entering the tenant, as it does the name
+  ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) A2).
 - **E1 — the browser cannot decode the file:** rejected in the picker with a message; nothing is stored.
 - **E2 — the tenant key does not open here** (behind or refused): the control is disabled with a hint, as the name fields are
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) E2).

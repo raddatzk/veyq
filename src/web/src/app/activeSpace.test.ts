@@ -15,6 +15,7 @@ vi.mock('../core/people/directory', async (orig) => ({ ...(await orig<object>())
 vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 vi.mock('../features/tenant/tenantCapabilities', () => ({ getTenantCapabilities: vi.fn() }))
+vi.mock('../features/account/profile/carryProfileForward', () => ({ carryProfileForward: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
 import { resetPeopleDirectory } from '../core/people/directory'
@@ -35,6 +36,8 @@ import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
 import { capabilityState } from '../shared/state/capabilities'
+import { carryProfileForward } from '../features/account/profile/carryProfileForward'
+import { account } from './account'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
 const TENANT_SCOPE_ID = 'tn-1'
@@ -50,6 +53,7 @@ beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(carryProfileForward).mockResolvedValue({ name: false, picture: false })
   clearActiveSpace()
   resetTree()
   clearFavorites()
@@ -363,5 +367,44 @@ describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => 
     expect(activeSpace.status).toBe('no-tenant')
     expect(serverState.suspended).toBe(false)
     expect(suspensionSignals.leaveHome).toBe(0)
+  })
+})
+
+describe('the own profile moves forward on entering the tenant (ADR 0023 § The epoch of a sealed name, inbox #573)', () => {
+  const rotated = (scopeId: string, kind: ScopeKind) => {
+    const e1 = new Uint8Array(32).fill(8)
+    return { scopeId, tenantId: TENANT_ID, kind, key: e1, epochs: { current: 1, keys: new Map([[1, e1], [0, new Uint8Array(32).fill(4)]]) }, nameEpoch: 0, deletedAt: null, purgeAfter: null }
+  }
+
+  it('entering a rotated tenant hands the step the tenant, its scope, a COPY of every epoch key and the own account id; the copy is zeroed after', async () => {
+    account.userId = 'me-1'
+    const scope = rotated(TENANT_SCOPE_ID, ScopeKind.Tenant)
+    vi.mocked(openScope).mockResolvedValue(scope)
+    await enterScope(TENANT_SCOPE)
+    expect(carryProfileForward).toHaveBeenCalledTimes(1)
+    const [held, userId] = vi.mocked(carryProfileForward).mock.calls[0]
+    expect(userId).toBe('me-1')
+    expect([held.tenantId, held.scopeId, held.epochs.current]).toEqual([TENANT_ID, TENANT_SCOPE_ID, 1])
+    expect(held.epochs.keys.get(1)).not.toBe(scope.epochs.keys.get(1)) // a switch zeroes the active keys; the step holds its own
+    await Promise.resolve()
+    await Promise.resolve()
+    expect([...held.epochs.keys.values()].every((k) => k.every((b) => b === 0)), 'the copy is zeroed once the step settled').toBe(true)
+    expect(activeEpochKeys()?.keys.get(1)?.[0], 'the active keys are untouched').toBe(8)
+  })
+
+  it('not at epoch 0, and not for a group or the personal space (the profile lives in the tenant)', async () => {
+    vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
+    await enterScope(TENANT_SCOPE)
+    vi.mocked(openGroupByToken).mockResolvedValue(rotated('g-1', ScopeKind.Group))
+    await enterScope('@g-1')
+    expect(carryProfileForward).not.toHaveBeenCalled()
+  })
+
+  it('after a rotation of the active tenant, the re-opened keys go to the step too', async () => {
+    vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
+    await enterScope(TENANT_SCOPE)
+    vi.mocked(openScopeById).mockResolvedValue(rotated(TENANT_SCOPE_ID, ScopeKind.Tenant))
+    await refreshActiveScope()
+    expect(vi.mocked(carryProfileForward).mock.calls.map(([h]) => h.epochs.current)).toEqual([1])
   })
 })

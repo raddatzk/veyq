@@ -53,3 +53,34 @@ export function deriveEpochKeys(scopeId: string, grantKey: Uint8Array, grantedEp
 export function zeroEpochKeys(ek: EpochKeys): void {
   ek.keys.forEach((k) => k.fill(0))
 }
+
+/** A copy of every held epoch key, for work that outlives the holder's own set (which may be zeroed meanwhile); the
+ *  caller zeroes the copy with {@link zeroEpochKeys}. */
+export function copyEpochKeys(ek: EpochKeys): EpochKeys {
+  return { current: ek.current, keys: new Map([...ek.keys].map(([e, k]) => [e, k.slice()])) }
+}
+
+/**
+ * Open a value whose row does not record the epoch it was sealed under — a member's join record, name and picture on the
+ * tenant profile: under every epoch key held, **newest first**; the first that opens wins, returned with its epoch. `open`
+ * returns null (or throws) for a key it does not open under. Only the keys of `ek` are tried, so a reader opens exactly
+ * what its grant's keys open: a value sealed under an epoch it does not hold stays shut. Null when none opens.
+ *
+ * Newest first, because a writer seals under the current epoch of the moment it writes and a member's own client moves its
+ * name and picture forward to the current epoch (`features/account/profile/carryProfileForward.ts`): the first try almost
+ * always opens, and a value a rotation left behind costs one failed AEAD open per epoch in between.
+ */
+export function openUnderHeldEpochs<T>(ek: EpochKeys, open: (key: Uint8Array) => T | null): { value: T; epoch: number } | null {
+  for (let e = ek.current; e >= 0; e--) {
+    const key = ek.keys.get(e)
+    if (!key) continue
+    let value: T | null = null
+    try {
+      value = open(key)
+    } catch {
+      /* not sealed under this epoch's key */
+    }
+    if (value !== null) return { value, epoch: e }
+  }
+  return null
+}
