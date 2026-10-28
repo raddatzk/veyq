@@ -193,8 +193,10 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
       return edit(meta, ctx)
     },
     send,
-    // The cover names a blob wrapped under the key it was uploaded with, so an epoch refusal is not rebuilt under another
-    // (no `reread`): the caller's. The floor runs first — a cover is a member's write (ADR 0109 point 6).
+    // The cover names a blob wrapped under the key it was uploaded with, so an epoch refusal is not rebuilt here under
+    // another (no `reread`): the caller runs the whole cover again, the upload included, after pulling the node's path
+    // forward (`useNodeCover` through `writeUnderMemberNode`, ADR 0111 decision 11). The floor runs first — a cover is a
+    // member's write (ADR 0109 point 6).
     { atFloor: (epoch) => assertActiveScopeFloor(a.scopeId, { id: a.nodeId, epoch }) },
   )
   return { ...state, replaced }

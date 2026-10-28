@@ -10,7 +10,8 @@
 //
 // What only this layer proves: that the server lets a plain member read, stage and commit a re-key (the owner-only gate
 // is gone), that it serves the member's scope row `rekeying`, and that the client's pull, re-read and re-seal meet the
-// real server's epoch gate. The unit layer (`core/node/rekey/rekeyScope.test.ts`, `features/memories/uploadQueue.test.ts`)
+// real server's epoch gate — and, for a medium's meta edit, that the re-key re-sealed the listed tier and raised its
+// revision, so the edit's rebuild under the new key meets `409 stale_revision` and re-bases on it (inbox #563). The unit layer (`core/node/rekey/rekeyScope.test.ts`, `features/memories/uploadQueue.test.ts`)
 // proves the same steps against an in-memory server.
 //
 //   python3 scripts/run_web_e2e.py src/web/src/features/spaces/anyMemberRekeys.e2e.test.ts
@@ -32,7 +33,7 @@ import { createShareNodeAsGuest, guestTreeContext } from '../../core/sharing/gue
 import { registry } from '../../core/applications/registry'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { createMemory } from '../memories/memoryNodes'
-import { listMedia } from '../memories/media'
+import { listMedia, setMediaMeta, unsealMeta } from '../memories/media'
 import { enqueueUploads, useUploadQueue } from '../memories/uploadQueue'
 import { memoriesLifecycle } from '../memories/lifecycle'
 import { MEMORY_KIND } from '../memories/kinds'
@@ -50,6 +51,7 @@ const TENANT_NAME = 'E2E Any Member Rekeys' // declared plaintext — NOT a cana
 const GROUP_NAME = 'Wandergruppe Allgaeu'
 const FOLDER_NAME = 'Gipfelbuch Nebelhorn'
 const MEMORY_NAME = 'Huettenabend Prinz Luitpold'
+const MEMORY2_NAME = 'Gipfelkreuz Hochvogel'
 const GUEST_NAME = 'Bergfreundin Walburga'
 const GUEST_FOLDER = 'Funde vom Grat'
 
@@ -87,10 +89,22 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     const openedA = (await openScopeById(gG))!
     const folderId = await createFolder(gG, openedA.epochs, FOLDER_NAME)
     const memory = await createMemory(gG, openedA.epochs, MEMORY_NAME)
+    const memory2 = await createMemory(gG, openedA.epochs, MEMORY2_NAME)
     const folderKey = nodeContentKey(gG, openedA.epochs, await listTree(gG, openedA.epochs), folderId)!
     const minted = await mintShare(gG, folderId, { key: folderKey, epoch: 0 }, openedA.epochs, FOLDER_NAME, ShareRole.ReadWrite)
     const fragmentKey = b64url(minted.kShare)
-    recordCanaries(GROUP_NAME, FOLDER_NAME, MEMORY_NAME, GUEST_NAME, GUEST_FOLDER)
+    recordCanaries(GROUP_NAME, FOLDER_NAME, MEMORY_NAME, MEMORY2_NAME, GUEST_NAME, GUEST_FOLDER)
+    const { batches } = useUploadQueue()
+
+    // --- A: a photo in the second Memory, its time corrected: a listed tier sealed under that Memory's key from before ----
+    const key2A = nodeContentKey(gG, openedA.epochs, await listTree(gG, openedA.epochs), memory2.nodeId)!
+    enqueueUploads({ scopeId: gG, nodeId: memory2.nodeId, memoryKey: key2A, nodeEpoch: 0 },
+      [{ file: new File([bytes(5) as BlobPart], 'kreuz.jpg', { lastModified: 1 }), mediaType: '' }], { label: '0' })
+    const photoA = batches.value.at(-1)!.files[0]
+    await vi.waitFor(() => expect(['done', 'failed']).toContain(photoA.status), { timeout: 60_000, interval: 250 })
+    expect(photoA.status, `A's photo landed (${photoA.error ?? ''})`).toBe('done')
+    const [listedA] = await listMedia(gG, memory2.nodeId)
+    await setMediaMeta(gG, listedA, key2A, 0, Date.UTC(2024, 6, 1))
 
     // --- anonymous: named on the link before the rotation ------------------------------------------------------------
     const head = await resolvePublicShare(minted.shareId, fragmentKey)
@@ -111,7 +125,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     //     path on B's device, and the photo is sealed again under the Memory's key now ----------------------------------
     const openedB = (await openScopeById(gG))!
     const oldKey = nodeContentKey(gG, openedB.epochs, await listTree(gG, openedB.epochs), memory.nodeId)!
-    const { batches } = useUploadQueue()
     enqueueUploads({
       scopeId: gG, nodeId: memory.nodeId, memoryKey: oldKey, nodeEpoch: 0,
       atFloor: (epoch) => assertNodeKeyAtFloor({ id: memory.nodeId, epoch }, openedB.epochs),
@@ -128,6 +141,26 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     expect(afterPull.find((n) => n.id === memory.nodeId)?.epoch, 'the Memory was re-keyed by the member').toBe(1)
     expect(afterPull.find((n) => n.id === folderId)?.epoch, 'only the written path: the folder still lags').toBe(0)
     expect(await listMedia(gG, memory.nodeId)).toHaveLength(1)
+    expect(afterPull.find((n) => n.id === memory2.nodeId)?.epoch, 'the second Memory still lags').toBe(0)
+
+    // --- B corrects the time of A's photo in the second Memory, as listed before its re-key: the floor refuses the old
+    //     key, the pull re-keys that Memory, and the edit is rebuilt under its new key — re-based on the tier the re-key
+    //     re-sealed, whose revision it raised (`409 stale_revision`) ----------------------------------------------------
+    const key2B = nodeContentKey(gG, openedB.epochs, afterPull, memory2.nodeId)!
+    const [listedB] = await listMedia(gG, memory2.nodeId)
+    const edited = await setMediaMeta(gG, listedB, key2B, 0, Date.UTC(2024, 6, 2), {
+      atFloor: (epoch) => assertNodeKeyAtFloor({ id: memory2.nodeId, epoch }, openedB.epochs),
+      pull: pullRekeyPath(gG, [memory2.nodeId]),
+      reread: async () => {
+        const at = nodeKeyForWrite(gG, openedB.epochs, await listTree(gG, openedB.epochs), memory2.nodeId)!
+        return { key: at.key, epoch: at.epoch }
+      },
+    })
+    expect(edited.wrote, 'the edit landed').toBe(true)
+    expect(edited.metaRevision, 'A\'s write, the re-key\'s re-seal, then B\'s').toBe((listedB.metaRevision ?? 0) + 2)
+    const afterEdit = await listTree(gG, openedB.epochs)
+    expect(afterEdit.find((n) => n.id === memory2.nodeId)?.epoch, 'the edit\'s pull re-keyed the second Memory').toBe(1)
+    expect(afterEdit.find((n) => n.id === folderId)?.epoch, 'and nothing else: the folder still lags').toBe(0)
 
     // --- anonymous: a write into the folder waits while it lags ... -------------------------------------------------
     const guestWrite = createShareNodeAsGuest(await contextNow(), { parentId: folderId, kind: FOLDER_KIND, name: GUEST_FOLDER })
@@ -145,7 +178,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     await become(A)
     const openedA2 = (await openScopeById(gG))!
     const treeA = await listTree(gG, openedA2.epochs)
-    expect(treeA.map((n) => n.name).sort()).toEqual([GUEST_FOLDER, FOLDER_NAME, MEMORY_NAME].sort())
+    expect(treeA.map((n) => n.name).sort()).toEqual([GUEST_FOLDER, FOLDER_NAME, MEMORY_NAME, MEMORY2_NAME].sort())
     expect(await listMedia(gG, memory.nodeId)).toHaveLength(1)
+    const key2Now = nodeContentKey(gG, openedA2.epochs, treeA, memory2.nodeId)!
+    const [photoNow] = await listMedia(gG, memory2.nodeId)
+    expect(unsealMeta(gG, key2Now, photoNow)?.capturedAtOverride, 'B\'s corrected time, under the new key').toBe(Date.UTC(2024, 6, 2))
   }, 180_000)
 })

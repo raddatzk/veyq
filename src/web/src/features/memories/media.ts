@@ -14,7 +14,7 @@ import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { NODE_REKEY_PENDING, NodeRekeyPendingError } from '../../shared/rekeyRetry'
+import { NODE_REKEY_PENDING, NodeRekeyPendingError, writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
@@ -264,11 +264,16 @@ export function rawMediaMeta(scopeId: string, memoryKey: Uint8Array, item: Media
 
 /** The listed tier for a WRITE: absent → a fresh `{ v: 1 }`; present but unopenable or unparseable → refused. */
 function openMediaMetaForWrite(scopeId: string, memoryKey: Uint8Array, media: MediaRef, wrappedMeta: string | null): RawMediaMeta {
+  return openMediaMetaUnder(scopeId, () => mediaKey(scopeId, memoryKey, media), media.mediaId, wrappedMeta)
+}
+
+/** {@link openMediaMetaForWrite} under the key `key` resolves to (the media's own, [mediaKey]); a key that does not
+ *  resolve is a tier that does not open. */
+function openMediaMetaUnder(scopeId: string, key: () => Uint8Array, mediaId: string, wrappedMeta: string | null): RawMediaMeta {
   if (!wrappedMeta) return { v: 1 }
   let parsed: unknown
   try {
-    const key = mediaKey(scopeId, memoryKey, media)
-    parsed = JSON.parse(new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, media.mediaId), key, fromB64std(wrappedMeta))))
+    parsed = JSON.parse(new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, mediaId), key(), fromB64std(wrappedMeta))))
   } catch {
     throw new MetaUnreadableError()
   }
@@ -991,6 +996,7 @@ export async function setMediaMeta(
   memoryKey: Uint8Array,
   nodeEpoch: number,
   overrideMs: number | null,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   const openedWith = unsealMeta(scopeId, memoryKey, media as MediaItem)?.capturedAtOverride
   return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw, { retry, state }) => {
@@ -998,7 +1004,7 @@ export async function setMediaMeta(
     if (overrideMs === null) delete raw.capturedAtOverride
     else raw.capturedAtOverride = overrideMs
     return raw
-  })
+  }, opts)
 }
 
 /**
@@ -1040,6 +1046,7 @@ export async function backfillPlaceName(
   nodeEpoch: number,
   placeName: string,
   placeLevel?: string,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw) => {
     if (cleanStr(raw.placeName) !== undefined) return null // the fresh tier already has one — nothing to fill
@@ -1047,7 +1054,7 @@ export async function backfillPlaceName(
     if (placeLevel === undefined) delete raw.placeLevel
     else raw.placeLevel = placeLevel
     return raw
-  })
+  }, opts)
 }
 
 /** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). Any field but `v`
@@ -1055,6 +1062,18 @@ export async function backfillPlaceName(
  *  the name resolved again on every open) or one a newer client wrote that this one does not know. */
 function metaHasContent(m: RawMediaMeta): boolean {
   return Object.entries(m).some(([k, v]) => k !== 'v' && v !== undefined)
+}
+
+/**
+ * How a MEMBER's media-meta write meets an epoch refusal of the medium's node (ADR 0109 point 6): the device floor before
+ * each attempt (`atFloor`), and on `node_rekey_pending` (or the floor's refusal) the node's path pulled forward on this
+ * device (`pull`, ADR 0111 decision 11) and its key re-read (`reread`) for a rebuild; `stale_epoch` re-reads once. Without
+ * `reread` a refusal is the caller's — a guest's write, which has no key above its root to pull with.
+ */
+export type MediaMetaWriteOptions = {
+  atFloor?: (nodeEpoch: number) => void
+  reread?: () => Promise<{ key: Uint8Array; epoch: number }>
+  pull?: () => Promise<boolean>
 }
 
 /**
@@ -1067,6 +1086,12 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
  * left worth sealing. `nodeEpoch` is the medium's node's epoch as read with `memoryKey`, which the write states (ADR 0109
  * point 6).
+ *
+ * A rebuild after the node's re-key ([MediaMetaWriteOptions]) seals under the re-read key at its epoch, and starts from the
+ * tier AS LISTED — opened once, under the key it was listed with: the re-key re-sealed that tier without changing a byte of
+ * its plaintext and raised its revision, so the rebuild's send meets `409 stale_revision` and re-bases on the re-sealed tier,
+ * which opens under the new key. A WRITE_ONLY guest's medium is neither re-sealed nor re-revised by a re-key, and its `K_up`
+ * stays the same: it is resolved once, from the origin as listed (whose drop key the re-key replaced).
  */
 async function persistMeta(
   scopeId: string,
@@ -1074,20 +1099,36 @@ async function persistMeta(
   memoryKey: Uint8Array,
   nodeEpoch: number,
   edit: (raw: RawMediaMeta, ctx: MetaEditContext) => RawMediaMeta | null,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   const { mediaId } = media
-  const { state, meta, wrote } = await writeSealedMeta<RawMediaMeta>(
-    { wrappedMeta: media.wrappedMeta ?? null, metaRevision: media.metaRevision ?? 0 },
-    {
-      open: (wrappedMeta) => openMediaMetaForWrite(scopeId, memoryKey, media, wrappedMeta),
-      seal: (raw) =>
-        metaHasContent(raw) ? sealJson(mediaKey(scopeId, memoryKey, media), prune(raw), mediaMetaContext(scopeId, mediaId)) : null,
-      send: async (wrappedMeta, metaRevision) => {
-        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision, nodeEpoch } }))
+  const base = { wrappedMeta: media.wrappedMeta ?? null, metaRevision: media.metaRevision ?? 0 }
+  let guestKey: Uint8Array | undefined
+  const keyFor = (nodeKey: Uint8Array) => (media.uploader ? (guestKey ??= mediaKey(scopeId, memoryKey, media)) : nodeKey)
+  let listed: RawMediaMeta | undefined
+  const openListed = () => (listed ??= openMediaMetaForWrite(scopeId, memoryKey, media, base.wrappedMeta))
+  const once = async (nodeKey: Uint8Array, epoch: number) => {
+    opts.atFloor?.(epoch)
+    return writeSealedMeta<RawMediaMeta>(
+      base,
+      {
+        open: (wrappedMeta) =>
+          wrappedMeta === base.wrappedMeta ? structuredClone(openListed()) : openMediaMetaUnder(scopeId, () => keyFor(nodeKey), mediaId, wrappedMeta),
+        seal: (raw) => (metaHasContent(raw) ? sealJson(keyFor(nodeKey), prune(raw), mediaMetaContext(scopeId, mediaId)) : null),
+        send: async (wrappedMeta, metaRevision) => {
+          await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision, nodeEpoch: epoch } }))
+        },
       },
-    },
-    edit,
-  )
+      edit,
+    )
+  }
+  const reread = opts.reread
+  const { state, meta, wrote } = reread
+    ? await writeAtNodeEpoch(async (again) => {
+      const at = again ? await reread() : { key: memoryKey, epoch: nodeEpoch }
+      return once(at.key, at.epoch)
+    }, { pull: opts.pull })
+    : await once(memoryKey, nodeEpoch)
   return { tier: state.wrappedMeta ? normalizeMediaMeta(meta) : null, wrappedMeta: state.wrappedMeta, metaRevision: state.metaRevision, wrote }
 }
 
