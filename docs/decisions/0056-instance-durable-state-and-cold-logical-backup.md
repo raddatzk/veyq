@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-08-06
+- Model: [cc.storage.object-lifecycle](../crosscutting/cc.storage.object-lifecycle.md)
 
 ## Context
 
@@ -95,8 +96,7 @@ downtime equal to the capture, which for a household instance is the cheaper sid
 **3. The store leg is captured logically, as its index; the objects go into an object pool only when one is
 named.** The backup reads the object namespace through the S3 API, never the store's data directories, and on
 every target it records that namespace as an **index**: every object's key, size and MD5, in one listing, in the
-manifest (`backupFormat` 3). The objects stay in the store. Owner, 2026-10-17: *"Richtiges Vollbackup liegt doch
-im Betrieb des S3"* — keeping the objects is the store operator's job (its versioning, replication or snapshots),
+manifest (`backupFormat` 3). The objects stay in the store: keeping the objects is the store operator's job (its versioning, replication or snapshots),
 and a backup that copied the whole bucket every time would make each capture, and each upgrade's downtime, as
 large as the store. Two properties of the built system make the index enough for what veyq's own backup is for:
 an upgrade migrates the schema and **never rewrites an object** — every object is an immutable ciphertext blob,
@@ -131,7 +131,7 @@ target (never a credential) beside the index, and **the index is what ties the t
 index's keys out of the pool, whatever else the pool holds. The pool holds ciphertext only, as the store does, so it
 changes nothing about what the operator can read.
 
-**The pool keeps exactly what its retained captures need** (owner 2026-10-17). An object is deleted from the pool as
+**The pool keeps exactly what its retained captures need.** An object is deleted from the pool as
 soon as no retained capture's index names it, and captures rotate by `keep` — so a deletion, a member's erasure
 included, reaches the pool within the backup rotation window [security-model](../crosscutting/security-model.md)
 promises, and an object an earlier, still-retained capture needs is never deleted. The retained captures are the
@@ -145,7 +145,7 @@ restores without a source, its objects being in the store; from the pool it refu
 longer holds. A pool therefore serves one instance.
 
 **The bundled store keeps no history of its own.** Garage, the pinned v2.0.0, has no object versioning (measured
-2026-10-17 against a throwaway node through the pinned rclone: `GetBucketVersioning` answers `Unversioned`,
+against a throwaway node through the pinned rclone: `GetBucketVersioning` answers `Unversioned`,
 `PutBucketVersioning` and `ListObjectVersions` answer `501 NotImplemented`), and it can snapshot its metadata but
 not its data blocks (the fast path below). So on the bundled store, under Compose, nothing but a pool or a volume
 copy of the store keeps an object the store loses, and `veyqctl status` says so while no pool is configured
@@ -209,7 +209,7 @@ This turns "install the backup's release, restore, upgrade" into "restore, start
 target's release decides the outcome**. A rollback after a failed upgrade (§6) therefore still starts by
 installing the release the backup came from. Restoring the pre-upgrade backup onto the new release would only
 run the failed upgrade again. The restore says this when the backup is older than its target. On Compose the
-rollback is **in place** (owner 2026-10-17): the capture holds no object and an upgrade rewrites none, so `veyqctl
+rollback is **in place**: the capture holds no object and an upgrade rewrites none, so `veyqctl
 rollback` empties the database, starts the capture's release once, and restores with the check only — the objects
 never leave the store ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), the cluster's
 rollback in [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9 in Compose's
@@ -222,8 +222,7 @@ before the Server Owner confirms the bucket again ([ADR 0062](0062-store-object-
 operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the
 wrong image, and it buys nothing that the forward migration does not already have to guarantee.
 
-**A restore also checks the objects before it writes, and it writes objects only into an empty store** (owner
-2026-10-17). Both forms run before the dump is loaded, and a refusal writes nothing:
+**A restore also checks the objects before it writes, and it writes objects only into an empty store**. Both forms run before the dump is loaded, and a refusal writes nothing:
 
 - **Without a source — the check only.** Every object the dump's rows require must be in the **live store** with
   the size and MD5 the index recorded (A4). A missing or different one refuses the restore, naming each; an object
@@ -245,60 +244,24 @@ anyway, so their absence is reported and never refused.
 
 **8. A capture is kept at most B days, and an erasure made after a capture is re-applied when it is restored.**
 Backups are not exempt from erasure (GDPR Art. 17; Art. 5(1)(e) bounds how long anything is kept), and the EDPB's
-erasure report asks a controller to track erasures and apply them again on a restored system (CEF 2025 § 4.2.6). Two
-halves, on both targets in step:
+erasure report asks a controller to track erasures and apply them again on a restored system
+([legal register](../crosscutting/legal-register.md) L4, L10). Two halves, on both targets in step:
 
-- **B is an instance setting**, set in admin-web and `veyq-admin` like the guest-write record's N
-  ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)): days, 30 by default (the
-  most the moderation Run page already recommends for a backup holding guest addresses). The capture tooling reads it
-  from the database it captures, so it has one home; an unreadable value means 30. Every capture veyq's tooling
-  wrote — Compose's `veyqctl` captures under its home, the cluster gate's under its claim, an object pool's ledger
-  entries — is deleted once it is older than B, **the newest included** (owner question in
-  `cr-backup-erasure-and-retention`): `veyqctl` prunes at every `backup`, `upgrade` and `start` and offers
-  `veyqctl backup prune` for a daily timer, the gate prunes at every start and the chart runs the same prune daily;
-  `veyqctl status` warns while no capture younger than B exists (admin-web cannot see the captures). `backup.keep`
-  stays as the bound on space. The chart's daily prune is a CronJob of its own on the gate's image and claim: it reads
-  B from the database and writes only that claim, never the key's (`scripts/chart_meta_check.py` (xxviii)). A copy the operator moved off the host is theirs to delete by B; the Run docs say so, with access only to
-  restore it.
-- **The erasure ledger** lives outside the three legs, in the directory leg (c)'s key file lives in — persisted by
-  Compose's named volume and by the cluster's kept claim (Consequences, below) — so neither a restore nor a rollback
-  touches it. It holds one line per hard erasure that no restored row would trigger again by itself — an erased
-  account or tenant (a revoked pending one too), a purged scope, node or medium, a deleted link, a reclaimed storage key,
-  an ended moderation hold: kind, opaque id, time. The kinds are a sealed set the re-applier's `when` covers, so a kind without its re-applier does
-  not compile; an application contributes its own (Memories: a medium) through a core interface, as it does an eraser.
-  A purge that re-fires on its own restored row (a trash past its retention, a guest-write record) needs none; a hold's
-  end is a line however it ended, the cleanup's included, since one ended early comes back with its end still ahead. An erasure writes its line in its own transaction to a table, and a sweep appends it to the file after
-  the commit — at least once, which is harmless because re-applying is idempotent. **At every start, before the
-  instance serves,** the application reads the file and erases, through that kind's own eraser, every listed object
-  whose row exists; no restore needs to be detected. A line older than B goes, since no retained capture predates it.
-  The restore's object check (§7) counts a key the ledger lists as erased, never as missing — `veyqctl restore` and
-  `rollback` read the file out of the app's volume and hand it over (`--erasures`), the cluster's restore Job reads it
-  from the config-secret claim it already mounts; the gate itself still never mounts that claim (ADR 0098 decision
-  4c). A restored row that still names an erased key with no line of its own (an old version a Depot replace dropped)
-  is counted in the start's log line and served as a missing object is (Context 2).
-- **Moderation survives a restore** (owner 2026-10-18, by the legal-duty rule: a TCO Art. 3 block and a DSA Art. 17
-  measure must not be undone by one). The same outbox carries every block and lift of a measure (its item kind and
-  target, its link, space and case, who took it and its basis — a measure or an authority's order), every change of
-  a case (its item, space, category, state, when it opened, and its retention date: the latest `expires_at` of its
-  events once every event has one) and every end of a hold — a dismissal, the cleanup's end, a child-sexual-abuse case's
-  handover, the lift of a case's last measure (`HOLD_ENDED`, its hold and case; owner 2026-10-19). At start, per item
-  the **last** line wins, in both directions (owner 2026-10-19): an item whose last line is a block and that the
-  restored database does not block is blocked again, and one whose last line is a lift is lifted, never blocked again.
-  Re-blocking re-applies what the block did besides its row: a member's sessions end, and a tenant's status is set again
-  — offline for `TENANT_OFFLINE`, pending deletion for `TENANT_DELETED` — since the status, not the record, is what
-  refuses it (owner 2026-10-19). A case the database lacks comes back as a stub, `origin = RESTORED`, with no report and
-  nothing sealed: closed on its retention date if it had closed (decided too, its hold having been part of what the
-  capture lacked), open and owed a decision otherwise. A case the database holds in an earlier state than its last line
-  moves on to that state — forward only, open → decided → closed, so closed where it was closed (owner 2026-10-19); never
-  back, since an objection that reopened it after the capture is lost with the capture. A hold whose line says it ended
-  and that the restore brought back ends again — its snapshot and pins go — so a dismissed case's copy is not kept to
-  the hold's own bound, which for child sexual abuse would pass what § 184b(5) StGB allows (ADR 0093 § 4). The case's
-  sealed parts, and what decided it (a dismissal's note), are lost with a capture older than them. Whether CSAM ciphertext kept in a
-  capture is possession under § 184b StGB stays ADR 0093's open question; captures expire at B either way.
-- **Limit, stated:** a restore onto a new host re-applies only the ledger it is given; the Run docs put the file
-  beside leg (c)'s key on the list of what to carry. Erasures made in the last sweep interval (a minute) before a crash
-  that also lost the file are not re-applied. The re-application is part of the start: a line that cannot be applied
-  fails it closed, so the instance does not serve with an erasure undone (owner 2026-10-19).
+- **B is an instance setting** (days, 30 by default — the most the moderation Run page recommends for a backup holding
+  guest addresses), set in admin-web and `veyq-admin` like the guest-write record's N
+  ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)), and read by the capture
+  tooling from the database it captures, so it has one home. Every capture veyq's tooling wrote is deleted once older
+  than B, **the newest included**: a capture kept past B would bring back what an erasure removed. A copy the operator
+  moved off the host is theirs to delete by B.
+- **An erasure ledger outside the three legs**, beside leg (c)'s key, so neither a restore nor a rollback touches it,
+  lists every hard erasure no restored row would trigger again by itself, and every moderation block, lift, case
+  change and hold end. **At every start, before the instance serves,** the application re-applies it through each
+  kind's own eraser, so no restore needs to be detected, and fails the start closed where a line cannot be applied.
+  **Moderation survives a restore**, by the rule that a legal duty wins: a TCO Art. 3 block and a DSA Art. 17 measure
+  must not be undone by one, and a hold that had ended must not come back past its bound.
+
+What a capture holds, the prune on each target, the ledger's lines and their re-application, and the stated limits
+are [cc.privacy.retention](../crosscutting/cc.privacy.retention.md) § Backups and the erasure ledger.
 
 ## Consequences
 
@@ -330,7 +293,7 @@ halves, on both targets in step:
   missing; it brings nothing back. That is the store's versioning, replication or snapshots, or the object pool
   (Decision 3) — and on the bundled Garage, which keeps no versions, the pool or a volume copy of the store. The
   Run pages say it where the commands are, and `veyqctl status` says it on the host.
-- **Rejected — a full copy of the bucket in every capture** (what Compose did until 2026-10-17). Self-contained,
+- **Rejected — a full copy of the bucket in every capture** (what Compose once did). Self-contained,
   but every capture and every upgrade's downtime grows with the store, the copies duplicate what the store's own
   durability already keeps, and an upgrade, which never rewrites an object, gains nothing from them. The pool keeps
   the self-contained option for whoever wants it, at the cost of the new objects only.

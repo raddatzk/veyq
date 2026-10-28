@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-10-17
+- Model: [Moderation](../features/moderation/_index.md)
 
 ## Context
 
@@ -80,7 +81,7 @@ What exists to build on (measured in this worktree):
 
 - **Minting needs no vault.** admin-web draws `M_n`, seals it to every current moderator's identity public key,
   uploads the public half and the grants, and forgets it — the same class of work as the account birth it already
-  does at setup. It never opens a grant. **Epoch 1 is minted by first-run setup itself** (owner 2026-10-17): the setup
+  does at setup. It never opens a grant. **Epoch 1 is minted by first-run setup itself**: the setup
   client draws `M_1` and seals it to the identity born in that same setup, and the server stores it with the Server
   Owner's account in one transaction — so reporting is on from the first day, with the Server Owner as the first
   moderator, and no operation turns moderation on later. Later epochs are minted on the admin channel as below. An
@@ -93,7 +94,7 @@ What exists to build on (measured in this worktree):
   check it (a guest has no pins), and need not beyond what [ADR 0026](0026-client-trust-tiers.md) already says: the
   reporter's client is operator-served, and the operator is the moderation authority, so a substituted key gains an
   active operator only what the served code already could.
-- **A moderation grant is unsigned** (owner 2026-10-17), unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
+- **A moderation grant is unsigned**, unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
   decision 6): admin-web mints without a vault and so has no identity signing key. A server that substitutes a grant
   must also substitute the published bundle to read anything, which this section already grants an active operator,
   the moderation authority itself; the published-key comparison above is the check that matters.
@@ -183,15 +184,11 @@ What exists to build on (measured in this worktree):
   retention reader. src/web/: the moderation surface (accept, confirm the address, unlock, queue, decide, deliver, step
   down), the moderation mode bound to it. admin-web: roster, mint, rotate, the Server-Owner-only steps. `veyq-admin`:
   `moderator appoint|remove|list`, `moderation rotate`. Instance mail to more than one address.
-- **0093's costs move.** "admin-web's queue" becomes the moderation surface; admin-web keeps less of moderation than
-  0093 planned.
 - **Out of scope:** per-tenant moderators; a vote of several moderators on a measure; the passkey wrap until passkeys
   exist; moderator accounts with no tenant; any signal of a moderator's identity to the affected (statements name the
   host, not the person).
-- **It changes [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 1–3,
-  6, 7 and 11–13, [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decisions 3, 5 and
-  6, and [ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule** (the moderator as a fifth audience, whose gate
-  is not the Server-Owner gate and so stays in src/web/), each edited in place.
+- **[ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule gains a fifth audience**, the moderator, whose
+  gate is not the Server-Owner gate and so stays in src/web/.
 - **The flows** are [uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
   [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md),
   [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
@@ -224,7 +221,7 @@ What exists to build on (measured in this worktree):
 
 ## Decided with the owner
 
-The owner answered each question as recommended (2026-10-17); the options stay as the record of what was weighed.
+Three questions, the options weighed, and the one taken.
 
 1. **May the Server Owner step down as a moderator?** (a) Never: the host moderates. (b) While at least one other
    accepted moderator holds the key: their grants go, the key rotates, and they can reappoint themselves. (c) Always.

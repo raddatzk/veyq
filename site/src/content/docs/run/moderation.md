@@ -24,6 +24,8 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
+  - docs/features/moderation/_index.md
+  - docs/crosscutting/legal-register.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot

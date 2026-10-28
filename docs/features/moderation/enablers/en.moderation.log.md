@@ -106,6 +106,7 @@ report is open; `RECEIPT_SENT` and `DECISION_SENT` stay as the proof (DSA Art. 1
 
 ## Related
 
+- [cc.privacy.retention](../../../crosscutting/cc.privacy.retention.md) — these periods beside every other
 - [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 11,
   [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4,
   [ADR 0092](../../../decisions/0092-logs-are-operational-and-name-no-person.md)

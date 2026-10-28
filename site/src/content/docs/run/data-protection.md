@@ -6,6 +6,8 @@ sources:
   - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
+  - docs/crosscutting/cc.privacy.retention.md
+  - docs/crosscutting/legal-register.md
 ---
 
 > **Research, not legal advice.** What follows names the duties of the GDPR an instance's operator carries and what

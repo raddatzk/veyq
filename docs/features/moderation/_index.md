@@ -12,9 +12,66 @@ the log that keeps them accountable. A **core** feature
   surface without a vault), [ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   (reports, holds, measures, the moderation log), [ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decisions 3, 5 and 6 (instance mail to moderators, their address confirmed by a code).
+- **Current picture:** this page is the *Moderation and legal duties* topic's current-picture doc
+  ([decisions § Topics](../../decisions/README.md#topics)): § The current picture holds what is true now, whole; the
+  enablers hold each mechanism, the use-cases each flow, the ADRs the why. The law behind it is the
+  [legal register](../../crosscutting/legal-register.md), and how long each record is kept,
+  [cc.privacy.retention](../../crosscutting/cc.privacy.retention.md). The Server Owner's view is the Run area's
+  [Moderation](../../../site/src/content/docs/run/moderation.md) page.
 - **Actors:** the **Server Owner** (appoints, removes, mints the key, in admin-web or `veyq-admin`), a **moderator**
   (an existing account the Server Owner appointed, in src/web/'s moderation surface), a **reporter** (a member or a guest of
   a link, in the share they reported from).
+
+## The current picture
+
+veyq gives every instance a host's tools, whoever runs it, and costs nothing until someone reports. The Server Owner
+is the host for every tenant on the instance and carries the duties; veyq never decides which apply — every instance
+serves the full fixed texts, and a value the Server Owner leaves empty shows as "not stated by this operator"
+(ADR 0093 § 14).
+
+- **Who moderates.** Moderators are existing accounts the Server Owner appoints, for the whole instance, the Server
+  Owner among them from first-run setup. They share one instance moderation key in epochs; a removal mints a new epoch
+  for those who remain, and old reports stay sealed to theirs ([en.moderation.moderation-key](enablers/en.moderation.moderation-key.md),
+  ADR 0099 §§ 1–4).
+- **A report.** Anyone who can see something can report it — a member, or a guest of the link they see it through —
+  up to 100 items at once, from the selection bar, an item's menu or the lightbox. The reporter's client mints a report
+  share holding exactly the keys of what is reported and seals it, the reporter's text and their contact to the
+  moderation key; the server keeps the category, time and ids in the clear. Nothing is blocked by a report, nobody but
+  the moderators learns of it, and they are mailed "new case" with no key, host or link (ADR 0093 §§ 1–2, 5).
+- **The hold.** In the report's own transaction the server copies what was reported — ciphertext, attribution and
+  guest-write records — into hold tables and pins its store objects, which the reclaim sweep then skips. Every delete
+  and overwrite keeps running, so the hold is invisible, and it ends by its trigger: 90 days while open, at once on a
+  dismissal, six months after a measure's statement, at the handover for child sexual abuse material, an order's own
+  end ([en.moderation.hold](enablers/en.moderation.hold.md), ADR 0093 § 4).
+- **Review.** A moderator opens the instance-wide queue in src/web/'s moderation surface and reviews a case on the
+  reported tenant's host in the share viewer's moderation mode, which holds only the moderation key — never the vault
+  (ADR 0093 § 3, ADR 0099 § 6).
+- **Measures**, chosen when deciding, all reversible, all on ids: block the share, block the content (also every row on
+  the same stored object), block a guest uploader with their link — a moderator's; block a member's sign-in, take a
+  tenant offline — the Server Owner's, on a moderator's proposal. A step ends with its target's erasure
+  (ADR 0093 § 6).
+- **The affected are told.** A statement of reasons goes to the share's creator, the uploader and, on a content block,
+  the scope owner, in the app and by mail; an affected member objects once in the app and another moderator decides;
+  a reporter who left a contact gets a receipt and the decision. Only an authority defers a statement (ADR 0093 § 7,
+  ADR 0099 § 5).
+- **Authorities.** An order acts on ids, within the hour, with no key and no report: the share and its content blocked,
+  a case opened with a hold that ends where the order says. An Art. 18 report goes to the BKA as an export of clear
+  fields, never a content file; child sexual abuse material has its own warning, a proposed content block, and a hold
+  that ends at the handover (ADR 0093 §§ 12–13).
+- **The evidence.** A guest's write keeps its client address, source port and time for N days
+  ([en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md)); every report, decision and
+  key event is in an append-only log whose free text is sealed, kept to 31 December of the third year after its case
+  closes ([en.moderation.log](enablers/en.moderation.log.md)). No log line is evidence (ADR 0092).
+- **The instance contact** is the single point of contact for users and authorities and the TCO contact point; it is
+  optional, and public in the operator section of the terms ([uc.admin.operator-details](../admin/use-cases/uc.admin.operator-details.md)).
+
+## Decided, not built
+
+- A field on its own other than a node's name as a report's item (inbox #516), and the reporter's handover of a guest's
+  identity key (inbox #515) — ADR 0093 § 1.
+- A case's records kept longer while proceedings are pending, as a logged extension — ADR 0093 § 11.
+- The open legal questions (ADR 0093 § Legal basis, Still open, inbox #563–#576) — among them a hold until the handover
+  past 90 days and an authority's link to a held copy — each answered by counsel before veyq is offered as a service.
 
 ## Use-cases
 

@@ -45,6 +45,11 @@ records nothing:
 | a medium is uploaded, with its meta | `completeShareMedia` (per attached item) | `ITEM`, the medium | none |
 | a file's content is uploaded | `completeShareFile` | `NODE`, the file | none |
 
+**Why the port and the exact time.** Behind carrier-grade NAT only the address, the source port and an exact time
+together name a subscriber, so `client_port` is kept where the resolver knows one (nullable: unknown where no hop wrote
+one), the time is kept in milliseconds UTC and an export states the time zone, and the Run docs ask the operator to keep
+the server's clock on NTP: a clock minutes off makes the port worthless, because the port soon belongs to someone else.
+
 Each row holds the share identity (the authenticated writer, from its contributor token — or, for its own creation,
 the identity created), the object, the client address of the one resolver (text form), its source port where the
 resolver knows one (else none), `observed_at` (server time in milliseconds UTC) and `expires_at`. Nothing else: no
@@ -54,7 +59,9 @@ object exists yet; the commit records), a report (its own path, ADR 0093 § 1).
 
 **The address is the resolver's, never a client's choice** (ADR 0094 decision 3: the rightmost `X-Forwarded-For` entry
 no trusted proxy wrote, with the port that entry carries or the one configured source's). When the resolver yields no
-address, nothing is recorded; when it yields no port, the address is recorded alone. Each guest-write resource
+address, nothing is recorded; when it yields no port, the address is recorded alone. On Compose the address is strong by
+construction; on Helm only as strong as an enforced NetworkPolicy (ADR 0094 decision 6), which the disclosure and the
+Run docs say. Each guest-write resource
 resolves it once per request and hands it down; `GuestWriteRecordedTest` holds that every resource operation taking a
 guest's write credential does so or is listed as exempt with its reason.
 
@@ -94,6 +101,11 @@ go at boot) and then on `veyq.moderation.guest-write-record.purge.every`.
   identity id, so the id comes from a moderation case.
 - **The instance backup** dumps the table's schema and leaves out its rows (ADR 0093 § 10): what is lost is at most
   30 days old and expiring anyway, and what was reported lives in the hold tables, which are backed up.
+- **An operator's own backups** (volume snapshots, their own dumps) hold the rows, so the Run docs give them the
+  deletion concept the EDPB's erasure report asks for: a backup retention B, at most 30 days recommended for a backup
+  holding the table; access to a backup only to restore it; the startup purge after every restore; and **N + B** in the
+  disclosure. B is the instance setting every capture veyq writes is pruned by
+  ([cc.privacy.retention](../../../crosscutting/cc.privacy.retention.md) § Backups and the erasure ledger).
 
 ## The disclosure
 
@@ -103,7 +115,7 @@ a change). The guest page shows one first-layer sentence with that N wherever th
 write — core's `GuestNaming` in every shape: the naming dialog of a `READ_WRITE` link, the line that says whose session
 the device holds, the drop pages of Memories and Depot — and the right to object (GDPR Art. 21) as a sentence of its
 own. A `READ` guest sees nothing, because nothing is recorded. Its
-wording waits on counsel (ADR 0093 § Legal basis, Still open 4). The full GDPR Art. 13 text — controller and contact,
+wording waits on counsel (ADR 0093 § Legal basis, Still open 4; inbox #566). The full GDPR Art. 13 text — controller and contact,
 purpose, basis and legitimate interest, the data, N, what a hold keeps, the recipients, the rights and the supervisory
 authority, N + B, with the right to object apart — is the record passage of the instance privacy notice
 ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8, the one home of every Art. 13 passage), there
