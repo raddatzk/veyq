@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-09-07
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 

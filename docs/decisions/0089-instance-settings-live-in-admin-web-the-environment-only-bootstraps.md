@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-10-15
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 
@@ -83,7 +84,7 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 - The compose file, `.env.example` and the Helm values lose every store variable except the bundled hint; the
   run configuration, the dev and e2e profiles and the e2e orchestrator set the store through the same API the
   console uses, or through the hint.
-- **The external services are the second setting moved** (built with inbox #439 step 4): the map tiles, the geocoder
+- **The external services are the second setting moved**: the map tiles, the geocoder
   and the breached-password check were build-time variables or a fixed origin; they are Server-Owner settings in
   `veyq_external_service` (admin-web's **Server → External services**, `veyq-admin services`), applied without a restart,
   seeded with the old defaults, and followed by the served CSP

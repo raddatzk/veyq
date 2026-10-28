@@ -3,14 +3,15 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-09-23
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 
 The release image carries the web client inside the backend. The `Dockerfile` copies `src/web/dist` into
 `META-INF/resources`, and Quarkus serves those files as plain static resources. Nothing else takes part: no
 route, no filter and no header of veyq's own. Every deployment target inherits that, because compose's Traefik,
-the Helm chart's Gateway and a self-hoster's own proxy all sit in front of the same image. Measured on 2026-09-23
-against a fast-jar built with `dist` in that layout:
+the Helm chart's Gateway and a self-hoster's own proxy all sit in front of the same image. Measured against a fast-jar built with `dist`
+in that layout:
 
 - **No SPA fallback.** `/` and `/index.html` answer 200. `/recover`, `/tenant/accept`, `/s/<id>` and `/login`,
   loaded directly as HTML, answer **404** `Resource not found`. The router uses `createWebHistory()`, and a direct

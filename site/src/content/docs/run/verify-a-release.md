@@ -2,6 +2,7 @@
 title: Verify a release
 description: Check veyqctl's own signature once, then a release's image signatures and files before anything runs them.
 sources:
+  - docs/crosscutting/release-and-deployment.md
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md

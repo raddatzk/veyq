@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-07-13
+- Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
 ## Context
 

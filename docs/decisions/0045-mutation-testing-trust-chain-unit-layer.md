@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-07-16
+- Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
 ## Context
 
@@ -20,7 +21,7 @@ closing the one link the trust chain leaves unmeasured, and standing in for the 
 have. That directly answers [`ai/README.md`](../ai/README.md) rule 3 (*"no guard unless a human would notice
 the defect"*): here nothing notices, which is the whole point.
 
-**Measured (2026-07-16), and the measurement reshaped the decision:**
+**Measured, and the measurement reshaped the decision:**
 
 | Surface | Finding |
 |---|---|
@@ -102,7 +103,7 @@ layer.**
    not reach for a `--since` flag; file-level diff scoping, if ever wanted, is external `git diff → --mutate` glue
    (as on the backend), never a Stryker flag. A high `break` threshold on the mutate scope is the gate;
    report-only elsewhere until a baseline exists. **The shared crypto package's `break` is 100, with no margin**
-   (inbox #241, 2026-10-01): there every equivalent mutant is disabled at its own line with its measured reason,
+   — there every equivalent mutant is disabled at its own line with its measured reason,
    so a margin buys no headroom for one — only blindness, and at 95 it was 23 mutants, enough to lose the identity
    codec's whole test file at exit 0. A margin stays right where equivalents are left in the score; the reasoning
    and the bite live in `src/packages/crypto/stryker.config.mjs`. Backend: the incremental history file as the CI cache; git-diff

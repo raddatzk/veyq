@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-07-24
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 - Replaced in part: the single global key fingerprint by ADR 0089 (built)
 
 ## Context

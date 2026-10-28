@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: partly (not built: decision 2's push gate on the published snapshot's digests, decision 7's boot of L2's predecessor and L3's restores)
 - Date: 2026-10-16
+- Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
 ## Context
 
@@ -11,18 +12,14 @@ What a green run proves today stops short of what a Server Owner runs:
 - **`src/web/`'s `VEYQ_E2E` suites** (`scripts/run_web_e2e.py`) are real and strong — real crypto, a real MariaDB and
   Garage, the ADR 0053 sweeps — but they run in Node against the **fast-jar** on the **dev** compose stack. No
   browser, no image, no production recipe, no Traefik in front, no admin container.
-- **admin-web has no suite above unit level**, and its `npm run check` ran only in `container.yml`'s `test` (in `ci.yml`'s `frontend` since ADR 0091).
-- **The production recipe has never been brought up by anything** (`site/src/content/docs/run/new-instance.mdx`:
-  "No published release has been installed on either target yet"; `first-run.mdx`: "not exercised on a running
-  instance"). `validate_compose_posture.py` reads the file and runs nothing; ADR 0071 says a change to it is proven
-  by a live `up` — by hand.
-- **A whole class of defects is visible only from a browser** (docs/ai/README.md § "a UI slice is not done before it
-  was clicked": the `href="#"` that cleared a share key, the card actions hidden up to 1120 px) — and only from the
-  image: Dockerfile layers (`capabilities.json` at `Dockerfile:73`), nginx's proxy to the admin listener, Traefik's
+- **admin-web had no suite above unit level.**
+- **The production recipe had never been brought up by anything.** `validate_compose_posture.py` reads the file and
+  runs nothing; ADR 0071 said a change to it is proven by a live `up` — by hand.
+- **A whole class of defects is visible only from a browser** (the `href="#"` that cleared a share key, card actions
+  hidden below a width) — and only from the image: Dockerfile layers, nginx's proxy to the admin listener, Traefik's
   dynamic tenant routes, the HSTS/cookie behaviour behind TLS, ACME issuance into a read-only, non-root `/acme`.
-- **The publish workflow already has the seam** (`container.yml` then, `ci.yml` since ADR 0091). A publish dispatch pushes `build-<sha>-<arch>` per image and
-  architecture, then `publish` assembles, tags (snapshot or release) and signs them. A snapshot is a published,
-  signed `<major>.<minor>-SNAPSHOT`.
+- **The publish already has the seam.** A publish dispatch pushes `build-<sha>-<arch>` per image and architecture,
+  then `publish` assembles, tags (snapshot or release) and signs them.
 
 ## Decision
 
@@ -36,9 +33,8 @@ What a green run proves today stops short of what a Server Owner runs:
    server and the browser, and gives the instance only what the public internet gives an operator's: DNS for its own
    domain (an alias of Traefik on `edge`, so the app reaches its public origin), a CA it trusts (the run's Pebble
    root, in the app's truststore and Traefik's ACME client) and a mail relay (Mailpit, whose API the suite reads the
-   instance's mail from). Measured in phase 2: the store check uploads through the
-   public origin from inside the app container, so without them no tenant can be created. One more **test double,
-   like Pebble** (owner, inbox #464, 2026-10-17): the release check ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md))
+   instance's mail from). The store check uploads through the public origin from inside the app container, so without them no
+   tenant can be created. One more **test double, like Pebble**: the release check ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md))
    reads releases only on a release-stamped build, and the candidate of a push is a `-SNAPSHOT` by design, so the run
    stamps its own instance with the release `veyqctl` installed (`VEYQ_VERSION` on the app's container, never on the
    image), checks every 5 s instead of daily (`VEYQ_RELEASE_CHECK_EVERY` — the first check runs at startup, before the
@@ -60,7 +56,7 @@ What a green run proves today stops short of what a Server Owner runs:
    default certificate (ADR 0071's silent failure). Domains are `*.veyq.test`, resolved by Chromium's
    `--host-resolver-rules`, so the same run works on a laptop with no `/etc/hosts` edit.
 
-   **The browser runs in a container, never on the host** (decided at phase 2's go, 2026-10-16): macOS has no
+   **The browser runs in a container, never on the host**: macOS has no
    `certutil`, and Chromium on macOS reads no NSS db, so a host browser would need a second trust path for laptops
    that CI never runs. It runs in the official Playwright image, pinned by digest, as the overlay's `browser` service
    (behind a profile, started by `docker compose run`), on the run's own `edge` and `admin` networks — locally
@@ -76,9 +72,7 @@ What a green run proves today stops short of what a Server Owner runs:
    on Docker Desktop and not on a Linux runner, so a laptop would run another path than CI. **The trust store
    without `certutil`**: the image carries `libnss3` (Chromium links it) and Python, not `libnss3-tools`, and
    installing it would need the network at run time; `tests/e2e/stack/nss_trust_root.py` calls the NSS functions
-   `certutil -A` calls, through `ctypes` — measured: Chromium loads a page whose leaf the root issued, and refuses it
-   (`ERR_CERT_AUTHORITY_INVALID`) without. A Chrome `CACertificates` policy file was tried first and is not read by
-   Playwright's Chromium.
+   `certutil -A` calls, through `ctypes`. A Chrome `CACertificates` policy file is not read by Playwright's Chromium.
 
 4. **The driver is Playwright, in a workspace package `tests/e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
    maintained, its own `npm run check`. It sees src/web/ and src/admin-web/ only as a browser does and imports neither; it
@@ -98,49 +92,34 @@ What a green run proves today stops short of what a Server Owner runs:
    joined later, [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8).
    Self-hostable by default, checked per page.
    What a page **tried** counts too: a page's own CSP refuses most foreign requests inside the renderer, where no
-   route sees them (measured in phase 2 — an injected `fetch` on admin-web stayed green until CSP violations were
-   recorded beside the aborted requests). And the browser's resolver knows the instance's names only, so a request
+   route sees them, so CSP violations are recorded beside the aborted requests. And the browser's resolver knows the instance's names only, so a request
    no route decided finds no address.
 
 7. **One suite, run whole, as the lanes of ADR 0091 decision 3.** This ADR's harness is lane L1 (the candidate,
    fresh): first run in admin-web, a tenant, a Memory written on one device and read on another, a READ link opened
-   anonymously, the feature scenarios (starting with the capability off states inbox #447 ran by hand), the sweeps.
+   anonymously, the feature scenarios, the sweeps.
    Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor and L3's
    restores. Retries are 0.
 
-   **Run whole, one leg per domain** (2026-10-26, ADR 0091 decision 1: a stage that outgrows its budget is sharded;
-   owner: "Können wir das nicht einfach nach domain clustern?", small ones, never clusters that look half random): the
-   suite's browser stage took 15.7 min on 2026-10-26, against the job's 15, so CI runs it as one leg per domain and architecture (`ci.yml`'s
-   `stack` matrix, Playwright's `--project <domain>`), each on an instance of its own with its own sweeps. **A domain is
-   a folder** of `tests/e2e/tests/features/` and a Playwright project of the same name (`tests/e2e/playwright.config.ts`
-   reads the folders): today `account`, `depot`, `expenses`, `memories`, `moderation` and `platform`. Every leg runs the
-   dependency projects whole — `setup`, `scenarios`, and `instance` (`features/instance/`), which holds the instance-wide
-   state other scenarios read (the instance mail, the deputy moderator) — and its domain, whose specs read nothing
-   another feature spec left (a spec that writes what no later spec may meet, published terms or a device cap, does so
-   in a tenant of its own). `tests/e2e/shards.test.mjs` holds the split: every feature spec in exactly one domain folder
-   and none directly in `features/`, every folder a project and a matrix leg, a matrix leg with no folder red,
-   the dependency projects whole in every leg. **A new spec goes into its domain's folder**, so nothing is rebalanced: the
-   legs are domains, not bins balanced by time. A new domain is a new folder and its matrix leg, in one change. A domain
-   whose leg grows past about 7 min is split by sub-domain (Depot's downloads apart from its browsing, say), never at
-   random. It replaced, the same day, Playwright's `--shard`, which splits by test count and not by time (two shards of
-   9.4 and 6.8 min browser). Measured on arm64 on 2026-10-26, the images built, after this decision's and decision 9's
-   changes: the whole suite in one run 13.3 min browser (165 tests), 14.0 min the whole lane; per leg, browser and
-   whole lane, `account` 2.9 and 3.5 min, `depot` 3.5 and 4.0, `expenses` 3.3 and 3.7, `memories` 2.3 and 2.9,
-   `moderation` 2.5 and 3.0, `platform` 3.4 and 3.9 — each leg's boot about 25 s before its browser and its dependency
-   projects about 52 s of it. So the slowest leg, the job's wall time, is 4.0 min (two shards: 10.0; neither counts the image build every leg
-   repeats from the cache first); the six legs
-   together cost 20.9 min of runner time per architecture (two shards: 17.3), the boot and the dependency projects
-   paid six times instead of twice. One worker per instance still: more workers wait until every spec is proven
-   isolated (inbox #548); one snapshot of the instance after the dependency projects, restored per leg, is inbox #552.
+   **Run whole, one leg per domain** (ADR 0091 decision 1: a stage that outgrows its budget is sharded): CI runs the
+   suite as one leg per domain and architecture (`ci.yml`'s `stack` matrix, Playwright's `--project <domain>`), each on
+   an instance of its own with its own sweeps. **A domain is a folder** of `tests/e2e/tests/features/` and a Playwright
+   project of the same name. Every leg runs the dependency projects whole — `setup`, `scenarios`, and `instance`, which
+   holds the instance-wide state other scenarios read — and its domain, whose specs read nothing another feature spec
+   left (a spec that writes what no later spec may meet does so in a tenant of its own). `tests/e2e/shards.test.mjs`
+   holds the split. **A new spec goes into its domain's folder**, so nothing is rebalanced: the legs are domains, not
+   bins balanced by time, and a new domain is a new folder and its matrix leg, in one change. A domain whose leg grows
+   past about 7 min is split by sub-domain, never at random. *Rejected:* Playwright's `--shard`, which splits by test
+   count, not by time. The cost taken: the boot and the dependency projects are paid once per leg. One worker per
+   instance until every spec is proven isolated.
 
    **Traces**: a local run keeps one per test, so a green run on a laptop can be compared with a red one; CI (`CI=true`,
-   handed to the browser container) keeps one for a failed test only — a trace costs about 0.5 s a test, 83 s a whole
-   run (2026-10-26). A green CI leg's run directory still keeps its logs, report and dumps.
+   handed to the browser container) keeps one for a failed test only — a trace costs about half a second a test. A green CI leg's run directory still keeps its logs, report and dumps.
 
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
    bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
 
-9. **One rule for languages and test levels** (owner 2026-10-26: "Das sollten wir alles vereinheitlichen"). L1 proves
+9. **One rule for languages and test levels.** L1 proves
    what only the release candidate in a browser can show, once:
    - **Every flow runs in English.**
    - **A second language is the catalogs' and the component tests'**: src/web/'s `i18n.test.ts` holds that both
@@ -162,19 +141,15 @@ What a green run proves today stops short of what a Server Owner runs:
      `memory-guest-live.spec.ts` asks for its idle `304` by hiding and showing the tab, and keeps one real tick of the
      gallery's 20-second poll (`ITEMS_POLL`) for its claim that a visible gallery updates by itself.
    - **A Service Worker is stopped through DevTools, never waited for.** Playwright attaches DevTools to every worker,
-     and with DevTools attached Chromium does not stop an idle one (measured: in five runs on 2026-10-26 a worker with
-     no client left was never stopped by itself within 40 s), so a wait for Chromium's idle stop is a wait for nothing;
+     and with DevTools attached Chromium does not stop an idle one, so a wait for Chromium's idle stop is a wait for nothing;
      `ServiceWorker.stopAllWorkers` stops it at the moment the test needs (`depot-download-interrupted.spec.ts`'s closed
      tab). That file keeps one real 40 s pause, for the claim that NOTHING stops a download that stands still — which a
      stop cannot show — and says why.
-   - **Measured, not taken** (2026-10-26): seeding a spec's state through the API instead of the UI, and reusing a
-     signed-in session across specs. Seeding with the real client code saves only 1–4 s per tenant birth, because
-     Argon2id dominates — about 3 s per sign-in, and the same derivations when seeding; typing nine Expenses entries
-     takes 5.4 s. `storageState` cannot carry an unlocked veyq session, and that is correct: the session vault is sealed
-     under a non-extractable key in IndexedDB, and copying it would itself be a defect. Reusing a session through
-     `window.open` saved 1–5 s per spec for 19 specs, at the cost of browser state shared between specs. And both loosen
-     decision 4's boundary (the suite sees the surfaces only as a browser does): the seeding imports the client's code,
-     the reuse hands a spec a session another spec opened. The whole run gained 48–81 s, so neither was taken.
+   - **Not taken: seeding a spec's state through the API, or reusing a signed-in session across specs.** Argon2id
+     dominates a tenant birth whether the UI or the client code drives it, so seeding saves little; `storageState`
+     cannot carry an unlocked veyq session, correctly — the session vault is sealed under a non-extractable key, and
+     copying it would itself be a defect; and both loosen decision 4's boundary (the seeding imports the client's code,
+     the reuse hands a spec a session another spec opened) for a gain of about a minute a run.
 
 ## Rejected alternatives
 
@@ -206,30 +181,24 @@ What a green run proves today stops short of what a Server Owner runs:
   between the tool and a test that booted the stack its own way.
 - **Port 80/443 belong to the run.** The recipe publishes Traefik on them, so a local run needs them free; the admin
   port is the run's own (`ADMIN_PORT`), never the developer's 8081.
-- **A push gets slower** by a stack boot plus the suite, per architecture in parallel; ADR 0091 budgets the lane at 15
-  min. Estimated at refine, not measured: ~6–10 min for the first scenarios. What it rests on: the image is
-  built once by `build` and only pulled (dispatch) or rebuilt from its cache (dry run); one instance per run, not per
-  file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`src/packages/crypto/src/v1.ts`); the fast-jar
-  started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. Measured locally on 2026-10-16 (arm64 Mac, images
-  from cache, load 4–6): the job's steps 91 s; the lane itself 48.5 s with ten tests and 73.6–91.3 s with fifteen,
-  every stage timed in its summary — a runner's cold build and image pulls are not in those. The first CI run's
-  per-stage times replace this paragraph. Speed is never bought by weakening what ships.
+- **A push gets slower** by a stack boot plus the suite, per architecture in parallel; ADR 0091 budgets each leg at 15
+  min. Speed is never bought by weakening what ships.
 - **Published** for security researchers on the docs site, with every other stage: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The Run pages become checkable.** first-run.setup.ts uses admin-web's own labels in the order first-run.mdx gives
   them; a renamed button or a reordered step is a red run.
 
-## Answered at refine (2026-10-16, accepted with this ADR)
+## Answered at refine
 
-1. **The whole suite on every push and pull request** — replaced at the same refine by ADR 0091 decision 4, which the
-   owner chose over the first answer (smoke per push, the full tier per publish): a regression is cheapest found at
-   the commit that causes it.
+1. **The whole suite on every push and pull request** ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+   decision 4), not a smoke tier per push and the full tier per publish: a regression is cheapest found at the commit
+   that causes it.
 2. **Coverage gets a surface of its own, `stack`**, resolving refs relative to `tests/e2e/` (`validate_coverage.py`'s
    `SURFACES` + `FILE_ROOTS`, the extension point that file names). Filing a spec under `web` or `admin-web` would
    claim a surface's own CI job ran it, which none does; one spec also drives both. `stack` is not OWED, and it is
    admitted (ADMITTED) only after a CI log shows its suite executed (ADR 0040) — until the repository has a remote,
    the use-cases it serves carry `stack` under `gaps:` with that reason.
-3. **Kubernetes is a follow-up CR**, after the compose target is green in CI: the chart has its own unproven publish
-   (ADR 0064), and two unproven targets in one CR would leave a red with two suspects.
+3. **Kubernetes comes after the compose target is green in CI**: the chart has its own unproven publish (ADR 0064),
+   and two unproven targets in one change would leave a red with two suspects.
 4. **First run is driven through the UI, once per run, by the `setup` project** — it is the scenario, not a fixture.
    A scenario that needs more state than first run leaves (a second member, a populated space) builds it through the
    UI too while the suite is small; an API seeder is introduced only when a scenario's setup dominates its runtime, and
