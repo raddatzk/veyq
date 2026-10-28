@@ -113,8 +113,9 @@ per scenario at CPU throttle 1 and 4):
   and sends each chunk itself, handing the browser the chunk as a file object, which cost the sending thread about a
   seventh of what the same bytes cost as an array. On a machine at load 25 to 40, three runs each without the profiler
   beside two passes of the version before: 25.9 s against 29.8–32.2 s at throttle 1, and 37.5 s against 73.4–75.4 s at
-  throttle 4. What holds the main thread now is the gallery laid out again on each chunk's progress, about a quarter of
-  the upload at throttle 4.
+  throttle 4. What held the main thread then was the gallery laid out again on each chunk's progress, about a quarter of
+  the upload at throttle 4. A chunk now redraws only its own tile, which a unit test proves by counting the layouts;
+  the upload has not been timed again since.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
   about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.

@@ -405,6 +405,23 @@ acceptanceCriteria:
           Mounted for real and scrolled in happy-dom, which lays nothing out: the scroll container's and the grid's boxes
           are given by hand, and the bound is asserted on a 2,000-tile grid (bitten: mounting every row turns four cases
           red). In a real browser the DOM stayed under 1,100 nodes at 1,000 / 3,000 / 10,000 photos, read by the volume harness (`scripts/measure_volume.py`, `tests/e2e/measure/volume.ts`) at the V1 heavy stage (2026-10-24): every ADR 0105 target met at 1,000, 3,000 and 10,000 photos, a local reading that is no coverage.
+  - id: an-upload-chunk-redraws-only-its-tile
+    text: >-
+      An upload's progress and stage changes re-render its one optimistic tile and never the gallery's layout: the tile
+      list handed to the grid stays the same value through every chunk and stage change, and is replaced only when a
+      tile appears, gets its probe's answer (aspect ratio, capture time, poster), settles or leaves (inbox #640).
+    coverage:
+      web:
+        unit:
+          - src/features/memories/useOptimisticTiles.test.ts
+          - src/features/memories/components/MemoryDetail.optimistic.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          Counted in happy-dom on the real detail: the justified layout runs zero times over 20 progress ticks and a stage
+          change, and again when a tile appears or settles (bitten: a tile list that copies the live fields, and one
+          without the same-value memo, each turn it red). What it takes off a browser's main thread is a local timing
+          reading, no coverage.
   - id: thumbnails-open-near-the-viewport
     text: >-
       A thumbnail is fetched and opened only for a tile some owner wants — a grid's window, announced nearest to the

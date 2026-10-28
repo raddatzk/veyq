@@ -324,8 +324,10 @@ inbox #220). Each chunk is now read, sealed and `PUT` in the frame worker, as a 
 thread about seven times as much per `PUT`); the page keeps the windows, the re-sign and the progress. Its after-reading
 (2026-10-28, a machine at load 25–40, three runs each without the CPU profiler, beside two passes of the tree before)
 put the upload at 25.9 s against 29.8–32.2 s at throttle 1 and 37.5 s against 73.4–75.4 s at throttle 4, the pump's
-tasks at 0.5–0.9 s, and the frame worker at 7.7–8.9 s. What holds the main thread now is Vue re-laying out the gallery
-on each chunk's progress, 24 % of the upload at throttle 4 (inbox #640). The method,
+tasks at 0.5–0.9 s, and the frame worker at 7.7–8.9 s. What held the main thread then was Vue re-laying out the gallery
+on each chunk's progress, 24 % of the upload at throttle 4; a chunk now redraws only its own tile
+([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) § Quality notes), its after-reading still to
+be taken (inbox #220). The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
