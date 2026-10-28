@@ -318,8 +318,9 @@ class ScopesStore(
 
     /**
      * An owner sets [targetId]'s role on a GROUP (uc.spaces.manage-group-members). The checks run under the scope
-     * row's lock, which is this transaction's first statement: the caller is an OWNER, the target holds a row, and
-     * the change leaves an OWNER ([MembershipPolicy]). Each removal-rotation holds the same lock. Checked before
+     * row's lock, which is this transaction's first statement: the caller is an OWNER, the target holds an accepted row
+     * (a consent proposal is no member until it accepts, so it is never made an owner — inbox #597), and the change
+     * leaves an accepted OWNER ([MembershipPolicy]). Each removal-rotation holds the same lock. Checked before
      * the lock, two co-owners demoting each other both counted two owners, and the group was left with none
      * (developer-styleguide §12). The checks read committed data under the lock on both engines (ADR 0078).
      */
@@ -424,7 +425,8 @@ class ScopesStore(
         }
         val caller = all.firstOrNull { it.userId == granterId }
         val decision = RotationPolicy.plan(
-            scope.currentEpoch, epoch, all.map { RotationMember(it.userId, it.role) },
+            // The last-owner guard counts accepted owners only: a proposal is a MEMBER to it whatever its row says (#597).
+            scope.currentEpoch, epoch, all.map { RotationMember(it.userId, if (it.pendingConsent) MembershipEntity.MEMBER else it.role) },
             invites.keys, grants, inviteGrants, pendingInviteIds, pendingUserIds, removes,
             callerGrantedEpoch = caller?.wrappedGrant?.let { caller.grantedEpoch },
             // A non-owner is here only on a pending re-key row (the handler's gate); the row's epoch is read under this

@@ -38,10 +38,12 @@ class MembershipStore {
     fun isScopeOwner(userId: String, scopeId: String): Boolean =
         MembershipEntity.count("userId = ?1 and scopeId = ?2 and role = ?3", userId, scopeId, MembershipEntity.OWNER) > 0
 
-    /** The number of OWNER memberships on a scope — the last-owner guard's count (ADR 0007). The **policy** that
-     *  turns `<= 1` into a `LastOwner` refusal stays in the feature handler. */
+    /** The number of **accepted** OWNER memberships on a scope — the last-owner guard's count (ADR 0007). An unaccepted
+     *  proposal is no owner whatever its row says (inbox #597: counted, it let the last accepted owner step down, and a
+     *  decline then left the group with none). The **policy** that turns `<= 1` into a `LastOwner` refusal stays in the
+     *  feature handler. */
     fun ownerCount(scopeId: String): Long =
-        MembershipEntity.count("scopeId = ?1 and role = ?2", scopeId, MembershipEntity.OWNER)
+        MembershipEntity.count("scopeId = ?1 and role = ?2 and pendingConsent = false", scopeId, MembershipEntity.OWNER)
 
     /** Whether the user is a tenant **owner** — holds an `OWNER` membership on the tenant **root scope**
      *  (`scopeId == tenantId`, cr-0026), **not** merely any `OWNER` row carrying this `tenantId` (every scope birth
@@ -50,9 +52,10 @@ class MembershipStore {
      *  The owner sibling of [ownerCount] — both key the tenant's authority on the root scope. */
     fun isTenantOwner(userId: String, tenantId: String): Boolean = isScopeOwner(userId, tenantId)
 
-    /** A member's role in a scope, or null if they hold no membership there. */
+    /** A member's role in a scope, or null if they hold no **accepted** membership there — a consent proposal is no
+     *  member until it accepts (ADR 0014 §5), so a role change cannot make one an owner (inbox #597). */
     fun memberRole(userId: String, scopeId: String): String? =
-        MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult()?.role
+        MembershipEntity.find("userId = ?1 and scopeId = ?2 and pendingConsent = false", userId, scopeId).firstResult()?.role
 
     /** Whether the user holds a grant in this scope (is a key-holder there) — the member-directory gate. */
     fun holdsGrant(userId: String, scopeId: String): Boolean =

@@ -92,7 +92,8 @@ and which is confidential even from the tenant owner.**
    - **Optional consent (a per-user "ask before adding me" toggle) makes the add a proposal.** A non-auto-join
      member is *proposed*, held as a **soft** membership that **holds the grant** from the add on, exactly as a direct
      add does; the server serves the group to the invitee only after **Accept**, and consenting changes nothing about
-     keys. Because the target's key could open the grant from the add on, a **Decline** — or the owner rescinding the
+     keys. Until then the proposal is no member to any role decision: it cannot be made an owner (`404
+     member_not_found`) and counts as no owner to the last-owner guard ([ADR 0007](0007-membership-role-grant-relation.md)). Because the target's key could open the grant from the add on, a **Decline** — or the owner rescinding the
      proposal — queues the group's rotation, as a removal does (ADR 0111 decision 4).
      To let them decide informed, the owner's device hands the invitee the group's **derived name-key `K_name`**
      (wrapped to their identity, `asymWrap(inviteePub, K_name, "group-name-key")`) so the invitee opens the scope's

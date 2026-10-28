@@ -203,8 +203,9 @@ only the server originates it ([ADR 0021](../decisions/0021-operator-blind-backg
 A rotation commits the scope's **next** epoch. The rotating client mints `E_{n+1}`, seals `E_n` under it, and posts
 one request (`rotateScope`, `commitRotation` in `src/web/src/features/spaces/scopes.ts`): the stated epoch, the chain
 link, a grant to every member whose key it anchors and always to itself, the members it cannot anchor as
-**pending** (`pendingUserIds`), for a tenant every open invite re-granted or declared pending, and optionally the
-member it removes. Under the scope's row lock the server decides (`RotationPolicy`):
+**pending** (`pendingUserIds`), for a tenant every open invite re-granted or declared pending, and, on a group only,
+optionally the member it removes — `removesUserId` on a tenant or personal scope is `400 invalid_request`: a tenant
+member leaves by the removal cascade, which also cuts their groups. Under the scope's row lock the server decides (`RotationPolicy`):
 
 - **Only `current + 1` commits.** The caller's own grant must be current, else `409 stale_epoch` and nothing is stored;
   a client that lost a race re-opens its grant and rebuilds **once**, from a fresh key
@@ -213,7 +214,8 @@ member it removes. Under the scope's row lock the server decides (`RotationPolic
   for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`). A pending member keeps
   the grant it holds, behind — that **is** the stored pending marker, and grant delivery brings it current
   (ADR 0111 decision 9). A removal-rotation's grants must not name the member it removes
-  (`422 removed_member_granted`), and the last owner cannot be removed (`409 last_owner`).
+  (`422 removed_member_granted`), and the last accepted owner cannot be removed (`409 last_owner`; a consent
+  proposal counts as no owner).
 - **Who may commit:** an **owner** of the scope, of any kind; and a member who is not an owner only with the pending
   re-key row their own account's securing left for that scope at its current epoch, and never with a removal
   (`403 not_scope_owner`; ADR 0111 decision 8).
@@ -234,7 +236,7 @@ its epoch floor for the scope.
 The policy is [ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)'s for removals
 (`RemovalPolicy` in `src/backend/core/.../admin/tenant/`) and [ADR 0060](../decisions/0060-key-rotation-after-compromise.md)'s
 for a compromise. Revoking a link or a member invite rotates nothing. The server accepts a rotation of any kind from
-an owner; the client starts one in exactly three places: the group removal, the queued-rotation worker and the
+an owner, and a removal only on a group; the client starts one in exactly three places: the group removal, the queued-rotation worker and the
 securing account's finish.
 
 ### A queued rotation

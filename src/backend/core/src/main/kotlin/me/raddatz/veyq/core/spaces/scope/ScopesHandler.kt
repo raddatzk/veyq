@@ -593,7 +593,8 @@ class ScopesHandler(
      * someone else's commit already met it) and never with a removal, which stays an owner's act. Anyone else is
      * `403 not_scope_owner`.
      *
-     * With [removes] it is a **removal-rotation** (ADR 0024 Decision 4): [ScopesStore.rotate] deletes the membership
+     * With [removes] it is a **removal-rotation** (ADR 0024 Decision 4), a GROUP's only (`400 invalid_request` on any
+     * other kind): [ScopesStore.rotate] deletes the membership
      * and soft-revokes the public shares that member created in the group (cr-0104) in the **same transaction** as
      * the epoch commit, so a commit that fails after the delete rolls the removal back with it. [revokeLinks]
      * (removals only) turns off every other link of the group in that same transaction too (ADR 0075).
@@ -607,6 +608,10 @@ class ScopesHandler(
         if (revokeLinks && removes == null) return RotateOutcome.InvalidRequest
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
+        // A removal-rotation is a group's (ADR 0024 Decision 4). A tenant member leaves only by the removal cascade
+        // (ADR 0025, `TenantHandler.removeMember`): a removal here deleted the tenant row alone, and the member kept their
+        // groups, read them on and was re-granted every later epoch (inbox #595). A personal scope's one member is its owner.
+        if (removes != null && store.scopeKind(scopeId) != ScopeEntity.GROUP) return RotateOutcome.InvalidRequest
         val owner = store.isScopeOwner(callerId, scopeId)
         if (!owner && (removes != null || store.regrantEpoch(callerId, scopeId) == null)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound

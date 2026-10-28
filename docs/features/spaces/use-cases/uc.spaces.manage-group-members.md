@@ -6,7 +6,8 @@
 - **Goal:** run a group's roster — **promote** a member to co-owner, **demote** a co-owner back to member, and
   **remove** a member — within the ownership rules, so a removed member loses access to **new** content.
 - **Preconditions:** The caller is an **OWNER** of the group ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).
-  The target is a current member of the group.
+  The target is a current, **accepted** member of the group: a consent proposal is no member until it accepts, so
+  promoting one is `404 member_not_found` — the owner rescinds it instead.
 - **Postconditions (success):** The target's role/membership reflects the action. On **removal**, the membership is
   deleted (instant 403) **and**, in the same transaction, the scope rotates its content key forward so the removed
   member can't read post-removal content ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)). The server
@@ -39,7 +40,8 @@
 
 - **A1 — last-owner guard.** The **last remaining OWNER** cannot be demoted or removed (a group needs ≥1 owner,
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) / [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).
-  The action is rejected; the caller must first promote another member or delete the group. The guard holds when
+  The action is rejected; the caller must first promote another member or delete the group. Only accepted owners
+  count: a proposal whose row says OWNER is none. The guard holds when
   changes overlap: every role change, removal-rotation and tenant removal decides under the group row's lock, so two
   co-owners demoting each other end with one owner, and the second is told what a retry would tell it.
 - **A2 — the remover holds no key.** A tenant owner's removal that cuts a co-shared group they do not hold
@@ -51,6 +53,9 @@
   anyone and re-grants the directory the server returns, so this path holds against an honest operator only
   (ADR 0024 § Guarantee). A group owner's own removal never queues: it is step 4's one request.
 - **A3 — a non-owner attempts an action:** rejected (owner-gated, enforced by code, [ADR 0008](../../../decisions/0008-centralized-http-auth.md)).
+  A removal-rotation is a group's only: naming a member to remove on a tenant or personal scope is `400
+  invalid_request` — a tenant member leaves by [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md)'s
+  cascade.
 - **A4 — a member whose grant is older than the current epoch** (a rotation skipped them, or its re-grant has not
   arrived): their client reads the scope as waiting for the current key and writes nothing into it until re-granted, and the
   server refuses a node create tagged with an older epoch (`409 stale_epoch`) — content under an old epoch would

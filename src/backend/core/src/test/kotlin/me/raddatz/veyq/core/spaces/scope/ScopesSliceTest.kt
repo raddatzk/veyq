@@ -218,6 +218,60 @@ class ScopesSliceTest {
     }
 
     @Test
+    fun aRemovalRotationOnATenantScopeIsRefusedSoTheCascadeIsTheOnlyWayOut() {
+        // Inbox #595, measured on f9b83edeb: this answered 201 and deleted the tenant row only. The member kept every
+        // group membership and read those groups on (READ passes without the tenant root), their personal scope stayed
+        // live, no group rotation was queued, and a group they solely owned kept an owner who could no longer act.
+        // A tenant member leaves only by the removal cascade (ADR 0025, `removeTenantMember`).
+        val (owner, domain) = seedMember()
+        val tenantId = tenantIdOf(domain)
+        val partner = seedTenantMember(tenantId, "partner")
+        val groupId = createGroupAs(partner, domain)
+
+        removeRotating(owner, tenantId, removes = partner, grantees = listOf(owner))
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        assertTrue(isMember(partner, tenantId), "the refused removal-rotation leaves the member in the tenant")
+        assertTrue(isMember(partner, groupId), "…and in their group")
+        assertEquals(0, TestGrants.epochOf(tenantId), "…and the tenant's epoch unmoved")
+
+        // Control on the same scope: without a removal the tenant rotates as before.
+        rotate(owner, tenantId).then().statusCode(201).body("epoch", equalTo(1))
+    }
+
+    @Test
+    fun aPersonalScopeRotatesForItsOwnerAndRefusesARemoval() {
+        // Inbox #595: no test pinned a PERSONAL rotation. Its owner — the securing account, ADR 0025 point 3 — rotates it
+        // like any scope; a removal is refused as on a tenant (a personal scope's one member is its owner).
+        val (owner, domain) = seedMember()
+        val personal = given().header("Authorization", bearer(owner))
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
+            .`when`().post("/api/scopes").then().statusCode(201).extract().path<String>("scopeId")
+
+        removeRotating(owner, personal, removes = owner, grantees = emptyList())
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        removeRotating(owner, personal, removes = seedUser(), grantees = listOf(owner))
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        assertEquals(0, TestGrants.epochOf(personal), "a refused removal stores nothing")
+
+        // A tenant member who is not its owner holds no row on it: the same 404 as a scope that does not exist.
+        val other = seedTenantMember(tenantIdOf(domain), "other")
+        rotate(other, personal).then().statusCode(404).body("code", equalTo("scope_not_found"))
+
+        // The owner's rotation commits the next epoch and re-grants them.
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(personal)}}""")
+            .`when`().post("/api/scopes/$personal/epochs")
+            .then().statusCode(201).body("epoch", equalTo(1))
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$personal' }.currentEpoch", equalTo(1))
+            .body("find { it.id == '$personal' }.grantedEpoch", equalTo(1))
+            .body("find { it.id == '$personal' }.wrappedGrant", equalTo(newGrant))
+    }
+
+    @Test
     fun theMemberDeleteRefusesAKeyedMemberAndRescindsOnlyAProposal() {
         // A keyed member leaves only by a removal-rotation — a bare delete would end the removal without its rotation.
         val (owner, domain) = seedMember()

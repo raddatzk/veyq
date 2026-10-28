@@ -61,11 +61,15 @@ members; new content seals under it. Nothing is re-encrypted.**
    (a) mints `E_{n+1}`, posts the chain-link `symWrap(E_{n+1}, E_n)`;
    (b) re-grants `E_{n+1}` to the remaining members — the members it read **before** the removal, minus the one
    it removes — and declares **pending** every one whose key its client cannot anchor
-   ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2), in a tenant scope each open member invite
-   too; the server refuses a rotation that leaves anyone out silently
+   ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2); the server refuses a rotation that leaves
+   anyone out silently
    ([keys-grants-and-trust § Rotating a scope](../crosscutting/keys-grants-and-trust.md#rotating-a-scope));
    (c) names the removed member **in the same request**, and the server deletes that membership and commits the
    new epoch in one transaction (instant layer-1 access cut — a 403 on the scope).
+   A removal-rotation is a **group's** only: on a tenant or personal scope the server refuses the removal (`400
+   invalid_request`). A tenant member leaves by the removal cascade
+   ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), which cuts their groups too; a removal-rotation of the
+   tenant root deleted that one row and left them reading every group they were in (inbox #595).
    The removed member is excluded by the remover's own choice, never by a member list read afterwards: a server
    that re-lists them would otherwise receive `E_{n+1}` wrapped to their genuine key, which the remover's pin of them
    accepts. One request also means a closed tab can no longer leave a removal without its rotation.

@@ -5,20 +5,20 @@ title: Manage a group's members (promote / demote / remove)
 # epoch. `members.test.ts::removeGroupMember` is the consent rescind only — the one delete without a rotation.
 acceptanceCriteria:
   - id: promote-demote
-    text: A GroupOwner promotes a member to co-owner (OWNER) or demotes a co-owner to MEMBER — a pure role change, no key move.
+    text: A GroupOwner promotes a member to co-owner (OWNER) or demotes a co-owner to MEMBER — a pure role change, no key move. Only an accepted member is promoted; a consent proposal is refused 404 member_not_found and keeps its row.
     coverage:
-      backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard] }
+      backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ConsentGroupAddSliceTest.aProposalCannotBeMadeAnOwnerSoTheLastAcceptedOwnerStays] }
       web: { unit: [src/features/spaces/members.test.ts] }
   - id: last-owner-guard
-    text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner). It holds for overlapping changes too — two co-owners demoting each other, or stepping down together, leave one owner.
+    text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner). Only accepted owners count — a consent proposal whose row says OWNER is none, by role change or by removal-rotation. It holds for overlapping changes too — two co-owners demoting each other, or stepping down together, leave one owner.
     coverage:
       backend:
         unit: [RotationPolicyTest.refusesRemovingTheLastOwner, RotationPolicyTest.removesAnOwnerWhileAnotherOwnerRemains]
-        integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard, OwnerRoleRaceSliceTest.twoOwnersDemotingEachOtherLeaveOneOwner, OwnerRoleRaceSliceTest.twoOwnersStepDownTogetherLeaveOneOwner]
+        integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard, ConsentGroupAddSliceTest.aProposalCannotBeMadeAnOwnerSoTheLastAcceptedOwnerStays, ConsentGroupAddSliceTest.aProposalHoldingOwnerIsNoOwnerToTheLastOwnerGuard, OwnerRoleRaceSliceTest.twoOwnersDemotingEachOtherLeaveOneOwner, OwnerRoleRaceSliceTest.twoOwnersStepDownTogetherLeaveOneOwner]
   - id: remove-member
-    text: A GroupOwner removes a member → the membership is deleted (the group instantly reads as 404 to them, ADR 0042). A non-owner caller is rejected.
+    text: A GroupOwner removes a member → the membership is deleted (the group instantly reads as 404 to them, ADR 0042). A non-owner caller is rejected. A removal-rotation is a group's only — on a tenant or personal scope it is 400 invalid_request with nothing stored, while a plain rotation of either still commits.
     coverage:
-      backend: { integration: [ScopesSliceTest.aRemovalRotationWhoseGrantsNameTheRemovedMemberIsRefusedAndChangesNothing, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard] }
+      backend: { integration: [ScopesSliceTest.aRemovalRotationWhoseGrantsNameTheRemovedMemberIsRefusedAndChangesNothing, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard, ScopesSliceTest.aRemovalRotationOnATenantScopeIsRefusedSoTheCascadeIsTheOnlyWayOut, ScopesSliceTest.aPersonalScopeRotatesForItsOwnerAndRefusesARemoval] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts] }
   - id: removal-is-one-request
     text: >

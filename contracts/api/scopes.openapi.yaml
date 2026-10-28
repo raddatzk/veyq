@@ -475,8 +475,10 @@ paths:
       description: >
         Sets a group member's role (`OWNER` / `MEMBER`) — the GroupOwner's promote/demote (uc.spaces.manage-group-members,
         cr-0088, ADR 0014 §4). Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then
-        owner-gated (`403 not_scope_owner`); the **last-owner guard** rejects demoting the last remaining OWNER
-        (`409 last_owner`, ADR 0007). A pure role change — no key moves (the member already holds the scope key).
+        owner-gated (`403 not_scope_owner`); the target must be an **accepted** member — a consent proposal is no member
+        until it accepts, so it is never made an owner (`404 member_not_found`) — and the **last-owner guard** rejects
+        demoting the last remaining OWNER, counting accepted owners only (`409 last_owner`, ADR 0007). A pure role
+        change — no key moves (the member already holds the scope key).
         Enforced by code, not this spec (ADR 0008).
       security:
         - bearerAuth: []
@@ -498,8 +500,8 @@ paths:
         "400": { description: Malformed (invalid role)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
-        "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
-        "409": { description: "The last remaining OWNER cannot be demoted (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member, or the target is a consent proposal not yet accepted (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
+        "409": { description: "The last remaining accepted OWNER cannot be demoted (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [scopes]
@@ -596,7 +598,9 @@ paths:
         complete; and since the scope's epoch moved past every pending re-key row's `epoch_at_rotation`, no such row
         opens the commit gate again.
 
-        **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4): the server
+        **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4), on a GROUP scope
+        only — a tenant member leaves by `removeTenantMember`'s cascade (ADR 0025) and a personal scope's one member is
+        its owner, so `removesUserId` on a TENANT or PERSONAL scope is `400 invalid_request`, nothing stored. The server
         deletes that membership — with the per-member rows the applications keep for it and the public shares it created in the group — and
         commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
         leaves the member in place. The request's grants must not name that member (`422
@@ -628,11 +632,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeRotated" }
               example: { epoch: 1 }
-        "400": { description: "Malformed (missing/invalid link or grant), `revokeLinks` without `removesUserId`, or invite grants on a scope that is no TENANT.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "400": { description: "Malformed (missing/invalid link or grant), `revokeLinks` without `removesUserId`, or `removesUserId` on a scope that is no GROUP (`invalid_request`, nothing stored). Invite grants or pending invite ids on a scope that is no TENANT are ignored: such a scope has no open invites.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is neither an OWNER of the scope nor a member whose account rotation left a pending re-key row for it at its current epoch, or is such a member and names `removesUserId` (`not_scope_owner`, nothing stored); or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), `removesUserId` is the last remaining accepted OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
