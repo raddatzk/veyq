@@ -223,8 +223,6 @@ describe('importMemoryContent', () => {
     vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
-    vi.mocked(listMedia).mockResolvedValue(['m1', 'm2', 'm3'].map((id) => ({ ...item(id), wrappedMeta: 'w', metaRevision: 1 })))
-    vi.mocked(setMediaMeta).mockResolvedValue({ tier: null, wrappedMeta: 'w2', metaRevision: 2, wrote: true })
     vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
   })
 
@@ -253,14 +251,12 @@ describe('importMemoryContent', () => {
     uploaded.forEach((blob, i) => expect(blob, `medium ${i}`).toBe(returned[i]))
   })
 
-  it('restores a correction as an override and a place name, only for the media that need it', async () => {
+  it('restores a correction as an override and a place name at birth, in the upload of the medium that carries them (inbox #700)', async () => {
     await importMemoryContent(MEMORY_KIND)(ctx(node()))
-    expect(vi.mocked(setMediaMeta)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(setMediaMeta).mock.calls[0][1]).toMatchObject({ mediaId: 'm2' })
-    expect(vi.mocked(setMediaMeta).mock.calls[0][4]).toBe(Date.parse('2023-11-14T22:15:00.000Z'))
-    expect(vi.mocked(backfillPlaceName)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(backfillPlaceName).mock.calls[0][1]).toMatchObject({ mediaId: 'm1' })
-    expect(vi.mocked(backfillPlaceName).mock.calls[0][4]).toBe('Lisbon')
+    const restored = vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)
+    // a.jpg's time was not corrected: the bytes' own is read again, only its place comes back
+    expect(restored).toEqual([{ placeName: 'Lisbon' }, { capturedAtOverride: Date.parse('2023-11-14T22:15:00.000Z') }, {}])
+    expect([setMediaMeta, backfillPlaceName, listMedia].map((f) => vi.mocked(f).mock.calls.length), 'no second pass').toEqual([0, 0, 0])
   })
 
   it('creates a chapter under its Memory with the chapter kind', async () => {

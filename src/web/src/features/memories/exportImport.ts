@@ -18,7 +18,9 @@
 //    copies of them are for people and other tools to read. There is NO API to seal a coordinate the file lacks, so a
 //    coordinate that was only ever sealed (never in the file) does not come back.
 //  - a capture time the file lacks is carried by the payload's modified time (the upload falls back to it); one the member
-//    CORRECTED (an override) is restored as an override in a second pass, and so is a place name the tier lacks.
+//    CORRECTED is restored as an override, and the place name too, both sealed into the listed tier by the upload that adds
+//    the medium (`RestoredMediaFacts`) - never a second write after it, which a rotation landing in between would refuse
+//    (inbox #700).
 //  - the importer is the uploader of every medium; the exported contributor stays text. Participants are not restored:
 //    their ids mean nothing in the target (ADR 0083).
 //
@@ -52,10 +54,10 @@ import type { BlobMeta } from '../../core/blob/meta'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 import type { NodeKind } from '../../core/node/kind'
 import {
-  addCopiedMedia, addMedia, backfillPlaceName, effectiveCapturedAt, listMedia, mediaTypeOf, plaintextSize, rawMediaMeta, readByChunk,
-  setMediaMeta, tierChunkProviders, type MediaExif, type MediaItem, type ReadByChunk,
+  addCopiedMedia, addMedia, effectiveCapturedAt, mediaTypeOf, plaintextSize, rawMediaMeta, readByChunk,
+  tierChunkProviders, type MediaExif, type MediaItem, type ReadByChunk, type RestoredMediaFacts,
 } from './media'
-import { guestMemorySource, memberMediaMetaOptions, memberMemorySource, type MemorySource } from './source'
+import { guestMemorySource, memberMemorySource, type MemorySource } from './source'
 import { normalizeDate } from './memoryDate'
 import { normalizeLocation } from './memoryLocation'
 import { unsealMemoryParticipants } from './memoryParticipants'
@@ -356,7 +358,8 @@ const isoToMs = (v: unknown): number | undefined => {
 }
 
 /** The import hook of a kind (MEMORY or CHAPTER): create the node with its date and place sealed at birth, add every
- *  original, then the second pass (corrections, place names) and the cover.
+ *  original with its restored facts sealed at birth too (a corrected capture time, a place name), then the cover and the
+ *  banner.
  *
  *  Every write into the node it created goes through core's `memberNodeWriter` (inbox #670): a rotation another member
  *  makes while the import or the copy is under way leaves the new node at the epoch it was born at, so the next medium,
@@ -382,42 +385,17 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)
     const total = media.reduce((s, m) => s + bytesOf(m), 0) || 1
     let done = 0
-    const added: { mediaId: string; medium: ExportedMedium }[] = []
     for (const medium of media) {
       if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
       const before = done
       const size = bytesOf(medium)
-      const { mediaId } = await node.write(async (at) => {
+      await node.write(async (at) => {
         const opts = { signal: ctx.signal, nodeEpoch: at.epoch, onProgress: (f: number) => ctx.onProgress?.((before + f * size) / total) }
         return copying
           ? addCopiedMedia(ctx.scopeId, nodeId, at.key, await copiedSource(ctx, medium), opts)
           : addOriginal(ctx, nodeId, at.key, medium, opts)
       })
       done += size
-      added.push({ mediaId, medium })
-    }
-
-    // Second pass: what the upload cannot derive from the file. One listing gives the rows (wrappedMeta, metaRevision),
-    // their tiers sealed under the key the media were just added under; each edit meets an epoch refusal as the
-    // lightbox's does (`memberMediaMetaOptions`: pull, re-read, re-base on the tier the re-key re-sealed). A copy sealed
-    // every fact at birth and needs none.
-    const fixes = copying ? [] : added.filter(({ medium }) => medium.capturedAtCorrected || medium.location?.place)
-    if (fixes.length > 0) {
-      const listed = node.at
-      const rows = new Map((await listMedia(ctx.scopeId, nodeId)).map((r) => [r.mediaId, r]))
-      for (const { mediaId, medium } of fixes) {
-        const row = rows.get(mediaId)
-        if (!row) continue
-        let target = row
-        const at = isoToMs(medium.capturedAt)
-        if (medium.capturedAtCorrected && at !== undefined) {
-          const w = await setMediaMeta(ctx.scopeId, target, listed.key, listed.epoch, at, memberMediaMetaOptions(ctx.scopeId, nodeId))
-          target = { ...target, wrappedMeta: w.wrappedMeta ?? undefined, metaRevision: w.metaRevision }
-        }
-        if (medium.location?.place) {
-          await backfillPlaceName(ctx.scopeId, target, listed.key, listed.epoch, medium.location.place, undefined, memberMediaMetaOptions(ctx.scopeId, nodeId))
-        }
-      }
     }
 
     const cover = content.cover as ExportedCover | undefined
@@ -442,7 +420,17 @@ async function addOriginal(
   ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
 ): Promise<{ mediaId: string }> {
   const file = wholePayload(await ctx.payload(medium.file, medium.name ?? 'file'))
-  return addMedia(ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }, undefined, opts)
+  return addMedia(ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }, undefined, {
+    ...opts, restored: restoredFacts(medium),
+  })
+}
+
+/** What a download's medium restores beside its bytes, sealed at birth (`RestoredMediaFacts`, inbox #700): its corrected
+ *  capture time as an override, and its place name. A time that was not corrected is the bytes' own, read again. */
+function restoredFacts(medium: ExportedMedium): RestoredMediaFacts {
+  const at = medium.capturedAtCorrected ? isoToMs(medium.capturedAt) : undefined
+  const place = typeof medium.location?.place === 'string' ? medium.location.place : undefined
+  return { ...(at !== undefined ? { capturedAtOverride: at } : {}), ...(place ? { placeName: place } : {}) }
 }
 
 /** A copy's medium as `addCopiedMedia` takes it: the original and each tier read by frame, the facts as the walk read them.

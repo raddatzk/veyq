@@ -5,7 +5,8 @@ title: Re-key a space's nodes after a rotation
 # several triggers (a group removal, a queued rotation, a secured account's own scopes), so it owns its criteria
 # rather than any one trigger's use-case. The web refs run the re-key through the real crypto (no mocked seal)
 # against an in-memory server; the backend refs prove the commit, the gates and the derived state on the real one. The
-# any-member re-key (ADR 0111 decision 11) also runs live: anyMemberRekeys.e2e.test.ts in the web-e2e job.
+# any-member re-key (ADR 0111 decision 11) also runs live: anyMemberRekeys.e2e.test.ts in the web-e2e job, and a member's
+# import and copy into its active group meeting two rotations each: importMeetsRotation.e2e.test.ts.
 acceptanceCriteria:
   - id: every-node-rekeyed
     text: After a rotation every live and trashed node of the scope carries the new epoch, a fresh key, and every field that was sealed under its old key re-sealed under the new one; a medium added afterwards to a folder or Memory that existed before opens with no key from before the rotation.
@@ -66,7 +67,7 @@ acceptanceCriteria:
           - RekeyCoreSliceTest.aMembersScopeRowReadsRekeyingWhileANodeLags
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts] }
   - id: a-members-write-pulls-its-path
-    text: A member's write refused node_rekey_pending (or by its device floor) re-keys the written node and its lagging ancestors top-down on its own device and is retried at once, spending no wait; a guest's write never pulls and waits; a write into a node only an owner re-keys falls back to the waits with nothing committed; a stale_epoch after the pull is re-read once; a member's media and file uploads seal again under the node's key now.
+    text: A member's write refused node_rekey_pending (or by its device floor) re-keys the written node and its lagging ancestors top-down on its own device and is retried at once, spending no wait; a guest's write never pulls and waits; a write into a node only an owner re-keys falls back to the waits with nothing committed; a stale_epoch after the pull is re-read once; a medium completion's per-item refusals are read as the HTTP ones; a member's media and file uploads seal again under the node's key now.
     coverage:
       web:
         unit:
@@ -74,16 +75,18 @@ acceptanceCriteria:
           - src/shared/rekeyRetry.test.ts
           - src/features/expenses/potSession.pull.test.ts
           - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/media.test.ts
           - src/core/node/tree.test.ts
-        e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts]
+        e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts, src/features/spaces/importMeetsRotation.e2e.test.ts]
   - id: a-run-pulls-what-it-created
-    text: A rotation that lands while an import or a copy is under way leaves the run's own nodes behind; each later write into one - a create below it, a Memory's medium, cover or banner, a Pot's batch or receipt, a Depot file's content - is one write that pulls that node forward on this device and is sealed again under its re-read key, the run going on under that key and creating nothing twice; a stale_epoch from another device's re-key pulls before its re-read, so a device holding the scope behind re-opens it; a create at the scope root re-opens the scope and states its epoch; below a drop box the write waits, the refused pull re-opening the scope so the re-read after the wait opens an owner's re-key, and the run is rolled back only when the waits run out.
+    text: A rotation that lands while an import or a copy is under way leaves the run's own nodes behind; each later write into one - a create below it, a Memory's medium, cover or banner, a Pot's batch or receipt, a Depot file's content - is one write that pulls that node forward on this device and is sealed again under its re-read key, the run going on under that key and creating nothing twice; a download's medium carries its corrected capture time and place name in that one write, so a re-key after the last medium leaves nothing to re-seal; a stale_epoch from another device's re-key pulls before its re-read, so a device holding the scope behind re-opens it; a create at the scope root re-opens the scope and states its epoch; below a drop box the write waits, the refused pull re-opening the scope so the re-read after the wait opens an owner's re-key, and the run is rolled back only when the waits run out.
     coverage:
       web:
         unit:
           - src/core/export/importSubtree.midRun.test.ts
           - src/shared/rekeyRetry.test.ts
           - src/core/node/rekey/rekeyScope.test.ts
+        e2e: [src/features/spaces/importMeetsRotation.e2e.test.ts]
   - id: links-follow-and-stay-marked
     text: A link from before shows what is added after the re-key and stays marked reissueRequired; its re-issue's key does not open what the old recovery copy's key reaches.
     coverage:

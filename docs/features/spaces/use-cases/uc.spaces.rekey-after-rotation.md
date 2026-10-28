@@ -73,8 +73,10 @@
   started with, so its next write meets the gate: a create below one of its nodes, a Memory's next medium, its cover
   or banner, a Pot's next batch or receipt, a Depot file's content. Each is **one write** that pulls that node forward
   on this device and is sealed again under the re-read key; the run goes on under the key and epoch it left, and never
-  repeats a kind's whole import, which would create the node twice. Another member's device may re-key the node first:
-  the write then meets `409 stale_epoch`, and the pull runs before the re-read anyway, since the device holds the scope
+  repeats a kind's whole import, which would create the node twice. A download's medium seals its corrected capture time
+  and place name in the upload that adds it, so no write after the last medium opens a tier the re-key re-sealed.
+  Another member's device may re-key the node first: the write then meets `409 stale_epoch`, and the pull runs before
+  the re-read anyway, since the device holds the scope
   at the old epoch and opens the new key only once it re-opened it. A create at the scope root, which states no parent
   epoch, re-opens the scope the same way. Below a drop box the write waits for an owner (E7); the refused pull still
   re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
