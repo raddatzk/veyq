@@ -1046,9 +1046,11 @@ paths:
         each later step is one securing of the account, signed by the identity and the proof key it retired. A client
         walks it (`verifyKeyChain`, the `key_chain` crypto vector) from the head it pinned for that person to the head a
         directory read served, and accepts the newest key only if every step verifies — the server's word is never
-        taken for it. Host-independent: one chain per account, the same in every tenant. Served to the person and to
-        users who share a tenant with them (a membership on the same tenant root scope); anyone else gets the
-        `404 not_found` an unknown user gets, so the read enumerates nobody (ADR 0042). Operator-blind: public keys and
+        taken for it. Host-independent: one chain per account, the same in every tenant. Served to the person, to
+        users who share a tenant with them (a membership on the same tenant root scope), and between two accepted
+        moderators of the instance (ADR 0099: a holder anchors the moderator it delivers the moderation key to, who may
+        share no tenant with it); anyone else gets the `404 not_found` an unknown user gets, so the read enumerates
+        nobody (ADR 0042). Operator-blind: public keys and
         signatures the server stores, and the server-observed time of each step — it already knows every rotation.
       security:
         - bearerAuth: []
@@ -1071,7 +1073,8 @@ paths:
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "404":
           description: >
-            No such person — or one who shares no tenant with the caller (`not_found`, indistinguishable, ADR 0042).
+            No such person — or one who shares no tenant with the caller, where not both are accepted moderators
+            (`not_found`, indistinguishable, ADR 0042).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_found } }
 

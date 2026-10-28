@@ -284,10 +284,13 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      **`getKeyChain`** (`GET /api/people/{userId}/key-chain`, new tag `key-chain`) serves the whole chain and its head,
      to the person and to users who share a tenant with them (a membership on the same tenant root scope); anyone else
      gets the `404` an unknown user gets (ADR 0042). The server already knows every rotation, so this read adds nothing
-     to what the operator learns.
+     to what the operator learns. *Built in phase 4 with one more reader: two accepted moderators of the instance read
+     each other's chain (ADR 0099: a holder anchors the moderator it delivers the moderation key to, and the two may
+     share no tenant; the roster is the instance's, so they already know each other) — `KeyChainStore.mayRead`.*
    - **`keyChainHead` rides every read that serves another user's key to a check**: `ScopeMember`,
-     `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite` (`signerKeyChainHead`) and `ServedMemberInvite`
-     (`signerKeyChainHead`, `granterKeyChainHead`) *(assistant, for owner review: so a client compares heads without
+     `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite` (`signerKeyChainHead`), `ServedMemberInvite`
+     (`signerKeyChainHead`, `granterKeyChainHead`) and `ModerationPendingDelivery` (added in phase 4, closing phase 3's
+     open item) *(assistant, for owner review: so a client compares heads without
      fetching chains, and fetches a chain only when a head moved)*. The per-grant snapshot `granterIdentityPublicKey`
      gets none: it may be a retired key, and the recipient checks it against the granter's chain (decision 9).
 3. **Self-grants of every scope, staged before the publish and applied in it** (Phase 0: one request cannot carry
@@ -956,10 +959,10 @@ phase 1):
   as a co-member. One already pinned is judged by `anchorChainKey` (an anomaly or a retired key refuses the accept).
   `memberInviteAnchored` in `tenantInvite.ts`.
 - **The moderation unlock** declines an anomaly **and** a retired key (the moderator holds a newer one). A moderator who
-  shares no tenant with the delivering holder is served no chain, so a first delivery to them is declined where the
-  fingerprint-only check delivered — fail closed, another holder who shares a tenant delivers. *Open:* a head on
-  `ModerationPendingDelivery` and a key-chain gate that admits moderation-key holders would close it; neither is in this
-  CR's contract.
+  shares no tenant with the delivering holder was served no chain, so a first delivery to them was declined where the
+  fingerprint-only check delivered. *Closed in phase 4* (§ Phase 4 built, item B): `ModerationPendingDelivery` serves
+  `keyChainHead`, `getKeyChain` serves one accepted moderator's chain to another, and `unlockModeration` anchors the
+  recipient with `anchorIdentity` like every other wrap.
 - **`commitRotation`** judges every member but the rotator (`anchorIdentity(m.userId, m)`): an anomaly goes into
   `pendingUserIds`, everyone else is granted with `recipientIdentityDigest`; the rotator's own grant goes to the identity
   it holds, unjudged. Nobody is dropped from both lists.
@@ -1068,7 +1071,8 @@ If this phase cannot run a browser, it says so, and the pass stays open here.
   Decisions 1, 2, 6 (the one server-side grant check; the pin holds the head; no review) and § What is still open;
   **ADR 0104** decision 2 (the entry holds the head); **ADR 0024** Decision 4's queued account rotation; **ADR 0020**
   move 3b's decline clearing; **ADR 0111** § Status (decisions 6–10 and 16's counter built) and the marks those ADRs
-  carry for the parts built here.
+  carry for the parts built here; **ADR 0111** decision 7's reader list gains two accepted moderators (phase 4, item B),
+  and ADR 0099 § 3's delivery anchors its recipient by the served head.
 - `uc.account.rotate-keys`: goal, postconditions, steps 1 and 3–9, E3, E4, E6, E9 (gone or rewritten), E7 rewritten,
   E11 added; `uc.spaces.verify-identity` (chain acceptance replaces the review; the anomaly);
   `uc.spaces.complete-queued-rotation` (the account-rotation trigger goes; the removal cascade stays);

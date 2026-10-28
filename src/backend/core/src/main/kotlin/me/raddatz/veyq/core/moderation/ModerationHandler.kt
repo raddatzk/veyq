@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -40,8 +41,8 @@ data class RosterView(
 /** An epoch's bundle with the caller's grant of it, or null where it waits for a delivery. */
 data class EpochGrant(val epoch: Int, val kemPublicKey: String, val signPublicKey: String, val sealedGrant: String?)
 
-/** An accepted moderator missing epochs the caller holds. */
-data class PendingDelivery(val accountId: String, val identityPublicKey: String, val epochs: List<Int>)
+/** An accepted moderator missing epochs the caller holds, with the key to seal to and the head of its key chain. */
+data class PendingDelivery(val accountId: String, val identityPublicKey: String, val keyChainHead: String, val epochs: List<Int>)
 
 /** A grant in a mint or a delivery: the moderator, the identity it is sealed to, the epoch and the ciphertext. */
 data class GrantIn(val accountId: String, val identityPublicKey: String, val epoch: Int, val sealedGrant: String)
@@ -84,6 +85,7 @@ sealed interface ModerationOutcome<out T> {
 class ModerationHandler(
     private val accounts: AccountStore,
     private val log: ModerationLog,
+    private val keyChain: KeyChainStore,
 ) {
     private val rng = SecureRandom()
 
@@ -247,19 +249,25 @@ class ModerationHandler(
         return text
     }
 
-    /** Every accepted moderator missing epochs [holderId] holds, with the identity to seal them to. */
+    /**
+     * Every accepted moderator missing epochs [holderId] holds, with the identity to seal them to and the head of its key
+     * chain — what the holder anchors that identity by (cr-secure-the-account decision 9), as every directory read that
+     * serves another user's key serves its head.
+     */
     @Transactional
     fun pendingDeliveries(holderId: String): List<PendingDelivery> {
         val grants = ModerationGrantEntity.listAll()
         val held = grants.filter { it.moderatorId == holderId }.map { it.epoch }.toSortedSet()
         val byModerator = grants.groupBy({ it.moderatorId }, { it.epoch })
-        return ModeratorEntity.list("removedAt is null and acceptedAt is not null order by acceptedAt, accountId")
+        val recipients = ModeratorEntity.list("removedAt is null and acceptedAt is not null order by acceptedAt, accountId")
             .filter { it.accountId != holderId }
-            .mapNotNull { m ->
-                val missing = held.filter { it !in (byModerator[m.accountId] ?: emptyList()) }
-                val key = VeyqUser.findById(m.accountId)?.identityPublicKey
-                if (missing.isEmpty() || key == null) null else PendingDelivery(m.accountId, key, missing)
-            }
+        val heads = keyChain.heads(recipients.map { it.accountId })
+        return recipients.mapNotNull { m ->
+            val missing = held.filter { it !in (byModerator[m.accountId] ?: emptyList()) }
+            val key = VeyqUser.findById(m.accountId)?.identityPublicKey
+            val head = heads[m.accountId]
+            if (missing.isEmpty() || key == null || head == null) null else PendingDelivery(m.accountId, key, head, missing)
+        }
     }
 
     /**

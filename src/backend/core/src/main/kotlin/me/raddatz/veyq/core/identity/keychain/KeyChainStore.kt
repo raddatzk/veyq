@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.identity.keychain
 
 import me.raddatz.veyq.core.crypto.KeyChainStatements
+import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import jakarta.enterprise.context.ApplicationScoped
@@ -87,12 +88,16 @@ class KeyChainStore {
     }
 
     /**
-     * Whether [callerId] may read [userId]'s chain (ADR 0111 decision 7): the person themselves, or someone who shares
-     * a tenant with them — a membership of each on the same tenant root scope (`scopeId == tenantId`). Its status does
-     * not matter: a suspended tenant does not hide public keys the person's other tenants serve too.
+     * Whether [callerId] may read [userId]'s chain (ADR 0111 decision 7): the person themselves, someone who shares
+     * a tenant with them — a membership of each on the same tenant root scope (`scopeId == tenantId`) — or, when both
+     * are accepted moderators of the instance, each other (ADR 0099: a holder anchors the moderator it delivers the
+     * moderation key to before it seals to them, and the two may share no tenant; the roster is the instance's, so
+     * the moderators already know each other). Its status does not matter: a suspended tenant does not hide public keys
+     * the person's other tenants serve too.
      */
     fun mayRead(callerId: String, userId: String): Boolean {
         if (callerId == userId) return true
+        if (ModeratorEntity.isModerator(callerId) && ModeratorEntity.isModerator(userId)) return true
         return MembershipEntity.getEntityManager().createQuery(
             "select count(a) from MembershipEntity a, MembershipEntity b where a.userId = :caller and b.userId = :target " +
                 "and a.scopeId = a.tenantId and b.scopeId = a.scopeId and a.pendingConsent = false and b.pendingConsent = false",

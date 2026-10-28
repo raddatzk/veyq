@@ -141,7 +141,10 @@ class ModerationResource(
         Response.ok(
             ModerationDeliveries(
                 moderation.pendingDeliveries(caller()).map {
-                    ModerationPendingDelivery(UUID.fromString(it.accountId), it.identityPublicKey, it.epochs)
+                    ModerationPendingDelivery(
+                        accountId = UUID.fromString(it.accountId), identityPublicKey = it.identityPublicKey,
+                        keyChainHead = it.keyChainHead, epochs = it.epochs,
+                    )
                 },
             ),
         ).build()

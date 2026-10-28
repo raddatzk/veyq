@@ -432,8 +432,8 @@ paths:
       operationId: listPendingModerationDeliveries
       summary: List the accepted moderators still missing an epoch the caller holds.
       description: >
-        Every accepted moderator who lacks a grant for a live epoch, with their identity public key (to pin-check and
-        seal to) and the epochs they miss that the caller holds (ADR 0099 § 3). Key-proved: only a holder delivers, and
+        Every accepted moderator who lacks a grant for a live epoch, with their identity public key and key-chain head (to
+        anchor and seal to) and the epochs they miss that the caller holds (ADR 0099 § 3). Key-proved: only a holder delivers, and
         the surface opens the queue after this succeeds.
       security:
         - bearerAuth: []
@@ -450,6 +450,7 @@ paths:
                 deliveries:
                   - accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                     identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                    keyChainHead: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
                     epochs: [1, 2]
         "400":
           description: Malformed request — a parameter or the body outside its contract.
@@ -1513,7 +1514,7 @@ components:
     ModerationPendingDelivery:
       type: object
       description: One accepted moderator missing epochs the caller holds.
-      required: [accountId, identityPublicKey, epochs]
+      required: [accountId, identityPublicKey, keyChainHead, epochs]
       properties:
         accountId:
           x-veyq-visibility: id
@@ -1523,10 +1524,22 @@ components:
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         identityPublicKey:
           type: string
-          description: The recipient's identity public bundle as the directory serves it; pin-check it before sealing.
+          description: >
+            The recipient's identity public bundle as the directory serves it; the holder anchors it beside
+            `keyChainHead` before sealing (cr-secure-the-account decision 9).
           contentEncoding: base64
           maxLength: 2048
           example: aWRlbnRpdHktcHVibGljLWtleQ==
+        keyChainHead:
+          type: string
+          description: >
+            The head of the recipient's key chain (ADR 0111 decision 7, the `key_chain` crypto vector): SHA-256 over its
+            newest step. The holder compares it with the head it pinned and fetches the chain (`getKeyChain`, which
+            serves one accepted moderator's chain to another even where they share no tenant) only when it moved. The
+            server's word until that walk checked it.
+          contentEncoding: base64
+          maxLength: 64
+          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
         epochs:
           x-veyq-visibility: structure
           type: array
