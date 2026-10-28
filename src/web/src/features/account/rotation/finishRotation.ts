@@ -70,7 +70,15 @@ async function finishOnce(): Promise<RotationScopeState[]> {
     if (!row || row.blocked) continue
     try {
       const members = await listScopeMembers(scopeId)
-      await commitRotation(scopeId, members, { open: planOpener(row, reread(scopeId)) })
+      // The scope's tenant is read through the plan's own TENANT row, so a scope in any tenant is judged in its tenant.
+      // Read afresh at each open, never the row of the pass's first read: the TENANT scope is usually committed earlier
+      // in this same pass, which raises this device's epoch floor past the self-grant that row carries — opened from it,
+      // the tenant would read `unavailable` and every member of every later group would be declared pending.
+      const openTenant = async (tenantId: string) => {
+        const tenantRow = await reread(tenantId)()
+        return tenantRow && !tenantRow.blocked ? planOpener(tenantRow, async () => tenantRow)(tenantId) : null
+      }
+      await commitRotation(scopeId, members, { open: planOpener(row, reread(scopeId)), openTenant })
     } catch (e) {
       if (!(e instanceof EpochMovedOn) && !(await isStaleEpoch(e))) continue // stays waiting; the next pass retries
     }

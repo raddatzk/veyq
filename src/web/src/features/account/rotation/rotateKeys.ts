@@ -27,7 +27,8 @@ import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favori
 import { decodeHttpError, HttpStatus, isCodedError, isHttpStatus } from '../../../shared/httpError'
 import { me } from '../../spaces/grantTrust'
 import { recipientIdentityDigest, sealGrant } from '../../spaces/grant'
-import { isUnreadableGrant, openPlanGrantKey } from '../../spaces/scopes'
+import { isUnreadableGrant, openPlanGrantKey, planOpener } from '../../spaces/scopes'
+import { collectMyVerifications, resignVerifications, type CarriedVerification } from '../tenantTrust'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { registerDocument } from '../deviceRegister'
 import { fetchKeyChain, linkOf, pinStoreDocument, type PinStoreWrite } from '../identityPins'
@@ -176,6 +177,7 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
   const oldProof = v1.deriveSecretKeyProofKeypair(secretKey)
   const newProof = v1.deriveSecretKeyProofKeypair(newSecretKey)
   const authKeys: v1.AuthKeypair[] = []
+  let carried: CarriedVerification[] = []
 
   try {
     const self = await me(currentPriv)
@@ -216,7 +218,16 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     const attestationSignature = b64std(v1.authSign(currentAuth.privateKey, nextAuth.publicKey))
 
     const stage = new SelfGrantStage(self.userId, identity, identityPublicKeyB64)
-    await stage.stageAll(await readRotationPlan())
+    const plan = await readRotationPlan()
+    await stage.stageAll(plan)
+    // The outgoing key's verifications, per tenant (ADR 0111 decision 13): read NOW, while the old identity is still the
+    // account's, so a statement a thief signs with it after the publish is never among them; re-signed by the new
+    // identity once the publish committed. A tenant this device cannot open carries none.
+    const tenantRows = plan.filter((r) => r.kind === 'TENANT' && !r.blocked)
+    carried = await collectMyVerifications(
+      self, b64std(keyChainStep.previousHead),
+      tenantRows.map((row) => ({ tenantId: row.tenantId, open: planOpener(row, async () => row) })),
+    )
 
     const wire = (w: { wrappedKey: Uint8Array; kdfParams: Uint8Array }) => ({ wrappedKey: b64std(w.wrappedKey), kdfParams: b64std(w.kdfParams) })
     let sealed!: { pins: PinStoreWrite; register: { blob: string; revision: number } }
@@ -302,6 +313,7 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     // restores a retired key nor finds one cached (the CR's invariant holds in the browser too).
     await carrySessionVault(newMasterKey)
     await afterCommit(oldMasterKey, newMasterKey, sealed, stage.planScopeIds())
+    await resignVerifications(carried, self.userId, identity.priv.sign, v1.keyChainHead(keyChainStep))
     const states = await finishRotation().catch((): RotationScopeState[] => [])
     return { outcome: 'published', states, unreadableScopeIds: stage.unreadableIds() }
   } finally {
@@ -318,6 +330,7 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     oldProof.privateKey.fill(0)
     newProof.privateKey.fill(0)
     for (const k of authKeys) k.privateKey.fill(0)
+    for (const c of carried) c.key.fill(0)
   }
 }
 

@@ -31,15 +31,14 @@ import {
   safetyNumber,
   safetyNumberOfFingerprint,
   myIdentityPublicKeyB64,
-  markVerified,
-  personTrust,
   readChain,
-  trustStates,
+  readJoinedChain,
   forgetVerifiedPins,
-  IdentityMovedError,
   pinStoreDocument,
   ENTRY_BYTES,
   type Pin,
+  type Standing,
+  type TenantStandings,
 } from './identityPins'
 import { fingerprintDigestB64 } from './safetyCode'
 import { masterKey, identityPrivate } from '../../app/vault'
@@ -78,11 +77,10 @@ const U1 = 'c0ffee00-0000-4000-8000-0000000000a1'
 const U2 = 'c0ffee00-0000-4000-8000-0000000000a2'
 const U3 = 'c0ffee00-0000-4000-8000-0000000000a3'
 const OTHER = 'c0ffee00-0000-4000-8000-0000000000b1'
-const NOBODY = 'c0ffee00-0000-4000-8000-0000000000ff'
 
 /** The pin a device holds for `chain`'s newest step — its key and head. */
-const pinAt = (chain: BuiltChain, state: Pin['state'] = 'pinned', firstSeenAt = 1): Pin =>
-  pinOf(bundleB64(chain.keys.at(-1)!), state, firstSeenAt, headOf(chain))
+const pinAt = (chain: BuiltChain, firstSeenAt = 1, o: { replaced?: boolean } = {}): Pin =>
+  pinOf(bundleB64(chain.keys.at(-1)!), firstSeenAt, headOf(chain), { index: chain.steps.length - 1, ...o })
 
 // The server side is the shared fake (`src/test/pinStore.ts`): it seals the documented format independently of this module.
 type ServerState = PinServerState
@@ -126,7 +124,7 @@ describe('the stored format is the vectors\' (v1.json#identity_pin)', () => {
     // The vector's head is synthetic: sha256("veyq/v1/key-chain/head" ‖ utf8(userId)).
     const head = b64std(v1.sha256Digest(enc.encode(`veyq/v1/key-chain/head${userId}`)))
     expect(await getPin(userId)).toEqual({
-      fingerprint: b64std(unhex(vectors.fingerprint.hash)), head, state: 'verified', firstSeenAt: 1760000000000,
+      fingerprint: b64std(unhex(vectors.fingerprint.hash)), head, index: 2, firstSeenAt: 1760000000000, replaced: true,
     })
   })
 
@@ -135,7 +133,7 @@ describe('the stored format is the vectors\' (v1.json#identity_pin)', () => {
     await firstContact(U1, A)
     const plain = v1.open({ purpose: 'identity-pin', pinId: unhex(idOf(U1)) }, MK, fromB64std(srv.state.entries.get(idOf(U1))!))
     expect(plain.length).toBe(ENTRY_BYTES)
-    expect(Object.keys(JSON.parse(new TextDecoder().decode(plain)))).toEqual(['u', 'f', 'h', 's', 't'])
+    expect(Object.keys(JSON.parse(new TextDecoder().decode(plain)))).toEqual(['u', 'f', 'h', 'i', 't', 'r'])
   })
 })
 
@@ -145,7 +143,7 @@ describe('anchorIdentity — first use and match (ADR 0028 Decision 2)', () => {
     const { served, chain } = born(U1, A)
     expect(await anchorIdentity(U1, served)).toBe('firstUse')
     expect(srv.state.revision).toBe(1)
-    expect(pinsOn(srv.state)).toEqual({ [U1]: { fingerprint: fp(KEY_A), head: headOf(chain), state: 'pinned', firstSeenAt: expect.any(Number) } })
+    expect(pinsOn(srv.state)).toEqual({ [U1]: { fingerprint: fp(KEY_A), head: headOf(chain), index: 0, firstSeenAt: expect.any(Number), replaced: false } })
     // A later wrap to the SAME key and head proceeds without a chain read and without a write.
     expect(await anchorIdentity(U1, served)).toBe('match')
     expect(chains.getKeyChain).toHaveBeenCalledTimes(1)
@@ -160,7 +158,7 @@ describe('anchorIdentity — first use and match (ADR 0028 Decision 2)', () => {
     expect(w.remove).toEqual([])
     expect(w.replaceAll).toBe(false)
     expect(w.revision).toBe(5)
-    // Every entry seals to one length, whatever its state.
+    // Every entry seals to one length, whatever it holds.
     expect(fromB64std(w.put[0].entry).length).toBe(fromB64std(srv.state.entries.get(idOf(U1))!).length)
     expect(Object.keys(pinsOn(srv.state)).sort()).toEqual([U1, U2, U3].sort())
   })
@@ -265,12 +263,12 @@ function twoSteps(): { h0: BuiltChain; h1: BuiltChain; h2: BuiltChain } {
 }
 
 describe('anchorIdentity — a chain that advanced from the pinned head (ADR 0111 decisions 7, 15)', () => {
-  it('two real steps from the pinned head are accepted: the pin moves to the new head and key, verified drops', async () => {
+  it('two real steps from the pinned head are accepted: the pin moves to the new head, key and index', async () => {
     const { h0, h2 } = twoSteps()
     chains.serve(h2)
-    const srv = fakeServer(storeOf({ [U1]: pinAt(h0, 'verified', 42) }, 1))
+    const srv = fakeServer(storeOf({ [U1]: pinAt(h0, 42) }, 1))
     expect(await anchorIdentity(U1, servedIdentity(h2))).toBe('advanced')
-    expect(pinsOn(srv.state)[U1]).toEqual({ fingerprint: fp(KEY_C), head: headOf(h2), state: 'pinned', firstSeenAt: 42 })
+    expect(pinsOn(srv.state)[U1]).toEqual({ fingerprint: fp(KEY_C), head: headOf(h2), index: 2, firstSeenAt: 42, replaced: false })
     // The pin moved: the same head and key again is a local match.
     expect(await anchorIdentity(U1, servedIdentity(h2))).toBe('match')
     expect(chains.getKeyChain).toHaveBeenCalledTimes(1)
@@ -396,6 +394,122 @@ describe('anchorChainKey — a key served without a head (the per-grant snapshot
   })
 })
 
+// ADR 0111 decisions 12, 15 and 16 — in a tenant, the join record anchors the person: the walk starts at the step that
+// installs the identity AND proof key the record names, never at a prefix the server serves before it, and the pin stays
+// the counter. The standing is handed in as `tenantTrust.ts` computes it (`tenantTrust.test.ts` judges the records
+// themselves); the chains, the pin store and the walk are real.
+describe('in a tenant, the join record anchors the chain (ADR 0111 decisions 12, 15, 16)', () => {
+  const D = chainKeys()
+  /** The tenant's word on `userId`: joined with `keys`, or another standing. */
+  const tenantWhere = (standing: Standing): TenantStandings => ({ tenantId: 'tenant-1', standing: async () => standing })
+  const joinedWith = (keys: ChainKeys) => tenantWhere({
+    kind: 'joined', identityPublicKey: v1.serializeIdentityPublic(keys.identity.pub), secretKeyProofPublicKey: keys.proof.publicKey,
+  })
+
+  it('the chain from the join record\'s step reaches the served head: anchored (first use, then advanced from the pin)', async () => {
+    const { h1, h2 } = twoSteps()
+    chains.serve(h2)
+    const srv = fakeServer()
+    expect(await anchorIdentity(U1, servedIdentity(h2), { tenant: joinedWith(B) })).toBe('firstUse')
+    expect(pinsOn(srv.state)[U1]).toMatchObject({ fingerprint: fp(KEY_C), head: headOf(h2), index: 2, replaced: false })
+
+    const srv2 = fakeServer(storeOf({ [U1]: pinAt(h1, 3) }, 1))
+    forgetVerifiedPins()
+    expect(await anchorIdentity(U1, servedIdentity(h2), { tenant: joinedWith(B) })).toBe('advanced')
+    expect(pinsOn(srv2.state)[U1]).toEqual({ fingerprint: fp(KEY_C), head: headOf(h2), index: 2, firstSeenAt: 3, replaced: false })
+  })
+
+  it('a chain on which no step installs the join record\'s keys is an anomaly, and pins nothing (control: the same chain, its own keys)', async () => {
+    const { h2 } = twoSteps()
+    chains.serve(h2)
+    const srv = fakeServer()
+    expect(await anchorIdentity(U1, servedIdentity(h2), { tenant: joinedWith(D) })).toBe('anomaly')
+    expect(srv.writeIdentityPins).not.toHaveBeenCalled()
+    expect(await anchorIdentity(U1, servedIdentity(h2), { tenant: joinedWith(A) })).toBe('firstUse')
+  })
+
+  it('the join record\'s keys beside another proof key do not anchor: the step must install BOTH', () => {
+    const { h2 } = twoSteps()
+    const halfB = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(B.identity.pub), secretKeyProofPublicKey: D.proof.publicKey }
+    expect(readJoinedChain(undefined, U1, servedChain(h2), halfB)).toEqual({ anchor: 'anomaly' })
+    const fullB = { ...halfB, secretKeyProofPublicKey: B.proof.publicKey }
+    expect(readJoinedChain(undefined, U1, servedChain(h2), fullB)).toMatchObject({ anchor: 'firstUse', joinedAt: 1, index: 2 })
+  })
+
+  it('a key before the join step is refused by anchorChainKey; the join step\'s own key is a retired one, the newest is current', async () => {
+    const { h2 } = twoSteps()
+    chains.serve(h2)
+    fakeServer()
+    expect(await anchorChainKey(U1, KEY_A, { tenant: joinedWith(B) })).toEqual({ anchor: 'anomaly', retired: false })
+    expect(await anchorChainKey(U1, KEY_B, { tenant: joinedWith(B) })).toMatchObject({ retired: true })
+    expect((await anchorChainKey(U1, KEY_B, { tenant: joinedWith(B) })).anchor).not.toBe('anomaly')
+    expect(await anchorChainKey(U1, KEY_C, { tenant: joinedWith(B) })).toEqual({ anchor: 'match', retired: false })
+  })
+
+  it('a served head behind the pinned one is an anomaly — the pin does not move back (control: the pinned head is a match)', async () => {
+    const { h1, h2 } = twoSteps()
+    chains.serve(h1) // the server rolls the chain back by one step
+    const srv = fakeServer(storeOf({ [U1]: pinAt(h2, 5) }, 1))
+    expect(await anchorIdentity(U1, servedIdentity(h1), { tenant: joinedWith(A) })).toBe('anomaly')
+    expect(pinsOn(srv.state)[U1].head).toBe(headOf(h2))
+    chains.serve(h2)
+    expect(await anchorIdentity(U1, servedIdentity(h2), { tenant: joinedWith(A) })).toBe('match')
+  })
+
+  it('a pin NOT on the anchored chain, the chain at least as long, is replaced: the pin moves to the anchored head, marked', async () => {
+    const h0 = chains.born(U1, A)
+    // The operator served another key at the first contact, before the join record was read; it was pinned at index 0.
+    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_C, 5, SOME_HEAD, { index: 0 }) }, 1))
+    expect(await anchorIdentity(U1, servedIdentity(h0), { tenant: joinedWith(A) })).toBe('replaced')
+    const pin = pinsOn(srv.state)[U1]
+    expect(pin).toMatchObject({ fingerprint: fp(KEY_A), head: headOf(h0), index: 0, replaced: true })
+    expect(pin.firstSeenAt).not.toBe(5) // new to this account under the anchored key
+    // control: the pin is now on the chain — the same read again is a plain match
+    expect(await anchorIdentity(U1, servedIdentity(h0), { tenant: joinedWith(A) })).toBe('match')
+  })
+
+  it('a pin NOT on the anchored chain, the chain SHORTER than the pinned one was, is an anomaly — it may be a rollback', async () => {
+    const h0 = chains.born(U1, A)
+    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_C, 5, SOME_HEAD, { index: 1 }) }, 1))
+    expect(await anchorIdentity(U1, servedIdentity(h0), { tenant: joinedWith(A) })).toBe('anomaly')
+    expect(pinsOn(srv.state)[U1]).toEqual(pinOf(KEY_C, 5, SOME_HEAD, { index: 1 }))
+  })
+
+  it('a pin taken unread at an invite accept (index -1) and not on the chain is no replacement either', () => {
+    const h0 = genesis(U1, A)
+    const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
+    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: -1 }), U1, servedChain(h0), joined)).toEqual({ anchor: 'anomaly' })
+    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: 0 }), U1, servedChain(h0), joined)).toMatchObject({ anchor: 'replaced' })
+  })
+
+  it('a pinned head ON the chain must carry the pinned key — another key there is an anomaly, never a replacement', () => {
+    const { h0, h1 } = twoSteps()
+    const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
+    expect(readJoinedChain(pinOf(KEY_C, 5, headOf(h0), { index: 0 }), U1, servedChain(h1), joined)).toEqual({ anchor: 'anomaly' })
+    expect(readJoinedChain(pinAt(h0, 5), U1, servedChain(h1), joined)).toMatchObject({ anchor: 'advanced' })
+  })
+
+  it('unanchored in the tenant is an anomaly with no chain read and no pin; so is a tenant this device cannot read, for a wrap', async () => {
+    chains.born(U1, A)
+    const srv = fakeServer()
+    const served = servedIdentity(genesis(U1, A))
+    expect(await anchorIdentity(U1, served, { tenant: tenantWhere({ kind: 'unanchored' }) })).toBe('anomaly')
+    expect(await anchorIdentity(U1, served, { tenant: tenantWhere({ kind: 'unavailable' }) })).toBe('anomaly')
+    expect(await anchorChainKey(U1, KEY_A, { tenant: tenantWhere({ kind: 'unanchored' }) })).toEqual({ anchor: 'anomaly', retired: false })
+    expect(chains.getKeyChain).not.toHaveBeenCalled()
+    expect(srv.writeIdentityPins).not.toHaveBeenCalled()
+    // control: a root owner is judged by the pin, as without a tenant — first use
+    expect(await anchorIdentity(U1, served, { tenant: tenantWhere({ kind: 'root' }) })).toBe('firstUse')
+  })
+
+  it('a grant\'s granter in a tenant this device cannot read falls back to the pin alone (decision 4 of the implementation)', async () => {
+    chains.born(U1, A)
+    fakeServer(storeOf({ [U1]: pinOf(KEY_A) }, 1))
+    expect(await anchorChainKey(U1, KEY_A, { tenant: tenantWhere({ kind: 'unavailable' }) })).toEqual({ anchor: 'match', retired: false })
+    expect(await anchorChainKey(U1, KEY_A, { tenant: tenantWhere({ kind: 'unanchored' }) })).toEqual({ anchor: 'anomaly', retired: false })
+  })
+})
+
 describe('readChain is pure and never throws on served bytes', () => {
   it('a step that is no base64 is an anomaly', () => {
     const chain = servedChain(genesis(U1, A))
@@ -432,10 +546,11 @@ describe('a key-holder pins past the old ceiling (ADR 0104, inbox #491)', () => 
     // A write's size does not grow with the store (the head's digest is fixed-size; the count adds a digit at most).
     expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(8)
     forgetVerifiedPins() // a fresh session lists the whole set and checks it against the head
-    const states = await trustStates(contacts)
-    expect(Object.values(states).every((t) => t.state === 'pinned')).toBe(true)
-    expect(states[contacts[444].userId]).toEqual({ state: 'pinned' })
-    expect(states[contacts[999].userId]).toEqual({ state: 'pinned' })
+    srv.listIdentityPinEntries.mockClear()
+    for (const c of [contacts[0], contacts[444], contacts[999]]) {
+      expect(await getPin(c.userId)).toMatchObject({ fingerprint: fp(c.identityPublicKey), head: c.keyChainHead })
+    }
+    expect(srv.listIdentityPinEntries).toHaveBeenCalledTimes(1) // the whole set, listed once for the three reads
   }, 120_000)
 })
 
@@ -466,148 +581,6 @@ describe('myIdentityPublicKeyB64', () => {
   it('throws when the vault is locked', () => {
     vi.mocked(identityPrivate).mockReturnValue(null)
     expect(() => myIdentityPublicKeyB64()).toThrow()
-  })
-})
-
-describe('markVerified (out-of-band compare → verified)', () => {
-  it('elevates a matching pin to verified, preserving fingerprint, head + firstSeenAt', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 7) }, 2))
-    await markVerified(U1, fp(KEY_A))
-    expect(pinsOn(srv.state)[U1]).toEqual({ fingerprint: fp(KEY_A), head: SOME_HEAD, state: 'verified', firstSeenAt: 7 })
-    expect(srv.state.revision).toBe(3)
-  })
-
-  it('aborts (never writes) when the pinned key moved under the compare', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 7) }, 2))
-    await expect(markVerified(U1, fp(KEY_B))).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(srv.state.revision).toBe(2) // no write — verified never stamped onto an unchecked key
-    expect(pinsOn(srv.state)[U1].state).toBe('pinned')
-  })
-
-  it('aborts when there is no pin at all (nothing was compared)', async () => {
-    fakeServer()
-    await expect(markVerified(NOBODY, fp(KEY_A))).rejects.toBeInstanceOf(IdentityMovedError)
-  })
-
-  it('verified wins a same-contact 409: re-asserts verified over a concurrent pinned, merges the other pin', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 7) }, 1))
-    srv.racedBy(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 7), [OTHER]: pinOf(KEY_B) }, 2))
-    await markVerified(U1, fp(KEY_A))
-    const pins = pinsOn(srv.state)
-    expect(pins[U1].state).toBe('verified')
-    expect(pins[OTHER].fingerprint).toBe(fp(KEY_B))
-    expect(srv.state.revision).toBe(3)
-  })
-
-  it('aborts on a 409 re-base if the concurrent device changed the key (moved under the compare)', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 7) }, 1))
-    srv.racedBy(storeOf({ [U1]: pinOf(KEY_B, 'pinned', 7) }, 2))
-    await expect(markVerified(U1, fp(KEY_A))).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(pinsOn(srv.state)[U1].fingerprint).toBe(fp(KEY_B)) // left as the concurrent write; not re-stamped
-  })
-})
-
-// ADR 0028 Decision 3: a member with no pin is pinned AT verification, with the fingerprint the compare confirmed and the
-// head the directory served beside it - one user action, one sealed write (or the store's merge on 409), never a pin
-// without the verification.
-describe('markVerified with pinAtHead (verifying an unpinned member pins them)', () => {
-  it('pins the compared fingerprint at the served head already verified, in ONE write', async () => {
-    const srv = fakeServer()
-    await markVerified(U1, fp(KEY_A), { pinAtHead: SOME_HEAD })
-    expect(srv.writeIdentityPins).toHaveBeenCalledTimes(1)
-    expect(pinsOn(srv.state)[U1]).toMatchObject({ fingerprint: fp(KEY_A), head: SOME_HEAD, state: 'verified' })
-  })
-
-  it('control: without the option an unpinned member is still refused - nothing pins on a plain markVerified', async () => {
-    const srv = fakeServer()
-    await expect(markVerified(U1, fp(KEY_A))).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(srv.writeIdentityPins).not.toHaveBeenCalled()
-  })
-
-  it('a concurrent pin of the SAME key merges on 409: it is verified, and the other contact is kept', async () => {
-    const srv = fakeServer()
-    srv.racedBy(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 3), [OTHER]: pinOf(KEY_B) }, 1))
-    await markVerified(U1, fp(KEY_A), { pinAtHead: SOME_HEAD })
-    const pins = pinsOn(srv.state)
-    expect(pins[U1]).toEqual({ fingerprint: fp(KEY_A), head: SOME_HEAD, state: 'verified', firstSeenAt: 3 })
-    expect(pins[OTHER].fingerprint).toBe(fp(KEY_B))
-  })
-
-  it('a concurrent pin of ANOTHER key throws IdentityMovedError and writes nothing', async () => {
-    const srv = fakeServer()
-    srv.racedBy(storeOf({ [U1]: pinOf(KEY_B, 'pinned', 3) }, 1))
-    await expect(markVerified(U1, fp(KEY_A), { pinAtHead: SOME_HEAD })).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(srv.state.revision).toBe(1) // only the concurrent write landed
-    expect(pinsOn(srv.state)[U1]).toEqual(pinOf(KEY_B, 'pinned', 3))
-  })
-
-  it('a member pinned to another key at load is refused too - the option never overwrites a pin', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_B, 'pinned', 3) }, 1))
-    await expect(markVerified(U1, fp(KEY_A), { pinAtHead: SOME_HEAD })).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(srv.writeIdentityPins).not.toHaveBeenCalled()
-  })
-})
-
-describe('trustStates (badge read)', () => {
-  it('folds a whole directory in one store read: verified, pinned, an anomaly at the pinned head, unpinned', async () => {
-    const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'verified'), [U2]: pinOf(KEY_A), [U3]: pinOf(KEY_C) }, 1))
-    const states = await trustStates([
-      { userId: U1, identityPublicKey: KEY_A, keyChainHead: SOME_HEAD },
-      { userId: U2, identityPublicKey: KEY_A, keyChainHead: SOME_HEAD },
-      { userId: U3, identityPublicKey: KEY_B, keyChainHead: SOME_HEAD }, // another key at the pinned head
-      { userId: NOBODY, identityPublicKey: KEY_A, keyChainHead: SOME_HEAD }, // never pinned
-    ])
-    expect(states).toEqual({
-      [U1]: { state: 'verified' },
-      [U2]: { state: 'pinned' },
-      [U3]: { state: 'anomaly' },
-      [NOBODY]: { state: 'unpinned' },
-    })
-    expect(srv.getIdentityPins).toHaveBeenCalledTimes(1)
-    expect(srv.listIdentityPinEntries).toHaveBeenCalledTimes(1)
-    expect(chains.getKeyChain).not.toHaveBeenCalled() // no head moved: no chain read
-    expect(srv.writeIdentityPins).not.toHaveBeenCalled() // an unpinned contact is never pinned by a read
-  })
-
-  it('a head that moved along the chain reads as pinned — verified dropped — and the pin moves; one off the chain is an anomaly', async () => {
-    const { h0, h2 } = twoSteps()
-    chains.serve(h2)
-    const srv = fakeServer(storeOf({ [U1]: pinAt(h0, 'verified', 9), [U2]: pinOf(KEY_A) }, 1))
-    const states = await trustStates([
-      { userId: U1, ...servedIdentity(h2) },
-      { userId: U2, identityPublicKey: KEY_B, keyChainHead: headOf(genesis(U2, B)) }, // no chain served for U2
-    ])
-    expect(states).toEqual({ [U1]: { state: 'pinned' }, [U2]: { state: 'anomaly' } })
-    expect(pinsOn(srv.state)[U1]).toEqual({ fingerprint: fp(KEY_C), head: headOf(h2), state: 'pinned', firstSeenAt: 9 })
-    expect(pinsOn(srv.state)[U2].fingerprint).toBe(fp(KEY_A))
-  })
-
-  it('a chain read that fails gives the contact no badge — never a false anomaly', async () => {
-    const h0 = chains.born(U1, A)
-    fakeServer(storeOf({ [U1]: pinAt(h0) }, 1))
-    chains.getKeyChain.mockRejectedValueOnce(new Error('offline'))
-    expect(await trustStates([{ userId: U1, ...servedIdentity(step(h0, B)) }])).toEqual({})
-  })
-})
-
-describe('personTrust (the profile)', () => {
-  it('a rotation the chain reaches: pinned, the pin moved, and the date of the newest step', async () => {
-    const h0 = chains.born(U1, A)
-    const h1 = step(h0, B, { createdAt: new Date('2026-10-20T12:00:00Z') })
-    chains.serve(h1)
-    const srv = fakeServer(storeOf({ [U1]: pinAt(h0, 'verified', 4) }, 1))
-    const read = await personTrust(U1, servedIdentity(h1))
-    expect(read).toEqual({ state: 'pinned', pin: pinAt(h1, 'pinned', 4), rotatedAt: new Date('2026-10-20T12:00:00Z') })
-    expect(pinsOn(srv.state)[U1]).toEqual(pinAt(h1, 'pinned', 4))
-  })
-
-  it('an anomaly says no date and moves nothing; a contact never rotated has no date', async () => {
-    const h0 = chains.born(U1, A)
-    fakeServer(storeOf({ [U1]: pinAt(h0) }, 1))
-    expect(await personTrust(U1, servedIdentity(h0))).toEqual({ state: 'pinned', pin: pinAt(h0), rotatedAt: null })
-    const forged = step(h0, B, { proofPrivateKey: chainKeys().proof.privateKey })
-    chains.serve(forged)
-    expect(await personTrust(U1, servedIdentity(forged))).toEqual({ state: 'anomaly', pin: pinAt(h0), rotatedAt: null })
   })
 })
 
@@ -655,11 +628,13 @@ describe('the pin store never goes backwards on this device (ADR 0028 Decision 7
     await expect(firstContact(U1, A)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
   })
 
-  it('the open before a write is checked too: a verification over a rolled-back store writes nothing', async () => {
-    fakeServer(storeOf({ [U1]: pinOf(KEY_B) }, 3))
+  it('the open before a write is checked too: a move over a rolled-back store writes nothing', async () => {
+    const h0 = chains.born(U1, A)
+    chains.serve(step(h0, B))
+    fakeServer(storeOf({ [U1]: pinAt(h0) }, 3))
     await getPin(U1)
-    const rolled = fakeServer(storeOf({ [U1]: pinOf(KEY_A) }, 2))
-    await expect(markVerified(U1, fp(KEY_A))).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    const rolled = fakeServer(storeOf({ [U1]: pinAt(h0) }, 2))
+    await expect(anchorIdentity(U1, servedIdentity(step(h0, B)))).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
     expect(rolled.writeIdentityPins).not.toHaveBeenCalled()
   })
 })
@@ -676,10 +651,8 @@ describe('a withheld, added, rolled-back or moved entry is refused (ADR 0104 dec
 
   it('control: the stored entries under the stored head open to every pin', async () => {
     threePins()
-    expect(await trustStates([
-      { userId: U1, identityPublicKey: KEY_A, keyChainHead: SOME_HEAD },
-      { userId: U2, identityPublicKey: KEY_B, keyChainHead: SOME_HEAD },
-    ])).toEqual({ [U1]: { state: 'pinned' }, [U2]: { state: 'pinned' } })
+    expect(await getPin(U1)).toEqual(pinOf(KEY_A))
+    expect(await getPin(U2)).toEqual(pinOf(KEY_B))
   })
 
   it('withheld: an entry left out of the listing — another key would read as a first use', async () => {
@@ -696,9 +669,12 @@ describe('a withheld, added, rolled-back or moved entry is refused (ADR 0104 dec
   })
 
   it('rolled back: an older ciphertext of one entry — a pin this device has since changed reinstated', async () => {
-    const srv = threePins()
+    const h0 = chains.born(U1, A)
+    const h1 = step(h0, B)
+    chains.serve(h1)
+    const srv = fakeServer(storeOf({ [U1]: pinAt(h0), [U2]: pinOf(KEY_B), [U3]: pinOf(KEY_C) }, 4))
     const before = srv.state.entries.get(idOf(U1))!
-    await markVerified(U1, fp(KEY_A)) // this device rewrites U1's entry (head v5)
+    expect(await anchorIdentity(U1, servedIdentity(h1))).toBe('advanced') // this device rewrites U1's entry (head v5)
     srv.tamper((e) => e.set(idOf(U1), before)) // the server serves U1's old entry under the new head
     forgetVerifiedPins() // as a fresh session would: list again
     await expect(getPin(U1)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
@@ -752,9 +728,8 @@ describe('the entries are listed once per head (ADR 0104 decision 6)', () => {
   it('pages through the whole set by pinId', async () => {
     const pins = Object.fromEntries([U1, U2, U3, OTHER].map((u) => [u, pinOf(KEY_A)]))
     const srv = fakeServer(storeOf(pins, 1), 1) // one entry a page
-    const read = await trustStates([U1, U2, U3, OTHER].map((userId) => ({ userId, identityPublicKey: KEY_A, keyChainHead: SOME_HEAD })))
-    expect(Object.keys(read)).toHaveLength(4)
-    expect(srv.listIdentityPinEntries).toHaveBeenCalledTimes(4)
+    for (const u of [U1, U2, U3, OTHER]) expect(await getPin(u)).toEqual(pinOf(KEY_A))
+    expect(srv.listIdentityPinEntries).toHaveBeenCalledTimes(4) // four pages, read once for all four
   })
 
   it('a second read under the same head lists nothing; a head another device moved lists again', async () => {

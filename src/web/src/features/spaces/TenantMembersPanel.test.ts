@@ -25,8 +25,8 @@ vi.mock('./scopes', () => ({
   revokeScopeShares: vi.fn(),
   scopeLifecycle: vi.fn(),
 }))
-// The pin store's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
-vi.mock('../account/identityPins', async (orig) => ({ ...(await orig<typeof import('../account/identityPins')>()), trustStates: vi.fn() }))
+// The tenant's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
+vi.mock('../account/tenantTrust', async (orig) => ({ ...(await orig<typeof import('../account/tenantTrust')>()), tenantBadges: vi.fn() }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOption: vi.fn() }))
@@ -35,7 +35,8 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
-import { trustStates } from '../account/identityPins'
+import { tenantBadges } from '../account/tenantTrust'
+import { account } from '../../app/account'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
@@ -52,7 +53,7 @@ const stubs = {
 }
 
 beforeEach(() => {
-  vi.mocked(trustStates).mockResolvedValue({})
+  vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
   // ADR 0109: the owner's row says whether the tenant's re-key is unfinished; nothing pending here
@@ -249,7 +250,7 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
   })
 })
 
-describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
+describe('TenantMembersPanel - who is verified in this tenant (ADR 0111 decision 15)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearActiveSpace()
@@ -261,8 +262,11 @@ describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
   const rowOf = (w: Awaited<ReturnType<typeof mountPanel>>, username: string) => w.findAll('.member-row').find((r) => r.text().includes('@' + username))!
 
   it('shows "verified" in the member list, and an anomaly with its note — and no review or accept anywhere', async () => {
-    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'verified' }, 'u-pend': { state: 'anomaly' } })
+    account.userId = 'u-me'
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'verified', 'u-pend': 'anomaly' })
     const w = await mountPanel('MEMBER')
+    // the active tenant's badges, without this account's own row
+    expect(tenantBadges).toHaveBeenCalledWith('t-1', 'u-me')
     expect(rowOf(w, 'owner').get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
     expect(rowOf(w, 'partner').get('[data-testid="member-trust-anomaly"]').text()).toBe(t('trust.anomaly'))
     expect(rowOf(w, 'partner').text()).toContain(t('trust.anomalyNote'))
@@ -275,8 +279,14 @@ describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
     expect(rowOf(w, 'owner').find('[data-testid="member-pending"]').exists()).toBe(false)
   })
 
-  it('control: a pinned member carries no trust badge', async () => {
-    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned' } })
+  it('a member first seen under two weeks ago reads "New"', async () => {
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'new' })
+    const w = await mountPanel('MEMBER')
+    expect(rowOf(w, 'owner').get('[data-testid="member-trust-new"]').text()).toBe(t('safety.stateNew'))
+  })
+
+  it('control: a member nobody verified carries no trust badge', async () => {
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'unverified' })
     const w = await mountPanel('MEMBER')
     expect(rowOf(w, 'owner').find('[data-testid^="member-trust-"]').exists()).toBe(false)
   })

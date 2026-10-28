@@ -474,7 +474,7 @@ async function onRestore() {
                 <span v-if="m.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
                 <!-- Identity trust (ADR 0028 Decision 2): "Verified" after a compare on the member's profile,
                      an anomaly when the served key does not follow from the pinned head. -->
-                <MemberTrustBadge :trust="trust[m.userId]" />
+                <MemberTrustBadge :badge="trust[m.userId]" />
               </div>
             </div>
             <!-- Owner-only controls (cr-0088/0089): promote a member to co-owner, demote a co-owner, or remove a

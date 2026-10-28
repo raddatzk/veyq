@@ -6,7 +6,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { anchorChainKey, type ChainKeyAnchor } from '../account/identityPins'
+import { anchorChainKey, type ChainKeyAnchor, type TenantStandings } from '../account/identityPins'
+import { cachedTenantView } from '../account/tenantTrust'
 import { epochFloor } from '../account/trustMarks'
 import { grantSignatureVerifies, type GrantScope } from './grant'
 
@@ -41,8 +42,8 @@ export async function me(priv: v1.Identity['priv']): Promise<Me> {
 // Pin writes are version-guarded read-modify-writes; several grants verified at once (the switcher opens every
 // group) would race each other's re-base. One at a time, the way the rotation's re-grant loop already pins.
 let pinQueue: Promise<unknown> = Promise.resolve()
-function anchorSerially(userId: string, keyB64: string): Promise<ChainKeyAnchor> {
-  const next = pinQueue.then(() => anchorChainKey(userId, keyB64))
+function anchorSerially(userId: string, keyB64: string, tenant?: TenantStandings): Promise<ChainKeyAnchor> {
+  const next = pinQueue.then(() => anchorChainKey(userId, keyB64, { tenant }))
   pinQueue = next.catch(() => undefined)
   return next
 }
@@ -69,8 +70,16 @@ export type GrantRow = {
  *   epoch from it is what a thief holding the old identity would forge, since the honest granter signs every new epoch
  *   with the new key. So it opens only at an epoch at or below this device's floor for the scope — an epoch this device
  *   already held — and is refused above it as `granter_key_retired`.
+ * - **In its tenant** (ADR 0111 decisions 12 and 15): a GROUP's grant is judged against the granter's standing in the
+ *   group's tenant (`tenantId`) — a granter without a join record who is no owner there, or whose join record does not
+ *   verify, is `granter_key_unanchored`, and a joined granter's key must sit on their chain at or after the step the
+ *   record names. The TENANT scope's own grant is judged by the pin alone: its standings are read with the very key it
+ *   carries, and a tenant whose directory this device cannot read (another tenant than the active one) falls back to
+ *   the pin as well — every new epoch from another member still has to link to the one this device holds.
  */
-export async function verifyOwnGrant(scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me): Promise<void> {
+export async function verifyOwnGrant(
+  scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me, tenantId?: string,
+): Promise<void> {
   const refuse = (reason: GrantRefusal) => new GrantRefused(scope.scopeId, reason)
   if (!row.granterUserId || !row.grantSignature) throw refuse('unsigned')
   const to = { userId: self.userId, identityPublicKeyB64: self.pubB64 }
@@ -87,7 +96,8 @@ export async function verifyOwnGrant(scope: GrantScope, wrappedGrant: string, ro
     throw refuse('bad_signature')
   }
   if (!grantSignatureVerifies(granterSign, scope, to, wrappedGrant, row.grantSignature)) throw refuse('bad_signature')
-  const granter = await anchorSerially(row.granterUserId, row.granterIdentityPublicKey)
+  const tenant = tenantId && scope.kind === 'GROUP' ? await cachedTenantView(tenantId).catch(() => undefined) : undefined
+  const granter = await anchorSerially(row.granterUserId, row.granterIdentityPublicKey, tenant)
   if (granter.anchor === 'anomaly') throw refuse('granter_key_unanchored')
   if (granter.retired && scope.epoch > (await epochFloor(scope.scopeId))) throw refuse('granter_key_retired')
 }
