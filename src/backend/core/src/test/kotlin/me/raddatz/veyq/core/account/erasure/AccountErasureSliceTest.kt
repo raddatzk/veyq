@@ -20,6 +20,8 @@ import me.raddatz.veyq.core.moderation.ModerationGrantEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tasks.CapabilityTags
+import me.raddatz.veyq.core.tasks.JobEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures
 import com.icegreen.greenmail.util.GreenMail
@@ -239,6 +241,44 @@ class AccountErasureSliceTest {
         tx {
             assertEquals(MembershipEntity.OWNER, roleOf(other, tenant), "the member it named owns the tenant now")
             assertEquals(TenantEntity.ACTIVE, TenantEntity.findById(tenant)!!.status)
+        }
+    }
+
+    @Test
+    fun anErasedSoleGroupOwnersGroupPassesToTheOldestAcceptedMemberAndItsProposalsExpire() {
+        // The erasure runs the tenant removal's cascade (ADR 0101 decision 2), so its orphan rule is the same (#598):
+        // only an accepted member is handed the group, and the only owner's departure expires every open proposal.
+        val tenant = seedTenant(owner = seedUser())
+        val u = seedUser()
+        val proposed = seedUser()
+        val elder = seedUser()
+        val group = UUID.randomUUID().toString()
+        tx {
+            listOf(u, proposed, elder).forEach { TenantRoots.join(it, tenant) }
+            scope(group, tenant, ScopeEntity.GROUP)
+            member(u, tenant, group, MembershipEntity.OWNER)
+            member(proposed, tenant, group, MembershipEntity.MEMBER)
+            member(elder, tenant, group, MembershipEntity.MEMBER)
+            // The proposal is the group's oldest other row.
+            MembershipEntity.update(
+                "pendingConsent = true, createdAt = ?1 where userId = ?2 and scopeId = ?3",
+                Instant.parse("2025-01-01T00:00:00Z"), proposed, group,
+            )
+        }
+
+        eraseByOwner(serverOwnerToken(), emailOf(u)).then().statusCode(200)
+
+        tx {
+            assertEquals(MembershipEntity.OWNER, roleOf(elder, group), "the oldest accepted member owns the group")
+            assertNull(roleOf(proposed, group), "the open proposal expired, never made an owner")
+            assertNull(ScopeEntity.findById(group)!!.deletedAt, "an accepted member remains, so the group carries on")
+            assertEquals(
+                1L,
+                JobEntity.count(
+                    "scopeId = ?1 and capabilityTag = ?2 and status = ?3", group, CapabilityTags.SCOPE_ROTATION, JobEntity.PENDING,
+                ),
+                "the group's rotation is queued",
+            )
         }
     }
 

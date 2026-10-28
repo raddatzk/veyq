@@ -229,7 +229,7 @@ its epoch floor for the scope.
 
 | Kind | Member removed | Account secured | Other triggers | Who commits |
 |---|---|---|---|---|
-| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation | yes, by the securing account | a declined or rescinded consent proposal: queued | an owner; the securing account through its pending row |
+| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued | an owner; the securing account through its pending row |
 | **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations | yes, by the securing account | — | an owner; the securing account through its pending row |
 | **Personal** | **no** — the account's personal scope is soft-deleted with its tenant membership | yes, by the account itself (its sole owner) | — | the owner |
 
@@ -242,8 +242,9 @@ securing account's finish.
 ### A queued rotation
 
 When a tenant owner removes a member who co-shares a group the tenant owner holds no key to, or a consent proposal is
-declined or rescinded, the server queues a `scope-rotation` job on the group — server-originated only, and an event
-joins a job only while nobody has claimed it, so many removals cost one rotation. It is offered **only to owners** of
+declined, rescinded or dropped by its invitee's removal from the tenant, the server queues a `scope-rotation` job on
+the group — server-originated only, and an event joins a job only while nobody has claimed it, so many removals cost
+one rotation. It is offered **only to owners** of
 the scope (`TasksHandler.claim`). The worker (`runScopeRotationWorker`, `src/web/src/features/tasks/scopeRotationWorker.ts`)
 reads the directory after the claim, commits the rotation, re-keys the nodes and completes. The server completes the
 job only if the epoch was committed while the worker held the lease (`409 rotation_not_committed`) and no node lags

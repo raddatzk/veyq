@@ -117,10 +117,14 @@ and which is confidential even from the tenant owner.**
      not just DB rows — the erasure the [security-model](../crosscutting/security-model.md) mandates. Purge is a
      **server job** (operator-blind-safe: it deletes only ciphertext + opaque rows + blobs, never a key/name),
      unlike removal's key rotation.
-   - **Orphans = an automatic rule, not an admin power.** When a user is removed from a tenant, a group they
-     **solely** own is **transferred** — ownership passes automatically to the **oldest remaining member**
-     (the **oldest remaining member** by membership `createdAt`, promoted to OWNER); if **no** member remains, it is
-     **grace-tombstoned** (same soft-delete as above). A server rule, so no tenant-owner snooping power is needed.
+   - **Orphans = an automatic rule, not an admin power.** When a user is removed from a tenant, a group they are the
+     **only accepted owner** of is **transferred** — ownership passes automatically to the **oldest remaining
+     accepted member** (by membership `createdAt`, promoted to OWNER); if **no** accepted member remains, it is
+     **grace-tombstoned** (same soft-delete as above). Either way its **open consent proposals expire** (the owner's
+     decision, 2026-10-28): a proposal is no member (ADR 0007), so it is never handed the group, and the group's
+     governance starts afresh with whoever accepted. On a hand-over the group's queued rotation takes the proposals'
+     key away with the departed owner's; a tombstoned group has nobody left to hold a key, so nothing rotates. A removed user who is only *proposed* to a group loses that proposal as a decline would, and
+     the group keeps its owner (inbox #598). A server rule, so no tenant-owner snooping power is needed.
      Its trigger is **tenant member-removal** ([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md)):
      removing a member cuts their **shared** access at once (ADR 0025 — no tenant rotation), but their **own** scopes
      (personal + any solo group) are **grace-tombstoned with read access kept**, so they can read/export their own

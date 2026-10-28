@@ -86,7 +86,13 @@ sequenceDiagram
   or an open proposal already exists; no duplicate.
 - **A3 — the invitee is offline / never responds:** the proposal simply **stays pending** — not an error. It holds
   the key, and every rotation re-grants it; the owner may rescind (which queues the group's rotation). There is no
-  auto-expiry in v1 (a deferred polish).
+  auto-expiry by time in v1 (a deferred polish).
+- **A3b — the group's only accepted owner leaves the tenant.** Every open proposal on the group **expires**: the row is
+  deleted, the invitation is gone (an accept answers `404 invitation_not_found`, a decline is the usual silent no-op).
+  A proposal is never handed the group. If accepted members remain, the oldest is promoted and the group's queued
+  rotation takes the proposals' key away with the departed owner's; if none remains, the group is tombstoned and
+  nothing rotates ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) step 4). An invitee removed
+  from the tenant loses their own proposal as a decline would (its A7).
 - **A3a — a proposed member is not a member yet, on any route.** Until they accept, the invitee reads and
   answers their own invitation and nothing of the group: every group operation — content, media, favorites,
   shares, roster, jobs — answers them exactly as it answers a stranger (the same 404,

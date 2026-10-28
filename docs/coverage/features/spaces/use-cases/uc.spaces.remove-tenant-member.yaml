@@ -23,13 +23,30 @@ acceptanceCriteria:
       backend: { integration: [MemberRemoveSliceTest.ownerRemovesMemberCutsSharedButKeepsOwnScopeReadable, MemberRemoveSliceTest.nonOwnerForbiddenAndUnknownMemberNotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
       web: { unit: [src/features/spaces/members.test.ts] }
   - id: orphan-transfer
-    text: A group the removed member solely owned that still has other members auto-transfers OWNER to the oldest remaining member (earliest createdAt); the group carries on, the tenant owner never gains access. "Solely" counts a co-owner's demote that overlaps the removal.
+    text: A group the removed member was the only accepted owner of that still has other accepted members auto-transfers OWNER to the oldest remaining accepted member (earliest createdAt) — a consent proposal is never handed it, however old — and every open proposal on it expires, the group's queued rotation taking their key away with the owner's; the group carries on, the tenant owner never gains access. "Solely" counts a co-owner's demote that overlaps the removal. The account erasure's cascade applies the same rule.
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.soleOwnedGroupWithMembersTransfersToOldestRemaining, OwnerRoleRaceSliceTest.aTenantRemovalOverlappingADemoteLeavesTheGroupAnOwner] }
+      backend:
+        integration:
+          - MemberRemoveSliceTest.soleOwnedGroupWithMembersTransfersToOldestRemaining
+          - MemberRemoveSliceTest.aSoleOwnerLeavingHandsTheGroupToTheOldestAcceptedMemberAndItsProposalsExpire
+          - AccountErasureSliceTest.anErasedSoleGroupOwnersGroupPassesToTheOldestAcceptedMemberAndItsProposalsExpire
+          - OwnerRoleRaceSliceTest.aTenantRemovalOverlappingADemoteLeavesTheGroupAnOwner
+        unit: [RemovalPolicyTest.soleOwnedSharedGroupTransfersThenRemovesAndRotates, RemovalPolicyTest.aGroupWithTwoAcceptedMembersIsNoLongerTheTargetsOwn]
   - id: orphan-tombstone
-    text: A group the removed member was the only member of is grace-tombstoned (cr-0090 soft-delete → scheduled purge), like a deleted group.
+    text: A group with no accepted member besides the removed one is grace-tombstoned (cr-0090 soft-delete → scheduled purge), like a deleted group; its open proposals are deleted, none is made an owner, and nothing rotates — nobody is left to hold a key.
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.soloGroupIsGraceTombstonedWithMembershipKept] }
+      backend:
+        integration:
+          - MemberRemoveSliceTest.soloGroupIsGraceTombstonedWithMembershipKept
+          - MemberRemoveSliceTest.aSoleOwnerLeavingAGroupWithOnlyAProposalTombstonesItAndTheProposalExpires
+          - MemberRemoveSliceTest.aSoleOwnerLeavingAGroupWithOnlyProposalsMakesNoneAnOwnerAndExpiresEveryOne
+        unit: [RemovalPolicyTest.soloGroupIsSoftDeletedNotRemoved]
+  - id: proposal-target-drops-the-proposal
+    text: A removed member who is only proposed to a group loses that proposal as a decline would (A7) — the row goes and the group's rotation is queued, no removal is counted — and the group keeps its own owner; it is never tombstoned or handed on, even when its owner is its only accepted member.
+    coverage:
+      backend:
+        integration: [MemberRemoveSliceTest.aRemovedMemberWhoIsOnlyAProposalNeverReownsNorTombstonesTheGroup]
+        unit: [RemovalPolicyTest.aTargetOnlyProposedToAGroupDropsTheProposalAndNeverTombstonesNorHandsOver, RemovalPolicyTest.aProposalRowThatSaysOwnerIsStillOnlyDropped]
   - id: own-scope-grace-read
     text: The removed member's personal scope (and any solo group) is grace-tombstoned but their membership is KEPT — they retain read-only access to read/export their own memories for the grace window, then ScopePurge erases them.
     coverage:

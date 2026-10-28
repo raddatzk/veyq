@@ -152,8 +152,10 @@ third scope role. The same shape repeats per scope kind:
   pure role change (no key moves); a role without a grant is a hollow title (can neither read nor invite —
   inviting needs the scope key). See [ADR 0006](../decisions/0006-cold-tenant-scope-birth.md).
 - **Several owners, never none.** A tenant and a group may have several owners; removing or demoting the last one
-  is refused (`409 last_owner`), counting accepted owners only. A group whose sole owner is removed from the tenant passes to its oldest other
-  member ([ADR 0014](../decisions/0014-group-scopes-and-governance.md) §6); a tenant left without an owner by an
+  is refused (`409 last_owner`), counting accepted owners only. A group whose only accepted owner is removed from the
+  tenant passes to its oldest other accepted member, and its open proposals expire with a queued rotation; with no
+  accepted member left it is tombstoned like a solo group, its proposals deleted
+  ([ADR 0014](../decisions/0014-group-scopes-and-governance.md) §6); a tenant left without an owner by an
   erasure waits for the Server Owner's owner invite to one of its members
   ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9).
 - **Belonging is an accepted row.** A member belongs to a tenant when it holds an accepted membership of the tenant's
