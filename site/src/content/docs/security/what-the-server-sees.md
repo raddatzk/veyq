@@ -83,9 +83,14 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
 
 - **Scope and membership:** who belongs to which tenant and group, and in which role.
 - **Per open member invite:** the invited address, its expiry, the invite's public key, the inviting owner's
-  signature over it and that owner's identity key, and the tenant key wrapped to the invite key; the key, the
-  signature and the grant are cleared once the invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; the
+  signature over it and that owner's identity key, the tenant key wrapped to the invite key, and the owner's own such
+  grant kept beside it as the invite's anchor; the key, the signature, the grant and the anchor are cleared once the
+  invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; the
   link's sealed part passes through it only while it is mailed.
+- **Who invited whom:** per member, the owner whose invite they joined through, recorded at the accept, and that
+  owner's signed endorsement of the member's sealed join record, written when the owner secures their account
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 21).
 - **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
   tenant member can enumerate these (concession 4 below).
 - **Who verified whom:** per verification, its tenant, the verifying and the verified member and when it was written
@@ -99,11 +104,13 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   ([ADR 0003](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0003-operator-blind-password-auth.md)).
 - The account's **Secret-Key proof public key**, which verifies a credential change, and its **key chain**: each
   identity and proof public key the account has had, the two signatures on each step and when the step was written.
-  The chain is served only to the person, to members of a tenant they are in, and between two accepted moderators.
+  The chain is served only to the person, to members of a tenant they are in, between two accepted moderators, and —
+  an inviting owner's — to the holder of their open invite's token.
   While an account is being secured, a **stage** of its self-grants: the new identity public key it declares, one
-  grant per scope as ciphertext, and when it expires; the publish deletes it, and an abandoned one is purged
+  grant per scope as ciphertext, the new identity's signatures over the open invites it signed and its endorsements
+  of the join records it rooted, and when it expires; the publish deletes it, and an abandoned one is purged
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 6–7).
+  decisions 6–7, 20 and 21).
 
 ### Structure and ids
 
