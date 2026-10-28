@@ -5,11 +5,31 @@
 
   1. `components.schemas.RotateAccountKeysRequest` has exactly the property set
      {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature,
-     identityPins, deviceRegister}.
+     identityPins, deviceRegister, keyChainStep, stageId, stagedGrantsDigest, unreadableScopeIds, authPublicKey,
+     attestationSignature, secretKeyProofPublicKey, secretKeyProofPossession}.
   2. Its `required` list equals that same set — **every** property is mandatory. An optional field is a
      discriminator spelled by omission: leave `recoveryWrap` out and you have asked for a rotation that
      rewrites one cold wrap and leaves the other holding the old Master Key, which is identity-only rotation
-     wearing a different hat.
+     wearing a different hat. The eight fields securing the account added (cr-secure-the-account, ADR 0111
+     decisions 6-7), and why none of them is a mode:
+       - `keyChainStep` — the step's two signatures. Every rotation is a step of the key chain; without it no
+         contact's client can reach the new identity, so "rotate without a step" would be a rotation every member
+         reads as an anomaly.
+       - `stageId`, `stagedGrantsDigest` — name the one stage of self-grants the publish applies and bind it into the
+         Secret Key's proof. Neither selects anything: the server applies the stage only if it covers its OWN set of
+         the account's grant-carrying memberships (`409 rotation_plan_changed`), so a smaller stage is refused, not
+         a lesser rotation.
+       - `unreadableScopeIds` — the scopes this device cannot open, declared so the completeness check can tell
+         "left out on purpose" from "forgotten" (`changes/README.md` § A server that insists on completeness). It
+         does not narrow what rotates: the identity, the Master Key and the Secret Key rotate whatever it lists,
+         and a listed scope only keeps its grant as it is. Required and possibly empty, never absent.
+       - `authPublicKey`, `attestationSignature` — the auth key the account keeps and the current auth key's
+         signature over it. Keeping the password derives the same key and the attestation still verifies, so both
+         are always sent: "the password stays" is a value, not an omission (ADR 0060 Decision 1).
+       - `secretKeyProofPublicKey`, `secretKeyProofPossession` — the new Secret Key's proof key and the new key's
+         signature over the rotation statement. The Secret Key always rotates (ADR 0111 decision 6, inbox #559);
+         leaving them out would be "keep the Secret Key", the variant that left a leaked Secret Key's holder
+         indistinguishable from the member.
   3. `passwordWrap` and `recoveryWrap` are `$ref`s to `RotatedWrap`, and `RotatedWrap` has exactly
      {wrappedKey, kdfParams} — no `method`. Which cold wrap is being rewritten is the *field it arrives in*,
      never a value inside it, so a `wraps: [{method, …}]` array cannot come back one level down and carry a
@@ -20,6 +40,10 @@
      device then refuses (ADR 0028 Decision 7). Required like the rest — "this rotation leaves the pin store
      behind" is the omission this guard exists to make unsayable, and an account with no document yet sends it
      empty rather than leaving the field out.
+  5. `keyChainStep` is a `$ref` to `KeyChainStepSignatures`, and that schema has exactly {identitySignature,
+     proofSignature}. The step's statement is the server's to rebuild from the stored head and the request's own
+     `identityPublicKey` and `secretKeyProofPublicKey`; a step object that carried keys, an index or a predecessor of
+     its own would be a second way to name what the rotation installs — and a way to name something else.
 
 ADR 0060 Decision 1 is that the Master Key and the identity keypair rotate **together, always**: every path to
 the identity private key runs through the Master Key, so an identity compromise implies a Master-Key
@@ -39,11 +63,12 @@ nothing else. A green run does **not** prove that rotation rotates both halves: 
 field, the client could send the old Master Key re-wrapped, and this would still pass. It does not look at the
 response, at path/query parameters, at headers, or inside the opaque base64 fields — a mode smuggled into a
 ciphertext blob is invisible here and always will be. Of the cold-credential gate (ADR 0060 Decision 2) it pins
-only that `secretKeyProofSignature` is present and required; whether the server *verifies* it is the backend's
-bite tests' job, and the password half is client-side and has no contract surface at all. Green means exactly:
-**the rotation request still has these seven mandatory fields and no eighth, its wraps still carry no
-method, and its two documents still arrive as their own update shapes.** That the server writes those two
-documents inside the rotation's transaction is `RotationSliceTest`'s to prove, not this guard's.
+only that `secretKeyProofSignature`, `secretKeyProofPossession`, `attestationSignature` and the step's two
+signatures are present and required; whether the server *verifies* them, and whether it refuses a stage that does
+not cover its own set, is the backend's bite tests' job. Green means exactly: **the rotation request still has
+these fifteen mandatory fields and no sixteenth, its wraps still carry no method, its two documents still arrive
+as their own update shapes, and its step carries two signatures and nothing else.** That the server writes those
+two documents inside the rotation's transaction is `RotationSliceTest`'s to prove, not this guard's.
 
 Two narrower predicates were reached for first and are wrong; recorded so the next reader does not re-derive
 them (§ *run the predicate against the untouched tree*, `changes/README.md`):
@@ -72,7 +97,9 @@ WRAP = "RotatedWrap"
 
 # ADR 0060 Decision 1 + § Consequences: the new identity, the private key under the new Master Key, both cold
 # wraps rewritten, the Secret-Key proof (Decision 2), and the two Master-Key-sealed account documents re-sealed
-# under the new key. Nothing optional, nothing selectable.
+# under the new key. ADR 0111 decisions 6-7 (cr-secure-the-account): the key-chain step, the stage it applies and
+# what this device declares unreadable, the auth key and its attestation, the new Secret Key's proof key and its
+# possession signature. Nothing optional, nothing selectable — the docstring says per field why it is not a mode.
 REQUEST_PROPS = {
     "identityPublicKey",
     "wrappedIdentityPrivateKey",
@@ -81,7 +108,17 @@ REQUEST_PROPS = {
     "secretKeyProofSignature",
     "identityPins",
     "deviceRegister",
+    "keyChainStep",
+    "stageId",
+    "stagedGrantsDigest",
+    "unreadableScopeIds",
+    "authPublicKey",
+    "attestationSignature",
+    "secretKeyProofPublicKey",
+    "secretKeyProofPossession",
 }
+STEP = "KeyChainStepSignatures"
+STEP_PROPS = {"identitySignature", "proofSignature"}
 WRAP_PROPS = {"wrappedKey", "kdfParams"}
 WRAP_REFS = ("passwordWrap", "recoveryWrap")
 # Each document arrives in its own named field, as the shape its own PUT already takes.
@@ -111,10 +148,11 @@ def main() -> int:
 
     request = schema_of(spec, REQUEST)
     wrap = schema_of(spec, WRAP)
+    step = schema_of(spec, STEP)
 
     # A missing schema is a failure, not a pass: the guard must not go quiet because what it watches was
     # renamed out from under it.
-    for name, node in ((REQUEST, request), (WRAP, wrap)):
+    for name, node in ((REQUEST, request), (WRAP, wrap), (STEP, step)):
         if node is None:
             errors.append(
                 f"components.schemas.{name} is missing from account.openapi.yaml. If the rotation request was "
@@ -127,7 +165,7 @@ def main() -> int:
             print(f"  - {e}")
         return 1
 
-    assert request is not None and wrap is not None  # narrowed by the check above
+    assert request is not None and wrap is not None and step is not None  # narrowed by the check above
     props = set(request.get("properties") or {})
     required = set(request.get("required") or [])
 
@@ -176,6 +214,29 @@ def main() -> int:
                 f"§ Consequences); an inline or list shape is how a subset of documents comes back."
             )
 
+    step_prop = (request.get("properties") or {}).get("keyChainStep")
+    if isinstance(step_prop, dict) and step_prop.get("$ref") != f"#/components/schemas/{STEP}":
+        errors.append(
+            f"{REQUEST}.keyChainStep: must be a $ref to {STEP}. The step's statement is the server's to rebuild "
+            f"from the stored head and the request's own keys; an inline shape is how a step naming other keys "
+            f"comes back."
+        )
+    step_props = set(step.get("properties") or {})
+    step_required = set(step.get("required") or [])
+    for extra in sorted(step_props - STEP_PROPS):
+        errors.append(
+            f"{STEP}.{extra}: a step carries only {sorted(STEP_PROPS)}. Its keys are the request's "
+            f"`identityPublicKey` and `secretKeyProofPublicKey`, its index and predecessor the stored chain's — a "
+            f"field here would be a second way to name what the rotation installs (ADR 0111 decision 7)."
+        )
+    for missing in sorted(STEP_PROPS - step_props):
+        errors.append(
+            f"{STEP}.{missing}: gone. A step is signed by the retired identity AND the retired proof key; one "
+            f"signature alone is what a stolen device could forge (ADR 0111 decision 7)."
+        )
+    for optional in sorted(step_props & STEP_PROPS - step_required):
+        errors.append(f"{STEP}.{optional}: present but not in `required` — a step with one signature is a forgeable step.")
+
     wrap_props = set(wrap.get("properties") or {})
     for extra in sorted(wrap_props - WRAP_PROPS):
         errors.append(
@@ -194,7 +255,8 @@ def main() -> int:
 
     print(
         f"OK: {REQUEST} carries exactly {sorted(REQUEST_PROPS)}, all required, "
-        f"and {WRAP} carries {sorted(WRAP_PROPS)} with no method — one rotation mode."
+        f"{WRAP} carries {sorted(WRAP_PROPS)} with no method, "
+        f"and {STEP} carries {sorted(STEP_PROPS)}, both required — one rotation mode."
     )
     return 0
 

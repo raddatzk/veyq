@@ -669,8 +669,11 @@ yet, and the server's refusal is a compare of `Content-Length` with the limit be
 
 Decisions 2, 3, 5, 6, 7, 8, 10 in the contract; the statements and vectors.
 
-- `RotateAccountKeysRequest` gains, all required: `keyChainStep` (`{newIdentityPublicKey, newSecretKeyProofPublicKey,
-  identitySignature, proofSignature}`; index and predecessor are the server's), `stageId`, `stagedGrantsDigest`,
+- `RotateAccountKeysRequest` gains, all required: `keyChainStep` (`KeyChainStepSignatures {identitySignature,
+  proofSignature}`; the index, the predecessor and the two keys it installs are the server's to rebuild, from the
+  stored chain and the request's own `identityPublicKey` and `secretKeyProofPublicKey` — *built so: the refine's
+  `{newIdentityPublicKey, newSecretKeyProofPublicKey, …}` repeated both keys, a second way to name what the rotation
+  installs that the server would have had to compare*), `stageId`, `stagedGrantsDigest`,
   `unreadableScopeIds` (`maxItems` 10,000), `authPublicKey`, `attestationSignature`, `secretKeyProofPublicKey`,
   `secretKeyProofPossession`. Each new property carries its `x-veyq-visibility` and bound
   (`validate_field_visibility.py`, `validate_request_bounds.py`).
@@ -707,6 +710,41 @@ generated `key-chain` interface in `ModuleCompositionTest`, and at the test buil
 each check once to see the red it names. **This contract makes client-sent fields required, so phases 1–5 merge to
 `main` together** (`changes/README.md` § A contract that makes a client-sent field required lands on `main` together
 with its client phase).
+
+#### Phase 1 built (2026-10-28) — where it differs from the text above, and what the next phases inherit
+
+- **`requeueRotationScope` is gone** (`POST /api/account/rotation/scopes/{scopeId}/requeue`), with
+  `RotateAccountKeysResult.queuedScopeIds`: an account rotation queues no job (decision 4), so there is nothing to
+  dead-letter or re-queue (decision 8 drops `failed`). Its probe left `OperatorBlindProbeTest`.
+- **`requeueScopeRotation` and `CompromiseRotation` stay, reworded to the removal cascade** (decision 3 keeps both for
+  it). Phase 2 inherits that `CompromiseRotationPolicy` derives its facts from a rotator's exclusion today: the
+  owner view must be rebased on the removal cascade's job (no rotator, no exclusion) — a design step of phase 2.
+- **The served chain** (`getKeyChain` → `KeyChain {userId, head, steps}`, `KeyChainStep {index, previousHead,
+  identityPublicKey, secretKeyProofPublicKey, identitySignature, proofSignature, createdAt}`, the three nullable
+  exactly at step 0) carries each step's `previousHead`, so `verifyKeyChain` can name a `predecessor` refusal apart
+  from a signature one. The operation lives in `scopes.openapi.yaml` under the new tag `key-chain`; its refusal is
+  `404 not_found`.
+- **`verifyKeyChain(chain, fromHead)`** answers `{ok: true, head, index, fromIndex, identityPublicKey,
+  secretKeyProofPublicKey}` or `{ok: false, step, reason}` with `reason` one of `malformed`, `predecessor`,
+  `identity_signature`, `proof_signature`, `head_not_in_chain` (a rollback or another account's chain); `fromIndex`
+  is where the pinned head sits (`index` = match, below it = advanced, `null` = first use) — phase 3's four answers.
+- **`RotationScopeState`** is `{scopeId, state: waiting|rekeying|secured|blocked, reason?}`, `reason` a shared
+  `RotationBlockedReason` (`tenant_suspended`, `scope_deleting`) that `RotationPlanScope.blocked` uses too.
+- **The publish declares `403 attestation_failed`** beside `secret_key_proof_failed` (the password half, as
+  `changePassword` answers it). `putRotationStageGrants` answers `204`, takes 1-256 grants, and declares
+  `x-veyq-concurrency: last-writer-wins` (one writer; the publish applies the digest-named set, not the last write).
+- **`pendingUserIds` is optional** (omitted = none), as `pendingInviteIds` is: the completeness check is what makes a
+  forgotten member a refusal. The owner birth's digest is a top-level `recipientIdentityDigest` beside `grant` in
+  `AcceptInviteRequest` and `RegisterAndAcceptRequest`, nullable like `grant`; `CompleteRequest`'s is nullable like
+  its `grantSignature`. `keyChainHead`/`signerKeyChainHead`/`granterKeyChainHead` and `ScopeMember.pending` are
+  required response fields.
+- **`clearDeclinesForAcceptedKey` is gone** with its schemas; the decline reason is `identity_unanchored`.
+- **The `identity_pin` vector's head is synthetic** (`sha256("veyq/v1/key-chain/head" ‖ utf8(userId))`): the entry
+  only carries 32 bytes there.
+- **Vectors:** an independent Python implementation (hashlib + `cryptography` Ed25519/HKDF/AES-GCM, kept out of the
+  tree as `9f9ce8e0a`'s was) wrote `key_chain`, `rotation_stage`, `secret_key_proof.rotation` and `identity_pin`; it
+  first re-derived the existing proof key, a grant signature and the change-password statement, so it agrees with
+  the vectors it did not write.
 
 ### Phase 2: backend
 
