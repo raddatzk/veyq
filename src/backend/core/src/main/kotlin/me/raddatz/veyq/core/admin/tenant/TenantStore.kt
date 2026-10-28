@@ -520,6 +520,17 @@ class TenantStore(
         TenantEntity.update("ownerEmail = ?1 where ownerEmail = ?2", "", address)
     }
 
+    /**
+     * An account's address change carries the tenants whose owner invite went to the old address along (ADR 0101
+     * decision 4, inbox #591): the column names the account's address, never one it gave up, so [forgetOwnerAddress] at
+     * its erasure finds every tenant that names it. In the swap's transaction, after the account row's lock — the order
+     * the account's purge takes too (account, then tenant rows). Not a routing column: no reprojection.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun followOwnerAddress(oldAddress: String, newAddress: String) {
+        TenantEntity.update("ownerEmail = ?1 where ownerEmail = ?2", newAddress, oldAddress)
+    }
+
     /** Revoke a pending tenant: delete its invite history — the address its owner invite went to — then the tenant
      *  itself, with its erasure ledger line (ADR 0056 decision 8): a restore of an earlier capture would bring both back. */
     @Transactional

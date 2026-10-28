@@ -67,7 +67,8 @@ it, for a mistaken or coerced request; the person cannot sign in to do so. Thirt
 ### 4. What goes
 
 The `veyq_user` row (address, keys, wraps) and the address wherever it was copied (the invites sent to it, a login
-challenge, a tenant's record of whom its owner invite named), master key wraps, session families and their tokens, identity pins,
+challenge, a tenant's record of whom its owner invite named — which follows an address change, so it never keeps an
+address the account gave up), master key wraps, session families and their tokens, identity pins,
 recovery, device register and pairings, address confirmations and changes, the tenant profile in every tenant,
 every membership, the favorites (core's and Memories'), the moderator row and its grants, and the terms acceptance
 rows except as decision 6 keeps them. The browser that erased clears its own records for the address (session vault,

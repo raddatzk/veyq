@@ -55,8 +55,8 @@ pruned at B days.
 
 | Datum | Home | Basis | Kept | Erased by | Backup | Decided in |
 |---|---|---|---|---|---|---|
-| A tenant invite: the address it went to | `veyq_tenant_invite` | (b) | valid 7 days; a settled row goes 30 days after its expiry | `TenantInvitePurge`; an erased account's address at once | yes | [0006](../decisions/0006-cold-tenant-scope-birth.md) |
-| The address a tenant's first owner invite named | `veyq_tenant.owner_email` | (b) | while the tenant lives | blanked when the account with that **current** address is erased; the tenant's erasure | yes | 0101 decision 4 |
+| A tenant invite: the address it went to | `veyq_tenant_invite` | (b) | valid 7 days; a settled row goes 30 days after its expiry, also one to an address its account has since changed | `TenantInvitePurge`; an erased account's current address at once | yes | [0006](../decisions/0006-cold-tenant-scope-birth.md) |
+| The address a tenant's owner invite named | `veyq_tenant.owner_email` | (b) | while the tenant lives; it follows its account's address change (`EmailChangeHandler` → `TenantStore.followOwnerAddress`) | blanked when the account holding that address is erased; the tenant's erasure | yes | 0101 decision 4 |
 | A member's tenant profile: username, sealed name and picture | `veyq_tenant_profile` | (b) | while account and tenant live | `AccountPurge`; `TenantPurge` | yes | [0023](../decisions/0023-per-tenant-member-identity.md), [0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md) |
 | A membership: who added and who granted, when | `veyq_membership` | (b) | while the membership lives; `added_by` and the granter in another member's row outlive their account | `ScopePurge` | yes | [0007](../decisions/0007-membership-role-grant-relation.md) |
 | The terms acceptance history: one row per accepted (space revision, section revision), its time | `veyq_tenant_terms_acceptance` | (f) evidence of what a member accepted | while account and tenant live; after the account's erasure only while a moderation case names it, to that case's log date (`TermsEvidence`) | `AccountPurge` and its sweep of kept rows; the tenant's erasure (cascade) | yes | [0035](../decisions/0035-server-terms-of-service.md) decision 4, 0101 decision 6 |
@@ -164,9 +164,6 @@ the file are not re-applied. Whether ciphertext of reported content kept in a ca
 
 Found measuring this register; each is an inbox row.
 
-- **An old address outlives an address change** in `veyq_tenant.owner_email` (and in a settled invite until its purge):
-  the address change rewrites only `veyq_user.email`, and the account's erasure blanks only the current address
-  (`TenantStore.forgetOwnerAddress`). Inbox #591.
 - **`erasures.log` is trimmed to B only at startup** (`ErasureLedgerStart`; `ErasureLedgerFile.rewrite` has no other
   caller): an instance that runs for months keeps lines with account and moderator ids longer than B. Inbox #592.
 - **A tenant's erasure deletes terms evidence an account's erasure keeps**: `veyq_tenant_terms_acceptance` cascades
