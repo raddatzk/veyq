@@ -64,6 +64,64 @@ class RotationStageGrantEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<RotationStageGrantEntity, String>
 }
 
+/** One staged re-signed invite (ADR 0111 decision 20): the stage identity's `invite-key` and
+ *  anchor `grant` signatures over the invite at [anchorEpoch], verified at upload — or both null, a declared invite the
+ *  publish ends. Upserted by `(stage, invite)`. */
+@Entity
+@DynamicUpdate
+@Table(name = "veyq_rotation_stage_invite")
+class RotationStageInviteEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "stage_id", nullable = false, columnDefinition = "uuid")
+    lateinit var stageId: String
+
+    @Column(name = "invite_id", nullable = false, columnDefinition = "uuid")
+    lateinit var inviteId: String
+
+    @Column(name = "anchor_epoch", nullable = false)
+    var anchorEpoch: Int = 0
+
+    @Column(name = "invite_key_signature", columnDefinition = "TEXT")
+    var inviteKeySignature: String? = null
+
+    @Column(name = "anchor_grant_signature", columnDefinition = "TEXT")
+    var anchorGrantSignature: String? = null
+
+    companion object : PanacheCompanionBase<RotationStageInviteEntity, String>
+}
+
+/** One staged join-record endorsement (ADR 0111 decision 21): the stage identity's signature over the member's sealed record,
+ *  verified at upload — or null, a declared record — and the SHA-256 of the record it was staged against ([recordDigest],
+ *  base64), which the publish compares with the record it finds. Upserted by `(stage, tenant, member)`. */
+@Entity
+@DynamicUpdate
+@Table(name = "veyq_rotation_stage_endorsement")
+class RotationStageEndorsementEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "stage_id", nullable = false, columnDefinition = "uuid")
+    lateinit var stageId: String
+
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
+    lateinit var tenantId: String
+
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
+    lateinit var userId: String
+
+    @Column(name = "record_digest", nullable = false, length = 44)
+    lateinit var recordDigest: String
+
+    @Column(name = "endorsement", columnDefinition = "TEXT")
+    var endorsement: String? = null
+
+    companion object : PanacheCompanionBase<RotationStageEndorsementEntity, String>
+}
+
 /**
  * The pending re-key of one scope a publish re-granted (ADR 0111 decision 8): the epoch the scope had then. While the
  * scope's current epoch still equals [epochAtRotation], the account may commit the next one without being an owner

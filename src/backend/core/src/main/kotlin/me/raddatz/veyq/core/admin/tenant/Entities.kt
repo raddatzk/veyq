@@ -127,8 +127,8 @@ class TenantMailSettingsEntity : PanacheEntityBase {
  *
  * A MEMBER invite is a **placeholder member** (ADR 0111 decisions 1-2): it holds the invite key the owner signed and a
  * grant wrapped to it, the columns a membership's grant has. Every statement that moves an invite out of `ACTIVE` nulls
- * them in the same statement ([INVITE_KEY_DROPPED]), so an accepted, revoked, superseded or expired invite holds no key
- * and no grant.
+ * them in the same statement ([INVITE_KEY_DROPPED]), so an accepted, revoked, superseded or expired invite holds no key,
+ * no grant and no anchor.
  */
 @Entity
 @Table(name = "veyq_tenant_invite")
@@ -195,6 +195,19 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "granter_identity_public_key")
     var granterIdentityPublicKey: String? = null
 
+    /** The invite's anchor (ADR 0111 decision 19): the inviting owner's own grant of the tenant
+     *  key at [anchorEpoch], wrapped to the invite key, with the owner's `grant` signature over it — what the invitee
+     *  checks every carried grant against. Written at mint (equal to the grant), moved only by a tenant rotation the
+     *  signer commits (`TenantStore.carryInvites`), re-signed by the signer's securing, and dropped with the key. */
+    @Column(name = "anchor_wrapped_grant")
+    var anchorWrappedGrant: String? = null
+
+    @Column(name = "anchor_epoch")
+    var anchorEpoch: Int? = null
+
+    @Column(name = "anchor_grant_signature")
+    var anchorGrantSignature: String? = null
+
     companion object : PanacheCompanionBase<TenantInviteEntity, String> {
         const val ACTIVE = "ACTIVE"
         const val SUPERSEDED = "SUPERSEDED"
@@ -208,11 +221,11 @@ class TenantInviteEntity : PanacheEntityBase {
         /** The terminal states a scheduled purge may physically delete. */
         val TERMINAL = listOf(SUPERSEDED, CONSUMED, EXPIRED)
 
-        /** The assignments every status transition out of `ACTIVE` carries in its own bulk update: the invite's key
-         *  and grant go with its last chance to be redeemed. */
+        /** The assignments every status transition out of `ACTIVE` carries in its own bulk update: the invite's key,
+         *  grant and anchor go with its last chance to be redeemed. */
         const val INVITE_KEY_DROPPED =
             "invitePublicKey = null, inviteKeySignature = null, signerUserId = null, signerIdentityPublicKey = null, " +
                 "wrappedGrant = null, grantedEpoch = null, grantSignature = null, granterUserId = null, " +
-                "granterIdentityPublicKey = null"
+                "granterIdentityPublicKey = null, anchorWrappedGrant = null, anchorEpoch = null, anchorGrantSignature = null"
     }
 }

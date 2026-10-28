@@ -12,7 +12,7 @@ import {
   SOME_HEAD,
   type PinServerState,
 } from '../../test/pinStore'
-import { bundleB64, chainKeys, fakeKeyChains, genesis, headOf, servedIdentity, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
+import { bundleB64, chainKeys, fakeKeyChains, genesis, headOf, served, servedIdentity, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
 
 // The pin store's API + vault are mocked; the crypto (seal/open under the Master Key, the pin ids, the set digest, every
 // key-chain step) is REAL, so the tests prove a genuine round-trip, the per-entry refusals, the revision-guarded merge
@@ -27,6 +27,7 @@ vi.mock('../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn()
 import {
   anchorIdentity,
   anchorChainKey,
+  anchorServedChain,
   getPin,
   safetyNumber,
   safetyNumberOfFingerprint,
@@ -203,21 +204,32 @@ describe('anchorIdentity — first use and match (ADR 0028 Decision 2)', () => {
     expect(srv.writeIdentityPins).not.toHaveBeenCalled()
   })
 
-  it('`firstUse: served` pins the served head without a chain read; a pinned contact is still judged by the chain', async () => {
+  it('the inviting owner, by the chain an invite serves: a first use pins the walked head at its REAL index, no chain fetched (ADR 0111 decision 19)', async () => {
     const srv = fakeServer()
-    expect(await anchorIdentity(U1, { identityPublicKey: KEY_A, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).toBe('firstUse')
+    const secured = step(genesis(U1, A), B)
+    expect(await anchorServedChain(U1, served(secured), servedIdentity(secured))).toBe('firstUse')
     expect(chains.getKeyChain).not.toHaveBeenCalled()
-    expect(pinsOn(srv.state)[U1]).toMatchObject({ fingerprint: fp(KEY_A), head: SOME_HEAD })
-    // Pinned now: another head is read through the chain — none is served, so it is an anomaly, not a re-pin.
-    expect(await anchorIdentity(U1, { identityPublicKey: KEY_B, keyChainHead: headOf(genesis(U1, B)) }, { firstUse: 'served' })).toBe('anomaly')
-    expect(chains.getKeyChain).toHaveBeenCalledTimes(1)
-    expect(pinsOn(srv.state)[U1].head).toBe(SOME_HEAD)
+    expect(pinsOn(srv.state)[U1]).toMatchObject({ fingerprint: fp(KEY_B), head: headOf(secured), index: 1 })
+    // Again: a match, nothing written.
+    expect(await anchorServedChain(U1, served(secured), servedIdentity(secured))).toBe('match')
+    expect(srv.writeIdentityPins).toHaveBeenCalledTimes(1)
   })
 
-  it('`firstUse: served` refuses a served head that is not one (32 bytes)', async () => {
-    const srv = fakeServer()
-    expect(await anchorIdentity(U1, { identityPublicKey: KEY_A, keyChainHead: 'AAAA' }, { firstUse: 'served' })).toBe('anomaly')
+  it('the inviting owner: a pinned head must lie on the served chain and carry the pinned key — else an anomaly, the pin kept', async () => {
+    const born0 = genesis(U1, A)
+    const srv = fakeServer(storeOf({ [U1]: pinAt(born0) }, 1))
+    // Another chain for the same account (a key the operator holds), never through the pinned head.
+    const forged = genesis(U1, C)
+    expect(await anchorServedChain(U1, served(forged), servedIdentity(forged))).toBe('anomaly')
     expect(srv.writeIdentityPins).not.toHaveBeenCalled()
+    // A served key that is not the chain's end: the walk does not end at it.
+    const secured = step(born0, B)
+    expect(await anchorServedChain(U1, served(secured), { ...servedIdentity(secured), identityPublicKey: KEY_A })).toBe('anomaly')
+    expect(srv.writeIdentityPins).not.toHaveBeenCalled()
+    // Control: the owner's genuine step from the pinned head advances the pin.
+    expect(await anchorServedChain(U1, served(secured), servedIdentity(secured))).toBe('advanced')
+    expect(pinsOn(srv.state)[U1]).toMatchObject({ fingerprint: fp(KEY_B), head: headOf(secured), index: 1 })
+    expect(chains.getKeyChain).not.toHaveBeenCalled()
   })
 
   it('a head sealed at one revision does not open as another — a replayed head is refused as unreadable', async () => {
@@ -475,13 +487,6 @@ describe('in a tenant, the join record anchors the chain (ADR 0111 decisions 12,
     expect(pinsOn(srv.state)[U1]).toEqual(pinOf(KEY_C, 5, SOME_HEAD, { index: 1 }))
   })
 
-  it('a pin taken unread at an invite accept (index -1) and not on the chain is no replacement either', () => {
-    const h0 = genesis(U1, A)
-    const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
-    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: -1 }), U1, servedChain(h0), joined)).toEqual({ anchor: 'anomaly' })
-    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: 0 }), U1, servedChain(h0), joined)).toMatchObject({ anchor: 'replaced' })
-  })
-
   it('a pinned head ON the chain must carry the pinned key — another key there is an anomaly, never a replacement', () => {
     const { h0, h1 } = twoSteps()
     const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
@@ -710,6 +715,18 @@ describe('a withheld, added, rolled-back or moved entry is refused (ADR 0104 dec
     const entries = new Map([[idOf(OTHER), sealEntryAs(U1, pinOf(KEY_A), idOf(OTHER))]])
     fakeServer({ blob: headFor(entries, 2), revision: 2, entries })
     await expect(getPin(U1)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+  })
+
+  it('an entry with a negative chain index is refused as unreadable — every pin is taken from a walked chain', async () => {
+    // Nothing pins a head unread any more (the inviting owner is pinned from the chain the invite serves, ADR 0111
+    // decision 19), so an index below the genesis is no entry this account wrote.
+    const bad = new Map([[idOf(U1), sealEntryAs(U1, pinOf(KEY_A, 5, SOME_HEAD, { index: -1 }), idOf(U1))]])
+    fakeServer({ blob: headFor(bad, 2), revision: 2, entries: bad })
+    await expect(getPin(U1)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    // control: the same entry at the genesis opens
+    const good = new Map([[idOf(U1), sealEntryAs(U1, pinOf(KEY_A, 5, SOME_HEAD, { index: 0 }), idOf(U1))]])
+    fakeServer({ blob: headFor(good, 3), revision: 3, entries: good })
+    await expect(getPin(U1)).resolves.toMatchObject({ index: 0 })
   })
 
   it('a listing that does not advance is refused, not followed', async () => {

@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.WrapData
+import me.raddatz.veyq.core.identity.keychain.KeyChainLink
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.SignedGrant
@@ -49,7 +50,8 @@ data class OwnerBirth(val grant: SignedGrant, val recipientIdentityDigest: Strin
 /**
  * What a MEMBER accept brings (ADR 0111 decision 3): the grant the newcomer gave itself from its invite's grant — at
  * [epoch], naming the key it is wrapped to — the invite key's proof that its holder redeems it for this account and
- * key, and the join record sealed under the tenant key. All or nothing, like [OwnerBirth].
+ * key, the join record sealed under the tenant key, and the digest of the inviting owner's key the record names
+ * ([signerIdentityDigest], ADR 0111 decision 20). All or nothing, like [OwnerBirth].
  */
 data class MemberJoin(
     val selfGrant: SignedGrant,
@@ -57,18 +59,26 @@ data class MemberJoin(
     val recipientIdentityDigest: String,
     val inviteProof: String,
     val sealedJoinRecord: String,
+    val signerIdentityDigest: String,
 ) {
     companion object {
         fun of(
             wrappedGrant: String?, signature: String?, epoch: Int?, digest: String?, inviteProof: String?, sealedJoinRecord: String?,
+            signerIdentityDigest: String?,
         ): MemberJoin? =
-            if (wrappedGrant == null || signature == null || epoch == null || digest == null || inviteProof == null || sealedJoinRecord == null) null
-            else MemberJoin(SignedGrant(wrappedGrant, signature), epoch, digest, inviteProof, sealedJoinRecord)
+            if (wrappedGrant == null || signature == null || epoch == null || digest == null || inviteProof == null ||
+                sealedJoinRecord == null || signerIdentityDigest == null
+            ) null
+            else MemberJoin(SignedGrant(wrappedGrant, signature), epoch, digest, inviteProof, sealedJoinRecord, signerIdentityDigest)
     }
 }
 
 /** Why a MEMBER join was refused before anything was written, or null when it may go ahead. */
-private enum class JoinRefusal { MISSING, PROOF_INVALID, RECIPIENT_KEY_NOT_CURRENT, STALE_EPOCH }
+private enum class JoinRefusal { MISSING, PROOF_INVALID, INVITE_CHANGED, RECIPIENT_KEY_NOT_CURRENT, STALE_EPOCH }
+
+/** A MEMBER accept named another signer key than the invite's stored one: its owner secured their account since the
+ *  client checked it (ADR 0111 decision 20). The client re-reads the preview and accepts again. */
+private val inviteChanged: HttpFailure = httpFailure("invite_changed", FailureStatus.CONFLICT)
 
 sealed interface PreviewOutcome {
     data class Found(
@@ -84,6 +94,10 @@ sealed interface PreviewOutcome {
         val invite: TenantInviteEntity?,
         /** The key-chain heads of the invite's signer and granter (ADR 0111 decision 7), by user id. */
         val heads: Map<String, String> = emptyMap(),
+        /** The invite signer's whole key chain, genesis first (ADR 0111 decision 19). */
+        val signerChain: List<KeyChainLink> = emptyList(),
+        /** The tenant scope's epoch links for every epoch in `(anchorEpoch, grantedEpoch]`, ascending (ADR 0111 decision 19). */
+        val epochLinks: List<Pair<Int, String>> = emptyList(),
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
@@ -100,6 +114,7 @@ sealed interface AcceptOutcome {
     data object InviteProofInvalid : AcceptOutcome, HttpFailure by httpFailure("invite_proof_invalid", FailureStatus.FORBIDDEN)
     data object RecipientKeyNotCurrent : AcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     data object StaleEpoch : AcceptOutcome, HttpFailure by Failures.staleEpoch
+    data object InviteChanged : AcceptOutcome, HttpFailure by inviteChanged
 }
 
 /** Result of a member accepting an owner invite into an ACTIVE tenant (`acceptTenantOwnership`, ADR 0101 decision 9). */
@@ -122,6 +137,7 @@ sealed interface RegisterAcceptOutcome {
     data object InviteProofInvalid : RegisterAcceptOutcome, HttpFailure by httpFailure("invite_proof_invalid", FailureStatus.FORBIDDEN)
     data object RecipientKeyNotCurrent : RegisterAcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     data object StaleEpoch : RegisterAcceptOutcome, HttpFailure by Failures.staleEpoch
+    data object InviteChanged : RegisterAcceptOutcome, HttpFailure by inviteChanged
 }
 
 /**
@@ -160,6 +176,11 @@ class TenantAcceptHandler(
             handover = invite.role == TenantInviteEntity.OWNER && tenant.status == TenantEntity.ACTIVE,
             invite = served,
             heads = served?.let { store.keyChainHeads(listOfNotNull(it.signerUserId, it.granterUserId)) }.orEmpty(),
+            signerChain = served?.signerUserId?.let { store.keyChainOf(it) }.orEmpty(),
+            epochLinks = served?.let { i ->
+                val anchor = i.anchorEpoch ?: return@let null
+                store.epochLinks(tenant.id, anchor, i.grantedEpoch ?: return@let null)
+            }.orEmpty(),
         )
     }
 
@@ -220,11 +241,14 @@ class TenantAcceptHandler(
             when (refusal(join, invite, userId, caller.identityPublicKey, current)) {
                 JoinRefusal.MISSING -> return AcceptOutcome.MissingGrant
                 JoinRefusal.PROOF_INVALID -> return AcceptOutcome.InviteProofInvalid
+                JoinRefusal.INVITE_CHANGED -> return AcceptOutcome.InviteChanged
                 JoinRefusal.RECIPIENT_KEY_NOT_CURRENT -> return AcceptOutcome.RecipientKeyNotCurrent
                 JoinRefusal.STALE_EPOCH -> return AcceptOutcome.StaleEpoch
                 null -> Unit
             }
             val j = join!!
+            // Who rooted this join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
+            val signer = invite.signerUserId!!
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
             // If already a member, spending the invite is all there is (their tenant profile already exists — the
             // username is only chosen on a fresh join).
@@ -234,11 +258,11 @@ class TenantAcceptHandler(
                 // A member removed from the tenant and invited back: the profile outlived the removal, so they
                 // rejoin under the username they had rather than being handed a second one — with a new join record.
                 store.joinAsMember(tenant.id, userId, j.selfGrant, j.epoch)
-                profiles.setJoinRecord(userId, tenant.id, j.sealedJoinRecord)
+                profiles.setJoinRecord(userId, tenant.id, j.sealedJoinRecord, signer)
             } else {
                 if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
                 store.joinAsMember(tenant.id, userId, j.selfGrant, j.epoch)
-                profiles.create(userId, tenant.id, username, sealedName, sealedAvatar, j.sealedJoinRecord)
+                profiles.create(userId, tenant.id, username, sealedName, sealedAvatar, j.sealedJoinRecord, signer)
             }
             // A member invite only ever travels by mail (ADR 0055 §2), so redeeming it proves the mailbox — keyed on
             // the invite's ROLE, never on a delivery value (ADR 0074 Decision 2). Every MEMBER sub-branch above.
@@ -293,11 +317,14 @@ class TenantAcceptHandler(
             when (refusal(join, invite, userId, account.identityPublicKey, current)) {
                 JoinRefusal.MISSING -> return RegisterAcceptOutcome.MissingGrant
                 JoinRefusal.PROOF_INVALID -> return RegisterAcceptOutcome.InviteProofInvalid
+                JoinRefusal.INVITE_CHANGED -> return RegisterAcceptOutcome.InviteChanged
                 JoinRefusal.RECIPIENT_KEY_NOT_CURRENT -> return RegisterAcceptOutcome.RecipientKeyNotCurrent
                 JoinRefusal.STALE_EPOCH -> return RegisterAcceptOutcome.StaleEpoch
                 null -> Unit
             }
         }
+        // Who rooted a member's join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
+        val signer = invite.signerUserId
         if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
         // An owner invite into an ACTIVE tenant goes to a member (ADR 0101 decision 9), never to a new account: a tenant
@@ -330,21 +357,30 @@ class TenantAcceptHandler(
         // The per-tenant identity: the plaintext handle, plus what the joiner sealed under K_tenant, which it holds at
         // accept either way (ADR 0023, ADR 0111 decision 3) — the optional name and picture (ADR 0084 decision 7) and a
         // member's join record. The server stores the blobs verbatim (blind).
-        profiles.create(userId, tenant.id, username, sealedName, sealedAvatar, if (member) join?.sealedJoinRecord else null)
+        profiles.create(
+            userId, tenant.id, username, sealedName, sealedAvatar, if (member) join?.sealedJoinRecord else null,
+            if (member) signer else null,
+        )
         return RegisterAcceptOutcome.Activated(tenant.id, userId)
     }
 
     /**
      * What a MEMBER join must hold before anything is written (ADR 0111 decision 3), read under the tenant scope's lock:
      * all its parts; the invite key's proof that this account and identity redeem it, verified under the invite key the
-     * server stores (the operator could mint its own invite, but an honest server refuses a redeem by token alone); a
-     * self-grant addressed to [identityPublicKey], the account's key; and an epoch no later than the tenant's [current]
-     * one — an earlier one is a pending invite's, and leaves the membership behind for the grant delivery.
+     * server stores (the operator could mint its own invite, but an honest server refuses a redeem by token alone); the
+     * invite's signer key as stored now, named by the digest the client checked (ADR 0111
+     * decision 20: an owner who secured their account since would otherwise root a record naming a retired key, with no
+     * endorsement behind it); a self-grant addressed to [identityPublicKey], the account's key; and an epoch no later
+     * than the tenant's [current] one — an earlier one is a pending invite's, and leaves the membership behind for the
+     * grant delivery.
      */
     private fun refusal(join: MemberJoin?, invite: TenantInviteEntity, userId: String, identityPublicKey: String?, current: Int): JoinRefusal? {
         val j = join ?: return JoinRefusal.MISSING
         val key = identityPublicKey ?: return JoinRefusal.RECIPIENT_KEY_NOT_CURRENT
         if (!InviteAcceptProof.verify(invite.invitePublicKey, invite.id, userId, key, j.inviteProof)) return JoinRefusal.PROOF_INVALID
+        if (invite.signerUserId == null || !InviteAcceptProof.digestMatches(invite.signerIdentityPublicKey, j.signerIdentityDigest)) {
+            return JoinRefusal.INVITE_CHANGED
+        }
         if (!InviteAcceptProof.digestMatches(key, j.recipientIdentityDigest)) return JoinRefusal.RECIPIENT_KEY_NOT_CURRENT
         if (j.epoch > current) return JoinRefusal.STALE_EPOCH
         return null

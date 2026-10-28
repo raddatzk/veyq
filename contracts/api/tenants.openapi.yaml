@@ -2208,8 +2208,11 @@ paths:
       description: >
         Returns what the invitee is asked to accept (tenant name, domain, the invited owner email) and
         whether that email already has an account — so the client picks the sign-in vs. register path — and, for
-        a MEMBER invite, the invite key, its owner's signature and its grant (`invite`), which the invitee's client
-        checks against the link's sealed part before it trusts any of it (ADR 0111 decision 1).
+        a MEMBER invite, the invite key, its owner's signature and key chain, the owner's anchor grant, the grant the
+        invite carries now and the epoch links between the two (`invite`), which the invitee's client checks against
+        the link's sealed part before it trusts any of it (ADR 0111 decisions 1
+        and 19). Serving the owner's chain here hands the holder of the token public keys and signatures, as
+        `getKeyChain` serves them to a co-member.
         Public: gated only by possession of the bootstrap secret (the URL-fragment token), which is matched
         by hash and never echoed back. A replayed superseded/consumed/expired secret is 410.
       requestBody:
@@ -2319,7 +2322,9 @@ paths:
             A conflict — the tenant is already active (`tenant_not_pending`), the chosen `username` is already
             taken in this tenant (`username_taken`), the self-grant names an epoch above the tenant scope's current
             one (`stale_epoch`), or its (or an OWNER invite's tenant birth's) `recipientIdentityDigest` is not the caller's current identity key
-            (`recipient_key_not_current`). The specific case is in the response `code`.
+            (`recipient_key_not_current`), or a MEMBER invite's `signerIdentityDigest` is not the invite's stored signer
+            key (`invite_changed`: its owner secured their account since the client checked it — re-read the preview,
+            re-check, accept again). The specific case is in the response `code`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2463,8 +2468,10 @@ paths:
             A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
             chosen `username` is already taken in this tenant (`username_taken`), the `userId` is already taken
             (`id_taken`), the self-grant names an epoch above the tenant scope's current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's)
-            `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`). The
-            specific case is in `code`.
+            `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`), or a MEMBER
+            invite's `signerIdentityDigest` is not the invite's stored signer key (`invite_changed`: its owner secured
+            their account since the client checked it — re-read the preview, re-check, accept again). The specific
+            case is in `code`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2847,7 +2854,8 @@ components:
             The inviting owner's Ed25519 identity signature over `encode(invite-key: tenantId, inviteId,
             sha256(invitePublicKey), expiresAt in Unix seconds)`. The server verifies it under the caller's stored
             identity key before it mints (`400 invalid_request`) — so a session without the owner's unlocked vault mints
-            no invite — and stores it beside that key; the invitee checks it against the fingerprint inside the link's seal.
+            no invite — and stores it beside that key; the invitee checks it under the key the owner's chain reaches from the
+            head inside the link's seal.
           contentEncoding: base64
           maxLength: 128
           example: c2lnbmF0dXJl
@@ -2866,7 +2874,8 @@ components:
           type: string
           description: >
             The link's sealed part: `mode ‖ kdfParams ‖ seal(invite-link: tenantId, inviteId)` of the invite key's seed,
-            the owner's fingerprint hash and account, under `Argon2id(code or password, salt)`. The server appends its
+            the head of the owner's key chain and the owner's account (payload version 2, the `invite_link` crypto
+            vector), under `Argon2id(code or password, salt)`. The server appends its
             base64url form to the mailed link's fragment after the token (`#<token>.<sealed>`) and keeps no copy; the
             code never reaches it.
           contentEncoding: base64
@@ -3588,10 +3597,12 @@ components:
     ServedMemberInvite:
       type: object
       description: >
-        A member invite as its invitee reads it. Every byte is the server's word until the invitee's client checked it:
-        the invite key must be the one the link's seed derives, the signer's key must hash to the fingerprint inside the
-        link's seal, and the signature must verify under it.
-      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, signerKeyChainHead, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey, granterKeyChainHead]
+        A member invite as its invitee reads it. Every byte is the server's word until the invitee's client checked it
+        (`checkInvite`, ADR 0111 decision 19): the invite key must be the one the link's seed
+        derives; the signer's chain must pass through the head inside the link's seal and end at the served signer key,
+        which must have signed the invite key and the anchor; and the tenant key the grant carries must be the anchor's
+        or one the epoch links peel down to it.
+      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, signerKeyChain, anchorWrappedGrant, anchorEpoch, anchorGrantSignature, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey, granterKeyChainHead, epochLinks]
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -3606,7 +3617,9 @@ components:
           example: aW52aXRlLXB1YmxpYy1rZXk=
         inviteKeySignature:
           type: string
-          description: The inviting owner's `invite-key` signature over it.
+          description: >
+            The inviting owner's `invite-key` signature over it, by the key `signerIdentityPublicKey` names — the one at
+            mint, or the one an owner's securing re-signed it with (ADR 0111 decision 20).
           contentEncoding: base64
           maxLength: 128
           example: c2lnbmF0dXJl
@@ -3625,23 +3638,48 @@ components:
         signerIdentityPublicKey:
           type: string
           description: >
-            The inviting owner's identity public bundle as it was when they signed. The invitee checks it against the
-            fingerprint inside the link's seal.
+            The inviting owner's identity public bundle that signed the invite key and the anchor now. The invitee
+            requires it to be the newest key of `signerKeyChain`, byte for byte (`signer_chain_mismatch`).
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
-        signerKeyChainHead:
+        signerKeyChain:
+          type: array
+          description: >
+            The inviting owner's whole key chain, genesis first, as `getKeyChain` serves it to a co-member (ADR 0111
+            decision 7) — public keys and signatures, served here to the holder of the invite token because the invitee
+            is no co-member yet. The invitee walks it from the head inside the link's seal: a later key is reached only
+            through steps the retired Secret-Key proof key signed, so an owner who secured their account after signing
+            is accepted at the new key and a retired key never.
+          items: { $ref: "scopes.openapi.yaml#/components/schemas/KeyChainStep" }
+        anchorWrappedGrant:
           type: string
           description: >
-            The head of the inviting owner's key chain now (ADR 0111 decision 7). The invitee pins it with the signer —
-            and refuses the invite when the key at that head is not the one the link's fingerprint names: an owner who
-            secured their account since signing ended their open invites (cr-secure-the-account).
+            The invite's anchor: the inviting owner's own grant of the tenant scope's key at `anchorEpoch`, sealed to the
+            invite key — written at mint and reissue, and moved only by a scope rotation the owner commits. Whatever grant
+            the invite carries must lead back to the key inside it (`E_a`).
           contentEncoding: base64
-          maxLength: 64
-          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDE=
+          maxLength: 8192
+          example: AQ==
+        anchorEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The tenant scope epoch whose key the anchor carries — at most `grantedEpoch`.
+          minimum: 0
+          example: 0
+        anchorGrantSignature:
+          type: string
+          description: >
+            The inviting owner's `grant` signature over the anchor (recipient = the invite id and the invite bundle), by
+            the key `signerIdentityPublicKey` names — any other is refused (`anchor_invalid`).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
         wrappedGrant:
           type: string
-          description: The invite's grant — the tenant scope's epoch key at `grantedEpoch`, sealed to the invite key.
+          description: >
+            The grant the invite carries now — the tenant scope's epoch key at `grantedEpoch`, sealed to the invite key:
+            the anchor itself (byte for byte, when `grantedEpoch` is `anchorEpoch`), or one a later rotation re-wrapped.
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
@@ -3667,18 +3705,29 @@ components:
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
         granterIdentityPublicKey:
           type: string
-          description: The granter's identity public bundle as it signed.
+          description: >
+            The granter's identity public bundle as it signed. A grant above the anchor must verify under it; the key
+            needs no anchor of its own, because the epoch links tie the grant's key to the owner's anchor.
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
         granterKeyChainHead:
           type: string
           description: >
-            The head of the granter's key chain now (ADR 0111 decision 7) — what the invitee's client walks the
-            granter's chain to before it accepts the grant from a granter other than the inviting owner.
+            The head of the granter's key chain now (ADR 0111 decision 7) — what an invitee that already pinned this
+            granter walks its chain to (a key the chain does not reach, or a retired one, refuses the invite). A granter
+            it never met is not pinned from here: the epoch links, not the granter's key, vouch for the grant.
           contentEncoding: base64
           maxLength: 64
           example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
+        epochLinks:
+          type: array
+          description: >
+            The tenant scope's epoch-chain links (ADR 0024) for every epoch in `(anchorEpoch, grantedEpoch]`, ascending —
+            empty when the grant is the anchor. The invitee peels them from the carried grant's key down to
+            `anchorEpoch` and takes the key only if that yields exactly the anchor's (`epoch_unlinked`): the operator
+            holds no `E_a`, so no link it makes ends there.
+          items: { $ref: "scopes.openapi.yaml#/components/schemas/ScopeEpochLink" }
 
     AcceptOwnershipRequest:
       type: object
@@ -3783,6 +3832,19 @@ components:
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        signerIdentityDigest:
+          type: [string, "null"]
+          description: >
+            **Required for a MEMBER invite.** SHA-256 of the inviting owner's identity bundle the join record names —
+            the signer key the newcomer's client checked (ADR 0111 decision 20). The server
+            compares it with the invite's stored signer key under the tenant scope's lock and refuses another (`409
+            invite_changed`): the owner secured their account between the client's check and this accept, so the
+            record would name a key their securing retired, with no endorsement behind it. The client re-reads the
+            preview, re-runs its checks with the invite key and the link facts it kept, and accepts once more.
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >
@@ -4069,6 +4131,19 @@ components:
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        signerIdentityDigest:
+          type: [string, "null"]
+          description: >
+            **Required for a MEMBER invite.** SHA-256 of the inviting owner's identity bundle the join record names —
+            the signer key the newcomer's client checked (ADR 0111 decision 20). The server
+            compares it with the invite's stored signer key under the tenant scope's lock and refuses another (`409
+            invite_changed`): the owner secured their account between the client's check and this accept, so the
+            record would name a key their securing retired, with no endorsement behind it. The client re-reads the
+            preview, re-runs its checks with the invite key and the link facts it kept, and accepts once more.
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >

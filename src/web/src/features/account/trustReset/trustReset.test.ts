@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
 import { fakeApi } from '../../../test/apiMock'
-import { fakePinServer, identityKey, pinOf, pinsOn, sealPinStore, SOME_HEAD, type PinServerState } from '../../../test/pinStore'
+import { fakePinServer, identityKey, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
 import type { AccountDeviceRegisterApi, DeviceRegister } from '../../../api/generated/account'
 
 // Starting a refused trust document over (ADR 0028 Decision 7's way back, inbox #192). The endpoints and the vault
@@ -19,7 +19,8 @@ vi.mock('../../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.f
 
 import { resetAccountDocument } from './trustReset'
 import { refusedDocuments } from './refusedDocuments'
-import { anchorIdentity, forgetVerifiedPins, getPin } from '../identityPins'
+import { anchorServedChain, forgetVerifiedPins, getPin } from '../identityPins'
+import { chainKeys, genesis, served, servedIdentity } from '../../../test/keyChain'
 import { readRegisterView } from '../deviceRegister'
 import { raiseMarks, readMarks } from '../trustMarks'
 import { accountDeviceRegisterApi, accountIdentityPinsApi } from '../../../api/client'
@@ -33,6 +34,7 @@ const dec = new TextDecoder()
 const GARBAGE = b64std(v1.randomBytes(64))
 const U1 = 'c0ffee00-0000-4000-8000-0000000000a1'
 const KEY = identityKey()
+const U1_CHAIN = genesis(U1, chainKeys())
 
 type Doc = 'pins' | 'register'
 // The pin store is a head plus entries (ADR 0104), the register one blob: each document's served copy is its own shape.
@@ -175,11 +177,11 @@ describe('what the reset buys, and what it costs (ADR 0028 Decision 7)', () => {
   it('after starting the pins over, a contact reads as first use again', async () => {
     await raiseMarks(MK, { pins: 3 })
     fakeServer({ pins: garbage('pins', 3) })
-    await expect(anchorIdentity(U1, { identityPublicKey: KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    await expect(anchorServedChain(U1, served(U1_CHAIN), servedIdentity(U1_CHAIN))).rejects.toMatchObject({ code: 'trust_state_unreadable' })
 
     await resetAccountDocument('pins')
 
-    expect(await anchorIdentity(U1, { identityPublicKey: KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).toBe('firstUse')
+    expect(await anchorServedChain(U1, served(U1_CHAIN), servedIdentity(U1_CHAIN))).toBe('firstUse')
   })
 
   it('past the bound of stale writes it rejects, and the mark is unchanged', async () => {

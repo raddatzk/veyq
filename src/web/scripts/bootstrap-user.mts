@@ -23,6 +23,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { fromB64std } from '@veyq/crypto/base64'
+import { keyChainGenesisStatement, keyChainHead, serializeIdentityPublic } from '@veyq/crypto/v1'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { generateInviteCode, parseInviteFragment } from '@veyq/crypto/invite'
 import { DEFAULT_INVITE_TTL_SECONDS, sealMemberInvite } from '../src/features/spaces/memberInvite'
@@ -177,9 +178,15 @@ async function onboardUser2(): Promise<void> {
   const cursor = await mailCursor(u2Email)
   const code = generateInviteCode()
   const mine = (await orThrow('listMyTenants', new ScopesApi(new ScopesConfiguration(onTenant)).listMyTenants())).find((t) => t.tenantId === tenantId)
+  // The owner was born above and never secured the account: its chain is the genesis step, and the link carries its head
+  // (ADR 0111 decision 19) as the web client's `myChainHead` would serve it.
+  const ownerHead = keyChainHead(keyChainGenesisStatement(ownerId, {
+    identityPublicKey: serializeIdentityPublic(built.identity.pub),
+    secretKeyProofPublicKey: fromB64std(built.material.secretKeyProofPublicKey),
+  }))
   const memberInviteRequest = await sealMemberInvite(
     tenantId, u2Email, { mode: 'code', code },
-    { userId: ownerId, pub: built.identity.pub, signPrivateKey: built.identity.priv.sign },
+    { userId: ownerId, pub: built.identity.pub, head: ownerHead, signPrivateKey: built.identity.priv.sign },
     { epoch: 0, key: tenantScopeKey }, mine?.memberInviteTtlSeconds ?? DEFAULT_INVITE_TTL_SECONDS,
   )
   await orThrow('inviteTenantMember', tenantsApi.inviteTenantMember({ tenantId, memberInviteRequest }))

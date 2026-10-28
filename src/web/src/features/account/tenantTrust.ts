@@ -90,9 +90,14 @@ function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs
  *  - no join record → `root` for an owner the server lists, `unanchored` for anyone else (a membership the server made);
  *  - a join record → `joined` when it opened, verifies (`invite.joinRecordVerifies`: the owner's signature over the invite
  *    key, the invite key's and the newcomer's over the record), names another member the server lists as an OWNER as its
- *    signer, and that signer's key in it is anchored in this tenant in turn ({@link anchorChainKey} with this view — a
- *    retired key of theirs included, since an owner who secured their account after inviting keeps their members);
+ *    signer, and that signer's key in it is anchored in this tenant in turn ({@link anchorChainKey} with this view);
  *    `unanchored` otherwise. A cycle of signers anchors nobody.
+ *  - **a record a retired key signed** (ADR 0111 decision 21): when the key the record names is
+ *    not the signer's served current one — a retired key of their chain, at or after their join — it counts only through
+ *    the signer's endorsement: the member's `joinEndorsement` must verify under the signer's served current key, over
+ *    the sealed record as stored, and that key must be anchored in this tenant ({@link anchorIdentity} with this view).
+ *    An owner's securing endorses every record it rooted (`rotateKeys`), so its members stay; a record a thief signs with
+ *    the retired key afterwards never carries an endorsement by the key the thief lacks.
  */
 export async function loadTenantView(tenantId: string, open: TenantOpener = openScopeById): Promise<TenantView> {
   let opened: OpenedScope | null = null
@@ -141,12 +146,33 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
     if (visiting.has(userId)) return UNANCHORED
     visiting.add(userId)
     try {
-      const judged = await anchorChainKey(record.signerUserId, b64std(record.signerIdentityPublicKey), { tenant: view })
+      const signerKey = b64std(record.signerIdentityPublicKey)
+      const judged = await anchorChainKey(record.signerUserId, signerKey, { tenant: view })
       if (judged.anchor === 'anomaly') return UNANCHORED
+      if ((judged.retired || signerKey !== signer.identityPublicKey) && !(await endorsedBySigner(m, signer))) return UNANCHORED
     } finally {
       visiting.delete(userId)
     }
     return { kind: 'joined', identityPublicKey: record.identityPublicKey, secretKeyProofPublicKey: record.secretKeyProofPublicKey }
+  }
+  /** Whether [m]'s join endorsement verifies under [signer]'s served current key, over [m]'s sealed record as stored,
+   *  that key anchored in this tenant (ADR 0111 decision 21). False — never a throw — for anything malformed. */
+  async function endorsedBySigner(m: ScopeMember, signer: ScopeMember): Promise<boolean> {
+    if (!m.joinEndorsement || !m.sealedJoinRecord) return false
+    let signKey: Uint8Array
+    let verifies: boolean
+    try {
+      signKey = v1.deserializeIdentityPublic(fromB64std(signer.identityPublicKey)).sign
+      verifies = invite.joinEndorsementVerifies(
+        signKey,
+        { tenantId, userId: m.userId, signerUserId: signer.userId, sealedJoinRecord: fromB64std(m.sealedJoinRecord) },
+        fromB64std(m.joinEndorsement),
+      )
+    } catch {
+      return false
+    }
+    if (!verifies) return false
+    return (await anchorIdentity(signer.userId, servedOf(signer), { tenant: view })) !== 'anomaly'
   }
   return view
 }

@@ -111,10 +111,21 @@ object TestGrants {
     const val SEALED_LINK = "c2VhbGVkLWxpbms+Pz8/"
 
     /** A MEMBER accept's join fields as JSON members (no braces): a self-grant at [epoch] addressed to
-     *  [identityPublicKeyB64], the invite key's proof for [userId], and a stand-in join record. */
-    fun memberJoinJson(key: TestInviteKey, inviteId: String, userId: String, identityPublicKeyB64: String, epoch: Int = 0): String =
+     *  [identityPublicKeyB64], the invite key's proof for [userId], a stand-in join record, and the digest of the signer
+     *  key the record names ([signerIdentityDigest]; by default the invite's stored signer key, read at call time —
+     *  what an honest client checked, ADR 0111 decision 20). */
+    fun memberJoinJson(
+        key: TestInviteKey, inviteId: String, userId: String, identityPublicKeyB64: String, epoch: Int = 0,
+        signerIdentityDigest: String = storedSignerDigest(inviteId),
+    ): String =
         """"selfGrant":{"wrappedGrant":"$WRAPPED",$SIGNATURE_JSON,"epoch":$epoch,"recipientIdentityDigest":"${digest(identityPublicKeyB64)}"},""" +
-            """"inviteProof":"${key.proof(inviteId, userId, identityPublicKeyB64)}","sealedJoinRecord":"$JOIN_RECORD""""
+            """"inviteProof":"${key.proof(inviteId, userId, identityPublicKeyB64)}","sealedJoinRecord":"$JOIN_RECORD",""" +
+            """"signerIdentityDigest":"$signerIdentityDigest""""
+
+    /** The digest of [inviteId]'s stored signer key — of a stand-in when the invite holds none (ended, or no invite), so
+     *  a request about such an invite stays well-formed and meets the refusal its test is about. */
+    fun storedSignerDigest(inviteId: String): String =
+        digest(QuarkusTransaction.requiringNew().call<String?> { TenantInviteEntity.findById(inviteId)?.signerIdentityPublicKey } ?: WRAPPED)
 }
 
 /**

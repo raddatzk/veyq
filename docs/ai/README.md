@@ -327,6 +327,12 @@ A refined CR nails **decisions, not keystrokes**:
   phase found the invariant false — the operator reads who verified whom and when. A refine that claims a record tells
   the server nothing lists the columns it is addressed and filtered by, and either accepts them as metadata or addresses
   it by an opaque id.
+- **A residual is priced only after the check it leans on is probed.** ADR 0111 stated that an invitee "refuses" an
+  invite whose signer is not the key at the served head, and that "every new epoch must still link to the one held";
+  a ten-line probe on `main` showed neither check exists (cr-trust-anchors-survive-rotation's refine, 2026-10-28) — the
+  first made the owner's-rotation row look like an availability question when a thief with the operator could plant a
+  key, the second hid a member-side gap (inbox #650). A refine that weighs a residual writes the attack as a test
+  against the untouched tree first, and quotes its result.
 - **A gated read lists every caller the change sends to it.** The same CR served the key chain to a person's tenant
   co-members, and the anchor check it built reads that chain from an invite accept (not a co-member yet) and from
   moderation delivery (moderators may share no tenant): the first was designed around in implementation, the second

@@ -387,7 +387,7 @@ paths:
               head: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
               put:
                 - pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7
-                  entry: c2VhbGVkLXBpbi1lbnRyeQ==
+                  entry: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
               remove: []
               replaceAll: false
       responses:
@@ -603,7 +603,8 @@ paths:
         (an unspent envelope carries the *old* Master Key and a live delegated session); void every open change of the
         sign-in address (its proof was taken under the old proof key); delete the declines of every `grant-delivery`
         job whose target is this account (a worker that could not anchor the old key tries the new one); revoke every
-        other session; and **apply the stage** `stageId`.
+        other session; and **apply the stage** `stageId` — its self-grants, its re-signed invites and its join-record
+        endorsements (ADR 0111 decisions 20 and 21).
 
         **The stage is applied here and nowhere else.** Under the account lock the server takes the stage: missing,
         expired, of another account, or declaring another identity bundle than `identityPublicKey` is
@@ -617,6 +618,27 @@ paths:
         grant for a scope the account no longer holds a grant on is not written, and an unreadable scope keeps its
         grant untouched and gets no row. The stage is deleted in the same transaction. From the moment this commits,
         every scope the account holds a grant on holds a grant of its current epoch to the published identity.
+
+        **The caller's open invites survive, re-signed** (ADR 0111 decision 20). Under the tenant scope locks it already takes, the
+        server requires every ACTIVE, unexpired member invite the caller signed, in every tenant, to be staged
+        (`putRotationStageInvites`) at its current anchor epoch — `409 rotation_plan_changed` otherwise, nothing written
+        (an invite minted, or an anchor moved, after staging). It writes each one's `invite-key` signature and anchor
+        grant signature from the stage and the new identity as the invite's signer key — and, where the grant the invite
+        carries is its anchor (the same epoch, the caller its granter), that grant's signature and granter key too. So
+        the invite's newcomer checks it under the key this publish installs, and the rotation the account commits next
+        carries it (the rotator is its signer: its anchor moves to the new epoch). An invite staged **declared** (both
+        signatures `null`: one the client found its outgoing key never signed) is **ended** instead, in the statement
+        every ending uses — revoked, its key, grant and anchor dropped — so no invite keeps a retired key's signature and
+        one the operator minted cannot block the caller's securing.
+
+        **The join records the caller rooted are endorsed or declared** (ADR 0111 decision 21). The server requires every tenant
+        profile whose join the caller rooted (`join_signer_user_id`) and that holds a join record to be staged
+        (`putRotationStageJoinEndorsements`), endorsed or declared — `409 rotation_plan_changed` otherwise, nothing
+        written, which also catches an accept between staging and the publish — and writes each profile's
+        `joinEndorsement` from the stage (`null` for a declared one). So a record the retired key signed keeps counting
+        only through the new key's endorsement, and one a thief signs with the retired key afterwards never counts.
+        Neither list widens `stagedGrantsDigest`: a re-signed invite and an endorsement hand nobody a key, each carries
+        the new identity's own signature verified at upload, and the publish installs only that identity (ADR 0111 decision 21).
 
         **One mode, and the request cannot express another.** There is no `mode`, no `identityOnly`, no `scopes`
         subset, and every field is required. Every path to the identity private key runs through the Master Key, so an
@@ -698,9 +720,10 @@ paths:
             `deviceRegister` is no longer the stored one (another device wrote it meanwhile); the client re-reads,
             re-seals and resubmits with the same new keys and the same signatures, which do not cover the two
             documents. `rotation_plan_changed` — the stage is missing, expired or declares another identity, its digest
-            is not `stagedGrantsDigest`, or a membership that carries a grant is neither staged at its scope's current
-            epoch nor in `unreadableScopeIds`; the client re-reads the plan, re-stages the delta (or opens a new stage)
-            and resubmits. **Nothing was written** in any case — a half-rotated account is a lockout, not a degraded
+            is not `stagedGrantsDigest`, a membership that carries a grant is neither staged at its scope's current
+            epoch nor in `unreadableScopeIds`, an open member invite the caller signed is not staged at its current
+            anchor epoch, or a join record the caller rooted is neither endorsed nor declared in the stage; the client
+            re-reads the plans, re-stages the delta (or opens a new stage) and resubmits. **Nothing was written** in any case — a half-rotated account is a lockout, not a degraded
             state.
           content:
             application/json:
@@ -875,6 +898,232 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: self_grant_invalid }
+
+  /api/account/rotation/plan/invites:
+    get:
+      tags: [account-rotation]
+      operationId: getRotationPlanInvites
+      summary: Every open member invite the caller signed, in every tenant — what a securing of the account re-signs.
+      description: >
+        Host-independent (ADR 0111 decision 20): one entry per ACTIVE, unexpired member invite
+        whose signer is the caller, in **every** tenant, with what its two signatures cover — the invite key and expiry
+        (the `invite-key` statement) and the anchor grant at its epoch (the `grant` statement, kind `TENANT`, the invite
+        as recipient) — and the two signatures the caller's current key made. The client re-signs both statements with
+        the identity it is about to publish and stages them (`putRotationStageInvites`) — **only** for an invite whose
+        two current signatures verify under its own outgoing identity: the list is the server's word, and re-signing an
+        invite the caller never signed would vouch for an invite key and a tenant key the operator chose; any other it
+        stages declared (both signatures `null`), and the publish ends it. Operator-blind:
+        public keys, signatures and ciphertext the server already serves the invite's holder.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: One entry per open member invite the caller signed, in every tenant.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RotationPlanInvite" }
+              example:
+                - tenantId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+                  inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+                  invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+                  expiresAt: 2026-07-11T12:00:00Z
+                  inviteKeySignature: c2lnbmF0dXJl
+                  anchorWrappedGrant: AQ==
+                  anchorEpoch: 0
+                  anchorGrantSignature: c2lnbmF0dXJl
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/rotation/plan/join-records:
+    get:
+      tags: [account-rotation]
+      operationId: getRotationPlanJoinRecords
+      summary: Every join record the caller rooted, in every tenant — what a securing of the account endorses or declares.
+      description: >
+        Host-independent (ADR 0111 decision 21): one entry per tenant profile whose join the
+        caller rooted (the signer of the invite it was accepted through) and that holds a join record, in **every**
+        tenant — the member, the sealed record as stored and the endorsement it carries now. The client opens each with
+        the tenant's epoch keys (the plan opener) and endorses it with the identity it is about to publish **only** when
+        the record verifies, names the caller as its signer, and either names the caller's outgoing key or carries an
+        endorsement that verifies under it; any other it declares (`endorsement: null`): a record it cannot open, or one a
+        retired key signed without an endorsement — exactly what must not be carried. Operator-blind: ciphertext and
+        signatures the server already serves every member of the tenant (`ScopeMember.sealedJoinRecord`,
+        `ScopeMember.joinEndorsement`), and the fact that the caller invited the member, which it recorded at the accept.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: One entry per join record the caller rooted, in every tenant.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RotationPlanJoinRecord" }
+              example:
+                - tenantId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+                  userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+                  sealedJoinRecord: c2VhbGVkLWpvaW4tcmVjb3Jk
+                  joinEndorsement: null
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/rotation/stage/{stageId}/invites:
+    put:
+      tags: [account-rotation]
+      operationId: putRotationStageInvites
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder stages into their own stage, and an invite staged twice is two signatures
+          by the stage's identity over the same statements. What the publish applies is checked there against every
+          open invite the caller signed, under the tenant scope locks.
+      summary: Stage one chunk of re-signed open invites into the caller's open stage.
+      description: >
+        Upserts up to 256 re-signed invites into the stage, by `inviteId` (ADR 0111 decision 20).
+        Each carries the identity the stage declares' signature over the invite's `invite-key` statement (the tenant,
+        the invite, SHA-256 of its stored invite bundle, its stored expiry) and over its anchor grant's `grant` statement
+        (kind `TENANT`, `anchorEpoch`, the invite as recipient, the stored anchor grant): both are **verified here**,
+        under that bundle, over what the server stores — `422 invite_resign_invalid` otherwise. An entry whose two
+        signatures are both `null` **declares** the invite instead: the client found that its two current signatures do
+        not verify under its own outgoing identity (the plan is the server's word), so it vouches for nothing, and the
+        publish ends the invite rather than leaving it signed by a retired key. One signature without the other is `400
+        invalid_request`. An invite the caller did not sign, that is not open, or whose anchor epoch is no longer
+        `anchorEpoch` is `409 rotation_plan_changed`, declared or not. A re-signed invite hands nobody a key, so the stage
+        digest does not cover it (ADR 0111 decision 21). Nothing of a refused chunk is written; nothing staged is applied before
+        the publish.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: stageId, in: path, required: true, description: The stage `openRotationStage` answered., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RotationStageInvites" }
+      responses:
+        "204":
+          description: The chunk is staged.
+        "400":
+          description: >
+            The request was malformed (more than 256 invites, a missing, oversized or non-base64 field, or an entry with
+            one signature `null` and the other not).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No open stage of the caller has this id — unknown, expired, replaced, or another account's (indistinguishable,
+            `rotation_stage_not_found`). The client opens a new stage and stages everything again. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_stage_not_found }
+        "409":
+          description: >
+            An invite the caller did not sign, that is not open (consumed, revoked, superseded or expired — or no invite at
+            all, the same answer), or whose anchor epoch is no longer `anchorEpoch` (`rotation_plan_changed`); the client
+            re-reads the plan. Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_plan_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            A re-signed `invite-key` or anchor `grant` signature does not verify under the identity the stage declares,
+            over the statement the server rebuilt from what it stores (`invite_resign_invalid`). Nothing of the chunk was
+            written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_resign_invalid }
+
+  /api/account/rotation/stage/{stageId}/join-endorsements:
+    put:
+      tags: [account-rotation]
+      operationId: putRotationStageJoinEndorsements
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder stages into their own stage, and a profile staged twice is the same
+          record endorsed or declared by the stage's identity. What the publish applies is checked there against every
+          join record the caller rooted.
+      summary: Stage one chunk of join-record endorsements (or declarations) into the caller's open stage.
+      description: >
+        Upserts up to 256 entries into the stage, by (`tenantId`, `userId`) (ADR 0111 decision
+        21). A non-null `endorsement` is the identity the stage declares' signature over the `join-endorsement` statement
+        (the tenant, the member, the caller as signer, SHA-256 of the member's sealed join record **as stored**; the
+        `join_endorsement` crypto vector) — **verified here**, under that bundle, over the stored record:
+        `422 join_endorsement_invalid` otherwise. A `null` one declares the record: the publish clears its endorsement.
+        A profile whose join the caller did not root, or that holds no join record, is `409 rotation_plan_changed`. An
+        endorsement hands nobody a key, so the stage digest does not cover it (ADR 0111 decision 21). Nothing of a refused chunk
+        is written; nothing staged is applied before the publish.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: stageId, in: path, required: true, description: The stage `openRotationStage` answered., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RotationStageJoinEndorsements" }
+      responses:
+        "204":
+          description: The chunk is staged.
+        "400":
+          description: The request was malformed (more than 256 entries, a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No open stage of the caller has this id — unknown, expired, replaced, or another account's (indistinguishable,
+            `rotation_stage_not_found`). The client opens a new stage and stages everything again. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_stage_not_found }
+        "409":
+          description: >
+            A profile whose join the caller did not root, or that holds no join record — or no such profile, the same
+            answer (`rotation_plan_changed`); the client re-reads the plan. Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_plan_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            An endorsement does not verify under the identity the stage declares, over the statement the server rebuilt
+            from the stored sealed record (`join_endorsement_invalid`). Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: join_endorsement_invalid }
 
   /api/account/rotation/scopes:
     get:
@@ -1670,7 +1919,7 @@ components:
       example:
         revision: 3
         head: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
-        put: [{ pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7, entry: c2VhbGVkLXBpbi1lbnRyeQ== }]
+        put: [{ pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7, entry: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= }]
         remove: []
         replaceAll: false
       properties:
@@ -1734,11 +1983,14 @@ components:
         entry:
           type: string
           description: >
-            The pin sealed under the Master Key, bound to its `pinId` (opaque base64). Every entry seals to one length.
+            The pin sealed under the Master Key, bound to its `pinId` (opaque base64). Every entry seals to one length:
+            the 192-byte padded entry sealed is 221 bytes, exactly 296 base64 characters (the `identity_pin` crypto
+            vector) — so the largest rotation body is exact, not estimated (ADR 0111 decision 22).
           contentEncoding: base64
-          maxLength: 512
-          example: c2VhbGVkLXBpbi1lbnRyeQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 296
+          maxLength: 296
+          example: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 296, max = 296) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     IdentityPinId:
       x-veyq-visibility: id
@@ -2219,6 +2471,203 @@ components:
           maxLength: 64
           example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotationPlanInvite:
+      type: object
+      description: >
+        An open member invite the caller signed, with what its two signatures cover (ADR 0111
+        decision 20). The client re-signs it only when both signatures verify under its own outgoing identity, and declares
+        it otherwise (`StagedInviteResign`).
+      required: [tenantId, inviteId, invitePublicKey, expiresAt, inviteKeySignature, anchorWrappedGrant, anchorEpoch, anchorGrantSignature]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The tenant the invite is into — the tenant scope the anchor grant is of.
+          example: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+        invitePublicKey:
+          type: string
+          description: The invite key's public bundle (`serializeIdentityPublic`), as stored.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aW52aXRlLXB1YmxpYy1rZXk=
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: The invite's expiry, as the owner signed it.
+          example: 2026-07-11T12:00:00Z
+        inviteKeySignature:
+          type: string
+          description: The caller's current `invite-key` signature over the invite — what the client checks under its outgoing key.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        anchorWrappedGrant:
+          type: string
+          description: The invite's anchor grant — the caller's own grant of the tenant key at `anchorEpoch`, sealed to the invite key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+        anchorEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The tenant scope epoch whose key the anchor carries — what the staged entry names back.
+          minimum: 0
+          example: 0
+        anchorGrantSignature:
+          type: string
+          description: The caller's current `grant` signature over the anchor — what the client checks under its outgoing key.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+
+    RotationPlanJoinRecord:
+      type: object
+      description: >
+        A join record the caller rooted (ADR 0111 decision 21): the member, the sealed record
+        exactly as stored, and the endorsement it carries now.
+      required: [tenantId, userId, sealedJoinRecord]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The tenant whose profile holds the record — its tenant scope's epoch keys open it.
+          example: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member the record is about.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        sealedJoinRecord:
+          type: string
+          description: >
+            The member's join record sealed under the tenant key (field `member-join-record`), exactly the bytes
+            `ScopeMember.sealedJoinRecord` serves — what an endorsement's digest covers.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLWpvaW4tcmVjb3Jk
+        joinEndorsement:
+          type: [string, "null"]
+          description: >
+            The endorsement the record carries now (`ScopeMember.joinEndorsement`), `null` for none — what the client
+            checks under its outgoing key when the record names an older one.
+          contentEncoding: base64
+          maxLength: 128
+          example: null
+
+    RotationStageInvites:
+      type: object
+      description: One chunk of re-signed invites. At most 256 a chunk; a stage holds as many chunks as the plan needs.
+      required: [invites]
+      properties:
+        invites:
+          type: array
+          description: The re-signed invites of this chunk, upserted by `inviteId`.
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/StagedInviteResign" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 256)'
+
+    StagedInviteResign:
+      type: object
+      description: >
+        An open invite the caller signed, re-signed by the identity the stage declares: its `invite-key` statement and its
+        anchor grant's `grant` statement, both rebuilt by the server from what it stores — or **declared**, both
+        signatures `null` (both or neither, else `400 invalid_request`): an invite whose current signatures the client
+        found not to be its outgoing key's, which the publish ends rather than re-signs. Without the declaration one
+        invite the operator minted in the caller's name would block every securing of the account.
+      required: [inviteId, anchorEpoch]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The invite — one the caller signed and that is open.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        anchorEpoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The anchor epoch the plan served and `anchorGrantSignature` covers; the stage and the publish require it to
+            still be the invite's (`409 rotation_plan_changed`).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        inviteKeySignature:
+          type: [string, "null"]
+          description: >
+            The stage identity's `invite-key` signature over the invite — verified at upload (`422 invite_resign_invalid`);
+            `null` with `anchorGrantSignature` declares the invite, and the publish ends it.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        anchorGrantSignature:
+          type: [string, "null"]
+          description: >
+            The stage identity's `grant` signature over the anchor grant at `anchorEpoch` — verified at upload (`422
+            invite_resign_invalid`); `null` with `inviteKeySignature` declares the invite, and the publish ends it.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotationStageJoinEndorsements:
+      type: object
+      description: One chunk of join-record endorsements or declarations. At most 256 a chunk.
+      required: [endorsements]
+      properties:
+        endorsements:
+          type: array
+          description: The entries of this chunk, upserted by (`tenantId`, `userId`).
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/StagedJoinEndorsement" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 256)'
+
+    StagedJoinEndorsement:
+      type: object
+      description: >
+        A join record the caller rooted, endorsed by the identity the stage declares — or declared (`endorsement: null`):
+        a record the client could not open, or one a retired key signed without an endorsement.
+      required: [tenantId, userId]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The tenant whose profile holds the record.
+          example: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member the record is about.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        endorsement:
+          type: [string, "null"]
+          description: >
+            The stage identity's signature over the `join-endorsement` statement for the stored sealed record — verified at
+            upload (`422 join_endorsement_invalid`); `null` declares the record, and the publish clears its endorsement.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotationScopeState:
       type: object

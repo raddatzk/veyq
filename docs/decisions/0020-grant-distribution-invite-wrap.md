@@ -111,7 +111,10 @@ key, wraps, or unwraps.** Concretely:
     mints no invite.
   - **Redeeming a genuine invite with a key of its own** now needs the code: the operator mails the link and holds its
     sealed part, so it can guess the code offline, against 50 bits behind Argon2id (or the strength of a password the
-    owner chose). The newcomer's view of its inviting owner is anchored by the fingerprint inside the seal.
+    owner chose). The newcomer's view of its inviting owner is anchored by the owner's key-chain head inside the
+    seal, and the key it is handed by the owner's own grant kept beside the invite
+    ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+    decision 19).
 
   Judging a *changed* key is ADR 0028's, and one key-holder's refusal of a delivery is a per-key-holder signal, not a
   global veto (ADR 0028 § Consequences). Key Transparency remains the end-state. Not hidden.

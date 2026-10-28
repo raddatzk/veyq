@@ -30,13 +30,13 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
 2. **Re-issue.** For a pending invite whose link the invitee lost or ignored, the owner re-issues it: their client
    builds a **whole new invite** exactly as [uc.spaces.add-member](uc.spaces.add-member.md) steps 1–2 do — new
    invite key, signature and grant, the link sealed under a **new code** shown once — and the server
-   **supersedes** the current invite (nulling its key and grant) and mints the new one, **emailed to the same
+   **supersedes** the current invite (nulling its key, grant and anchor) and mints the new one, **emailed to the same
    address**. The owner never sees the token ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)).
    Because the supersede happens as the fresh one is minted, a tenant that cannot send is refused **first**,
    leaving the outstanding invite alive rather than destroying it on a tenant that could never have delivered the
    replacement.
 3. **Revoke.** The owner revokes a pending invite: it is soft-transitioned to a terminal state in the statement
-   that nulls its key and grant, so a later replay of that secret at `accept` is rejected as no-longer-valid. The
+   that nulls its key, grant and anchor, so a later replay of that secret at `accept` is rejected as no-longer-valid. The
    reserved email is freed to re-invite. The tenant does not rotate ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)):
    a link and code taken before the revoke still open the epochs up to it, useful only with a dump of the
    ciphertext ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)

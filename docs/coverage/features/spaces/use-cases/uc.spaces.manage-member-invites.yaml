@@ -25,7 +25,7 @@ acceptanceCriteria:
     text: >-
       The owner re-issues a pending member invite as a whole new invite (ADR 0111) — a new invite key, signature
       and grant, its link sealed under a new code shown once to the owner — for the same address only; the server
-      supersedes the current one (its key and grant nulled, the old link dead) and mints the new single-use secret,
+      supersedes the current one (its key, grant and anchor nulled, the old link dead) and mints the new single-use secret,
       **emailed to the invited address**; the response carries no secret. A tenant with no sendable mailer is
       refused with 503 `mail_unavailable` before the supersede, so the outstanding invite survives untouched.
     coverage:
@@ -34,10 +34,10 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/memberInvite.test.ts]
   - id: revoke-member-invite
-    text: The owner revokes a pending member invite — it is soft-transitioned to a terminal state, in the statement that nulls its invite key and grant, so a later replay of its secret at accept is rejected (invite_no_longer_valid); an expired invite loses them the same way. It touches no already-joined member and rotates nothing; the reserved email is freed to re-invite. A non-owner is 403.
+    text: The owner revokes a pending member invite — it is soft-transitioned to a terminal state, in the statement that nulls its invite key, grant and anchor, so a later replay of its secret at accept is rejected (invite_no_longer_valid); an expired invite loses them the same way. It touches no already-joined member and rotates nothing; the reserved email is freed to re-invite. A non-owner is 403.
     coverage:
       backend:
-        integration: [MemberInviteManagementSliceTest.revokeMakesTheSecretNoLongerAcceptableAndDropsItFromTheList, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404, InvitePlaceholderSliceTest.revokingOrExpiringAnInviteDropsItsKeyAndGrant]
+        integration: [MemberInviteManagementSliceTest.revokeMakesTheSecretNoLongerAcceptableAndDropsItFromTheList, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404, InvitePlaceholderSliceTest.revokingOrExpiringAnInviteDropsItsKeyAndGrant, InviteAnchorSliceTest.anInviteThatEndsDropsItsAnchor]
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
         e2e: [src/features/spaces/memberInvite.e2e.test.ts]

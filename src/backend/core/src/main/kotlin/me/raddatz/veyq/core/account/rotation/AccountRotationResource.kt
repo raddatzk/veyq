@@ -9,7 +9,11 @@ import me.raddatz.veyq.core.generated.model.RotationBlockedReason
 import me.raddatz.veyq.core.generated.model.RotationPlanScope
 import me.raddatz.veyq.core.generated.model.RotationScopeState
 import me.raddatz.veyq.core.generated.model.RotationStage
+import me.raddatz.veyq.core.generated.model.RotationPlanInvite
+import me.raddatz.veyq.core.generated.model.RotationPlanJoinRecord
 import me.raddatz.veyq.core.generated.model.RotationStageGrants
+import me.raddatz.veyq.core.generated.model.RotationStageInvites
+import me.raddatz.veyq.core.generated.model.RotationStageJoinEndorsements
 import me.raddatz.veyq.core.account.identitypins.PinWrite
 import me.raddatz.veyq.core.account.identitypins.toPinWrite
 import me.raddatz.veyq.core.http.Failures
@@ -39,8 +43,8 @@ import java.util.UUID
         "Authenticated, and it acts only on the caller's own account. A publish is a once-in-an-incident operation whose " +
             "cost is bounded by what it rewrites — the caller's own wraps and one grant per scope they hold — not by " +
             "request volume, and it needs the Secret Key. The stage holds at most one row per scope the caller holds a " +
-            "grant on (an upsert by scope, 256 a chunk) and is replaced by the next open and purged at its expiry; the " +
-            "plan and the states read only the caller's own rows.",
+            "grant on, per open invite they signed and per join record they rooted (upserts, 256 a chunk) and is " +
+            "replaced by the next open and purged at its expiry; the plans and the states read only the caller's own rows.",
 )
 class AccountRotationResource(
     private val handler: RotationHandler,
@@ -107,6 +111,52 @@ class AccountRotationResource(
         }
         return when (val outcome = handler.stageGrants(identity.principal.name, stageId.toString(), grants)) {
             StageGrantsOutcome.Staged -> Response.noContent().build()
+            is HttpFailure -> httpError(outcome)
+        }
+    }
+
+    override fun getRotationPlanInvites(): Response =
+        Response.ok(
+            handler.planInvites(identity.principal.name).map {
+                RotationPlanInvite(
+                    tenantId = UUID.fromString(it.tenantId), inviteId = UUID.fromString(it.inviteId), invitePublicKey = it.invitePublicKey,
+                    expiresAt = it.expiresAt.atOffset(ZoneOffset.UTC), inviteKeySignature = it.inviteKeySignature,
+                    anchorWrappedGrant = it.anchorWrappedGrant, anchorEpoch = it.anchorEpoch, anchorGrantSignature = it.anchorGrantSignature,
+                )
+            },
+        ).build()
+
+    override fun getRotationPlanJoinRecords(): Response =
+        Response.ok(
+            handler.planJoinRecords(identity.principal.name).map {
+                RotationPlanJoinRecord(
+                    tenantId = UUID.fromString(it.tenantId), userId = UUID.fromString(it.userId),
+                    sealedJoinRecord = it.sealedJoinRecord, joinEndorsement = it.joinEndorsement,
+                )
+            },
+        ).build()
+
+    override fun putRotationStageInvites(stageId: UUID, rotationStageInvites: RotationStageInvites): Response {
+        // A declared invite carries neither signature (ADR 0111 decision 20): one
+        // without the other is neither a re-signature nor a declaration.
+        if (rotationStageInvites.invites.any { (it.inviteKeySignature == null) != (it.anchorGrantSignature == null) }) {
+            return httpError(Failures.invalidRequest)
+        }
+        val entries = rotationStageInvites.invites.map {
+            StagedInviteInput(it.inviteId.toString(), it.anchorEpoch.validated(), it.inviteKeySignature, it.anchorGrantSignature)
+        }
+        return when (val outcome = handler.stageInvites(identity.principal.name, stageId.toString(), entries)) {
+            StageInvitesOutcome.Staged -> Response.noContent().build()
+            is HttpFailure -> httpError(outcome)
+        }
+    }
+
+    override fun putRotationStageJoinEndorsements(stageId: UUID, rotationStageJoinEndorsements: RotationStageJoinEndorsements): Response {
+        val entries = rotationStageJoinEndorsements.endorsements.map {
+            StagedEndorsementInput(it.tenantId.toString(), it.userId.toString(), it.endorsement)
+        }
+        return when (val outcome = handler.stageEndorsements(identity.principal.name, stageId.toString(), entries)) {
+            StageEndorsementsOutcome.Staged -> Response.noContent().build()
             is HttpFailure -> httpError(outcome)
         }
     }

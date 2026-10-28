@@ -125,32 +125,41 @@ The newcomer has no identity yet, so the owner grants the epoch to a key that st
    invite id, the key's digest, the expiry), and grants the tenant's current epoch to it (`sealMemberInvite`). The
    server verifies that signature under the owner's stored identity before it mints — so an owner's session without
    the vault mints nothing — and stores the public half, the signature, the signer's key and the grant, at the current
-   epoch under the tenant scope's lock. Minting is owner-only; the expiry is the instance's
-   `veyq.tenant.invite.ttl`.
-2. **Link.** The seed and the owner's identity fingerprint travel in the mailed link's fragment, **always sealed**
-   (`invite-link`, bound to tenant and invite) under `Argon2id` of a **code** — 10 Crockford base32 characters, 50 bits
-   — or a password the owner chooses. The owner passes the code on outside veyq; the server appends the sealed part to
-   the mail and keeps no copy.
+   epoch under the tenant scope's lock, and keeps that grant a second time as the invite's **anchor**. Minting is
+   owner-only; the expiry is the instance's `veyq.tenant.invite.ttl`.
+2. **Link.** The seed and the owner's **key-chain head** (`myChainHead`: their own chain walked to the identity the vault
+   holds) travel in the mailed link's fragment, **always sealed** (`invite-link` v2, bound to tenant and invite) under
+   `Argon2id` of a **code** — 10 Crockford base32 characters, 50 bits — or a password the owner chooses. The owner
+   passes the code on outside veyq; the server appends the sealed part to the mail and keeps no copy.
 3. **Carried by every rotation.** Each tenant rotation re-grants each open invite, or declares it pending — any
-   member reads the open invites' keys for this (`listOpenInvites`, no email).
-4. **Accept.** The invitee's client opens the seal with the code, derives the invite key from the seed and requires it
-   to be the served one, requires the served signer key to hash to the fingerprint in the seal, verifies the owner's
-   signature and the invite's grant (`checkInvite`, `memberInviteAnchored`), and opens the grant. It then
-   **grants the epoch to its own new identity**, proves it holds the invite key (`invite-accept`, verified by the
-   server, else `403 invite_proof_invalid`), and writes a **join record** (below). The server consumes the invite —
-   key and grant nulled — and writes a member row whose granter is the newcomer itself
-   (`TenantAcceptHandler`, `TenantStore.joinAsMember`). A newcomer joining through an invite a rotation declared
-   pending joins at an older epoch, behind, and is brought current by grant delivery.
+   member reads the open invites' keys for this (`listOpenInvites`, no email). The anchor moves only with a rotation the
+   invite's signer commits under the invite's signer key; any other rotation leaves the owner's grant as the anchor.
+4. **Accept.** The invitee's client opens the seal with the code and runs `checkInvite`: the key the seed derives is the
+   served invite key; the signer's chain, which the preview serves, passes through the head in the seal and ends at the
+   served signer key; the `invite-key` signature and the anchor's `grant` signature verify under that key; and the
+   carried epoch peels down through the served epoch links to exactly the anchor's key. So a key the operator chose
+   under a granter it fabricated is refused (`epoch_unlinked`) — it holds no anchor key to link to — and so is anything
+   an owner's retired key signed (`signer_chain_mismatch`). It then **grants the epoch to its own new identity**, proves
+   it holds the invite key (`invite-accept`, verified by the server, else `403 invite_proof_invalid`), names the signer
+   key its join record carries (`signerIdentityDigest`, refused unless it is still the invite's: `409 invite_changed`,
+   then re-read and re-checked once), and writes a **join record** (below). The server consumes the invite — key,
+   grant and anchor nulled — writes a member row whose granter is the newcomer itself and records who rooted the join
+   (`TenantAcceptHandler`, `TenantStore.joinAsMember`). An existing account judges the inviting owner against its pin
+   with the served chain and pins the walked head (`anchorServedChain`). A newcomer joining through an invite a
+   rotation declared pending joins at an older epoch, behind, and is brought current by grant delivery.
 5. **Revoking an invite is removing a member.** Accept, revoke, supersede, expiry and the erasure of the signer's or the
-   addressee's account null its key and grant. The tenant does not rotate on it, so a revoked link with its code still
-   opens the epochs up to the revoke.
+   addressee's account null its key, grant and anchor. The tenant does not rotate on it, so a revoked link with its code
+   still opens the epochs up to the revoke.
 
 **The join record** is the newcomer's identity public key and Secret-Key proof public key with the owner-signed
 invite, signed by the **invite key** and by the new identity (`join-record`), sealed under the tenant epoch key the
 invite's grant carried (`member-join-record`), stored in the tenant profile (`veyq_tenant_profile.sealed_join_record`)
 and served to every member as `ScopeMember.sealedJoinRecord`. The owner's signature on the invite key and the invite
 key's signature on the record make a chain **owner → invite → newcomer** that neither the operator nor a holder of the
-tenant key can forge. A tenant's first owner has none ([§ Trust](#trust-who-is-who)).
+tenant key can forge. The server records who rooted it (`join_signer_user_id`); when that owner secures the account,
+they **endorse** the record with the new key (`join-endorsement` over the sealed record, `ScopeMember.joinEndorsement`),
+without which a record their retired key signed counts nowhere. A tenant's first owner has none
+([§ Trust](#trust-who-is-who)).
 
 ```mermaid
 ---
@@ -162,12 +171,14 @@ sequenceDiagram
   actor N as Newcomer's client
   O->>O: invite key from seed, sign it, grant E_n to it
   O->>S: invite key + owner signature + grant (epoch n, recipientIdentityDigest)
-  S->>S: verify owner signature under stored identity, epoch current under lock
-  S-->>N: mail: link with sealed {seed, owner fingerprint}
+  S->>S: verify owner signature under stored identity, epoch current under lock, keep the grant as anchor
+  S-->>N: mail: link with sealed {seed, owner head}
   Note over O,N: the code travels outside veyq
-  N->>N: open seal with code, check key + fingerprint + signature, open grant
-  N->>S: register/accept: self-grant to new identity, invite-accept proof, sealed join record
-  S->>S: verify proof, digest = caller's identity, consume invite, member row
+  N->>S: preview
+  S-->>N: invite, owner's chain, anchor, carried grant, epoch links
+  N->>N: open seal with code, walk chain from head, check signatures, peel carried epoch to the anchor
+  N->>S: register/accept: self-grant, invite-accept proof, signer digest, sealed join record
+  S->>S: verify proof and digest, consume invite, member row, record who rooted it
 ```
 
 ### A group add wraps directly
@@ -325,16 +336,20 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
    the grants in chunks of 256 (`openRotationStage`, `putRotationStageGrants`). The server verifies each under the
    identity the stage declares (`422 self_grant_invalid`) and applies nothing yet; a stage expires after
    `veyq.account.rotation.stage.ttl`. A scope this device cannot open is **declared** (`unreadableScopeIds`), never
-   dropped: it keeps its grant and gets no new epoch from this account.
+   dropped: it keeps its grant and gets no new epoch from this account. The same stage takes **what the account rooted**
+   (ADR 0111 decisions 20 and 21): every open invite it signed, re-signed by the new identity when both its current
+   signatures verify under the outgoing key and declared otherwise (`putRotationStageInvites`), and every join record it
+   rooted, endorsed by the new identity when the record names it and its outgoing key (or an endorsement by that key),
+   declared otherwise (`putRotationStageJoinEndorsements`).
 5. **Collect** this account's verifications that still count, per tenant it can open (`collectMyVerifications`).
 6. **One publish** (`POST /api/account/rotation`, one transaction): the server checks the stage and its digest, rebuilds
    the chain step and verifies both signatures, the Secret-Key proof under the stored proof key, possession of the new
    proof key and the old auth key's attestation of the new one. It then requires every grant-carrying membership to be
-   staged at its scope's **current** epoch or declared, else `409 rotation_plan_changed` and the client re-stages the
-   delta. It writes the new identity, the identity private key under the new Master Key, the `PASSWORD` and `RECOVERY`
+   staged at its scope's **current** epoch or declared — and every open invite it signed and every join record it rooted
+   staged — else `409 rotation_plan_changed` and the client re-stages the delta. It writes the new identity, the identity private key under the new Master Key, the `PASSWORD` and `RECOVERY`
    wraps under the **new** Secret Key (every other wrap deleted), the new auth and proof keys, the pin store and device
    register re-sealed under the new Master Key, the self-grants, **one pending re-key row per re-granted scope**, the
-   chain step; and it clears the delivery declines that target the account and revokes its other sessions.
+   chain step, the re-signed invites (a declared one ends) and the endorsements; and it clears the delivery declines that target the account and revokes its other sessions.
 7. **After the commit**, on any unlocked device of the account: the vault swaps to the new identity, the collected
    verifications are **re-signed** with the new key (`resignVerifications`), and the account **mints the next epoch of
    every scope it was re-granted, itself** (`finishRotation`, also run on every pass of the scope-rotation worker):
@@ -362,7 +377,7 @@ one the operator substituted (ADR 0111 decisions 12–17,
 | **Pin store** | per account, synced, sealed under the Master Key | the device | per person the highest key-chain head seen, its index, the identity fingerprint at it, the first-seen time and a *replaced* mark — no verdict |
 
 The chain is served to the person, to users who share a tenant with them, and between two accepted moderators
-(`KeyChainStore.mayRead`); every read that serves another user's key to a check serves their head beside it
+(`KeyChainStore.mayRead`), and an inviting owner's chain to the holder of their open invite's token (the preview); every read that serves another user's key to a check serves their head beside it
 (`ScopeMember.keyChainHead`, the grant-delivery target, an open invite's signer).
 
 ### The anchor, per tenant
@@ -371,7 +386,8 @@ Before any wrap in a tenant, the client reads the person's **standing** there (`
 `src/web/src/features/account/tenantTrust.ts`):
 
 - **joined** — their join record opens, verifies owner → invite → newcomer, and its signer is a member the server lists
-  as an **owner** whose key is anchored in the tenant in turn (an owner's retired key included);
+  as an **owner** whose key is anchored in the tenant in turn — a retired key of that owner only with their endorsement
+  of the record by their current key, which their securing writes;
 - **root** — an owner the server lists with no join record (the tenant's first owner): trusted on first use, by the pin;
 - **unanchored** — anyone else: a non-owner without a join record (a membership only the server can have made), a
   record that does not open or verify, a pending proposal;
@@ -424,9 +440,9 @@ Decision 7).
 There is no Key Transparency log; a hash-chained key chain with one head per account, shown in the compare, is what
 such a log would commit to without a format change (ADR 0111 decision 17).
 
-**What is still trusted on first use:** a root owner; the invite accept's inviter (whom the link's fingerprint
-vouches for) and the foreign granter of a grant a rotation re-wrapped to the invite; and every contact outside a shared
-tenant (the moderation delivery). Who counts as an owner is the server's word.
+**What is still trusted on first use:** a root owner and every contact outside a shared tenant (the moderation
+delivery, which seals a statement's facts to the served keys unchecked). Who counts as an owner is the server's word.
+The residuals and why each stays are [security-model § What holds today](security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
 
 ## The Secret Key
 
@@ -445,23 +461,7 @@ lacks it ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decisio
 
 ## Decided, not built
 
-- **Join records for existing members** — [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 18: an owner's client signs a join record for each member who has none, over the key it pins for them and
-  their proof key, so every member gets an owner-rooted anchor; two owners signing different keys for one member is an
-  anomaly. Nothing needs it while veyq has no release: every newcomer writes a join record at accept, so today only
-  root owners lack one.
-
-**Open, not decided** (inbox rows, each a question for the owner):
-
-- **#565** — a newcomer trusts on first use the rotator whose rotation re-wrapped its invite's grant; only an
-  owner-wrapped grant is checked against the key the link anchors.
-- **#568** — an owner's open invites end with the owner's rotation; sealing the owner's key-chain head into the link
-  would let them survive it.
-- **#569** — the pin store is re-sealed inside the one publish, which caps it at 25,000 entries; the stage could carry
-  it.
-- **#570** — a moderator seals a statement's facts to members' keys without the anchor check.
-- **#571** — a join record signed by an owner's retired key still anchors after that owner's rotation.
-- **#572** — the operator sees from a verification row's address who verified whom, in which tenant, and when.
+Nothing: every decision this concern draws on is built.
 
 ## Related
 

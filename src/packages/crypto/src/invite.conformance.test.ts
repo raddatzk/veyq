@@ -1,7 +1,7 @@
 // The member invite (ADR 0111 decisions 1-3) against the vectors an independent Python implementation generated
-// (`#invite_key`, `#invite_link`, `#join_record`): the key a seed derives, the owner's signature, the link's code, KEK,
-// seal and encoding, the invitee's checks — each with a crafted negative that fails exactly that check — the accept
-// proof and the join record.
+// (`#invite_key`, `#invite_link`, `#join_record`, `#join_endorsement`): the key a seed derives, the owner's signature,
+// the link's code, KEK, seal and encoding (version 2, carrying the owner's key-chain head), the accept proof, the join
+// record and an owner's endorsement of it. The invitee's checks are `inviteCheck.test.ts`'s.
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -18,6 +18,7 @@ const vectors = JSON.parse(readFileSync(resolve(here, '../../../../contracts/cry
 const k = vectors.invite_key
 const l = vectors.invite_link
 const j = vectors.join_record
+const e = vectors.join_endorsement
 const flip = (b: Uint8Array, i = 0) => {
   const out = b.slice()
   out[i] ^= 1
@@ -96,13 +97,23 @@ describe('invite link (#invite_link)', () => {
     expect(hex(v1.kekInviteLink(invite.inviteLinkSecret('password', l.password) as Uint8Array, unhex(l.salt)))).toBe(l.kek_password)
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
+  it('the signer head is the head of the owner\'s chain at step 0 (#key_chain\'s encoding)', () => {
+    const genesis = v1.keyChainGenesisStatement(k.owner.user_id, {
+      identityPublicKey: unhex(k.owner.bundle),
+      secretKeyProofPublicKey: unhex(vectors.secret_key_proof.key.public_key),
+    })
+    expect(hex(v1.encodeStatement(genesis))).toBe(l.signer_genesis)
+    expect(hex(v1.keyChainHead(genesis))).toBe(l.signer_head)
+  })
+
   it('the payload, its seal and the link\'s encoding are the vector\'s', () => {
     const payload = {
       seed: unhex(k.seed),
-      signerFingerprintHash: unhex(k.owner.fingerprint_hash),
+      signerHead: unhex(l.signer_head),
       signerUserId: k.owner.user_id,
     }
     expect(hex(invite.encodeInviteLinkPayload(payload))).toBe(l.payload)
+    expect(invite.decodeInviteLinkPayload(unhex(l.payload))).toEqual(payload)
     expect(hex(v1.encodeSealContext({ purpose: 'invite-link', ...address }))).toBe(l.context_bytes)
     const parsed = invite.parseSealedInviteLink(l.sealed)
     expect(parsed.mode).toBe('code')
@@ -112,12 +123,35 @@ describe('invite link (#invite_link)', () => {
     expect(hex(v1.encodeKdfParams(v1.ARGON, unhex(l.salt)))).toBe(l.kdf_params)
     const opened = invite.openInviteLink(address, unhex(l.kek_code), parsed)
     expect(hex(opened.seed)).toBe(k.seed)
-    expect(hex(opened.signerFingerprintHash)).toBe(k.owner.fingerprint_hash)
+    expect(hex(opened.signerHead)).toBe(l.signer_head)
     expect(opened.signerUserId).toBe(k.owner.user_id)
     // Sealing draws its own nonce; what it writes parses to the same header and opens to the same payload.
     const fresh = invite.sealInviteLink(address, 'code', unhex(l.kek_code), unhex(l.salt), payload)
     expect(fresh.slice(0, 44)).toBe(l.sealed.slice(0, 44))
     expect(hex(invite.encodeInviteLinkPayload(invite.openInviteLink(address, unhex(l.kek_code), invite.parseSealedInviteLink(fresh))))).toBe(l.payload)
+  })
+
+  it('a version-1 payload (the owner\'s fingerprint, no head) is refused — encoded alone or opened from a link', () => {
+    expect(() => invite.decodeInviteLinkPayload(unhex(l.payload_v1))).toThrow(new invite.InviteLinkInvalid('version'))
+    const parsed = invite.parseSealedInviteLink(l.sealed)
+    const v1Sealed = v1.seal({ purpose: 'invite-link', ...address }, unhex(l.kek_code), unhex(l.payload_v1))
+    expect(() => invite.openInviteLink(address, unhex(l.kek_code), { ...parsed, sealed: v1Sealed })).toThrow(
+      new invite.InviteLinkInvalid('version'),
+    )
+    // Control: the same seal over the version-2 payload opens.
+    const v2Sealed = v1.seal({ purpose: 'invite-link', ...address }, unhex(l.kek_code), unhex(l.payload))
+    expect(hex(invite.openInviteLink(address, unhex(l.kek_code), { ...parsed, sealed: v2Sealed }).signerHead)).toBe(l.signer_head)
+  })
+
+  it('a payload is exactly its three fields at their sizes', () => {
+    const p = unhex(l.payload)
+    expect(() => invite.decodeInviteLinkPayload(p.slice(0, -1))).toThrow(new invite.InviteLinkInvalid('truncated'))
+    expect(() => invite.decodeInviteLinkPayload(v1.concat(p, Uint8Array.of(0)))).toThrow(new invite.InviteLinkInvalid('trailing'))
+    expect(() => invite.decodeInviteLinkPayload(new Uint8Array(0))).toThrow(new invite.InviteLinkInvalid('version'))
+    const base = { seed: unhex(k.seed), signerHead: unhex(l.signer_head), signerUserId: k.owner.user_id }
+    expect(() => invite.encodeInviteLinkPayload({ ...base, signerHead: new Uint8Array(31) })).toThrow(new invite.InviteLinkInvalid('head'))
+    expect(() => invite.encodeInviteLinkPayload({ ...base, seed: new Uint8Array(31) })).toThrow(new invite.InviteLinkInvalid('seed'))
+    expect(() => invite.encodeInviteLinkPayload({ ...base, signerUserId: 'not-a-uuid' })).toThrow(new invite.InviteLinkInvalid('signer'))
   })
 
   it('opens with its code\'s KEK only, and only as this invite', () => {
@@ -146,55 +180,6 @@ describe('invite link (#invite_link)', () => {
   it('the fragment carries the token and, for a member invite, the sealed part', () => {
     expect(invite.parseInviteFragment(`#${l.fragment}`)).toEqual({ token: l.token, sealed: l.sealed })
     expect(invite.parseInviteFragment(l.token)).toEqual({ token: l.token, sealed: null })
-  })
-})
-
-describe('the invitee\'s checks (ADR 0111 decision 1)', () => {
-  const payload = { seed: unhex(k.seed), signerFingerprintHash: unhex(k.owner.fingerprint_hash), signerUserId: k.owner.user_id }
-  const served: invite.ServedInvite = {
-    ...k.context,
-    invitePublicKey: unhex(k.bundle),
-    inviteKeySignature: unhex(k.signature),
-    signerUserId: k.owner.user_id,
-    signerIdentityPublicKey: unhex(k.owner.bundle),
-  }
-  const failure = (p: invite.InviteLinkPayload, s: invite.ServedInvite): invite.InviteCheckFailure | null => {
-    try {
-      invite.checkInvite(p, s)
-      return null
-    } catch (e) {
-      if (e instanceof invite.InviteCheckFailed) return e.reason
-      throw e
-    }
-  }
-
-  it('control: the genuine invite passes, and the key it returns is the seed\'s', () => {
-    expect(failure(payload, served)).toBeNull()
-    expect(hex(v1.serializeIdentityPublic(invite.checkInvite(payload, served).pub))).toBe(k.bundle)
-  })
-
-  // Each negative passes every check before its own, so it fails exactly that one.
-  it('a served invite key the seed does not derive', () => {
-    const other = v1.serializeIdentityPublic(invite.inviteKeyFromSeed(new Uint8Array(32).fill(9)).pub)
-    expect(failure(payload, { ...served, invitePublicKey: other })).toBe('key_mismatch')
-  })
-
-  it('a served signer that is not the account the seal names', () => {
-    expect(failure(payload, { ...served, signerUserId: 'b0b00000-0000-4000-8000-0000000000e0' })).toBe('signer_mismatch')
-  })
-
-  it('a served signer key whose fingerprint is not the seal\'s — even one that signed the invite', () => {
-    // The operator's own key, which signs the genuine invite key: only the fingerprint inside the seal stops it.
-    const operator = v1.generateIdentity()
-    const forged = invite.signInviteKey(operator.priv.sign, { ...k.context, invitePublicKey: unhex(k.bundle) })
-    expect(
-      failure(payload, { ...served, signerIdentityPublicKey: v1.serializeIdentityPublic(operator.pub), inviteKeySignature: forged }),
-    ).toBe('fingerprint_mismatch')
-  })
-
-  it('a signature by another key, or over another expiry', () => {
-    expect(failure(payload, { ...served, inviteKeySignature: flip(unhex(k.signature)) })).toBe('bad_signature')
-    expect(failure(payload, { ...served, expiresAt: k.context.expiresAt + 60 })).toBe('bad_signature')
   })
 })
 
@@ -253,5 +238,49 @@ describe('accept proof and join record (#join_record)', () => {
     expect(() => invite.decodeJoinRecord(b.slice(0, b.length - 1))).toThrow(new invite.JoinRecordInvalid('truncated'))
     expect(() => invite.decodeJoinRecord(v1.concat(b, Uint8Array.of(0)))).toThrow(new invite.JoinRecordInvalid('trailing'))
     expect(() => invite.decodeJoinRecord(v1.concat(Uint8Array.of(2), b.slice(1)))).toThrow(new invite.JoinRecordInvalid('version'))
+  })
+})
+
+describe('an owner\'s endorsement of a join record (#join_endorsement)', () => {
+  const input: invite.JoinEndorsementInput = { ...e.context, sealedJoinRecord: unhex(e.sealed_join_record) }
+  const owner = unhex(k.owner.sign_public)
+  const signature = unhex(e.signature)
+
+  it('statement bytes and the owner\'s signature, over SHA-256 of the sealed record as stored', () => {
+    expect(e.sealed_join_record).toBe(vectors.field_seal['member-join-record'].envelope)
+    expect(hex(invite.joinEndorsementStatement(input).recordDigest)).toBe(e.record_digest)
+    expect(hex(v1.encodeStatement(invite.joinEndorsementStatement(input)))).toBe(e.statement)
+    expect(hex(invite.signJoinEndorsement(unhex(vectors.grant_signature.sign_seed), input))).toBe(e.signature)
+  })
+
+  it('verifies under the owner key — the control for every negative below', () => {
+    expect(invite.joinEndorsementVerifies(owner, input, signature)).toBe(true)
+  })
+
+  it.each([
+    ['another tenant', { ...input, tenantId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
+    ['another member', { ...input, userId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
+    ['another signer', { ...input, signerUserId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
+    ['another sealed record — one the thief wrote', { ...input, sealedJoinRecord: flip(input.sealedJoinRecord, 40) }],
+  ] as const)('answers for nothing else: %s', (_name, moved) => {
+    expect(invite.joinEndorsementVerifies(owner, moved, signature)).toBe(false)
+  })
+
+  it('a signature by another key — the retired key a thief holds — is not the owner\'s', () => {
+    const thief = invite.signJoinEndorsement(unhex('8d'.repeat(32)), input)
+    expect(invite.joinEndorsementVerifies(owner, input, thief)).toBe(false)
+    expect(invite.joinEndorsementVerifies(owner, input, flip(signature, 5))).toBe(false)
+  })
+
+  it('a malformed key, signature or id is false, never a throw', () => {
+    expect(invite.joinEndorsementVerifies(new Uint8Array(3), input, signature)).toBe(false)
+    expect(invite.joinEndorsementVerifies(owner, input, new Uint8Array(2))).toBe(false)
+    expect(invite.joinEndorsementVerifies(owner, { ...input, userId: 'not-a-uuid' }, signature)).toBe(false)
+  })
+
+  it('its label is a statement of its own, in no seal table', () => {
+    expect(new TextDecoder().decode(unhex(e.statement).slice(4, 4 + 'join-endorsement'.length))).toBe('join-endorsement')
+    expect(Object.keys(vectors.seal.sym)).not.toContain('join-endorsement')
+    expect(Object.keys(vectors.field_seal)).not.toContain('join-endorsement')
   })
 })

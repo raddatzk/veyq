@@ -72,7 +72,7 @@ const MAX_ENTRIES = 25_000
 
 /** One pinned contact: the head of their key chain this account pinned (base64 of 32 bytes), the fingerprint hash of the
  *  identity public bundle at that head (base64 of 32 bytes, `fingerprintDigestB64`), the index of that head's step in the
- *  chain (-1 for a head pinned unread, at an invite's accept), first-seen, and whether a join record replaced a pin that
+ *  chain, first-seen, and whether a join record replaced a pin that
  *  was not on its chain (ADR 0111 decision 15: "the key you saw before wasn't theirs"). */
 export interface Pin {
   fingerprint: string
@@ -243,7 +243,7 @@ function openEntry(mk: Uint8Array, indexKey: Uint8Array, pinIdHex: string, entry
     typeof head !== 'string' ||
     fromB64std(head).length !== 32 ||
     !Number.isSafeInteger(index) ||
-    (index as number) < -1 ||
+    (index as number) < 0 ||
     (replaced !== 0 && replaced !== 1) ||
     !Number.isSafeInteger(firstSeenAt) ||
     (firstSeenAt as number) < 0 ||
@@ -610,7 +610,7 @@ function recordReading(pins: PinMap, userId: string, judgedFrom: Pin | undefined
 // ── The operations ───────────────────────────────────────────────────────────────────────────────────────────
 
 /** A contact's key as a directory read serves it to a check: the identity bundle and the key-chain head beside it
- *  (`ScopeMember`, `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite`, `ServedMemberInvite`). */
+ *  (`ScopeMember`, `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite`). */
 export interface ServedIdentity {
   identityPublicKey: string
   keyChainHead: string
@@ -622,11 +622,6 @@ export interface ServedIdentity {
  * `match` is local (no fetch); the chain is read only when the served head differs from the pinned one, or on first use;
  * `firstUse` and `advanced` move the pin. Never accepts a prefix the server supplies: the walk starts at the pinned head.
  *
- * `firstUse: 'served'` is for the invite accept alone, where the account is not yet a co-member and the server serves it
- * no chain: an unknown inviter (whose key the link's fingerprint already vouched for) or a foreign granter is pinned at
- * the head the invite served, unread — trust on first use, which reading the chain would not strengthen (an operator
- * serves a first contact's chain as freely as its head). A pinned contact is judged as anywhere else.
- *
  * **`tenant`** (ADR 0111 decisions 12 and 15): the wrap is in that tenant, so the person's standing there decides first —
  * `unanchored` and `unavailable` are an `anomaly` with no fetch; a `joined` person's chain is always read and walked from
  * the step their join record names ({@link readJoinedChain}), the pin kept as the counter; a `root` owner is judged by
@@ -637,7 +632,7 @@ export interface ServedIdentity {
  * unlocked vault; throws `TrustStateRefused` when this device refuses its own pin store.
  */
 export async function anchorIdentity(
-  userId: string, served: ServedIdentity, opts: { firstUse?: 'chain' | 'served'; tenant?: TenantStandings } = {},
+  userId: string, served: ServedIdentity, opts: { tenant?: TenantStandings } = {},
 ): Promise<Anchor> {
   const standing = opts.tenant ? await opts.tenant.standing(userId) : null
   if (standing && (standing.kind === 'unanchored' || standing.kind === 'unavailable')) return 'anomaly'
@@ -654,14 +649,6 @@ export async function anchorIdentity(
     return reading.anchor
   }
   if (pin && pin.head === served.keyChainHead) return pin.fingerprint === servedFingerprint ? 'match' : 'anomaly'
-  if (!pin && opts.firstUse === 'served') {
-    if (!isHead(served.keyChainHead)) return 'anomaly'
-    const first: Pin = { fingerprint: servedFingerprint, head: served.keyChainHead, index: -1, firstSeenAt: Date.now(), replaced: false }
-    await mutateAndSave(store, (pins) => {
-      if (!pins[userId]) pins[userId] = first
-    })
-    return 'firstUse'
-  }
   const chain = await fetchKeyChain(userId)
   if (!chain) return 'anomaly'
   const reading = readChain(pin, userId, chain)
@@ -719,13 +706,22 @@ export async function anchorChainKey(
   return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
 }
 
-/** A served head that is one: base64 of 32 bytes. */
-function isHead(b64: string): boolean {
-  try {
-    return fromB64std(b64).length === 32
-  } catch {
-    return false
-  }
+/**
+ * The inviting owner of a member invite, judged by the key chain the invite serves beside it (ADR 0111
+ * decision 19) — the accept's one anchor check, where the account is not yet a co-member and the server serves it
+ * no chain through `getKeyChain`. The caller passes the chain as `checkInvite` (`@veyq/crypto/invite`) walked it: from the head inside
+ * the link to the served owner key, so `chain.head` is that walk's end and `served` its key. Here the pin decides, as
+ * {@link readChain} reads it: a pinned head must lie on the chain and carry the pinned key (else `anomaly`), and a first
+ * use pins the walked head at its real index. Nothing is fetched; a reading that does not end at `served` is an anomaly.
+ * Requires an unlocked vault; throws `TrustStateRefused` when this device refuses its own pin store.
+ */
+export async function anchorServedChain(userId: string, chain: KeyChain, served: ServedIdentity): Promise<Anchor> {
+  const store = await loadStore()
+  const pin = store.pins[userId]
+  const reading = readChain(pin, userId, chain)
+  if (!endsAt(reading, served)) return 'anomaly'
+  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+  return reading.anchor
 }
 
 /**

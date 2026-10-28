@@ -13,6 +13,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('../features/tenant/tenantInvite', () => ({
+  // The view tells a failed invite check from an HTTP refusal by its class (mapError).
+  InviteCheckFailed: class InviteCheckFailed extends Error {},
   previewInvite: vi.fn(),
   acceptInvite: vi.fn(),
   registerAndAccept: vi.fn(),

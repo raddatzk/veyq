@@ -1374,6 +1374,9 @@ components:
           example: OWNER
 
     ScopeEpochLink:
+      # `title` names the type a spec that $refs this schema from another file generates (tenants' ServedMemberInvite):
+      # without it both generators inline it under a name of their own (ADR 0111 decision 19).
+      title: ScopeEpochLink
       type: object
       required: [epoch, wrappedPrev]
       properties:
@@ -1519,7 +1522,10 @@ components:
           type: [array, "null"]
           description: >
             TENANT only: the open member invites this rotation re-grants the new epoch. With `pendingInviteIds`, exactly
-            the tenant's open invites — else `409 rotation_incomplete`. Omitted = none.
+            the tenant's open invites — else `409 rotation_incomplete`. Omitted = none. Each replaces the grant the
+            invite carries; where the rotator is the invite's signer it also becomes the invite's anchor (the owner's
+            own grant its invitee checks every carried grant against, ADR 0111 decision 19),
+            and any other rotator leaves the anchor where it was.
           items: { $ref: "#/components/schemas/InviteGrantEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
         pendingInviteIds:
@@ -1797,6 +1803,20 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
+        joinEndorsement:
+          type: [string, "null"]
+          description: >
+            TENANT scope only: the inviting owner's endorsement of this member's join record
+            (ADR 0111 decision 21) — their identity signature over the `join-endorsement`
+            statement (tenant, member, owner, SHA-256 of `sealedJoinRecord` exactly as served; the `join_endorsement`
+            crypto vector), written when the owner secures their account and signed by the key that securing installs.
+            A reader counts a join record signed by a key the owner has since retired only with an endorsement that
+            verifies under the owner's current key. `null` when the owner has not secured their account since the
+            member joined, when that securing declared the record (it could not open it, or a retired key had signed it
+            without an endorsement), for the tenant's first owner, and in every other kind of scope.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
 
     OpenInvite:
       type: object
@@ -1837,7 +1857,8 @@ components:
           description: >
             The head of the inviting owner's key chain now (ADR 0111 decision 7). The rotator re-grants the invite only
             if the chain from the head it pinned for the owner verifies to this head and the signer key is the one at
-            it — an owner's rotation therefore ends their open invites (cr-secure-the-account).
+            it. An owner's securing re-signs their open invites with the key it installs (ADR 0111
+            decision 20), so the invites outlive it.
           contentEncoding: base64
           maxLength: 64
           example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDE=
@@ -2124,6 +2145,9 @@ components:
           items: { $ref: "#/components/schemas/KeyChainStep" }
 
     KeyChainStep:
+      # `title` names the type a spec that $refs this schema from another file generates (tenants' ServedMemberInvite):
+      # without it both generators inline it under a name of their own (ADR 0111 decision 19).
+      title: KeyChainStep
       type: object
       description: >
         One step of a key chain, as stored: the keys it installed and — absent exactly at step 0, which nobody signs —

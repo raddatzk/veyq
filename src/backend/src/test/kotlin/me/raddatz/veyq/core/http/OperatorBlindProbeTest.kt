@@ -376,6 +376,16 @@ class OperatorBlindProbeTest {
             "listRotationScopeStates",
         )
         reason(
+            "securing the account re-signs what the caller rooted (ADR 0111 decisions 20 and 21): " +
+                "addresses the caller's own account and lists, across every tenant, only the open invites the caller " +
+                "signed and the join records of members the caller invited. A staged invite the caller did not sign, " +
+                "that is not open, or that does not exist, and a staged profile the caller did not root or that does not " +
+                "exist, all answer `409 rotation_plan_changed`, so nothing here is an existence oracle; RotationSliceTest " +
+                "owns these answers.",
+            "getRotationPlanInvites", "getRotationPlanJoinRecords", "putRotationStageInvites",
+            "putRotationStageJoinEndorsements",
+        )
+        reason(
             "person-addressed (ADR 0111 decision 7): names an account, not a space. Its gate is shared tenancy — a " +
                 "person who shares no tenant with the caller answers the unknown user's `404 not_found` (ADR 0042) — and " +
                 "a suspended tenant does not hide public keys a person's other tenants serve too; the key-chain read's " +

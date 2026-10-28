@@ -1,7 +1,7 @@
 # ADR 0111 — An invitee grants itself, a rotator re-keys its own scopes, and a signed key chain anchors who is who
 
 - Status: Accepted
-- Built: partly (not built: decision 18)
+- Built: yes
 - Date: 2026-10-27
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
 
@@ -61,35 +61,35 @@ Facts the design rests on, read in the code:
    server verifies that signature under the caller's stored identity key before it mints or re-issues (`400
    invalid_request` otherwise, so a session without the owner's vault mints no invite — on an honest server, the job
    the admission tag did) and stores the public half, that signature and the signer's key as it signed (so a later
-   rotation of the owner does not void the invite). The seed travels in the link together with the **owner's identity fingerprint** and
-   account, **always sealed** (`#<token>.<sealed>`, seal purpose `invite-link`, bound to the tenant and the invite)
+   rotation of the owner does not void the invite). The seed travels in the link together with the **owner's key-chain head**
+   and account (decision 19), **always sealed** (`#<token>.<sealed>`, seal purpose `invite-link`, bound to the tenant and the invite)
    under `Argon2id(secret, salt)` at the production profile, where the secret is a **generated code** — 10 Crockford
    base32 characters, 50 bits, shown once in the invite dialog — or a **password the owner chooses** (the account
    password's length floor). The owner passes it on outside veyq. The seal is mandatory because the server mails the
    link and mail is the only channel ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)), so the operator
    holds every link it mails: an unsealed link would hand it the invite. The server appends the sealed part to the
-   mailed link and keeps no copy. The fingerprint sits **inside** that seal, and the invitee's client **derives the
-   invite public key from the seed** rather than taking it from the server — otherwise an operator swaps fingerprint
-   and key in a mailed link. Against the operator, who can guess offline, the margin is 50 bits behind Argon2id.
+   mailed link and keeps no copy. The head sits **inside** that seal, and the invitee's client **derives the
+   invite public key from the seed** rather than taking it from the server — otherwise an operator swaps head and key
+   in a mailed link. Against the operator, who can guess offline, the margin is 50 bits behind Argon2id.
 2. **The invite holds a grant like a member.** It receives a grant of the current epoch wrapped to the invite public
    key (its recipient is the invite id, and it names the key by `recipientIdentityDigest`); the server takes it only
-   at the current epoch, under the tenant scope's lock (`409 stale_epoch`). **Every rotation of the tenant re-grants
+   at the current epoch, under the tenant scope's lock (`409 stale_epoch`), and keeps the owner's own grant beside it
+   as the invite's **anchor** (decision 19). **Every rotation of the tenant re-grants
    each open invite or declares it pending** (`inviteGrants`, `pendingInviteIds`): the rotator's client re-grants one
    whose owner signature verifies under the stored signer key and whose signer passes its anchor check, and declares the
    rest; the server refuses a rotation that leaves an open invite out (`409 rotation_incomplete`). Every member reads
    the open invites' keys for this (`listOpenInvites`, never an email). **Revoking an invite is removing a member** —
-   accept, revoke, supersede, expiry and the erasure of the signer's or the addressee's account null its key and grant
-   in the statement that ends it; a reissue is a supersede and a new invite (new key, link and code). A group has no
+   accept, revoke, supersede, expiry and the erasure of the signer's or the addressee's account null its key, grant and
+   anchor in the statement that ends it; a reissue is a supersede and a new invite (new key, link and code). A group has no
    invites; the group counterpart, a declined or rescinded add proposal, queues the group's rotation (decision 4).
    Every open invite has a **fixed expiry**, the instance's `veyq.tenant.invite.ttl` (served to the owner's client as
    `memberInviteTtlSeconds`, signed by the owner, checked by the server within a minute): hygiene, which ends the
    window in which the link can be redeemed, not what the link already decrypts (§ Consequences, the revoked invite).
 3. **The invitee grants itself and writes a join record.** On accept the invitee's client opens the seal with the
-   code, requires the key the seed derives to be the served one, requires the served signer key to hash to the
-   fingerprint in the seal, verifies the owner's signature, verifies the invite's grant (an owner-wrapped grant only
-   under that checked key; one a rotation re-wrapped names another member, trusted on first use — § What stays
-   open), opens it, and **grants the epoch to its own new identity** (a self-grant naming its key). It proves holding
-   the invite key with an `invite-accept` signature the server verifies (`403 invite_proof_invalid`). The server
+   code and checks the invite against the owner's chain walked from the head in the seal and the epoch against the
+   owner's anchor grant (decision 19), opens it, and **grants the epoch to its own new identity** (a self-grant naming its key). It proves holding
+   the invite key with an `invite-accept` signature the server verifies (`403 invite_proof_invalid`), and names the
+   signer key its join record carries, which must still be the invite's (`409 invite_changed`, decision 20). The server
    nulls the invite key and grant (single use), and the next rotation no longer includes it. The client then writes a
    **join record** into its tenant profile ([ADR 0023](0023-per-tenant-member-identity.md)): its identity public key
    and its Secret-Key proof public key with the owner-signed invite, signed — the statement `join-record` — by **the
@@ -123,7 +123,8 @@ Facts the design rests on, read in the code:
      **current** epoch key, granted to the new identity, naming it (`recipientIdentityDigest`) and signed by it. The
      stage declares the new identity bundle (`openRotationStage`; one stage per account, a second open replaces the
      first) and takes the grants in chunks of at most 256 (`putRotationStageGrants`); the server verifies each under the
-     identity the stage declares at upload (`422 self_grant_invalid`). **Nothing staged is applied before the
+     identity the stage declares at upload (`422 self_grant_invalid`). The same stage carries the re-signed open
+     invites (decision 20) and the endorsements of the join records the account rooted (decision 21). **Nothing staged is applied before the
      publish**: a stage is ciphertext and scope ids the server already holds as grant rows, and it expires an hour after
      it opened (`veyq.account.rotation.stage.ttl`, server-observed) and is purged.
    - **The publish names the stage and its digest** (`stageId`, `stagedGrantsDigest`) inside the statement the
@@ -145,8 +146,8 @@ Facts the design rests on, read in the code:
    cannot forge a step; only someone holding password **and** Secret Key can. The chain begins at the account's birth
    with an unsigned **genesis** naming the birth identity and proof key, whose proof key is the one the join record
    anchors (decision 3). The chain — public keys and signatures, nothing secret — is stored **once**, next to the
-   identity (`getKeyChain`), and **served only to the person, to users who share a tenant with them, and between two
-   accepted moderators of the instance** (server-enforced: an honest server's rule; the operator knows the rotations
+   identity (`getKeyChain`), and **served only to the person, to users who share a tenant with them, between two
+   accepted moderators of the instance, and — the inviting owner's — to the holder of an open invite's token** (decision 19) (server-enforced: an honest server's rule; the operator knows the rotations
    anyway). The moderators are readers because a holder of the moderation key anchors the moderator it delivers to
    ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)), and two moderators may share no
    tenant; the roster is the instance's, so they already know each other. It has one **head** — the hash of its newest
@@ -279,10 +280,10 @@ Facts the design rests on, read in the code:
       one, and it never blocks anybody's write.
     - **Who is anchored, per tenant** (`loadTenantView`'s standing): a member whose join record opens, verifies owner →
       invite → newcomer, names as its signer another member the server lists as an **owner**, and carries a signer key
-      that is anchored in this tenant in turn — a retired key of that owner's chain included, so the members an owner
-      invited before securing their account keep their anchor. An owner the server lists with **no** join record is a
+      that is anchored in this tenant in turn — a retired key of that owner's chain only with the owner's endorsement
+      by their current key (decision 21). An owner the server lists with **no** join record is a
       **root** (the tenant's first owner) and is trusted on first use, by the pin; a newcomer anchors its inviting owner
-      through the link (decision 1). **Anyone else is an anomaly**: a non-owner without a join record, a record that
+      through the head in the link (decision 19). **Anyone else is an anomaly**: a non-owner without a join record, a record that
       does not open or verify or whose signer is no anchored owner, a pending proposal, a cycle of signers. Every
       newcomer writes a join record and no release predates it, so a non-owner without one is a membership only the
       server can have made.
@@ -305,16 +306,65 @@ Facts the design rests on, read in the code:
 17. **Key Transparency stays later, in a design of its own; this record stays KT-ready.** A hash-chained key chain
     with one head, and that head in the compare, is what a later log commits to without a format change.
 
+### Anchors that survive a rotation
+
+19. **An invite carries its anchor: the owner's head in the link, the owner's grant beside the carried one.**
+    - The link's sealed payload (`invite-link` v2) is `0x02 ‖ lp(seed) ‖ lp(signerHead) ‖ lp(signerUserId)`. A head
+      commits the identity **and** the proof key at its step, so a later key of the owner is reached only through steps
+      the old Secret-Key proof key signed, which a thief of a device never holds. A fingerprint pins only the identity:
+      an operator holding a stolen device's identity could serve an invented genesis beside it with a proof key of its
+      choosing (§ What stays open records why the first design ended invites at the owner's rotation for that reason).
+    - The invite keeps the owner's own grant as its **anchor** (`anchor_wrapped_grant`, `anchor_epoch`,
+      `anchor_grant_signature`): written at mint, moved only when a tenant rotation carries the invite **and** the
+      rotator is the invite's signer under the invite's signer key, nulled when the invite ends. Any other rotation
+      writes the carried grant alone.
+    - The preview serves the signer's whole key chain, the anchor and the tenant's epoch links in `(anchorEpoch,
+      grantedEpoch]`. The newcomer (`checkInvite`, `src/packages/crypto/src/invite.ts`) requires the seed's key to be
+      the served invite key, the seal's signer to be the served one, the served chain to pass through the link's head
+      and end at the served signer key, the `invite-key` and the anchor's `grant` signature to verify under that key,
+      and the carried epoch to peel down through the served links to exactly the anchor's key. The operator holds no
+      anchor key, so it cannot make a link that ends there: a tenant key it chose under a granter it fabricated is
+      refused (`epoch_unlinked`), and so is anything a retired owner key signed (`signer_chain_mismatch`).
+    - An existing account judges the inviting owner against its pin with that chain and pins the walked head with its
+      index (`anchorServedChain`, `identityPins.ts`); a carried grant's granter is not pinned — the link to the anchor,
+      not its key, vouches for that grant.
+20. **An owner's securing re-signs its open invites**, through the stage of decision 6. The plan
+    (`getRotationPlanInvites`) lists every open member invite the account signed with its current signatures; the
+    client re-signs, with the **new** identity, the `invite-key` statement and the anchor's `grant` statement only when
+    both current signatures verify under the outgoing key, and otherwise **declares** the invite (both null) — so an
+    invite the server minted itself never gets the new key's signature. Each staged re-signature is verified under the
+    stage's identity (`422 invite_resign_invalid`). The publish requires every open invite the account signed to be
+    staged at its current anchor epoch (`409 rotation_plan_changed`), writes the re-signed ones (signer key = the new
+    identity, and the carried grant's signature where it is the anchor) and **ends** a declared one. The account's own
+    tenant rotation then carries the re-signed invites and moves their anchor to its new epoch. An accept names the
+    signer key its join record carries (`signerIdentityDigest`), refused unless it is still the invite's (`409
+    invite_changed`); the client re-reads the preview and re-checks once with the invite key and the link facts it
+    kept — so no join record lands naming a key the publish just retired.
+21. **A join record a retired owner key signed counts only through the owner's endorsement.** An endorsement is the
+    statement `join-endorsement` over the tenant, the member, the owner and SHA-256 of the member's **sealed** join
+    record as stored, signed by the owner's identity (`signJoinEndorsement`, vector `#join_endorsement`), served as
+    `ScopeMember.joinEndorsement`. A reader (`loadTenantView`) accepts a record whose signer key is not the owner's served
+    current key only when that key is on the owner's chain at or after their join, the owner's served key is anchored in
+    the tenant, and the endorsement verifies under it. The server records who rooted each join
+    (`veyq_tenant_profile.join_signer_user_id`, at the accept); the owner's securing reads that list
+    (`getRotationPlanJoinRecords`), endorses with the **new** identity each record that verifies, names it as signer and
+    either names its outgoing key or carries an endorsement by it, declares any other (`null`), and stages them (`422
+    join_endorsement_invalid`); the publish requires every record the account rooted to be staged against the record
+    stored now (`409 rotation_plan_changed`) and writes the endorsements. So a record a thief signs with the retired key
+    after the rotation counts nowhere, and the owner's members stay anchored — atomically, unlike the best-effort
+    re-signing of verifications (decision 13). Neither list enters `stagedGrantsDigest`: an endorsement or a re-signed
+    invite hands nobody a key, and each carries the new identity's own signature, checked at upload.
+22. **The rotation's one body is bounded by the contract's caps.** The publish re-seals the whole pin store (ADR
+    0104), so its body is bounded by the store's 25,000 entries beside every other field at its cap: 10,101,123 bytes
+    against the default 10,485,760 (2026-10-28). `scripts/validate_rotation_shape.py` computes that bound from the
+    contract and fails on a field without a cap or a total above the server's limit; the pin entry's length is exact
+    (296 characters). The pin store stays in the publish: staging it would only matter for a higher cap.
+
 ### Migration
 
-18. **An owner's client signs a join record for each existing member**, over the key it pins for that member today and
-    that member's Secret-Key proof public key, so every member gets an anchor rooted at an owner at once. Existing
-    members anchor the owner by their current pin of the owner. That one step is trust on first use: the owner's pin
-    may itself be a first-use pin, or made only now for a member the owner never wrapped to, and the proof public key
-    comes from the server unchecked, once — it is not served today (§ Context), so the directory gains that field.
-    If two owners sign join records for the same member over different keys, the contradiction is shown as an anomaly
-    and the member's key counts as **not anchored**: no wrap to it, declared pending in a rotation, never a block on
-    anyone's write.
+18. **Not needed: no release shipped before join records existed (2026-10-28).** It would have had an owner's client
+    sign a join record for each member who joined without one. Every newcomer writes a join record at accept and veyq
+    has no release, so the only members without one are root owners (decision 15).
 
 ## Consequences
 
@@ -329,7 +379,7 @@ Facts the design rests on, read in the code:
   stays the server's word, § What stays open).
 - **The owner is the trust root — accepted (owner, 2026-10-27).** A compromised owner can issue invites for keys of
   their choosing; but an owner can already admit anyone legitimately, so a compromised owner compromises membership
-  in any model. Contradictions between owners are anomalies (decision 18). Owners cross-signing each other, or a member
+  in any model. Owners cross-signing each other, or a member
   distrusting one owner, is a later extension, not part of this record.
 - **A revoked or expired tenant invite keeps what it was granted — accepted, with a short expiry (owner,
   2026-10-27).** The tenant does not rotate on removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), so link
@@ -354,12 +404,19 @@ Facts the design rests on, read in the code:
   moved from the completing owner to the rotator — and for the tenant it is the burst
   [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 meant to spread across devices. What is spread now is the far
   larger node re-key (decision 11); a wrap per member is one asymmetric seal each.
-- **What it adds to the server, all opaque:** an invite's public key and the owner's signature on it, and a grant to
-  that key; a key chain beside each identity, read only by co-members; the join records in the tenant profile and the
-  verifications in a table of their own, each sealed under the tenant key; the Secret-Key proof public key in the
-  directory; a pending marker per declared omission; and a grant that names the key it is wrapped to, without which
-  decision 10 cannot be checked. The server learns that an invite exists and that an account rotated, as it does
-  today, and from a verification's address who verified whom in a tenant, never what was confirmed.
+- **What it adds to the server, all opaque:** an invite's public key and the owner's signature on it, a grant to
+  that key and the owner's anchor grant beside it; a key chain beside each identity, read only by co-members and by the
+  holder of an invite its owner signed; the join records in the tenant profile, who rooted each, and the owner's
+  endorsement of it; the verifications in a table of their own, sealed under the tenant key; the Secret-Key proof
+  public key in the directory; a pending marker per declared omission; and a grant that names the key it is wrapped to,
+  without which decision 10 cannot be checked. The server learns that an invite exists, who invited whom and that an
+  account rotated, as it does today, and from a verification's address who verified whom in a tenant, never what was
+  confirmed.
+- **The verification row's address stays in the clear — decided (2026-10-28).** An opaque address (a MAC under the
+  tenant key) was weighed and declined: the server authenticates every write, so it knows the verifier whatever the
+  row is keyed by; a compare is mutual and its two writes arrive seconds apart, so hiding the subject hides little from
+  an operator that reads its own timestamps; and it would cost the one-row-per-pair replace and the removal's delete by
+  member. Membership-class metadata: the server already knows both are members and when the verifier's client wrote.
 - **What it replaced in the records it builds on** each of them names in its `Replaced in part` header line (ADR 0020,
   0024, 0025, 0028, 0060, 0080, 0104, 0109); ADR 0109's rejection of a lazy re-key stands.
 - **The compare and its vectors changed** (decision 14): the safety number stays the identity's, a chain code of the
@@ -404,18 +461,14 @@ Facts the design rests on, read in the code:
   a key-holder's device then wrapped to them with no further human decision (ADR 0020 move 3b), so it was in effect
   the key already; what is new is a link that keeps its reach after a revoke, accepted above, and the mandatory code or
   password, which the operator that mails the link never sees, raises it above that. *The owner signs the admission*
-  was rejected because a worker learns who the owner is from the server. A newcomer now learns the owner's fingerprint from the link, inside its seal; an existing member, from its own
-  pin of the owner (decision 18). ADR 0020's further point — that a removed owner's old signatures would stay valid
+  was rejected because a worker learns who the owner is from the server. A newcomer now learns the owner's head from
+  the link, inside its seal; an existing member, from its own pin of the owner. ADR 0020's further point — that a removed owner's old signatures would stay valid
   without signed removals — is not answered here (§ What stays open).
 
 ## What stays open
 
-- **Decision 18 is not built**, and has nothing to do while veyq has no release: the join record landed before the
-  first one, so the only members without one are root owners (decision 15). If a release ships members without join
-  records, each of them reads as an anomaly to every co-member, and decision 18 is then needed
-  (`changes/cr-join-records-for-existing-members.md`).
 - **The admission-tag replay hypothesis** died untested with the tag (decision 5); nothing claims it.
-- **A membership the server made is an anomaly — decided (assistant, 2026-10-27, for owner review).** Every newcomer
+- **A membership the server made is an anomaly.** Every newcomer
   writes a join record and no release predates it, so a non-owner without one can only be a membership the server
   wrote; trusting it on first use would keep open exactly the door the join record exists to close, and treating
   owners the same would make every root owner an anomaly to everyone they did not invite. It is never wrapped to and is
@@ -424,25 +477,28 @@ Facts the design rests on, read in the code:
   invite's carry — and the acceptance of a group's grant in the active tenant. **What stays of the operator's class:**
   an owner is the server's word (below), so a member the server presents as an owner roots keys; a root owner is
   trusted on first use; the tenant scope's own grant from another member is judged by the pin alone, because the
-  standings are read with the key that grant carries (every new epoch must still link to the one held, ADR 0024); and
+  standings are read with the key that grant carries — and nothing ties that new epoch to the key the device held
+  before it: the floor refuses a lower epoch number, not an unlinked key (inbox #650); and
   a grant in a tenant this device cannot read — a group grant outside the active tenant, read while staging a
   rotation — falls back to the pin. A wrap where the tenant cannot be read fails closed instead.
-- **The invite accept and the moderation delivery stay pin-only**: there is no tenant the two sides share whose join
-  records could anchor the other. So a grant a rotation re-wrapped to an open invite names a member the newcomer cannot
-  anchor: only a grant the inviting owner wrapped verifies under the key the link anchors; one a rotation re-wrapped
-  is signed by the rotator, whose key the newcomer trusts on first use (`memberInviteAnchored`,
-  `src/web/src/features/tenant/tenantInvite.ts`; inbox #565). Neither the join records nor the key chain close it: the
-  newcomer reads no join record before it is a member, and the chain anchors a key from a head someone pinned, while
-  a newcomer has pinned no rotator. Nor is that rotator pinned at the accept: the grant's granter key may be one its
-  granter has since retired, and pinning it beside their current head would pin a pair that never existed, a
-  permanent anomaly; the newcomer pins them through their chain at its first contact as a co-member, where their join
-  record anchors them. The members a moderator seals a statement's facts to are sealed to unanchored (inbox #570).
-- **A join record signed by an owner's retired key still anchors** (decision 15), so the members an owner invited
-  before securing their account keep their anchor. The cost: a thief holding that retired key could, with the
-  operator, mint a join record after the rotation — the class this record accepts for verifications forged between
-  theft and rotation (§ Consequences), here not ended by the rotation (inbox #571).
-- **A pin the anchored chain does not hold is replaced only when that chain is at least as long as the pinned one —
-  decided (assistant, 2026-10-27, for owner review).** An owner-rooted join record is stronger than a first-use pin,
+- **A newcomer does not anchor the member whose rotation carried its invite**, and need not: that grant counts by
+  its epoch link to the owner's anchor (decision 19). What remains is a party that **held the anchor epoch** — a
+  member or former member, or a thief of a member's device — who, with the operator, can plant a later epoch for a
+  newcomer whose invite a rotation by someone other than the owner carried. The owner's own rotation moves the anchor
+  past it.
+- **Withholding the owner's securing step from a new account.** A newcomer that pinned nothing cannot tell a chain
+  served only up to the link's head from the owner's whole chain; with the operator, a thief of the owner's retired key
+  can then pass `checkInvite` under that key. The newcomer's join record names the retired key without an endorsement,
+  so every co-member reads it as an anomaly (decision 21), and an honest server refuses the accept (`409
+  invite_changed`). The withholding class below.
+- **The moderation delivery stays pin-only**, and the members a moderator seals a statement's facts to are sealed to
+  **unchecked** (`factsForMembers`): the moderation surface has no Master Key and so no pin store (ADR 0099 § 6), and
+  the recipients may share no tenant with the moderator, so there is no pinned head and no join record to anchor them
+  by — any check would be a first use the operator serves. An operator that substitutes a recipient's key reads that
+  statement's facts text (beside the measure's kind, target, legal ground and provision, which it reads anyway) and
+  can re-wrap it to the genuine key afterwards. Accepted: the law asks for the statement's delivery, not for its
+  secrecy from the provider, and no anchor exists to check against.
+- **A pin the anchored chain does not hold is replaced only when that chain is at least as long as the pinned one.** An owner-rooted join record is stronger than a first-use pin,
   and a pin off the chain is the mark of a key an operator substituted at a first contact; but a chain shorter than
   the one this account pinned may be a rollback of a head it saw, which the pin exists to refuse, so that is an
   anomaly. The residual: an operator that got a substituted chain pinned that is longer than the person's real one
@@ -450,18 +506,7 @@ Facts the design rests on, read in the code:
 - **A join record is sealed under the tenant epoch its invite's grant carried**, the epoch current at the accept (or
   an older one, for an invite a rotation declared pending), so a later reader opens it with that epoch's key from its
   epoch chain, never with the current key alone.
-- **An owner's open invites end with the owner's rotation.** The link anchors the owner's identity **fingerprint**
-  only, and a grant the inviting owner wrapped must verify under that key. Accepting the rotated owner through the key
-  chain would need the invitee to anchor the step old → new, but a fingerprint pins the identity and not the proof key:
-  an operator holding a stolen device's identity could serve an invented genesis naming that identity with a proof key
-  of its choosing, then sign a step to a key of its own — the prefix decision 16's pinned head exists to refuse.
-  Re-signing the invite under the new identity fails the fingerprint for the same reason. So a rotator re-grants an
-  open invite only while the chain from the head it pinned for the owner ends at the signer key, the invitee refuses one
-  whose signer is not the key at the served head, and is told to ask for a new invite; the ceremony's entry tells an
-  owner who signed open invites that they stop working. Keeping them soundly needs the owner's **head** inside the
-  link's seal, so the invitee walks the chain from a pinned head — a change of the built link format (inbox #568).
-- **Who counts as an owner stays the server's word — accepted as a residual (assistant, 2026-10-27, for owner
-  review).** A member checking a join record knows the tenant's owners from the server's role list
+- **Who counts as an owner stays the server's word — accepted as a residual.** A member checking a join record knows the tenant's owners from the server's role list
   (`ScopeMember.role`) and its own pins; roles are not signed. A former owner, or a member the server presents as
   owner, can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member
   residual, and closing it needs signed roles and removals — the membership protocol ADR 0020 declined, which nothing
@@ -470,6 +515,7 @@ Facts the design rests on, read in the code:
   a first-time reader cannot tell on its own (the fork, until Key Transparency).
 - **A malicious server on a retry** may re-list a revoked invite to the other of two concurrent rotators — the
   honest-operator class, as today.
-- **What is still trusted on first use**: a root owner, the invite accept's unknown inviter and foreign granter, and
-  every contact outside a shared tenant (the moderation delivery). Inside a tenant everyone else is anchored by a join
+- **What is still trusted on first use**: a root owner, and every contact outside a shared tenant (the moderation
+  delivery). A newcomer anchors its inviting owner through the head in the link and the carried epoch through the
+  owner's anchor (decision 19). Inside a tenant everyone else is anchored by a join
   record or is an anomaly.

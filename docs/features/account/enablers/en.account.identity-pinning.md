@@ -52,8 +52,7 @@ head at revision n:                                 seal("identity-pins" ‖ n, 
   It pins the identity **and** the Secret-Key proof key, so an invented chain that names the pinned identity beside a
   proof key of the operator's choosing does not start from it. The keys are single letters so an entry with its head
   stays inside the 192-byte padding; an entry without a 32-byte head does not open.
-- **`index`** — the index of the pinned head's step in the chain (`-1` for a head pinned unread at an invite's
-  accept): it tells a pin the join-anchored chain does not hold from a rollback (§ Main flow, `replaced`).
+- **`index`** — the index of the pinned head's step in the chain: it tells a pin the join-anchored chain does not hold from a rollback (§ Main flow, `replaced`).
 - **`firstSeenAt`** — when this contact was first pinned (kept when the pin moves along the chain, new at a
   replacement); a member reads *New* while it is under 14 days old.
 - **`replaced`** — the join record replaced this pin (the profile says so). There is **no state**: whether someone is
@@ -74,14 +73,15 @@ reset write the whole set in one request, and that request must fit the server's
    key-chain head — a rotation's re-grant, a grant-delivery job, a group add and its name key, an open invite's carry,
    a moderation delivery — or to trust a grant that contact signed.
 2. **In a tenant, ask the person's standing there first** (`loadTenantView`, `src/web/src/features/account/tenantTrust.ts`;
-   ADR 0111 decisions 12 and 15): their join record must open under the tenant key, verify owner → invite → newcomer
-   and name an owner the server lists whose key in it is anchored in the tenant in turn (`joined`); an owner with no
-   join record is a `root`; anyone else — a non-owner without a join record, a record that does not verify — is
+   ADR 0111 decisions 12, 15 and 21): their join record must open under the tenant key, verify owner → invite →
+   newcomer and name an owner the server lists whose key in it is anchored in the tenant in turn (`joined`) — a key
+   that owner has since retired only with their `join-endorsement` of the record by their current key; an owner with
+   no join record is a `root`; anyone else — a non-owner without a join record, a record that does not verify — is
    `unanchored`, and a tenant this device cannot read is `unavailable`. `unanchored` is an **anomaly** with no chain
    read; so is `unavailable` for a wrap. A `joined` person's chain is always read and walked from the step that
    installs the identity **and** proof key the record names (`readJoinedChain`), whatever prefix the server serves
-   before it. A `root`, and every check outside a shared tenant (the invite accept, a moderation delivery), go by the
-   pin alone, below.
+   before it. A `root`, and every check outside a shared tenant (a moderation delivery), go by the pin alone, below;
+   the invite accept goes by the pin and the chain its invite serves (step 5).
 3. **Open the pin store** (unseal under the Master Key) and judge the served key and head (`anchorIdentity`):
    - **`match`** — the served head is the pinned head and the served key the key at it; no chain read (for a `joined`
      person: the pinned head is on the chain and carries the pinned key).
@@ -105,10 +105,14 @@ reset write the whole set in one request, and that request must fit the server's
    opens only at an epoch at or below this device's floor for the scope, and is refused above it
    (`granter_key_retired`): such grants exist from before the rotation, and a new epoch from a retired key is what a
    thief with the old identity would forge.
-5. **The invite accept** is no co-member yet, so no chain is served to it: the inviting owner (whose key the link's
-   fingerprint already checked) is pinned at the served head unread on first use and judged by the chain once pinned;
-   a **foreign granter** of a grant a rotation re-wrapped stays trusted on first use and is not pinned there (its key
-   may be one its granter has since retired) — the account pins them at its first contact as a co-member.
+5. **The invite accept** is no co-member yet, so `getKeyChain` serves it nothing; the invite's preview serves the
+   inviting owner's chain instead, which `checkInvite` has already walked from the head sealed in the link to the
+   served owner key (ADR 0111 decision 19). `anchorServedChain` judges that chain against the pin as `readChain`
+   does — a pinned head must lie on it and carry the pinned key, else `anomaly` — and on first use pins the walked
+   head at its real index. The granter of a grant a rotation carried is judged against its pin only if this account
+   pinned them before, and is not pinned here: the grant's epoch link down to the owner's anchor vouches for it, not
+   its key, which may be one its granter has since retired — the account pins them at its first contact as a
+   co-member.
 6. **Verification is not in this store.** A compare of safety number and chain code writes a signed statement into
    the tenant ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md));
    it starts from this check — only a key and head this device anchors in the tenant are compared and signed — and

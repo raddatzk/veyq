@@ -7,36 +7,44 @@
 //     the expiry, with the owner's identity key.
 //   - **The link carries the seed, sealed**: `https://<domain>/tenant/accept#<token>.<sealed>`, where `token` is the
 //     server's single-use invite secret and `sealed` the base64url of `mode(1) ‖ kdfParams(32) ‖ seal`. The seal
-//     (purpose `invite-link`, bound to the tenant and the invite) holds the seed, the owner's fingerprint hash and the
-//     owner's account, under `Argon2id(secret, salt)` — the secret a generated code (`mode` 1) or a password the owner
-//     chose (`mode` 2). The server mails the link and never sees the code, so the operator, who can guess offline,
-//     faces a 50-bit code behind Argon2id at the production profile.
-//   - **The invitee checks before it trusts**: the bundle it derives from the seed must be the one the server serves,
-//     the served owner key must hash to the fingerprint inside the seal, and the owner's signature must verify under it
-//     (`checkInvite`). Nothing it relies on comes from the server unchecked.
+//     (purpose `invite-link`, bound to the tenant and the invite) holds the seed, the head of the owner's key chain when
+//     they signed and the owner's account, under `Argon2id(secret, salt)` — the secret a generated code (`mode` 1) or a
+//     password the owner chose (`mode` 2). The server mails the link and never sees the code, so the operator, who can
+//     guess offline, faces a 50-bit code behind Argon2id at the production profile.
+//   - **The invite keeps its owner's grant as its anchor**: the owner's own grant of the tenant key at the anchor epoch
+//     (`E_a`), beside whatever grant a later rotation carried the invite with (ADR 0111 decision 19).
+//   - **The invitee checks before it trusts** (`checkInvite`): the bundle it derives from the seed must be the one the
+//     server serves; the owner's served chain must pass through the head inside the seal and end at the served owner
+//     key, which signed the invite key and the anchor; and the tenant key must be the anchor's `E_a` or peel down to it
+//     through the tenant's epoch links. Nothing it relies on comes from the server unchecked.
 //   - **It grants itself and writes a join record**: the `invite-accept` proof (signed by the invite key, checked by the
 //     server) and the join record — signed by the invite key AND the new identity over the `join-record` statement,
 //     sealed under the tenant key as the field `member-join-record`.
+//   - **An owner's securing endorses the join records it rooted** (`join-endorsement`): the new key signs SHA-256 of each
+//     sealed record, so a record the retired key signed still counts — and one a thief signs with that key after does not.
 //
-// Pinned by `contracts/crypto/vectors/v1.json` (`#invite_key`, `#invite_link`, `#join_record`, `seal.sym['invite-link']`,
-// `field_seal['member-join-record']`).
+// Pinned by `contracts/crypto/vectors/v1.json` (`#invite_key`, `#invite_link`, `#join_record`, `#join_endorsement`,
+// `seal.sym['invite-link']`, `field_seal['member-join-record']`).
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { concat, kemPublic, lp, utf8 } from './primitives'
-import { open, openField, seal, sealField } from './seal'
+import { open, openAs, openField, seal, sealField } from './seal'
 import {
   ARGON,
   decodeKdfParams,
   deserializeIdentityPublic,
   encodeKdfParams,
-  fingerprintHash,
+  grantStatement,
+  hybridSecret,
   identitySign,
   identityVerify,
   randomBytes,
   serializeIdentityPublic,
+  verifyKeyChain,
   type ArgonParams,
   type Identity,
+  type KeyChainLink,
 } from './v1'
 import { b64url, fromB64url } from './base64'
 
@@ -134,9 +142,11 @@ export function inviteLinkSecret(mode: InviteLinkMode, typed: string): Uint8Arra
   return code === null ? null : utf8(code)
 }
 
-/** What the link's seal holds: the invite key's seed, and who signed the invite — the owner's fingerprint hash and
- *  account. The fingerprint is inside the seal, so an operator cannot swap it together with the served key. */
-export type InviteLinkPayload = { seed: Uint8Array; signerFingerprintHash: Uint8Array; signerUserId: string }
+/** What the link's seal holds: the invite key's seed, and who signed the invite — the head of the owner's key chain
+ *  when they signed, and the owner's account. The head is inside the seal, so an operator cannot swap it together with
+ *  the served key; and a head commits the identity AND the Secret-Key proof key at that step, so the owner's chain
+ *  walked from it reaches a later key only through steps the proof key signed — which a thief of a device never holds. */
+export type InviteLinkPayload = { seed: Uint8Array; signerHead: Uint8Array; signerUserId: string }
 
 /** A link secret's address: the tenant and the invite it opens. */
 export type InviteAddress = { tenantId: string; inviteId: string }
@@ -149,19 +159,25 @@ export class InviteLinkInvalid extends Error {
 }
 
 const UUID_BYTES = 36
+const HEAD_BYTES = 32
 
-/** `lp(seed) ‖ lp(signerFingerprintHash) ‖ lp(utf8(signerUserId))`. */
+/** The payload's layout version. Version 1 (the owner's fingerprint hash where the head is now, and no version byte) is
+ *  refused: veyq has no release, so no version-1 link exists outside a dev database. */
+const INVITE_LINK_PAYLOAD_VERSION = 2
+
+/** `0x02 ‖ lp(seed) ‖ lp(signerHead) ‖ lp(utf8(signerUserId))`. */
 export function encodeInviteLinkPayload(p: InviteLinkPayload): Uint8Array {
   if (p.seed.length !== INVITE_SEED_BYTES) throw new InviteLinkInvalid('seed')
-  if (p.signerFingerprintHash.length !== 32) throw new InviteLinkInvalid('fingerprint')
+  if (p.signerHead.length !== HEAD_BYTES) throw new InviteLinkInvalid('head')
   const userId = utf8(p.signerUserId)
   if (userId.length !== UUID_BYTES) throw new InviteLinkInvalid('signer')
-  return concat(lp(p.seed), lp(p.signerFingerprintHash), lp(userId))
+  return concat(Uint8Array.of(INVITE_LINK_PAYLOAD_VERSION), lp(p.seed), lp(p.signerHead), lp(userId))
 }
 
 export function decodeInviteLinkPayload(b: Uint8Array): InviteLinkPayload {
-  const [seed, fp, user] = readFixed(b, [INVITE_SEED_BYTES, 32, UUID_BYTES], (r) => new InviteLinkInvalid(r))
-  return { seed, signerFingerprintHash: fp, signerUserId: new TextDecoder().decode(user) }
+  if (b.length < 1 || b[0] !== INVITE_LINK_PAYLOAD_VERSION) throw new InviteLinkInvalid('version')
+  const [seed, head, user] = readFixed(b.slice(1), [INVITE_SEED_BYTES, HEAD_BYTES, UUID_BYTES], (r) => new InviteLinkInvalid(r))
+  return { seed, signerHead: head, signerUserId: new TextDecoder().decode(user) }
 }
 
 const HEADER_BYTES = 1 + 32 // mode ‖ kdfParams (16 bytes of params, a 16-byte salt)
@@ -209,17 +225,42 @@ export function parseInviteFragment(fragment: string): { token: string; sealed: 
 
 // ── The invitee's checks ──────────────────────────────────────────────────────────────────────────────
 
-/** What the server serves about an invite (the preview) — every byte of it unchecked until `checkInvite` ran. */
+/** One link of the tenant scope's epoch chain as served (ADR 0024): `E_{epoch-1}` sealed under `E_epoch` (purpose
+ *  `scope-epoch`, bound to the scope and the epoch it is stored at), `wrappedPrev` DECODED. */
+export type ServedEpochLink = { epoch: number; wrappedPrev: Uint8Array }
+
+/**
+ * What the server serves about an invite (the preview) — every byte of it unchecked until `checkInvite` ran. Byte
+ * strings are DECODED; `expiresAt` is Unix seconds. `signerKeyChain` is the inviting owner's whole key chain, genesis
+ * first. The anchor is the owner's own grant of the tenant key at `anchorEpoch`; the grant is the one the invite carries
+ * now, at `grantedEpoch` — the anchor itself, or one a later rotation re-wrapped, with its granter's key beside it; the
+ * epoch links are the tenant scope's for every epoch in `(anchorEpoch, grantedEpoch]`.
+ */
 export type ServedInvite = InviteAddress & {
   invitePublicKey: Uint8Array
   inviteKeySignature: Uint8Array
   expiresAt: number
   signerUserId: string
   signerIdentityPublicKey: Uint8Array
+  signerKeyChain: readonly KeyChainLink[]
+  anchorWrappedGrant: Uint8Array
+  anchorEpoch: number
+  anchorGrantSignature: Uint8Array
+  wrappedGrant: Uint8Array
+  grantedEpoch: number
+  grantSignature: Uint8Array
+  granterIdentityPublicKey: Uint8Array
+  epochLinks: readonly ServedEpochLink[]
 }
 
 /** Which check refused an invite. One refusal for the user ("ask for a new one"), one reason each for the tests. */
-export type InviteCheckFailure = 'key_mismatch' | 'signer_mismatch' | 'fingerprint_mismatch' | 'bad_signature'
+export type InviteCheckFailure =
+  | 'key_mismatch'
+  | 'signer_mismatch'
+  | 'signer_chain_mismatch'
+  | 'bad_signature'
+  | 'anchor_invalid'
+  | 'epoch_unlinked'
 
 export class InviteCheckFailed extends Error {
   constructor(readonly reason: InviteCheckFailure) {
@@ -228,30 +269,139 @@ export class InviteCheckFailed extends Error {
   }
 }
 
+/** An invite that passed every check: the invite key the seed derives, the tenant key its grant carries at
+ *  `grantedEpoch`, and where the owner's chain ended — its head, index and key — for the pin store. The caller zeroes
+ *  `epochKey` and the invite key's private halves when done with them. */
+export type CheckedInvite = {
+  inviteKey: Identity
+  epochKey: Uint8Array
+  grantedEpoch: number
+  signer: { head: Uint8Array; index: number; identityPublicKey: Uint8Array }
+}
+
 /**
- * The invitee's checks, in the order an operator would have to beat them (ADR 0111 decision 1): the key the seed
- * derives must be the served one (the operator cannot choose the seed), the served signer must be the account and the
- * key the seal names (the fingerprint is inside the seal), and the owner's signature over the invite key must verify
- * under that key. Returns the derived invite key; throws {@link InviteCheckFailed} naming the first check that failed.
+ * The invitee's checks, in the order an operator would have to beat them (ADR 0111 decision 1,
+ * ADR 0111 decision 19). Returns the checked invite; throws {@link InviteCheckFailed} naming the
+ * first check that failed:
+ *   - `key_mismatch`: the key the seed derives is not the served invite key (the operator cannot choose the seed);
+ *   - `signer_mismatch`: the served signer is not the account the seal names;
+ *   - `signer_chain_mismatch`: the served chain is not the signer's, does not verify, does not pass through the head
+ *     inside the seal, or does not end at the served signer key byte for byte. So an owner who secured the account after
+ *     signing is accepted at the new key — reached only through a step the retired proof key signed — and a retired key
+ *     never;
+ *   - `bad_signature`: the `invite-key` signature does not verify under that newest key;
+ *   - `anchor_invalid`: neither does the anchor grant's `grant` signature;
+ *   - `epoch_unlinked`: the tenant key is neither the anchor's `E_a` nor one whose epoch links peel down to it — the
+ *     anchor does not open; or the carried grant sits below the anchor; or, at the anchor's epoch, it is not the anchor
+ *     byte for byte; or, above it, its signature does not verify under the served granter key, it does not open, or
+ *     peeling the served links from it down to the anchor's epoch does not yield exactly `E_a`. The operator holds no
+ *     `E_a`, so no link it makes ends there: the granter's key needs no anchor of its own.
  */
-export function checkInvite(payload: InviteLinkPayload, served: ServedInvite): Identity {
-  const invite = inviteKeyFromSeed(payload.seed)
-  if (!bytesEqual(serializeIdentityPublic(invite.pub), served.invitePublicKey)) throw new InviteCheckFailed('key_mismatch')
+export function checkInvite(payload: InviteLinkPayload, served: ServedInvite): CheckedInvite {
+  const inviteKey = inviteKeyFromSeed(payload.seed)
+  if (!bytesEqual(serializeIdentityPublic(inviteKey.pub), served.invitePublicKey)) throw new InviteCheckFailed('key_mismatch')
   if (payload.signerUserId !== served.signerUserId) throw new InviteCheckFailed('signer_mismatch')
-  let signer: Identity['pub']
-  try {
-    signer = deserializeIdentityPublic(served.signerIdentityPublicKey)
-  } catch {
-    throw new InviteCheckFailed('fingerprint_mismatch')
+  const chain = verifyKeyChain({ userId: payload.signerUserId, links: served.signerKeyChain }, payload.signerHead)
+  if (!chain.ok || !bytesEqual(chain.identityPublicKey, served.signerIdentityPublicKey)) {
+    throw new InviteCheckFailed('signer_chain_mismatch')
   }
-  if (!bytesEqual(fingerprintHash(signer), payload.signerFingerprintHash)) throw new InviteCheckFailed('fingerprint_mismatch')
+  // verifyKeyChain decoded every bundle of the chain, the newest included.
+  const signerSign = deserializeIdentityPublic(chain.identityPublicKey).sign
   const signed = inviteKeySignatureVerifies(
-    signer.sign,
+    signerSign,
     { tenantId: served.tenantId, inviteId: served.inviteId, invitePublicKey: served.invitePublicKey, expiresAt: served.expiresAt },
     served.inviteKeySignature,
   )
   if (!signed) throw new InviteCheckFailed('bad_signature')
-  return invite
+  const grantOf = (epoch: number, wrappedGrant: Uint8Array) =>
+    grantStatement({
+      scopeId: served.tenantId, scopeKind: 'TENANT', epoch, recipientUserId: served.inviteId,
+      recipientIdentityPublicKey: served.invitePublicKey, wrappedGrant,
+    })
+  if (!identityVerify(signerSign, grantOf(served.anchorEpoch, served.anchorWrappedGrant), served.anchorGrantSignature)) {
+    throw new InviteCheckFailed('anchor_invalid')
+  }
+  const anchorKey = openGrant(served.tenantId, served.anchorEpoch, inviteKey, served.anchorWrappedGrant)
+  if (anchorKey === null) throw new InviteCheckFailed('epoch_unlinked')
+  const checked = (epochKey: Uint8Array): CheckedInvite => ({
+    inviteKey,
+    epochKey,
+    grantedEpoch: served.grantedEpoch,
+    signer: { head: chain.head, index: chain.index, identityPublicKey: chain.identityPublicKey },
+  })
+  if (served.grantedEpoch === served.anchorEpoch) {
+    if (!bytesEqual(served.wrappedGrant, served.anchorWrappedGrant)) throw unlinked(anchorKey)
+    return checked(anchorKey)
+  }
+  // A carried grant below the anchor needs no test of its own: the peel refuses to go up, and the key it carries is not
+  // E_a either way (bite-tested 2026-10-28: an explicit refusal here was no load-bearing check).
+  let granterSign: Uint8Array
+  try {
+    granterSign = deserializeIdentityPublic(served.granterIdentityPublicKey).sign
+  } catch {
+    throw unlinked(anchorKey)
+  }
+  if (!identityVerify(granterSign, grantOf(served.grantedEpoch, served.wrappedGrant), served.grantSignature)) throw unlinked(anchorKey)
+  const epochKey = openGrant(served.tenantId, served.grantedEpoch, inviteKey, served.wrappedGrant)
+  if (epochKey === null) throw unlinked(anchorKey)
+  const peeled = peelEpochKey(served.tenantId, epochKey, served.grantedEpoch, served.anchorEpoch, served.epochLinks)
+  const linked = peeled !== null && bytesEqual(peeled, anchorKey)
+  peeled?.fill(0)
+  if (!linked) {
+    epochKey.fill(0)
+    throw unlinked(anchorKey)
+  }
+  anchorKey.fill(0)
+  return checked(epochKey)
+}
+
+/** The tenant key a grant to the invite key carries, or null when it does not open as that epoch's grant. */
+function openGrant(tenantId: string, epoch: number, inviteKey: Identity, wrappedGrant: Uint8Array): Uint8Array | null {
+  try {
+    return openAs({ purpose: 'scope-grant', scopeId: tenantId, epoch }, hybridSecret(inviteKey.priv), wrappedGrant)
+  } catch {
+    return null
+  }
+}
+
+/** The `epoch_unlinked` refusal, the anchor's key zeroed first. */
+function unlinked(anchorKey: Uint8Array): InviteCheckFailed {
+  anchorKey.fill(0)
+  return new InviteCheckFailed('epoch_unlinked')
+}
+
+/**
+ * Peel a scope's epoch chain (ADR 0024) from `key` — the scope key at `fromEpoch` — down to `toEpoch`, through the served
+ * `links` (each `E_{n-1}` sealed under `E_n`, purpose `scope-epoch`, bound to the scope and `n`). Returns the key at
+ * `toEpoch` (a copy of `key` when the two are one epoch), or null when it cannot: `toEpoch` above `fromEpoch`, a link in
+ * between missing, an epoch served twice, or a link that does not open under the key above it. Never a throw: every link
+ * is the server's. The keys in between are zeroed; the caller owns the result.
+ */
+export function peelEpochKey(
+  scopeId: string, key: Uint8Array, fromEpoch: number, toEpoch: number, links: readonly ServedEpochLink[],
+): Uint8Array | null {
+  if (!Number.isSafeInteger(fromEpoch) || !Number.isSafeInteger(toEpoch) || toEpoch < 0 || toEpoch > fromEpoch) return null
+  const byEpoch = new Map<number, Uint8Array>()
+  for (const l of links) {
+    if (byEpoch.has(l.epoch)) return null
+    byEpoch.set(l.epoch, l.wrappedPrev)
+  }
+  let current: Uint8Array = key.slice()
+  for (let e = fromEpoch; e > toEpoch; e--) {
+    const wrappedPrev = byEpoch.get(e)
+    let prev: Uint8Array | null = null
+    if (wrappedPrev !== undefined) {
+      try {
+        prev = open({ purpose: 'scope-epoch', scopeId, epoch: e }, current, wrappedPrev)
+      } catch {
+        prev = null
+      }
+    }
+    current.fill(0)
+    if (prev === null) return null
+    current = prev
+  }
+  return current
 }
 
 // ── The join record ───────────────────────────────────────────────────────────────────────────────────
@@ -373,6 +523,35 @@ export function decodeJoinRecord(b: Uint8Array): JoinRecord {
     signerIdentityPublicKey: signer,
     inviteSignature: inviteSig,
     identitySignature: identitySig,
+  }
+}
+
+// ── An owner's endorsement of a join record (ADR 0111 decision 21) ────────────────────────
+
+/** What an endorsement covers: the record's address, the owner who rooted it, and the member's SEALED join record
+ *  exactly as stored — the bytes the server serves as `sealedJoinRecord`. */
+export type JoinEndorsementInput = JoinRecordAddress & { signerUserId: string; sealedJoinRecord: Uint8Array }
+
+export const joinEndorsementStatement = (e: JoinEndorsementInput) =>
+  ({
+    purpose: 'join-endorsement',
+    tenantId: e.tenantId,
+    userId: e.userId,
+    signerUserId: e.signerUserId,
+    recordDigest: sha256(e.sealedJoinRecord),
+  }) as const
+
+/** The owner's identity (`Identity['priv'].sign`) endorses one sealed join record. Deterministic, so the vectors pin it. */
+export const signJoinEndorsement = (ownerSignPrivateKey: Uint8Array, e: JoinEndorsementInput): Uint8Array =>
+  identitySign(ownerSignPrivateKey, joinEndorsementStatement(e))
+
+/** Whether `signature` is the owner's (`ownerSignPublicKey`) over this sealed record at this address. False — never a
+ *  throw — for any malformed part: every byte here came from the server. */
+export function joinEndorsementVerifies(ownerSignPublicKey: Uint8Array, e: JoinEndorsementInput, signature: Uint8Array): boolean {
+  try {
+    return identityVerify(ownerSignPublicKey, joinEndorsementStatement(e), signature)
+  } catch {
+    return false
   }
 }
 

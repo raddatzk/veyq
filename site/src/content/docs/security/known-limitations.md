@@ -94,11 +94,13 @@ key and an Ed25519 signing key), which the server relays from its directory. Wha
   opening it: in the personal scope only under its own key, in a shared scope under a key of the granter's pinned
   chain (a retired one only for an epoch at or below the device's epoch floor).
 - **A tenant invite is anchored by its link.** The invitee's client derives the invite key from the seed sealed in the
-  link and checks the owner's signature on it against the owner fingerprint sealed beside it, so the operator, which
-  mails the link, cannot swap the key or the owner in it. The seal opens only with a code the owner passes on outside
-  veyq (50 bits behind Argon2id), or a password the owner chose
+  link and walks the owner's key chain from the head sealed beside it to the key that signed the invite, so the
+  operator, which mails the link, cannot swap the key or the owner in it, and an owner who secured their account since
+  is followed through their chain. The tenant key it is handed must be the owner's own grant kept beside the invite,
+  or link down to it, so the operator cannot hand the newcomer a key of its choosing. The seal opens only with a code
+  the owner passes on outside veyq (50 bits behind Argon2id), or a password the owner chose
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 1).
+  decisions 1 and 19).
 
 **What remains.** TOFU cannot detect a lie told before first sight. If the operator substitutes a key *before*
 anyone pinned the real one, and re-wraps genuine content too, nothing looks wrong until the two members compare safety
@@ -110,11 +112,9 @@ The same gap covers further cases:
   [Freshness](#freshness-only-where-a-device-keeps-a-mark)).
 - **A member the operator presents as an owner.** A membership the operator writes as an ordinary member has no join
   record and is an anomaly nobody wraps to. But who is an owner is the server's word — roles are not signed — so a
-  membership it writes as an owner is a root, trusted on first use, and can root keys of its choosing. And a join
-  record signed by an owner's retired key still anchors, so a thief holding that key could, with the operator, mint
-  one after the owner secured the account. Before it mints an invite, the server checks that the invite key carries
-  the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of
-  the attacker's (ADR 0111 § What stays open).
+  membership it writes as an owner is a root, trusted on first use, and can root keys of its choosing. Before it
+  mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner
+  password without the unlocked vault cannot invite an account of the attacker's (ADR 0111 § What stays open).
 - **A tenant invite guessed open.** The operator holds every mailed link, sealed part included, and can guess the code
   offline; a weak password the owner chose instead falls faster.
 - **A shared-scope grant signed by a granter identity the operator fabricated**, where the pin alone decides: the
@@ -122,8 +122,7 @@ The same gap covers further cases:
   use, so an operator that fabricates both the granter and the key is not detected on the spot — only by the next
   verification of that granter's safety number. In the active tenant a group grant from a granter without an
   owner-rooted join record is refused. The signature rules out a grant presented under the identity of someone the
-  recipient has already pinned (ADR 0028 Decision 6). A newcomer's invite grant that a rotation re-wrapped is one such
-  grant: it names the rotating member, and the newcomer reads no join record before it is a member.
+  recipient has already pinned (ADR 0028 Decision 6).
 
 **Related residuals of the same mechanism:**
 
@@ -143,12 +142,22 @@ The same gap covers further cases:
   already saw a newer one, or by two members whose chain codes differ.
 - **The server sees who verified whom.** A verification's content is sealed under the tenant key, so the server cannot
   read, fake or tell which ones count; but each is stored under its tenant, verifier and subject with the time it was
-  written.
-- **An owner's open invites end when the owner secures their account.** The link anchors the owner's fingerprint, not
-  the owner's chain head, so the invitee cannot follow the rotation and is told to ask for a new invite.
-- **A moderation statement's recipients are sealed to as served.** The keys `getModerationStatementRecipients` returns
-  are sealed to without the anchor gate, though its contract asks for a pin check first; the recipients may share no
-  tenant with the moderator. Open, not decided.
+  written. Decided, not an oversight: the server authenticates every write, so it knows the verifier whatever the row
+  is keyed by, and a compare's two writes arrive seconds apart, so hiding the subject would hide little.
+- **A later epoch planted for a newcomer by someone who held the anchor's.** When a rotation by someone other than the
+  inviting owner carried an open invite, a party who held the epoch the invite is anchored at — a member, a former
+  member, or a thief of a member's device — could, with the operator, serve the newcomer a later epoch of its own that
+  links to it. The owner's own rotation moves the anchor past it.
+- **The owner's securing withheld from a new account.** A newcomer that pinned nothing cannot tell a chain served only
+  up to the head in the link from the owner's whole chain, so a thief of the owner's retired key could, with the
+  operator, pass the invite's check under that key. The newcomer's join record then names the retired key, which
+  counts only with the owner's endorsement by their current key, so every co-member reads it as an anomaly; an honest
+  server refuses the accept.
+- **A moderation statement's recipients are sealed to unchecked.** The keys `getModerationStatementRecipients` returns
+  are sealed to without the anchor gate: the moderation surface holds no pin store, and the recipients may share no
+  tenant with the moderator, so there is nothing to anchor them by. An operator that substitutes a key reads that
+  statement's facts text, beside the measure's kind, target, legal ground and provision, which it reads anyway.
+  Accepted: the law asks for the statement's delivery, not for its secrecy from the provider.
 
 **Decided in:** [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md),
   [security-model § Key-directory trust](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#key-directory-trust--tofu-pinning--out-of-band-verification-adr-0028).

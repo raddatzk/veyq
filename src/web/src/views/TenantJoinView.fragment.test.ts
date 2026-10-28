@@ -9,6 +9,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 const route = vi.hoisted(() => ({ hash: '' }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => route }))
 vi.mock('../features/tenant/tenantInvite', () => ({
+  // The view tells a failed invite check from an HTTP refusal by its class (mapError).
+  InviteCheckFailed: class InviteCheckFailed extends Error {},
   previewInvite: vi.fn(),
   acceptInvite: vi.fn(),
   registerAndAccept: vi.fn(),

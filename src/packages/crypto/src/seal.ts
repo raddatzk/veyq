@@ -348,7 +348,8 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
  * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#grant_signature`,
- * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`, `#key_chain`).
+ * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`, `#join_endorsement`,
+ * `#key_chain`, `#verification`).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext. A grant to an open
@@ -370,6 +371,11 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     key, so a redeem with the token alone is refused.
  *   - `join-record` (ADR 0111 decisions 3 and 12): what the invite key AND the new identity both sign — who joined
  *     (account, identity digest, Secret-Key proof public key) through which owner-signed invite.
+ *   - `join-endorsement` (ADR 0111 decision 21): what an inviting owner's identity signs over a
+ *     join record they rooted — the tenant, the member, the owner and SHA-256 of the member's SEALED join record as
+ *     stored, so it endorses that one record and the server can check it without opening anything. An owner's securing
+ *     endorses every record its outgoing key rooted with the new key, so a record a retired key signed counts only
+ *     with the current key's endorsement (./invite.ts).
  *   - `key-chain-genesis` (ADR 0111 decision 7, cr-secure-the-account): step 0 of an account's key chain — the identity
  *     public bundle and the Secret-Key proof public key the account was born with, in full. Never signed: there is no
  *     key before it. Its own label, so a genesis can never be read as a step and no step as a genesis.
@@ -398,6 +404,7 @@ export const STATEMENT_PURPOSES = {
   'moderation-proof': [['challenge', 'bytes'], ['operationId', 'operationId'], ['caseId', 'optionalId']],
   'invite-key': [['tenantId', 'id'], ['inviteId', 'id'], ['inviteKeyDigest', 'digest'], ['expiresAt', 'uint']],
   'invite-accept': [['inviteId', 'id'], ['userId', 'id'], ['identityDigest', 'digest']],
+  'join-endorsement': [['tenantId', 'id'], ['userId', 'id'], ['signerUserId', 'id'], ['recordDigest', 'digest']],
   'join-record': [
     ['tenantId', 'id'],
     ['userId', 'id'],
