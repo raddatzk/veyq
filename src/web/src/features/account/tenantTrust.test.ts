@@ -82,12 +82,25 @@ function rotated(p: Person, next: ChainKeys = chainKeys()): Person {
   chains.serve(chain)
   return { userId: p.userId, chain }
 }
-/** `p` as the tenant's directory lists them: their newest key and head, a role, and the join record they wrote. */
-function row(p: Person, role: ScopeMemberRoleEnum, record?: invite.JoinRecord, o: { pendingConsent?: boolean } = {}): ScopeMember {
+/** Who endorses a member's join record, with which key — over the record as stored, or (an attack) over another
+ *  sealing of it. */
+type Endorsement = { signerUserId: string; by: v1.Identity; overAnotherSealing?: boolean }
+
+/** `p` as the tenant's directory lists them: their newest key and head, a role, the join record they wrote, and the
+ *  endorsement of it the record's signer wrote (cr-trust-anchors-survive-rotation decision 9). */
+function row(
+  p: Person, role: ScopeMemberRoleEnum, record?: invite.JoinRecord, o: { pendingConsent?: boolean; endorsed?: Endorsement } = {},
+): ScopeMember {
+  const sealed = record ? invite.sealJoinRecord(K0, { tenantId: T, userId: p.userId }, record) : null
+  const e = o.endorsed
+  const endorsedBytes = e?.overAnotherSealing ? invite.sealJoinRecord(K0, { tenantId: T, userId: p.userId }, record!) : sealed
   return {
     userId: p.userId, username: p.userId.slice(-4), avatarRevision: 0, role, identityPublicKey: bundleB64(keysOf(p)),
     keyChainHead: headOf(p.chain), pending: false, pendingConsent: o.pendingConsent,
-    sealedJoinRecord: record ? b64std(invite.sealJoinRecord(K0, { tenantId: T, userId: p.userId }, record)) : null,
+    sealedJoinRecord: sealed ? b64std(sealed) : null,
+    joinEndorsement: e && endorsedBytes
+      ? b64std(invite.signJoinEndorsement(e.by.priv.sign, { tenantId: T, userId: p.userId, signerUserId: e.signerUserId, sealedJoinRecord: endorsedBytes }))
+      : null,
   }
 }
 const servedOf = (p: Person) => ({ identityPublicKey: bundleB64(keysOf(p)), keyChainHead: headOf(p.chain) })
@@ -258,13 +271,54 @@ describe('the join record anchors a person in the tenant (ADR 0111 decisions 12,
     expect((await (await loadTenantView(T, open)).standing(JOINER)).kind).toBe('joined')
   })
 
-  it('a record its owner signed with a key they have since retired still anchors (the owner secured their account after inviting)', async () => {
-    let owner = born(OWNER)
+  // #571 (cr-trust-anchors-survive-rotation decision 10): a record its owner signed with a key they have since retired.
+  /** JOINER's record through OWNER, signed while OWNER held their first key; OWNER has since secured their account. */
+  function retiredKeyRecord() {
+    const before = born(OWNER)
     const joiner = born(JOINER)
-    const record = joinedThrough(joiner, owner)
-    owner = rotated(owner)
+    const record = joinedThrough(joiner, before)
+    const owner = rotated(before)
+    return { joiner, record, owner, retired: keysOf(before).identity, current: keysOf(owner).identity }
+  }
+  const standingOf = async (userId: string) => (await (await loadTenantView(T, open)).standing(userId)).kind
+
+  it('#571: a record a retired key signed, without an endorsement, anchors nobody; endorsed by the signer\'s CURRENT key it is joined', async () => {
+    const { joiner, record, owner, current } = retiredKeyRecord()
     directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record)]
-    expect((await (await loadTenantView(T, open)).standing(JOINER)).kind).toBe('joined')
+    expect(await standingOf(JOINER)).toBe('unanchored')
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: current } })]
+    expect(await standingOf(JOINER)).toBe('joined')
+  })
+
+  it('#571: an endorsement by the RETIRED key does not count — the thief holds that key (control: the current key\'s)', async () => {
+    const { joiner, record, owner, retired, current } = retiredKeyRecord()
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: retired } })]
+    expect(await standingOf(JOINER)).toBe('unanchored')
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: current } })]
+    expect(await standingOf(JOINER)).toBe('joined')
+  })
+
+  it('#571: the current key\'s endorsement of ANOTHER sealed record does not count, nor one naming another signer', async () => {
+    const { joiner, record, owner, current } = retiredKeyRecord()
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: current, overAnotherSealing: true } })]
+    expect(await standingOf(JOINER)).toBe('unanchored')
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { endorsed: { signerUserId: STRANGER, by: current } })]
+    expect(await standingOf(JOINER)).toBe('unanchored')
+  })
+
+  it('#571: an endorsement by a key the server serves for the owner but their chain does not end at does not count', async () => {
+    const { joiner, record, owner } = retiredKeyRecord()
+    const operator = v1.generateIdentity()
+    const servedOwner = { ...row(owner, 'OWNER'), identityPublicKey: b64std(v1.serializeIdentityPublic(operator.pub)) }
+    directory = [servedOwner, row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: operator } })]
+    expect(await standingOf(JOINER)).toBe('unanchored')
+  })
+
+  it('control: a record naming the signer\'s current key needs no endorsement', async () => {
+    const owner = born(OWNER)
+    const joiner = born(JOINER)
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', joinedThrough(joiner, owner))]
+    expect(await standingOf(JOINER)).toBe('joined')
   })
 
   it('a non-owner without a join record is an anomaly — no chain read, no pin; an owner without one is a root, trusted on first use', async () => {
