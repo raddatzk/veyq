@@ -92,7 +92,7 @@ describe("deleting the banner's picture (uc.memory.banner A2)", () => {
     await flushPromises()
     expect(confirm.text()).toContain(t('memory.banner.pictureNotice'))
     expect(confirm.text()).toContain(t('memory.banner.pictureRemove'))
-    ;(document.body.querySelector('#confirm-option') as HTMLInputElement).click()
+    ;(document.body.querySelector('#confirm-option-0') as HTMLInputElement).click()
     confirm.click(t('media.delete'))
     await flushPromises()
     expect(trash).toHaveBeenCalledWith(media[0])

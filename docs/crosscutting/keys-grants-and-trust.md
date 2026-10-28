@@ -230,14 +230,21 @@ its epoch floor for the scope.
 | Kind | Member removed | Account secured | Other triggers | Who commits |
 |---|---|---|---|---|
 | **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued | an owner; the securing account through its pending row |
-| **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations | yes, by the securing account | — | an owner; the securing account through its pending row |
+| **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations; the owner may opt into a re-key after it | yes, by the securing account | an owner's *"re-key this space"*, nobody removed | an owner; the securing account through its pending row |
 | **Personal** | **no** — the account's personal scope is soft-deleted with its tenant membership | yes, by the account itself (its sole owner) | — | the owner |
 
 The policy is [ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)'s for removals
 (`RemovalPolicy` in `src/backend/core/.../admin/tenant/`) and [ADR 0060](../decisions/0060-key-rotation-after-compromise.md)'s
 for a compromise. Revoking a link or a member invite rotates nothing. The server accepts a rotation of any kind from
-an owner, and a removal only on a group; the client starts one in exactly three places: the group removal, the queued-rotation worker and the
-securing account's finish.
+an owner, and a removal only on a group; the client starts one in exactly four places: the group removal, the queued-rotation worker, the
+securing account's finish and a tenant owner's re-key (`rekeyTenant`, `src/web/src/features/spaces/members.ts`).
+
+**A tenant owner's re-key** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 2) is a plain rotation
+of the TENANT scope from the members panel, for the compromise case: on its own, or opted into a removal, unchecked by
+default. With a removal the cascade lands first and the rotation follows, over the directory read after it with the
+removed member dropped by the owner's own choice, so the new epoch is never wrapped to them; a server that kept their
+membership meets `409 rotation_incomplete` and nothing commits. The nodes are re-keyed right after, as for any rotation
+([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9).
 
 ### A queued rotation
 

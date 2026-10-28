@@ -5,7 +5,7 @@
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
-import { openScopeById } from './scopes'
+import { commitRotation, openScopeById } from './scopes'
 import { buildMemberInvite, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { writeKey, zeroEpochKeys } from './epochs'
@@ -101,6 +101,24 @@ export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
  */
 export function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
   return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
+}
+
+/**
+ * Give the tenant a new lock (ADR 0025 § 2, uc.spaces.remove-tenant-member A8-A9) — an owner's plain rotation of the
+ * TENANT scope, for the compromise case: a member's device lost, or a removed member who may have kept the key. It is
+ * {@link commitRotation}, the one path every rotation takes: the next epoch minted on this device, every member whose
+ * key it anchors re-granted, the rest and every open invite it cannot vouch for declared pending. Returns the new epoch.
+ * The caller re-keys the nodes after it (ADR 0109).
+ *
+ * The directory is read **now**, after any removal, so the request covers every membership the server holds (`409
+ * rotation_incomplete` otherwise). `excluding` — the member a removal just took out — is dropped from it by the owner's
+ * own choice, however the server lists them: the new epoch is never wrapped to them. A server that kept their
+ * membership meets the rotation's cover check, and nothing commits. Never a `removesUserId`: a tenant member leaves only
+ * by the removal cascade (`400 invalid_request` on a TENANT, inbox #595), which runs first.
+ */
+export async function rekeyTenant(tenantScopeId: string, excluding?: string): Promise<number> {
+  const members = (await listScopeMembers(tenantScopeId)).filter((m) => m.userId !== excluding)
+  return commitRotation(tenantScopeId, members)
 }
 
 /**

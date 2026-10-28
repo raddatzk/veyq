@@ -21,7 +21,9 @@
   completes a rotation a removal had to queue) and [uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md)
   (the node re-key every rotation runs). Removal and compromise are two triggers on one mechanism, and the
   *scope-type policy* in [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) governs only the first:
-  on **removal** a tenant is ACL-revoked and a personal scope has nobody to rotate away from; on **compromise** every
+  on **removal** a tenant is ACL-revoked (its owner may opt into a re-key after it, or run one alone,
+  [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A8–A9) and a personal scope has
+  nobody to rotate away from; on **compromise** every
   scope the account is in rotates, the tenant and the personal scope included, each committed by the account itself
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the grant primitive

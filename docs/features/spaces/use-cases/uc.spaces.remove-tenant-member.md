@@ -13,8 +13,9 @@
 - **Postconditions (success):** The target's **tenant-scope + shared-group** memberships are deleted (instant 403 on
   shared content). Groups they were the **only accepted owner** of are **transferred** to the oldest remaining accepted
   member, else **grace-tombstoned**; either way their open consent proposals have expired. The target's **own** scopes
-  (their personal scope + any group with no other *accepted* member) are **grace-tombstoned but still readable by them** until the scheduled purge erases them. The tenant scope
-  is **not** rotated ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) — ACL-revoke). Every
+  (their personal scope + any group with no other *accepted* member) are **grace-tombstoned but still readable by them** until the scheduled purge erases them. The removal
+  does **not** rotate the tenant scope ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) —
+  ACL-revoke); the owner's opt-in re-key after it does (A8). Every
   scope the removal cut has **counted it**, so a public link on it that the removed member could have rebuilt — any
   link minted before the removal that carries a recovery copy, a co-member's included — can no longer be
   re-activated, only renewed: until a member renews it or a switch-off (A5) turns it off, such a link **keeps
@@ -87,6 +88,25 @@
   its own owner — it is never tombstoned or handed on for a proposal. An accept of that proposal that overlaps the
   removal waits on the group's lock and finds the proposal gone, so a removed member never stays in the group as an
   accepted one (inbox #599).
+- **A8 — give the space a new lock after the removal.** The removal confirmation carries a second unchecked box,
+  *"also give this space a new lock"*, for the compromise case: the removed member may have kept the tenant key (a
+  device, a copy) and a dishonest operator could feed them what is written later
+  ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) § 2). Ticked, the **removal lands first**;
+  only then does the owner's device rotate the TENANT scope as any rotation does
+  ([keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope)):
+  the next epoch minted on-device, every member it anchors re-granted, the rest and every open invite it cannot vouch
+  for declared pending. Its member set is the directory read **after** the removal with the removed member dropped by
+  the owner's own choice — the new epoch is never wrapped to them, and a server that kept their membership gets
+  `409 rotation_incomplete` with nothing committed. The device then re-keys the tenant's nodes; one it does not finish
+  leaves the tenant *re-keying*, which any member's device resumes
+  ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). A refused removal (A1–A3) rotates nothing; a
+  rotation that fails after the removal leaves the removal standing and tells the owner the lock is not in, to retry
+  with A9.
+- **A9 — give the space a new lock, with no removal.** A TenantOwner may re-key the tenant at any time from the
+  members panel — a member's device lost, or a removal made without A8 — behind a confirmation that says what it
+  protects (a holder of only the old key cannot read what is added from now on) and what it does not (what was
+  already seen; links made before keep working until renewed or turned off, a rotation re-wraps them). The same
+  rotation and node re-key as A8, over the directory read then; a non-owner is refused (`403 not_scope_owner`).
 - **E1 — already-downloaded content:** the target keeps whatever they saved locally — **not retractable** by any
   design. Removal (and the grace purge) erase the **server** copy, not what already left it.
 
@@ -94,9 +114,10 @@
 
 - **Operator-blind — and the server may do this work.** Removal is access-control + (for the target's own scopes)
   erasure, which the blind server may perform: it deletes memberships and flips `deletedAt` — **no key, no name, no
-  plaintext**. The **tenant content key is not rotated** ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) —
+  plaintext**. The removal does **not rotate the tenant content key** ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) —
   the tenant is the primary, potentially large content home; O(N) rotation-per-removal is the wrong default);
-  groups rotate later, client-driven.
+  groups rotate later, client-driven. The opt-in re-key (A8–A9) is client-driven too: the owner's device mints the
+  epoch, the server stores ciphertext.
 - **Humane erasure.** Reusing the cr-0090 grace + read-only + purge, the target's **own** memories (personal + any
   solo group) get a **read-only grace window** — they can look through + export them before they're gone. Only
   **shared** content is cut instantly.
@@ -124,3 +145,4 @@ memories stay readable to them for 30 days to save.
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (group removal + rotation),
   [uc.spaces.add-member](uc.spaces.add-member.md) (the tenant roster's other half)
 - End-user view (docs site): [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)
+- Security area of the docs site: [Protocols](../../../../site/src/content/docs/security/protocols.mdx)

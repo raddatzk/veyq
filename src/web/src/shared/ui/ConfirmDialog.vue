@@ -13,7 +13,7 @@ import VeyqButton from './VeyqButton.vue'
 import VeyqCheckbox from './VeyqCheckbox.vue'
 import VeyqDialog from './VeyqDialog.vue'
 import { useI18n } from 'vue-i18n'
-import { confirmOption, confirmRequest, settleConfirm } from '../state/useConfirm'
+import { confirmOptions, confirmRequest, settleConfirm } from '../state/useConfirm'
 
 const { t } = useI18n()
 </script>
@@ -27,13 +27,13 @@ const { t } = useI18n()
     @update:visible="settleConfirm(false)"
   >
     <p class="dialog-copy">{{ confirmRequest.message }}</p>
-    <!-- The request's opt-in (useConfirm's askWithOption): unchecked each time it opens, read back only on accept.
-         Laid out as MemoryNodeDialog's opt-in — the label, then its consequence. -->
-    <div v-if="confirmRequest.option" class="confirm-option">
-      <VeyqCheckbox v-model="confirmOption" input-id="confirm-option" />
-      <label for="confirm-option" class="confirm-option-text">
-        <span>{{ confirmRequest.option.label }}</span>
-        <span v-if="confirmRequest.option.hint" class="confirm-option-hint">{{ confirmRequest.option.hint }}</span>
+    <!-- The request's opt-ins (useConfirm's askWithOptions): unchecked each time it opens, read back only on accept.
+         Each laid out as MemoryNodeDialog's opt-in — the label, then its consequence. -->
+    <div v-for="(option, i) in confirmRequest.options ?? []" :key="i" class="confirm-option">
+      <VeyqCheckbox v-model="confirmOptions[i]" :input-id="`confirm-option-${i}`" />
+      <label :for="`confirm-option-${i}`" class="confirm-option-text">
+        <span>{{ option.label }}</span>
+        <span v-if="option.hint" class="confirm-option-hint">{{ option.hint }}</span>
       </label>
     </div>
     <div class="veyq-dialog-action-row">

@@ -91,3 +91,15 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareSharedScopeSliceTest.aTenantOwnerSwitchesOffTheTenantsLinks] }
       web: { unit: [src/features/spaces/TenantMembersPanel.test.ts] }
+  - id: owner-rekeys-the-tenant
+    text: >
+      A TenantOwner gives the tenant a new lock (ADR 0025 § 2) as a plain rotation of the TENANT scope, with no
+      removesUserId: on its own (A9), or opted into a removal (A8, unchecked by default), where the removal lands first
+      and the rotation follows over the directory read after it with the removed member dropped by the owner's own
+      choice — never wrapped to them — then the node re-key. The server takes it with anchored members re-granted, the
+      rest and the open invites re-granted or declared pending, refuses one that leaves a member out (409
+      rotation_incomplete) and a non-owner's (403 not_scope_owner); a refused removal rotates nothing, and a rotation
+      that fails after a removal says the lock is not in.
+    coverage:
+      backend: { integration: [TenantRekeySliceTest.anOwnerReKeysTheTenantAfterARemovalGrantingWhoRemainsAndDeclaringTheRest, TenantRekeySliceTest.aMemberWhoIsNotAnOwnerCannotReKeyTheTenant] }
+      web: { unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/members.test.ts, src/shared/ui/ConfirmDialog.test.ts], e2e: [src/features/spaces/tenantRekey.e2e.test.ts] }

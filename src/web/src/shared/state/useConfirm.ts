@@ -14,12 +14,13 @@
 //   - **Cancel, Escape and dismiss are one answer.** Anything that is not the accept button is `false`; there is
 //     no third outcome a call site could forget to handle.
 //
-// A request may carry one **opt-in** (`option`, asked through `askWithOption`): a checkbox beside the consequence,
-// unchecked every time the dialog opens, whose state rides on the accept — a decline answers `null` whatever was
-// ticked, so a call site cannot act on an option the user then cancelled. ADR 0075's "also turn off every link" on
-// a tenant removal is the first; the group removal asks the same thing through its inline confirm, which is a
-// different mechanism (ui-web-styleguide § Confirming a destructive action), not a copy of this one.
-import { computed, ref } from 'vue'
+// A request may carry **opt-ins** (`options`, asked through `askWithOptions`, or one through `askWithOption`): a
+// checkbox each beside the consequence, unchecked every time the dialog opens, whose states ride on the accept — a
+// decline answers `null` whatever was ticked, so a call site cannot act on an option the user then cancelled. ADR
+// 0075's "also turn off every link" on a tenant removal was the first, ADR 0025 § 2's "also give this space a new
+// lock" beside it the second; the group removal asks the first through its inline confirm, which is a different
+// mechanism (ui-web-styleguide § Confirming a destructive action), not a copy of this one.
+import { computed, ref, type Ref } from 'vue'
 import type { VeyqIconName } from '../ui/icons'
 
 /** What a call site says; every string is already i18n-resolved by the caller, as with `useToast`. */
@@ -33,8 +34,8 @@ export interface ConfirmRequest {
   acceptLabel: string
   /** Optional icon for the primary, mirroring the opening button's icon. */
   acceptIcon?: VeyqIconName
-  /** An opt-in offered beside the consequence — only through `askWithOption`, which reads it back. */
-  option?: ConfirmOption
+  /** The opt-ins offered beside the consequence, in order — only through `askWithOptions`, which reads them back. */
+  options?: ConfirmOption[]
 }
 
 /** A checkbox the dialog offers with the question; every string already i18n-resolved by the caller. */
@@ -46,21 +47,15 @@ export interface ConfirmOption {
 }
 
 const pending = ref<ConfirmRequest | null>(null)
-/** The open request's opt-in, as ticked so far — unchecked whenever a request opens. */
-const optionChecked = ref(false)
 /** Resolves the promise `ask()` handed out; `null` whenever no request is open. */
-let settle: ((accepted: boolean, option: boolean) => void) | null = null
+let settle: ((accepted: boolean, options: boolean[]) => void) | null = null
 
 /** The open request, or `null`. Read by the single mounted `ConfirmDialog`; call sites use `ask()`. */
 export const confirmRequest = computed<ConfirmRequest | null>(() => pending.value)
 
-/** The open request's opt-in state — the dialog's checkbox binds it; it is read back only on accept. */
-export const confirmOption = computed<boolean>({
-  get: () => optionChecked.value,
-  set: (checked) => {
-    optionChecked.value = checked
-  },
-})
+/** The open request's opt-ins as ticked so far, one per option — all unchecked whenever a request opens. The dialog's
+ *  checkboxes bind them; they are read back only on accept. */
+export const confirmOptions: Ref<boolean[]> = ref([])
 
 /**
  * Answer the open request and close it. The dialog calls this — accept with `true`, cancel/Escape/dismiss with
@@ -69,36 +64,44 @@ export const confirmOption = computed<boolean>({
  */
 export function settleConfirm(accepted: boolean): void {
   const resolve = settle
-  const option = optionChecked.value
+  const options = confirmOptions.value.slice()
   settle = null
   pending.value = null
-  optionChecked.value = false
-  resolve?.(accepted, option)
+  confirmOptions.value = []
+  resolve?.(accepted, options)
 }
 
 export function useConfirm(): {
   ask: (request: ConfirmRequest) => Promise<boolean>
   askWithOption: (request: ConfirmRequest & { option: ConfirmOption }) => Promise<{ option: boolean } | null>
+  askWithOptions: (request: ConfirmRequest & { options: ConfirmOption[] }) => Promise<{ options: boolean[] } | null>
 } {
+  /** Open [request] with its opt-ins unchecked and resolve to what [answer] makes of the reply — in the settle itself,
+   *  no extra hop, so a caller resumes in the same tick it always did; [busy] at once while another request is open. */
+  function open<T>(request: ConfirmRequest, answer: (accepted: boolean, options: boolean[]) => T, busy: T): Promise<T> {
+    if (pending.value) return Promise.resolve(busy)
+    pending.value = request
+    confirmOptions.value = (request.options ?? []).map(() => false)
+    return new Promise<T>((resolve) => {
+      settle = (accepted, options) => resolve(answer(accepted, options))
+    })
+  }
+
   /** Ask, and resolve to what the user answered. `false` also means "something else was already being asked". */
   function ask(request: ConfirmRequest): Promise<boolean> {
-    if (pending.value) return Promise.resolve(false)
-    pending.value = request
-    optionChecked.value = false
-    return new Promise<boolean>((resolve) => {
-      settle = (accepted) => resolve(accepted)
-    })
+    return open({ ...request, options: undefined }, (accepted) => accepted, false)
   }
 
-  /** Ask with an opt-in: `null` when declined (or another request is open), else whether the option was ticked. */
+  /** Ask with opt-ins: `null` when declined (or another request is open), else whether each was ticked, in order. */
+  function askWithOptions(request: ConfirmRequest & { options: ConfirmOption[] }): Promise<{ options: boolean[] } | null> {
+    return open(request, (accepted, options) => (accepted ? { options } : null), null)
+  }
+
+  /** {@link askWithOptions} with one opt-in: `null` when declined, else whether it was ticked. */
   function askWithOption(request: ConfirmRequest & { option: ConfirmOption }): Promise<{ option: boolean } | null> {
-    if (pending.value) return Promise.resolve(null)
-    pending.value = request
-    optionChecked.value = false
-    return new Promise((resolve) => {
-      settle = (accepted, option) => resolve(accepted ? { option } : null)
-    })
+    const { option, ...rest } = request
+    return open({ ...rest, options: [option] }, (accepted, options) => (accepted ? { option: options[0] === true } : null), null)
   }
 
-  return { ask, askWithOption }
+  return { ask, askWithOption, askWithOptions }
 }

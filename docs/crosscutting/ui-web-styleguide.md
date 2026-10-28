@@ -195,10 +195,11 @@ or a one-off `1rem` label sitting in them.
   `ask()`, which resolves `true`/`false` so the call site keeps its guard clause
   (`if (!(await ask({ … }))) return`). It is mounted **once** in `App.vue` beside the toasts and follows the
   footer rules above. This is the default for a destructive action that needs a sentence of consequence.
-  A request may carry **one opt-in** through `askWithOption()` — a checkbox under the consequence, unchecked each
-  time the dialog opens, its state answered only on accept (`null` on decline). It is the dialog form of the
-  opt-in the inline confirm carries in the group panel's removal ("also turn off every link"); the two are one
-  question in two mechanisms, not a copy to merge.
+  A request may carry **opt-ins** through `askWithOptions()` (one through `askWithOption()`) — a checkbox each under
+  the consequence, unchecked each time the dialog opens, their states answered in order only on accept (`null` on
+  decline). The tenant removal carries two ("also turn off every link", "also give this space a new lock"). The first
+  is the dialog form of the opt-in the inline confirm carries in the group panel's removal; the two are one question
+  in two mechanisms, not a copy to merge.
   **`admin-web` has its own copy of both files**, not an import — [ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md),
   the same relationship `shared/state/useToast.ts` already has with web's. There is no shared UI package and
   there must not be one.
