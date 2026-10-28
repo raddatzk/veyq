@@ -506,6 +506,90 @@ largest N the membership caps allow (read them, do not assume them), against the
 fit, phase 1 stops and the CR goes back to the owner with the numbers (the self-grants must stay in the publish's
 transaction; splitting them out reopens way 2).
 
+#### Phase 0 measured (2026-10-28, `main` at `23da80658`) — **the worst case does not fit; back to the owner**
+
+**The limit:** `quarkus.http.limits.max-body-size` is set nowhere, so Quarkus' default `10240K` = **10,485,760 bytes**
+(`git grep -n "max-body-size" -- src infra` → only `RequestTooLargeRoutes.kt:39`'s default and test comments).
+
+**There is no membership cap, so N has no bound.** Measured: `git grep -n -i "max-groups\|groups-per\|max-memberships"
+-- src/backend` → nothing; `createGroup` checks only the capability switch (`ScopesHandler.kt:298`); `listMyScopes`
+has no page or `maxItems`; `scopes.openapi.yaml` has no `maxItems` at all. An account's grants grow with every tenant
+it joins and every group it is in — **and with every group another member adds it to**: any tenant member creates a
+group, is its owner (`addGate`, `ScopesHandler.kt:419-431`), and a `pendingConsent` proposal holds a grant from the add
+on (decision 3 counts it). So another member can push an account past any per-request budget without its consent.
+
+**The sizes, from the real encoders** (`@veyq/crypto`'s `seal`, `sealTo`, `generateIdentity`; a throwaway vitest file
+in `src/packages/crypto/src/`, deleted after, body below; run with `npx vitest run src/phase0.measure.test.ts
+--silent=false`):
+
+| Piece | Bytes on the wire |
+|---|---|
+| a real rotation at the pin cap today (ADR 0104, measured 2026-10-26) | 9,602,700 (25,000 × 384 per pin + ~2,700) |
+| the same, every other field at its contract cap (`IdentityPinsSliceTest.ROTATION_OVERHEAD`) | ≈ 9,700,000 |
+| new fixed fields: `keyChainStep` (a 1,256-byte bundle + key + two signatures) | 2,015 |
+| new fixed fields: `authPublicKey`, `attestationSignature`, `secretKeyProofPublicKey`, `secretKeyProofPossession`, the two array keys | 409 |
+| **one self-grant**, real (`wrappedGrant` an X-Wing `sealTo` of 32 bytes = 1,576 base64) | **1,845** |
+| one self-grant at its contract caps (`wrappedGrant` 8,192, signature 128) | 8,501 |
+| one `unreadableScopeIds` entry | 39 |
+
+**What fits beside a full pin store** (10,485,760 − 9,602,700 − 2,424 = 880,636 bytes): **477** real self-grants
+(103 at the field caps); with every other field at its cap, **424** (92). Beside 1,000 pins: 5,472. **The worst
+case — any number of memberships — does not fit at any limit.**
+
+**A second finding on the same budget: decision 9's pin entry with `head` breaks the pin cap by itself.** Today's entry
+plaintext is 157 bytes (160 at the largest `firstSeenAt`), padded to 192; with `"head":"<44>"` it is 211 (214). Padded
+to the next size that holds it (224), an entry seals to 340 base64 and costs 428 bytes a pin: 25,000 × 428 =
+**10,700,000 > 10,485,760** with no self-grant at all (the cap would drop to 24,487). Single-letter keys
+(`{"u","f","h","s","t"}`) put the entry with its head at 179 (182) bytes, inside today's 192 — so the pin cost stays
+384 and this finding needs no owner decision (the `identity_pin` vector is regenerated either way).
+
+**Options for the owner** (the self-grants stay applied in the publish's transaction in every one):
+1. **A per-account membership cap** (e.g. 400), refused at every membership writer — group create, group add (the
+   proposal included), tenant accept — and `selfGrants` `maxItems` equal to it. Smallest build; a product limit
+   (an account in 400 spaces cannot join a 401st); a co-member's adds count against it, so the add would have to be
+   refused to the adder at the target's cap.
+2. **Staged self-grants** *(implementer's recommendation)*: the client uploads the self-grants in chunks before the
+   publish, under a rotation nonce, each verified at upload under the new identity the stage declares; the publish
+   names the stage and its digest (bound into the rotation proof statement), and its one transaction checks the set
+   equality against the staged rows and moves them into place. Nothing is applied before the publish, so a closed tab
+   before it changes nothing (way 2 stays closed); a stage is inert until a Secret-Key-proved publish binds it and is
+   replaced by the next stage. No bound on N, and the same staging lifts ADR 0104's pin-cap ceiling ("above it a
+   rotation would need a staged write, which is not built"). Cost: a staging table, an endpoint, cleanup of abandoned
+   stages, one more contract operation.
+3. **Smaller self-grants**: one `sealTo` of a fresh key R to the new identity, and per scope `E_n` sealed under R
+   (≈ 84 base64) — about 330 bytes a self-grant, ≈ 2,660 beside a full pin store. Moves the bound, does not remove it,
+   and adds a second grant format every grant reader must open.
+4. **A larger body limit for this route.** Moves the bound; a proxy in front keeps its own (the Run area's E10
+   remedy), and N stays unbounded.
+
+<details><summary>The measurement file (throwaway)</summary>
+
+```ts
+import { describe, it } from 'vitest'
+import * as v1 from './v1'
+import { b64std } from './base64'
+const uuid = '1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c'
+describe('phase 0', () => { it('measures', () => {
+  const id = v1.generateIdentity(), bundle = v1.serializeIdentityPublic(id.pub)
+  const fp = b64std(v1.fingerprintHash(id.pub)), head = b64std(v1.sha256Digest(new Uint8Array(10)))
+  const mk = v1.randomBytes(32), sig = b64std(v1.randomBytes(64)), digest = b64std(v1.randomBytes(32))
+  const entryAt = (n: number) => b64std(v1.seal({ purpose: 'identity-pin', pinId: v1.randomBytes(32) }, mk, new Uint8Array(n))).length
+  const pinJson = (len: number) => JSON.stringify({ pinId: 'a'.repeat(64), entry: 'x'.repeat(len) }).length + 1
+  const wrapped = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: uuid, epoch: 2147483647 }, v1.hybridPublic(id.priv), v1.randomBytes(32)))
+  console.log({
+    entryJsonWithHead: JSON.stringify({ userId: uuid, fingerprint: fp, head, state: 'verified', firstSeenAt: Date.now() }).length,
+    pinJsonAt192: pinJson(entryAt(192)), pinJsonAt224: pinJson(entryAt(224)), wrappedGrantB64: wrapped.length,
+    selfGrantJson: JSON.stringify({ scopeId: uuid, epoch: 2147483647, wrappedGrant: wrapped, grantSignature: sig, recipientIdentityDigest: digest }).length + 1,
+    keyChainStepJson: JSON.stringify({ keyChainStep: { newIdentityPublicKey: b64std(bundle), newSecretKeyProofPublicKey: digest, identitySignature: sig, proofSignature: sig } }).length,
+  })
+}) })
+```
+</details>
+
+Measured offline with the real encoders rather than on a throwaway instance: no built client can send the new fields
+yet, and the server's refusal is a compare of `Content-Length` with the limit before anything is read
+(`RequestTooLargeRoutes`, pinned by `RequestTooLargeSliceTest`), so a live run would add only that compare.
+
 ### Phase 1: contracts and crypto
 
 Decisions 2, 3, 5, 6, 7, 8, 10 in the contract; the statements and vectors.
