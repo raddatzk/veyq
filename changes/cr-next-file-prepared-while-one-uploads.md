@@ -127,7 +127,10 @@ and each profiled total is above its unprofiled median, the switch's own control
    - `frameWorker.test.ts`: the request carries the `Blob` and no plaintext (nothing transferred); a non-`Blob` source
      transfers its slice; an abort rejects at once and posts `cancel`; a latch before `ready` and a death after it each
      finish the chunk on the page.
-   - `transport.test.ts`: a `PUT` the store refuses with `403` is re-signed and sent once more (untested so far).
+   - `transport.test.ts`: a `PUT` the store refuses with `403` is re-signed and sent once more, sealed anew, and any
+     other refusal fails without a re-sign (core's own case beside `media.test.ts`'s re-sign through `addMedia`).
+   - The page path keeps today's steps and their order: the chunk is asked for only when a Worker takes it, so
+     `media.test.ts`'s one slice per frame and the copy suites' one read per frame stay as they are.
    - The wire snapshots stay byte-equal.
 
    **Done when:** `npm run check` in `src/web` is green.
