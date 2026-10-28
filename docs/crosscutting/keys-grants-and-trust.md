@@ -418,11 +418,7 @@ lacks it ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decisio
 
 ## Decided, not built
 
-- **Join records for existing members** — [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 18: an owner's client signs a join record for each member who has none, over the key it pins for them and
-  their proof key, so every member gets an owner-rooted anchor; two owners signing different keys for one member is an
-  anomaly. Nothing needs it while veyq has no release: every newcomer writes a join record at accept, so today only
-  root owners lack one.
+Nothing decided is unbuilt.
 
 **Open, not decided** (inbox rows, each a question for the owner):
 

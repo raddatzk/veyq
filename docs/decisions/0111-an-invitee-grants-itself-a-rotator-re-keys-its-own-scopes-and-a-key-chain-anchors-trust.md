@@ -1,7 +1,7 @@
 # ADR 0111 — An invitee grants itself, a rotator re-keys its own scopes, and a signed key chain anchors who is who
 
 - Status: Accepted
-- Built: partly (not built: decision 18)
+- Built: yes
 - Date: 2026-10-27
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
 
@@ -307,14 +307,9 @@ Facts the design rests on, read in the code:
 
 ### Migration
 
-18. **An owner's client signs a join record for each existing member**, over the key it pins for that member today and
-    that member's Secret-Key proof public key, so every member gets an anchor rooted at an owner at once. Existing
-    members anchor the owner by their current pin of the owner. That one step is trust on first use: the owner's pin
-    may itself be a first-use pin, or made only now for a member the owner never wrapped to, and the proof public key
-    comes from the server unchecked, once — it is not served today (§ Context), so the directory gains that field.
-    If two owners sign join records for the same member over different keys, the contradiction is shown as an anomaly
-    and the member's key counts as **not anchored**: no wrap to it, declared pending in a rotation, never a block on
-    anyone's write.
+18. **Not needed: no release shipped before join records existed (2026-10-28).** It would have had an owner's client
+    sign a join record for each member who joined without one. Every newcomer writes a join record at accept and veyq
+    has no release, so the only members without one are root owners (decision 15).
 
 ## Consequences
 
@@ -329,7 +324,7 @@ Facts the design rests on, read in the code:
   stays the server's word, § What stays open).
 - **The owner is the trust root — accepted (owner, 2026-10-27).** A compromised owner can issue invites for keys of
   their choosing; but an owner can already admit anyone legitimately, so a compromised owner compromises membership
-  in any model. Contradictions between owners are anomalies (decision 18). Owners cross-signing each other, or a member
+  in any model. Owners cross-signing each other, or a member
   distrusting one owner, is a later extension, not part of this record.
 - **A revoked or expired tenant invite keeps what it was granted — accepted, with a short expiry (owner,
   2026-10-27).** The tenant does not rotate on removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), so link
@@ -405,17 +400,13 @@ Facts the design rests on, read in the code:
   the key already; what is new is a link that keeps its reach after a revoke, accepted above, and the mandatory code or
   password, which the operator that mails the link never sees, raises it above that. *The owner signs the admission*
   was rejected because a worker learns who the owner is from the server. A newcomer now learns the owner's fingerprint from the link, inside its seal; an existing member, from its own
-  pin of the owner (decision 18). ADR 0020's further point — that a removed owner's old signatures would stay valid
+  pin of the owner. ADR 0020's further point — that a removed owner's old signatures would stay valid
   without signed removals — is not answered here (§ What stays open).
 
 ## What stays open
 
-- **Decision 18 is not built**, and has nothing to do while veyq has no release: the join record landed before the
-  first one, so the only members without one are root owners (decision 15). If a release ships members without join
-  records, each of them reads as an anomaly to every co-member, and decision 18 is then needed
-  (`changes/cr-join-records-for-existing-members.md`).
 - **The admission-tag replay hypothesis** died untested with the tag (decision 5); nothing claims it.
-- **A membership the server made is an anomaly — decided (assistant, 2026-10-27, for owner review).** Every newcomer
+- **A membership the server made is an anomaly.** Every newcomer
   writes a join record and no release predates it, so a non-owner without one can only be a membership the server
   wrote; trusting it on first use would keep open exactly the door the join record exists to close, and treating
   owners the same would make every root owner an anomaly to everyone they did not invite. It is never wrapped to and is
@@ -441,8 +432,7 @@ Facts the design rests on, read in the code:
   before securing their account keep their anchor. The cost: a thief holding that retired key could, with the
   operator, mint a join record after the rotation — the class this record accepts for verifications forged between
   theft and rotation (§ Consequences), here not ended by the rotation (inbox #571).
-- **A pin the anchored chain does not hold is replaced only when that chain is at least as long as the pinned one —
-  decided (assistant, 2026-10-27, for owner review).** An owner-rooted join record is stronger than a first-use pin,
+- **A pin the anchored chain does not hold is replaced only when that chain is at least as long as the pinned one.** An owner-rooted join record is stronger than a first-use pin,
   and a pin off the chain is the mark of a key an operator substituted at a first contact; but a chain shorter than
   the one this account pinned may be a rollback of a head it saw, which the pin exists to refuse, so that is an
   anomaly. The residual: an operator that got a substituted chain pinned that is longer than the person's real one
@@ -460,8 +450,7 @@ Facts the design rests on, read in the code:
   whose signer is not the key at the served head, and is told to ask for a new invite; the ceremony's entry tells an
   owner who signed open invites that they stop working. Keeping them soundly needs the owner's **head** inside the
   link's seal, so the invitee walks the chain from a pinned head — a change of the built link format (inbox #568).
-- **Who counts as an owner stays the server's word — accepted as a residual (assistant, 2026-10-27, for owner
-  review).** A member checking a join record knows the tenant's owners from the server's role list
+- **Who counts as an owner stays the server's word — accepted as a residual.** A member checking a join record knows the tenant's owners from the server's role list
   (`ScopeMember.role`) and its own pins; roles are not signed. A former owner, or a member the server presents as
   owner, can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member
   residual, and closing it needs signed roles and removals — the membership protocol ADR 0020 declined, which nothing
