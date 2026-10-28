@@ -745,6 +745,30 @@ with its client phase).
   tree as `9f9ce8e0a`'s was) wrote `key_chain`, `rotation_stage`, `secret_key_proof.rotation` and `identity_pin`; it
   first re-derived the existing proof key, a grant signature and the change-password statement, so it agrees with
   the vectors it did not write.
+- **Green at the end of phase 1** (load 8.4–8.9): `npm run check` in `src/packages/crypto` (801 tests); every
+  `scripts/validate_*.py`; `validate_guard_gaps.py --force` (91 cases); `npm run generate:api` in `src/web/` and
+  `src/admin-web/` (`tests/e2e/` generates nothing).
+- **The red it left, measured once each — the next phases' worklist:**
+  - `./gradlew check` stops at `:core:compileKotlin` (20 errors), so no test of the backend ran and the test reds
+    the paragraph above predicts (`ModuleCompositionTest`'s `key-chain` interface, `SecretKeyProofTest` on the
+    regenerated `secret_key_proof.rotation`, every builder of a reshaped request, `OperatorBlindProbeTest`'s
+    `createPersonalScope`/`createGroup` bodies without `recipientIdentityDigest`) are still unseen behind it:
+    `AccountRotationResource` (the four new operations unimplemented; `soleMemberScopeIds`/`queuedScopeIds`;
+    `requeueRotationScope` and the `stalled`/`failed` states), `TenantsResource:579` (`signerKeyChainHead`,
+    `granterKeyChainHead`), `ScopesResource:129, 195, 268` (`keyChainHead`, `signerKeyChainHead`, `pending`),
+    `TasksResource` (`clearDeclinesForAcceptedKey` and its two types; `GrantDeliveryTarget.keyChainHead`).
+  - `src/web/` `npm run check`: lint green, typecheck red with 45 errors (so its tests did not run): `identityPins.ts`
+    and its test (`clearDeclinesForAcceptedKey`), `rotateKeys.ts` and its test (the request's eight fields,
+    `rotationProofStatement`'s new input, `soleMemberScopeIds`/`queuedScopeIds`, `requeueRotationScope`),
+    `KeyRotationPanel.vue` and its test (`failed`/`stalled`), `scopes.ts` (`recipientIdentityDigest` on the
+    personal/group birth, `RotationGrant[]` vs `ScopeGrantEntry[]`), `noServerReachesTheReset.test.ts`, and every
+    `ScopeMember`/`ResolvedGroupCandidate`/`OpenInvite`/`GrantDeliveryTarget`/`ServedMemberInvite` fixture
+    (`GroupMembersPanel`, `members`, `scopes`, `TenantMembersPanel`, `useMemberDirectory`, `grantDeliveryWorker`,
+    `scopeRotationWorker` tests, `src/test/memberInvite.ts`, `src/test/models.ts`). Run alone, the vector-reading
+    `identityPins.test.ts` is red on the entry with the short keys (`an entry sealed by the independent generator
+    opens as the pin of its contact`) — phase 3's.
+  - `src/admin-web/` was regenerated (only `tenants` moved: `ServedMemberInvite`, the owner birth's
+    `recipientIdentityDigest`, both optional or unread there): its typecheck is green; its full check was not run.
 
 ### Phase 2: backend
 
