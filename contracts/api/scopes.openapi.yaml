@@ -1004,7 +1004,10 @@ paths:
         with the grant the owner wrapped when proposing (ADR 0111 decision 4); nothing about keys changes, and the
         group opens at once. Acts only on the caller's own proposal (invitee-gated); a scope where the caller has no open
         proposal is `404 invitation_not_found`. Idempotent-safe: a re-accept of an already-accepted membership
-        is a no-op `204`. Enforced by code, not this spec (ADR 0008).
+        is a no-op `204`. Decided under the group scope's row lock, the one a decline, an add and a tenant removal take:
+        an accept that overlaps a removal which expires the proposal (the group's only accepted owner leaves, or the
+        invitee is removed from the tenant) waits for it and answers `404 invitation_not_found`, never a membership the
+        removal did not see (inbox #599). Enforced by code, not this spec (ADR 0008).
       security:
         - bearerAuth: []
       parameters:
