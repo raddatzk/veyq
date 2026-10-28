@@ -16,6 +16,7 @@ vi.mock('./members', () => ({
   setTenantMemberRole: vi.fn(),
   SetTenantMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
   memberError: vi.fn(),
+  prepareInviteCode: vi.fn(),
 }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
 import { account } from '../../app/account'
@@ -50,7 +51,7 @@ import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
-import { formatInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
+import { formatInviteCode, generateInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { deriveEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
@@ -63,7 +64,13 @@ const stubs = {
   InviteMemberDialog: true,
 }
 
+/** A code as `prepareInviteCode` mints it, its link key's derivation stood in for: `discard` is what zeroes it. */
+const preparedCode = () => ({ mode: 'code' as const, code: generateInviteCode(), ahead: { take: vi.fn(() => null), discard: vi.fn() } })
+/** The codes the panel prepared, in order. */
+const prepared = () => vi.mocked(prepareInviteCode).mock.results.map((r) => r.value as ReturnType<typeof preparedCode>)
+
 beforeEach(() => {
+  vi.mocked(prepareInviteCode).mockImplementation(preparedCode)
   vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
@@ -145,7 +152,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     const wrapper = await mountPanel('OWNER')
     await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()
-    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1', 'newbie@x.z', { mode: 'code', code: expect.any(String) })
+    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1', 'newbie@x.z', expect.objectContaining({ mode: 'code', code: expect.any(String) }), expect.any(Function))
     const { code } = vi.mocked(reissueMemberInvite).mock.calls[0][3] as { code: string }
     expect(normalizeInviteCode(code)).toBe(code)
     expect(wrapper.get('[data-testid="reissued-invite-code"]').text()).toBe(formatInviteCode(code))
@@ -188,6 +195,85 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     await wrapper.find(`[aria-label="${t('members.revoke')}"]`).trigger('click')
     await flushPromises()
     expect(revokeMemberInvite).not.toHaveBeenCalled()
+  })
+})
+
+// inbox #630: a re-issue builds and mails a whole new invite - the link key's Argon2id included - so it says what it is
+// doing, as the invite dialog does (#566): its row names the phase, every re-issue button is disabled while it runs (a
+// double click sends nothing twice), and its code is prepared as the owner sees the pending list, so the derivation has
+// begun before the click.
+describe('TenantMembersPanel - a re-issue says what it is doing (inbox #630)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+  })
+  const SENT = { email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT' } as const
+
+  it('while it runs its row names the phase and every re-issue button is disabled; the line goes when it is done', async () => {
+    let phase!: (p: InvitePhase) => void
+    let finish!: () => void
+    vi.mocked(reissueMemberInvite).mockImplementation((_t, _i, _e, _s, onPhase) => {
+      phase = onPhase!
+      onPhase!('securing')
+      return new Promise((resolve) => (finish = () => resolve(SENT)))
+    })
+    const wrapper = await mountPanel('OWNER', [...PENDING, { ...PENDING[0], inviteId: 'inv-2', email: 'other@x.z' }])
+    const buttons = () => wrapper.findAll(`[aria-label="${t('members.reissue')}"]`)
+    const progress = () => wrapper.find('[data-testid="reissue-progress"]')
+    expect(progress().exists()).toBe(false)
+    await buttons()[0].trigger('click')
+    await flushPromises()
+    expect(progress().text()).toBe(t('members.inviteSecuring'))
+    expect(wrapper.findAll('.invite-row')[0].find('[data-testid="reissue-progress"]').exists(), 'on the re-issued row').toBe(true)
+    expect(buttons().map((b) => b.attributes('disabled') !== undefined)).toEqual([true, true])
+    phase('sending')
+    await flushPromises()
+    expect(progress().text()).toBe(t('members.inviteSending'))
+    await buttons()[0].trigger('click') // a double click: nothing more is sent
+    await buttons()[1].trigger('click')
+    expect(reissueMemberInvite).toHaveBeenCalledOnce()
+    finish()
+    await flushPromises()
+    expect(progress().exists()).toBe(false)
+    expect(buttons().map((b) => b.attributes('disabled') !== undefined)).toEqual([false, false])
+  })
+
+  it('its code is prepared as the owner sees the pending list - the re-issue sends that very one, and the next is armed', async () => {
+    vi.mocked(reissueMemberInvite).mockResolvedValue(SENT)
+    const wrapper = await mountPanel('OWNER')
+    expect(prepareInviteCode, 'before any click').toHaveBeenCalledOnce()
+    await wrapper.get(`[aria-label="${t('members.reissue')}"]`).trigger('click')
+    await flushPromises()
+    const [first] = prepared()
+    expect(vi.mocked(reissueMemberInvite).mock.calls[0][3]).toBe(first)
+    expect(wrapper.get('[data-testid="reissued-invite-code"]').text()).toBe(formatInviteCode(first.code))
+    expect(prepareInviteCode, 'the next re-issue\'s code').toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed re-issue zeroes what its code derived and the next one sends a fresh code', async () => {
+    vi.mocked(reissueMemberInvite).mockRejectedValueOnce(httpError(503, 'mail_send_failed')).mockResolvedValue(SENT)
+    const wrapper = await mountPanel('OWNER')
+    await wrapper.get(`[aria-label="${t('members.reissue')}"]`).trigger('click')
+    await flushPromises()
+    const [failed, next] = prepared()
+    expect(failed.ahead.discard).toHaveBeenCalled()
+    await wrapper.get(`[aria-label="${t('members.reissue')}"]`).trigger('click')
+    await flushPromises()
+    expect(vi.mocked(reissueMemberInvite).mock.calls[1][3]).toBe(next)
+    expect(next.code).not.toBe(failed.code)
+  })
+
+  it('nothing is prepared without a pending invite to re-issue, and an unused code is zeroed when the panel closes', async () => {
+    await mountPanel('MEMBER')
+    await mountPanel('OWNER', [])
+    expect(prepareInviteCode).not.toHaveBeenCalled()
+    const wrapper = await mountPanel('OWNER')
+    const [unused] = prepared()
+    wrapper.unmount()
+    expect(unused.ahead.discard).toHaveBeenCalled()
   })
 })
 
