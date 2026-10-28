@@ -98,6 +98,16 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareSharedScopeSliceTest.aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/shared/ui/ConfirmDialog.test.ts] }
+  - id: owner-rekeys-the-group
+    text: >
+      A GroupOwner gives the group a new lock (ADR 0025 § 1, A6) as a plain rotation of the GROUP scope with no
+      removesUserId, behind a confirmation, then the node re-key; not offered to a non-owner nor during the deletion
+      grace. The server takes it from any owner, a co-owner included, with anchored members re-granted and the rest
+      declared pending, keeps every membership, refuses one that leaves a member out (409 rotation_incomplete) and a
+      plain member's (403 not_scope_owner); a rotation that fails says nothing was changed and re-keys nothing.
+    coverage:
+      backend: { integration: [GroupRekeySliceTest.anOwnerReKeysTheGroupWithNobodyRemovedGrantingWhomItAnchorsAndDeclaringTheRest, GroupRekeySliceTest.aPlainMemberCannotReKeyTheGroupAndACoOwnerCan] }
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/features/spaces/members.test.ts], e2e: [src/features/spaces/groupRekey.e2e.test.ts] }
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `remove-rotates-forward` in

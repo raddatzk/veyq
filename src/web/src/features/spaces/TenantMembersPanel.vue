@@ -19,7 +19,7 @@ import {
   listMemberInvites,
   listScopeMembers,
   reissueMemberInvite,
-  rekeyTenant,
+  rekeySpace,
   removeTenantMember,
   revokeMemberInvite,
   setTenantMemberRole,
@@ -262,7 +262,7 @@ async function remove(member: ScopeMember) {
 }
 
 // Give the space a new lock (ADR 0025 § 2) — owner-only, from the standalone action or after a removal. The rotation is
-// the one every rotation is (`rekeyTenant` → `commitRotation`): the next epoch minted here, every member this device
+// the one every rotation is (`rekeySpace` → `commitRotation`): the next epoch minted here, every member this device
 // anchors re-granted, the rest declared pending. Then, as after a group removal, the nodes are re-keyed on this device
 // right away (ADR 0109); one that stops leaves the space re-keying — the hint below says so — and any member's worker
 // resumes it. `excluding` is the member a removal just took out. Answers whether the new epoch landed.
@@ -273,7 +273,7 @@ async function giveNewLock(excluding?: string): Promise<boolean> {
   lockBusy.value = true
   try {
     try {
-      await rekeyTenant(scopeId, excluding)
+      await rekeySpace(scopeId, excluding)
     } catch (e) {
       on401(e)
       if (!isUnauthorized(e)) actionError.value = excluding ? t('spaceLock.removedNotRekeyed') : t('spaceLock.failed')

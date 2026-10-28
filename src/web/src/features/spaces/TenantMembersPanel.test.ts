@@ -13,7 +13,7 @@ vi.mock('./members', () => ({
   reissueMemberInvite: vi.fn(),
   revokeMemberInvite: vi.fn(),
   removeTenantMember: vi.fn(),
-  rekeyTenant: vi.fn(),
+  rekeySpace: vi.fn(),
   setTenantMemberRole: vi.fn(),
   SetTenantMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
   memberError: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, rekeyTenant, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
@@ -308,7 +308,7 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
       options: [expect.objectContaining({ label: t('members.removeRevokeLinks') }), expect.objectContaining({ label: t('spaceLock.removeOption') })],
     }))
     expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', true)
-    expect(rekeyTenant).not.toHaveBeenCalled()
+    expect(rekeySpace).not.toHaveBeenCalled()
   })
 
   // inbox #259: a removal cuts the app's access, not a link the member copied — that keeps opening its Memory
@@ -336,7 +336,7 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
     confirmAskWithOptions.mockResolvedValue(null)
     await removePartner()
     expect(removeTenantMember).not.toHaveBeenCalled()
-    expect(rekeyTenant).not.toHaveBeenCalled()
+    expect(rekeySpace).not.toHaveBeenCalled()
   })
 
   it('offers the owner "turn off every link" and sends it for the tenant space on confirm', async () => {
@@ -472,7 +472,7 @@ describe('TenantMembersPanel - names across a tenant rotation (inbox #573)', () 
 })
 
 // ADR 0025 § 2: a tenant owner gives the space a new lock — after a removal, opted in, or on its own. A removal stays
-// ACL-revoke unless asked; the rotation is the plain one (rekeyTenant, members.test.ts) and the nodes follow (ADR 0109).
+// ACL-revoke unless asked; the rotation is the plain one (rekeySpace, members.test.ts) and the nodes follow (ADR 0109).
 describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -481,7 +481,7 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     activeSpace.scopeId = 't-1'
     activeSpace.tenantId = 't-1'
     vi.mocked(removeTenantMember).mockResolvedValue(undefined)
-    vi.mocked(rekeyTenant).mockResolvedValue(1)
+    vi.mocked(rekeySpace).mockResolvedValue(1)
     vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
   })
 
@@ -497,11 +497,11 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     confirmAskWithOptions.mockResolvedValue({ options: [false, true] })
     await removePartner()
     expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', false)
-    expect(rekeyTenant).toHaveBeenCalledWith('t-1', 'u-pend')
+    expect(rekeySpace).toHaveBeenCalledWith('t-1', 'u-pend')
     expect(rekeyScope).toHaveBeenCalledWith('t-1')
     const order = (f: unknown) => vi.mocked(f as () => void).mock.invocationCallOrder[0]
-    expect(order(removeTenantMember)).toBeLessThan(order(rekeyTenant))
-    expect(order(rekeyTenant)).toBeLessThan(order(rekeyScope))
+    expect(order(removeTenantMember)).toBeLessThan(order(rekeySpace))
+    expect(order(rekeySpace)).toBeLessThan(order(rekeyScope))
     expect(refreshActiveScope).toHaveBeenCalled()
   })
 
@@ -509,13 +509,13 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     confirmAskWithOptions.mockResolvedValue({ options: [false, true] })
     vi.mocked(removeTenantMember).mockRejectedValue(httpError(409, 'last_owner'))
     const wrapper = await removePartner()
-    expect(rekeyTenant).not.toHaveBeenCalled()
+    expect(rekeySpace).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(t('members.actionFailed'))
   })
 
   it('a rotation that fails after the removal says the member is gone but the lock is not in', async () => {
     confirmAskWithOptions.mockResolvedValue({ options: [false, true] })
-    vi.mocked(rekeyTenant).mockRejectedValue(httpError(409, 'rotation_incomplete'))
+    vi.mocked(rekeySpace).mockRejectedValue(httpError(409, 'rotation_incomplete'))
     const wrapper = await removePartner()
     expect(removeTenantMember).toHaveBeenCalled()
     expect(rekeyScope).not.toHaveBeenCalled()
@@ -528,7 +528,7 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     await lockAction(wrapper)!.trigger('click')
     await flushPromises()
     expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: t('spaceLock.confirm') }))
-    expect(rekeyTenant).toHaveBeenCalledWith('t-1', undefined)
+    expect(rekeySpace).toHaveBeenCalledWith('t-1', undefined)
     expect(rekeyScope).toHaveBeenCalledWith('t-1')
     expect(removeTenantMember).not.toHaveBeenCalled()
   })
@@ -538,7 +538,7 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     const owner = await mountPanel('OWNER')
     await lockAction(owner)!.trigger('click')
     await flushPromises()
-    expect(rekeyTenant).not.toHaveBeenCalled()
+    expect(rekeySpace).not.toHaveBeenCalled()
 
     const member = await mountPanel('MEMBER')
     expect(lockAction(member)).toBeUndefined()
@@ -546,7 +546,7 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
 
   it('a standalone rotation that fails says nothing was changed', async () => {
     confirmAsk.mockResolvedValue(true)
-    vi.mocked(rekeyTenant).mockRejectedValue(httpError(409, 'stale_epoch'))
+    vi.mocked(rekeySpace).mockRejectedValue(httpError(409, 'stale_epoch'))
     const wrapper = await mountPanel('OWNER')
     await lockAction(wrapper)!.trigger('click')
     await flushPromises()

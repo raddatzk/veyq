@@ -211,7 +211,10 @@ member leaves by the removal cascade, which also cuts their groups. Under the sc
   a client that lost a race re-opens its grant and rebuilds **once**, from a fresh key
   ([ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4).
 - **Nobody is left out silently.** Grants, pending members and the removed member must cover every membership, and
-  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`). A pending member keeps
+  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`): a member who joined or
+  an invite minted after the client's read. The client's one rebuild (as for `stale_epoch`) reads the members and the
+  open invites again, keeping its own exclusions — the member it removes, or the one a tenant re-key leaves out — on the
+  re-read list too, so the new epoch is never wrapped to them; a second refusal is the answer. A pending member keeps
   the grant it holds, behind — that **is** the stored pending marker, and grant delivery brings it current
   (ADR 0111 decision 9). A removal-rotation's grants must not name the member it removes
   (`422 removed_member_granted`), and the last accepted owner cannot be removed (`409 last_owner`; a consent
@@ -229,7 +232,7 @@ its epoch floor for the scope.
 
 | Kind | Member removed | Account secured | Other triggers | Who commits |
 |---|---|---|---|---|
-| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued | an owner; the securing account through its pending row |
+| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued; an owner's *"re-key this space"*, nobody removed | an owner; the securing account through its pending row |
 | **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations; the owner may opt into a re-key after it | yes, by the securing account | an owner's *"re-key this space"*, nobody removed | an owner; the securing account through its pending row |
 | **Personal** | **no** — the account's personal scope is soft-deleted with its tenant membership | yes, by the account itself (its sole owner) | — | the owner |
 
@@ -237,14 +240,16 @@ The policy is [ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)'
 (`RemovalPolicy` in `src/backend/core/.../admin/tenant/`) and [ADR 0060](../decisions/0060-key-rotation-after-compromise.md)'s
 for a compromise. Revoking a link or a member invite rotates nothing. The server accepts a rotation of any kind from
 an owner, and a removal only on a group; the client starts one in exactly four places: the group removal, the queued-rotation worker, the
-securing account's finish and a tenant owner's re-key (`rekeyTenant`, `src/web/src/features/spaces/members.ts`).
+securing account's finish and an owner's re-key of a tenant or a group (`rekeySpace`, `src/web/src/features/spaces/members.ts`).
 
-**A tenant owner's re-key** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 2) is a plain rotation
-of the TENANT scope from the members panel, for the compromise case: on its own, or opted into a removal, unchecked by
-default. With a removal the cascade lands first and the rotation follows, over the directory read after it with the
-removed member dropped by the owner's own choice, so the new epoch is never wrapped to them; a server that kept their
-membership meets `409 rotation_incomplete` and nothing commits. The nodes are re-keyed right after, as for any rotation
-([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9).
+**An owner's re-key** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) §§ 1–2) is a plain rotation
+of the TENANT or a GROUP scope from its members panel, for the compromise case. A tenant owner runs it on its own, or
+opted into a removal, unchecked by default. With a removal the cascade lands first and the rotation follows, over the
+directory read after it with the removed member dropped by the owner's own choice, so the new epoch is never wrapped to
+them; a server that kept their membership meets `409 rotation_incomplete` and nothing commits. A group owner runs it
+on its own only, since a group removal already rotates. The nodes are re-keyed right after, as for any rotation
+([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9,
+[uc.spaces.manage-group-members](../features/spaces/use-cases/uc.spaces.manage-group-members.md) A6).
 
 ### A queued rotation
 

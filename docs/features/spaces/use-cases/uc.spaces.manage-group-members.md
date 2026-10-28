@@ -67,6 +67,19 @@
   many went off. Either way each link is marked so it comes back only by renewal, never by re-activation
   ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A non-owner is
   refused (`403 not_scope_owner`); a group in its deletion grace is read-only (`409 scope_deleting`).
+- **A6 — give the group a new lock, with no removal.** For the compromise case with nobody to remove — a member's
+  device lost — a GroupOwner may re-key the group at any time from its members panel
+  ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) § 1), behind a confirmation that says what
+  it protects (a holder of only the old key cannot read what is added from now on) and what it does not (what was
+  already seen; links made before keep working until renewed or turned off, a rotation re-wraps them). It is the
+  tenant owner's action ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A9) on the group: a plain
+  rotation as any rotation is
+  ([keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope)), no
+  member named for removal — the next epoch minted on-device over the directory read then, every member it anchors
+  re-granted, a pending consent proposal included, the rest declared pending — and the device then re-keys the
+  group's nodes ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). Not offered on a removal, which
+  already rotates, nor while the group is in its deletion grace; a co-owner may run it, a non-owner is refused
+  (`403 not_scope_owner`).
 - **E1 — already-read content:** a removed member keeps whatever they already decrypted — **not retractable** by
   any design (the stated limit). Removal protects **future** content only.
 

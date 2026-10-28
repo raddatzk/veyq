@@ -106,10 +106,19 @@ sweep came back clean is deleted at once (it is only ever read BY that sweep; on
 that is the one a reader must open to explain the hit), and a new run first prunes the older run directories down to
 `VEYQ_E2E_KEEP_RUNS` (default 2, counting the new one).
 
+**Runs side by side.** Two runs against one stack (two worktrees, two agents) used to share everything a run makes on
+it — `veyq_e2e_1`, the statement log, the ports — and one of them failed. Each run now claims a SLOT on the stack
+(`e2e_sweeps.claim_run_slot`, a registration in the mariadb container that a killed run's successor clears): a run
+alone holds slot 0 and everything above is unchanged for it, while a run that finds another live takes the next slot,
+which names its databases (`veyq_e2e_s<slot>_<n>`, …) and buckets, gets free ports where `VEYQ_PORT`/`VEYQ_ADMIN_PORT`
+are unset, and a stamp no live run holds. The statement log is one window both runs share
+(`e2e_sweeps.StatementLog`), and `.e2e-out/` prunes no directory of a run still alive. The shared `blobs` bucket and the
+one Mailpit stay shared: every object and every address carries its run's own ids.
+
 Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: src/backend/build/quarkus-app/quarkus-run.jar
-    VEYQ_PORT             Backend HTTP port. Default: 8080
-    VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
+    VEYQ_PORT             Backend HTTP port. Default: 8080 (a free one for a run beside another, see above)
+    VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090 (likewise)
     VEYQ_INFRA_DIR        The directory holding the Compose files whose stack to use (a checkout's `DOCKER_DIR` in
                           `scripts/repo_layout.py`). Default: this checkout's (see [compose_up] for a worktree)
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
@@ -127,6 +136,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -208,19 +218,39 @@ TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
 DB_ROOT_PASSWORD = os.environ.get("VEYQ_DB_ROOT_PASSWORD", "change-me-root")
 DB_APP_USER = "veyq"
 
+# This run's slot on the stack ([use_slot], `e2e_sweeps.claim_run_slot`): 0 for a run alone, whose names are the ones
+# a run always had; a run beside another names everything it makes on the shared stack with its slot.
+SLOT = 0
+
+
+def _db_ns() -> str:
+    return f"_s{SLOT}" if SLOT else ""
+
+
+def _bucket_ns() -> str:
+    return f"-s{SLOT}" if SLOT else ""
+
+
 # Every database a boot of this run is pointed at, named in ONE place: the boots use these, and [sweep_logs]
 # derives from a boot log's file name which of them that boot's log must name (its armed-sensor control).
-STORE_INIT_DATABASE = "veyq_e2e_store_init"
+def store_init_database() -> str:
+    """The provisioning boot's scratch database ([provision_store])."""
+    return f"veyq_e2e{_db_ns()}_store_init"
 
 
 def suite_database(index: int) -> str:
     """A group's first instance — the database its first member runs against."""
-    return f"veyq_e2e_{index}"
+    return f"veyq_e2e{_db_ns()}_{index}"
 
 
 def restore_database(index: int) -> str:
     """The instance a group's hook restores onto — every later member of the group runs against it."""
-    return f"veyq_e2e_restore_{index}"
+    return f"veyq_e2e{_db_ns()}_restore_{index}"
+
+
+def group_bucket(index: int) -> str:
+    """A real group's own bucket — the one its hook destroys ([run_group])."""
+    return f"veyq-e2e{_bucket_ns()}-src-{index}"
 
 
 # The bundled store's ADMIN plane (a different port from the S3 one), published local-only by
@@ -257,6 +287,33 @@ MAILPIT_SMTP = ("127.0.0.1", 11025)
 # `/api/setup` is the better probe anyway: unauthenticated, reachable whether or not setup is complete, served
 # only once Flyway has migrated, and the first call every suite makes.
 READY_URL = f"http://127.0.0.1:{PORT}/api/setup"
+
+
+def free_port(taken: Iterable[int] = ()) -> int:
+    """A port nothing on this host listens on now, as the OS hands one out — for a run beside another ([use_slot])."""
+    for _ in range(20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("", 0))
+            port = probe.getsockname()[1]
+        if port not in taken:
+            return port
+    raise SystemExit("[e2e] found no free port for a run beside another")
+
+
+def use_slot(slot: int) -> None:
+    """Bind this run to its slot: the names [_db_ns] derives, and for a run beside another, free ports where none is
+    set. Rebinds every module name built from a port, so the readiness probe, the suites' bases and the token
+    derivation's origins ([DEV]) follow."""
+    global SLOT, PORT, ADMIN_PORT, BASE, ADMIN_BASE, READY_URL, DEV
+    SLOT = slot
+    if slot and "VEYQ_PORT" not in os.environ:
+        PORT = free_port()
+    if slot and "VEYQ_ADMIN_PORT" not in os.environ:
+        ADMIN_PORT = free_port(taken=(PORT,))
+    BASE = f"http://{HOST}:{PORT}"
+    ADMIN_BASE = f"http://127.0.0.1:{ADMIN_PORT}"
+    READY_URL = f"http://127.0.0.1:{PORT}/api/setup"
+    DEV = DEV._replace(backend_origins=(BASE, ADMIN_BASE))
 
 
 class NoE2eFilesError(RuntimeError):
@@ -427,7 +484,7 @@ def provision_store(workdir: Path, timeout: int = 120) -> None:
     # runs that prove anything are the ones nobody does twice — and it would also stop proving per-step
     # idempotence, which is what a second run against a provisioned store IS.
     log("booting a throwaway backend to provision the store")
-    database = STORE_INIT_DATABASE
+    database = store_init_database()
     secret_file = workdir / "config-secret-store-init.key"
     boot_log = workdir / "backend-store-init.log"
     fresh_database(database)
@@ -490,8 +547,9 @@ def fresh_database(name: str) -> None:
     )
 
 
-def port_is_taken(url: str = READY_URL) -> bool:
+def port_is_taken(url: str | None = None) -> bool:
     """Something already answering on our port would be readiness-polled as if it were ours."""
+    url = url or READY_URL
     try:
         with urllib.request.urlopen(url, timeout=2):
             return True
@@ -635,7 +693,7 @@ def booted_database(log_path: Path) -> str | None:
         return restore_database(int(match.group("suite")))
     if match.group("suite"):
         return suite_database(int(match.group("suite")))
-    return STORE_INIT_DATABASE
+    return store_init_database()
 
 
 def booted_databases(workdir: Path) -> set[str]:
@@ -1190,8 +1248,14 @@ class HookFailure(RuntimeError):
 # Instance-SHAPED and deliberately nothing more. The decoy exists so that "which project did the capture
 # resolve?" has an exit code instead of a wording: with it in place the dev-file capture completes and the
 # production-file capture cannot, and the difference is the one flag between them.
-DECOY_DB = "veyq_prod_project_decoy"
-DECOY_BUCKET = "veyq-prod-project-decoy"
+def decoy_db() -> str:
+    return f"veyq_prod_project_decoy{_db_ns()}"
+
+
+def decoy_bucket() -> str:
+    return f"veyq-prod-project-decoy{_bucket_ns()}"
+
+
 DECOY_DOMAIN = "decoy.invalid"
 
 
@@ -1289,9 +1353,9 @@ def rehearse_production_project(workdir: Path) -> None:
             f"would be scored as a pass."
         )
 
-    seed_project_decoy(DECOY_DB)
-    fresh_bucket(DECOY_BUCKET)
-    shared = ["capture", "--db-name", DECOY_DB, "--store-bucket", DECOY_BUCKET,
+    seed_project_decoy(decoy_db())
+    fresh_bucket(decoy_bucket())
+    shared = ["capture", "--db-name", decoy_db(), "--store-bucket", decoy_bucket(),
               "--config-secret-file", str(key)]
 
     log(f"control: the same capture through {shown(COMPOSE_FILE)} must reach the decoy")
@@ -1320,14 +1384,14 @@ def rehearse_production_project(workdir: Path) -> None:
         raise SystemExit(
             f"[e2e] PRODUCTION-PROJECT REHEARSAL FAILED: a capture pointed at "
             f"{shown(PROD_COMPOSE_FILE)} exited {subject.returncode} and captured database "
-            f"{DECOY_DB}, domains {captured} — an instance living in the DEV project. The production file names "
+            f"{decoy_db()}, domains {captured} — an instance living in the DEV project. The production file names "
             f"no project, so Compose derived one from its directory (`{PROD_COMPOSE_FILE.parent.name}`) and "
             f"handed the production procedure whatever happens to run out of it. On a production host that is a "
             f"backup of the wrong instance, taken and reported as a success. Declare the project in the file "
             f"(`name:`) so the procedure cannot be pointed at the wrong stack by standing in the wrong directory."
         )
     log(f"the production capture did not resolve the dev project (exit {subject.returncode}), "
-        f"while the control through {shown(COMPOSE_FILE)} reached {DECOY_DB} — the project is a "
+        f"while the control through {shown(COMPOSE_FILE)} reached {decoy_db()} — the project is a "
         f"property of the file, not of the directory it sits in")
 
 
@@ -1749,7 +1813,7 @@ def run_group(index: int, members: list[Path], workdir: Path, stamp: str,
     builds = builds or [CANDIDATE] * len(members)
     name = group_of(members[0])
     inst = Instance(suite_database(index), workdir / f"config-secret-{index}.key",
-                    f"veyq-e2e-src-{index}" if len(members) > 1 else None)
+                    group_bucket(index) if len(members) > 1 else None)
     group_dir = workdir / f"group-{index}-{name}"
 
     if len(members) > 1:
@@ -1869,7 +1933,8 @@ def prune_old_runs(keep: int) -> list[str]:
     anything else a developer put in `.e2e-out/` - and an undeletable one is reported, not fatal. Returns the names removed."""
     if not RUN_ROOT.is_dir():
         return []
-    runs = sorted((d for d in RUN_ROOT.iterdir() if d.is_dir() and d.name.isdigit()), key=lambda d: int(d.name))
+    runs = sorted((d for d in RUN_ROOT.iterdir() if d.is_dir() and d.name.isdigit() and not run_is_live(d)),
+                  key=lambda d: int(d.name))
     doomed = runs[: max(0, len(runs) - keep)]
     removed: list[str] = []
     for d in doomed:
@@ -1879,6 +1944,15 @@ def prune_old_runs(keep: int) -> list[str]:
         except OSError as e:
             log(f"could not prune old run {d.name}: {e}")
     return removed
+
+
+# A run's directory holds this file while the run lives — `<host> <pid>` — so a run beside it never prunes it.
+LIVE_MARK = ".live"
+
+
+def run_is_live(run_dir: Path) -> bool:
+    mark = run_dir / LIVE_MARK
+    return mark.is_file() and sweeps._owner_alive(mark.read_text())
 
 
 def keep_runs() -> int:
@@ -1909,6 +1983,17 @@ def main(argv: list[str]) -> int:
     if upgrade:
         # Refused before anything is built: a ref that is no commit, or one older than the seeder.
         resolve_predecessor(upgrade_from)
+    # The stack first: the slot is claimed in its mariadb container, and the slot decides the names and ports below.
+    compose_up()
+    # One stamp for the whole run: it varies emails/usernames so a re-run against a warm limiter sees a new
+    # invite recipient, and the per-file database makes cross-file collisions impossible anyway. Digits only —
+    # the username pattern is [A-Za-z0-9_.-] with a 32-char cap. No live run on the stack holds the same one.
+    slot, stamp = sweeps.claim_run_slot(DEV)
+    atexit.register(sweeps.release_run_slot, DEV, slot)
+    use_slot(slot)
+    if slot:
+        log(f"another run is live on this stack: this one is slot {slot} — databases {suite_database(1)}, …, "
+            f"ports {PORT}/{ADMIN_PORT}")
     for port, variable, url in ((PORT, "VEYQ_PORT", READY_URL), (ADMIN_PORT, "VEYQ_ADMIN_PORT", f"{ADMIN_BASE}/api/setup")):
         if port_is_taken(url):
             raise SystemExit(
@@ -1916,25 +2001,24 @@ def main(argv: list[str]) -> int:
                 f"Stop it, or set {variable} to a free port."
             )
 
-    # One stamp for the whole run: it varies emails/usernames so a re-run against a warm limiter sees a new
-    # invite recipient, and the per-file database makes cross-file collisions impossible anyway. Digits only —
-    # the username pattern is [A-Za-z0-9_.-] with a 32-char cap.
-    stamp = str(int(time.time()))
     log(f"running the upgrade proof (the `{UPGRADE_GROUP}` group of two builds), stamp={stamp}" if upgrade else
         f"running {len(files)} e2e file(s) in {len(groups)} group(s), stamp={stamp}")
 
     # Retained, not a tempdir: the boot log is itself a sweep surface (ADR 0053 § Decision 4), and a canary file
-    # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the stack comes
-    # up because the run's first backend boot ([provision_store]) writes its log here with the rest.
+    # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the store is
+    # provisioned because the run's first backend boot ([provision_store]) writes its log here with the rest.
     pruned = prune_old_runs(keep_runs() - 1)
     if pruned:
         log(f"pruned {len(pruned)} older run director{'y' if len(pruned) == 1 else 'ies'} from {RUN_ROOT.relative_to(REPO)}/ "
             f"(keeping {keep_runs()}, VEYQ_E2E_KEEP_RUNS)")
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
+    live_mark = workdir / LIVE_MARK
+    live_mark.write_text(f"{socket.gethostname()} {os.getpid()}")
+    atexit.register(lambda: live_mark.unlink(missing_ok=True))
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
 
-    # The upgrade proof's predecessor is built BEFORE the stack comes up — minutes of npm and Gradle that a failed build
+    # The upgrade proof's predecessor is built BEFORE the statement log opens — minutes of npm and Gradle that a failed build
     # should not spend holding the shared database's statement log open — and removed after its group ran.
     predecessor = prepare_predecessor(upgrade_from, workdir) if upgrade else None
     builds: list[list[Build] | None] = [None] * len(groups)
@@ -1947,7 +2031,6 @@ def main(argv: list[str]) -> int:
     for signum in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, lambda received, _frame: sys.exit(128 + received))
 
-    compose_up()
     statements = StatementLog(stamp, workdir)
     try:
         statements.open()

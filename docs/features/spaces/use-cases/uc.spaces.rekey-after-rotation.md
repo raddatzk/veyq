@@ -1,9 +1,10 @@
 # UC: Re-key a space's nodes after a rotation
 
 - **ID:** uc.spaces.rekey-after-rotation
-- **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; a
-  tenant owner's, right after their explicit re-key of the tenant
-  ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A8–A9); an owner's scope-rotation worker, for a
+- **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; an
+  owner's, right after their explicit re-key of the tenant or a group
+  ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A8–A9,
+  [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) A6); an owner's scope-rotation worker, for a
   queued rotation (a tenant removal that cut a co-shared group); a secured account's own device, for every scope its rotation re-granted — and, in the background, **any member
   holding the current epoch**, through their worker ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 11: a re-key is not governance). A drop box and what its guests hold in it are re-keyed by an **owner**
