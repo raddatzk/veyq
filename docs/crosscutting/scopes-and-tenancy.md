@@ -1,15 +1,17 @@
 # Scopes & Tenancy
 
-> The structural layer: **where content lives and who may access it.** It defines the scope kinds, the
-> organizational structures (tenant / group / personal), how access is granted *cryptographically*
-> (scope keys, grants, shares), how a new member is onboarded (an invite they grant themselves from), and the unified
-> navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
+> The structural layer: **where content lives and who may do what with it.** It defines the scope kinds, the
+> organizational structures (tenant / group / personal), the roles at each level and the powers each holds, how a new
+> member is onboarded (an invite they grant themselves from), and the unified navigation contract. It is the current
+> picture of the topic *Scopes, membership, tenancy, governance* in the [ADR index](../decisions/README.md#topics); how
+> keys, grants and rotations work is [keys, grants and trust](keys-grants-and-trust.md), and public links are
+> [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md). Engineering sibling to the [Security Model](security-model.md) and the
 > [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`src/packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
-This is the **target model**; first-build scope is tracked via the inbox and change-requests. The general
-**scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
-operator-blind) are realised by the enabler [en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md);
-the tenant root scope is born at tenant activation.
+The general **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
+operator-blind) are the enabler [en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md); a
+group is [en.spaces.group-scope](../features/spaces/enablers/en.spaces.group-scope.md); the tenant root scope is born
+cold by its first owner at activation ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md)).
 
 Everything in this document is the **platform's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
 scopes, memberships, grants, shares and the node tree. The tree is domain-neutral — each node has a `kind`, and
@@ -26,9 +28,9 @@ tenant:
 - **`TENANT`** — the tenant's shared root scope. One server hosts many tenants, each with its own domain.
 - **`GROUP`** — a collaborative space within a tenant, **no nesting**; all members have equal content
   rights, owners manage membership and settings only.
-- **`PERSONAL`** — a member's private space **within a tenant** (one per member, per tenant), created
-  when the user joins that tenant. Maximum confidentiality; no other key-holder unless the member
-  explicitly shares.
+- **`PERSONAL`** — a member's private space **within a tenant** (one per member, per tenant), born by the
+  member's client. Maximum confidentiality; no other key-holder, ever — the member reaches others only through a
+  public link.
 
 **Users are global to the server** and may belong to multiple tenants; a user therefore has a **separate
 personal scope per tenant**. Because every scope lives within a tenant, it is reached under that
@@ -92,7 +94,7 @@ flowchart TB
   ma["Member A<br>identity key"]
   mb["Member B<br>identity key"]
   ksc["Scope content key K_SC<br>(current epoch)"]
-  knode["Per-Memory content keys K_node"]
+  knode["Node keys K_node<br>(every node, below the scope)"]
   content["Content<br>(nodes, media, journal, metadata)"]
   share["Public share<br>(per-share key)"]
   NB["A grant = the scope's current content-epoch key<br>sealed to a member's identity public key (one wrap<br>= the whole scope). Each member opens it with their<br>own identity private key."]
@@ -101,7 +103,7 @@ flowchart TB
   mb -->|"opens (holds a grant)"| ksc
   ksc -->|"unwraps"| knode
   knode -->|"encrypts"| content
-  knode -->|"one Memory's K_node wrapped<br>to a per-share key (token-unlocked)"| share
+  knode -->|"one node's key wrapped<br>under the link's own key"| share
   ksc -.- NB
 
   classDef note fill:#fffdf0,stroke:#c9b458,stroke-dasharray:4 3,color:#5c5326
@@ -109,12 +111,12 @@ flowchart TB
 ```
 
 - **Grant = the unit of access.** A member receives the **scope's current content-epoch key sealed to
-  their identity public key** — one wrap grants the whole scope ([ADR 0024](../decisions/0024-scope-key-rotation.md)).
+  their identity public key** — one wrap grants the whole scope
+  ([keys, grants and trust § Grants](keys-grants-and-trust.md#grants-who-wraps-a-scope-key-to-whom)).
   Membership *is* this cryptographic grant; the server stores that a grant exists, not a readable role that
   confers content.
-- **Shares are least-privilege.** A public share gets only the *specific* Memory's content key (`K_node`)
-  wrapped to a per-share key, unlocked by the share token — never the scope key. (Detail in the sharing
-  feature.)
+- **Links are least-privilege.** A public link gets only the shared node's key, wrapped under the link's own key
+  — never the scope key ([en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)).
 - **Group/tenant roles** live in membership rows (`OWNER` / `MEMBER`) and gate *management*
   actions, not content readability — content readability is purely the grant.
 
@@ -136,37 +138,70 @@ scope architecture:
 
 Membership is the **relation between a user and a scope**, and it carries **both** axes of the model in
 one row: a **management role** (server-enforced) and a **grant** (the scope's current content-epoch key
-sealed to the member's identity public key — client-enforced confidentiality). Roles are `OWNER` /
+sealed to the member's identity public key — client-enforced confidentiality). Scope roles are `OWNER` /
 `MEMBER` at **every** level ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); there is no
-third role. The same shape repeats per scope kind:
+third scope role. The same shape repeats per scope kind:
 
 | Membership | Cardinality | Role values | Grant |
 |---|---|---|---|
-| **Server** | 1 per user (a user belongs to one server) | `OWNER` · `MEMBER` | optional — only if the operator domain is modelled as a server-scope (parked, see below) |
-| **Tenant** | n-m (user × tenant) | `OWNER` · `MEMBER` | grant to the `TENANT` scope key |
-| **Group** | n-m (user × group, within one tenant) | `OWNER` · `MEMBER` | grant to the `GROUP` scope key |
-| **Personal** | the member alone | — | self-held; no other key-holder unless explicitly shared |
+| **Tenant** | n-m (user × tenant), on the tenant's root scope | `OWNER` · `MEMBER` | to the `TENANT` scope key |
+| **Group** | n-m (user × group, within one tenant) | `OWNER` · `MEMBER` | to the `GROUP` scope key |
+| **Personal** | the member alone | `OWNER` | the member's self-grant |
 
 - **Role gates *management*, grant gates *content*.** Promoting a member who already holds a grant is a
   pure role change (no key moves); a role without a grant is a hollow title (can neither read nor invite —
   inviting needs the scope key). See [ADR 0006](../decisions/0006-cold-tenant-scope-birth.md).
-- **The first tenant membership is born at activation** — the invited owner's `OWNER` row + its grant come
-  into being when they cold-birth the `TENANT` scope (Slice B). Member invites extend the same relation
-  later via the invite-wrap.
-- **Server role is 1-1, not n-m** — a user has exactly one server role (today `veyq_user.server_role`).
-  Multiple `OWNER`s are allowed by the model; a flow to mint a second one is a later use-case.
+- **Several owners, never none.** A tenant and a group may have several owners; removing or demoting the last one
+  is refused (`409 last_owner`). A group whose sole owner is removed from the tenant passes to its oldest other
+  member ([ADR 0014](../decisions/0014-group-scopes-and-governance.md) §6); a tenant left without an owner by an
+  erasure waits for the Server Owner's owner invite to one of its members
+  ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9).
+- **Belonging is an accepted row.** A member belongs to a tenant when it holds an accepted membership of the tenant's
+  root scope; a group member proposed with consent holds an unaccepted row until it accepts.
+- **The Server Owner is a separate axis.** `veyq_user.server_role` is `SERVER_OWNER` or `MEMBER`, one per account; it
+  is never a scope role, confers no grant and no content, and no scope or tenant gate reads it
+  ([cc.security.authorization](cc.security.authorization.md) § The gate dimensions). A Server Owner who is also a
+  tenant's owner holds that as a membership like anyone else. Making a second account Server Owner is not built.
+
+## Who may do what
+
+The powers each role holds, as built. *Owner* means an `OWNER` membership of the scope named; a **tenant owner** is
+an owner of the tenant's root scope. The mechanics behind a row — what a grant, a rotation or a re-key does — are
+[keys, grants and trust](keys-grants-and-trust.md); a link's are [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md).
+
+| Power | Who |
+|---|---|
+| Create a tenant, suspend, reactivate or delete it, change its domain and quota; invite its first owner | the **Server Owner** — no scope role, no key ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md), [ADR 0066](../decisions/0066-tenant-suspension.md)) |
+| Invite one of a tenant's members to own it | the **Server Owner** ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) |
+| Invite a person into a tenant (by email); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
+| Remove a member from the tenant | a tenant owner; never the last owner |
+| Make a tenant member an owner, or demote one | a tenant owner; never the last owner |
+| Set the tenant's terms, mail settings and per-link storage limit; see members' email | a tenant owner |
+| Create a group or one's own personal scope | any member of the tenant (a group also needs its capability) |
+| Add a tenant member to a group (by username) | a group owner — the tenant owner has **no** power over a group it does not own ([ADR 0014](../decisions/0014-group-scopes-and-governance.md)) |
+| Remove a group member | a group owner, as a removal-rotation; never the last owner |
+| Make a group member an owner, or demote one | a group owner; never the last owner |
+| Rename a group or set its icon; delete it into its grace and restore it | a group owner |
+| Rotate a scope's key | an owner of the scope, any kind; a non-owner only for a scope its own account's securing left pending, and never with a removal |
+| Re-key a node after a rotation | any member holding the current epoch; a drop box, a guest identity folder and below one: an owner of the scope |
+| Create a public link; re-activate or re-issue a switched-off link; re-seal the root's name on links | any member of the scope |
+| Edit or switch off one link; re-issue an enabled one | that link's owner |
+| Switch off every link of a scope | an owner of the scope, any kind |
+| Delete a link | its owner; any member once the owner is no longer a member |
+
+**Not built:** leaving a group or a tenant on one's own (a member declines a group proposal; an account can be
+erased), and email-inviting someone who is not yet a tenant member into a group.
 
 ### Reaching a person — email for outsiders, username within the system
 
 Who you can address depends on whether they already exist on the server:
 
-- **Outsider (no account yet)** — reached by **email** (the only out-of-band channel). This is the tenant
-  **owner** invite: the operator types an email, the server sends an invite, the invitee registers. The
-  email is **operational metadata** the server must hold to send mail.
-- **Existing user (already on the server)** — invited by **username** — a **per-tenant, unique-within-tenant**
-  handle on the membership ([ADR 0023](../decisions/0023-per-tenant-member-identity.md)) — fully **in-app** via
-  the invite-wrap; no email needed. This is the member / group-invite path and keeps person lookup
-  **non-enumerable** (you resolve a username only within scopes you can already see).
+- **Into a tenant — by email**, the only out-of-band channel: the Server Owner's owner invite and a tenant owner's
+  member invite are mailed links, whether or not the person already has an account. The email is **operational
+  metadata** the server must hold to send mail.
+- **Into a group — by username**, a **per-tenant, unique-within-tenant** handle on the member's tenant profile
+  ([ADR 0023](../decisions/0023-per-tenant-member-identity.md)), fully **in-app**; no email needed. A username
+  resolves only within the tenant, so person lookup stays **non-enumerable** across tenants.
 
 **Email visibility is a role rule, not crypto.** The owner email is server-visible operational metadata;
 the server returns it **only to roles that need it** (a `SERVER_OWNER`, or the tenant's own
@@ -177,35 +212,20 @@ crosscutting over **all** server-visible emails (including `veyq_user.email`), n
 
 ## Onboarding a new member — an invite they grant themselves from
 
-A new member has **no identity keypair yet**, so the owner wraps the scope key to a placeholder instead: the invite
-([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 3,
-[ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-decisions 1–3):
-
-1. **Invite.** From an unlocked vault, an owner's client mints an **invite key**, signs it with the owner's identity,
-   wraps the tenant's current epoch to it, and seals the key's seed with the owner's fingerprint into the mailed
-   link, under a **code** (or password) the owner passes on outside veyq. Every rotation of the tenant re-grants each
-   open invite or declares it pending.
-2. **Accept.** The invitee opens the link with the code, checks the invite key and the owner's signature against the
-   fingerprint in the seal, opens the grant, and wraps the epoch to its **own** new identity. It is a member with the
-   key at once, and writes an owner-rooted **join record** into its tenant profile.
-
-A group member already has an identity, so the group owner wraps the group's epoch to it directly. A member whose
-grant is behind — a rotation skipped them, or their invite was declared pending — is brought current by the next
-key-holder online ([ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 5); its client opens that grant only if
-its granter's signature verifies ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
-
-An owner's **session** alone cannot start this: the server mints an invite only when its key carries the caller's
-owner signature under the identity key it stores, which needs the unlocked vault. What no wrap checks yet is that a
-membership came through an invite: the join record is written, not read, so a membership the operator writes into
-the database is wrapped to by a key-holder that never pinned it, as a first use ([security-model](security-model.md)).
+A new member has no identity yet, so an owner's invite holds a grant to an owner-signed invite key and the newcomer
+grants itself from it at accept; a group add wraps directly to an existing identity. The mechanism, the join record and
+what the server checks are [keys, grants and trust § Grants](keys-grants-and-trust.md#grants-who-wraps-a-scope-key-to-whom).
 
 ## Revocation & rotation
 
-Revoking a member or share is **two-layered** (detail in the [Security Model](security-model.md)):
-server-side token/membership invalidation is **instant** (no keys needed); **rotating `K_SC` forward into
+Revoking a member is **two-layered** (detail in the [Security Model](security-model.md)):
+server-side membership invalidation is **instant** (no keys needed); **rotating `K_SC` forward into
 a new epoch** (granted to the remaining members, [ADR 0024](../decisions/0024-scope-key-rotation.md)) is
-the eventual defense-in-depth. Already-read content cannot be retracted.
+the defense-in-depth. Already-read content cannot be retracted. **Switching off a link is the first layer only** — it
+rotates nothing; a link someone who left could rebuild comes back only by re-issue, with a fresh key
+([en.sharing.public-link § Lifecycle](../features/sharing/enablers/en.sharing.public-link.md#lifecycle)).
+
+Who commits a rotation, per scope kind, and who re-keys the nodes: [keys, grants and trust § Rotating a scope](keys-grants-and-trust.md#rotating-a-scope).
 
 ## Navigation contract — unified across kinds
 
@@ -227,7 +247,7 @@ it can decrypt any names or metadata. The operator must not learn private names 
 - **No cross-scope move** — moving across scopes is a copy + re-encrypt, not a tree move.
 - No cycles; **no folder inside a Memory** (a Memories rule — a kind decides what may nest under it).
 - **Slug uniqueness per parent** across folders, Memories and chapters, via blinded slug tokens.
-- A personal scope has **no other key-holder** unless the owner explicitly shares.
+- A personal scope has **no other key-holder**; the member shares from it only through a public link.
 - The **same rules apply to all scope kinds**.
 
 ## Looking ahead — the Subscription layer (SaaS), parked
@@ -239,5 +259,8 @@ the billing unit). Not designed here; refined separately when #41 is pulled.
 
 ## Related
 
-- Concepts: [Security Model](security-model.md), [Account & Key Model](../features/account/enablers/en.account.key-model.md).
-- Features (refined later): Spaces, Memory, Sharing, Admin (tenant/group invites).
+- Concepts: [Security Model](security-model.md), [keys, grants and trust](keys-grants-and-trust.md),
+  [cc.security.authorization](cc.security.authorization.md) (how each rule above is gated),
+  [Account & Key Model](../features/account/enablers/en.account.key-model.md).
+- Features: [Spaces](../features/spaces/_index.md), [Sharing](../features/sharing/_index.md),
+  [Admin](../features/admin/_index.md).

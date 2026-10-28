@@ -102,6 +102,7 @@ anonymity.
 
 ## Related
 
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - **Feature:** [sharing](../_index.md)
 - **Use-cases:** [uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md) (the *member* half,
   server-side), [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),

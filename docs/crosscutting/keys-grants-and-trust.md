@@ -15,7 +15,7 @@
   ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)); one account's unlock methods, KEKs and recovery
   ([en.account.key-model](../features/account/enablers/en.account.key-model.md)); the pin store's format and sync
   ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)); share keys and the
-  link lifecycle ([sharing](../features/sharing/_index.md)); the threat model and what holds against an active operator
+  link lifecycle ([en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)); the threat model and what holds against an active operator
   ([security-model](security-model.md)).
 - **Read by:** the docs site's Security area — [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md)
   and [Protocols](../../site/src/content/docs/security/protocols.mdx).

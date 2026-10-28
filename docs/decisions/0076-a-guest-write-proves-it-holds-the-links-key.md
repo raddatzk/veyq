@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-10-02
+- Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
 
 ## Context
 

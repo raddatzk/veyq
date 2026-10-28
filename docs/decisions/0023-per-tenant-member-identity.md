@@ -1,7 +1,9 @@
 # ADR 0023 — Member identity: per-tenant username + sealed real names, email is the global key
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-08
+- Model: [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md)
 
 ## Context
 
@@ -75,26 +77,17 @@ a tenant.**
   epoch when it enters the tenant (`carryProfileForward.ts`): opened and sealed again, written only while the stored blob
   (the name) or revision (the picture) is still the one it opened, so a save from another device in between wins.
   - *Why on entry, not on the next save:* a name is set once and rarely saved again, and each failed trial costs about
-    26 ms per 1,000 members on every directory read (measured 2026-10-28: 19 ms for 1,000 names opening at the first
-    try, 264 ms nine epochs behind) — without the move, every rotation would add that for good.
+    26 ms per 1,000 members on every directory read — without the move, every rotation would add that for good.
   - *Why no epoch beside the blob:* the server could hold one (an epoch number is opaque metadata it already holds per
     scope), but it would check nothing, and it would cost a field on the profile's writes, the accepts and both reads, and a
     migration whose existing rows would need the trial open anyway. With the move, the trial is one open in the steady
     state.
-- **The join record** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 3, built 2026-10-28). The profile row also holds `sealed_join_record`: the member's identity and
-  Secret-Key proof public key with the owner-signed invite it joined through, signed by the invite key and the new
-  identity, sealed under the tenant epoch the invite's grant carried (field purpose `member-join-record`, bound to the
-  tenant and the member). It is written once, by the accept, never by a profile update, and served to every member on
-  `ScopeMember.sealedJoinRecord` in the tenant scope; the tenant's first owner has none (the trust root). Every
-  member's client reads it as the anchor of that member's key in this tenant (ADR 0111 decisions 12 and 15).
-- **The verifications** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 12). Beside the profile, a member's signed verifications of other members of the tenant live in their own
-  table, one row per verifier and subject (`veyq_verification`), each sealed under a tenant epoch (field purpose
-  `member-verification`, bound to the tenant, both members and the epoch). Like the profile, a row is written only by
-  its member — the verifier is always the caller — and read by every member of the tenant; a member's removal deletes
-  the rows naming them. Unlike the name, the row's address is plaintext: the server sees who verified whom in the
-  tenant, never what was confirmed.
+- **The join record and the verifications** live beside the profile: the profile row holds the member's sealed
+  join record, written once by the accept, and a member's signed verifications of other members sit in their own
+  rows; both are written only by their member and read by every member of the tenant
+  ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decisions 3 and 12). What they hold and how a client reads them is
+  [keys, grants and trust § The anchor, per tenant](../crosscutting/keys-grants-and-trust.md#the-anchor-per-tenant).
 - **Directory visibility.** Every tenant member sees each member's `username` (plaintext) + `firstName`/`lastName`
   (locally decrypted). **Only a tenant `OWNER`** additionally sees `email` (owner correlates a pending member to
   their invite — [ADR 0007](0007-membership-role-grant-relation.md); the field is omitted for ordinary members).
@@ -118,6 +111,5 @@ a tenant.**
   govern; tenants stay isolated (no cross-tenant handle correlation) — good for the hosted SaaS.
 - **Enables the group member-add search** ([ADR 0014](0014-group-scopes-and-governance.md)): resolve a per-tenant
   `username` (unique in the tenant) → the member's identity public key → wrap `K_SC`.
-- **Refines [ADR 0007](0007-membership-role-grant-relation.md):** "reach an existing user by username" is now
-  concretely a per-tenant handle on the membership; email-owner-only visibility is unchanged.
-- **Built by cr-0083** (the identity enabler [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md)).
+- **Refines [ADR 0007](0007-membership-role-grant-relation.md):** "reach an existing user by username" is concretely a
+  per-tenant handle on the member's tenant profile; email-owner-only visibility is unchanged.

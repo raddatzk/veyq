@@ -1,12 +1,11 @@
 # UC: Share a Memory as a contributor link (anyone with the link can add photos)
 
 - **ID:** uc.sharing.share-contributor
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
+- **Primary actor:** **a curator** — any member of the scope that holds the Memory (personal, group or tenant).
 - **Secondary actor:** **an anonymous contributor** — no account, no identity keypair; names themselves once.
 - **Goal:** publish **one** of your own Memories as a **contributor link** — anyone with the link can **view it and
   add photos** — while the server stays operator-blind and the rest of your content stays private.
-- **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_node`).
+- **Preconditions:** an **authenticated, unlocked** curator who is a member of the Memory's scope and can open it.
 - **Share roots today:** a contributor link can be rooted at a **Memory**, a **chapter** (its photos land in the
   chapter) or a **folder** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 6 and 13): a folder's contributor creates folders and
   uploads files inside it — never a Memory, a drop box or another application's node (owner decision 2026-10-14; the
@@ -20,12 +19,10 @@
   (direct-append) and are attributed to the contributor's **sealed** name. Operator-blind throughout: the server
   never sees `K_share`, `K_node`, any name (the Memory's or the contributor's), or the photo bytes.
 
-This is the second sharing slice ([ADR 0030](../../../decisions/0030-contributor-public-share.md)), building on
-the public **viewer** share ([uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),
-[ADR 0029](../../../decisions/0029-public-viewer-share.md)). The crypto is the same per-Memory second-wrap of
-[ADR 0012](../../../decisions/0012-content-key-hierarchy.md); a contributor unwraps `K_node` from the fragment key
-exactly as a viewer does, then seals new media under it. **v1 is deliberately narrow: role READ_WRITE only
-(view + add), direct-append, personal-scope Memories.**
+It builds on the public **viewer** share ([uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md)): a
+contributor opens the Memory from the fragment key exactly as a viewer does, then seals new media under it
+([ADR 0030](../../../decisions/0030-contributor-public-share.md)). The record, the guest identity and the write proof
+are [en.sharing.public-link](../enablers/en.sharing.public-link.md).
 
 ## Main flow
 
@@ -166,10 +163,9 @@ sequenceDiagram
 - **Client-integrity trust tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Same as the viewer:
   the no-install page is passive-operator-safe, not operator-proof against an active foreign operator; surfaced by
   the **footer link** to the security docs. For the self-hosted case (operator = curator) the gap is moot.
-- **Scope rotation ≠ share revocation.** Unchanged from
-  [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md). cr-0101's personal-scope v1 had no member
-  removal; group/tenant contributor shares — where removal soft-revokes the removed member's shares — are now
-  [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104).
+- **Scope rotation ≠ share revocation.** As for the viewer
+  ([uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md)); a removal in a shared scope switches off
+  the removed member's links ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md)).
 
 ## User impact
 
@@ -180,6 +176,7 @@ space stays private and you see who added what.
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - Decisions: [ADR 0030](../../../decisions/0030-contributor-public-share.md) (this contributor share — the sealed
   anonymous identity + the share-scoped upload path), [ADR 0029](../../../decisions/0029-public-viewer-share.md)
   (the share resource + anonymous access path it extends),

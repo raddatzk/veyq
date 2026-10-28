@@ -1,7 +1,10 @@
 # ADR 0014 — Group scopes & governance: shared scopes, private even from the tenant owner
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-28
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
+- Replaced in part: § 2, § 5 by ADR 0111 (built); § 3 by ADR 0027 (built); § 7 by ADR 0068 (built)
 
 ## Context
 
@@ -26,8 +29,7 @@ Considered and rejected during refinement:
 - **Tenant owner can force-delete a group, or add themselves to one.** Rejected — both break the core promise
   that a group is confidential *even from a privileged tenant role*. The only legitimate need behind them —
   **orphaned groups** when an owner leaves the tenant — is met by an automatic rule, not an admin power (below).
-- **Plaintext group name stored server-side.** Rejected — a leak; the name is sealed under `K_SC` like any
-  node name ([ADR 0012](0012-content-key-hierarchy.md)).
+- **Plaintext group name stored server-side.** Rejected — a leak; the name is sealed like any node name.
 - **Email-invite outsiders as the first way to add a member.** Deferred (not rejected) — start with
   **username search of existing tenant members** (their identity public key already exists); email-invite
   onboarding is a later, heavier flow.
@@ -42,7 +44,8 @@ and which is confidential even from the tenant owner.**
 
 1. **Birth (warm, client-driven).** An existing, unlocked tenant member (the **GroupOwner**) mints it like a
    personal scope ([en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md)) but
-   **named + multi-member-capable**: generate a random `K_SC`, **seal the group name under `K_SC`**, and
+   **named + multi-member-capable**: generate a random `K_SC`, **seal the group name** under the name key derived
+   from it (§ 3), and
    `asymWrap` `K_SC` to their **own** identity public key (the self-grant). `POST` the ciphertext name + grant
    under a scope id the client minted ([ADR 0072](0072-a-seal-binds-its-object.md));
    the server records the `GROUP` scope under it + the creator's `role=OWNER` membership. No new crypto — the KEM grant of
@@ -52,9 +55,11 @@ and which is confidential even from the tenant owner.**
    `asymWrap`'d to *their* identity public key. Adding a member is exactly: the adding owner's client wraps the
    group's current epoch to the target's key and `POST`s that grant with the add
    ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-   decision 4, built 2026-10-28). The server never holds `K_SC`.
+   decision 4). The server never holds `K_SC`.
 
-3. **The name is sealed under `K_SC`.** Only members decrypt it. The server — and anyone with server/DB access,
+3. **The name is sealed under a key derived from `K_SC`** — the name key `K_name` of the epoch the name was sealed
+   at ([ADR 0027](0027-group-invite-name-shared-key.md)). Only members, and an invitee handed that one key, decrypt
+   it. The server — and anyone with server/DB access,
    including a self-hosting tenant owner — sees an **unnamed** group: opaque `scopeId`, `kind`, members. This is
    what makes a group **private even from the tenant owner**.
 
@@ -62,7 +67,7 @@ and which is confidential even from the tenant owner.**
 
    | Role | May |
    |---|---|
-   | **GroupOwner** (`OWNER` on a GROUP scope) | create the group · **add members via username search** · **promote a member to co-owner / demote a co-owner** · **delete the group with a grace period** |
+   | **GroupOwner** (`OWNER` on a GROUP scope) | create the group · **add members via username search** · **remove a member, with a rotation** · **promote a member to co-owner / demote a co-owner** · rename it · switch off every link in it · **delete the group with a grace period**, and restore it |
    | **Member** (any role with a grant) | read + write the group's content (holds `K_SC`) |
    | **TenantOwner** | **nothing** with respect to groups — groups are **not surfaced** to them, and they cannot delete a group or add themselves |
 
@@ -88,14 +93,11 @@ and which is confidential even from the tenant owner.**
      member is *proposed*, held as a **soft** membership that **holds the grant** from the add on, exactly as a direct
      add does; the server serves the group to the invitee only after **Accept**, and consenting changes nothing about
      keys. Because the target's key could open the grant from the add on, a **Decline** — or the owner rescinding the
-     proposal — queues the group's rotation, as a removal does (ADR 0111 decision 4; this replaced the original
-     consent-first gate, under which nothing was wrapped before Accept and the invitee then waited for a key-holder).
+     proposal — queues the group's rotation, as a removal does (ADR 0111 decision 4).
      To let them decide informed, the owner's device hands the invitee the group's **derived name-key `K_name`**
      (wrapped to their identity, `asymWrap(inviteePub, K_name, "group-name-key")`) so the invitee opens the scope's
      **canonical** sealed name — the same ciphertext the members read — and **cannot** be shown a divergent,
-     owner-typed name. This replaces the original **one-off name-seal** (an unverifiable owner-supplied name a
-     modified owner client could make diverge); the derivation, the forward-secrecy, and the rejected alternatives
-     are settled in [ADR 0027](0027-group-invite-name-shared-key.md). The invitee sees the (group-consistent) name +
+     owner-typed name; the derivation and the rejected alternatives are [ADR 0027](0027-group-invite-name-shared-key.md)'s. The invitee sees the (group-consistent) name +
      who added them.
    - **Threat:** a malicious operator could return a public key it controls (MITM) and read the group.
      **Defense:** the **safety-number / fingerprint** of that identity. The verification stance is settled in
@@ -104,11 +106,10 @@ and which is confidential even from the tenant owner.**
      **safety-number verification** (QR compare) elevates *pinned* → *verified*; a **hard gate** before the first
      grant is available as an **opt-in strict mode**. The pin store is client-side + sealed (operator-blind).
 
-6. **Lifecycle.** Settled in the lifecycle slice ([uc.spaces.delete-group](../features/spaces/use-cases/uc.spaces.delete-group.md), G3b):
+6. **Lifecycle** ([uc.spaces.delete-group](../features/spaces/use-cases/uc.spaces.delete-group.md)):
    - **Owner delete = soft + grace.** Any GroupOwner deletes; the group enters **pending-deletion** (`deletedAt`
-     marker + a `purgeAfter` date) and is hard-purged by a scheduled job after a **30-day grace period** (`P30D`,
-     reusing the tenant-invite retention precedent). Mirrors the scheduled-purge pattern (`TenantInvitePurge` /
-     `SessionPurge`). **During grace the group stays
+     marker + a `purgeAfter` date) and is hard-purged by a scheduled job after a **30-day grace period**. **During
+     grace the group stays
      viewable + downloadable but read-only, clearly marked as deleting** (members can see their pictures one last
      time); grants/memberships are untouched, so **any owner can restore** in-window (trivial: clear the marker).
      The **hard-purge erases content + blob objects** from the store (reusing the blob-aware node-subtree delete),
@@ -126,17 +127,12 @@ and which is confidential even from the tenant owner.**
      they merely co-shared is client-driven and completed later by a remaining member (the async backstop).
    - **Removal → rotation.** A removed member keeps the content key they already held; confidentiality of **new**
      content is restored by **rotating the scope key forward into a new epoch** — re-grant it to the remaining
-     members, seal new content under it, **nothing existing is re-encrypted** (the epoch chain,
-     [ADR 0024](0024-scope-key-rotation.md)). "Stop new grants + rotate forward"; already-read content cannot be
-     retracted (a stated limitation).
+     members, re-key every node below it, **nothing existing is re-encrypted** (the epoch chain,
+     [ADR 0024](0024-scope-key-rotation.md), [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md));
+     already-read content cannot be retracted (a stated limitation).
 
-7. **A member's Memory favorites are private to them, not sealed under `K_SC`.** `K_SC` is **shared** in a
-   group, so the favorites blob ([en.memory.favorites](../features/memory/enablers/en.memory.favorites.md))
-   sealed under it is readable by every member. **Decided and discharged** by
-   [ADR 0068](0068-favorites-two-confidentiality-levels.md): the pin seals under the member's **master key**, in
-   every scope without a branch — "own identity key" here named the *property*, not the primitive. That ADR also
-   settles what this clause did not anticipate: a **second**, deliberately **shared** favorite object on
-   individual media items, which is why the rule is stated there rather than extended here.
+7. **A member's Memory favorites** are [ADR 0068](0068-favorites-two-confidentiality-levels.md)'s: `K_SC` is shared in a
+   group, so a member's private favorites seal under their own master key, never under it.
 
 ## Consequences
 
@@ -149,11 +145,6 @@ and which is confidential even from the tenant owner.**
 - **No new crypto, no new operator trust.** Member grants are the same hybrid KEM as the tenant's
   ([ADR 0020](0020-grant-distribution-invite-wrap.md)); the only new server state is the GROUP scope row's sealed name
   + the per-member grants + the pending-deletion lifecycle.
-- **Sliced delivery.** **G1** — create + open + browse a group (solo owner; this ADR's substrate,
-  [en.spaces.group-scope](../features/spaces/enablers/en.spaces.group-scope.md)). **G2** — add a member
-  (username search + KEM grant + the fingerprint stance). **G3** — member management, grace-period delete +
-  orphan rule, key rotation.
-- **Deferred, on purpose:** the fingerprint verification stance (G2), grace length + restore + rotation
-  mechanics (G3), and email-invite onboarding (later). They are recorded here so the slices inherit the frame.
+- **Not built:** adding someone who is not yet a tenant member to a group by email.
 
 Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

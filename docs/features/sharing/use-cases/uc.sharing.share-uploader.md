@@ -1,13 +1,12 @@
 # UC: Share a Memory as an uploader link (a write-only drop-box)
 
 - **ID:** uc.sharing.share-uploader
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
+- **Primary actor:** **a curator** — any member of the scope that holds the Memory (personal, group or tenant).
 - **Secondary actor:** **an anonymous uploader** — no account, no identity keypair; names themselves once.
 - **Goal:** publish **one** of your own Memories as a **write-only drop-box** link — anyone with the link can **add
   photos** but **cannot see** the Memory's existing content (nor other contributors'), while the server stays
   operator-blind.
-- **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_node`).
+- **Preconditions:** an **authenticated, unlocked** curator who is a member of the Memory's scope and can open it.
 - **Share roots today:** an uploader link can be rooted at a **Memory** or a **chapter** (sealed to the chapter's
   own drop key, its photos land in the chapter — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 13), never at a folder (`422`). This
   use-case walks the Memory case; what each root kind allows is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
@@ -16,12 +15,10 @@
   Memory — visible to the curator in *their* gallery. The uploader sees **only the photos they add this session**
   (from local previews, never a download) and can delete them **in that session**; a reload shows nothing.
 
-This is the third sharing slice ([ADR 0031](../../../decisions/0031-uploader-public-share.md)), building on the
-READ_WRITE share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md),
-[ADR 0030](../../../decisions/0030-contributor-public-share.md)). The upload crypto/path is identical; the
-difference is the **`canView` gate** (a WRITE_ONLY link's media read answers an empty list) and the **session-only,
-client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append** — the personal-scope limit was lifted by
-[uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md).
+It builds on the READ_WRITE share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)); the
+difference is the **`canView` gate** (a WRITE_ONLY link's media read answers an empty list), the drop key the guest
+seals to, and the **session-only, client-local** own-view ([ADR 0031](../../../decisions/0031-uploader-public-share.md)).
+The record, the drop key path and the lifecycle are [en.sharing.public-link](../enablers/en.sharing.public-link.md).
 
 ## Main flow
 
@@ -125,8 +122,8 @@ sequenceDiagram
   `share_identity_id` stamp (for the curator’s view + the delete check) + ciphertext.
 - **Inherited from the contributor share.** Mandatory sealed name → anonymous identity; the share-scoped upload
   path; direct-append (the curator sees the contributions); byte budget + rate limit; the footer-link trust tier;
-  scope-rotation ≠ share-revoke. cr-0102's personal-scope-only restriction is lifted for group/tenant by
-  [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104).
+  scope-rotation ≠ share-revoke; in a shared scope, the governance of
+  [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md).
 
 ## User impact
 
@@ -137,6 +134,7 @@ in the Memory nor what others added.
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - Decisions: [ADR 0031](../../../decisions/0031-uploader-public-share.md) (this write-only drop-box — the
   client-local, session-only own-view + delete-own), [ADR 0030](../../../decisions/0030-contributor-public-share.md)
   (the sealed identity + share-scoped upload path it reuses), [ADR 0029](../../../decisions/0029-public-viewer-share.md)

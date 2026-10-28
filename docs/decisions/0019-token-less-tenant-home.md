@@ -1,7 +1,9 @@
 # ADR 0019 — The token-less fragment is the Tenant space (shared root is home), Personal on `~me`
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-03
+- Model: [en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md)
 
 ## Context
 
@@ -35,7 +37,7 @@ The full grammar (extends, and revises the default of, [ADR 0015](0015-operator-
 |---|---|---|
 | **Tenant** (shared, default home) | `/` — token-less, **no bare `#`** | `/#urlaube` |
 | **Personal** | `/#~me` | `/#~me/urlaube` |
-| **Group** (later) | `/#@<id>` | `/#@<id>/urlaube` |
+| **Group** | `/#@<id>` | `/#@<id>/urlaube` |
 
 - **Token-less = tenant, and it stays clean.** A tenant child rides a bare fragment (`#urlaube`) with **no**
   `~me`/`@` prefix and **no** empty `#` at the root — `/` alone is the tenant root. The leading token is what
@@ -43,9 +45,8 @@ The full grammar (extends, and revises the default of, [ADR 0015](0015-operator-
 - **Personal ↔ Tenant is a leading-token flip**, resolved entirely client-side like every other fragment move
   ([ADR 0015](0015-operator-blind-readable-urls.md)) — the blind server resolves no path and sees no fragment.
 - **Fallback to Personal when there is no tenant grant.** The token-less home is openable only if the member
-  **holds a `TENANT` grant**. Today only the cold-birth owner does (tenant member-invite is unbuilt), so for
-  everyone else the shell **falls back to Personal** (`~me`) as the effective home and marks the Tenant entry
-  unavailable ([en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md), E1). The default
+  **holds a `TENANT` grant** it can open; for a member who does not, the shell **falls back to Personal** (`~me`) as
+  the effective home and marks the Tenant entry unavailable ([en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md), E1). The default
   is thus *conditional*: token-less means "tenant if you can open it, else personal".
 - **Slugs stay in the fragment.** Folder/Memory slugs are unchanged from [ADR 0015](0015-operator-blind-readable-urls.md);
   only the leading token (or its absence) changed meaning. Operator-blindness is untouched — the fragment still
@@ -58,9 +59,9 @@ The full grammar (extends, and revises the default of, [ADR 0015](0015-operator-
 - **Cleanest URL for the collaborative center.** The token-less form (`/`, `#urlaube`) belongs to the space
   meant to be shared and linked; the private space carries the visible `~me` marker, which also reads as an
   honest "you are in your private space" signal.
-- **The default is conditional, not absolute** (cost). "Token-less = tenant" holds only for grant-holders;
-  non-owners silently land in Personal until tenant member-invite ships. This is a deliberate, documented
-  fallback, not a bug — but it means a bare `/` does not universally identify one scope across members.
+- **The default is conditional, not absolute** (cost). "Token-less = tenant" holds only for grant-holders; a member
+  without an openable tenant grant lands in Personal. This is a deliberate, documented fallback, not a bug — but it
+  means a bare `/` does not universally identify one scope across members.
 - **The flip changes what a bare bookmark means** (cost). A pre-existing bookmark to `family.example.com/`
   (bare) that used to open Personal now opens the Tenant space (or falls back to Personal). Explicit `#~me/…`
   and `#@…/…` bookmarks are **unaffected**; only the token-less default moved. Acceptable — a bare root is a
@@ -77,5 +78,3 @@ The full grammar (extends, and revises the default of, [ADR 0015](0015-operator-
 - **Supersedes only the default, not ADR 0015.** ADR 0015's fragment-routing decision, client-side resolution,
   and the `~me`/`@` tokens all stand; this ADR pins the previously-unspecified token-less default and is
   cross-referenced from 0015.
-
-> Realised: the `location.ts` default flip + Personal ↔ Tenant switching; contracts + backend unchanged.

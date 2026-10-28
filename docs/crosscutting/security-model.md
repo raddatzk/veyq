@@ -490,7 +490,8 @@ server-blind token makes this work without the server ever seeing a name:
   possible and serve ciphertext only. A layer-1 control: the operator, being the server, could write anyway.
 - **Revocation is soft, and independent of scope rotation.** Disabling a share / expiry stops *new* access;
   already-downloaded content is not retractable. A scope key rotation (a member removal) does **not** revoke a
-  share — a shared `K_node` is wrapped independently of `K_SC` — so shares are revoked **separately** (a removed
+  share — its re-key re-wraps the node's new key under the link's own `K_share`
+  ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4) — so shares are revoked **separately** (a removed
   member with the link keeps reading until then). The no-install web viewer is operator-served, so it is
   **passive-operator-safe** (the client-integrity tier, [ADR 0026](../decisions/0026-client-trust-tiers.md)), not
   operator-proof against a *foreign* operator; the viewer surfaces this honestly via a footer link here.
@@ -783,7 +784,7 @@ content. A deletion audit records accountability without retaining the erased da
 
 **A public link goes with what it shows** ([ADR 0029](../decisions/0029-public-viewer-share.md) §7). Purging a
 Memory deletes every link on it, and a curator can delete a link by hand: the share row becomes a tombstone that
-keeps only its id, scope, Memory, role and dates — the sealed title, note, label, recovery copy, password fields and
+keeps only its id, scope, node, role and creation time — the sealed title, note, label, recovery copy, password fields and
 key wrap are erased — so the link can never answer again and its id is never minted again. A guest's identity row
 (their sealed name and wrapped key) is erased once its link is deleted and nothing of theirs remains: no photo,
 trashed or not, and no bucket. The photos guests added belong to the Memory, not to the link, and go only with it.

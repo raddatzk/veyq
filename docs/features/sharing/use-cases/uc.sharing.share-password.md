@@ -99,6 +99,7 @@ password without handing out a new link.
 
 ## Related
 
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - **Feature:** [sharing](../_index.md)
 - **Decisions:** [ADR 0037](../../../decisions/0037-password-protected-shares.md) (this gate + the honest

@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-06-26
 - Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
+- Replaced in part: Consequences (the operator never selects a successor) by ADR 0101 (built)
 
 ## Context
 
@@ -57,15 +58,17 @@ from anyone.
   by construction.
 - **The operator never selects a successor.** Operator-blindness withholds both the key *and* the
   identity view (opaque member IDs only), so the operator cannot choose a new owner even setting crypto
-  aside. Promotion is **tenant-internal** (an existing owner/admin promotes a member). This matches the
+  aside. Promotion is **tenant-internal**: an existing owner makes a member an owner. The one exception is a tenant
+  left with no owner by an erasure: the Server Owner invites one of its members to own it, a role that moves no key
+  ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9). This matches the
   universal E2EE pattern — Signal, Keybase, Proton, 1Password, Bitwarden, Apple ADP all keep
   recovery/succession one level *inside* (multiple admins / an org key / designated recovery contacts),
   never at the infrastructure operator.
 - **Single-key-holder cliff (accepted): `solo owner gone == content gone`.** Owner removal is recoverable
   by **promoting another key-holder**; it is unrecoverable only when the owner is the **sole** key-holder
   (content cryptographically orphaned — no operator recovery, by invariant). Accepted as the owner's own
-  risk; redundancy is **not forced** at activation. Richer succession (co-owner / designated successor /
-  tenant recovery key) is **deferred with the SaaS layer** (inbox #41).
+  risk; redundancy is **not forced** at activation — an owner may make a member a co-owner. Richer succession (a
+  designated successor, a tenant recovery key) is deferred with the SaaS layer.
 - **On-premise collapses the split.** In the common self-hosted case (one server, usually one tenant,
   self-administered) the Server Owner *is* the Tenant Owner — they invite their own email and accept. The
   operator/owner separation earns its keep only for multi-tenant/SaaS hosting of *other* people.
