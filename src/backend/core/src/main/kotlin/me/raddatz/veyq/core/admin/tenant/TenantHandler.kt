@@ -719,7 +719,7 @@ class TenantHandler(
         // Impure shell: load the directory (ownerCount pre-resolved per row), ask the pure policy, execute its steps.
         // Every branch and boundary of the decision lives in RemovalPolicy, where it is mutation-verified (ADR 0045 §2).
         val rows = scopes.membershipsInTenant(targetId, tenantId)
-            .map { RemovalScope(it.scopeId, it.kind, it.role, it.memberCount, it.ownerCount) }
+            .map { RemovalScope(it.scopeId, it.kind, it.role, it.acceptedMembers, it.ownerCount, it.pending) }
         return when (val plan = RemovalPolicy.plan(rows, tenantId, allowLastOwner)) {
             RemovalPlan.MemberNotFound -> RemoveTenantMemberOutcome.MemberNotFound
             RemovalPlan.LastOwner -> RemoveTenantMemberOutcome.LastOwner
@@ -730,8 +730,9 @@ class TenantHandler(
                 // membership → job (ScopesStore.rotate's). A cut that held a member's row while a rotation held the
                 // scope row would deadlock; one order across scopes keeps two such requests from crossing. The
                 // locks taken above already cover every scope but one the target joined after its ids were read;
-                // that one is locked here, and only its counts can come from the pre-lock snapshot.
-                plan.steps.filter { it.action != CascadeAction.SOFT_DELETE }.map { it.scopeId }.sorted()
+                // that one is locked here, and only its counts can come from the pre-lock snapshot. A tombstone that
+                // expires a group's proposals deletes membership rows too, so it is locked like a cut (inbox #598).
+                plan.steps.filter { it.action != CascadeAction.SOFT_DELETE || it.expireProposals }.map { it.scopeId }.sorted()
                     .forEach { scopes.lockScope(it) }
                 plan.steps.forEach { execute(it, targetId, now) }
                 // ADR 0084 decision 8: the picture goes with the access, the profile row (and its handle) outlives it
@@ -746,16 +747,26 @@ class TenantHandler(
 
     /** Run one policy-decided cascade step against the stores. Decides nothing — the `when` only dispatches. */
     private fun execute(step: CascadeStep, targetId: String, now: Instant) {
+        // ADR 0014 §6: the group's only accepted owner leaves, so its open proposals expire — before the hand-over,
+        // whose successor query skips proposals besides. No rotation is queued for them here: a tombstoned group has nobody
+        // left to hold a key, and a handed-over group is rotated by the target's own cut below.
+        if (step.expireProposals) scopes.expireProposals(step.scopeId)
         when (step.action) {
             // The target's own scope: grace-tombstone, keep the membership (read-only grace, then purge).
             CascadeAction.SOFT_DELETE -> scopes.softDelete(step.scopeId, now)
-            // Orphan rule: hand the solely-owned group to the oldest remaining member before cutting the target.
+            // Orphan rule: hand the solely-owned group to the oldest remaining accepted member before cutting the target.
             CascadeAction.TRANSFER_THEN_REMOVE -> {
                 scopes.oldestOtherMember(step.scopeId, targetId)
                     ?.let { scopes.setRole(it, step.scopeId, MembershipEntity.OWNER) }
                 cutSharedAccess(step, targetId)
             }
             CascadeAction.REMOVE -> cutSharedAccess(step, targetId)
+            // Only proposed here: the decline's path (ScopesHandler.declineInvitation) — the row goes and, since it
+            // held the key, the group's rotation is queued; no removal is counted and the group keeps its owner.
+            CascadeAction.DROP_PROPOSAL ->
+                if (scopes.deletePendingMembership(targetId, step.scopeId) > 0 && step.rotateAfter) {
+                    tasks.originateScopeRotation(step.scopeId, maxAttempts)
+                }
         }
     }
 

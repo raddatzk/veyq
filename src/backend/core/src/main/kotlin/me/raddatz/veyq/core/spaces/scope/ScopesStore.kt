@@ -365,7 +365,8 @@ class ScopesStore(
      * Count one removal of an accepted member (ADR 0075 point 4) — called in the transaction of **every** path that
      * removes one: the group's removal-rotation ([rotate]) and the tenant cascade, for each scope it cuts. A share
      * minted before it is then one the removed member could have rebuilt from its recovery copy, so it comes back only
-     * by re-issue. A pending proposal's delete is no removal: it was never keyed and holds no grant to open a copy.
+     * by re-issue. A pending proposal's delete is no removal: it holds the grant (ADR 0111 decision 4), but the server
+     * served it nothing of the group, so it has no copy to rebuild a link from (uc.spaces.consent-group-add A3a).
      * One atomic `+ 1` in the database, never a read-modify-write of a loaded row: the caller may already hold that row
      * in its persistence context (the gate read it; [rotate] locked it), and a stale in-memory count plus one would
      * lose a removal racing this one. The loaded row is not refreshed — `ScopeEntity` is `@DynamicUpdate`, so its
@@ -519,16 +520,19 @@ class ScopesStore(
 
     // --- tenant-member removal cascade (cr-0091) ---
 
-    /** One of a user's memberships within a tenant, tagged with its scope kind + the total member and owner counts
-     *  on that scope — a row of the `removeTenantMember` worklist (cr-0091). The `ownerCount` is pre-resolved here so
-     *  the removal decision's sole-owner / last-owner `<= 1` boundaries live in the pure [RemovalPolicy], not an SQL
-     *  predicate — unit-tested and mutation-verified without a boot (ADR 0045 §2). */
+    /** One of a user's memberships within a tenant, tagged with its scope kind + the **accepted** member and owner
+     *  counts on that scope and whether the user's own row is an unaccepted proposal — a row of the
+     *  `removeTenantMember` worklist (cr-0091). The counts are pre-resolved here so the removal decision's sole-owner /
+     *  last-owner `<= 1` boundaries live in the pure [RemovalPolicy], not an SQL predicate — unit-tested and
+     *  mutation-verified without a boot (ADR 0045 §2). A proposal is counted by neither: it is no member to any role
+     *  decision until it accepts (inbox #598). */
     data class TenantMembershipRow(
         val scopeId: String,
         val kind: String,
         val role: String,
-        val memberCount: Long,
+        val acceptedMembers: Long,
         val ownerCount: Long,
+        val pending: Boolean,
     )
 
     /** The ids of every scope the user holds a row on in this tenant — the locks a tenant removal takes before it
@@ -536,24 +540,38 @@ class ScopesStore(
     fun scopeIdsInTenant(userId: String, tenantId: String): List<String> =
         MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().map { it.scopeId }
 
-    /** Every scope the user is a member of in this tenant, each tagged with the scope kind + its member and owner
-     *  counts — the input to the per-kind removal cascade (delete shared, orphan-transfer, soft-delete own, cr-0091). */
+    /** Every scope the user holds a row on in this tenant, each tagged with the scope kind + its accepted member and
+     *  owner counts — the input to the per-kind removal cascade (delete shared, orphan-transfer, soft-delete own,
+     *  drop a proposal; cr-0091, inbox #598). */
     fun membershipsInTenant(userId: String, tenantId: String): List<TenantMembershipRow> =
         MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().mapNotNull { m ->
             ScopeEntity.findById(m.scopeId)?.let { s ->
                 TenantMembershipRow(
                     m.scopeId, s.kind, m.role,
-                    MembershipEntity.count("scopeId", m.scopeId),
+                    MembershipEntity.count("scopeId = ?1 and pendingConsent = false", m.scopeId),
                     membership.ownerCount(m.scopeId),
+                    m.pendingConsent,
                 )
             }
         }
 
-    /** The earliest-joined **other** member of a scope (min `createdAt`), or null if the user is alone — the
-     *  orphan rule's deterministic successor owner (cr-0091, ADR 0014 §6). */
+    /** The earliest-joined **other accepted** member of a scope (min `createdAt`), or null if none is left — the
+     *  orphan rule's deterministic successor owner (cr-0091, ADR 0014 §6). A consent proposal is never handed a group,
+     *  however old: it is no member until it accepts (inbox #598). */
     fun oldestOtherMember(scopeId: String, exceptUserId: String): String? =
-        MembershipEntity.find("scopeId = ?1 and userId <> ?2 order by createdAt asc, id", scopeId, exceptUserId)
-            .firstResult()?.userId
+        MembershipEntity.find(
+            "scopeId = ?1 and userId <> ?2 and pendingConsent = false order by createdAt asc, id", scopeId, exceptUserId,
+        ).firstResult()?.userId
+
+    /**
+     * Expire every open consent proposal on a group (ADR 0014 §6, inbox #598) — its only accepted owner is leaving,
+     * and a proposal, no member, is never handed the group. The rows go as a decline's do
+     * ([deletePendingMembership]): no removal is counted, since the server served a proposal nothing of the group. The
+     * caller holds the scope row's lock and queues the rotation its proposals' grants call for, if anybody is left.
+     */
+    @Transactional
+    fun expireProposals(scopeId: String): Int =
+        MembershipEntity.delete("scopeId = ?1 and pendingConsent = true", scopeId).toInt()
 
     /**
      * Add a member to a GROUP **with the grant** the owner's client wrapped to their identity key (ADR 0111 decision 4)

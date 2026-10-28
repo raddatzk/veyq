@@ -138,6 +138,106 @@ class MemberRemoveSliceTest {
         assertFalse(hasMembership(member, personal), "and its kept membership is gone with it")
     }
 
+    // --- the orphan rule counts accepted members only; a sole owner's departure expires open proposals (#598) ----
+
+    @Test
+    fun aSoleOwnerLeavingAGroupWithOnlyAProposalTombstonesItAndTheProposalExpires() {
+        val (tenantId, owner) = seedActiveTenant("rm-598.example.com", "owner@rm-598.example.com")
+        val member = seedTenantMember(tenantId, "m@rm-598.example.com")
+        val proposed = seedTenantMember(tenantId, "p@rm-598.example.com")
+        val group = seedGroup(tenantId, member)
+        addProposal(tenantId, group, proposed, addedBy = member)
+
+        given().header("Authorization", bearer(owner))
+            .`when`().delete("/api/tenants/$tenantId/members/$member").then().statusCode(204)
+
+        // No accepted member is left: the group is the departing owner's own, tombstoned with their membership kept.
+        assertNotNull(deletedAt(group), "a group with no accepted member left is grace-tombstoned")
+        assertTrue(hasMembership(member, group), "the departing owner keeps their membership for the read-only grace")
+        assertFalse(hasMembership(proposed, group), "the open proposal expired with the owner's departure, never made an owner")
+        assertEquals(0L, liveRotationJobs(group), "nobody is left to hold a key, so no rotation is queued")
+
+        // The proposal is gone for its invitee: nothing to accept, and a decline queues no rotation nobody could claim.
+        given().header("Authorization", bearer(proposed))
+            .`when`().post("/api/scopes/$group/invitations/accept")
+            .then().statusCode(404).body("code", equalTo("invitation_not_found"))
+        given().header("Authorization", bearer(proposed))
+            .`when`().post("/api/scopes/$group/invitations/decline").then().statusCode(204)
+        assertEquals(0L, liveRotationJobs(group), "the decline found no proposal and queued nothing")
+    }
+
+    @Test
+    fun aSoleOwnerLeavingAGroupWithOnlyProposalsMakesNoneAnOwnerAndExpiresEveryOne() {
+        val (tenantId, owner) = seedActiveTenant("rm-598b.example.com", "owner@rm-598b.example.com")
+        val member = seedTenantMember(tenantId, "m@rm-598b.example.com")
+        val first = seedTenantMember(tenantId, "p1@rm-598b.example.com")
+        val second = seedTenantMember(tenantId, "p2@rm-598b.example.com")
+        val group = seedGroup(tenantId, member)
+        addProposal(tenantId, group, first, addedBy = member, createdAt = Instant.parse("2026-01-01T00:00:00Z"))
+        addProposal(tenantId, group, second, addedBy = member)
+
+        given().header("Authorization", bearer(owner))
+            .`when`().delete("/api/tenants/$tenantId/members/$member").then().statusCode(204)
+
+        assertNotNull(deletedAt(group), "proposals are no members: the group is treated as empty")
+        assertFalse(hasMembership(first, group), "the oldest proposal expired, never promoted")
+        assertFalse(hasMembership(second, group), "every open proposal expired")
+        assertEquals(0L, liveRotationJobs(group), "an emptied group is not rotated")
+    }
+
+    @Test
+    fun aSoleOwnerLeavingHandsTheGroupToTheOldestAcceptedMemberAndItsProposalsExpire() {
+        val (tenantId, owner) = seedActiveTenant("rm-598c.example.com", "owner@rm-598c.example.com")
+        val member = seedTenantMember(tenantId, "m@rm-598c.example.com")
+        val olderProposal = seedTenantMember(tenantId, "p1@rm-598c.example.com")
+        val elder = seedTenantMember(tenantId, "elder@rm-598c.example.com")
+        val junior = seedTenantMember(tenantId, "junior@rm-598c.example.com")
+        val newerProposal = seedTenantMember(tenantId, "p2@rm-598c.example.com")
+        val group = seedGroup(tenantId, member)
+        // The oldest row of the group is a proposal: only accepted rows may be handed the group.
+        addProposal(tenantId, group, olderProposal, addedBy = member, createdAt = Instant.parse("2025-06-01T00:00:00Z"))
+        addMember(tenantId, group, elder, createdAt = Instant.parse("2026-01-01T00:00:00Z"))
+        addMember(tenantId, group, junior, createdAt = Instant.parse("2026-06-01T00:00:00Z"))
+        addProposal(tenantId, group, newerProposal, addedBy = member)
+
+        given().header("Authorization", bearer(owner))
+            .`when`().delete("/api/tenants/$tenantId/members/$member").then().statusCode(204)
+
+        assertEquals(MembershipEntity.OWNER, roleOn(elder, group), "the oldest ACCEPTED member is promoted")
+        assertEquals(MembershipEntity.MEMBER, roleOn(junior, group), "the newer accepted member stays a MEMBER")
+        assertFalse(hasMembership(olderProposal, group), "the proposal older than every member expired, never promoted")
+        assertFalse(hasMembership(newerProposal, group), "every open proposal expired with the only owner's departure")
+        assertFalse(hasMembership(member, group), "the departing owner is cut")
+        assertNull(deletedAt(group), "accepted members remain, so the group carries on")
+        // One queued rotation takes both the departing owner's key and the expired proposals' away.
+        assertEquals(1L, liveRotationJobs(group), "the group's rotation is queued for its new owner")
+        assertEquals(1, memberRemovalsOf(group), "only the owner's cut counts as a removal, an expired proposal does not")
+    }
+
+    @Test
+    fun aRemovedMemberWhoIsOnlyAProposalNeverReownsNorTombstonesTheGroup() {
+        val (tenantId, owner) = seedActiveTenant("rm-598d.example.com", "owner@rm-598d.example.com")
+        val groupOwner = seedTenantMember(tenantId, "go@rm-598d.example.com")
+        val target = seedTenantMember(tenantId, "t@rm-598d.example.com")
+        val other = seedTenantMember(tenantId, "o@rm-598d.example.com")
+        // The group's only accepted row is its owner, so counted by accepted rows alone it would look like the
+        // target's own solo group — the trap a bare `pendingConsent = false` filter falls into.
+        val group = seedGroup(tenantId, groupOwner)
+        addProposal(tenantId, group, target, addedBy = groupOwner)
+        addProposal(tenantId, group, other, addedBy = groupOwner)
+
+        given().header("Authorization", bearer(owner))
+            .`when`().delete("/api/tenants/$tenantId/members/$target").then().statusCode(204)
+
+        assertEquals(MembershipEntity.OWNER, roleOn(groupOwner, group), "the group's own accepted owner stays")
+        assertNull(deletedAt(group), "a proposal's removal never tombstones the group")
+        assertFalse(hasMembership(target, group), "the removed member's proposal is dropped")
+        assertTrue(hasMembership(other, group), "another invitee's proposal stays open: the group still has its owner")
+        // As a decline does: the proposal held the key, so the group rotates, and a proposal's drop is no removal.
+        assertEquals(1L, liveRotationJobs(group), "the dropped proposal held the key: the group's rotation is queued")
+        assertEquals(0, memberRemovalsOf(group), "a dropped proposal is no removal (ADR 0075 point 4), as a decline is not")
+    }
+
     // --- cr-0092: the async group-key-rotation backstop (SCOPE_ROTATION on the blind task queue) --------------
 
     @Test
@@ -277,6 +377,19 @@ class MemberRemoveSliceTest {
         tenantId: String, scopeId: String, userId: String,
         role: String = MembershipEntity.MEMBER, createdAt: Instant = Instant.now(),
     ) = QuarkusTransaction.requiringNew().run { membership(userId, tenantId, scopeId, role, createdAt) }
+
+    /** An open consent proposal on a group: a MEMBER row with `pendingConsent`, holding the grant (ADR 0111 decision 4). */
+    private fun addProposal(tenantId: String, scopeId: String, userId: String, addedBy: String, createdAt: Instant = Instant.now()) =
+        QuarkusTransaction.requiringNew().run {
+            membership(userId, tenantId, scopeId, MembershipEntity.MEMBER, createdAt)
+            MembershipEntity.update(
+                "pendingConsent = true, sealedNameKey = ?1, addedBy = ?2 where userId = ?3 and scopeId = ?4",
+                "bmFtZS1rZXk=", addedBy, userId, scopeId,
+            )
+        }
+
+    private fun memberRemovalsOf(scopeId: String): Int =
+        QuarkusTransaction.requiringNew().call { ScopeEntity.findById(scopeId)!!.memberRemovals }
 
     /** Persist a membership. Must run inside an active transaction. */
     private fun membership(
