@@ -42,7 +42,9 @@ Five rules follow:
    go.** The obligation that leaves is on the docs, not on the repo. Work-order ids (`cr-…`) are **provenance
    labels, not resolvable pointers** — a CR is deleted when done, and no `git log --grep` recovers what it
    said. So a doc that cites one carries the whole reason in its own sentence; the id records where a decision
-   came from, never where to go read it. A reason that only a `git log` holds is a reason the next reader will
+   came from, never where to go read it. That holds for code comments and contract prose too: a `cr-… decision 3` there
+   is a pointer into a file that goes, so cite the ADR or use case that states the decision (cr-secure-the-account's
+   implementers wrote 95 such pointers, repointed before the CR could be deleted). A reason that only a `git log` holds is a reason the next reader will
    not find.
 
 ## State vs. flow
@@ -308,6 +310,16 @@ A refined CR nails **decisions, not keystrokes**:
   settled it (another link's guests were reachable that way before the CR). Before designing keys for a field,
   name the weakest attacker the new layer stops and what that attacker reads anyway, and put the cheap variant
   with its residual beside the expensive one.
+- **A request a CR grows is measured at the bound of everything it carries, and a list with no cap has no bound.**
+  cr-secure-the-account put one self-grant per membership into the rotation's one body, beside a pin store already at
+  92 % of the request limit, and grew the pin entry past its padded size. Its Phase 0 found that nothing caps an
+  account's memberships — any co-member can add it to groups — and that the entry change alone would have pushed the
+  pin cap past the limit; the self-grants moved to a stage the publish applies. A refine that adds a list to a
+  single-body request names the cap behind the list's length, or the staging that makes a cap unnecessary.
+- **A gated read lists every caller the change sends to it.** The same CR served the key chain to a person's tenant
+  co-members, and the anchor check it built reads that chain from an invite accept (not a co-member yet) and from
+  moderation delivery (moderators may share no tenant): the first was designed around in implementation, the second
+  failed closed until the gate admitted moderators.
 - **A CR that removes a defence, or builds only the first half of its successor, lists per attacker what the old
   one stopped and what stops it in between.** cr-invite-is-a-placeholder-member removed the admission tag (ADR 0111
   decision 5) while the join record that replaces it is written but read by nothing until a later CR; the refine

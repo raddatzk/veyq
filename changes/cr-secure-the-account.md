@@ -1435,4 +1435,20 @@ Added in phase 5 *(assistant, for owner review; the same voice, no key named but
 
 ## Retrospective
 
-*(filled at implement time)*
+- **Planning: the one request was never measured against what it would carry.** The refine put one self-grant per
+  membership into a body whose pin store already used 92 % of the limit, and grew the pin entry past 192 bytes, without
+  asking what bounds the membership count. Phase 0 found nothing does (any co-member can add an account to groups) and
+  that the entry change alone would have broken the pin cap; the design moved to a stage. Root cause: the refine
+  priced the new fields, not the list multiplied by its bound. **Moved** to `docs/ai/README.md` § Refinement checklist.
+- **Planning: a gated read was not traced to every caller the change sends to it.** The key chain was served to tenant
+  co-members only, and the anchor gate calls it from an invite accept (not a co-member yet) and from moderation delivery
+  (moderators may share no tenant). Phase 3 failed closed on moderators; Phase 4 widened the gate. **Moved** to the same
+  checklist.
+- **Execution: the phase split did not follow the compile boundary.** The contract made the request's crypto fields
+  required in Phase 1, the CR filed their minting under Phase 5 (the ceremony) while Phase 4's mechanism had to send
+  them, and Phase 3's done-when (`npm run check` green) could not hold while the ceremony's files did not compile. The
+  implementers moved the crypto into Phase 4 and proved Phase 3 by a filtered run. And the implementers cited "decision
+  N" of this CR in 95 code and contract lines although rule 5 already says a CR id is a label, not a pointer — repointed
+  before deletion; rule 5 now names code comments. **Next time:** a refine that makes a client field required puts every
+  producer of that field in the same phase as the contract's first client.
+
