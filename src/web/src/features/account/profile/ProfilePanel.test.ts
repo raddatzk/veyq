@@ -31,7 +31,7 @@ import ProfilePanel from './ProfilePanel.vue'
 import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, unsealName, setMyAvatar, clearMyAvatar } from './profile'
 import { openAvatar } from './memberAvatar'
 import NamePictureFields from './NamePictureFields.vue'
-import { epochsOf } from '../../spaces/epochsTestUtil'
+import { ownNameKey } from '../../../test/models'
 
 const K_TENANT = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
@@ -73,7 +73,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     vi.clearAllMocks()
     vi.mocked(getMyProfile).mockResolvedValue(STORED)
     vi.mocked(updateMyProfile).mockResolvedValue(STORED)
-    vi.mocked(openOwnNameKey).mockResolvedValue({ key: K_TENANT, epochs: epochsOf(K_TENANT), tenantId: ADDRESS.scopeId, address: ADDRESS })
+    vi.mocked(openOwnNameKey).mockImplementation(async () => ownNameKey(K_TENANT, ADDRESS))
   })
 
   it('loads and shows the stored name, unsealed on the device', async () => {
@@ -138,7 +138,7 @@ describe('ProfilePanel - the profile picture (ADR 0084)', () => {
     vi.clearAllMocks()
     vi.mocked(getMyProfile).mockResolvedValue(STORED)
     vi.mocked(updateMyProfile).mockResolvedValue(STORED)
-    vi.mocked(openOwnNameKey).mockResolvedValue({ key: K_TENANT, epochs: epochsOf(K_TENANT), tenantId: ADDRESS.scopeId, address: ADDRESS })
+    vi.mocked(openOwnNameKey).mockImplementation(async () => ownNameKey(K_TENANT, ADDRESS))
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:p'), revokeObjectURL: vi.fn() }))
   })
   const fields = (w: Panel) => w.findComponent(NamePictureFields).props('model')

@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { effectScope } from 'vue'
-import { memberProfile } from '../../../test/models'
+import { memberProfile, ownNameKey } from '../../../test/models'
 
 vi.mock('./profile', async (orig) => ({
   ...(await orig<typeof import('./profile')>()),
@@ -21,10 +21,9 @@ vi.mock('../../../core/people/directory', () => ({
 }))
 
 import { useNameAndPicture } from './useNameAndPicture'
-import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from './profile'
+import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName, type OwnNameKey } from './profile'
 import { openAvatar } from './memberAvatar'
 import { avatarUrlOf, refreshPeopleDirectory } from '../../../core/people/directory'
-import { epochsOf } from '../../spaces/epochsTestUtil'
 
 const K = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000f1', userId: '5c09e000-0000-4000-8000-0000000000f2' }
@@ -35,7 +34,7 @@ function model() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, epochs: epochsOf(K), tenantId: ADDRESS.scopeId, address: ADDRESS })
+  vi.mocked(openOwnNameKey).mockImplementation(async () => ownNameKey(K, ADDRESS))
   vi.mocked(getMyProfile).mockResolvedValue(memberProfile())
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }))
 })
@@ -104,5 +103,62 @@ describe('useNameAndPicture', () => {
     m.choose(new Uint8Array([5]))
     await expect(m.savePicture()).rejects.toThrow('no_tenant_key')
     expect(setMyAvatar).not.toHaveBeenCalled()
+  })
+
+  describe('the tenant keys it holds (inbox #574)', () => {
+    const zeroed = (own: OwnNameKey) => [...own.epochs.keys.values()].every((k) => k.every((b) => b === 0))
+    let handed: OwnNameKey[]
+    beforeEach(() => {
+      handed = []
+      vi.mocked(setMyAvatar).mockResolvedValue(undefined) // an earlier case leaves it failing
+      vi.mocked(openOwnNameKey).mockImplementation(async () => {
+        const own = ownNameKey(K, ADDRESS)
+        handed.push(own)
+        return own
+      })
+    })
+
+    it('keeps them while the editor is open — a save still seals — and zeroes them when the editor goes away', async () => {
+      const scope = effectScope()
+      const m = scope.run(() => useNameAndPicture())!
+      await m.load(memberProfile())
+      m.choose(new Uint8Array([7]))
+      await m.savePicture()
+      expect([...openAvatar(K, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([7])
+      expect(m.sealedName()).toBeTruthy()
+      expect(zeroed(handed[0])).toBe(false)
+      scope.stop()
+      expect(zeroed(handed[0])).toBe(true)
+    })
+
+    it('a second load zeroes the keys the first one opened', async () => {
+      const m = model()
+      await m.load(memberProfile())
+      await m.load(memberProfile())
+      expect(handed.map(zeroed)).toEqual([true, false])
+    })
+
+    it('keys that arrive after the editor went away are zeroed at once, and fill nothing', async () => {
+      let arrive!: () => void
+      vi.mocked(openOwnNameKey).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            arrive = () => {
+              const own = ownNameKey(K, ADDRESS)
+              handed.push(own)
+              resolve(own)
+            }
+          }),
+      )
+      const scope = effectScope()
+      const m = scope.run(() => useNameAndPicture())!
+      const loading = m.load(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }) }))
+      await Promise.resolve()
+      scope.stop()
+      arrive()
+      await loading
+      expect(zeroed(handed[0])).toBe(true)
+      expect(m.firstName).toBe('')
+    })
   })
 })

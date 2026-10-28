@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
-import { memberProfile } from '../../../test/models'
+import { memberProfile, ownNameKey } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 
 const push = vi.hoisted(() => vi.fn())
@@ -12,10 +12,9 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('./profile', async (orig) => ({ ...(await orig<typeof import('./profile')>()), getMyProfile: vi.fn(), openOwnNameKey: vi.fn() }))
 
 import FinishProfilePrompt from './FinishProfilePrompt.vue'
-import { getMyProfile, openOwnNameKey, sealName } from './profile'
+import { getMyProfile, openOwnNameKey, sealName, type OwnNameKey } from './profile'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
-import { epochsOf } from '../../spaces/epochsTestUtil'
 
 const K = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000aa', userId: '5c09e000-0000-4000-8000-0000000000ab' }
@@ -36,7 +35,7 @@ beforeEach(() => {
   activeSpace.status = 'ready'
   activeSpace.tenantId = 'tenant-1'
   vi.mocked(getMyProfile).mockResolvedValue(memberProfile())
-  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, epochs: epochsOf(K), tenantId: ADDRESS.scopeId, address: ADDRESS })
+  vi.mocked(openOwnNameKey).mockImplementation(async () => ownNameKey(K, ADDRESS))
 })
 
 describe('FinishProfilePrompt', () => {
@@ -95,6 +94,29 @@ describe('FinishProfilePrompt', () => {
     activeSpace.status = 'ready'
     await flushPromises()
     expect(prompt(w).exists()).toBe(true)
+  })
+
+  it('zeroes the tenant keys once its one read is done (inbox #574)', async () => {
+    let handed: OwnNameKey | undefined
+    vi.mocked(openOwnNameKey).mockImplementation(async () => (handed = ownNameKey(K, ADDRESS)))
+    // A name that opens only under the handed key: the read used the key before it was zeroed.
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
+    expect(prompt(await mountPrompt()).exists()).toBe(false)
+    expect([...handed!.epochs.keys.values()].every((k) => k.every((b) => b === 0))).toBe(true)
+  })
+
+  it('zeroes the tenant keys even when the profile read fails before they arrive', async () => {
+    let handed: OwnNameKey | undefined
+    let arrive!: () => void
+    vi.mocked(openOwnNameKey).mockImplementation(
+      () => new Promise((resolve) => (arrive = () => resolve((handed = ownNameKey(K, ADDRESS))))),
+    )
+    vi.mocked(getMyProfile).mockRejectedValue(new Error('offline'))
+    const w = await mountPrompt()
+    arrive()
+    await flushPromises()
+    expect(prompt(w).exists()).toBe(false)
+    expect([...handed!.epochs.keys.values()].every((k) => k.every((b) => b === 0))).toBe(true)
   })
 
   it('stores no image and no name - only the flag', async () => {

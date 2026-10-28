@@ -40,8 +40,7 @@ import { getMyProfile, updateMyProfile, openOwnNameKey, setMyAvatar, clearMyAvat
 import { openAvatar } from '../../features/account/profile/memberAvatar'
 import NamePictureFields from '../../features/account/profile/NamePictureFields.vue'
 import * as v1 from '@veyq/crypto/v1'
-import { memberProfile } from '../../test/models'
-import { epochsOf } from '../../features/spaces/epochsTestUtil'
+import { memberProfile, ownNameKey } from '../../test/models'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const load = vi.mocked(loadTenantPeople)
@@ -128,7 +127,7 @@ describe('PersonProfile - editing one\'s own name and picture (ADR 0084 decision
 
   beforeEach(() => {
     vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Kevin', lastName: 'R' }) }))
-    vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, epochs: epochsOf(K), tenantId: ADDRESS.scopeId, address: ADDRESS })
+    vi.mocked(openOwnNameKey).mockImplementation(async () => ownNameKey(K, ADDRESS))
     vi.mocked(updateMyProfile).mockResolvedValue(memberProfile())
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:p'), revokeObjectURL: vi.fn() }))
   })
