@@ -97,8 +97,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    never client-supplied, written once per revision (re-accepting a recorded revision keeps its first time; accepting
    a newer revision adds a row and leaves the older ones untouched). No API serves the history, so a space owner
    cannot read it either: the operator and support read it from the database. It is kept while the member and the
-   tenant are, and after the account's or the tenant's erasure only while a moderation case names the account, to
-   that case's log date — evidence outlives the person only as far as a dispute can reach
+   tenant are, and after the account's or the tenant's erasure only while a moderation case names the account (a step
+   over content on a tenant names its owners at the time of the step), to that case's log date — evidence outlives the
+   person only as far as a dispute can reach
    ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 6; the period and its
    eraser are [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)). The anonymous acceptance is
    client-only. **No
