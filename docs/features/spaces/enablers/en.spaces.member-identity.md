@@ -61,8 +61,9 @@ member's own group rows) and splits it by sensitivity:
      owner-signed invite, signed by the invite key and the new identity, sealed under the tenant epoch key the
      invite's grant carried (field `member-join-record`, bound to tenant and member). It is written only at accept,
      never by a profile update, served to co-members on the tenant listing (`ScopeMember.sealedJoinRecord`), and
-     null for the tenant's first owner, the trust root. Nothing reads it to decide anything yet
-     ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 3).
+     null for the tenant's first owner, the trust root. Every member's client reads it as the anchor of that member's
+     key in the tenant
+     ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3, 12, 15).
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
    **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`.
 

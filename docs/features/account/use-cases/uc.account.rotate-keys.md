@@ -72,7 +72,12 @@
 6. **Swap.** As soon as the publish is known committed the vault holds the new keys (the old ones are zeroed), this
    tab's session vault is re-sealed under `MK'`, the Memory pins are re-sealed and the caller's own item marks
    re-tagged — their self-tag's key derives from the Master Key, and only a mark whose tag verifies under the old key
-   is carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9). These run best-effort.
+   is carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9). And the account's own
+   **verifications** of other members are re-signed: before the publish the client collected, in every tenant it can
+   open, those that verify under the outgoing identity at its head, and now signs each again with the new identity
+   and the new head over the old row — so a statement a thief signs with the retired key counts nowhere
+   ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 13). These run best-effort; a verification not re-signed stops counting.
 7. **The next epochs.** For each pending row the account mints the scope's next epoch, from any of its unlocked devices
    — this one right after the publish, any other the next time it unlocks, one opened with the new kit included — and
    grants it to its new identity and to every member whose key its client anchors
@@ -81,8 +86,9 @@
    by someone else in between meets the row. Any member then re-keys the scope's nodes
    ([uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md)).
 8. **Other members follow without a review.** Each contact's client reads the new key with the account's new chain
-   head and accepts it because the chain reaches it from the head it pinned; the profile says *new identity, signed by
-   their previous key*, and *verified* drops ([uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md)).
+   head and accepts it because the chain reaches it from the head it pinned (in a tenant, from the step the account's
+   join record names); the profile says *new identity, signed by their previous key*, and *verified* drops, since every
+   verification names the old head ([uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md)).
 9. **Report honestly.** The result is a per-scope status, not a success tick, re-read from the **server** on every
    visit and Host-independent: *Not yet* (`waiting`, its next epoch not in), *Fitting the new lock* (`rekeying`, a node
    still carries a key from before), *New lock* (`secured`) or *Not possible yet* (`blocked`, with the reason). Until a

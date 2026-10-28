@@ -43,10 +43,12 @@ this page says so.
 **Today.** Identity keys are trust-on-first-use: a client pins the head of a member's **key chain** the first time it
 meets them, accepts a new key only where a step signed by the old identity and the old Secret-Key proof key reaches it
 from that head, shows any other key as *Can't confirm this key* and wraps nothing to it, and lets two members compare
-safety numbers on their profiles to mark each other *verified*. The operator writes the key directory itself, so it
-**can** install an identity of its own on an account; a member who pinned the account's head sees it as an anomaly,
-one who never did trusts it on first use. A key substituted before anyone pinned it goes unnoticed until the members
-compare safety numbers, and a step withheld from a member who never saw a newer one is not seen at all.
+safety numbers and chain codes on their profiles to verify each other. In a tenant a member's join record, rooted at
+an owner, anchors their key from the step they joined with. The operator writes the key directory itself, so it
+**can** install an identity of its own on an account; a member who pinned the account's head, or anchors it by its
+join record, sees it as an anomaly, one who did neither trusts it on first use — a tenant's owner, or a contact
+outside a shared tenant. A key substituted before anyone pinned it goes unnoticed there until the members compare,
+and a step withheld from a member who never saw a newer one is seen only by two people whose chain codes differ.
 
 **Gap it would close.** The security-model's *What holds today* table names Key Transparency as what closes the
 "installs an identity of its own on an account" row, and the key-directory section names it as the eventual end-state
@@ -65,9 +67,10 @@ ADR 0060 (g), ADR 0028.
 
 ## Strict verification mode
 
-**Today.** Verification is built and advisory. A member compares another member's safety number (QR scan or digits)
-and marks them *verified*; a key the member's key chain does not reach from the pinned head is an anomaly nobody
-wraps to, and no human accepts one. Nothing refuses to share with a member nobody has verified.
+**Today.** Verification is built and advisory. A member compares another member's safety number and chain code (QR
+scan or digits), and a match writes a signed verification every member of the tenant counts; a key the member's key
+chain does not reach from its anchor is an anomaly nobody wraps to, and no human accepts one. Nothing refuses to share
+with a member nobody has verified.
 
 **Gap it would close.** The goal stated in its use-case: *an unverified member is never silently trusted with a
 share*. With it on, no client would wrap a key to an unverified member (in a group add, a rotation's re-grant or a

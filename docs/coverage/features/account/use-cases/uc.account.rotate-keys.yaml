@@ -248,6 +248,18 @@ acceptanceCriteria:
           - src/features/spaces/scopes.test.ts
           - src/features/spaces/grantTrust.test.ts
         e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
+  - id: the-rotators-verifications-are-re-signed
+    # ADR 0111 decision 13, as built: re-signing, not a closing list (the decision says why). The thief case and its
+    # control live in tenantTrust.test.ts; the ordering around the publish (collect before, re-sign after, nothing on
+    # a refused publish) in rotateKeys.test.ts.
+    text: >
+      Before the publish the client collects, in every tenant it can open, its own verifications that verify under the
+      outgoing identity at its current head; after the commit it re-signs each with the new identity, naming the new
+      head and the same subject and subject head, over the old row. A refused publish re-signs nothing, a tenant this
+      device cannot open carries nothing, and a statement the retired key signs after the rotation counts nowhere.
+    coverage:
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/account/tenantTrust.test.ts] }
+      backend: { integration: [VerificationSliceTest.theVerifierIsAlwaysTheCallerAndASecondPutReplacesTheFirst] }
   - id: forward-secrecy-not-repair
     # No test can assert "no surface implies repair" — that is prose, and the coverage refs below reach only
     # the copy keys that carry it. What actually holds this is review of the four facts the panel states before

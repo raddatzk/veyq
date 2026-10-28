@@ -113,17 +113,18 @@ sequenceDiagram
   key ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)). Every membership is now born with
   its grant.
 - **The owner is the trust root.** The owner's signature on the invite key and the invite key's signature on the
-  join record chain **owner → invite → newcomer**. Nothing reads the join record to decide anything yet; the
-  tenant's first owner has none ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 3).
+  join record chain **owner → invite → newcomer**, and every member's client reads the join record as the anchor of
+  the newcomer's key in the tenant; the tenant's first owner has none ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decisions 3, 12 and 15).
 - **A session alone mints no invite.** The server verifies the invite key's `invite-key` signature under the
   caller's stored identity key before it mints or re-issues (`TenantHandler.signedByCaller`, `400 invalid_request`,
   also for a signed expiry with a fraction of a second), so a session without the owner's unlocked vault — a phished
   password — creates no invite any client would carry or deliver to: the role the admission tag played, on an honest
   server.
-- **What no wrap checks yet.** Because nothing reads the join record, a membership the operator writes into the
-  database is wrapped to by the next rotation or delivery after the anchor check, as a first use
-  ([security-model](../../../crosscutting/security-model.md)).
+- **A membership the operator writes is not wrapped to — unless it writes an owner.** A non-owner without a join
+  record is an anomaly to every wrap a member's client makes in the tenant; an owner without one is a root, trusted on
+  first use, because roles are the server's word ([security-model](../../../crosscutting/security-model.md) § Key-directory
+  trust).
 - **Inviting is owner-only.** Only a tenant OWNER mints, re-issues or revokes a member invite (`403
   not_tenant_owner`); a member never hands the key to someone the owner did not invite.
 - **Delivery result, never silent (cr-email-invite-send-hardening).** The mint reports how the invite went. On

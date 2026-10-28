@@ -281,8 +281,8 @@ server.
    `join-record` statement by the invite key **and** by the new identity, and sealed as the field
    `member-join-record`, bound to the tenant and the member, under the tenant epoch key the invite grant carried. The
    chain owner → invite → newcomer is one neither the operator nor a holder of the tenant key can forge while the
-   owner is not compromised. **Nothing reads the record to decide anything yet.** The tenant's first owner, its trust
-   root, has none.
+   owner is not compromised. Every member's client reads it as the **anchor** of the newcomer's key in this tenant
+   (section 7). The tenant's first owner, its trust root, has none.
 8. **Adding a member to a group.** The person already has an identity, so no invite key is needed: the group owner's
    client runs the anchor gate (section 7) on the key and key-chain head the server serves for that username and seals
    the group's current epoch to it as it adds them; a key it cannot anchor is not added. With consent on, the proposal holds that grant, and the server hands it out only once the target
@@ -298,15 +298,23 @@ server.
    `409 recipient_key_not_current`), and **signs the grant**. The signature covers the scope id, the scope kind, the
    epoch, the recipient's user id, a digest of the recipient's identity key and a digest of the grant ciphertext.
 10. **Opening.** A member's client judges the **granter's** key the grant carries (the key that signed it, as the
-   server stored it) against the granter's key chain from the head it pinned: a key outside that chain is refused
+   server stored it) against the granter's key chain from the head it pinned — for a group of the active tenant, from
+   the step the granter's join record names (section 7): a key outside that chain is refused
    (`granter_key_unanchored`), and a retired key of it is accepted only for an epoch at or below this device's epoch
    floor for the scope (`granter_key_retired` otherwise), because an honest granter signs every newer epoch with its
    new key. It verifies the signature, and only then opens the grant.
 11. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
-   identity public key shown as 6×5 digits, and a QR code of it. Another member scans that code or compares the
-   digits aloud. On a match the pin becomes *verified* (an unpinned member is pinned at that moment with the compared
-   key), and member lists show the mark. When a *verified* contact secures their account, the pin moves to their
-   new head and *verified* drops; it comes back only through a new compare.
+   identity public key shown as 6×5 digits, their **chain code**, 10 digits of their key chain's head (section 7),
+   shown only once the chain the server serves ends at the identity in their vault, and a QR code of both
+   (`veyqid:2`). Another member scans that code or compares the digits aloud, against the key and head their client
+   anchors in the tenant. On a match the verifier's identity signs the statement `verification` — the tenant, both
+   user ids, the subject's head and the verifier's own head — sealed as the field `member-verification` under the
+   tenant key, bound to tenant, verifier, subject and epoch, and writes it into the verifier's own row
+   (`putMyVerification`; the server keys the row by the caller). Every member reads the tenant's rows
+   (`listVerifications`) and counts one only while it names the subject's current head and verifies under the
+   verifier's current key at the verifier's current head: *verified by …* holds for everyone in that tenant, and only
+   there. When a *verified* contact secures their account their head moves, so *verified* drops by itself; it comes
+   back only through a new compare. A head that differs between the two sides — a withheld step — is a mismatch.
 
 The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key: one
 entry per pin holding the contact's identity **fingerprint** (the digest the safety number is) and the **head of
@@ -339,7 +347,8 @@ sequenceDiagram
 **What the server learns.** Invite metadata (recipient address, role, send time, expiry), the invite public key, the
 owner's signature and identity key, the invite's grant ciphertext, identity public keys, each membership's granted
 epoch, the sealed join records, each account's key chain (section 7), and when a worker declines a delivery. It holds the link's sealed part while it mails
-it. It never sees the code, a scope key, a pin, or who verified whom.
+it. Of a verification it sees the address — which member verified which, in which tenant — and when it was written,
+never its content. It never sees the code, a scope key or a pin.
 
 **What it cannot do.**
 
@@ -352,19 +361,26 @@ it. It never sees the code, a scope key, a pin, or who verified whom.
 - **Swap a key after first contact.** A client that pinned a contact's head accepts a new key only through a step
   signed by the old identity and the old Secret-Key proof key (section 7). Anything else shows as *Can't confirm this
   key*, and nobody wraps to it.
+- **Swap a member's key in a tenant, even at first contact,** or invent an ordinary member: a key the chain does not
+  reach from the member's join record, and a non-owner without one, are anomalies (section 7).
+- **Forge or move a verification.** Each is signed by its verifier and bound to its tenant, verifier and subject;
+  the server can only withhold one.
 - **Wipe or roll back the pin store** on a device that has held one (Decision 7).
 
 **Residual.**
 
 - **TOFU's first-use gap.** If the operator substitutes a key before anyone pinned the real one, nothing looks
-  wrong until the two people compare safety numbers. That covers a group add or a grant delivery to a substituted
-  key, a shared grant signed by a granter identity the operator fabricated (pinned on first sight; a rotator's
-  re-grant of an open invite is one), and a device with no trust-state mark yet. A newcomer who registers through an
-  invite has no pin store before its account exists, so it pins the inviting owner only on a later contact.
-- **A member the operator invents.** A key-holder's client wraps to every member the server lists, behind the TOFU
-  gate alone: a rotation re-grants them, and grant delivery brings a membership with a grant behind the current
-  epoch up to date. An operator that writes a membership of its own therefore gets the current key on first use. The
-  join records every accept now writes are the anchor meant to close this; nothing checks them yet. This is the operator's door only: before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
+  wrong until the two people compare safety numbers. Inside a tenant that is left for owners, whom no join record
+  anchors; it also covers a shared grant signed by a granter identity the operator fabricated where the pin alone
+  decides (the tenant scope's own grant, a group's outside the active tenant; a rotator's re-grant of an open invite
+  is one), and a device with no trust-state mark yet. A newcomer who registers through an invite has no pin store
+  before its account exists, so it pins the inviting owner only on a later contact.
+- **A member the operator presents as an owner.** Roles are the server's word, so a membership it writes as an owner
+  is a root, trusted on first use, and roots keys of its choosing; and a join record signed by an owner's retired key
+  still anchors, so a thief holding that key could, with the operator, mint one after the owner's rotation
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  § What stays open). Before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
+- **Who verified whom.** The server sees the address of every verification row.
 - **A revoked or expired invite keeps what it was granted.** The tenant does not rotate on removal
   ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)),
   so a link and its code still open the epochs up to the revoke — useful only with a dump of the ciphertext. A
@@ -705,8 +721,18 @@ decisions 6–10, [uc.account.rotate-keys](https://github.com/raddatzk/veyq/blob
 - **match** — the served head is the pinned head and the served key the key at it;
 - **advanced** — the chain from the pinned head to the served head verifies step by step (both signatures, each
   predecessor hash, the keys at the pinned head equal to the pinned fingerprint) and ends at the served key: the pin
-  moves to the new head, and *verified* drops;
+  moves to the new head, and *verified* drops, since every verification names the old head;
 - **anomaly** — anything else, a served head older than the pinned one included.
+
+**In a tenant the join record decides first.** A wrap there, and a group grant from the active tenant, ask the
+person's standing: their join record (section 3, step 7) must open under the tenant key, verify owner → invite →
+newcomer, and name as signer an owner the server lists whose key in it this client anchors in the tenant in turn (a
+retired key of that owner included). The chain is then walked from the step that installs the identity **and** proof
+key the record names — whatever the server serves before it counts for nothing — and only a key at or after that step
+counts; the pin is the counter. A pinned head not on that chain is **replaced** when the chain is at least as long as
+the pinned one was (the pin was a key the operator substituted at a first contact; the profile says so) and an anomaly
+when it is shorter. An owner the server lists with no join record is a root, judged by the pin alone; any other
+member without a valid join record is an anomaly with no chain read. Who is an owner is the server's word.
 
 A client wraps only on the first three, and accepts a grant only from a granter key of the chain it pinned (a retired
 one only at or below its epoch floor, section 3). There is no human override: a legitimate rotation is always signed,
@@ -758,6 +784,10 @@ members of each scope.
 7. **Nodes.** Any member re-keys the scope's nodes (section 5). A scope reads *secured* once no node lags.
 8. **Everyone else.** Their clients see a new head, walk the chain from the head they pinned (*advanced*), and go on
    granting to the account and accepting its grants with no review.
+9. **The account's verifications.** Before the publish the client collected, in every tenant it can open, its own
+   verifications that verify under the outgoing identity at its head; after it, it signs each again with the new
+   identity and the new head over the old row. A verification counts only under its verifier's current key, so a
+   statement a thief signs with the retired key counts nowhere. Best-effort: one not re-signed stops counting.
 
 A publish failure the server did not answer with a declared refusal is an unknown outcome: the client re-reads the
 served wrapped identity. If it opens under the new Master Key, the publish committed and the client goes on; under the
@@ -804,10 +834,10 @@ the Master Key, an epoch key, or whom anybody trusts.
 
 **Residual.**
 
-- **First use.** A contact this account never pinned is trusted at the head the server serves. The join records meant
-  to anchor a first contact are written and not yet read (ADR 0111 decisions 12–15 are not built).
-- **Withholding.** A client that never saw a newer step cannot tell it was withheld; the safety-number compare does not
-  show the head yet.
+- **First use.** A contact this account never pinned is trusted at the head the server serves where no join record
+  anchors them: a tenant's owner, and every contact outside a shared tenant.
+- **Withholding.** A client that never saw a newer step cannot tell it was withheld, unless two people compare chain
+  codes.
 - **The race for the account.** Whoever holds the password and the current Secret Key and secures the account first
   owns it. That is no new power: the same holder can already move the sign-in address and change the password.
 - **A password holder without the Secret Key** who signs in after the publish could commit an epoch of their own on a

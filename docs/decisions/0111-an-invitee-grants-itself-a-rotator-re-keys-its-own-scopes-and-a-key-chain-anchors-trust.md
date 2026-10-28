@@ -7,12 +7,14 @@
   an owner's — ADR 0109 point 7 states it), **decisions 6–10 are built** (2026-10-28: securing the account replaces
   identity, Master Key and Secret Key in one doubly signed key-chain step, applies the self-grants staged before it, the
   account mints every next epoch itself, a grant names its recipient key on every writer, and an omission is declared —
-  [ADR 0060](0060-key-rotation-after-compromise.md) states it), and so is **decision 16's counter** (the pin entry holds
-  the key-chain head, and a key is accepted where the chain reaches it — [ADR 0028](0028-identity-authenticity-tofu-verification.md)
-  and [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) state it). **Not built:**
-  decisions 12–14 and 18, decision 15's anchor in the join record and its *verified by …* display (until then the pinned
-  head is the anchor, and a person without one is trusted on first use), and decision 16's replacement of the personal
-  *verified* mark (§ What stays open). [ADR 0020](0020-grant-distribution-invite-wrap.md),
+  [ADR 0060](0060-key-rotation-after-compromise.md) states it), and **decisions 12–17 are built** (2026-10-28: the join
+  record anchors a person per tenant, a verification is a signed statement every member of the tenant reads, a
+  rotation re-signs the outgoing key's verifications with the new one, the compare shows the key-chain head, a member
+  sees *new*, *not verified*, *verified by …* and the anomaly, the pin store is the device's counter only, and the
+  chain stays KT-ready —
+  [ADR 0028](0028-identity-authenticity-tofu-verification.md) and
+  [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) state it). **Not built:**
+  decision 18 (§ What stays open). [ADR 0020](0020-grant-distribution-invite-wrap.md),
   [ADR 0024](0024-scope-key-rotation.md), ADR 0028, ADR 0060 and [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
   each state in place the part of them this record replaced.
 - Date: 2026-10-27
@@ -116,12 +118,12 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
    record form a chain **owner → invite → newcomer** that neither the operator nor any holder of the tenant key,
    current or former member, can forge while the owner is not compromised. **The trust root of a tenant is its
    owner**, handed to each newcomer through the link; several owners each root their own invitees; the tenant's first
-   owner, born through the Server Owner's owner invite, has no join record. Nothing reads a join record to decide
-   anything yet (decisions 12 and 15). A member accept by an existing account signs in with the Secret Key, because
-   the join record names its proof key.
+   owner, born through the Server Owner's owner invite, has no join record. Every member reads the join records as
+   the anchor of who is who in the tenant (decisions 12 and 15). A member accept by an existing account signs in with
+   the Secret Key, because the join record names its proof key.
 4. **A group needs no invite key.** The target already has an account, so the group owner wraps the group's current
-   epoch directly to the target's key, after the anchor check — the key the target's join record anchors once decision 12
-   is built. A `pendingConsent` proposal holds that grant from the add on, consenting changes nothing about keys, a
+   epoch directly to the target's key, after the anchor check — the key the target's join record anchors in that
+   tenant (decision 12). A `pendingConsent` proposal holds that grant from the add on, consenting changes nothing about keys, a
    group rotation re-grants a pending proposal like a member, and a decline or an owner's rescind of a proposal queues
    the group's rotation, since the target held the key.
 5. **Gone with it:** the tenant admission tag (ADR 0020 move 6), the grant-delivery worker for new members, and the
@@ -229,46 +231,98 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
     |---|---|---|---|
     | Next to the identity, served to tenant co-members | **key chain**: rotation steps (old → new, signed by old identity + old Secret-Key proof key), hash-chained | the person only | a forged step needs password + Secret Key |
     | Tenant profile, sealed under the tenant key | **join record** (the identity and proof key at joining, signed by the owner-signed invite key) | the person, through its invite | the operator and tenant-key holders cannot forge the owner → invite → newcomer chain |
-    | Tenant profile, sealed under the tenant key | **verifications** ("Carol verified Bob at head X", signed by Carol), each a separate statement, not chained | each verifier | nobody can forge another's verification; the operator can only withhold one |
-    | Tenant profile, sealed under the tenant key | per rotation: **the outgoing key's verifications in this tenant**, signed by the new key | the rotator | a thief with a retired key cannot add a verification after the rotation |
+    | The tenant's verifications (`veyq_verification`, one row per verifier and subject), sealed under the tenant key | **verifications** ("in this tenant, Carol at her head Y verified Bob at his head X", signed by Carol's identity), each a separate statement, not chained | each verifier, into their own rows only | nobody can forge another's verification; the operator can only withhold one |
     | Each device (synced, sealed under the Master Key) | **highest key-chain head seen** per person | the device | rollback or withholding of a step it has seen newer |
 
     - The **key chain** holds only what the person does themselves and changes only on a rotation. The join record is
       not part of it: it is per tenant and only anchors which point of the chain the person joined with.
+    - **A key is anchored** in a tenant when the key chain reaches it from the step that installs the identity **and**
+      the proof key the person's join record there names, and that record verifies owner → invite → newcomer under an
+      owner who is anchored in turn (decision 15). `loadTenantView` (`src/web/src/features/account/tenantTrust.ts`)
+      reads a tenant's directory and opens its join records with the tenant's epoch keys; `readJoinedChain`,
+      `anchorIdentity` and `anchorChainKey` (`identityPins.ts`) walk the chain from the joined step, and only a key at
+      or after it counts there.
     - **Verifications** each name the head they confirm. Not chained, so two people verifying Bob at once fork
       nothing, and an unsynced verification never moves a head. A rotation moves the head, so every verification of
       the old head stops counting by itself — that **is** "a rotation drops *verified*", with no rule of its own.
-    - **A key is anchored** when it is reachable from the join record by the key chain.
-13. **A rotation closes the outgoing key's verifications, per tenant.** In each tenant the rotation writes into the
-    rotator's tenant profile, sealed under that tenant's key, the list of the verifications the outgoing key made in
-    this tenant, signed by the **new** identity and the new Secret-Key proof key and naming the hash of the rotation
-    step. A verification signed with a retired key counts only if the list signed by that key's successor names it.
-    Without it a thief holding Carol's old key — and, from her device, the tenant key — could sign "Carol verified
-    Mallory" after her rotation and, with the operator's help, place it as if older; the thief cannot sign the list,
-    lacking the new key. Carol re-checks nothing.
-    - The server-wide chain step says nothing about verifications, and each tenant sees only its own list, so no member
+    - **A verification is written only into its verifier's own row** by `putMyVerification`, which keys the row by the
+      authenticated caller and never by a field of the body, and every member of the tenant reads them through
+      `listVerifications` (`contracts/api/tenants.openapi.yaml`). Its statement (purpose `verification`) names the
+      tenant, both user ids and both heads, signed by the verifier's identity; it is sealed as the field
+      `member-verification` under a tenant epoch the verifier holds, bound to the tenant, the verifier, the subject and
+      that epoch, so a row moved to another slot neither opens nor verifies (`src/packages/crypto/src/verification.ts`,
+      vector `#verification`). A member's removal from the tenant deletes every row naming them; an erasure and a
+      tenant's purge take theirs by cascade.
+    - **It counts** while it names the subject's **current** head and verifies under the verifier's **current**
+      identity, with the verifier's current head as the head it names, and the verifier anchored in the tenant
+      (`countVerifications`). An older head of either, or a retired key, is not shown.
+13. **A rotation re-signs the outgoing key's verifications with the new key, per tenant.** Before the publish the
+    rotator's client collects, in every tenant it can open, its own verifications that verify under its current
+    (outgoing) identity at its current head; after the commit it signs each again with the **new** identity, naming the
+    same subject and subject head and its new head, and writes it over the old row, one row per write
+    (`collectMyVerifications` and `resignVerifications` in `tenantTrust.ts`, around the publish in `rotateKeys.ts`).
+    Since a verification counts only under its verifier's current key (decision 12), a statement signed by a retired
+    key counts nowhere. Without that rule a thief holding Carol's old key — and, from her device, the tenant key —
+    could sign "Carol verified Mallory" after her rotation and, with the operator's help, place it as if older; signed
+    by the retired key, it does not count, and the thief cannot sign as the new key. Carol re-checks nothing.
+    - **The set is read before the publish**, while the outgoing key is still the account's, so a statement a thief
+      writes after the publish is never among what is re-signed.
+    - **Only the new identity signs**, not also the new Secret-Key proof key: whoever holds the new identity can sign a
+      fresh verification as the current key anyway, so a second signature would defend nothing — and a later device of
+      the account holds no Secret Key.
+    - **Why re-signing and not a closing list** (a list of the outgoing key's verifications per tenant, signed by the
+      new keys, which a retired key's verification would have to appear on): the publish is one request body, and no
+      cap bounds the tenants an account is in nor the members of a tenant, so lists in it have no upper bound; a list as
+      a write of its own per tenant is still unbounded within the tenant. Re-signing is one bounded row per write, needs
+      no second record type, and gives the same guarantee: what the retired key signs after the rotation counts nowhere.
+    - The server-wide chain step says nothing about verifications, and each tenant sees only its own rows, so no member
       learns in how many tenants the rotator is.
-    - A withheld list only makes the old verifications stop counting: a display falls away, nothing opens.
-    - A tenant the rotation did not reach gets its list later: the rotator holds the new key and the tenant key.
+    - **Best-effort.** A tenant this device could not open carries nothing, and a write lost after the commit leaves a
+      row signed by the retired key: that verification stops counting — a display falls away, nothing opens. Nothing
+      re-signs it later; a new compare restores it.
 14. **The safety-number compare also shows the key-chain head.** Comparing does not change it, so two people see the
     same head unless one of them is missing a step — a withheld step shows up there. Every pair that compares is a
-    manual witness, at almost no cost.
+    manual witness, at almost no cost. Beside the identity's 30-digit safety number the profile shows a **chain code**
+    of 10 digits (two groups of 5, the same rendering over the head: `v1.chainCodeDigits`, vector
+    `fingerprint.chain_code`), and the QR carries both, `veyqid:2:<fingerprint digest>:<head>`. A `veyqid:1` code is read
+    as one from an older app, whose holder is asked to update; it never matches. Both must match, and a match writes the
+    verification of decision 12 (`verifyPerson`), which signs only while the compared key and head are still the ones
+    the directory serves and this device anchors in the tenant. A device shows its own chain code only once the chain
+    the server serves it ends at the identity its vault holds, so a step withheld from both sides cannot match.
 15. **What a user sees, and the one gate.**
-    - **Display only:** *new* (first contact), *not verified*, *verified by …* (verifications of the current head),
-      *new identity, signed by the previous key*. *Verified* returns after a rotation only through a new compare.
+    - **Display only**, per tenant: *new* (this account first pinned them less than 14 days ago), *not verified*,
+      *verified by …* (the names of the members whose verification of the current head counts) and *new identity,
+      signed by the previous key* (the newest step of their chain is a rotation, with its date). *Verified* returns
+      after a rotation only through a new compare. A member list badges *verified*, *new* and the anomaly; *not
+      verified* is the ordinary state and shows nothing there.
     - **The one gate:** a key not reachable from the anchor is **not wrapped to** — a rotation declares it pending
       (decision 9) — and is shown as an anomaly. A legitimate rotation is always signed, so the gate never fires for
       one, and it never blocks anybody's write.
-    - **An unknown person** — no join record, a member from before this model being the case — is trusted on first
-      use, with no block: here the operator is assumed friendly, and verification by code is the user's.
+    - **Who is anchored, per tenant** (`loadTenantView`'s standing): a member whose join record opens, verifies owner →
+      invite → newcomer, names as its signer another member the server lists as an **owner**, and carries a signer key
+      that is anchored in this tenant in turn — a retired key of that owner's chain included, so the members an owner
+      invited before securing their account keep their anchor. An owner the server lists with **no** join record is a
+      **root** (the tenant's first owner) and is trusted on first use, by the pin; a newcomer anchors its inviting owner
+      through the link (decision 1). **Anyone else is an anomaly**: a non-owner without a join record, a record that
+      does not open or verify or whose signer is no anchored owner, a pending proposal, a cycle of signers. Every
+      newcomer writes a join record and no release predates it, so a non-owner without one is a membership only the
+      server can have made.
+    - **A pin not on the anchored chain is replaced**, once: when the chain the join record anchors does not hold the
+      pinned head and is at least as long as the pinned chain was (the entry keeps the index of its head), the pin
+      moves to the anchored head, marked, and the profile says *"The key you saw before wasn't theirs. Their invitation
+      confirms this one."* An owner-rooted join record is stronger than a first-use pin, and this is the case of an
+      operator who substituted a key at a first contact. A shorter chain is an anomaly instead — it may be a rollback
+      of a head this account saw — and a pinned head **on** the chain must carry the pinned key.
+    - **Where the tenant cannot be read** (this device cannot open or list it): a wrap there fails closed, as an
+      anomaly; the check of a grant's granter falls back to the pin alone (§ What stays open).
     - **Per tenant.** Verifications in tenant A count for everyone in A, and only in A; a user in A and B is anchored
-      and verified per tenant.
+      and verified per tenant. The pin store stays per account (decision 16).
 16. **The device's counter is the pin store's job.** The synced, Master-Key-sealed store of
     [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) holds, per person, the
-    highest key-chain head this account has seen, under ADR 0028 Decision 7's rollback rules. What it replaces is the
-    pinned fingerprint's role as the thing a key change is judged against, and the personal *verified* mark, which
-    becomes the signed verification of decision 12. The first half is built: the entry holds the head, and a served key
-    is judged by walking the chain from it (ADR 0028 Decision 2); the personal mark stays until decision 12 is.
+    highest key-chain head this account has seen, under ADR 0028 Decision 7's rollback rules. It replaces the pinned
+    fingerprint's role as the thing a key change is judged against, and the personal *verified* mark, which is now the
+    signed verification of decision 12: an entry holds the head, its index in the chain, the first-seen time and the
+    mark of a replacement (decision 15), and no state (ADR 0104 decision 2).
 17. **Key Transparency stays later, in a design of its own; this record stays KT-ready.** A hash-chained key chain
     with one head, and that head in the compare, is what a later log commits to without a format change.
 
@@ -291,9 +345,9 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
 - **The first-use gap closes for a newcomer's view of its inviting owner** — against the operator and against
   current and former members, alone or together — **as long as the owner is not compromised and the code is not
   guessed.** The operator, which mails the link, holds its sealed part and can guess the code offline, against 50
-  bits behind Argon2id (or the strength of a password the owner chose). What it does not close yet is the other
-  direction: the members' view of the newcomer, which the join record anchors only once decision 12 reads it
-  (§ What stays open).
+  bits behind Argon2id (or the strength of a password the owner chose). The other direction — the members' view of
+  the newcomer — the join record anchors, rooted at an owner the server lists (decisions 12 and 15; who is an owner
+  stays the server's word, § What stays open).
 - **The owner is the trust root — accepted (owner, 2026-10-27).** A compromised owner can issue invites for keys of
   their choosing; but an owner can already admit anyone legitimately, so a compromised owner compromises membership
   in any model. Contradictions between owners are anomalies (decision 18). Owners cross-signing each other, or a member
@@ -302,15 +356,19 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   2026-10-27).** The tenant does not rotate on removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), so link
   and password stay a key to the epochs up to the revoke — useful only with a dump of the ciphertext. Same class as a
   removed tenant member without a re-key. A group rotates on revoke anyway.
-- **Verifications forged between theft and rotation — accepted (owner, 2026-10-27).** The list a rotation writes per
-  tenant (decision 13) cannot tell them from the verifier's own: the thief held the same key and the Master Key. They
-  belong to the compromise window, like anything else done with the identity then.
-- **Verifications become visible to a tenant's members.** Today a *verified* mark is a private entry of the verifier's
-  sealed pin store; under decision 12 it is a signed statement every member of that tenant reads, which is what lets
-  *verified by …* count for everyone there. The operator reads none of it (sealed under the tenant key); a removed
-  member, holding the tenant key the tenant does not rotate on removal, keeps reading these records with the operator's
-  help — writing a forged one no longer helps them, because of the owner chain.
-- **An overview "people I share with"** — per tenant: anchored, verified by whom, rotated — becomes cheap: it is the
+- **Verifications forged between theft and rotation — accepted (owner, 2026-10-27).** The re-signing (decision 13)
+  carries them with the verifier's own: they verify under the outgoing key at its head, as hers do, because the thief
+  held the same key and the Master Key. They belong to the compromise window, like anything else done with the
+  identity then.
+- **Verifications are visible to a tenant's members, and their address to the server.** A *verified* is no private
+  entry of the verifier's pin store any more but a signed statement every member of that tenant reads, which is what
+  lets *verified by …* count for everyone there. The operator reads none of its content (sealed under the tenant
+  key): not the heads, not whether it still counts. But a row is addressed by tenant, verifier and subject in the clear,
+  and carries the time the server wrote it, so the server learns **which member verified which, in which tenant, and
+  when** — what a sealed pin store kept from it. A removed member, holding the tenant key the tenant does not rotate on
+  removal, could read these records with the operator's help — writing a forged one does not help them, because each
+  is signed by its verifier and counts only under an anchored member's current key.
+- **An overview "people I share with"** — per tenant: anchored, verified by whom, rotated — is cheap now: it is the
   member list plus these records. Today there is only the per-person profile and the per-space member lists.
 - **The rotator's device carries the rotation's grants**: one epoch, one chain link and one wrap per member, for every
   scope the rotator is in, the tenant included. That is the `O(N)` re-grant ADR 0060 Decision 5 accepts on a compromise,
@@ -318,17 +376,18 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 meant to spread across devices. What is spread now is the far
   larger node re-key (decision 11); a wrap per member is one asymmetric seal each.
 - **What it adds to the server, all opaque:** an invite's public key and the owner's signature on it, and a grant to
-  that key; a key chain beside each identity, read only by co-members; the join records, verifications and closing
-  lists, sealed in the tenant profile; the Secret-Key proof public key in the directory; a pending marker per declared
-  omission; and a grant that names the key it is wrapped to, without which decision 10 cannot be checked. The server
-  learns that an invite exists and that an account rotated, as it does today, and nothing about who verified whom.
+  that key; a key chain beside each identity, read only by co-members; the join records in the tenant profile and the
+  verifications in a table of their own, each sealed under the tenant key; the Secret-Key proof public key in the
+  directory; a pending marker per declared omission; and a grant that names the key it is wrapped to, without which
+  decision 10 cannot be checked. The server learns that an invite exists and that an account rotated, as it does
+  today, and from a verification's address who verified whom in a tenant, never what was confirmed.
 - **What it changes in the records it builds on**, each stated there in place: ADR 0020 moves 3, 5 and 6 (admission
   and delivery); ADR 0024 Decision 4's admission tags, Decision 5's re-grant of new members and § Guarantee's queued
   account rotation; ADR 0028 Decisions 2, 5 and 6 and the role of the pin; ADR 0060 Decision 2's Secret Key kept across a
   rotation and Decisions 4, 6 and 7; ADR 0104's entry content; ADR 0109 point 7's owner-only re-key; ADR 0080 Decision 11
   gains the owner-only re-key of a drop box. ADR 0109's rejection of a lazy re-key stands.
-- **The pinned bundle, the safety number and its vectors change** (decision 14, inbox #560): the compare carries the
-  head, and the proof public key joins what a person is known by.
+- **The compare and its vectors changed** (decision 14): the safety number stays the identity's, a chain code of the
+  head stands beside it, and the QR carries both; the head pins the proof public key with the identity.
 - **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** Every check here is a client's: against an active
   operator it holds only on a client the operator does not serve, and honest-operator elsewhere — the limit any model
   shares, including on a first contact anchored through the invitation.
@@ -375,26 +434,43 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
 
 ## What stays open
 
-- **Decisions 12–14 and 18 are not built**, nor decision 15's anchor in the join record with its *verified by …*
-  display, nor decision 16's replacement of the personal *verified* mark. Until they are, the anchor is the head this
-  account pinned, a person it never pinned is trusted on first use, and a verification is the personal mark ADR 0028
-  Decision 3 describes.
+- **Decision 18 is not built**, and has nothing to do while veyq has no release: the join record landed before the
+  first one, so the only members without one are root owners (decision 15). If a release ships members without join
+  records, each of them reads as an anomaly to every co-member, and decision 18 is then needed
+  (`changes/cr-join-records-for-existing-members.md`).
 - **The admission-tag replay hypothesis** died untested with the tag (decision 5); nothing claims it.
-- **A membership the server made is wrapped to today.** With the tag gone and no join record read yet (decisions 12
-  and 15), every wrap to another member — a rotation's re-grant, the delivery to a behind member, a group add — takes
-  the anchor check against this account's pin only, so a membership the operator invents is, to a key-holder that
-  never pinned its account, a first use: wrapped to and pinned at the head the server serves. This is the operator's class only: an honest server verifies an invite's owner
-  signature under the caller's identity key before it mints, so a session without the owner's vault mints no invite
-  (`TenantHandler.signedByCaller`). Decision 18 and decision 12's anchor close it; whether a rotation should then still wrap
-  to a membership without a join record, or treat it as an anomaly, is not decided.
-- **A grant a rotation re-wrapped to an open invite names a member the newcomer cannot anchor yet.** Only a grant
-  the inviting owner wrapped verifies under the key the link anchors; one a rotation re-wrapped is signed by the
-  rotator, whose key the newcomer trusts on first use (`memberInviteAnchored`,
-  `src/web/src/features/tenant/tenantInvite.ts`) until join records anchor rotators (decision 12; inbox #565). The key
-  chain does not close it: it anchors a key from a head someone pinned, and a newcomer has pinned no rotator. Nor is
-  that rotator pinned at the accept: the grant's granter key may be one its granter has since retired, and pinning it
-  beside their current head would pin a pair that never existed, a permanent anomaly; the newcomer pins them through
-  their chain at its first contact as a co-member.
+- **A membership the server made is an anomaly — decided (assistant, 2026-10-27, for owner review).** Every newcomer
+  writes a join record and no release predates it, so a non-owner without one can only be a membership the server
+  wrote; trusting it on first use would keep open exactly the door the join record exists to close, and treating
+  owners the same would make every root owner an anomaly to everyone they did not invite. It is never wrapped to and is
+  declared pending in a rotation, never a block on anyone's write. Closed by it: every wrap a member's client makes in
+  a tenant — a rotation's re-grant, the delivery to a behind member, a group add, a group's name key, an open
+  invite's carry — and the acceptance of a group's grant in the active tenant. **What stays of the operator's class:**
+  an owner is the server's word (below), so a member the server presents as an owner roots keys; a root owner is
+  trusted on first use; the tenant scope's own grant from another member is judged by the pin alone, because the
+  standings are read with the key that grant carries (every new epoch must still link to the one held, ADR 0024); and
+  a grant in a tenant this device cannot read — a group grant outside the active tenant, read while staging a
+  rotation — falls back to the pin. A wrap where the tenant cannot be read fails closed instead.
+- **The invite accept and the moderation delivery stay pin-only**: there is no tenant the two sides share whose join
+  records could anchor the other. So a grant a rotation re-wrapped to an open invite names a member the newcomer cannot
+  anchor: only a grant the inviting owner wrapped verifies under the key the link anchors; one a rotation re-wrapped
+  is signed by the rotator, whose key the newcomer trusts on first use (`memberInviteAnchored`,
+  `src/web/src/features/tenant/tenantInvite.ts`; inbox #565). Neither the join records nor the key chain close it: the
+  newcomer reads no join record before it is a member, and the chain anchors a key from a head someone pinned, while
+  a newcomer has pinned no rotator. Nor is that rotator pinned at the accept: the grant's granter key may be one its
+  granter has since retired, and pinning it beside their current head would pin a pair that never existed, a
+  permanent anomaly; the newcomer pins them through their chain at its first contact as a co-member, where their join
+  record anchors them. The members a moderator seals a statement's facts to are sealed to unanchored (inbox #570).
+- **A join record signed by an owner's retired key still anchors** (decision 15), so the members an owner invited
+  before securing their account keep their anchor. The cost: a thief holding that retired key could, with the
+  operator, mint a join record after the rotation — the class this record accepts for verifications forged between
+  theft and rotation (§ Consequences), here not ended by the rotation (inbox #571).
+- **A pin the anchored chain does not hold is replaced only when that chain is at least as long as the pinned one —
+  decided (assistant, 2026-10-27, for owner review).** An owner-rooted join record is stronger than a first-use pin,
+  and a pin off the chain is the mark of a key an operator substituted at a first contact; but a chain shorter than
+  the one this account pinned may be a rollback of a head it saw, which the pin exists to refuse, so that is an
+  anomaly. The residual: an operator that got a substituted chain pinned that is longer than the person's real one
+  leaves that person an anomaly to this account — shown, never silent, and never a block on a write.
 - **A join record is sealed under the tenant epoch its invite's grant carried**, the epoch current at the accept (or
   an older one, for an invite a rotation declared pending), so a later reader opens it with that epoch's key from its
   epoch chain, never with the current key alone.
@@ -408,13 +484,16 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   whose signer is not the key at the served head, and is told to ask for a new invite; the ceremony's entry tells an
   owner who signed open invites that they stop working. Keeping them soundly needs the owner's **head** inside the
   link's seal, so the invitee walks the chain from a pinned head — a change of the built link format (inbox #568).
-- **Who counts as an owner is the server's word.** A member checking a join record knows the tenant's owners from the
-  server's role list and its own pins; roles are not signed. A former owner, or a member the server presents as owner,
-  can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member residual,
-  and closing it needs signed roles and removals — the membership protocol ADR 0020 declined.
+- **Who counts as an owner stays the server's word — accepted as a residual (assistant, 2026-10-27, for owner
+  review).** A member checking a join record knows the tenant's owners from the server's role list
+  (`ScopeMember.role`) and its own pins; roles are not signed. A former owner, or a member the server presents as
+  owner, can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member
+  residual, and closing it needs signed roles and removals — the membership protocol ADR 0020 declined, which nothing
+  here waits for.
 - **Withholding** is detected only by a device that saw a newer step, or by two people comparing heads (decision 14);
   a first-time reader cannot tell on its own (the fork, until Key Transparency).
 - **A malicious server on a retry** may re-list a revoked invite to the other of two concurrent rotators — the
   honest-operator class, as today.
-- **The operator class of a first use stays until join records are read**: everything in this list that reads "trusted
-  on first use" is closed by decisions 12 and 15, not by the key chain.
+- **What is still trusted on first use**: a root owner, the invite accept's unknown inviter and foreign granter, and
+  every contact outside a shared tenant (the moderation delivery). Inside a tenant everyone else is anchored by a join
+  record or is an anomaly.

@@ -204,4 +204,21 @@ guards and `npm run check` in `site/` are green.
 
 ## Retrospective
 
-*(filled at implement time)*
+Built 2026-10-28 in four phases (crypto + contracts, backend, web, docs + site); browser pass with three throwaway members.
+
+- **Decision 3 was built differently, with the same guarantee.** No closing list: a rotation re-signs each of the outgoing
+  key's verifications with the new identity, read before the publish, and a verification counts only under the
+  verifier's current key at their current head. The CR put one list per tenant into the publish — tenants per account and
+  members per tenant are uncapped, so the body had no bound (the checklist rule cr-secure-the-account wrote, one CR
+  earlier). Moved to: ADR 0111 decision 13, and the refinement checklist's request-bound bullet.
+- **The invariant "the operator learns only that records exist" was false as planned.** Rows are keyed by verifier and
+  subject; the docs phase caught it. Moved to: ADR 0111 § Consequences, security-model, inbox #572, and a checklist bullet.
+- **The pin needed its index.** "Replace an off-chain pin" and "the pin is the rollback counter" collide: a pinned head
+  missing from the served chain is either a substituted key or a withheld step. The entry gained `i`, and a pin is replaced
+  only when the anchored chain is at least as long. Moved to: ADR 0104 decision 2, ADR 0111 decision 15.
+- **The browser pass found a defect of the build before this one** (names sealed under the old tenant epoch no longer open
+  after a rotation; secure-the-account's pass never reloaded a tab). Moved to: inbox #573, and § The pipeline's browser
+  paragraph.
+- **The finish read a stale plan row** for the tenant (its own commit raised the epoch floor past it), so every later
+  group's member would have been declared pending — found by a test, fixed in `finishRotation.ts`.
+- Not run (kept for the end of V1): L1, web-e2e, api-fuzz, the MariaDB races (the put takes the tenant scope's lock).

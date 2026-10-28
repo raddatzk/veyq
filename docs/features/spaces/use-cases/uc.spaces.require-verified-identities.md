@@ -8,7 +8,7 @@
   reach is already never wrapped to, strict mode or not; what strict mode adds is the unverified member.)
 - **Preconditions:** an **authenticated, unlocked** caller; the verification ceremony this gates on exists —
   [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) (compare a member's safety
-  number on their profile, mark them *verified*).
+  number and chain code on their profile, which writes a verification every member of the tenant reads).
 - **Status:** **planned, and not buildable as specified** — its shape is open (A1).
 - **Postconditions (success):** with strict mode on, the caller's client wraps no scope key to an **unverified**
   member; it waits until a human verifies them. Operator-blind: the
@@ -18,11 +18,11 @@
 
 1. **Turn it on.** The caller switches on "require verification before sharing" ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
    Decision 4). Off by default: the default flow is TOFU with the key chain ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)).
-2. **A wrap waits for verification.** Where the caller's client would wrap a scope key to a member whose pin is not
-   `verified` — adding them to a group, re-granting them in a rotation (declared pending), delivering to them — it
-   does not.
-3. **A rotation keeps the gate.** A verified contact who secures their account drops to `pinned` (the chain moves the
-   pin), so the next wrap to them waits for a new compare.
+2. **A wrap waits for verification.** Where the caller's client would wrap a scope key to a member no verification
+   counts for in the tenant — adding them to a group, re-granting them in a rotation (declared pending), delivering to
+   them — it does not.
+3. **A rotation keeps the gate.** A verified contact who secures their account moves to a new head, which no
+   verification names yet, so the next wrap to them waits for a new compare.
 4. **Verify to release.** Once the caller verifies the member
    ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)), the next wrap goes ahead.
 
@@ -32,6 +32,11 @@
   unverified identity regardless of the caller's own setting. The mechanism has to be **scope-wide**, and that
   redesign is undecided ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) § What is
   still open). This use-case states the intent; it is not a design.
+- **A2 — it collides with "never a block".** [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 15 shows *verified* as display only and lets nothing about another member's identity block anybody's write;
+  its one gate is the anomaly, never an unverified member. Strict mode would be a second gate, so it needs a decision
+  against that record, not only a design — which is why A1 stands and this stays planned. Since verifications are
+  shared in the tenant, a scope-wide gate would at least have one record every member reads.
 
 ## Quality notes
 
@@ -48,8 +53,8 @@ today you can verify people, but nothing enforces it.
 ## Related
 
 - Feature: [Spaces (scopes)](../_index.md)
-- Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the pin store whose
-  `verified` state this would gate on)
+- Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the anchor check
+  this would sit beside)
 - Use-cases: [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) (the verification it
   requires), [uc.spaces.verify-identity](uc.spaces.verify-identity.md) (the advisory default it would harden)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 4, strict
