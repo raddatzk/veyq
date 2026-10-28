@@ -31,8 +31,9 @@ Governance (who may add, the name stays sealed, no tenant-owner power) is [ADR 0
    unique-in-tenant handle every tenant member already sees, so this leaks nothing new
    ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
 2. The GroupOwner picks the resolved member. Their client runs the **anchor check** on the served key and head
-   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2: pinned on first use,
-   followed along the target's key chain, a key the chain does not reach refused with nothing sent), then **wraps** the group's current epoch key to it — `sealTo` under
+   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2: the target's join record
+   in the tenant decides first, the key followed along the target's key chain from the step it names, a key the chain
+   does not reach — or a non-owner without a join record — refused with nothing sent), then **wraps** the group's current epoch key to it — `sealTo` under
    the `scope-grant` purpose, bound to the scope and epoch ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)),
    signed with the owner's identity key (Decision 6) — and posts it with the add, naming the key it is wrapped to
    (`recipientIdentityDigest`).
@@ -80,11 +81,12 @@ sequenceDiagram
   **TOFU-pin on first use**, a key the target's chain does not reach refused with "Can't confirm this key" and no
   accept, and out-of-band
   **safety-number verification** ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md))
-  elevates a contact to *verified*; an opt-in **strict mode** is not built
-  ([uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)). What remains is a substituted
-  key on a real add before the owner pinned the target (self-hosted makes it moot); anchoring that key in the
-  target's join record is later work ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 12).
+  writes a verification every member of the tenant reads; an opt-in **strict mode** is not built
+  ([uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)). The target's join record
+  anchors the key even before the owner pinned the target
+  ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 12); what remains is a substituted key for a target the server presents as a tenant owner without a join
+  record, trusted on first use (self-hosted makes it moot).
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open the
   group → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a wipe),
   matching [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) E2.

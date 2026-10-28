@@ -16,6 +16,8 @@ import { emptyPinStore, fakePinServer, identityKey, pinIdOf, pinOf, pinsOn, seal
 import type { KeyChain, KeyChainApi, KeyChainStep, ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 import type { TasksApi } from '../../../api/generated/tasks'
 import type { LoginApi } from '../../../api/generated/auth'
+import type { MemberVerification, TenantsApi } from '../../../api/generated/tenants'
+import * as verification from '@veyq/crypto/verification'
 
 // The APIs and the vault are mocked; the scope layer, the trust layer and **the crypto are real** — the wraps, the identity
 // mint, the self-grants, the key-chain step and the KEK derivations all run for real (the last at a light Argon cost, see
@@ -41,6 +43,7 @@ vi.mock('../../../api/client', () => ({
   tasksApi: vi.fn(),
   loginApi: vi.fn(),
   keyChainApi: vi.fn(),
+  tenantsApi: vi.fn(),
 }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 // A vault that holds what it is handed, as the real one does — so the published identity a rotation swaps in is the one
@@ -101,6 +104,7 @@ import {
   loginApi,
   scopesApi,
   tasksApi,
+  tenantsApi,
 } from '../../../api/client'
 import { clearVault, identityPrivate, setUnlocked } from '../../../app/vault'
 import { carrySessionVault, clearSessionVault } from '../rememberMe/sessionVault'
@@ -178,7 +182,7 @@ const registerAt = (revision: number) => ({ purpose: 'device-register', revision
 const enc = new TextEncoder()
 const dec = new TextDecoder()
 /** B pinned at the head of its chain — so the finish's grant to B is `match`, not a first use. */
-const PINNED = { [U1]: pinOf(identityKey()), [B]: pinOf(B_PUB, 'pinned', 1, headOf(B_CHAIN)) }
+const PINNED = { [U1]: pinOf(identityKey()), [B]: pinOf(B_PUB, 1, headOf(B_CHAIN)) }
 const sealedPins = (revision: number, pins: Record<string, ReturnType<typeof pinOf>> = PINNED, mk = MK): PinServerState =>
   sealPinStore(mk, pins, revision)
 const REGISTERED = { devices: { d1: { label: 'Work laptop', lastSeenAt: 1 } }, families: { fam1: 'd1' }, wraps: {} }
@@ -216,7 +220,9 @@ function grantRow(scope: Pick<Scope, 'id' | 'kind' | 'keys'>, epoch: number, to:
   return { ...g, grantedEpoch: epoch, granterUserId: by.userId, granterIdentityPublicKey: by.bundle }
 }
 
-/** A scope the caller holds at `epoch` (its chain of keys built up to it), its grant from `by` (itself by default). */
+/** A scope the caller holds at `epoch` (its chain of keys built up to it), its grant from `by` (itself by default). Its
+ *  tenant is the active one unless said otherwise — whose TENANT scope has the tenant's id (`scopeId == tenantId`, ADR
+ *  0007), which is where a rotation reads who is anchored there (ADR 0111 decision 15). */
 function heldScope(
   id: string, kind: v1.ScopeKind,
   o: { epoch?: number; tenantId?: string; active?: boolean; role?: 'OWNER' | 'MEMBER'; by?: Signer; withB?: boolean; blocked?: RotationBlockedReason } = {},
@@ -225,7 +231,7 @@ function heldScope(
   const keys = Array.from({ length: epoch + 1 }, () => v1.randomBytes(32))
   const links = new Map<number, string>()
   for (let e = 1; e <= epoch; e++) links.set(e, b64std(v1.seal({ purpose: 'scope-epoch', scopeId: id, epoch: e }, keys[e], keys[e - 1])))
-  const scope: Scope = { id, kind, tenantId: o.tenantId ?? 't1', currentEpoch: epoch, keys, links, members: new Map(), active: o.active ?? true, blocked: o.blocked }
+  const scope: Scope = { id, kind, tenantId: o.tenantId ?? SCOPE_TENANT, currentEpoch: epoch, keys, links, members: new Map(), active: o.active ?? true, blocked: o.blocked }
   const by = o.by ?? meOld
   scope.members.set(ME, { userId: ME, role: o.role ?? 'OWNER', bundle: OLD_PUB, head: '', grant: grantRow(scope, epoch, { userId: ME, bundle: OLD_PUB }, by) })
   if (o.withB) {
@@ -491,9 +497,10 @@ function fakeServer(opts: ServerOpts = {}) {
   })
   fakeApi(tasksApi, { claimTask: vi.fn<TasksApi['claimTask']>(async () => null) })
   const membersFail = new Set<string>()
+  const membersDown = new Set<string>()
   vi.mocked(listScopeMembers).mockImplementation(async (scopeId: string) => {
     online()
-    if (membersFail.delete(scopeId)) throw fetchFailed()
+    if (membersFail.delete(scopeId) || membersDown.has(scopeId)) throw fetchFailed()
     const s = scopes.get(scopeId)!
     return [...s.members.values()].map((m): ScopeMember => ({
       userId: m.userId, username: m.userId, avatarRevision: 0, role: m.role, identityPublicKey: m.bundle, keyChainHead: m.head,
@@ -518,6 +525,14 @@ function fakeServer(opts: ServerOpts = {}) {
     /** `listScopeMembers` of `scopeId` fails once, as a re-key that does not reach the server. */
     failMembersOnce(scopeId: string) {
       membersFail.add(scopeId)
+    },
+    /** `listScopeMembers` of `scopeId` fails until {@link healMembers} — every read of it, the tenant's directory read
+     *  by a rotation of any scope in it (ADR 0111 decision 15) included. */
+    failMembers(scopeId: string) {
+      membersDown.add(scopeId)
+    },
+    healMembers() {
+      membersDown.clear()
     },
     reconnect() {
       offline = false
@@ -871,7 +886,7 @@ describe('securing the account loses no space (inbox #556)', () => {
 
   it('way 3, a new epoch fails: the space waits, the vault is on the new identity and its grant opens; the next pass secures it', async () => {
     const srv = fakeServer({ scopes: ordinaryScopes() })
-    srv.failMembersOnce(SCOPE_TENANT)
+    srv.failMembers(SCOPE_TENANT)
     const result = await rotate()
     expect(result.states.find((s) => s.scopeId === SCOPE_TENANT)?.state).toBe('waiting')
     expect(vaultPubB64()).toBe(srv.acct.bundle)
@@ -879,6 +894,7 @@ describe('securing the account loses no space (inbox #556)', () => {
     expect(tenant.currentEpoch).toBe(0)
     expect(same(openMine(tenant), tenant.keys[0])).toBe(true)
 
+    srv.healMembers()
     await runScopeRotationWorker()
     expect(tenant.currentEpoch).toBe(1)
     expect((await srv.listRotationScopeStates()).find((s) => s.scopeId === SCOPE_TENANT)?.state).toBe('secured')
@@ -897,7 +913,8 @@ describe('securing the account loses no space (inbox #556)', () => {
   it('the finish grants a member who joined after the publish (decision 4: whoever is a member then)', async () => {
     // Bite: restore the `members.length !== 1` refusal — the space stays waiting, and the newcomer is never granted.
     const group = heldScope(SCOPE_JOINED, 'GROUP')
-    const srv = fakeServer({ scopes: [group], abandonAfterPublish: true })
+    // B is anchored in the group's tenant (its owner, a root): the finish judges the newcomer there (ADR 0111 decision 15)
+    const srv = fakeServer({ scopes: [group, heldScope(SCOPE_TENANT, 'TENANT', { role: 'MEMBER', by: bSigner, withB: true })], abandonAfterPublish: true })
     await rotate()
     srv.reconnect()
     group.members.set(B, { userId: B, role: 'MEMBER', bundle: B_PUB, head: headOf(B_CHAIN), grant: grantRow(group, 0, { userId: B, bundle: B_PUB }, bSigner) })
@@ -1128,6 +1145,58 @@ describe('securing the account loses no space (inbox #556)', () => {
   }, 60_000)
 })
 
+// ADR 0111 decision 13: the outgoing key's verifications are carried to the new key — read BEFORE the publish, while the
+// old identity is still the account's, and re-signed by the new identity after it. A statement placed in this account's
+// slot after the publish (a thief's, signed with the retired key) is never among them.
+describe('securing the account re-signs this account\'s verifications (ADR 0111 decision 13)', () => {
+  /** The tenant's verification rows: ME's verification of B, as ME's OLD identity signed it at ME's genesis head — and,
+   *  once the publish committed, a statement the retired key signs about a stranger (the thief's). */
+  function verificationsIn(srv: ReturnType<typeof fakeServer>) {
+    const tenant = srv.scopes.get(SCOPE_TENANT)!
+    const row = (subjectUserId: string, subjectHead: Uint8Array): MemberVerification => {
+      const address = { tenantId: SCOPE_TENANT, verifierUserId: ME, subjectUserId }
+      const v = verification.signVerification(address, { subjectHead, verifierHead: srv.acct.chain.head }, OLD_ID.priv.sign)
+      return { verifierUserId: ME, subjectUserId, epoch: 0, sealedStatement: b64std(verification.sealVerification(tenant.keys[0], { ...address, epoch: 0 }, v)), createdAt: new Date() }
+    }
+    const mine = row(B, B_CHAIN.head)
+    const thief = row(U1, v1.randomBytes(32))
+    const listVerifications = vi.fn<TenantsApi['listVerifications']>(async () => ({
+      verifications: srv.publishes.length ? [mine, thief] : [mine], more: false,
+    }))
+    const putMyVerification = vi.fn<TenantsApi['putMyVerification']>(async () => undefined)
+    fakeApi(tenantsApi, { listVerifications, putMyVerification })
+    return { tenant, listVerifications, putMyVerification }
+  }
+
+  it('collects before the publish and re-signs after it: the new identity, the new head, the same subject and head', async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes() })
+    const { tenant, listVerifications, putMyVerification } = verificationsIn(srv)
+    await rotate()
+
+    expect(listVerifications).toHaveBeenCalledWith(expect.objectContaining({ tenantId: SCOPE_TENANT, verifierUserId: ME }))
+    expect(listVerifications.mock.invocationCallOrder[0]).toBeLessThan(srv.rotateAccountKeys.mock.invocationCallOrder[0])
+    expect(putMyVerification).toHaveBeenCalledTimes(1) // the thief's statement, there only after the publish, is not carried
+    expect(putMyVerification.mock.invocationCallOrder[0]).toBeGreaterThan(srv.rotateAccountKeys.mock.invocationCallOrder[0])
+
+    const put = putMyVerification.mock.calls[0][0]
+    expect(put).toMatchObject({ tenantId: SCOPE_TENANT, subjectUserId: B, putVerificationRequest: { epoch: 0 } })
+    const address = { tenantId: SCOPE_TENANT, verifierUserId: ME, subjectUserId: B }
+    const v = verification.openVerification(tenant.keys[0], { ...address, epoch: 0 }, fromB64std(put.putVerificationRequest.sealedStatement))
+    expect(b64std(v.subjectHead)).toBe(headOf(B_CHAIN))
+    expect(b64std(v.verifierHead)).toBe(b64std(srv.acct.chain.head)) // the head the publish appended
+    const published = v1.deserializeIdentityPublic(fromB64std(srv.acct.bundle))
+    expect(verification.verificationVerifies(address, v, published.sign)).toBe(true)
+    expect(verification.verificationVerifies(address, v, OLD_ID.pub.sign)).toBe(false)
+  })
+
+  it('a publish that is refused re-signs nothing', async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes(), rotateFails: httpError(403, 'secret_key_proof_failed') })
+    const { putMyVerification } = verificationsIn(srv)
+    await expect(rotate()).rejects.toBeDefined()
+    expect(putMyVerification).not.toHaveBeenCalled()
+  })
+})
+
 describe('what securing the account leaves behind', () => {
   it('carries the Memory pins of EVERY scope across the new Master Key, after the vault swapped', async () => {
     const elsewhere = heldScope(SCOPE_ELSEWHERE, 'GROUP', { tenantId: 't2', active: false })
@@ -1272,7 +1341,7 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
   })
 
   it('re-keys every pin entry: new ids under the new Master Key, every entry re-sealed, the old ids gone', async () => {
-    const three = { [U1]: pinOf(identityKey()), [U2]: pinOf(identityKey(), 'verified'), [U3]: pinOf(identityKey()) }
+    const three = { [U1]: pinOf(identityKey()), [U2]: pinOf(identityKey()), [U3]: pinOf(identityKey()) }
     const srv = fakeServer({ pins: sealedPins(3, three), register: sealedRegister(2) })
     const oldIds = [...srv.pins.entries.keys()].sort()
     await rotate()

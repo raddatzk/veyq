@@ -276,6 +276,13 @@ class OperatorBlindProbeTest {
         // A member's picture (ADR 0084): tenant-gated like the directory. The control reaches the handler and answers
         // `404 avatar_not_found` for the invented member - a code the gate's own `tenant_not_found` is not.
         "getMemberAvatar" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/members/$someId/avatar") },
+        // The members' verifications (ADR 0111 decision 12): tenant-gated like the directory. The control's read answers
+        // 200; its write names an invented subject and answers `404 member_not_found` - past the gate, a code the gate's
+        // own `tenant_not_found` is not.
+        "listVerifications" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/verifications") },
+        "putMyVerification" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/verifications/$someId", """{"epoch":0,"sealedStatement":"$B64"}""")
+        },
         "updateTenantTerms" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },

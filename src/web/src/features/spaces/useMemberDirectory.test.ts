@@ -6,10 +6,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
-vi.mock('../account/identityPins', () => ({ trustStates: vi.fn() }))
+vi.mock('../account/tenantTrust', () => ({ tenantBadges: vi.fn() }))
 
 import { useMemberDirectory } from './useMemberDirectory'
-import { trustStates } from '../account/identityPins'
+import { tenantBadges } from '../account/tenantTrust'
+import { activeSpace } from '../../app/activeSpace'
+import { account } from '../../app/account'
 import { TrustStateRefused } from '../account/trustMarks'
 import type { ScopeMember } from './members'
 
@@ -31,29 +33,29 @@ const member = (userId: string): ScopeMember =>
 
 beforeEach(() => {
   push.mockClear()
-  vi.mocked(trustStates).mockResolvedValue({})
+  vi.mocked(tenantBadges).mockClear()
+  vi.mocked(tenantBadges).mockResolvedValue({})
+  activeSpace.tenantId = 'tenant-1'
+  account.userId = 'me'
 })
 
 describe('useMemberDirectory', () => {
   it('loads rows + ownership on mount and refreshes trust', async () => {
-    vi.mocked(trustStates).mockResolvedValueOnce({ a: { state: 'anomaly' } })
+    vi.mocked(tenantBadges).mockResolvedValueOnce({ a: 'anomaly', b: 'verified' })
     const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a'), member('b')], isOwner: true })))
     expect(api.loading.value).toBe(true)
     await flushPromises()
     expect(api.loading.value).toBe(false)
     expect(api.members.value.map((m) => m.userId)).toEqual(['a', 'b'])
     expect(api.isOwner.value).toBe(true)
-    expect(api.trust.value).toEqual({ a: { state: 'anomaly' } })
-    // Each member is judged against the key AND the head the directory served for them.
-    expect(trustStates).toHaveBeenCalledWith([
-      { userId: 'a', identityPublicKey: 'pk-a', keyChainHead: 'head-a' },
-      { userId: 'b', identityPublicKey: 'pk-b', keyChainHead: 'head-b' },
-    ])
+    expect(api.trust.value).toEqual({ a: 'anomaly', b: 'verified' })
+    // The badges are the ACTIVE tenant's (a group lives in it), read without this account's own row.
+    expect(tenantBadges).toHaveBeenCalledWith('tenant-1', 'me')
     expect(api.loadError.value).toBe('')
   })
 
   it('names a refused pin store (ADR 0028 Decision 7) instead of a directory that merely shows no flags', async () => {
-    vi.mocked(trustStates).mockRejectedValueOnce(new TrustStateRefused('trust_state_unreadable', 'pins'))
+    vi.mocked(tenantBadges).mockRejectedValueOnce(new TrustStateRefused('trust_state_unreadable', 'pins'))
     const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: true })))
     await flushPromises()
     expect(api.trustRefusal.value).toBe('verify.trustUnreadable')
@@ -62,10 +64,18 @@ describe('useMemberDirectory', () => {
   })
 
   it('control: any other trust-read failure degrades silently, as before', async () => {
-    vi.mocked(trustStates).mockRejectedValueOnce(new Error('vault locked'))
+    vi.mocked(tenantBadges).mockRejectedValueOnce(new Error('vault locked'))
     const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: true })))
     await flushPromises()
     expect(api.trustRefusal.value).toBeNull()
+  })
+
+  it('no active tenant reads no badges', async () => {
+    activeSpace.tenantId = null
+    const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: true })))
+    await flushPromises()
+    expect(tenantBadges).not.toHaveBeenCalled()
+    expect(api.trust.value).toEqual({})
   })
 
   it('maps a 403 load to notAuthorized and a 500 to failed', async () => {

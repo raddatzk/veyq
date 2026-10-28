@@ -7,6 +7,8 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => 
 // The anchor gate is exercised in identityPins.test.ts, and with a real pin store and real chains in
 // grantDeliveryWorker.anchor.test.ts; here we drive its answer directly.
 vi.mock('../account/identityPins', () => ({ anchorIdentity: vi.fn() }))
+// Who is anchored in the scope's tenant is tenantTrust.test.ts's; here the view is a token the anchor check must receive.
+vi.mock('../account/tenantTrust', () => ({ tenantViewOfScope: vi.fn() }))
 // The worker's own identity — its signing key signs every grant it posts (ADR 0028 Decision 6). A fresh copy per
 // call, like the real vault, because the worker zeroes what it is handed.
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
@@ -17,6 +19,7 @@ import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import type { ClaimedJob, TasksApi } from '../../api/generated/tasks'
 import { anchorIdentity } from '../account/identityPins'
+import { tenantViewOfScope, type TenantView } from '../account/tenantTrust'
 import { TrustStateRefused } from '../account/trustMarks'
 import { identityPrivate } from '../../app/vault'
 import { grantSignatureVerifies } from '../spaces/grant'
@@ -60,8 +63,12 @@ function oneJob(claimed: ClaimedJob) {
   return { claimTask, completeTask, declineTask }
 }
 
+/** The scope's tenant as read for the delivery: a token the anchor check must receive. */
+const SCOPE_TENANT: TenantView = { tenantId: 'tenant-of-scope', members: new Map(), available: true, standing: async () => ({ kind: 'root' }) }
+
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(tenantViewOfScope).mockResolvedValue(SCOPE_TENANT)
   // Default: the target is new or unchanged → the worker proceeds with the wrap (TOFU). Overridden per test.
   vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
   vi.mocked(identityPrivate).mockImplementation(() => ({
@@ -70,6 +77,23 @@ beforeEach(() => {
 })
 
 describe('runGrantDeliveryWorker', () => {
+  it('reads the scope\'s tenant once per drain, however many jobs it delivers', async () => {
+    const second: ClaimedJob = { ...job(), jobId: 'j2' }
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce(job()).mockResolvedValueOnce(second).mockResolvedValueOnce(null)
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined)
+    mockTasks(claimTask, completeTask)
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 2 })).toBe(2)
+    expect(tenantViewOfScope).toHaveBeenCalledTimes(1)
+    expect(anchorIdentity).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(anchorIdentity).mock.calls.every(([, , o]) => o?.tenant === SCOPE_TENANT)).toBe(true)
+  })
+
+  it('a drain with nothing to claim reads no tenant at all', async () => {
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValue(null), vi.fn<TasksApi['completeTask']>())
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 2 })).toBe(0)
+    expect(tenantViewOfScope).not.toHaveBeenCalled()
+  })
+
   it('claims for the opened scope, wraps K_SC to the foreign identity, signs it and completes; the wrap opens back to K_SC', async () => {
     const K_SC = v1.randomBytes(32)
     const { claimTask, completeTask } = oneJob(job())
@@ -98,7 +122,9 @@ describe('runGrantDeliveryWorker', () => {
     // It names the key it is wrapped to (ADR 0111 decision 10): SHA-256 of the target's bundle.
     expect(completeTask.mock.calls[0][0].completeRequest?.recipientIdentityDigest).toBe(b64std(v1.sha256Digest(fromB64std(targetPubB64))))
     // The target was judged against the key AND the head the claim served.
-    expect(anchorIdentity).toHaveBeenCalledWith(TARGET, job().grantDelivery)
+    // judged in the tenant the scope lives in (ADR 0111 decision 15)
+    expect(tenantViewOfScope).toHaveBeenCalledWith(S1)
+    expect(anchorIdentity).toHaveBeenCalledWith(TARGET, job().grantDelivery, { tenant: SCOPE_TENANT })
   })
 
   // The poll hands the worker the ACTIVE SPACE's write key, and leaving or re-entering the space zeroes that array in

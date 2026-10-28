@@ -7,14 +7,15 @@
 - **Provides:** an **operator-blind, cross-device memory of each contact's key-chain head**, and the one check every
   wrap to **another** account's key and every grant from one goes through: a key the contact's doubly signed key chain
   reaches from the pinned head is followed, anything else is an **anomaly** — so a **substituted** key (an active
-  operator's MITM) is caught after first sight, a legitimate rotation needs nobody, and out-of-band verification can
-  elevate a contact to *verified* ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
-  Decision 2, [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 7, 15, 16).
+  operator's MITM) is caught after first sight and a legitimate rotation needs nobody; in a tenant the person's
+  owner-rooted **join record** decides first, so the pin there is the counter, not the anchor
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2,
+  [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decisions 7, 12, 15, 16).
 - **Serves (use-cases):** [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the
   passive half — pin on first sight, follow the chain, surface an anomaly),
   [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md) (the
-  proactive ceremony that elevates a pin to *verified*),
+  compare, which starts from this check),
   [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md) (strict
   mode, which would gate on *verified*; planned) and
   [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md) (which produces the one legitimate key
@@ -22,9 +23,9 @@
 - **Depends on:** [en.account.key-model](en.account.key-model.md) — the Master Key that seals the pin store, so
   the account must be **unlocked** for any of this to run.
 - **Postconditions:** after wrapping to a contact for the first time, the client holds a **pin** of that contact's
-  key-chain head and the identity at it (state *pinned*); a later key the chain reaches moves the pin, and one it does
-  not reach is never wrapped to and never accepted as a granter. The server saw opaque ids, sealed entries and a sealed head — never a `userId`, a pinned
-  key or a state; it does see how many pins there are.
+  key-chain head and the identity at it; a later key the chain reaches moves the pin, and one it does not reach is
+  never wrapped to and never accepted as a granter. The server saw opaque ids, sealed entries and a sealed head —
+  never a `userId` or a pinned key; it does see how many pins there are.
 
 ## What it is — the sealed pin store
 
@@ -34,7 +35,7 @@ synced with the account like the other Master-Key-sealed material. The server st
 never interprets them:
 
 ```
-entry at pinId = HMAC-SHA256(K_pinIndex, userId):   seal("identity-pin" ‖ pinId, { u: userId, f: fingerprint, h: head, s: state, t: firstSeenAt } padded to 192 bytes)
+entry at pinId = HMAC-SHA256(K_pinIndex, userId):   seal("identity-pin" ‖ pinId, { u: userId, f: fingerprint, h: head, i: index, t: firstSeenAt, r: replaced } padded to 192 bytes)
 head at revision n:                                 seal("identity-pins" ‖ n,     { version: 2, count, digest })
 ```
 
@@ -47,57 +48,71 @@ head at revision n:                                 seal("identity-pins" ‖ n, 
   It pins the identity **and** the Secret-Key proof key, so an invented chain that names the pinned identity beside a
   proof key of the operator's choosing does not start from it. The keys are single letters so an entry with its head
   stays inside the 192-byte padding; an entry without a 32-byte head does not open.
-- **`state`** — `pinned` (trust-on-first-use, unverified) or `verified` (a human compared the safety-number
-  out-of-band, [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)).
-- **`firstSeenAt`** — when this contact was first pinned (kept when the pin moves along the chain).
+- **`index`** — the index of the pinned head's step in the chain (`-1` for a head pinned unread at an invite's
+  accept): it tells a pin the join-anchored chain does not hold from a rollback (§ Main flow, `replaced`).
+- **`firstSeenAt`** — when this contact was first pinned (kept when the pin moves along the chain, new at a
+  replacement); a member reads *New* while it is under 14 days old.
+- **`replaced`** — the join record replaced this pin (the profile says so). There is **no state**: whether someone is
+  verified is a signed statement in the tenant
+  ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)).
 - **The head's `digest`** — SHA-256 over every entry in `pinId` order, so the set is one object the device can check
   (§ Sync & merge). Vector-pinned: `contracts/crypto/vectors/v1.json#identity_pin`.
 
 **Account-global, keyed by `userId`.** Identity is one keypair per account across all tenants
-([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)), so there is **one pin per contact** — a person
-you verified in one space is verified everywhere. A store holds at most 25,000 pins: the rotation and the reset
-write the whole set in one request, and that request must fit the server's body limit.
+([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)), so there is **one pin per contact**. The anchor
+and *verified* are per tenant (ADR 0111 decision 15): a person is anchored by their join record in each tenant, and a
+verification counts only in the tenant it was written in. A store holds at most 25,000 pins: the rotation and the
+reset write the whole set in one request, and that request must fit the server's body limit.
 
 ## Main flow — the anchor check before every foreign wrap and grant
 
 1. A client is about to `asymWrap` to a directory-returned identity key for `userId`, served with that contact's
    key-chain head — a rotation's re-grant, a grant-delivery job, a group add and its name key, an open invite's carry,
    a moderation delivery — or to trust a grant that contact signed.
-2. **Open the pin store** (unseal under the Master Key) and judge the served key and head (`anchorIdentity`):
-   - **`match`** — the served head is the pinned head and the served key the key at it; no chain read.
+2. **In a tenant, ask the person's standing there first** (`loadTenantView`, `src/web/src/features/account/tenantTrust.ts`;
+   ADR 0111 decisions 12 and 15): their join record must open under the tenant key, verify owner → invite → newcomer
+   and name an owner the server lists whose key in it is anchored in the tenant in turn (`joined`); an owner with no
+   join record is a `root`; anyone else — a non-owner without a join record, a record that does not verify — is
+   `unanchored`, and a tenant this device cannot read is `unavailable`. `unanchored` is an **anomaly** with no chain
+   read; so is `unavailable` for a wrap. A `joined` person's chain is always read and walked from the step that
+   installs the identity **and** proof key the record names (`readJoinedChain`), whatever prefix the server serves
+   before it. A `root`, and every check outside a shared tenant (the invite accept, a moderation delivery), go by the
+   pin alone, below.
+3. **Open the pin store** (unseal under the Master Key) and judge the served key and head (`anchorIdentity`):
+   - **`match`** — the served head is the pinned head and the served key the key at it; no chain read (for a `joined`
+     person: the pinned head is on the chain and carries the pinned key).
    - **`firstUse`** — no pin: read the chain (`getKeyChain`), require its head to be the served one and its newest key
-     the served key, **pin the head** (`state = pinned`), then proceed (trust-on-first-use — the bootstrap; blocking
-     first contact would be a chicken-and-egg).
+     the served key, **pin the head**, then proceed (trust-on-first-use — the bootstrap; blocking first contact would
+     be a chicken-and-egg).
    - **`advanced`** — the chain walks from the pinned head to the served one, every step signed by both keys it
      retires (the identity and the Secret-Key proof key), each naming its predecessor, the key at the pinned head equal
-     to the pinned fingerprint, and it ends at the served key: the pin moves to the new head, `verified` drops.
+     to the pinned fingerprint, and it ends at the served key: the pin moves to the new head.
+   - **`replaced`** — a `joined` person only: the pinned head is not on the chain the join record anchors, and that
+     chain is at least as long as the pinned one was (`index`): the pin was a key that was not theirs, so it moves to
+     the anchored head, marked `replaced`. A shorter chain is an anomaly — it may be a rollback.
    - **`anomaly`** — anything else: a served head older than the pinned one (a rollback), a step not signed by both
      keys, a chain the server does not serve. **Never wrapped to and never offered to a human to accept**: a UI-path
      wrap (the group add) refuses with `IdentityUnanchoredError` and shows "Can't confirm this key", a rotation declares
      the member pending, the human-less grant-delivery worker **declines the job** (`identity_unanchored`), and a grant
      the contact signed is refused (`granter_key_unanchored`).
-3. **A key served without a head** — the per-grant copy of the granter's key — is judged by `anchorChainKey`: is it
-   the key at the pinned head, or a **retired** key of the chain this device walked? A grant signed by a retired key
+4. **A key served without a head** — the per-grant copy of the granter's key — is judged by `anchorChainKey`: is it
+   the key at the pinned head, or a **retired** key of the chain this device walked? For a `joined` person only a key
+   at or after the joined step counts; a `root` and an `unavailable` tenant go by the pin. A grant signed by a retired key
    opens only at an epoch at or below this device's floor for the scope, and is refused above it
    (`granter_key_retired`): such grants exist from before the rotation, and a new epoch from a retired key is what a
    thief with the old identity would forge.
-4. **The invite accept** is no co-member yet, so no chain is served to it: the inviting owner (whose key the link's
+5. **The invite accept** is no co-member yet, so no chain is served to it: the inviting owner (whose key the link's
    fingerprint already checked) is pinned at the served head unread on first use and judged by the chain once pinned;
    a **foreign granter** of a grant a rotation re-wrapped stays trusted on first use and is not pinned there (its key
    may be one its granter has since retired) — the account pins them at its first contact as a co-member.
-5. **Verification** ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md))
-   elevates a pin `pinned → verified` on a member's profile, after a safety-number compare (a scanned QR or the
-   digits read aloud). `markVerified` stamps `verified` **only** if the pinned fingerprint still equals the compared
-   one (else `IdentityMovedError`, nothing written); for a member with no pin it pins the compared fingerprint **already
-   verified** in the same one write (`pinIfUnpinned`, ADR 0028 Decision 3) — so no profile view and no compare that
-   failed ever pins. It ships without strict mode on purpose (ADR 0028 Decision 3): TOFU cannot see a key substituted
-   at first contact, and a compare out-of-band can. The badge read (`trustStates`) folds the pin against the served key
-   and head into `verified`, `pinned`, `anomaly` or `unpinned`; it moves a pin the chain advanced, never pins an
-   unpinned contact, and gives a contact whose chain read failed no badge rather than a false anomaly. Requiring
-   *verified* before a share
-   is strict mode ([uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)),
-   whose shape is still open: a *per-account* toggle can't protect shared-scope content, since any co-member can key
-   an unverified identity (ADR 0028 Decision 4).
+6. **Verification is not in this store.** A compare of safety number and chain code writes a signed statement into
+   the tenant ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md));
+   it starts from this check — only a key and head this device anchors in the tenant are compared and signed — and
+   the profile and the member lists read who is anchored here and who verified them in the tenant (`personInTenant`,
+   `tenantBadges`, `tenantTrust.ts`); a member whose chain read failed gets no badge rather than a false anomaly.
+   Requiring *verified* before a share is strict mode
+   ([uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)), whose
+   shape is still open (ADR 0028 Decision 4).
 
 ```mermaid
 ---
@@ -121,18 +136,18 @@ sequenceDiagram
   C->>C: anomaly → no wrap #59; UI refuses, rotation declares pending, worker declines
   end
   end
-  Note right of S: sees opaque ids, sealed entries, a sealed head<br>(no userId, no key, no state)
+  Note right of S: sees opaque ids, sealed entries, a sealed head<br>(no userId, no key)
 ```
 
 ## Sync & merge
 
 The head carries the store's one monotonic **`revision`**, beside the ciphertext and bound into its seal
-([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)). Every write — a pin, a move along the chain, a verify — is **one
+([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)). Every write — a pin, a move along the chain, a replacement — is **one
 entry plus a new head** in one compare-and-set on that revision; the reset and the rotation write the whole set with
 `replaceAll`. If the stored revision moved, nothing of the write lands (`409 stale_revision`), and the client
 **re-reads and re-applies** its change before re-sealing. Pins are **append-heavy** (a new contact), so real
 conflicts are rare: a first sight claims only an empty slot and a move replaces only the pin it was judged against,
-so a device that pinned or moved the contact meanwhile keeps its write, and **`verified` wins** a same-contact merge. A **new device** lists the entries and
+so a device that pinned or moved the contact meanwhile keeps its write. A **new device** lists the entries and
 inherits every pin — so the trust state is shared across the account, not re-TOFU'd per device.
 
 A device lists the entries once per head revision, checks them against the head's digest and keeps them for the
@@ -160,7 +175,7 @@ revision reads the new store with no action; one whose mark sat above it is offe
 ## Quality notes
 
 - **Operator-blind, except the count.** Opaque ids and Master-Key-sealed entries; the server never learns whom you
-  pinned or verified. It does learn how many pins there are — as it always could from the single blob's length, and
+  pinned (whom you verified it learns from the tenant's verification rows, ADR 0111 § Consequences). It does learn how many pins there are — as it always could from the single blob's length, and
   from the grant rows it holds anyway — and which entry a write touched
   ([ADR 0104](../../../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
   decisions 5 and § Consequences). A store keyed by plain `userId` would leak the trust set — rejected
@@ -198,7 +213,7 @@ revision reads the new store with no action; one whose mark sat above it is offe
   Decision 6)
 - Use-cases: [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (pin on first sight,
   follow the chain, surface an anomaly), [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)
-  (the human ceremony that elevates *pinned* → *verified*), [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)
+  (the compare, which writes a verification into the tenant), [uc.spaces.require-verified-identities](../../spaces/use-cases/uc.spaces.require-verified-identities.md)
   (strict mode, planned)
 - End-user view (docs site): [Verify a person](../../../../site/src/content/docs/account/verify-a-person.mdx)
 - End-user view (docs site): [A key can't be confirmed](../../../../site/src/content/docs/help/key-changed.mdx)

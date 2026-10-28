@@ -7,7 +7,9 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ScopeMember } from './members'
-import { trustStates, type ContactTrust } from '../account/identityPins'
+import { tenantBadges, type MemberBadge } from '../account/tenantTrust'
+import { activeSpace } from '../../app/activeSpace'
+import { account } from '../../app/account'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { handle401 } from '../../shared/handle401'
@@ -23,20 +25,18 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>) {
 
   const members = ref<ScopeMember[]>([])
   const isOwner = ref(false)
-  // Identity trust (ADR 0028 Decision 3, ADR 0028 Decision 2): per-member trust from the sealed pin store -
-  // `verified` (compared on the member's profile) and `anomaly` (a served key the chain does not reach from the pinned
-  // head) are shown in the list. A key the chain reached is no state of its own: it moves the pin. No review, no accept.
-  const trust = ref<Record<string, ContactTrust>>({})
+  // Identity trust in the active tenant (ADR 0111 decision 15): per-member badges from `tenantBadges` - `verified` (a
+  // verification of the member's current head counts there), `new`, `unverified`, and `anomaly` (a key the tenant does
+  // not anchor). A GROUP's list reads its tenant's badges: a group lives in the active tenant. No review, no accept.
+  const trust = ref<Record<string, MemberBadge>>({})
   // The i18n key naming why this device refused its own pin store (ADR 0028 Decision 7), or null. Every wrap to a
   // foreign key is blocked while it holds, so the panel says so rather than showing a directory with no flags.
   const trustRefusal = ref<string | null>(null)
-  // Read every member's trust state in one fetch. Vault-gated: degrade to no flags rather than break the directory if
-  // the store/identity is unavailable.
+  // Read every member's badge in one read of the tenant. Vault-gated: degrade to no flags rather than break the directory
+  // if the store/identity is unavailable.
   async function refreshTrust() {
     try {
-      trust.value = await trustStates(
-        members.value.map((m) => ({ userId: m.userId, identityPublicKey: m.identityPublicKey, keyChainHead: m.keyChainHead })),
-      )
+      trust.value = activeSpace.tenantId ? await tenantBadges(activeSpace.tenantId, account.userId || undefined) : {}
       trustRefusal.value = null
     } catch (e) {
       trust.value = {}

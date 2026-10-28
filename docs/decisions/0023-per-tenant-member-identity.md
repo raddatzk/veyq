@@ -69,8 +69,15 @@ a tenant.**
   Secret-Key proof public key with the owner-signed invite it joined through, signed by the invite key and the new
   identity, sealed under the tenant epoch the invite's grant carried (field purpose `member-join-record`, bound to the
   tenant and the member). It is written once, by the accept, never by a profile update, and served to every member on
-  `ScopeMember.sealedJoinRecord` in the tenant scope; the tenant's first owner has none (the trust root). Nothing
-  reads it to decide anything yet.
+  `ScopeMember.sealedJoinRecord` in the tenant scope; the tenant's first owner has none (the trust root). Every
+  member's client reads it as the anchor of that member's key in this tenant (ADR 0111 decisions 12 and 15).
+- **The verifications** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 12). Beside the profile, a member's signed verifications of other members of the tenant live in their own
+  table, one row per verifier and subject (`veyq_verification`), each sealed under a tenant epoch (field purpose
+  `member-verification`, bound to the tenant, both members and the epoch). Like the profile, a row is written only by
+  its member — the verifier is always the caller — and read by every member of the tenant; a member's removal deletes
+  the rows naming them. Unlike the name, the row's address is plaintext: the server sees who verified whom in the
+  tenant, never what was confirmed.
 - **Directory visibility.** Every tenant member sees each member's `username` (plaintext) + `firstName`/`lastName`
   (locally decrypted). **Only a tenant `OWNER`** additionally sees `email` (owner correlates a pending member to
   their invite — [ADR 0007](0007-membership-role-grant-relation.md); the field is omitted for ordinary members).

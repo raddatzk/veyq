@@ -6,8 +6,8 @@
   (§ Consequences, 2026-10-26). [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decisions 1 and 7
   say what is pinned and which revision is marked in place. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) keeps this
   store's shape and its rollback rules and changes what an entry holds: per person, the highest key-chain head this
-  account has seen (decision 2, built 2026-10-28). The personal *verified* state stays in the entry until ADR 0111
-  decision 12's signed verifications are built.
+  account has seen, its index in the chain and whether a join record replaced it, and no *verified* state, which is a
+  signed verification in the tenant now (decision 2, built 2026-10-28).
 - Date: 2026-10-19
 
 Provenance: **(M)** measured when the store was built (`IdentityPinsSliceTest`, on H2 and on MariaDB); **(R)**
@@ -42,16 +42,19 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
    a concurrent first use is a revision conflict, not two entries.
 2. **An entry is sealed under the Master Key with its own purpose, `identity-pin`, bound to its `pinId`** (ADR 0072).
    Its plaintext names the `userId`, and a reader refuses an entry whose `userId` does not derive its `pinId`, so the
-   server cannot move an entry to another contact's slot. The plaintext is compact JSON `{u, f, h, s, t}` — the
-   `userId`, the fingerprint, the contact's key-chain **head** (ADR 0111 decision 16), the state and `firstSeenAt` —
-   padded with spaces to 192 bytes, so `pinned` and `verified` (and any two contacts) seal to the same size — 221
-   bytes, 296 base64 characters. The keys are single letters so the head fits: the entry is 179 bytes (182 at the
-   largest `firstSeenAt`), where the spelled-out keys would make it 211 and push it to the next padding size, 428 bytes
-   a pin on the wire, and 25,000 of those past the request limit below. An entry without a 32-byte head does not
-   open.
+   server cannot move an entry to another contact's slot. The plaintext is compact JSON `{u, f, h, i, t, r}` — the
+   `userId`, the fingerprint, the contact's key-chain **head** (ADR 0111 decision 16), the index of that head's step in
+   the chain (`-1` for a head pinned unread at an invite's accept), `firstSeenAt`, and `r` = 1 when a join record
+   replaced a pin that was not on its chain (ADR 0111 decision 15) — padded with spaces to 192 bytes, so any two
+   contacts seal to the same size — 221 bytes, 296 base64 characters. There is no state: whether someone is verified is
+   a signed statement in the tenant (ADR 0111 decision 12), and the index is what tells a pin the anchored chain does
+   not hold from a rollback (a replacement needs that chain at least as long as the pinned one). The keys are single
+   letters so the head fits: the entry is 176 bytes for a chain of under ten steps (179 at a four-digit index), where
+   the spelled-out keys would make it 215 and push it to the next padding size, 428 bytes a pin on the wire, and
+   25,000 of those past the request limit below. An entry without a 32-byte head does not open.
 3. **What an entry pins is the key-chain head and the identity's `fingerprintHash`** — the 32-byte, domain-separated
    SHA-256 over the full identity bundle that the safety number and its QR already are ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
-   Decision 3) — with `state` and `firstSeenAt`, not the bundle itself (Q1). The head is compared with a served one and
+   Decision 3) — with the head's index, `firstSeenAt` and the replacement mark, not the bundle itself (Q1). The head is compared with a served one and
    is where the client walks the contact's chain from (ADR 0028 Decision 2). **This keeps the security claim:** every
    reader of a pin compares it for equality with a key the directory serves or shows its safety number (M: five reads of a
    pin's key in `src/web/` — three equality comparisons, and two safety numbers, one of them also the input of the QR

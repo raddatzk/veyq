@@ -1067,7 +1067,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       const text = new TextDecoder().decode(pt)
       const entry = JSON.parse(text)
       // Single-letter keys, so an entry with its key-chain head stays inside entry_bytes (ADR 0028 Decision 2).
-      expect(Object.keys(entry)).toEqual(['u', 'f', 'h', 's', 't'])
+      expect(Object.keys(entry)).toEqual(['u', 'f', 'h', 'i', 't', 'r'])
       expect(entry.u).toBe(p.pin_ids[0].userId)
       expect(hex(Uint8Array.from(Buffer.from(entry.f, 'base64')))).toBe(vectors.fingerprint.hash)
       expect(Buffer.from(entry.h, 'base64').length).toBe(32)

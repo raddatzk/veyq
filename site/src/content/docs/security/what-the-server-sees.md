@@ -65,9 +65,12 @@ Sealed client-side, never readable by the server:
   bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
   type (photo, video or PDF) live there, so the operator learns neither;
 - bucket and uploader names, a share's note and private name, and every identity pin: whom it pins, the key's
-  fingerprint, its state and when it was first seen, each in an entry sealed under the Master Key;
+  fingerprint and key-chain head, when it was first seen and whether a join record replaced it, each in an entry
+  sealed under the Master Key;
 - a member's **join record** (the keys they joined with and the owner-signed invite they came through), sealed under
-  the tenant key.
+  the tenant key;
+- what a **verification** confirms — the two key-chain heads and the verifier's signature — sealed under the tenant
+  key.
 
 Each text or icon field (a name, a node's or a medium's metadata, a share's note and label, a member's name and
 picture) seals under a key of its own, derived per write. Inside its ciphertext the server stores the 16-byte random
@@ -85,6 +88,10 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   link's sealed part passes through it only while it is mailed.
 - **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
   tenant member can enumerate these (concession 4 below).
+- **Who verified whom:** per verification, its tenant, the verifying and the verified member and when it was written
+  (its content is sealed, above), served to the tenant's members
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 12).
 - Whether a member **has a profile picture** and how often it changed (`avatar_revision`); the picture itself is a
   constant-size sealed blob. Contract, crypto and backend are built; the web client is not yet.
 - The account's **Ed25519 auth public key**, which verifies a signed login challenge. It is not a credential, and

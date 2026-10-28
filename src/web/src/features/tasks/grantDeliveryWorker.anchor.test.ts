@@ -1,9 +1,11 @@
 import 'fake-indexeddb/auto'
-// The grant delivery's anchor gate end to end (ADR 0028 Decision 2, ADR 0111 decision 9): the REAL pin store and the REAL
-// chain walk decide whether the worker wraps to the key a claim serves; only the server is faked — the task endpoints,
-// the pin store's endpoint and the key-chain read. A target who secured their account is delivered to their new key
-// (the chain reaches it from the pinned head); a "new key" behind a step the retired Secret Key did not sign is declined
-// `identity_unanchored` and never wrapped to.
+// The grant delivery's anchor gate end to end (ADR 0028 Decision 2, ADR 0111 decisions 9 and 15): the REAL pin store and
+// the REAL chain walk decide whether the worker wraps to the key a claim serves; only the server is faked — the task
+// endpoints, the pin store's endpoint and the key-chain read — and the target's standing in the scope's tenant, which is
+// tenantTrust.test.ts's (here: joined with the keys their chain was born with, or not anchored at all). A target who
+// secured their account is delivered to their new key (the chain reaches it from the join record's step and the pinned
+// head); a "new key" behind a step the retired Secret Key did not sign is declined `identity_unanchored` and never
+// wrapped to, and so is a target the tenant does not anchor.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { fakePinServer, pinOf, pinsOn, sealPinStore } from '../../test/pinStore'
@@ -13,11 +15,13 @@ import { fakeApi } from '../../test/apiMock'
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn(), accountIdentityPinsApi: vi.fn(), keyChainApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn(), masterKey: vi.fn() }))
+vi.mock('../account/tenantTrust', () => ({ tenantViewOfScope: vi.fn() }))
 
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
 import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
-import { forgetVerifiedPins } from '../account/identityPins'
+import { forgetVerifiedPins, type Standing } from '../account/identityPins'
+import { tenantViewOfScope } from '../account/tenantTrust'
 import { identityPrivate, masterKey } from '../../app/vault'
 import type { ClaimedJob, TasksApi } from '../../api/generated/tasks'
 import * as v1 from '@veyq/crypto/v1'
@@ -31,6 +35,8 @@ const OLD = chainKeys()
 const NEW = chainKeys()
 
 let chains: ReturnType<typeof fakeKeyChains>
+/** TARGET's standing in the scope's tenant, as `tenantTrust.ts` would read it. */
+let standingOfTarget: Standing
 
 /** One claimable delivery to TARGET, served at `chain`'s newest key and head; then drained. */
 function deliveryTo(chain: BuiltChain) {
@@ -54,6 +60,13 @@ beforeEach(() => {
   forgetVerifiedPins()
   globalThis.indexedDB = new IDBFactory()
   chains = fakeKeyChains()
+  // TARGET joined the scope's tenant with the keys their chain was born with
+  standingOfTarget = {
+    kind: 'joined', identityPublicKey: v1.serializeIdentityPublic(OLD.identity.pub), secretKeyProofPublicKey: OLD.proof.publicKey,
+  }
+  vi.mocked(tenantViewOfScope).mockResolvedValue({
+    tenantId: 'tenant-of-scope', members: new Map(), available: true, standing: async () => standingOfTarget,
+  })
 })
 
 describe('the grant delivery wraps only to a key the chain reaches from the pinned head', () => {
@@ -61,7 +74,7 @@ describe('the grant delivery wraps only to a key the chain reaches from the pinn
     const h0 = chains.born(TARGET, OLD)
     const h1 = step(h0, NEW)
     chains.serve(h1)
-    const pins = fakePinServer(sealPinStore(MK, { [TARGET]: pinOf(bundleB64(OLD), 'verified', 1, headOf(h0)) }, 1))
+    const pins = fakePinServer(sealPinStore(MK, { [TARGET]: pinOf(bundleB64(OLD), 1, headOf(h0)) }, 1))
     const { completeTask, declineTask } = deliveryTo(h1)
     const K = v1.randomBytes(32)
 
@@ -70,7 +83,7 @@ describe('the grant delivery wraps only to a key the chain reaches from the pinn
     const sealed = completeTask.mock.calls[0][0].completeRequest!.sealedResult!
     const opened = v1.openAs({ purpose: 'scope-grant', scopeId: S1, epoch: 3 }, v1.hybridSecret(NEW.identity.priv), fromB64std(sealed))
     expect(Array.from(opened)).toEqual(Array.from(K))
-    expect(pinsOn(MK, pins.state)[TARGET]).toMatchObject({ head: headOf(h1), state: 'pinned' }) // verified dropped
+    expect(pinsOn(MK, pins.state)[TARGET]).toMatchObject({ head: headOf(h1), index: 1 })
   })
 
   it('anomaly: a step the retired Secret Key did not sign is declined identity_unanchored — nothing is wrapped', async () => {
@@ -78,12 +91,25 @@ describe('the grant delivery wraps only to a key the chain reaches from the pinn
     const thief = chainKeys()
     const forged = step(h0, thief, { proofPrivateKey: chainKeys().proof.privateKey })
     chains.serve(forged)
-    const pins = fakePinServer(sealPinStore(MK, { [TARGET]: pinOf(bundleB64(OLD), 'pinned', 1, headOf(h0)) }, 1))
+    const pins = fakePinServer(sealPinStore(MK, { [TARGET]: pinOf(bundleB64(OLD), 1, headOf(h0)) }, 1))
     const { completeTask, declineTask } = deliveryTo(forged)
 
     expect(await run(v1.randomBytes(32))).toBe(0)
     expect(completeTask).not.toHaveBeenCalled()
     expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe('identity_unanchored')
     expect(pinsOn(MK, pins.state)[TARGET].head).toBe(headOf(h0))
+  })
+
+  it('a target the tenant does not anchor (a non-owner without a join record) is declined — no chain read, nothing wrapped', async () => {
+    standingOfTarget = { kind: 'unanchored' }
+    const h0 = chains.born(TARGET, OLD)
+    const pins = fakePinServer(sealPinStore(MK, { [TARGET]: pinOf(bundleB64(OLD), 1, headOf(h0)) }, 1))
+    const { completeTask, declineTask } = deliveryTo(h0)
+
+    expect(await run(v1.randomBytes(32))).toBe(0)
+    expect(completeTask).not.toHaveBeenCalled()
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe('identity_unanchored')
+    expect(chains.getKeyChain).not.toHaveBeenCalled()
+    expect(pins.writeIdentityPins).not.toHaveBeenCalled()
   })
 })

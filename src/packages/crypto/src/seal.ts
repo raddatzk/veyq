@@ -145,6 +145,11 @@ export const FIELD_PURPOSES = {
   // A member's join record (ADR 0111 decisions 3 and 12, ./invite.ts): written once at the invite's accept, beside the
   // name and the picture. Not `join-record`, which is the statement both of its signatures cover.
   'member-join-record': [['scopeId', 'id'], ['userId', 'id']],
+  // A member's verification of another member (ADR 0111 decision 12, ./verification.ts): one row per (tenant, verifier,
+  // subject), written only by the verifier, beside the name and the join record. It binds the tenant epoch it is sealed
+  // under, so a reader takes that epoch's key from its chain and a row served at another epoch does not open; and the
+  // subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
+  'member-verification': [['scopeId', 'id'], ['userId', 'id'], ['subjectUserId', 'id'], ['epoch', 'uint']],
   // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
   // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
   // body. It keeps the object binding though K_rev is unique to the revision (ADR 0072 Decision 2), so a body served as
@@ -372,6 +377,10 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     of the proof public key it retires, and the new bundle and proof public key in full. Signed twice over the same
  *     bytes, by the retired identity AND by the retired proof key, so a thief holding a device's identity alone cannot
  *     forge one.
+ *   - `verification` (ADR 0111 decisions 12 and 13): what a verifier's identity signs after a safety-number compare —
+ *     in this tenant, this verifier at this head of their own chain confirmed this subject at this head of theirs. It
+ *     counts only while it names the subject's current head and is signed by the verifier's current key; a rotation
+ *     re-signs the outgoing key's verifications with the new one (./verification.ts).
  */
 export const STATEMENT_PURPOSES = {
   grant: [
@@ -402,6 +411,13 @@ export const STATEMENT_PURPOSES = {
     ['signerIdentityDigest', 'digest'],
   ],
   'key-chain-genesis': [['userId', 'id'], ['identityPublicKey', 'bytes'], ['secretKeyProofPublicKey', 'bytes']],
+  verification: [
+    ['tenantId', 'id'],
+    ['verifierUserId', 'id'],
+    ['subjectUserId', 'id'],
+    ['subjectHead', 'digest'],
+    ['verifierHead', 'digest'],
+  ],
   'key-chain-step': [
     ['userId', 'id'],
     ['index', 'uint'],

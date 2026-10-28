@@ -1,31 +1,60 @@
 useCase: uc.spaces.enforce-verified-identities
 feature: spaces
 title: Actively verify a member's identity (safety number)
-# Built by cr-identity-verification (ADR 0028 Decision 3, owner decisions 2026-10-14). Strict mode, which this file
-# used to carry as a planned criterion beside the ceremony, moved to uc.spaces.require-verified-identities: the
-# coverage model has no partially built file (ADR 0040), so the split is what lets the ceremony's criteria carry refs.
-# Every web ref below was bitten (the CR's retrospective names each injection). The real-browser pass of the ceremony
-# is recorded in the use-case, not here: a browser run is no CI run.
+# ADR 0028 Decision 3 in the form ADR 0111 decisions 12-15 gave it: the compare carries the chain code, and a match is a
+# signed verification in the tenant every member reads, no longer a private mark in the pin store. Strict mode, which
+# this file once carried as a planned criterion, lives on uc.spaces.require-verified-identities: the coverage model has
+# no partially built file (ADR 0040). A real-browser pass would be recorded in the use-case, not here: a browser run is
+# no CI run.
 acceptanceCriteria:
   - id: show-my-safety-number
-    text: A member's own profile shows their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key) and a QR of it whose payload is a versioned veyq marker plus the 32-byte fingerprint digest and nothing else - small enough to stay far below the jsqr bound.
+    text: A member's own profile shows their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key), their chain code (10 digits of their key-chain head) and a QR of both whose payload is the veyqid:2 marker, the 32-byte fingerprint digest and the 32-byte head, and nothing else - far below the jsqr bound. The chain code is shown only when the chain the server serves ends at the vault's identity; otherwise the page says so and shows neither.
     coverage:
       web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/core/people/PersonProfile.test.ts, src/features/account/safetyCode.test.ts] }
   - id: safety-number-verify
-    text: On another member's profile the caller compares the safety number of the key they would trust (the pin's, else the directory's) - by scanning the other's QR (the scanned digest against that key's digest) or reading the digits aloud. A match marks the member verified; a code of a different key or "they don't match" warns and writes nothing; a QR that is no safety code is said as such and never accepted.
+    text: On another member's profile the caller compares the safety number and chain code of the key and head this device anchors in the tenant - by scanning the other's QR (digest AND head against the anchored ones) or reading the digits aloud. A match writes the caller's verification; a code of a different key, of the same key at another head (a withheld step), or "they don't match" warns and writes nothing; a QR that is no safety code is said as such, and a veyqid:1 code is said to come from an app to update; neither is accepted.
     coverage:
-      web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/features/account/safetyCode.test.ts, src/features/account/identityPins.test.ts] }
-  - id: verify-pins-an-unpinned-member
-    text: Verifying a member with no pin pins the compared key already verified in one sealed write (the store's merge on a 409); a pin of another key that appeared meanwhile throws IdentityMovedError, writes nothing, and the profile says so and shows the key the store now holds. Nothing else pins more than before - a profile view pins nothing.
+      web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/features/account/safetyCode.test.ts] }
+  - id: a-verification-is-the-verifiers-own-signed-row
+    # ADR 0111 decision 12. The server half: the row is keyed by the caller, never by the body.
+    text: A match signs, with the caller's identity, the statement that in this tenant the caller at their head confirmed the subject at the subject's head, seals it under the tenant's current epoch bound to tenant, verifier, subject and epoch, and writes it into the caller's own row - the verifier is always the authenticated caller, a second write replaces the first, a verification of oneself, of a non-member or at an epoch the tenant has not reached is refused, and an outsider reads and writes nothing (404). If the directory moved the key or head under the compare (IdentityMovedError) or the tenant no longer anchors it (IdentityUnanchoredError), nothing is signed.
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
-  - id: verified-shows-in-member-lists
-    text: A verified member reads "Verified" on their profile and in the tenant's and groups' member lists, beside the anomaly's "Can't confirm this key"; a pinned or unpinned member carries no trust badge.
+      web: { unit: [src/features/account/tenantTrust.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+      backend:
+        integration:
+          - VerificationSliceTest.theVerifierIsAlwaysTheCallerAndASecondPutReplacesTheFirst
+          - VerificationSliceTest.aVerificationOfOneselfIsRefused
+          - VerificationSliceTest.aSubjectWhoIsNoMemberOfTheTenantIs404MemberNotFound
+          - VerificationSliceTest.anEpochBeyondTheTenantScopesCurrentOneIs400
+          - VerificationSliceTest.aMissingEpochIs400AndNotEpochZero
+          - VerificationSliceTest.anOutsiderGetsTheMembershipNotFoundOnReadAndOnWrite
+  - id: verified-by-counts-for-every-member
+    # ADR 0111 decisions 12 and 15. Each negative in tenantTrust.test.ts has its control on the same row.
+    text: Every member of the tenant reads its verifications and counts one only while it opens at its slot, names the subject's current head and verifies under the verifier's current key at the verifier's current head, the verifier anchored in the tenant; a row moved to another subject's slot neither opens nor counts. The profile reads "Verified" and "Verified by {names}." (the caller as "you") or "Not verified", with "New" while this account first saw them under 14 days ago; the tenant's and groups' member lists badge "Verified", "New" and the anomaly's "Can't confirm this key", and "not verified" shows nothing there.
     coverage:
-      web: { unit: [src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/GroupMembersPanel.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
-  - id: verified-contact-key-change-is-louder
-    text: A verified contact whose key chain moves to a new key the chain reaches from the pinned head is pinned at the new head as pinned - verified drops, and returns only through a new compare on the profile, which then shows the new key's number and "New identity, signed by their previous key". A key the chain does not reach reads as an anomaly ("Can't confirm this key") in the member lists and on the profile, verified or not, with no accept.
+      web: { unit: [src/features/account/tenantTrust.test.ts, src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/GroupMembersPanel.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+      backend:
+        integration:
+          - VerificationSliceTest.aMembersVerificationIsReadByEveryMemberOfTheTenantTheWriterIncluded
+          - VerificationSliceTest.theFiltersNarrowAndThePagesTileTheSetInVerifierThenSubjectOrder
+  - id: a-rotation-drops-verified-and-a-retired-key-adds-nothing
+    # ADR 0111 decision 13 (re-signing). The thief case: a statement the verifier's RETIRED key signs after their
+    # rotation does not count; re-signed by the new key it does (tenantTrust.test.ts).
+    text: When the subject's key chain moves to a new head, every verification of the old head stops counting - "Verified" drops and returns only through a new compare, while the profile shows "New identity, signed by their previous key". When the verifier secures their account, their verifications are re-signed by the new key; a statement signed by a retired key counts nowhere. A key the chain does not reach reads as an anomaly in the member lists and on the profile, verified or not, with no compare and no accept.
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/MemberTrustBadge.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+      web: { unit: [src/features/account/tenantTrust.test.ts, src/features/account/rotation/rotateKeys.test.ts, src/core/people/PersonSafetyNumber.test.ts, src/features/spaces/MemberTrustBadge.test.ts] }
+  - id: verifications-leave-with-the-member
+    text: A member's removal from the tenant deletes every verification row there naming them, as verifier or as subject; an erased account and a deleted tenant leave no row.
+    coverage:
+      backend:
+        integration:
+          - VerificationSliceTest.aMemberRemovedFromTheTenantLeavesNoRowThereAsVerifierOrSubject
+          - VerificationSliceTest.anErasedAccountLeavesNoRowAsVerifierNorAsSubject
+          - VerificationSliceTest.aDeletedTenantLeavesNoRow
 gaps:
-  backend: "No backend surface: verification is client-only and its one write is the pin store's existing sealed PUT, whose wire shape uc.spaces.verify-identity covers (IdentityPinsSliceTest)."
+  crypto: >-
+    `src/verification.conformance.test.ts` pins the verification statement, its signature and record encoding
+    (`#verification`), its field seal (`field_seal['member-verification']`) and the chain code
+    (`fingerprint.chain_code`), each vector from an independent Python implementation. `packages/crypto`'s job has never
+    executed, so ADR 0040 admits none of its suites; on the first run whose log shows them executed, the suite goes under
+    `a-verification-is-the-verifiers-own-signed-row` and `show-my-safety-number`.

@@ -83,6 +83,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_application_erasure.reminder_mailed_at" to "ApplicationErasureMail's claim: the reminder is owed while it is null",
             "veyq_tenant_invite.expires_at" to "TenantStore/TenantAcceptHandler refuse and expire; served to the admin",
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",
+            "veyq_verification.created_at" to "served: MemberVerification.createdAt on listVerifications (ADR 0111 decision 12) - " +
+                "shown, never what decides whether a verification counts",
             "veyq_scope.deleted_at" to "ScopePurge's grace cutoff; served as deletedAt/purgeAfter of a pending group",
             "veyq_membership.created_at" to "ScopesStore.oldestOtherMember: the orphan rule's successor (ADR 0014 §6)",
             "veyq_tenant_terms_acceptance.accepted_at" to "audit evidence of acceptance, one row per revision (when " +

@@ -613,11 +613,11 @@ export const grantStatement = (g: GrantStatementInput): Extract<StatementContext
   wrappedGrantDigest: sha256(g.wrappedGrant),
 })
 
-/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record, and a
- *  key-chain step (signed by the identity it retires). */
+/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record, a
+ *  key-chain step (signed by the identity it retires) and a verification of another member (./verification.ts). */
 export type IdentityStatement = Extract<
   StatementContext,
-  { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' | 'key-chain-step' }
+  { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' | 'key-chain-step' | 'verification' }
 >
 
 /** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`) — an account's or an invite
@@ -961,6 +961,20 @@ export function fingerprintDigits(h: Uint8Array): string {
     groups.push(String(v % 100000).padStart(5, '0'))
   }
   return groups.join(' ')
+}
+
+/**
+ * The **chain code** (ADR 0111 decision 14): ten digits, two groups of five, rendered from a key-chain head as
+ * {@link fingerprintDigits} renders the safety number — each group a 40-bit big-endian chunk of the head mod 100000.
+ * Shown beside the safety number and compared the same way: the safety number says which key, the chain code which
+ * point of the chain, so two people who see the same key at different heads — one of them missing a step the server
+ * withheld — see two codes. The head is already a domain-separated SHA-256 (`keyChainHead`), so no second hash. About
+ * 33 bits: a withheld step is not ground for, it is a step the withholder cannot sign. Conformance:
+ * contracts/crypto/vectors/v1.json#fingerprint.chain_code.
+ */
+export function chainCodeDigits(head: Uint8Array): string {
+  if (head.length !== 32) throw new Error('chain code: not a 32-byte head')
+  return fingerprintDigits(head).split(' ').slice(0, 2).join(' ')
 }
 
 /**

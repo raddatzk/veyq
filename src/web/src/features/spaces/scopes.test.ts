@@ -27,6 +27,9 @@ vi.mock('../account/identityPins', () => ({
     }
   },
 }))
+// Who is anchored in a tenant (the join records) is tenantTrust.test.ts's; here a tenant read is a token per tenant id,
+// which the anchor checks above must receive — so a wrap or a grant judged outside its tenant is red.
+vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenantView: vi.fn(), tenantViewOfScope: vi.fn() }))
 
 import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares } from './scopes'
 import { ScopeKind, type MyTenant, type OpenInvite, type ScopeEpochLink, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
@@ -34,6 +37,7 @@ import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, accountApi } from '../../api/client'
 import { createFolder } from '../../core/node/tree'
 import { anchorChainKey, anchorIdentity } from '../account/identityPins'
+import { cachedTenantView, loadTenantView, tenantViewOfScope, type TenantView } from '../account/tenantTrust'
 import { identityPrivate, masterKey } from '../../app/vault'
 import { epochLinkContext } from './epochs'
 import { deriveGroupNameKey, sealGroupName, openGroupNameWith } from './inviteName'
@@ -108,7 +112,17 @@ function mockScopes(
 // (ADR 0028 Decision 7), of which the per-scope epoch floor is one (ADR 0024 Decision 6).
 const MK = v1.randomBytes(32)
 
+/** The token a read of `tenantId` stands as — one per tenant id, so `toHaveBeenCalledWith` tells the tenants apart. */
+const views = new Map<string, TenantView>()
+const tenantView = (tenantId: string): TenantView => {
+  if (!views.has(tenantId)) views.set(tenantId, { tenantId, members: new Map(), available: true, standing: async () => ({ kind: 'root' }) })
+  return views.get(tenantId)!
+}
+
 beforeEach(() => {
+  vi.mocked(loadTenantView).mockImplementation(async (tenantId) => tenantView(tenantId))
+  vi.mocked(cachedTenantView).mockImplementation(async (tenantId) => tenantView(tenantId))
+  vi.mocked(tenantViewOfScope).mockImplementation(async () => tenantView('t'))
   vi.clearAllMocks()
   vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
@@ -350,6 +364,25 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
     pending: false,
   })
 
+  it('reads the tenant for a GROUP\'s rotation, never for a PERSONAL one — there is no other member to judge', async () => {
+    const e0 = v1.randomBytes(32)
+    const me: ScopeMember = { userId: ME, username: 'me', avatarRevision: 0, role: 'OWNER', identityPublicKey: ID_PUB, keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=', pending: false }
+    fakeApi(scopesApi, {
+      listMyScopes: listing([signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: ownGrant(P, e0, 0), grantedEpoch: 0 })]),
+      rotateScope: vi.fn<ScopesApi['rotateScope']>().mockResolvedValue({ epoch: 1 }),
+    })
+    expect(await commitRotation(P, [me])).toBe(1)
+    expect(loadTenantView).not.toHaveBeenCalled()
+
+    // control: the same for a group reads its tenant
+    fakeApi(scopesApi, {
+      listMyScopes: listing([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), grantedEpoch: 0 })]),
+      rotateScope: vi.fn<ScopesApi['rotateScope']>().mockResolvedValue({ epoch: 1 }),
+    })
+    expect(await commitRotation(G1, [me])).toBe(1)
+    expect(loadTenantView).toHaveBeenCalledWith('t', undefined)
+  })
+
   it('mints a fresh epoch, chain-links the old one under it, and re-grants it to every remaining member', async () => {
     // The caller holds the group at epoch 0 (E_0). commitRotation opens that grant to derive E_0.
     const e0 = v1.randomBytes(32)
@@ -397,7 +430,7 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
     // Every member anchored is granted; nobody is pending.
     expect(payload.pendingUserIds).toEqual([])
     // Each member was judged against the key AND the head the directory served.
-    expect(anchorIdentity).toHaveBeenCalledWith(A, remaining[0])
+    expect(anchorIdentity).toHaveBeenCalledWith(A, remaining[0], { tenant: tenantView('t') })
     // A group has no invites: the rotation neither reads nor carries any (ADR 0111 decision 4).
     expect(payload.inviteGrants).toEqual([])
     expect(payload.pendingInviteIds).toEqual([])
@@ -498,7 +531,9 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
     expect(payload.pendingInviteIds).toEqual([I1, I2])
     expect(payload.inviteGrants!.map((g) => g.inviteId)).toEqual([I3])
     // The signer was judged against its served key and head.
-    expect(anchorIdentity).toHaveBeenCalledWith(ME, { identityPublicKey: ID_PUB, keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=' })
+    expect(anchorIdentity).toHaveBeenCalledWith(
+      ME, { identityPublicKey: ID_PUB, keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=' }, { tenant: tenantView(T1) },
+    )
   })
 
   /**
@@ -911,7 +946,16 @@ describe('a grant opens only if its granter\'s signature verifies (ADR 0028 Deci
     serve([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })])
     vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'anomaly', retired: false })
     expect(await openScopeById(G1)).toBeNull()
-    expect(anchorChainKey).toHaveBeenCalledWith(FOREIGNER, pubOf(foreigner))
+    // a GROUP's grant is judged in the group's tenant
+    expect(anchorChainKey).toHaveBeenCalledWith(FOREIGNER, pubOf(foreigner), { tenant: tenantView('t') })
+  })
+
+  it('the TENANT scope\'s own grant from another member is judged by the pin alone — its standings need the key it carries', async () => {
+    const key = v1.randomBytes(32)
+    serve([signed({ id: T, kind: 'TENANT', tenantId: T, wrappedGrant: ownGrant(T, key, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })])
+    vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
+    expect(Array.from((await openScope(ScopeKind.Tenant))!.key)).toEqual(Array.from(key))
+    expect(anchorChainKey).toHaveBeenCalledWith(FOREIGNER, pubOf(foreigner), { tenant: undefined })
   })
 
   it.each(['match', 'advanced'] as const)('control: a shared grant whose granter key is anchored (%s) opens', async (anchor) => {
@@ -981,7 +1025,7 @@ describe('a grant verifies under the key its granter signed it with, not the gra
     serveRGrant(key, pubOf(rOld))
     vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
     expect(Array.from((await openScopeById(G1))!.key)).toEqual(Array.from(key))
-    expect(anchorChainKey).toHaveBeenCalledWith(R, pubOf(rOld))
+    expect(anchorChainKey).toHaveBeenCalledWith(R, pubOf(rOld), { tenant: tenantView('t') })
   })
 
   it('and the owner holding it can therefore complete the covering rotation', async () => {

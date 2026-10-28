@@ -239,8 +239,8 @@
         "context_bytes": "0000000c6964656e746974792d70696e0000002017918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7",
         "kek": "7070707070707070707070707070707070707070707070707070707070707070",
         "nonce": "1a1b1c1d1e1f202122232425",
-        "plaintext": "7b2275223a2263306666656530302d303030302d343030302d383030302d303030303030303030313031222c2266223a2232654d45642f716c7a32674662634e4d2f734143355069417a46495247574e4959586a37625057673239413d222c2268223a2242756b6c647755416d666b3253473866614c646a6f4359316c6575503644742b575639744c6951665a7a453d222c2273223a227665726966696564222c2274223a313736303030303030303030307d20202020202020202020202020",
-        "blob": "021a1b1c1d1e1f202122232425baafc0700eb580e1a3a1b0c4a12edc10bf337cbb86ecc9ed0f12ad04c043ce5e5d54a8071bd053412856837d73b94e78b88f4fedaa6a888e561f51d6c5306cd775eab3251d4faebaf200a24fa09bd20e278ff2dee8b2da485f71a959216e68df1750e8eef5b857a2643c6af5419f3c389c6d8ca316f5f1d21dbabbf07a5653eb199feaab57435812f3bbca616b6cb40a8326a65960ca0909ead132c2a02284db79eda7513705ba68f420baf67ad8d31c718426f6698d89b89448f136bd95e323ffc4735f9b8f7f024b9abf2c2cb50cfb"
+        "plaintext": "7b2275223a2263306666656530302d303030302d343030302d383030302d303030303030303030313031222c2266223a2232654d45642f716c7a32674662634e4d2f734143355069417a46495247574e4959586a37625057673239413d222c2268223a2242756b6c647755416d666b3253473866614c646a6f4359316c6575503644742b575639744c6951665a7a453d222c2269223a322c2274223a313736303030303030303030302c2272223a317d20202020202020202020202020202020",
+        "blob": "021a1b1c1d1e1f202122232425baafc0700eb580e1a3a1b0c4a12edc10bf337cbb86ecc9ed0f12ad04c043ce5e5d54a8071bd053412856837d73b94e78b88f4fedaa6a888e561f51d6c5306cd775eab3251d4faebaf200a24fa09bd20e278ff2dee8b2da485f71a959216e68df1750e8eef5b857a2643c6af5419f3c389c6d8ca316f5f1d21dbabbf07a5653eb199feaab57435812f3bbca616b6cb40a8326a64360ca1953add7799ef870d6c965ffe3433d04bd6ef43ca8b468d2d25161947bf6698d89b89448f136bd95e3239211a29071be88a673aa4f9651efb0d5"
       },
       "device-register": {
         "context": {
@@ -683,6 +683,22 @@
       "nonce": "0a0b0c0d0e0f101112131415",
       "plaintext": "6a6f696e2d7265636f72642d6279746573",
       "envelope": "03a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10a0b0c0d0e0f1011121314150b96ae9502a44f5bda8ebd235891239ddcd12cc219514f14e7c7ab21445858eecc"
+    },
+    "member-verification": {
+      "context": {
+        "scopeId": "c0ffee00-0000-4000-8000-0000000000f1",
+        "userId": "c0ffee00-0000-4000-8000-0000000000f2",
+        "subjectUserId": "b0b00000-0000-4000-8000-0000000000c1",
+        "epoch": 3
+      },
+      "context_bytes": "000000136d656d6265722d766572696669636174696f6e0000002463306666656530302d303030302d343030302d383030302d3030303030303030303066310000002463306666656530302d303030302d343030302d383030302d3030303030303030303066320000002462306230303030302d303030302d343030302d383030302d303030303030303030306331000000080000000000000003",
+      "parent_key": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "salt": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "info": "766579712f76312f6669656c642f6d656d6265722d766572696669636174696f6e",
+      "field_key": "a27eb05b862f223833efe05a25706b4907beed19d1fdc14a71e98d4d94abb138",
+      "nonce": "1c1d1e1f2021222324252627",
+      "plaintext": "0100000020c9c49ba9c50d99c0dd3393bb23048bc70e2d7855e9051f4ed119928be62032df00000020afcab4470eda9dd1e716a368d298cbdf19ae1f93630fd7afac3447d7f68a34fb00000040f7b2ecd54d1575a1d99a11fb0e18c7bb6b2d66b1251790faef977f98744cfced436c4d988dec756809b3703ade6af11b1e30c223b485c1067c492b735da38a0f",
+      "envelope": "03b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b21c1d1e1f20212223242526270e8813b22f96327f1f88fee3b748d08559704e0fc3aff876c13ec895c7d8a62f2739bba7239ebaae8145d4e45218a74534d503fdca68ef157922c4be2f77194118a83f98ec25173972f450db87d21b5efe9a76e375b8117cf0c8fe0ed40fe0ec5539783cd2fefbedab4c5f9998ed610943ee390ba751d61d42327e94ba105501511ca6667548dc449c7b84c9d3fe0e6851776fc88002bf2301902b98b2"
     }
   },
   "group_name_key": {
@@ -979,11 +995,25 @@
     "encoded": "00000003000080000000000100000020a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
   },
   "fingerprint": {
-    "note": "Identity safety number: sha256(\"veyq/v1/fingerprint\" || lp(kem) || lp(sign)) -> 6 groups of 5 decimal digits, each a 40-bit big-endian hash chunk mod 100000, space-joined. Detects active-operator key-substitution when two users compare out-of-band. Input is fixed synthetic bytes (the fingerprint is a pure byte-hash; key validity is irrelevant). hash is that SHA-256 digest itself (fingerprintHash): the safety-number QR carries it and an identity-pin entry pins it (ADR 0104 decision 3), so the digits render from a stored hash alone (fingerprintDigits).",
+    "note": "Identity safety number: sha256(\"veyq/v1/fingerprint\" || lp(kem) || lp(sign)) -> 6 groups of 5 decimal digits, each a 40-bit big-endian hash chunk mod 100000, space-joined. Detects active-operator key-substitution when two users compare out-of-band. Input is fixed synthetic bytes (the fingerprint is a pure byte-hash; key validity is irrelevant). hash is that SHA-256 digest itself (fingerprintHash): the safety-number QR carries it and an identity-pin entry pins it (ADR 0104 decision 3), so the digits render from a stored hash alone (fingerprintDigits). chain_code (ADR 0111 decision 14): the ten digits shown beside the safety number, rendered from a key-chain head (#key_chain's heads) as the first two groups of the same rendering - each a 40-bit big-endian chunk of the head mod 100000. The safety-number QR (veyqid:2) carries the fingerprint hash and the head.",
     "kem": "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
     "sign": "3333333333333333333333333333333333333333333333333333333333333333",
     "hash": "d9e30477faa5cf68056dc34cfec002e4f880cc52111963486178fb6cf5a0dbd0",
-    "digits": "24122 04685 86434 33970 81025 97504"
+    "digits": "24122 04685 86434 33970 81025 97504",
+    "chain_code": [
+      {
+        "head": "afcab4470eda9dd1e716a368d298cbdf19ae1f93630fd7afac3447d7f68a34fb",
+        "digits": "89102 49622"
+      },
+      {
+        "head": "c9c49ba9c50d99c0dd3393bb23048bc70e2d7855e9051f4ed119928be62032df",
+        "digits": "62373 28435"
+      },
+      {
+        "head": "c87aeb5a5b1457d39d22b5fae06207bcef96fd29403272a3ef6e9a3eae727fa8",
+        "digits": "03643 32034"
+      }
+    ]
   },
   "secret_key_proof": {
     "note": "ADR 0060 Decision 2: the Secret-Key proof key and the four statements it signs (rotation, change-password, recovery, change-email). seed = HKDF-SHA256(ikm = secret_key, salt = empty, info = \"veyq/v1/secret-key-proof\"), Ed25519 keypair from the seed. Statement = lp(utf8(domain)) || lp(field)..., each field the DECODED bytes of its wire value. wrap digest = sha256(lp(wrappedKey) || lp(kdfParams)). Signatures are Ed25519 (deterministic), so they are pinned too. Asserted by packages/crypto AND by the backend (SecretKeyProofTest). The rotation is the one statement two proof keys sign: the current one (signature) and the new one it registers (possession_signature).",
@@ -1234,7 +1264,7 @@
     }
   },
   "identity_pin": {
-    "note": "ADR 0104: the identity-pin store as one sealed entry per pin under a sealed head. k_pin_index = HKDF-SHA256(ikm = master_key, salt = empty, info = \"veyq/v1/identity-pin-index\", 32); pinId = HMAC-SHA256(k_pin_index, utf8(userId)), the 32 bytes an entry is stored and sealed at (seal.sym.identity-pin, [pinId] as a digest field) and carried on the wire as 64 lowercase hex characters. An entry's plaintext is the compact UTF-8 JSON {u: userId, f: fingerprint, h: head, s: state, t: firstSeenAt} in that key order (single-letter keys, so an entry with its head stays inside entry_bytes, ADR 0028 Decision 2), f being b64std of the contact's 32-byte fingerprint hash (#fingerprint's hash) and h b64std of the contact's key-chain head (#key_chain; synthetic here: sha256('veyq/v1/key-chain/head' || utf8(userId))), padded with spaces (0x20) to exactly entry_bytes, so every entry seals to one length. The set digest = SHA-256(utf8(\"veyq/v1/identity-pin-set\") || lp(pinId) || lp(SHA-256(entry)) ...) over the entries in ascending pinId byte order, entry being the sealed entry's decoded bytes; never an incremental digest (ADR 0104 decision 4). The head (seal.sym.identity-pins, bound to its revision) carries compact JSON {version: 2, count, digest: b64std(set digest)}; seal.sym.identity-pins' plaintext is set.empty's head, and seal.sym.identity-pin is pin_ids[0]'s entry, the first of set.two (listed opposite to pinId order, so the canonical sort is load-bearing). Generated by an independent Python implementation (hashlib/hmac + cryptography HKDF and AES-GCM). Asserted by packages/crypto only: the server holds no master key.",
+    "note": "ADR 0104: the identity-pin store as one sealed entry per pin under a sealed head. k_pin_index = HKDF-SHA256(ikm = master_key, salt = empty, info = \"veyq/v1/identity-pin-index\", 32); pinId = HMAC-SHA256(k_pin_index, utf8(userId)), the 32 bytes an entry is stored and sealed at (seal.sym.identity-pin, [pinId] as a digest field) and carried on the wire as 64 lowercase hex characters. An entry's plaintext is the compact UTF-8 JSON {u: userId, f: fingerprint, h: head, i: index, t: firstSeenAt, r: replaced} in that key order (single-letter keys, so an entry with its head stays inside entry_bytes, ADR 0028 Decision 2), f being b64std of the contact's 32-byte fingerprint hash (#fingerprint's hash) and i the index of that head's step in its chain (-1 for a head pinned unread, at an invite's accept), r 1 when a join record replaced a pin that was not on its chain (ADR 0111 decision 15) and else 0, h b64std of the contact's key-chain head (#key_chain; synthetic here: sha256('veyq/v1/key-chain/head' || utf8(userId))), padded with spaces (0x20) to exactly entry_bytes, so every entry seals to one length. The set digest = SHA-256(utf8(\"veyq/v1/identity-pin-set\") || lp(pinId) || lp(SHA-256(entry)) ...) over the entries in ascending pinId byte order, entry being the sealed entry's decoded bytes; never an incremental digest (ADR 0104 decision 4). The head (seal.sym.identity-pins, bound to its revision) carries compact JSON {version: 2, count, digest: b64std(set digest)}; seal.sym.identity-pins' plaintext is set.empty's head, and seal.sym.identity-pin is pin_ids[0]'s entry, the first of set.two (listed opposite to pinId order, so the canonical sort is load-bearing). Generated by an independent Python implementation (hashlib/hmac + cryptography HKDF and AES-GCM). Asserted by packages/crypto only: the server holds no master key.",
     "master_key": "7070707070707070707070707070707070707070707070707070707070707070",
     "k_pin_index": "b0046a847e0482c60aa7ed6905edf0c59b121b8e4322151def4d661e0d77f80e",
     "pin_ids": [
@@ -1261,10 +1291,10 @@
           },
           {
             "pinId": "17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7",
-            "entry": "021a1b1c1d1e1f202122232425baafc0700eb580e1a3a1b0c4a12edc10bf337cbb86ecc9ed0f12ad04c043ce5e5d54a8071bd053412856837d73b94e78b88f4fedaa6a888e561f51d6c5306cd775eab3251d4faebaf200a24fa09bd20e278ff2dee8b2da485f71a959216e68df1750e8eef5b857a2643c6af5419f3c389c6d8ca316f5f1d21dbabbf07a5653eb199feaab57435812f3bbca616b6cb40a8326a65960ca0909ead132c2a02284db79eda7513705ba68f420baf67ad8d31c718426f6698d89b89448f136bd95e323ffc4735f9b8f7f024b9abf2c2cb50cfb"
+            "entry": "021a1b1c1d1e1f202122232425baafc0700eb580e1a3a1b0c4a12edc10bf337cbb86ecc9ed0f12ad04c043ce5e5d54a8071bd053412856837d73b94e78b88f4fedaa6a888e561f51d6c5306cd775eab3251d4faebaf200a24fa09bd20e278ff2dee8b2da485f71a959216e68df1750e8eef5b857a2643c6af5419f3c389c6d8ca316f5f1d21dbabbf07a5653eb199feaab57435812f3bbca616b6cb40a8326a64360ca1953add7799ef870d6c965ffe3433d04bd6ef43ca8b468d2d25161947bf6698d89b89448f136bd95e3239211a29071be88a673aa4f9651efb0d5"
           }
         ],
-        "digest": "708e917a985f112270de6927fb101ba038b76d3dd0f28e2e6700c78bbe2eabbd"
+        "digest": "175c10f081562e4ef73518fe42b7dabbc1531950ff13f6a6ab2811af4e6d5b69"
       }
     }
   },
@@ -1415,6 +1445,21 @@
         "reason": "proof_signature"
       }
     }
+  },
+  "verification": {
+    "note": "ADR 0111 decisions 12-13: a member's verification of another member in one tenant. statement = lp(utf8('verification')) || lp(utf8(tenantId)) || lp(utf8(verifierUserId)) || lp(utf8(subjectUserId)) || lp(subjectHead) || lp(verifierHead), each head a 32-byte key-chain head (#key_chain: subject_head is links[1].head of that chain's user, verifier_head synthetic as links[0].head); signature = Ed25519(sign_seed, statement) by the verifier's identity. record = 0x01 || lp(subjectHead) || lp(verifierHead) || lp(signature), fixed sizes 32/32/64 - the plaintext sealed as field_seal['member-verification'] bound to (tenant, verifier, subject, epoch). It counts while subjectHead is the subject's current head and the signature verifies under the verifier's current identity with verifierHead its current head; a rotation re-signs (decision 13). Generated by an independent Python implementation (hashlib + cryptography Ed25519). Asserted by packages/crypto only: the server never opens one.",
+    "context": {
+      "tenantId": "c0ffee00-0000-4000-8000-0000000000f1",
+      "verifierUserId": "c0ffee00-0000-4000-8000-0000000000f2",
+      "subjectUserId": "b0b00000-0000-4000-8000-0000000000c1"
+    },
+    "sign_seed": "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c",
+    "sign_public": "fcbe38632417bb5b875d49a3c02270633917c6093fd01ebb59ff6416e37afe0c",
+    "subject_head": "c9c49ba9c50d99c0dd3393bb23048bc70e2d7855e9051f4ed119928be62032df",
+    "verifier_head": "afcab4470eda9dd1e716a368d298cbdf19ae1f93630fd7afac3447d7f68a34fb",
+    "statement": "0000000c766572696669636174696f6e0000002463306666656530302d303030302d343030302d383030302d3030303030303030303066310000002463306666656530302d303030302d343030302d383030302d3030303030303030303066320000002462306230303030302d303030302d343030302d383030302d30303030303030303030633100000020c9c49ba9c50d99c0dd3393bb23048bc70e2d7855e9051f4ed119928be62032df00000020afcab4470eda9dd1e716a368d298cbdf19ae1f93630fd7afac3447d7f68a34fb",
+    "signature": "f7b2ecd54d1575a1d99a11fb0e18c7bb6b2d66b1251790faef977f98744cfced436c4d988dec756809b3703ade6af11b1e30c223b485c1067c492b735da38a0f",
+    "record": "0100000020c9c49ba9c50d99c0dd3393bb23048bc70e2d7855e9051f4ed119928be62032df00000020afcab4470eda9dd1e716a368d298cbdf19ae1f93630fd7afac3447d7f68a34fb00000040f7b2ecd54d1575a1d99a11fb0e18c7bb6b2d66b1251790faef977f98744cfced436c4d988dec756809b3703ade6af11b1e30c223b485c1067c492b735da38a0f"
   },
   "rotation_stage": {
     "note": "ADR 0111 decision 6: the digest the publish binds its staged self-grants by. digest = sha256(utf8('veyq/v1/rotation-stage') || lp(utf8(scopeId)) || lp(u64be(epoch)) || lp(sha256(wrappedGrant)) ...) over the entries in ascending scopeId byte order (canonical lowercase UUIDs), one per scope; wrappedGrant DECODED. entries are listed opposite to that order, so the canonical sort is load-bearing; empty is the digest of no entry. Generated by an independent Python implementation (hashlib). Asserted by packages/crypto and by the backend, which recomputes it over the staged rows.",

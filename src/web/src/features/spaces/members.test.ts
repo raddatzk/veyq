@@ -9,6 +9,8 @@ vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 // The pin store is identityPins.test.ts's; here its answer for the target is driven directly.
 vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), anchorIdentity: vi.fn() }))
+// Who is anchored in the group's tenant is tenantTrust.test.ts's; here the view is a token the anchor check must receive.
+vi.mock('../account/tenantTrust', () => ({ tenantViewOfScope: vi.fn() }))
 
 import {
   addGroupMember,
@@ -23,6 +25,7 @@ import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/gen
 import { openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
 import { anchorIdentity, IdentityUnanchoredError } from '../account/identityPins'
+import { tenantViewOfScope, type TenantView } from '../account/tenantTrust'
 import { grantContext, grantSignatureVerifies } from './grant'
 import { stubApi, fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
@@ -43,6 +46,8 @@ const U = '9a000000-0000-4000-8000-0000000000b1'
 /** The group's key per epoch, as this test holds it; the data layer gets a fresh copy (it zeroes what it opened). */
 const GROUP_KEYS = new Map([[2, v1.randomBytes(32)], [3, v1.randomBytes(32)]])
 let heldEpoch = 2
+/** The group's tenant as read for the add — what the anchor check is handed (ADR 0111 decision 15). */
+const GROUP_TENANT = { tenantId: 'tenant-of-g', members: new Map(), available: true, standing: vi.fn() } as unknown as TenantView
 const openGroup = () => {
   const key = GROUP_KEYS.get(heldEpoch)!.slice()
   return openedScope({ scopeId: G, kind: ScopeKind.Group, key, epochs: { current: heldEpoch, keys: new Map([[heldEpoch, key]]) } })
@@ -54,6 +59,7 @@ beforeEach(() => {
   vi.mocked(openScopeById).mockImplementation(async () => openGroup())
   vi.mocked(identityPrivate).mockImplementation(() => ({ kemSeed: OWNER.priv.kemSeed.slice(), sign: OWNER.priv.sign.slice() }))
   vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
+  vi.mocked(tenantViewOfScope).mockResolvedValue(GROUP_TENANT)
 })
 
 describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decision 4)', () => {
@@ -77,7 +83,9 @@ describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decis
     expect(grantSignatureVerifies(TARGET.pub.sign, { scopeId: G, kind: 'GROUP', epoch: 2 }, to, body.wrappedGrant, body.grantSignature)).toBe(false)
     // And it names the key it is wrapped to: SHA-256 of the target's bundle.
     expect(body.recipientIdentityDigest).toBe(b64std(v1.sha256Digest(fromB64std(TARGET_PUB))))
-    expect(anchorIdentity).toHaveBeenCalledWith(U, TARGET_SERVED)
+    // judged in the group's own tenant
+    expect(tenantViewOfScope).toHaveBeenCalledWith(G)
+    expect(anchorIdentity).toHaveBeenCalledWith(U, TARGET_SERVED, { tenant: GROUP_TENANT })
   })
 
   it('refuses a target whose key the chain does not reach from the pinned head — nothing is opened or sent', async () => {

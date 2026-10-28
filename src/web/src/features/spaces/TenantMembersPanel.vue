@@ -389,7 +389,7 @@ async function revoke(invite: PendingMemberInvite) {
                 <span v-if="member.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
                 <!-- Identity trust (ADR 0028 Decision 2): "Verified" after a compare on the member's profile,
                      an anomaly when the served key does not follow from the pinned head. -->
-                <MemberTrustBadge :trust="trust[member.userId]" />
+                <MemberTrustBadge :badge="trust[member.userId]" />
               </div>
             </div>
             <div class="management-actions">

@@ -45,8 +45,10 @@ can move a claim to layer 2 (security model § What holds today).
   identity pin store, the device register, the per-scope epoch floor).
 - **An active operator on a client it serves.** See the trust tiers below.
 - **Key substitution at first contact.** The operator relays identity keys. A key that a signed step of the person's
-  key chain does not reach is shown as an anomaly to anyone who pinned their chain, and two members who compare safety numbers detect a substituted one; a key
-  substituted before anyone pinned it, between members who never compare, is not detected. Key Transparency, which
+  key chain does not reach is shown as an anomaly to anyone who pinned their chain, and in a tenant to every member
+  when the person joined with an owner-rooted join record; two members who compare safety numbers detect a
+  substituted one. A key substituted before anyone pinned it where no join record anchors it — a tenant's owner, a
+  contact outside a shared tenant — between members who never compare, is not detected. Key Transparency, which
   would close this, is not built ([Roadmap](/veyq/security/roadmap/)).
 - **Recipients.** Sharing gives confidentiality up towards the people it is shared with, on purpose. A public link
   is a bearer capability: whoever holds the full URL decrypts what it shares. Content a recipient already

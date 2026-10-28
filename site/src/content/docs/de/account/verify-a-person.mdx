@@ -2,15 +2,17 @@
 title: "Eine Person verifizieren"
 sources:
   - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md
   - docs/features/account/enablers/en.account.identity-pinning.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
 
-Jedes Mitglied hat eine **Sicherheitsnummer**, die aus seinem Schlüssel entsteht. Zeigen deine App und die einer
-anderen Person für diese Person dieselbe Nummer, weißt du, dass der Server dir ihren echten Schlüssel gegeben hat und
-nicht den von jemand anderem. Einmal zu vergleichen ist freiwillig; am wichtigsten ist es, wenn sich ein Schlüssel
-nicht bestätigen lässt.
+Jedes Mitglied hat eine **Sicherheitsnummer**, die aus seinem Schlüssel entsteht, und daneben einen kürzeren
+**Kettencode**, der sich jedes Mal ändert, wenn die Person ihr Konto absichert. Zeigen deine App und die der anderen
+Person für diese Person dieselbe Nummer und denselben Kettencode, weißt du, dass der Server dir ihren echten Schlüssel
+gegeben hat und nicht den von jemand anderem. Zu vergleichen ist freiwillig; am wichtigsten ist es, wenn sich ein
+Schlüssel nicht bestätigen lässt.
 
 ## Eine Sicherheitsnummer vergleichen
 
@@ -20,33 +22,56 @@ Macht das zusammen, nebeneinander oder am Telefon.
    einer Erinnerung dabei waren, oder bei wer eine Datei oder ein Foto hinzugefügt hat.
 2. Wähle unter **Sicherheitsnummer** eines davon:
    - **Code scannen**, und richte deine Kamera auf den Code im eigenen Profil der Person.
-   - **Ziffern vergleichen**, lest die Ziffern gemeinsam vor, und wähle **Sie stimmen überein** oder **Sie stimmen
-     nicht überein**.
-3. Stimmen sie überein, sagt die Seite, dass die Person **für dein Konto verifiziert** ist, und zeigt **Verifiziert**.
+   - **Ziffern vergleichen**, lest die Ziffern und den **Kettencode** gemeinsam vor, und wähle **Sie stimmen überein**
+     oder **Sie stimmen nicht überein**.
+3. Stimmen sie überein, sagt die Seite, dass die Person *verifiziert* ist und *alle in diesem Bereich sehen, dass du
+   diese Person verifiziert hast*, und zeigt **Verifiziert**.
 
-Die andere Person findet ihre eigene Nummer auf ihrer eigenen Profilseite unter **Deine Sicherheitsnummer**. Sie
-öffnet sie genauso, über ihren eigenen Namen, zum Beispiel an einer Datei oder einem Foto, das sie hinzugefügt hat.
+Die andere Person findet ihre eigene Nummer und ihren Kettencode auf ihrer eigenen Profilseite unter **Deine
+Sicherheitsnummer**. Sie öffnet sie genauso, über ihren eigenen Namen, zum Beispiel an einer Datei oder einem Foto, das
+sie hinzugefügt hat.
 
-<Screenshot id="account-safety-number" shows="Das Profil eines anderen Mitglieds mit dem Block Sicherheitsnummer: das Abzeichen Nicht verifiziert, die Ziffern und die Schaltflächen Code scannen und Ziffern vergleichen" />
+<Screenshot id="account-safety-number" shows="Das Profil eines anderen Mitglieds mit dem Block Sicherheitsnummer: das Abzeichen Nicht verifiziert, die Ziffern, der Kettencode und die Schaltflächen Code scannen und Ziffern vergleichen" />
 
 Stimmen die Nummern nicht überein, markiere die Person nicht als verifiziert: Der Schlüssel, den du hast, gehört
-womöglich nicht zu ihr. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut.
+womöglich nicht zu ihr. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut. Unterscheidet sich nur der
+Kettencode, fehlt einem von euch ein Schritt, den der Server womöglich zurückhält.
+
+Sagt veyq, dass der Code aus einer älteren Version der App stammt, bitte die andere Person, ihre App zu aktualisieren,
+und scanne dann erneut.
+
+## Wer sieht, dass du jemanden verifiziert hast
+
+Eine Verifizierung gehört zu dem Bereich, in dem du sie gemacht hast. Alle in diesem Bereich sehen sie: im Profil der
+Person **Verifiziert** mit **Verifiziert von** und den Namen derer, die mit ihr verglichen haben, und **Verifiziert**
+neben ihr in den Mitgliederlisten. In einem anderen Bereich, den du mit derselben Person teilst, gilt sie nicht;
+vergleicht dort ebenfalls, wenn sie dort verifiziert sein soll. Der Server hält deine Verifizierung verschlossen, kann
+sie also weder lesen noch fälschen, sieht aber, dass du diese Person verifiziert hast.
+
+Eine Person, die du vor weniger als zwei Wochen kennengelernt hast, zeigt **Neu**. **Nicht verifiziert** zeigen die
+meisten, und die Mitgliederlisten sagen dazu nichts.
 
 ## Wenn jemand sein Konto absichert
 
 Sichert eine Person [ihr Konto ab](/veyq/de/account/replace-your-keys/), bekommt sie einen neuen Schlüssel, mit ihrem
 vorherigen unterschrieben. Deine App prüft diese Unterschrift selbst und teilt weiter mit ihr; du musst nichts tun. In
 ihrem Profil steht **Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben** mit dem Datum. Ein
-**Verifiziert** von vorher gilt nicht weiter: Vergleicht die Sicherheitsnummer erneut, wenn du sie verifiziert haben
-willst.
+**Verifiziert** von vorher gilt für den neuen Schlüssel nicht: Vergleicht die Sicherheitsnummer erneut, wenn du sie
+verifiziert haben willst.
+
+Sicherst du dein eigenes Konto ab, bleiben die Personen, die du verifiziert hast, verifiziert: Deine App unterschreibt
+deine Verifizierungen mit deinem neuen Schlüssel neu.
 
 ## Wenn sich ein Schlüssel nicht bestätigen lässt
 
-Gibt der Server für ein Mitglied einen Schlüssel aus, der nicht aus dem folgt, den deine App kannte, zeigen ihr Profil
-und die Mitgliederlisten unter **Einstellungen** **Schlüssel nicht bestätigt**: *Der Schlüssel dieser Person folgt
-nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern
-persönlich.* Ein echter Schlüsselwechsel ist immer unterschrieben, so sieht ein abgesichertes Konto also nicht aus:
-Es kann jemand sein, der versucht, einen Schlüssel als den dieser Person auszugeben.
+Deine App prüft den Schlüssel jedes Mitglieds gegen die Einladung, mit der es in den Bereich kam und die eine Person
+unterschrieben hat, die den Bereich besitzt, und gegen den Schlüssel, den sie vorher kannte. Gibt der Server für ein
+Mitglied einen Schlüssel aus, der nicht daraus folgt, oder kam ein Mitglied ohne eine solche Einladung hinein, ohne den
+Bereich mitzubesitzen, zeigen das Profil dieser Person und die Mitgliederlisten unter **Einstellungen** **Schlüssel nicht
+bestätigt**: *Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm
+geteilt. Vergleicht eure Sicherheitsnummern persönlich.* Ein echter Schlüsselwechsel ist immer unterschrieben, so
+sieht ein abgesichertes Konto also nicht aus: Es kann jemand sein, der versucht, einen Schlüssel als den dieser Person
+auszugeben.
 
 Dein Gerät gibt diesem Schlüssel keinen Schlüssel eines Bereichs und fügt ihn keiner Gruppe hinzu. Bekommt ein
 Bereich in der Zeit ein neues Schloss, steht in der Mitgliederliste daneben **Wartet auf jemanden, der den Schlüssel
@@ -54,6 +79,10 @@ bestätigen kann**: Ein anderes Mitglied, dessen App den Schlüssel bestätigen 
 beim Hinzufügen oder Posten aufgehalten, und eine Schaltfläche zum Annehmen des Schlüssels gibt es ohnehin nicht. Frag
 die Person außerhalb von veyq und vergleicht eure Sicherheitsnummern persönlich:
 [Was du tun kannst](/veyq/de/help/key-changed/).
+
+Steht in einem Profil *Der Schlüssel, den du vorher gesehen hast, gehörte nicht zu dieser Person. Die Einladung dieser
+Person bestätigt diesen.*, hatte deine App für diese Person einmal einen Schlüssel bekommen, den ihre Einladung nicht
+stützt, und verwendet jetzt den, den sie stützt. Vergleicht eure Sicherheitsnummern, wenn du sichergehen willst.
 
 veyq vertraut nur einem Schlüssel, den dein eigenes Gerät geprüft hat; der Server kann Schlüssel weiterreichen, aber
 keinen unterschieben, ohne dass deine App es zeigt: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

@@ -49,7 +49,7 @@ const refusal = (g: ReturnType<typeof grantAt>) =>
 
 /** This account has pinned the granter at `chain`'s newest head. */
 function pinnedAt(chain: BuiltChain) {
-  return fakePinServer(sealPinStore(MK, { [GRANTER]: pinOf(bundleB64(chain.keys.at(-1)!), 'pinned', 1, headOf(chain)) }, 1))
+  return fakePinServer(sealPinStore(MK, { [GRANTER]: pinOf(bundleB64(chain.keys.at(-1)!), 1, headOf(chain)) }, 1))
 }
 
 beforeEach(() => {

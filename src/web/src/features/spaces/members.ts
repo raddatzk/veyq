@@ -11,6 +11,7 @@ import { recipientIdentityDigest, sealGrant } from './grant'
 import { writeKey, zeroEpochKeys } from './epochs'
 import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
+import { tenantViewOfScope } from '../account/tenantTrust'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { SetTenantMemberRoleRequestRoleEnum, type MemberInviteState, type PendingMemberInvite } from '../../api/generated/tenants'
 import { SetMemberRoleRequestRoleEnum, type ScopeMember, type ResolvedGroupCandidate, type GroupInvitation } from '../../api/generated/scopes'
@@ -112,7 +113,9 @@ export function setTenantMemberRole(tenantId: string, userId: string, role: SetT
 export async function addGroupMember(
   scopeId: string, username: string, targetUserId: string, target: ServedIdentity, sealedNameKey?: string,
 ): Promise<ScopeMember> {
-  if ((await anchorIdentity(targetUserId, target)) === 'anomaly') throw new IdentityUnanchoredError(targetUserId)
+  // In the group's tenant (ADR 0111 decision 15): a target without a join record who is no owner there is not wrapped to.
+  const tenant = await tenantViewOfScope(scopeId)
+  if ((await anchorIdentity(targetUserId, target, { tenant })) === 'anomaly') throw new IdentityUnanchoredError(targetUserId)
   const targetIdentityPublicKeyB64 = target.identityPublicKey
   return onceMoreIfStale(async () => {
     const opened = await openScopeById(scopeId)

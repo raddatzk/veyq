@@ -11,6 +11,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
 import { anchorIdentity, type Anchor } from '../account/identityPins'
+import { tenantViewOfScope, type TenantView } from '../account/tenantTrust'
 import { TrustStateRefused } from '../account/trustMarks'
 import { recipientIdentityDigest, sealGrant } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'
@@ -51,6 +52,8 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
 
 async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise<number> {
   let delivered = 0
+  // The scope's tenant, read once per drain and only when a job came (ADR 0111 decision 15): every target is judged there.
+  let tenant: Promise<TenantView> | undefined
   for (;;) {
     const job = await claimGrantDelivery(scope.scopeId)
     if (!job) break
@@ -67,7 +70,9 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
     // decline is lifted by the target's next rotation, which clears every decline against it (decision 10).
     let anchor: Anchor
     try {
-      anchor = await anchorIdentity(target.targetUserId, target)
+      // In the scope's tenant (ADR 0111 decision 15): a target without a join record who is no owner there is declined.
+      tenant ??= tenantViewOfScope(scope.scopeId)
+      anchor = await anchorIdentity(target.targetUserId, target, { tenant: await tenant })
     } catch (e) {
       // This device refused the pin store itself (ADR 0028 Decision 7): no pin can be read or written, so no key
       // can be judged. PAUSE, never decline — a decline is about this target and excludes this worker for good,

@@ -29,9 +29,9 @@ vi.mock('./scopes', () => ({
   revokeScopeShares: vi.fn(),
 }))
 vi.mock('../account/identityPins', () => ({
-  trustStates: vi.fn(),
   IdentityUnanchoredError: class extends Error {},
 }))
+vi.mock('../account/tenantTrust', () => ({ tenantBadges: vi.fn() }))
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
@@ -45,7 +45,9 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError } from './members'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation, revokeScopeShares } from './scopes'
-import { IdentityUnanchoredError, trustStates } from '../account/identityPins'
+import { IdentityUnanchoredError } from '../account/identityPins'
+import { tenantBadges } from '../account/tenantTrust'
+import { activeSpace } from '../../app/activeSpace'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { realI18n, t } from '../../test/i18n'
@@ -93,7 +95,7 @@ const button = (w: ReturnType<typeof mount>, label: string) => w.findAll('button
 
 beforeEach(() => {
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
-  vi.mocked(trustStates).mockResolvedValue({})
+  vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(scopeLifecycle).mockResolvedValue(null)
   vi.mocked(setSpaceIcon).mockResolvedValue(undefined)
   vi.mocked(clearSpaceIcon).mockResolvedValue(undefined)
@@ -226,7 +228,7 @@ describe('GroupMembersPanel — an add carries the group key to the resolved ide
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
-    vi.mocked(trustStates).mockResolvedValue({})
+    vi.mocked(tenantBadges).mockResolvedValue({})
   })
 
   async function addDave(w: ReturnType<typeof mount>) {
@@ -285,7 +287,7 @@ describe('GroupMembersPanel — a member is active or a pending consent proposal
     vi.mocked(listScopeMembers).mockResolvedValue(ROWS)
     vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: 'owner' }))
     vi.mocked(openGroupIcon).mockResolvedValue(null)
-    vi.mocked(trustStates).mockResolvedValue({})
+    vi.mocked(tenantBadges).mockResolvedValue({})
     const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
     await flushPromises()
     const badges = (who: string) =>
@@ -332,15 +334,20 @@ describe('GroupMembersPanel — a stuck compromise rotation, on an owner row (uc
   })
 })
 
-describe('GroupMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
-  beforeEach(() => vi.clearAllMocks())
+describe('GroupMembersPanel - who is verified in its tenant (ADR 0111 decision 15)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    activeSpace.tenantId = 'tenant-1'
+  })
 
   it('shows "verified" beside the member, and an anomaly with its note and no review', async () => {
-    vi.mocked(trustStates).mockResolvedValueOnce({ 'u-own': { state: 'verified' } })
+    vi.mocked(tenantBadges).mockResolvedValueOnce({ 'u-own': 'verified' })
     const w = await mountPanel({ me: 'owner' })
+    // a group's list reads the badges of the tenant it lives in - the active one
+    expect(vi.mocked(tenantBadges).mock.calls[0][0]).toBe('tenant-1')
     expect(w.get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
 
-    vi.mocked(trustStates).mockResolvedValueOnce({ 'u-own': { state: 'anomaly' } })
+    vi.mocked(tenantBadges).mockResolvedValueOnce({ 'u-own': 'anomaly' })
     const w2 = await mountPanel({ me: 'owner' })
     expect(w2.get('[data-testid="member-trust-anomaly"]').text()).toBe(t('trust.anomaly'))
     expect(w2.get('.member-row').text()).toContain(t('trust.anomalyNote'))

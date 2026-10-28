@@ -166,17 +166,23 @@ button to accept it: a real change is always signed, so a key that isn't can be 
 you then compare your **safety numbers** — every key has a short one — in person. Meanwhile someone else in the space
 whose app does confirm their key passes them the space's key, and nobody's posting waits for it.
 
-**Checking before anything changes.** Remembering only helps from the first key your app saw: if the server
-handed you a wrong key from the very start, nothing would look wrong. So you can check it yourself. Your own
-profile shows *your* safety number and a code; open a friend's profile, scan the code on their screen or read the
-digits to each other, and if it matches they are marked **"Verified"** — on their profile and in every member list
-(step by step: [Verify a person](/veyq/account/verify-a-person/)).
-When a verified friend secures their account, the mark doesn't carry over to the new key; compare again to restore it.
+**In a space, the invitation vouches for each member.** Every invitation is signed by an owner of the space, and
+whoever accepts it leaves a record, signed through that invitation, of the key they joined with. Your app checks each
+member's key against that record, so a key the server swaps in for them — even one your app never saw before — shows
+as **"Can't confirm this key"**, and so does a member the server added without any invitation.
+
+**Checking it yourself.** The owners of a space have no invitation behind them, and who counts as an owner is
+the server's word; and outside a shared space your app has only the key it first saw. So you can check anyone
+yourself. Your own profile shows *your* safety number, a shorter chain code and a code to scan; open a friend's
+profile, scan the code on their screen or read the digits to each other, and if both match they are marked
+**"Verified"** — on their profile, where it says who verified them, and in every member list, for everyone in that
+space (step by step: [Verify a person](/veyq/account/verify-a-person/)).
+When a verified friend secures their account, it doesn't carry over to the new key; compare again to restore it.
 
 **The honest part:** the comparing is up to you. Nothing requires
-you to verify anyone before you share with them; a setting that would does not exist yet. The stronger system,
-where the server can't lie about keys at all, is **planned, not built** — and we'd rather tell you than imply
-otherwise.
+you to verify anyone before you share with them; a setting that would does not exist yet. Our server can't read or
+fake a verification, but it can see who verified whom. The stronger system, where the server can't lie about keys at
+all, is **planned, not built** — and we'd rather tell you than imply otherwise.
 
 ## If something goes wrong
 

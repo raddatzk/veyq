@@ -2,14 +2,16 @@
 title: "Verify a person"
 sources:
   - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
+  - docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md
   - docs/features/account/enablers/en.account.identity-pinning.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
 
-Every member has a **safety number**, made from their key. When yours and someone else's app show the same number
-for that person, you know the server gave you their real key and not someone else's. Comparing it once is optional;
-it matters most when a key can't be confirmed.
+Every member has a **safety number**, made from their key, and a shorter **chain code** beside it, which changes each
+time they secure their account. When your app and the other person's show the same number and the same chain code for
+that person, you know the server gave you their real key and not someone else's. Comparing them is optional; it
+matters most when a key can't be confirmed.
 
 ## Compare a safety number
 
@@ -19,36 +21,61 @@ Do this together with the other person, side by side or on a call.
    Memory, or as who added a file or photo.
 2. Under **Safety number**, choose one:
    - **Scan their code**, and point your camera at the code on their own profile page.
-   - **Compare digits**, read the digits aloud with them, and choose **They match** or **They don't match**.
-3. If they match, the page says the person **is verified on this account**, and shows **Verified**.
+   - **Compare digits**, read the digits and the **Chain code** aloud with them, and choose **They match** or **They
+     don't match**.
+3. If they match, the page says the person *is verified* and that *everyone in this space sees that you verified
+   them*, and shows **Verified**.
 
-The other person finds their own number on their own profile page, under **Your safety number**. They open it the
-same way, by choosing their own name, for example on a file or photo they added.
+The other person finds their own number and chain code on their own profile page, under **Your safety number**. They
+open it the same way, by choosing their own name, for example on a file or photo they added.
 
-<Screenshot id="account-safety-number" shows="Another member's profile with the Safety number block: the badge Not verified, the digits, and the Scan their code and Compare digits buttons" />
+<Screenshot id="account-safety-number" shows="Another member's profile with the Safety number block: the badge Not verified, the digits, the chain code, and the Scan their code and Compare digits buttons" />
 
 If the numbers do not match, do not mark the person as verified: the key you have may not be theirs. Ask them to
-check their own profile, and compare again.
+check their own profile, and compare again. If only the chain code differs, one of you is missing a step, which the
+server may be holding back.
+
+If veyq says the code comes from an older version of the app, ask the other person to update their app, then scan
+again.
+
+## Who sees that you verified someone
+
+A verification belongs to the space you made it in. Everyone in that space sees it: on the person's profile,
+**Verified** with **Verified by** and the names of who compared with them, and **Verified** beside them in the member
+lists. In another space you share with the same person, it does not count; compare there too if you want them verified
+there. The server keeps your verification locked, so it can't read or fake one, but it can see that you verified that
+person.
+
+A person you met less than two weeks ago shows **New**. **Not verified** is what most people show, and the member lists
+say nothing for it.
 
 ## When someone secures their account
 
 When a person [secures their account](/veyq/account/replace-your-keys/), they get a new key, signed by their previous
 one. Your app checks that signature by itself and goes on sharing with them; you don't have to do anything. Their
-profile shows **New identity, signed by their previous key** with the date. A **Verified** mark from before does not
-carry over: compare the safety number again if you want them verified.
+profile shows **New identity, signed by their previous key** with the date. A **Verified** from before does not carry
+over to the new key: compare the safety number again if you want them verified.
+
+When you secure your own account, the people you verified stay verified: your app signs your verifications again with
+your new key.
 
 ## When a key can't be confirmed
 
-If the server hands out a key for a member that does not follow from the one your app knew, their profile and the
-member lists under **Settings** show **Can't confirm this key**: *This person's key doesn't follow from the one you
-knew. Nothing is shared with it until it does. Compare your safety numbers in person.* A real change of keys is
-always signed, so this is not what securing an account looks like: it can be someone trying to pass off a key as
-theirs.
+Your app checks each member's key against the invitation that brought them into the space, which an owner of the
+space signed, and against the key it knew before. If the server hands out a key for a member that does not follow from
+those, or a member who is not an owner came in without such an invitation, their profile and the member lists under **Settings** show
+**Can't confirm this key**: *This person's key doesn't follow from the one you knew. Nothing is shared with it until it
+does. Compare your safety numbers in person.* A real change of keys is always signed, so this is not what securing an
+account looks like: it can be someone trying to pass off a key as theirs.
 
 Your device hands that key no space key and does not add it to a group. If a space gets a new lock meanwhile, the
 member list shows **Waiting for someone who can confirm their key** beside them: another member whose app does
 confirm their key passes it on. Nobody's adding or posting is held up by it, and there is no button to accept the key
 anyway. Ask the person, outside veyq, and compare your safety numbers in person: [What to do](/veyq/help/key-changed/).
+
+If a profile says *The key you saw before wasn't theirs. Their invitation confirms this one.*, your app had once been
+given a key for that person that their invitation does not back, and now uses the one it does. Compare your safety
+numbers with them if you want to be sure.
 
 veyq only ever trusts a key your own device has checked; the server can pass keys along, but it cannot swap one in
 without your app showing it: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

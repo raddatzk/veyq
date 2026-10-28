@@ -112,7 +112,9 @@ Five rules follow:
    measurement like any other: **wait for a state, not for a duration; read the console and the failed-request
    list before believing the DOM; and name which tree the dev server is serving.** The fix that pass did find
    was real, but it was found only after the substrate was established — everything before that was noise
-   presented as evidence.
+   presented as evidence. And a pass across a key rotation opens a **fresh tab** after it: a tab that still held the old epoch
+  key showed every name, and only a reload showed that every member's name, sealed under the old epoch, no longer opened
+  (cr-trust-records-in-the-tenant; secure-the-account's pass, which rotated the tenant, had not reloaded).
 
    **And a UI slice is not done before it was clicked in a real browser.** The public folder page of
    cr-node-key-hierarchy landed with 33 new unit tests green and two defects only a browser showed: a breadcrumb
@@ -315,7 +317,15 @@ A refined CR nails **decisions, not keystrokes**:
   92 % of the request limit, and grew the pin entry past its padded size. Its Phase 0 found that nothing caps an
   account's memberships — any co-member can add it to groups — and that the entry change alone would have pushed the
   pin cap past the limit; the self-grants moved to a stage the publish applies. A refine that adds a list to a
-  single-body request names the cap behind the list's length, or the staging that makes a cap unnecessary.
+  single-body request names the cap behind the list's length, or the staging that makes a cap unnecessary. The next CR
+  planned a closing list per tenant in the same publish (the outgoing key's verifications, cr-trust-records-in-the-tenant);
+  a set of signed items a rotation must carry needs no list at all when each item is re-signed in place, one bounded
+  write each, read before the publish so nothing signed after it is carried.
+- **"The server learns only that it exists" names the row's key.** cr-trust-records-in-the-tenant sealed every
+  verification under the tenant key and still keyed its rows by verifier and subject, served to every member: the docs
+  phase found the invariant false — the operator reads who verified whom and when. A refine that claims a record tells
+  the server nothing lists the columns it is addressed and filtered by, and either accepts them as metadata or addresses
+  it by an opaque id.
 - **A gated read lists every caller the change sends to it.** The same CR served the key chain to a person's tenant
   co-members, and the anchor check it built reads that chain from an invite accept (not a co-member yet) and from
   moderation delivery (moderators may share no tenant): the first was designed around in implementation, the second

@@ -123,7 +123,7 @@ acceptanceCriteria:
         e2e: [src/features/spaces/memberInvite.e2e.test.ts]
   - id: self-grant-and-join-record
     # ADR 0111 decision 3: the accept is a grant writer (TenantStore.joinAsMember). The join record is written once,
-    # at accept (veyq_tenant_profile.sealed_join_record), and nothing reads it to decide anything yet.
+    # at accept (veyq_tenant_profile.sealed_join_record); uc.spaces.verify-identity covers its reading as the anchor.
     text: The newcomer grants itself the tenant key (a grant sealed to its own identity, naming its key), proves the invite with the invite key's signature over (invite, account, identity) — the server refuses another key's proof with 403 `invite_proof_invalid` and writes nothing — and writes a join record (its identity and Secret-Key proof public keys and the owner-signed invite, signed by the invite key and the new identity, sealed under the tenant key bound to tenant and member). The server writes the membership with that grant, the profile with the record, and consumes the invite, nulling its key and grant; a second accept is refused as a replay.
     coverage:
       backend:

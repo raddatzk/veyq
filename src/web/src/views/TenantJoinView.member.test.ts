@@ -299,7 +299,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
   ] as const)('a foreign granter this account pinned, whose grant key is %s, is refused — nothing is posted', async (_l, judged) => {
     const rotator = v1.generateIdentity()
     rewrappedBy(rotator)
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', index: 0, firstSeenAt: 1, replaced: false })
     vi.mocked(anchorChainKey).mockResolvedValue(judged)
     const w = await mountAt()
     await signIn(w)
@@ -310,7 +310,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
 
   it('control: a foreign granter this account pinned, whose key the chain reaches, is accepted', async () => {
     rewrappedBy(v1.generateIdentity())
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', index: 0, firstSeenAt: 1, replaced: false })
     vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'advanced', retired: false })
     const w = await mountAt()
     await signIn(w)

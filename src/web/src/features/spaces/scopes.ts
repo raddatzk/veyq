@@ -12,7 +12,8 @@ import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type
 import { grantContext, recipientIdentityDigest, sealGrant, type GrantScope, type SignedGrant } from './grant'
 import * as invite from '@veyq/crypto/invite'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
-import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
+import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity, type TenantStandings } from '../account/identityPins'
+import { loadTenantView, tenantViewOfScope, type TenantOpener } from '../account/tenantTrust'
 import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
@@ -250,7 +251,7 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
 async function openOwnGrant(
   scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
-  await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self)
+  await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self, scope.tenantId)
   const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
   await raiseEpochFloor(scope.id, scope.grantedEpoch)
   return key
@@ -490,7 +491,8 @@ export async function wrapGroupNameKeyForInvitee(
   // The anchor gate (ADR 0028 Decision 2): this is the invite's first wrap to the invitee's *foreign*
   // identity — pinned on first sight, a key the chain reaches from the pinned head proceeds, an anomaly is never sealed
   // to: the caller catches IdentityUnanchoredError and says so, with no accept.
-  if ((await anchorIdentity(inviteeUserId, invitee)) === 'anomaly') throw new IdentityUnanchoredError(inviteeUserId)
+  const tenant = await tenantViewOfScope(scopeId)
+  if ((await anchorIdentity(inviteeUserId, invitee, { tenant })) === 'anomaly') throw new IdentityUnanchoredError(inviteeUserId)
   const inviteeIdentityPublicKeyB64 = invitee.identityPublicKey
   const opened = await openScopeById(scopeId)
   if (!opened) return null
@@ -680,6 +682,9 @@ export type CommitRotationOptions = {
   /** Where the caller's own grant is opened from: the active tenant's scope list by default; the account rotation's
    *  finish passes {@link planOpener}, which reads every tenant's rows (ADR 0111 decision 8). */
   open?: RotationOpener
+  /** Where the scope's TENANT is opened from, to read who is anchored there (ADR 0111 decision 15): the active tenant's
+   *  list by default; the finish passes the plan's tenant row. */
+  openTenant?: TenantOpener
 }
 
 /**
@@ -691,13 +696,13 @@ export type CommitRotationOptions = {
  * behind and is brought current by the grant delivery. The server refuses a rotation that names neither for an open one.
  */
 async function carryOpenInvites(
-  scopeId: string, newKey: Uint8Array, next: GrantScope, signPrivateKey: Uint8Array,
+  scopeId: string, newKey: Uint8Array, next: GrantScope, signPrivateKey: Uint8Array, tenant: TenantStandings,
 ): Promise<{ inviteGrants: InviteGrantEntry[]; pendingInviteIds: string[] }> {
   const inviteGrants: InviteGrantEntry[] = []
   const pendingInviteIds: string[] = []
   // Sequential, as the member re-grants: the pin store's version-guarded writes must not race each other.
   for (const open of await withRefresh(() => scopesApi().listOpenInvites({ scopeId }))) {
-    if (await inviteVouched(scopeId, open)) {
+    if (await inviteVouched(scopeId, open, tenant)) {
       const to = { userId: open.inviteId, identityPublicKeyB64: open.invitePublicKey }
       inviteGrants.push({ inviteId: open.inviteId, ...sealGrant(newKey, next, to, signPrivateKey), recipientIdentityDigest: recipientIdentityDigest(open.invitePublicKey) })
     } else {
@@ -710,7 +715,7 @@ async function carryOpenInvites(
 /** Whether an open invite's key is the one its owner signed, under a signer key this device anchors (the signer's
  *  served key and `signerKeyChainHead`, {@link anchorIdentity}). False — never a throw — for anything malformed: every
  *  byte here came from the server. */
-async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolean> {
+async function inviteVouched(tenantId: string, open: OpenInvite, tenant: TenantStandings): Promise<boolean> {
   try {
     const signer = v1.deserializeIdentityPublic(fromB64std(open.signerIdentityPublicKey))
     const signed = invite.inviteKeySignatureVerifies(
@@ -721,7 +726,7 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
     // Only a signature that verified may pin its signer's key (as for a grant's granter, ADR 0028 Decision 6).
     if (!signed) return false
     const served = { identityPublicKey: open.signerIdentityPublicKey, keyChainHead: open.signerKeyChainHead }
-    return (await anchorIdentity(open.signerUserId, served)) !== 'anomaly'
+    return (await anchorIdentity(open.signerUserId, served, { tenant })) !== 'anomaly'
   } catch {
     return false
   }
@@ -755,7 +760,7 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
 export async function commitRotation(
   scopeId: string, members: ScopeMember[], opts: CommitRotationOptions = {},
 ): Promise<number> {
-  const { removes, revokeLinks = false, open = (id: string) => openById(id, 'open') } = opts
+  const { removes, revokeLinks = false, open = (id: string) => openById(id, 'open'), openTenant } = opts
   const carry = removes === undefined ? members : members.filter((m) => m.userId !== removes)
   for (let attempt = 0; ; attempt++) {
     // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
@@ -777,6 +782,10 @@ export async function commitRotation(
           userId, ...sealGrant(newKey, next, { userId, identityPublicKeyB64 }, who.signPrivateKey),
           recipientIdentityDigest: recipientIdentityDigest(identityPublicKeyB64),
         })
+      // Who is anchored is judged in the scope's tenant (ADR 0111 decisions 12 and 15): a member there without a join
+      // record who is no owner — a membership the server made — is declared pending like any anomaly. A PERSONAL scope
+      // has no other member to judge, so its tenant is not read.
+      const tenant = opened.kind === ScopeKind.Personal ? undefined : await loadTenantView(opened.tenantId, openTenant)
       // Sequential so the pin store's version-guarded writes don't race each other.
       for (const m of carry) {
         // Our own re-grant targets the identity we hold, never the directory's copy of it.
@@ -785,12 +794,12 @@ export async function commitRotation(
         // is DECLARED pending (decision 10) — never skipped silently, the server refuses a rotation that names neither —
         // and any member whose client anchors their key brings them current through the grant delivery. The rotation
         // itself still proceeds: forward secrecy against the removed member cannot hinge on them.
-        else if ((await anchorIdentity(m.userId, m)) === 'anomaly') pendingUserIds.push(m.userId)
+        else if ((await anchorIdentity(m.userId, m, { tenant })) === 'anomaly') pendingUserIds.push(m.userId)
         else grantTo(m.userId, m.identityPublicKey)
       }
       // A tenant's open member invites are placeholder members (ADR 0111 decision 2): each is re-granted or declared.
-      const invites = opened.kind === ScopeKind.Tenant
-        ? await carryOpenInvites(scopeId, newKey, next, who.signPrivateKey)
+      const invites = opened.kind === ScopeKind.Tenant && tenant
+        ? await carryOpenInvites(scopeId, newKey, next, who.signPrivateKey, tenant)
         : { inviteGrants: [], pendingInviteIds: [] }
       const rotateScopeRequest = {
         epoch, wrappedPrev, grants, pendingUserIds, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined,

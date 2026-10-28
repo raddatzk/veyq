@@ -99,7 +99,7 @@ async function seed(userIds: string[]): Promise<void> {
   const entries = new Map<string, string>()
   const put = userIds.map((userId, i) => {
     const pinId = pinIdOf(mk, userId)
-    const pin = { fingerprint: fingerprintOf(i), head: fingerprintOf(i), state: i % 2 ? 'verified' as const : 'pinned' as const, firstSeenAt: 1_760_000_000_000 + i }
+    const pin = { fingerprint: fingerprintOf(i), head: fingerprintOf(i), index: i, firstSeenAt: 1_760_000_000_000 + i, replaced: i % 2 === 1 }
     const entry = sealPinEntry(mk, userId, pin, pinId)
     entries.set(pinId, entry)
     return { pinId, entry }
