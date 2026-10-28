@@ -182,9 +182,10 @@ class AccountPurge(
         val sessions = UploadSessionEntity.list("openerUserId", accountId)
         reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
         UploadSessionEntity.delete("openerUserId", accountId)
-        // The terms acceptance history (ADR 0101 decision 6): kept under the opaque id while a case names the account.
-        if (!TermsEvidence.namesAtErasure(accountId)) TenantTermsAcceptanceEntity.delete("userId", accountId)
-        // After the terms question, which asks whether one stands: a measure on the account ends with it.
+        // The terms acceptance history (ADR 0101 decision 6): kept under the opaque id while a moderation record still kept
+        // names the account — the question the sweep of kept rows asks later ([sweepKeptTerms]).
+        if (!TermsEvidence.namesUntil(accountId, Instant.now())) TenantTermsAcceptanceEntity.delete("userId", accountId)
+        // After the terms question, which reads the state the erasure found: a measure on the account ends with it.
         steps.targetErased(accountId, listOf(BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT, BlockKind.CONTENT_UPLOADER), Instant.now())
         AccountErasureEntity.deleteById(accountId)
         // The erasure ledger's line (ADR 0056 decision 8, ADR 0101 decision 8), in this transaction, before the row goes:
