@@ -64,13 +64,13 @@ always ciphertext the server stores but cannot open.
 |---|---|---|---|
 | Account password | Human secret, **never sent to the server** | — (never leaves the device) | Locally derives two domain-separated things: the **auth keypair** (login) and the **unlock KEK** (with the Secret Key, to open a Master Key wrap). |
 | Auth keypair (`authPublicKey` / `authPrivateKey`) | Ed25519 signing keypair derived from the password (`seed = Argon2id(password, authSalt)`) | Only the **public** key is stored; the private key is derived on demand, never stored or sent | Login by **challenge-response**: the client signs a server nonce with `authPrivateKey`; the server verifies with `authPublicKey`. Separate from the identity keypair and from content; Ed25519 now, PQ/hybrid later. |
-| Secret Key | High-entropy user-held secret (Emergency Kit / enrolled devices) | **Never** stored server-side | Combined with the password for two-secret key derivation (2SKD); protects content unlock after a DB breach. The derivation is [Unlock methods & KEK derivation](#unlock-methods--kek-derivation) below; the threat it answers is [Security Model → Threat model](../../../crosscutting/security-model.md#threat-model--trust-boundaries). |
+| Secret Key | High-entropy user-held secret (Emergency Kit / enrolled devices) | **Never** stored server-side | Combined with the password for two-secret key derivation (2SKD); protects content unlock after a DB breach. Replaced only when the account is secured, which issues a new Emergency Kit ([Rotation after a compromise](#rotation-after-a-compromise)); a password change, a reset and a change of the sign-in address keep it. The derivation is [Unlock methods & KEK derivation](#unlock-methods--kek-derivation) below; the threat it answers is [Security Model → Threat model](../../../crosscutting/security-model.md#threat-model--trust-boundaries). |
 | Master Key | 32-byte symmetric account root | Only as `MasterKeyWrap.wrappedKey`: one `PASSWORD` and one `RECOVERY` wrap, plus one per enrolled device (`DEVICE`, `DEVICE_KEY`); the contract also names `PASSKEY`, which no client writes yet | Opens `wrappedIdentityPrivateKey`. Stable across a password change and a reset (only a rotation replaces it); a credential change rewrites the two cold wraps and deletes every other one (below). |
 | Unlock KEK | Derived in-memory wrapping key | **Never** stored server-side | Opens exactly one Master Key wrap. Derived on the client, then discarded. |
 | Identity public key (`identityPublicKey`) | `lp(kem) ‖ lp(sign)`: the X-Wing encapsulation key (X25519 + ML-KEM-768, 1216 bytes — [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) decision 2) + the Ed25519 signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; verifies the grants this user signs ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). |
 | Identity private key (`wrappedIdentityPrivateKey`) | `lp(kemSeed) ‖ lp(sign)`: the 32-byte X-Wing seed, which is X-Wing's decapsulation key and derives the encapsulation key, + the Ed25519 signing seed | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs every grant this user issues. |
 | `RECOVERY` wrap | A `MasterKeyWrap` opened by the **Secret Key alone** (`kekRecovery(secretKey, salt)` — no password) | `MasterKeyWrap.wrappedKey`, **withheld** server-side until a two-factor release | Opens the Master Key when the password is gone. There is **no separate recovery code**: the recovery factor *is* the Secret Key from the Emergency Kit ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
-| Secret-Key proof key | Ed25519 signing keypair derived from the **Secret Key alone** | Only the **public** key, registered at account birth | Signs every request that mints a cold credential — rotation, change-password, recovery completion, a change of the sign-in address — so the **server** can refuse a caller without the Secret Key ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). Stable while the Secret Key is. Decrypts nothing. |
+| Secret-Key proof key | Ed25519 signing keypair derived from the **Secret Key alone** | Only the **public** key, registered at account birth and replaced when the account is secured | Signs every request that mints a cold credential — rotation, change-password, recovery completion, a change of the sign-in address — so the **server** can refuse a caller without the Secret Key ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). Replaced with the Secret Key, under a signature of the current one, and named in the account's key chain. Decrypts nothing. |
 
 ## Auth vs. unlock — two separate layers
 
@@ -137,17 +137,25 @@ and "someone else holds my device" is a reason people reset. The backend holds t
 ## Rotation after a compromise
 
 When key material has been handed to someone it should not have been — a phished device-link grant is the
-case that forces it ([ADR 0059](../../../decisions/0059-device-linking.md)) — the Master Key **and** the
-identity keypair are replaced **together**. There is one mode and no choice: the identity private key exists
-only wrapped under the Master Key, so an identity compromise implies a Master-Key compromise, and rotating the
-identity alone would re-wrap a new identity under the leaked Master Key. Rotation is gated on the **Secret
-Key** — a cold unlock (`PASSWORD` or `RECOVERY`), never a device wrap — because that is exactly the material a
-linked device never received, and an attacker who could rotate first would lock the holder out permanently.
-The Secret Key itself is not rotated, so the Emergency Kit stays valid.
+case that forces it ([ADR 0059](../../../decisions/0059-device-linking.md)), a leaked Secret Key the other — the
+Master Key, the identity keypair **and** the Secret Key are replaced **together** (*Secure your account*). There is
+one mode and no choice: the identity private key exists only wrapped under the Master Key, so an identity compromise
+implies a Master-Key compromise, and rotating the identity alone would re-wrap a new identity under the leaked Master
+Key; someone who holds the Secret Key and the password is otherwise indistinguishable from the member. The rotation
+is gated on the **current Secret Key** — a cold unlock (`PASSWORD` or `RECOVERY`), never a device wrap — because that
+is exactly the material a linked device never received, and an attacker who could rotate first would lock the holder
+out permanently. It issues a **new Emergency Kit**, saved and confirmed before anything is published; the `PASSWORD`
+and `RECOVERY` wraps are rewritten under the new Secret Key, so the old kit opens nothing.
 
-Rotation is **forward secrecy, not repair**: what was already read stays read. The full decision, its costs
-and the re-admission ceremony are [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md); the
-flow is [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md); the scope-side re-key belongs to
+Each rotation is a step of the account's **key chain**: the new identity and the new Secret-Key proof key, signed by
+the old identity **and** the old proof key, hash-chained from an unsigned genesis written at the account's birth. It
+holds only public keys and signatures and is served to co-members, who accept the new key because the chain reaches
+it from the head they pinned ([en.account.identity-pinning](en.account.identity-pinning.md)).
+
+Rotation is **forward secrecy, not repair**: what was already read stays read. The full decision and its costs are
+[ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md), the key chain and the stage of self-grants
+[ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md);
+the flow is [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md); the scope-side re-key belongs to
 [en.spaces.scope-key-rotation](../../spaces/enablers/en.spaces.scope-key-rotation.md).
 
 ## Recovery — three independent paths, no escrow
@@ -176,7 +184,7 @@ it rescuing data.
 ## The Emergency Kit
 
 The kit is the Secret Key made portable, and it is a **format with two writers and one reader**: `web` writes
-it when an account is born by joining a tenant, `admin-web` when the Server Owner's account is born at setup
+it when an account is born by joining a tenant and when an account is secured (a new Secret Key), `admin-web` when the Server Owner's account is born at setup
 ([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)), and only `web` reads it, at unlock.
 Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the codec exists
 **once**, in `@veyq/crypto`, pinned by a fixed-literal vector.

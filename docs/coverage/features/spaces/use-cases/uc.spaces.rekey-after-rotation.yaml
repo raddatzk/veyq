@@ -2,7 +2,7 @@ useCase: uc.spaces.rekey-after-rotation
 feature: spaces
 title: Re-key a space's nodes after a rotation
 # Refined 2026-10-23 (inbox #518, ADR 0109), built the same day (cr-scope-rotation-rekeys-nodes). The property has
-# several triggers (a group removal, a queued rotation, an account's own personal scope), so it owns its criteria
+# several triggers (a group removal, a queued rotation, a secured account's own scopes), so it owns its criteria
 # rather than any one trigger's use-case. The web refs run the re-key through the real crypto (no mocked seal)
 # against an in-memory server; the backend refs prove the commit, the gates and the derived state on the real one. The
 # any-member re-key (ADR 0111 decision 11) also runs live: anyMemberRekeys.e2e.test.ts in the web-e2e job.

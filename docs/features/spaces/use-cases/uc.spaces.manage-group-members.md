@@ -27,7 +27,9 @@
    - The server **deletes** the membership — the instant **layer-1** cut (a 403 on the scope) — and commits the
      epoch in **one transaction**. It refuses a request whose grants name the removed member, and applies the
      last-owner guard. A failed removal leaves the member in place; there is no removal without its rotation.
-   - Members the rotation could not re-grant (a changed key) get the new epoch later by grant-delivery; until then
+   - Members the rotation could not re-grant (a key the owner's client cannot anchor) are declared pending in the
+     request, which the server requires (`409 rotation_incomplete` otherwise), and get the new epoch later by
+     grant-delivery from any member who anchors them; until then
      their scope reads as *waiting for the current key* and they write nothing (A4). A pending consent proposal is
      re-granted like any member: it holds the group's key from its add on. New content
      seals under the new epoch. The removed member keeps the old epoch → reads pre-removal content, **never**

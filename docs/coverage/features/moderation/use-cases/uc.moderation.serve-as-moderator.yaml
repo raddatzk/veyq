@@ -26,8 +26,8 @@ acceptanceCriteria:
         unit: [src/views/ModerationView.test.ts]
   - id: a-holder-delivers-after-the-pin-check
     text: >-
-      A holder's surface delivers every live epoch to an accepted moderator missing one, after the pin check; a changed
-      identity is declined, a delivery by someone not holding the epoch or to someone not accepted is refused, and a
+      A holder's surface delivers every live epoch to an accepted moderator missing one, after the anchor check against
+      the recipient's served key-chain head; a key the chain does not reach is declined, a delivery by someone not holding the epoch or to someone not accepted is refused, and a
       repeated delivery changes nothing.
     coverage:
       backend:

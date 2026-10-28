@@ -32,7 +32,7 @@ owner-typed claim), and the **accept/decline** step.
    (operational metadata, like other account settings): the operator learns *that* someone likes to be asked,
    never any key or content. Default **off** → the direct-add of [uc.spaces.add-group-member](uc.spaces.add-group-member.md).
 2. **The owner adds (a proposal).** The GroupOwner resolves the target by **username** exactly as in direct-add
-   and picks them; their client wraps the group's current epoch key to the target after the pin check, as a direct
+   and picks them; their client wraps the group's current epoch key to the target after the anchor check, as a direct
    add does. The server sees the preference is **on**, so it records a **soft membership** (`pendingConsent`) —
    *proposed*, not yet a member — **holding that grant**. A rotation of the group re-grants a pending proposal like
    any member, so an accept never opens onto a key the group already left.
@@ -68,7 +68,7 @@ sequenceDiagram
   actor I as Invitee<br>(consent = on)
   participant CI as Client<br>(invitee)
   O->>S: resolve username → { userId, identityPublicKey }
-  O->>O: pin check → grant = seal K_SC to inviteePub#59; derive K_name = HKDF(E_e)#59; wrap it to inviteePub ("group-name-key")
+  O->>O: anchor check → grant = seal K_SC to inviteePub#59; derive K_name = HKDF(E_e)#59; wrap it to inviteePub ("group-name-key")
   O->>S: add + grant + sealedNameKey → consent=on → record SOFT membership (pendingConsent) holding the grant
   I->>CI: open invitations → unwrap K_name → open CANONICAL encryptedName → see real name + who added
   alt Accept
@@ -102,7 +102,7 @@ sequenceDiagram
   agreement, not key authenticity; that is governed by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
   (**TOFU-pin** on first use, a **changed** key surfaced/refused, out-of-band **safety-number verification** via
   [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), opt-in strict); the
-  pin check runs before both wraps, strict mode is not built ([security-model](../../../crosscutting/security-model.md)).
+  anchor check runs before both wraps, strict mode is not built ([security-model](../../../crosscutting/security-model.md)).
   Note ADR 0027 closes a **different** attack — a *modified-owner* private name-lie — orthogonal to this
   operator-key seam.
 

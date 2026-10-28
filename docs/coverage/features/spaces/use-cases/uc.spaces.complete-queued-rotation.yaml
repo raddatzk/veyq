@@ -35,9 +35,8 @@ acceptanceCriteria:
       backend: { integration: [QueuedRotationSliceTest.aDeliveryCompletionThatLostItsLeaseWritesNothing, QueuedRotationSliceTest.aRotationCompletionThatLostItsLeaseWritesNothing] }
   - id: refusals-about-the-worker-decline
     text: >
-      A worker whose commit is refused for a reason about itself — stale_epoch, not_scope_owner (demoted between
-      claim and commit) or rotation_excluded (it rotated its own account while holding the lease) — declines the
-      job, releasing it to the other owners without spending an attempt; any other error fails it (D2).
+      A worker whose commit is refused for a reason about itself — stale_epoch or not_scope_owner (demoted between
+      claim and commit) — declines the job, releasing it to the other owners without spending an attempt; any other error fails it (D2).
     coverage:
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
   - id: server-originated-tags-refused-at-enqueue
@@ -52,7 +51,7 @@ acceptanceCriteria:
       E2/E8: an OWNER's own scope row (ScopeSummary, and MyTenant for a tenant root) carries compromiseRotation
       stalled (no owner both holds a grant and has not declined the job) or failed (it dead-lettered); a plain
       member's row never does. The member panel shows it — failed with the re-queue, stalled with the promote hint —
-      and the sidebar marks the space. An owner's re-queue originates it again, excluding nobody (an account rotation queues no job, cr-secure-the-account);
+      and the sidebar marks the space. An owner's re-queue originates it again, excluding nobody (an account rotation queues no job);
       anything but failed is 409 rotation_not_failed, a non-owner 403 not_scope_owner, nothing written (D10, #234).
     coverage:
       backend: { integration: [QueuedRotationSliceTest.anOwnerSeesAStuckQueuedRotationOnTheirOwnRowAndRequeuesIt] }

@@ -31,8 +31,10 @@
    account holds and compares each epoch's public bundle derived from the opened `M_n` with the one the server
    publishes; a mismatch stops the unlock (ADR 0099 § 3).
 5. **Deliver.** The surface proves the key (a signed `moderation-proof` over a fresh server challenge) and lists the
-   accepted moderators still missing an epoch. For each it checks the recipient's identity against this account's pin
-   (ADR 0028: first seen is pinned, a changed one is declined as a scope grant's delivery is), seals every live epoch it
+   accepted moderators still missing an epoch, each with its key-chain head. For each it runs the anchor check against
+   this account's pin (ADR 0028 Decision 2: first seen is pinned through its chain — the server serves one accepted
+   moderator's chain to another, since two moderators may share no tenant — a key the chain reaches is followed, and an
+   anomaly or a retired key served beside a newer head is declined as a scope grant's delivery is), seals every live epoch it
    holds to that identity (`moderation-grant` [epoch]) and uploads them. The delivery needs the pin store, so it runs
    in this unlock, before step 6.
 6. The surface zeroes the Master Key and the identity private key and keeps only the moderation keys. With a fresh
@@ -45,8 +47,8 @@
   the surface; until then nothing needs the key.
 - **A3 — The published key differs from the one opened.** The unlock stops with a warning naming the epoch; nothing is
   delivered and no proof is signed.
-- **A4 — A recipient's identity changed since this account pinned it.** That delivery is declined and left for review,
-  as a scope grant's is; the others go ahead.
+- **A4 — A recipient's key does not follow from the head this account pinned.** That delivery is declined, as a scope
+  grant's is, with no accept ("compare your safety numbers in person"); the others go ahead.
 - **A5 — The code expired, was entered wrong too often, or the address changed.** The surface sends a new code on
   request; until one is entered, moderation notices are not mailed to this address.
 - **A6 — Step down.** With a key proof the moderator steps down: the role and every grant go at once, and the panel in
@@ -75,7 +77,7 @@ to anything else of theirs.
 ## Related
 
 - [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
-  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the pin check before sealing to a
+  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the anchor check before sealing to a
   foreign identity), [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) (a key-holder delivers, the
   pattern reused)
 - [uc.moderation.appoint-moderators](uc.moderation.appoint-moderators.md),

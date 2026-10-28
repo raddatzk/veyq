@@ -2,7 +2,7 @@ useCase: uc.spaces.add-group-member
 feature: spaces
 title: Add a member to a group
 # cr-0086 built resolve/add. Since ADR 0111 decision 4 (cr-invite-is-a-placeholder-member) the add carries the grant:
-# the owner's client wraps the group's current epoch to the resolved key after the pin check, and the membership
+# the owner's client wraps the group's current epoch to the resolved key after the anchor check, and the membership
 # holds it from the add on. Grant delivery (cr-0076/0079, epoch-aware since cr-0093) is left only for a member a
 # rotation skipped.
 acceptanceCriteria:
@@ -19,9 +19,9 @@ acceptanceCriteria:
       backend: { integration: [GroupAddGrantSliceTest.aGroupAddCarriesTheGrant, ScopesSliceTest.addGroupMemberByUsernameRecordsAGrantedMember, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, ScopesSliceTest.addGroupMemberAlreadyMemberIs409, GrantWriterSnapshotSliceTest.aGroupAddRecordsTheAddingOwnersKey] }
       web: { unit: [src/features/spaces/members.test.ts, src/features/spaces/GroupMembersPanel.test.ts], e2e: [src/features/spaces/memberInvite.e2e.test.ts] }
   - id: add-wraps-only-to-the-current-key
-    # The pin check is the owner client's (ADR 0028); the server checks the epoch and the key the grant names
+    # The anchor check is the owner client's (ADR 0028 Decision 2); the server checks the epoch and the key the grant names
     # (recipientIdentityDigest, ADR 0111: a grant names its recipient key from birth).
-    text: The owner's client wraps only after the pin check passed the resolved key — a CHANGED key is refused with nothing sent and the review offered. The server refuses a grant of an epoch a rotation left (409 `stale_epoch`, the client rebuilds once) and one naming a key that is not the target's current identity (409 `recipient_key_not_current`), each with nothing written.
+    text: The owner's client wraps only after the anchor check passed the resolved key — a key the target's key chain does not reach from this account's pin is refused with nothing sent and the anomaly's note ("Can't confirm this key") shown, with no accept. The server refuses a grant of an epoch a rotation left (409 `stale_epoch`, the client rebuilds once) and one naming a key that is not the target's current identity (409 `recipient_key_not_current`), each with nothing written.
     coverage:
       backend: { integration: [GroupAddGrantSliceTest.aGroupAddAtAStaleEpochIsRefused, GroupAddGrantSliceTest.aGroupAddNamingAnotherKeyIsRefused, ScopesSliceTest.aGroupAddGrantedAtAStaleEpochIsRefused] }
       web: { unit: [src/features/spaces/members.test.ts, src/features/spaces/GroupMembersPanel.test.ts] }

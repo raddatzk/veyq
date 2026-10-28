@@ -112,20 +112,21 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   an unaccepted proposal is not a member, a deleting group refuses every write, a suspended tenant refuses its
   members everything on any domain, and a non-member — share guests included — learns neither;
   [ADR 0042](../../decisions/0042-http-failure-projection.md), [ADR 0066](../../decisions/0066-tenant-suspension.md))
-- [Trust-on-first-use, notice, and review a changed identity key](use-cases/uc.spaces.verify-identity.md) —
-  **built (cr-0098/cr-0099)** (a client **pins** each contact's identity key on first wrap — operator-blind,
-  cross-device; a **changed** key is never silently trusted: the grant-delivery worker **declines**, the UI
-  surfaces a notice + accept → re-pin, rotation excludes the member;
+- [Trust-on-first-use, then follow a contact's key chain, and surface a key it does not reach](use-cases/uc.spaces.verify-identity.md) —
+  **built** (a client **pins** each contact's key-chain head on first wrap — operator-blind, cross-device; a key the
+  doubly signed chain reaches from the pin is followed with no review, one it does not reach is an anomaly with no
+  accept: nothing is wrapped to it, a rotation declares the member pending, the grant-delivery worker **declines**;
+  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 7, 15, 16,
   [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md),
   [en.account.identity-pinning](../account/enablers/en.account.identity-pinning.md))
 - [Actively verify a member's identity (safety number)](use-cases/uc.spaces.enforce-verified-identities.md) —
   **built (web, cr-identity-verification)** (a member's own profile shows their safety number and its QR; on another
   member's profile you scan their QR or compare the digits, and a match marks them *verified* — pinning an unpinned
-  member with the compared key; "Verified" shows on the profile and in the member lists, and a verified contact's
-  key change is said louder; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 3)
+  member with the compared key; "Verified" shows on the profile and in the member lists, and drops when the contact
+  secures their account; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 3)
 - [Require verified identities before sharing (strict mode)](use-cases/uc.spaces.require-verified-identities.md) —
-  **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members and
-  a changed key is a hard block; needs a scope-wide redesign before it is buildable at all, a per-account toggle
+  **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members;
+  needs a scope-wide redesign before it is buildable at all, a per-account toggle
   can't protect shared-scope content)
 - Person / profile view — **built (web)** (`#people/<userId>`, ADR 0083 — not the `~username` of
   [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)): open a member and see the Memories **you can

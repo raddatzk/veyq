@@ -231,7 +231,7 @@ Two title voices coexist, and that is the rule rather than an inconsistency to f
   "Take this tenant offline". **10 of 10** `ask()` call sites. Their `message` is the pre-existing `*Confirm`
   sentence, which already *asks*, so a second question in the header would ask twice.
 - **Question header on a mutation-owning dedicated dialog** — "Forget this device?", "Delete forever?",
-  "Replace your keys?", "Delete bucket?". **4 of 4** question headers sit there, on a consequence-only body.
+  "Secure your account?", "Delete bucket?". **4 of 4** question headers sit there, on a consequence-only body.
 
 So: match the voice to the mechanism you picked, and do not "fix" one to look like the other. The single
 counterexample is `DeleteNodeDialog` ("Delete folder", or the kind's own title such as "Delete Memory") — a dedicated dialog wearing the
@@ -270,7 +270,9 @@ Owner 2026-10-23; the same rule holds for `src/admin-web/`'s texts.
   deleted and the links work again when switched back, tells the person clicking what their click does to *others*.
   Keep it, in a clause.
 - **The exception: what the reader should keep safe gets enough explanation that they do.** How much depends on what
-  a loss costs. A Secret Key, a recovery code or an Emergency Kit cannot be replaced, so the text says so plainly. The
+  a loss costs. A lost Secret Key or Emergency Kit cannot be replaced — securing the account issues a new one, but only
+  against the current one — so the text says so plainly, and says that a kit someone else may hold is replaced by
+  securing the account. The
   config-secret key costs work rather than data: without it, media on a store of the Server Owner's own are unreachable until its
   credentials are entered again, and so is every other sealed secret; the bundled store reads its deployment's hint and is
   untouched (ADR 0089 decisions 3 and 4, ADR 0050). So its panel says what the key

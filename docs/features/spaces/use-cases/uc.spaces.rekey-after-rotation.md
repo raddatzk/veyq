@@ -2,8 +2,8 @@
 
 - **ID:** uc.spaces.rekey-after-rotation
 - **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; an
-  owner's scope-rotation worker, for a queued rotation (an account rotation, a tenant removal that cut a co-shared
-  group) or an explicit re-key; the rotator's own, for the personal scope — and, in the background, **any member
+  owner's scope-rotation worker, for a queued rotation (a tenant removal that cut a co-shared group) or an explicit
+  re-key; a secured account's own device, for every scope its rotation re-granted — and, in the background, **any member
   holding the current epoch**, through their worker ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 11: a re-key is not governance). A drop box and what its guests hold in it are re-keyed by an **owner**
   only.
@@ -91,5 +91,5 @@ member's device finishes the rest in the background.
 - Decisions: [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md), [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
-- End-user view (docs site): [Replace your keys](../../../../site/src/content/docs/account/replace-your-keys.mdx),
+- End-user view (docs site): [Secure your account](../../../../site/src/content/docs/account/replace-your-keys.mdx),
   [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)
