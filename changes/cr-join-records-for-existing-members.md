@@ -33,8 +33,8 @@ owner-rooted anchor at once.
 `release:`. If there still is none, delete this CR unbuilt and mark ADR 0111 decision 18 in place as not needed
 (no member predates the join record). If a release has shipped with members on it, refine this CR then, against the
 built format: the owner-side batch signing (who signs when several owners exist — the first owner to open the members
-panel), the `proof public key from the server, once` step (the directory field `cr-secure-the-account` serves through
-`getKeyChain`'s step 0), and the contradiction rule.
+panel), the `proof public key from the server, once` step (the proof key `getKeyChain` serves in the
+chain's genesis, built 2026-10-28), and the contradiction rule.
 
 ## Retrospective
 
