@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useConfirm, confirmRequest, confirmOption, settleConfirm } from './useConfirm'
+import { useConfirm, confirmRequest, confirmOptions, settleConfirm } from './useConfirm'
 
 const request = { header: 'Sign out?', message: 'This device signs out.', acceptLabel: 'Sign out' }
 
@@ -67,10 +67,34 @@ describe('useConfirm', () => {
   it('askWithOption carries the opt-in state set while it was open, and resets it for the next request', async () => {
     const { askWithOption } = useConfirm()
     const answer = askWithOption({ ...request, option: { label: 'Also' } })
-    expect(confirmOption.value).toBe(false)
-    confirmOption.value = true
+    expect(confirmOptions.value).toEqual([false])
+    confirmOptions.value[0] = true
     settleConfirm(true)
     await expect(answer).resolves.toEqual({ option: true })
-    expect(confirmOption.value).toBe(false)
+    expect(confirmOptions.value).toEqual([])
+  })
+
+  it('askWithOptions answers each opt-in by its place, and a decline answers null whatever was ticked', async () => {
+    const { askWithOptions } = useConfirm()
+    const options = [{ label: 'First' }, { label: 'Second' }]
+    const answer = askWithOptions({ ...request, options })
+    expect(confirmOptions.value).toEqual([false, false])
+    confirmOptions.value[1] = true
+    settleConfirm(true)
+    await expect(answer).resolves.toEqual({ options: [false, true] })
+
+    const declined = askWithOptions({ ...request, options })
+    confirmOptions.value[0] = true
+    settleConfirm(false)
+    await expect(declined).resolves.toBeNull()
+  })
+
+  it('a plain ask carries no opt-in, even one handed to it', async () => {
+    const { ask } = useConfirm()
+    const answer = ask({ ...request, options: [{ label: 'Ignored' }] })
+    expect(confirmRequest.value?.options).toBeUndefined()
+    expect(confirmOptions.value).toEqual([])
+    settleConfirm(true)
+    await expect(answer).resolves.toBe(true)
   })
 })
