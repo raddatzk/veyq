@@ -211,6 +211,19 @@ const en = {
       'This person’s key doesn’t follow from the one you knew. Nothing is shared with it until it does. Compare your safety numbers in person.',
     rotated: 'New identity, signed by their previous key, on {date}.',
   },
+  // Who's who in a space (inbox #562, uc.spaces.enforce-verified-identities main flow 5): every other member's key there.
+  // The states, "verified by" and the rotation line are `safety.*` and `trust.*`, as on a profile.
+  whoIsWho: {
+    navTitle: 'Who’s who',
+    title: 'Who’s who',
+    sub: 'Everyone you share this space with: whose key your app confirms, who verified them, and who has a new identity.',
+    loading: 'Checking everyone’s key…',
+    loadFailed: 'Could not check everyone’s key. Please try again.',
+    unavailable: 'This space can’t be opened on this device right now, so no key can be checked.',
+    empty: 'Nobody else is in this space yet.',
+    compare: 'Compare safety numbers',
+    openProfile: 'Open {name}’s profile',
+  },
   settings: {
     title: 'Settings',
     back: 'Back',
@@ -2215,6 +2228,17 @@ const de: typeof en = {
     anomalyNote:
       'Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern persönlich.',
     rotated: 'Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben, am {date}.',
+  },
+  whoIsWho: {
+    navTitle: 'Wer ist wer',
+    title: 'Wer ist wer',
+    sub: 'Alle, mit denen du diesen Bereich teilst: wessen Schlüssel deine App bestätigt, wer sie verifiziert hat und wer eine neue Identität hat.',
+    loading: 'Die Schlüssel werden geprüft…',
+    loadFailed: 'Die Schlüssel konnten nicht geprüft werden. Bitte versuche es erneut.',
+    unavailable: 'Dieser Bereich lässt sich auf diesem Gerät gerade nicht öffnen, daher kann kein Schlüssel geprüft werden.',
+    empty: 'Außer dir ist noch niemand in diesem Bereich.',
+    compare: 'Sicherheitsnummern vergleichen',
+    openProfile: 'Profil von {name} öffnen',
   },
   settings: {
     title: 'Einstellungen',
