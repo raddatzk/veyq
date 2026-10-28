@@ -91,7 +91,7 @@ sequenceDiagram
 - **E3 — the rotation was built on a superseded epoch:** another rotation committed first (two owners, two tabs,
   a job reclaimed after its lease lapsed, or a panel removal meeting a queued job), or the rotating device's
   grant lags the scope (E2's skipped member). The server answers `409 stale_epoch` and stores nothing: no link and
-  no grant. The device re-opens its grant and rebuilds the rotation **once**, from a fresh key
+  no grant. The device re-opens its grant, reads the members again and rebuilds the rotation **once**, from a fresh key
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4 says why the key must be fresh). After a race
   the re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
   synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it

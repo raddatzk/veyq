@@ -211,7 +211,10 @@ member leaves by the removal cascade, which also cuts their groups. Under the sc
   a client that lost a race re-opens its grant and rebuilds **once**, from a fresh key
   ([ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4).
 - **Nobody is left out silently.** Grants, pending members and the removed member must cover every membership, and
-  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`). A pending member keeps
+  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`): a member who joined or
+  an invite minted after the client's read. The client's one rebuild (as for `stale_epoch`) reads the members and the
+  open invites again, keeping its own exclusions — the member it removes, or the one a tenant re-key leaves out — on the
+  re-read list too, so the new epoch is never wrapped to them; a second refusal is the answer. A pending member keeps
   the grant it holds, behind — that **is** the stored pending marker, and grant delivery brings it current
   (ADR 0111 decision 9). A removal-rotation's grants must not name the member it removes
   (`422 removed_member_granted`), and the last accepted owner cannot be removed (`409 last_owner`; a consent

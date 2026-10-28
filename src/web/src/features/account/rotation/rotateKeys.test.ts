@@ -122,6 +122,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../../spaces/grant'
 import { raiseMarks, readMarks } from '../trustMarks'
 import { runScopeRotationWorker } from '../../tasks/scopeRotationWorker'
+import { SCOPE_ROTATION } from '../../tasks/capabilityTags'
 import { bundleB64, genesis, headOf, served, type ChainKeys } from '../../../test/keyChain'
 
 // This file runs in the node environment (fake-indexeddb), where src/test/setup.ts registers no application. The REAL
@@ -480,8 +481,22 @@ function fakeServer(opts: ServerOpts = {}) {
     }
     return { epoch: r.epoch }
   })
+  const membersFail = new Set<string>()
+  const membersDown = new Set<string>()
+  // The directory as the server serves it — to the callers' read (`members.listScopeMembers`, mocked at that module) and
+  // to a rotation's rebuild, which reads it again itself (inbox #661).
+  async function readMembers(scopeId: string): Promise<ScopeMember[]> {
+    online()
+    if (membersFail.delete(scopeId) || membersDown.has(scopeId)) throw fetchFailed()
+    const s = scopes.get(scopeId)!
+    return [...s.members.values()].map((m): ScopeMember => ({
+      userId: m.userId, username: m.userId, avatarRevision: 0, role: m.role, identityPublicKey: m.bundle, keyChainHead: m.head,
+      pending: m.grant.grantedEpoch < s.currentEpoch,
+    }))
+  }
   fakeApi(scopesApi, {
     rotateScope,
+    listScopeMembers: vi.fn<ScopesApi['listScopeMembers']>(async ({ scopeId }) => readMembers(scopeId)),
     listMyScopes: vi.fn<ScopesApi['listMyScopes']>(async () => {
       online()
       return held().filter((s) => s.active).map(summary)
@@ -496,17 +511,7 @@ function fakeServer(opts: ServerOpts = {}) {
     }),
   })
   fakeApi(tasksApi, { claimTask: vi.fn<TasksApi['claimTask']>(async () => null) })
-  const membersFail = new Set<string>()
-  const membersDown = new Set<string>()
-  vi.mocked(listScopeMembers).mockImplementation(async (scopeId: string) => {
-    online()
-    if (membersFail.delete(scopeId) || membersDown.has(scopeId)) throw fetchFailed()
-    const s = scopes.get(scopeId)!
-    return [...s.members.values()].map((m): ScopeMember => ({
-      userId: m.userId, username: m.userId, avatarRevision: 0, role: m.role, identityPublicKey: m.bundle, keyChainHead: m.head,
-      pending: m.grant.grantedEpoch < s.currentEpoch,
-    }))
-  })
+  vi.mocked(listScopeMembers).mockImplementation(readMembers)
 
   return {
     scopes, acct, pins, register, publishes, applied, regrant,
@@ -923,6 +928,70 @@ describe('securing the account loses no space (inbox #556)', () => {
     const bGrant = group.members.get(B)!.grant
     expect(bGrant.grantedEpoch).toBe(1)
     expect(same(v1.openAs(grantContext(SCOPE_JOINED, 1), v1.hybridSecret(B_KEYS.identity.priv), fromB64std(bGrant.wrappedGrant)), openMine(group))).toBe(true)
+  })
+
+  /** B joins `group` (anchored in the tenant, whose owner B is) right AFTER the caller's own directory read of it — so
+   *  the list the caller hands the rotation lacks B, and the server's completeness check refuses the first commit. */
+  function joinAfterFirstRead(group: Scope) {
+    const base = vi.mocked(listScopeMembers).getMockImplementation()!
+    let joined = false
+    vi.mocked(listScopeMembers).mockImplementation(async (scopeId: string) => {
+      const listed = await base(scopeId)
+      if (scopeId === group.id && !joined) {
+        joined = true
+        group.members.set(B, { userId: B, role: 'MEMBER', bundle: B_PUB, head: headOf(B_CHAIN), grant: grantRow(group, 0, { userId: B, bundle: B_PUB }, bSigner) })
+      }
+      return listed
+    })
+  }
+
+  it('the finish grants a member who joined between its directory read and its commit: the rebuild reads the members again (inbox #661)', async () => {
+    // Bite: build the rebuild from the list the caller handed in (`listed = members` in commitRotation) — the second
+    // commit meets the same `409 rotation_incomplete`, the space stays waiting and B is never granted.
+    const group = heldScope(SCOPE_JOINED, 'GROUP')
+    const srv = fakeServer({ scopes: [group, heldScope(SCOPE_TENANT, 'TENANT', { role: 'MEMBER', by: bSigner, withB: true })], abandonAfterPublish: true })
+    await rotate()
+    srv.reconnect()
+    joinAfterFirstRead(group)
+    srv.rotateScope.mockClear()
+    await runScopeRotationWorker()
+    const groupCommits = srv.rotateScope.mock.calls.flatMap((c, i) => (c[0].scopeId === SCOPE_JOINED ? [srv.rotateScope.mock.results[i].value] : []))
+    expect(groupCommits).toHaveLength(2) // the first met the join, the one rebuild took it
+    await expect(groupCommits[0]).rejects.toMatchObject({ message: 'http 409 rotation_incomplete' })
+    expect(group.currentEpoch).toBe(1)
+    const bGrant = group.members.get(B)!.grant
+    expect(bGrant.grantedEpoch).toBe(1)
+    expect(same(v1.openAs(grantContext(SCOPE_JOINED, 1), v1.hybridSecret(B_KEYS.identity.priv), fromB64std(bGrant.wrappedGrant)), openMine(group))).toBe(true)
+  })
+
+  it('a queued rotation grants a member who joined between the worker\'s directory read and its commit (inbox #661)', async () => {
+    // Bite: as above — without the re-read the worker's one rebuild fails as well, and the job is failed back unrotated.
+    const group = heldScope(SCOPE_JOINED, 'GROUP')
+    const srv = fakeServer({ scopes: [group, heldScope(SCOPE_TENANT, 'TENANT', { role: 'MEMBER', by: bSigner, withB: true })] })
+    await rotate() // the account's own rotation settles first, so the pass below only takes the queued job
+    expect(group.currentEpoch).toBe(1)
+    const completeTask = vi.fn<TasksApi['completeTask']>(async () => undefined)
+    const failTask = vi.fn<TasksApi['failTask']>()
+    fakeApi(tasksApi, {
+      claimTask: vi.fn<TasksApi['claimTask']>()
+        .mockResolvedValueOnce({ jobId: 'j1', scopeId: SCOPE_JOINED, capabilityTag: SCOPE_ROTATION, attempts: 1 })
+        .mockResolvedValue(null),
+      completeTask, failTask,
+      declineTask: vi.fn<TasksApi['declineTask']>(),
+      heartbeatTask: vi.fn<TasksApi['heartbeatTask']>(),
+    })
+    joinAfterFirstRead(group)
+    srv.rotateScope.mockClear()
+
+    expect(await runScopeRotationWorker()).toBe(1)
+
+    expect(srv.rotateScope).toHaveBeenCalledTimes(2)
+    expect(failTask).not.toHaveBeenCalled()
+    expect(completeTask).toHaveBeenCalledTimes(1)
+    expect(group.currentEpoch).toBe(2)
+    const bGrant = group.members.get(B)!.grant
+    expect(bGrant.grantedEpoch).toBe(2)
+    expect(same(v1.openAs(grantContext(SCOPE_JOINED, 2), v1.hybridSecret(B_KEYS.identity.priv), fromB64std(bGrant.wrappedGrant)), openMine(group))).toBe(true)
   })
 
   it('someone else’s commit finishes the row: a 409 stale_epoch, and the rebuild commits nothing on top', async () => {

@@ -106,14 +106,14 @@ export function removeTenantMember(tenantId: string, userId: string, revokeLinks
  * The caller re-keys the nodes after it (ADR 0109).
  *
  * The directory is read **now**, after any removal, so the request covers every membership the server holds (`409
- * rotation_incomplete` otherwise). `excluding` — the member a removal just took out — is dropped from it by the owner's
- * own choice, however the server lists them: the new epoch is never wrapped to them. A server that kept their
+ * rotation_incomplete` otherwise; the rotation's one rebuild reads it again). `excluding` — the member a removal just
+ * took out — is dropped from it, and from the re-read, by the owner's own choice, however the server lists them: the
+ * new epoch is never wrapped to them. A server that kept their
  * membership meets the rotation's cover check, and nothing commits. Never a `removesUserId`: a tenant member leaves only
  * by the removal cascade (`400 invalid_request` on a TENANT, inbox #595), which runs first.
  */
 export async function rekeyTenant(tenantScopeId: string, excluding?: string): Promise<number> {
-  const members = (await listScopeMembers(tenantScopeId)).filter((m) => m.userId !== excluding)
-  return commitRotation(tenantScopeId, members)
+  return commitRotation(tenantScopeId, await listScopeMembers(tenantScopeId), { excluding })
 }
 
 /**
