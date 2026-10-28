@@ -487,13 +487,6 @@ describe('in a tenant, the join record anchors the chain (ADR 0111 decisions 12,
     expect(pinsOn(srv.state)[U1]).toEqual(pinOf(KEY_C, 5, SOME_HEAD, { index: 1 }))
   })
 
-  it('a pin taken unread at an invite accept (index -1) and not on the chain is no replacement either', () => {
-    const h0 = genesis(U1, A)
-    const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
-    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: -1 }), U1, servedChain(h0), joined)).toEqual({ anchor: 'anomaly' })
-    expect(readJoinedChain(pinOf(KEY_C, 5, SOME_HEAD, { index: 0 }), U1, servedChain(h0), joined)).toMatchObject({ anchor: 'replaced' })
-  })
-
   it('a pinned head ON the chain must carry the pinned key — another key there is an anomaly, never a replacement', () => {
     const { h0, h1 } = twoSteps()
     const joined = { kind: 'joined' as const, identityPublicKey: v1.serializeIdentityPublic(A.identity.pub), secretKeyProofPublicKey: A.proof.publicKey }
@@ -722,6 +715,18 @@ describe('a withheld, added, rolled-back or moved entry is refused (ADR 0104 dec
     const entries = new Map([[idOf(OTHER), sealEntryAs(U1, pinOf(KEY_A), idOf(OTHER))]])
     fakeServer({ blob: headFor(entries, 2), revision: 2, entries })
     await expect(getPin(U1)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+  })
+
+  it('an entry with a negative chain index is refused as unreadable — every pin is taken from a walked chain', async () => {
+    // Nothing pins a head unread any more (the inviting owner is pinned from the chain the invite serves, ADR 0111
+    // decision 19), so an index below the genesis is no entry this account wrote.
+    const bad = new Map([[idOf(U1), sealEntryAs(U1, pinOf(KEY_A, 5, SOME_HEAD, { index: -1 }), idOf(U1))]])
+    fakeServer({ blob: headFor(bad, 2), revision: 2, entries: bad })
+    await expect(getPin(U1)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    // control: the same entry at the genesis opens
+    const good = new Map([[idOf(U1), sealEntryAs(U1, pinOf(KEY_A, 5, SOME_HEAD, { index: 0 }), idOf(U1))]])
+    fakeServer({ blob: headFor(good, 3), revision: 3, entries: good })
+    await expect(getPin(U1)).resolves.toMatchObject({ index: 0 })
   })
 
   it('a listing that does not advance is refused, not followed', async () => {

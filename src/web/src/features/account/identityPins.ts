@@ -72,7 +72,7 @@ const MAX_ENTRIES = 25_000
 
 /** One pinned contact: the head of their key chain this account pinned (base64 of 32 bytes), the fingerprint hash of the
  *  identity public bundle at that head (base64 of 32 bytes, `fingerprintDigestB64`), the index of that head's step in the
- *  chain (-1 for a head pinned unread, at an invite's accept), first-seen, and whether a join record replaced a pin that
+ *  chain, first-seen, and whether a join record replaced a pin that
  *  was not on its chain (ADR 0111 decision 15: "the key you saw before wasn't theirs"). */
 export interface Pin {
   fingerprint: string
@@ -243,7 +243,7 @@ function openEntry(mk: Uint8Array, indexKey: Uint8Array, pinIdHex: string, entry
     typeof head !== 'string' ||
     fromB64std(head).length !== 32 ||
     !Number.isSafeInteger(index) ||
-    (index as number) < -1 ||
+    (index as number) < 0 ||
     (replaced !== 0 && replaced !== 1) ||
     !Number.isSafeInteger(firstSeenAt) ||
     (firstSeenAt as number) < 0 ||
