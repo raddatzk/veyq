@@ -84,6 +84,7 @@ touching anyone already in it.
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the invite as a placeholder member)
 - [uc.spaces.add-member](uc.spaces.add-member.md) — mints the member invites this manages.
 - [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) — the owner-invite management this
   mirrors (resend / reassign / revoke).

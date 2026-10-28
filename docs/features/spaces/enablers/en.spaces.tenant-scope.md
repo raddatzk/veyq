@@ -19,7 +19,8 @@
   tenant scope specifically, so it is not a `Serves` target here.
 - **Depends on:** [en.spaces.personal-scope](en.spaces.personal-scope.md) (the generalised **scope identity**
   `scopeId + kind` and the client-side **open-by-unwrap**), and `uc.account.unlock` (the identity that opens
-  the grant).
+  the grant). How a tenant grant is written, checked, rotated and delivered is the topic's current picture,
+  [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md); this enabler only opens one.
 - **Preconditions:** An **authenticated, unlocked** member of the active tenant (the identity **private**
   bundle is in the vault, so the client can open a grant); the tenant resolved from the request `Host`; a
   `kind=TENANT` scope for which the caller **holds a grant** is returned by `GET /api/scopes`.
@@ -64,8 +65,8 @@ generalising "open a scope by kind" so `kind=TENANT` is opened the same way `kin
 
 1. After unlock, the client lists scopes: `GET /api/scopes` (already fetched for the personal scope).
 2. It takes the entry with `kind=TENANT` **for which the caller holds a `wrappedGrant`**.
-3. It `asymUnwrap`s that grant with the vaulted identity (hybrid secret + public derived from the identity
-   private bundle, context `scope-grant`) → the **tenant scope key**, held in memory.
+3. It checks the grant's granter signature ([keys, grants and trust § Grants](../../../crosscutting/keys-grants-and-trust.md#grants-who-wraps-a-scope-key-to-whom))
+   and opens it with the vaulted identity (context `scope-grant`) → the **tenant scope key**, held in memory.
 4. The shell makes the tenant the **active space**: it resets the tree + favorites for the new scope and
    browses the tenant's Memory tree ([uc.spaces.switch-spaces](../use-cases/uc.spaces.switch-spaces.md)).
 
@@ -104,9 +105,10 @@ sequenceDiagram
 - **E2 — not unlocked:** without the identity private bundle the client cannot open the grant → entering the
   tenant is deferred until after unlock (the deep-link-through-login restore of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) applies unchanged).
-- **E3 — grant unwrap fails** (corrupt/foreign grant, identity rotated without re-wrap): the tenant can't be
-  opened → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a
-  wipe). Identity rotation re-wraps grants (its own use-case).
+- **E3 — the grant does not open or is refused** (corrupt, foreign, or its granter's signature does not verify or
+  anchor): the tenant can't be opened → surfaced as an error; the scope row is **not** self-deleted (a blind operator
+  must not force a wipe). Securing the account never causes it: its publish re-grants every scope to the new identity
+  ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)).
 - **E4 — no tenant context** (no Host / unknown tenant): `404` — every scope lives within a tenant
   ([ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md)); there is no host-less tenant scope.
 
@@ -125,9 +127,9 @@ sequenceDiagram
   yields the key (client-enforced confidentiality, [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md)).
 - **Grant distribution is a separate flow.** This enabler assumes the caller **already holds** a tenant grant
   (the owner does, from cold birth). **Distributing** tenant grants to new members is
-  [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md), and it is **built**: the owner's invite holds a
-  grant to an owner-signed invite key, and the newcomer grants itself from it at accept
-  ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3).
+  [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md): the owner's invite holds a grant to an owner-signed
+  invite key, and the newcomer grants itself from it at accept
+  ([keys, grants and trust § A member invite](../../../crosscutting/keys-grants-and-trust.md#a-member-invite-is-a-placeholder-member)).
 - **Every tenant's grant, in one Host-independent call.** `GET /api/scopes` is **Host-scoped** — it serves the
   scope rows of the tenant resolved from the request `Host`, and nothing of any other tenant.
   `GET /api/scopes/my-tenants` is **account-scoped** (`MembershipEntity.find("userId", …)`, no Host at all) and
@@ -157,7 +159,8 @@ sequenceDiagram
 
 - Feature: [Spaces (scopes)](../_index.md)
 - Concepts: [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md) (scope kinds, grants = membership,
-  host-based tenant resolution), [Account & Key Model](../../account/enablers/en.account.key-model.md)
+  host-based tenant resolution), [Keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (grants,
+  rotation, the anchor check), [Account & Key Model](../../account/enablers/en.account.key-model.md)
   (identity opens grants), [Security Model](../../../crosscutting/security-model.md) (operator-blind)
 - Decisions: [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) (the tenant scope is born cold —
   why there is no client birth here), [ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md) (scopes

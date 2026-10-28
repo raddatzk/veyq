@@ -95,6 +95,7 @@ so the removed member stops reading what comes next.
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (rotation per scope kind, the queued rotation)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the rotation itself)
 - Use-case: [uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md) (the re-key step 5 runs)

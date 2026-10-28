@@ -124,6 +124,7 @@ with a key that does not follow from it, so nobody can quietly pose as someone y
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the key chain, the join record and the anchor)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the sealed pin
   store + the chain walk this narrates), [en.spaces.member-identity](../enablers/en.spaces.member-identity.md)

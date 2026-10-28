@@ -1,20 +1,20 @@
 # ADR 0054 — Password recovery releases the RECOVERY wrap against two factors: address control and the Secret Key
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-05
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 
-A `RECOVERY` `MasterKeyWrap` has been written at every account birth since V1
-(`src/packages/crypto/src/accountBirth.ts`), and the server has withheld it from the only endpoint
-that serves wraps ever since (`KeyMaterialHandler.forUser` filters it out). It has never been read by any
-client. The account key model calls a forgotten password "must not mean lost memories"
-([en.account.key-model](../features/account/enablers/en.account.key-model.md)) and the published wiki promises
-a way back, so the gap is a promise outstanding, not merely a missing feature. Inbox #113 carries it; ADR 0053's
-sibling durability bar is stated in [architecture](../architecture/README.md) §10.
+A `RECOVERY` `MasterKeyWrap` is written at every account birth (`src/packages/crypto/src/accountBirth.ts`), and the
+server withholds it from the endpoint that serves wraps (`KeyMaterialHandler.forUser` filters it out). The account
+key model says a forgotten password "must not mean lost memories"
+([en.account.key-model](../features/account/enablers/en.account.key-model.md)), so recovery is a promise the product
+owes, not merely a missing feature. ADR 0053's sibling durability bar is stated in
+[architecture](../architecture/README.md) §10.
 
-Three facts constrain the design. The first two are in the code; the third is the trap the first version of
-this record fell into.
+Three facts constrain the design. The first two are in the code; the third is a trap.
 
 **1. The RECOVERY wrap is opened by the Secret Key alone.** `kekRecovery(secretKey, salt)` takes no password,
 where the `PASSWORD` floor takes both (`kekPasswordSecret`). So there is **no separate recovery code** in veyq
@@ -27,10 +27,9 @@ a live session plus the Secret Key would open the vault *without* the password, 
 content factor into a login-only one. So release cannot be authenticated by session — it must be gated on
 something the ordinary logged-in user does not have.
 
-**3. A hash of the Master Key is not a proof of the Secret Key — the trap this record first fell into.** It
-first gated the reset on reproducing a domain-separated SHA-256 of the Master Key against the copy stored at
-birth, on the reasoning that it *"needs the master key, i.e. the Secret Key"*. Both halves
-of that fail.
+**3. A hash of the Master Key is not a proof of the Secret Key.** Gating the reset on reproducing a
+domain-separated SHA-256 of the Master Key against a copy stored at birth looks as if it *"needs the master key,
+i.e. the Secret Key"*. Both halves of that fail.
 - **The Master Key is not the Secret Key.** A linked device holds the Master Key without ever having seen the
   Secret Key ([ADR 0059](0059-device-linking.md) §10).
 - **The proof is the stored value itself.** A database dump carries the very tag a reset presents.
@@ -38,10 +37,8 @@ of that fail.
 A proof the server checks has to be one the server cannot itself produce: a signature under a key only the
 Secret Key derives ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2).
 
-The open question was what gates the release. The originally sketched answer was an email gate, recorded in
-code as "the (future) email-gated recovery flow (cr-0052)" — a CR that no longer exists. Email verification was
-briefly scoped out of V1 on the reasoning that invite-only registration already proves address control; that
-reasoning covers *registration*, not *recovery*, and it was reversed on 2026-08-05.
+The open question was what gates the release. Invite-only registration proves address control at
+*registration*; that says nothing about who holds the mailbox at *recovery*, so recovery needs its own proof of it.
 
 ## Decision
 
@@ -147,12 +144,10 @@ limiter so the two answers cannot be paired into an address-level oracle
 
 ## Consequences
 
-- **The published promise gets narrower and truer.** `wiki/{en,de}` describes a single-use *recovery code* that
-  issues a fresh kit. No such code exists; the Secret Key is the recovery factor, and a reset does not re-issue
-  the kit (the Secret Key is unchanged, so the old kit stays valid). The wiki must be corrected to describe what
-  veyq actually does. Re-issuing a kit means rotating the Secret Key and re-wrapping. It is part of securing the
-  account ([ADR 0060](0060-key-rotation-after-compromise.md)), not of a reset: a reset keeps the Secret Key, so the kit
-  it was opened with stays valid.
+- **No recovery code, and a reset issues no kit.** The Secret Key is the recovery factor, and a reset keeps it, so
+  the kit it was opened with stays valid; published copy may not promise a single-use code or a fresh kit from
+  recovery. A new kit comes only with a new Secret Key, which is securing the account
+  ([ADR 0060](0060-key-rotation-after-compromise.md); [keys, grants and trust § The Secret Key](../crosscutting/keys-grants-and-trust.md#the-secret-key)).
 - **Recovery never gates on a stored confirmation.** The mailed token proves address control at the time of
   release, which is what matters; a flag recorded months earlier adds no factor. Address confirmation
   ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md)) is therefore recorded and shown,

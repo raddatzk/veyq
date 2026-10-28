@@ -83,6 +83,7 @@ member's device finishes the rest in the background.
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (rotation and the node re-key)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the epoch it follows)
 - Triggers: [uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md),

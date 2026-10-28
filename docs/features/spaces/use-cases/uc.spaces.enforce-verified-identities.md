@@ -129,6 +129,7 @@ that space then sees that you verified them, and you see when someone's key no l
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (verifications and what a member sees)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the pin store and
   the anchor check the compare starts from)
