@@ -65,7 +65,9 @@ member's own group rows) and splits it by sensitivity:
      key in the tenant
      ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3, 12, 15).
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
-   **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`.
+   **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`. A name saved under an
+   earlier tenant epoch still opens after a rotation, and its member's own client moves it forward
+   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name).
 
 ## Alternate / exception flows
 

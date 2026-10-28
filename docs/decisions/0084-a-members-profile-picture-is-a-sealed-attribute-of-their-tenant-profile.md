@@ -53,7 +53,10 @@ base64; the largest place it is drawn is 128 px, the profile page, so it stays s
 `TEXT` column and 21908 < 65532, so the raise needed no schema change. A picture sealed with the earlier 8 KiB pad is not
 one of ours: the client's `openAvatar` refuses any plaintext of another length and shows the letter, so the operator cannot tell
 a photo from a drawing. The contract `maxLength` equals the sealed constant's exact base64 length and is pinned by a test
-and by `validate_maxlength_storage.py`, so it provably fits the `TEXT` column.
+and by `validate_maxlength_storage.py`, so it provably fits the `TEXT` column. `K_tenant` is the tenant epoch current at the
+save; the row records no epoch, so a reader opens the picture under every epoch key it holds, and the member's own client
+moves it forward after a rotation — the name's rule, [ADR 0023](0023-per-tenant-member-identity.md) § The epoch of a sealed
+name.
 
 **4. Who sees it: tenant members only.** Groups use the tenant key too, so the same read serves them. **Never a guest,
 never a share view**: no share endpoint serves an avatar and a share view renders the letter. This is a statement about

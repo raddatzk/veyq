@@ -64,6 +64,23 @@ a tenant.**
   its invite ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 3) — so the client seals it right there and submits it with the accept, or it is added or edited later in
   the profile (both entry points seal identically).
+- **The epoch of a sealed name.** The name, and the picture of [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md),
+  are sealed under the tenant epoch ([ADR 0024](0024-scope-key-rotation.md)) current when their member saved them, and
+  the profile row records no epoch. **Every reader opens them under every tenant epoch key it holds, newest first** — the
+  join record's rule (`openUnderHeldEpochs`, `src/web/src/features/spaces/epochs.ts`). So a rotation, which securing an
+  account causes in every tenant it is in ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 8), leaves every name and picture readable to every member: a grant at the current epoch peels the chain down
+  to `E_0`, a newcomer's included. Nothing opens under a key the reader does not hold, so no one reads a name their
+  membership did not already give them. **The member's own client moves its name and picture forward** to the current
+  epoch when it enters the tenant (`carryProfileForward.ts`): opened and sealed again, written only while the stored blob
+  (the name) or revision (the picture) is still the one it opened, so a save from another device in between wins.
+  - *Why on entry, not on the next save:* a name is set once and rarely saved again, and each failed trial costs about
+    26 ms per 1,000 members on every directory read (measured 2026-10-28: 19 ms for 1,000 names opening at the first
+    try, 264 ms nine epochs behind) — without the move, every rotation would add that for good.
+  - *Why no epoch beside the blob:* the server could hold one (an epoch number is opaque metadata it already holds per
+    scope), but it would check nothing, and it would cost a field on the profile's writes, the accepts and both reads, and a
+    migration whose existing rows would need the trial open anyway. With the move, the trial is one open in the steady
+    state.
 - **The join record** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 3, built 2026-10-28). The profile row also holds `sealed_join_record`: the member's identity and
   Secret-Key proof public key with the owner-signed invite it joined through, signed by the invite key and the new
