@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { fakeApi } from '../../../test/apiMock'
-import { fakePinServer, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import { fakePinServer, pinOf, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import { chainKeys, fakeKeyChains, servedIdentity, type BuiltChain } from '../../../test/keyChain'
 import type { AccountDeviceRegisterApi, DeviceRegister } from '../../../api/generated/account'
 import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 
@@ -15,21 +16,22 @@ import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 //
 // Which paths: every importer of the two document modules outside the reset and the rotation, measured with
 //   grep -rn -E "from '[./]*(account/)?(identityPins|deviceRegister)'" src/web/src | grep -v '\.test\.'
-// — the grant-delivery worker, the member directory (`trustStates`), the changed-key review (`getPin`,
-// `acceptKeyChange`), the group invite (`acceptKeyChange`), opening a scope (`scopes.ts` / `grantTrust.ts`, both
-// through `checkAndPin`), the sessions panel (`readRegisterView`, the reconcile, the rename), the unlock
-// (`rememberThisDevice`), the onboarding tail (`rememberThisDeviceWrap`), and the hub's probe. Opening the
-// active space reaches the store only through `checkAndPin`, so it is driven at that entry point; the worker is
-// driven whole, through its real claim, because its pause is its own decision.
+// — the grant-delivery worker, the member directory (`trustStates`), the profile (`personTrust`, `markVerified`), every
+// wrap site (`anchorIdentity`: the group add, the rotation, the open-invite carry, the invite accept), the recipient
+// side and the moderation unlock (`anchorChainKey`, through `grantTrust.ts`), the sessions panel (`readRegisterView`, the
+// reconcile, the rename), the unlock (`rememberThisDevice`), the onboarding tail (`rememberThisDeviceWrap`), and the
+// hub's probe. Opening the active space reaches the store only through `anchorChainKey`, so it is driven at that entry
+// point; the worker is driven whole, through its real claim, because its pause is its own decision.
 vi.mock('../../../api/client', () => ({
   accountIdentityPinsApi: vi.fn(),
   accountDeviceRegisterApi: vi.fn(),
   tasksApi: vi.fn(),
+  keyChainApi: vi.fn(),
 }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn() }))
 
-import { acceptKeyChange, checkAndPin, forgetVerifiedPins, getPin, markVerified, trustStates } from '../identityPins'
+import { anchorChainKey, anchorIdentity, forgetVerifiedPins, getPin, markVerified, personTrust, trustStates } from '../identityPins'
 import { fingerprintDigestB64 } from '../safetyCode'
 import {
   readRegisterView,
@@ -58,8 +60,10 @@ const S1 = '5c09e000-0000-4000-8000-0000000000c2'
 const OTHER_ID = '7a26e000-0000-4000-8000-0000000000c3'
 const OTHER_KEY = b64std(v1.serializeIdentityPublic(v1.generateIdentity().pub))
 /** The pin store as this account wrote it at `revision`: one contact pinned (ADR 0104: a head plus an entry). */
-const pinsAt = (revision: number) =>
-  sealPinStore(MK, { [OTHER_ID]: { fingerprint: fingerprintDigestB64(OTHER_KEY), state: 'pinned', firstSeenAt: 1 } }, revision)
+const pinsAt = (revision: number) => sealPinStore(MK, { [OTHER_ID]: pinOf(OTHER_KEY) }, revision)
+/** The target's key chain as the server serves it — born with TARGET — and what a directory serves beside it. */
+let targetChain: BuiltChain
+const target = () => servedIdentity(targetChain)
 const registerAt = (revision: number) =>
   b64std(v1.seal({ purpose: 'device-register', revision }, MK, enc.encode(JSON.stringify({ devices: {}, families: {}, wraps: {} }))))
 
@@ -79,9 +83,7 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
   const K_SC = v1.randomBytes(32)
   const job: ClaimedJob = {
     jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
-    grantDelivery: {
-      targetUserId: TARGET_ID, targetMembershipId: 'm1', identityPublicKey: TARGET_PUB,
-    },
+    grantDelivery: { targetUserId: TARGET_ID, targetMembershipId: 'm1', ...target() },
   }
   const completeTask = vi.fn<TasksApi['completeTask']>(async () => undefined)
   fakeApi(tasksApi, {
@@ -89,7 +91,6 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
     completeTask,
     failTask: vi.fn<TasksApi['failTask']>(),
     declineTask: vi.fn<TasksApi['declineTask']>(),
-    clearDeclinesForAcceptedKey: async () => ({ cleared: 0 }),
   })
   return { putIdentityPins, putDeviceRegister, completeTask, K_SC }
 }
@@ -98,9 +99,10 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
 async function driveEveryPath(K_SC: Uint8Array) {
   const attempts: Array<() => Promise<unknown>> = [
     () => getPin(TARGET_ID),
-    () => checkAndPin(TARGET_ID, TARGET_PUB),
-    () => trustStates([{ userId: TARGET_ID, directoryKey: TARGET_PUB }]),
-    () => acceptKeyChange(TARGET_ID, TARGET_PUB),
+    () => anchorIdentity(TARGET_ID, target()),
+    () => anchorChainKey(TARGET_ID, TARGET_PUB),
+    () => trustStates([{ userId: TARGET_ID, ...target() }]),
+    () => personTrust(TARGET_ID, target()),
     () => markVerified(TARGET_ID, fingerprintDigestB64(TARGET_PUB)),
     () => runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 }),
     () => readRegisterView(['fam1'], [], 'me'),
@@ -118,6 +120,7 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   forgetVerifiedPins()
+  targetChain = fakeKeyChains().born(TARGET_ID, chainKeys(TARGET))
   vi.mocked(identityPrivate).mockImplementation(() => ({
     kemSeed: WORKER.priv.kemSeed.slice(), sign: WORKER.priv.sign.slice(),
   }))
