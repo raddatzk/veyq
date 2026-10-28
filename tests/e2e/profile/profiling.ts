@@ -95,8 +95,21 @@ export interface Window {
   failedRequests: string[]
   /** Every answer of the window with a status of 400 or more, as `METHOD origin+path status` — judged by the driver too. */
   httpErrors: string[]
+  /**
+   * `Performance.getMetrics` right before the window opens and right after it closes (inbox #220): the cumulative
+   * counters (`TaskDuration`, `ScriptDuration`, `LayoutDuration`, `RecalcStyleDuration`, in seconds) of the window are
+   * `metrics` minus `metricsBefore`, so the sign-in before it no longer counts.
+   */
+  metricsBefore: Record<string, number>
   metrics: Record<string, number>
 }
+
+/**
+ * The two marks that tie the trace's clock to the window (inbox #220): `t0` and `t1` are these marks' `startTime`, and
+ * the trace carries each as a `blink.user_timing` event at the same instant on its own clock. Fixed names, nothing of
+ * the content. `scripts/profile_attribute.py` reads them by these names.
+ */
+export const WINDOW_MARKS = { start: 'veyq-profile-window-start', end: 'veyq-profile-window-end' } as const
 
 /**
  * Runs `operation` (the action that starts what is profiled, and the wait for the state that ends it) under the
@@ -129,18 +142,19 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   await browser.startTracing(page, { path: `${OUT}/${stem}.trace.json`, categories: TRACE_CATEGORIES, screenshots: false })
   if (cpuProfile) await cdp.send('Profiler.start')
 
+  const metricsBefore = (await cdp.send('Performance.getMetrics')).metrics
   const startedAt = Date.now()
-  const t0 = await page.evaluate(() => performance.now())
+  const t0 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.start)
   await operation()
-  const t1 = await page.evaluate(() => performance.now())
+  const t1 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.end)
   const endedAt = Date.now()
+  const { metrics } = await cdp.send('Performance.getMetrics')
 
   const profile = cpuProfile ? (await cdp.send('Profiler.stop')).profile : null
   await browser.stopTracing()
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
   if (profile) writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
 
-  const { metrics } = await cdp.send('Performance.getMetrics')
   const { apiRequests, storeRequests } = await page.evaluate(([from, to]) => {
     const inWindow = (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
       .filter((e) => e.startTime >= from && e.startTime <= to)
@@ -161,6 +175,7 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     storeRequests,
     failedRequests: failed,
     httpErrors,
+    metricsBefore: Object.fromEntries(metricsBefore.map((m) => [m.name, m.value])),
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))
