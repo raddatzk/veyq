@@ -239,6 +239,11 @@ class AccountPurge(
             "veyq_share.share_name_editor_user_id" to kept("content attribution: a link's shown name"),
             "veyq_membership.added_by" to kept("another member's membership names who added them"),
             "veyq_membership.granter_user_id" to kept("another member's grant names who wrapped it, for its signature"),
+            // A member invite is a placeholder member (ADR 0111): the erasure supersedes the account's live invites —
+            // to its address or signed by it — and that statement nulls both columns; what stays is another owner's
+            // live invite a rotation by this account re-granted, which names it like a membership's grant does.
+            "veyq_tenant_invite.signer_user_id" to kept("superseded with its key dropped when the signer's account is erased"),
+            "veyq_tenant_invite.granter_user_id" to kept("a live invite's grant names who wrapped it, for its signature"),
             // The moderation records the law keeps to their case's log retention date (ADR 0101 decision 7).
             "veyq_moderation_report.reporter_account" to kept("a report the person made, kept to its case's log retention"),
             "veyq_moderation_block.target_id" to kept("a measure on the account stays as the record it is"),

@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.admin.tenant
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -31,6 +33,10 @@ import java.util.UUID
 class UsernameRaceSliceTest {
 
     @Inject lateinit var profiles: TenantProfileStore
+    @Inject lateinit var store: TenantStore
+
+    /** Each seeded invite's key, by its secret — a MEMBER accept proves it holds the invite key (ADR 0111). */
+    private val keys = java.util.concurrent.ConcurrentHashMap<String, TestInviteKey>()
 
     @Test
     fun concurrentRenamesToOneHandleGiveItToOne() {
@@ -84,24 +90,27 @@ class UsernameRaceSliceTest {
         return userId
     }
 
-    private fun seedMemberInvite(tenantId: String, email: String, secret: String) =
+    /** A MEMBER invite signed by the tenant's owner, its grant of `E_0`, stored as the handler stores one. */
+    private fun seedMemberInvite(tenantId: String, email: String, secret: String) {
+        val key = TestInviteKey().also { keys[secret] = it }
         QuarkusTransaction.requiringNew().run {
-            TenantInviteEntity().apply {
-                id = UUID.randomUUID().toString(); this.tenantId = tenantId; ownerEmail = email
-                tokenHash = Tokens.hash(secret); status = TenantInviteEntity.ACTIVE; role = TenantInviteEntity.MEMBER
-                expiresAt = Instant.now().plus(7, ChronoUnit.DAYS); createdAt = Instant.now()
-            }.persist()
+            val owner = MembershipEntity.find("scopeId = ?1 and role = ?2", tenantId, MembershipEntity.OWNER).firstResult()!!.userId
+            store.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS), key.stored(owner))
         }
+    }
 
     private fun rename(userId: String, domain: String, username: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain)
             .contentType(ContentType.JSON).body("""{"username":"$username"}""")
             .`when`().put("/api/account/profile").then().extract().answer()
 
-    private fun register(secret: String, username: String): Pair<Int, String?> =
-        given().contentType(ContentType.JSON).body(
+    private fun register(secret: String, username: String): Pair<Int, String?> {
+        val userId = UUID.randomUUID().toString()
+        val key = keys.getValue(secret)
+        return given().contentType(ContentType.JSON).body(
             """
-            {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"$username",
+            {"bootstrapSecret":"$secret","userId":"$userId","username":"$username",
+             ${TestGrants.memberJoinJson(key, key.inviteId, userId, "bWVtYmVyLXB1YmxpYy1rZXk=")},
              "account":{"suiteId":"v1",
                "identityPublicKey":"bWVtYmVyLXB1YmxpYy1rZXk=",
                "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
@@ -110,4 +119,5 @@ class UsernameRaceSliceTest {
                "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"}}
             """.trimIndent(),
         ).`when`().post("/api/tenants/accept/register").then().extract().answer()
+    }
 }

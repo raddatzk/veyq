@@ -16,14 +16,15 @@ import java.util.UUID
 
 /**
  * The scheduled grant-delivery backstop, through its real entry `GrantDeliveryOriginator.run()` (ADR 0021,
- * cr-0076, cr-0093). Its own logic is the scope selection in `TasksStore.reconcileAllGrantDelivery`: grant-less
- * scopes ∪ rotated scopes. Each membership below is behind (or not) for exactly one reason:
+ * cr-0076, cr-0093). Its own logic is the scope selection in `TasksStore.reconcileAllGrantDelivery`: the rotated
+ * scopes, the only ones where a membership can be behind — every membership is born with a grant (ADR 0111), so a
+ * grant-less one is no delivery target any more. Each membership below is behind (or not) for exactly one reason:
  *
- * - Scope A (epoch 0): M1 grant-less; M2 grant-less but `pendingConsent`; M3 granted; M6 grant-less with a PENDING
- *   job already. A is selected only because it holds grant-less members.
- * - Scope B (epoch 2): M4 granted at epoch 1 (stale); M5 granted at epoch 2. B holds **no** grant-less member, so
- *   it is selected only because it was rotated — which is what makes M4 the witness for the `rotated` half.
- * - Scope C: MF, a grant-less member no assertion reads before the restore. It stands in for another test's
+ * - Scope A (epoch 0, never rotated): M1 grant-less; M3 granted. Neither is behind, and A is not selected.
+ * - Scope B (epoch 2): M4 granted at epoch 1 (behind); M5 granted at epoch 2; M2 a `pendingConsent` proposal granted at
+ *   epoch 1 — it holds a grant like any member (ADR 0111 decision 4), so it is behind too; M6 behind with a PENDING job
+ *   already; M7 grant-less in a rotated scope, which nothing delivers to.
+ * - Scope C (epoch 1): MF, behind, no assertion reads it before the restore. It stands in for another test's
  *   leftover row: `run()` walks the whole shared database, so it originates jobs far outside this fixture.
  *
  * Every count is by `resourceRef`, never `run()`'s return value, because that value includes other tests' rows.
@@ -40,37 +41,41 @@ class GrantDeliveryOriginatorTest {
     lateinit var originator: GrantDeliveryOriginator
 
     @Test
-    fun runOriginatesOneJobPerBehindMembershipAcrossGrantlessAndRotatedScopesAndIsIdempotent() {
+    fun runOriginatesOneJobPerBehindMembershipOfARotatedScopeAndIsIdempotent() {
         val before = grantDeliveryJobIds()
         lateinit var mf: String
         try {
             val tenant = seedTenant(tenantScope = false)
             val a = scope(tenant, epoch = 0)
             val b = scope(tenant, epoch = 2)
-            val c = scope(tenant, epoch = 0)
+            val c = scope(tenant, epoch = 1)
             val m1 = membership(tenant, a, grantedEpoch = null)
-            val m2 = membership(tenant, a, grantedEpoch = null, pendingConsent = true)
             val m3 = membership(tenant, a, grantedEpoch = 0)
-            val m6 = membership(tenant, a, grantedEpoch = null)
-            pendingJob(a, m6)
             val m4 = membership(tenant, b, grantedEpoch = 1)
             val m5 = membership(tenant, b, grantedEpoch = 2)
-            mf = membership(tenant, c, grantedEpoch = null)
+            val m2 = membership(tenant, b, grantedEpoch = 1, pendingConsent = true)
+            val m6 = membership(tenant, b, grantedEpoch = 1)
+            pendingJob(b, m6)
+            val m7 = membership(tenant, b, grantedEpoch = null)
+            mf = membership(tenant, c, grantedEpoch = 0)
 
             repeat(2) { round ->
                 originator.run()
                 val after = if (round == 0) "after run()" else "after a second run()"
-                assertEquals(1L, pendingJobs(m1), "M1 (grant-less) has exactly one job $after")
-                assertEquals(1L, pendingJobs(m4), "M4 (stale in a rotated scope) has exactly one job $after")
-                assertEquals(0L, pendingJobs(m2), "M2 (pendingConsent) has none $after")
+                assertEquals(0L, pendingJobs(m1), "M1 (grant-less, never-rotated scope) has none $after")
                 assertEquals(0L, pendingJobs(m3), "M3 (granted at the current epoch) has none $after")
+                assertEquals(1L, pendingJobs(m4), "M4 (behind in a rotated scope) has exactly one job $after")
                 assertEquals(0L, pendingJobs(m5), "M5 (granted at the rotated epoch) has none $after")
+                assertEquals(1L, pendingJobs(m2), "M2 (a behind pendingConsent proposal) has exactly one job $after")
                 assertEquals(1L, pendingJobs(m6), "M6 (already has a live job) still has exactly one $after")
+                assertEquals(0L, pendingJobs(m7), "M7 (grant-less in a rotated scope) has none $after")
             }
             assertEquals(1L, pendingJobs(mf), "MF has a job before the restore, so the restore check below is not vacuous")
         } finally {
             QuarkusTransaction.requiringNew().run {
-                JobEntity.delete("capabilityTag = ?1 and id not in ?2", CapabilityTags.GRANT_DELIVERY, before.ifEmpty { setOf("") })
+                // No sentinel id for an empty snapshot: `id` is a UUID column, and `''` fails its conversion.
+                if (before.isEmpty()) JobEntity.delete("capabilityTag", CapabilityTags.GRANT_DELIVERY)
+                else JobEntity.delete("capabilityTag = ?1 and id not in ?2", CapabilityTags.GRANT_DELIVERY, before)
             }
         }
         assertEquals(0L, pendingJobs(mf), "the restore removed the job originated for a row outside this fixture")

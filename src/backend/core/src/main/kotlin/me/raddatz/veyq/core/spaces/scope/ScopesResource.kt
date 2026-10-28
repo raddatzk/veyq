@@ -26,7 +26,7 @@ import me.raddatz.veyq.core.generated.model.SetScopeIconRequest
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.generated.model.OpenInvite
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.tenant.RequestTenant
 import me.raddatz.veyq.core.validation.validated
@@ -81,7 +81,6 @@ class ScopesResource(
         when (val outcome = handler.createGroup(
             identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
             SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature),
-            Admission(createGroupRequest.admissionId.toString(), createGroupRequest.admissionEpoch.validated(), createGroupRequest.admissionTag),
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -114,7 +113,8 @@ class ScopesResource(
     override fun addGroupMember(scopeId: UUID, addGroupMemberRequest: AddGroupMemberRequest): Response =
         when (val outcome = handler.addGroupMember(
             identity.principal.name, scopeId.toString(), addGroupMemberRequest.username, addGroupMemberRequest.sealedNameKey,
-            Admission(addGroupMemberRequest.admissionId.toString(), addGroupMemberRequest.admissionEpoch.validated(), addGroupMemberRequest.admissionTag),
+            SignedGrant(addGroupMemberRequest.wrappedGrant, addGroupMemberRequest.grantSignature),
+            addGroupMemberRequest.epoch.validated(), addGroupMemberRequest.recipientIdentityDigest,
         )) {
             is AddGroupMemberOutcome.Added -> Response.status(Response.Status.CREATED).entity(scopeMember(outcome.row)).build()
             is HttpFailure -> httpError(outcome)
@@ -171,12 +171,30 @@ class ScopesResource(
         when (val outcome = handler.rotateScope(
             identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch, rotateScopeRequest.wrappedPrev,
             rotateScopeRequest.grants.map { RotationGrant(it.userId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature)) },
-            rotateScopeRequest.admissions.map { it.admissionId.toString() to it.admissionTag },
-            rotateScopeRequest.droppedAdmissions.orEmpty().map { it.toString() }.toSet(),
+            rotateScopeRequest.inviteGrants.orEmpty().map {
+                InviteGrant(it.inviteId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature), it.recipientIdentityDigest)
+            },
+            rotateScopeRequest.pendingInviteIds.orEmpty().map { it.toString() }.toSet(),
             rotateScopeRequest.removesUserId?.toString(),
             rotateScopeRequest.revokeLinks ?: false,
         )) {
             is RotateOutcome.Ok -> Response.status(Response.Status.CREATED).entity(ScopeRotated(epoch = outcome.epoch)).build()
+            is HttpFailure -> httpError(outcome)
+        }
+
+    // Any member reads a tenant's open invites, with their keys and no email (ADR 0111 decision 2): a rotation carries them.
+    override fun listOpenInvites(scopeId: UUID): Response =
+        when (val outcome = handler.listOpenInvites(identity.principal.name, scopeId.toString())) {
+            is ListOpenInvitesOutcome.Listed -> Response.ok(
+                outcome.invites.map {
+                    OpenInvite(
+                        inviteId = UUID.fromString(it.inviteId), invitePublicKey = it.invitePublicKey,
+                        inviteKeySignature = it.inviteKeySignature, signerUserId = UUID.fromString(it.signerUserId),
+                        signerIdentityPublicKey = it.signerIdentityPublicKey,
+                        expiresAt = OffsetDateTime.ofInstant(it.expiresAt, ZoneOffset.UTC),
+                    )
+                },
+            ).build()
             is HttpFailure -> httpError(outcome)
         }
 
@@ -245,10 +263,7 @@ class ScopesResource(
     private fun scopeMember(row: ScopeMemberRow) = ScopeMember(
         userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName, avatarRevision = row.avatarRevision,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
-        hasGrant = row.hasGrant, pendingConsent = row.pendingConsent,
-        admissionId = row.admission?.let { UUID.fromString(it.id) },
-        admissionEpoch = row.admission?.epoch,
-        admissionTag = row.admission?.tag,
+        pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord,
     )
 
     /** The active tenant's id — resolved by [RequestTenant] through the one canonical resolver, which

@@ -103,7 +103,7 @@ class ScopeEntity : PanacheEntityBase {
 
         /**
          * Take the scope row's write lock for the caller's transaction — the one serialisation point a rotation
-         * commit, an admission, a grant-delivery completion, every scope-rotation origination and every removal of one
+         * commit, a grant written at a stated epoch (a group add, a member invite, its accept), a grant-delivery completion, every scope-rotation origination and every removal of one
          * scope share (lock order: scope → membership → job; several scope rows in id order). Returns the row as it is
          * under the lock. A query, so the `SELECT … FOR UPDATE` reaches the database even when the transaction already
          * holds the row in its persistence context (the `ScopeAccess` gate loads it, a tenant removal reads it to plan

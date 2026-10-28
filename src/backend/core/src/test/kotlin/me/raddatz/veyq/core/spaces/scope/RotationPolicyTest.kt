@@ -8,15 +8,15 @@ import org.junit.jupiter.api.Test
 /**
  * The pure rotation decision (ADR 0045 §2), boot-free and mutation-verified. Every assertion pins an exact value —
  * a bare "not empty" would let a mutant that grants the *wrong* set pass (the assertion-strength trap ADR 0045 exists
- * to close). The security case — `never grants a pendingConsent proposal` — mirrors the slice
- * `ConsentGroupAddSliceTest.rotationNeverGrantsAPendingProposal`, but here without a Quarkus boot per mutant; the
- * completeness cases mirror `ScopesSliceTest.rotationThatLeavesAnOpenAdmissionBehindIsRefused`.
+ * to close). The completeness cases — every open tenant invite is re-granted or declared pending (ADR 0111 decision 2)
+ * — mirror the slice `InvitePlaceholderSliceTest.aRotationOfTheTenantMustCarryEveryOpenInvite`, here without a Quarkus
+ * boot per mutant.
  */
 class RotationPolicyTest {
 
-    private fun member(id: String, pending: Boolean = false, owner: Boolean = false, admission: String? = null) =
-        RotationMember(id, pending, if (owner) "OWNER" else "MEMBER", admission)
+    private fun member(id: String, owner: Boolean = false) = RotationMember(id, if (owner) "OWNER" else "MEMBER")
     private fun grant(id: String) = RotationGrant(id, SignedGrant("g-$id", "s-$id"))
+    private fun inviteGrant(id: String) = InviteGrant(id, SignedGrant("g-$id", "s-$id"), "d-$id")
 
     private fun plan(
         currentEpoch: Int = 0,
@@ -24,12 +24,12 @@ class RotationPolicyTest {
         members: List<RotationMember> = listOf(member("a")),
         open: Set<String> = emptySet(),
         grants: List<RotationGrant> = emptyList(),
-        retags: List<Pair<String, String>> = emptyList(),
-        dropped: Set<String> = emptySet(),
+        inviteGrants: List<InviteGrant> = emptyList(),
+        pending: Set<String> = emptySet(),
         removes: String? = null,
         callerExcluded: Boolean = false,
         callerGrantedEpoch: Int? = currentEpoch,
-    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, retags, dropped, removes, callerExcluded, callerGrantedEpoch)
+    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, inviteGrants, pending, removes, callerExcluded, callerGrantedEpoch)
 
     private fun committed(d: RotationDecision): RotationPlan = (d as RotationDecision.Commit).plan
 
@@ -54,22 +54,16 @@ class RotationPolicyTest {
     @Test
     fun staleIsDecidedBeforeCompleteness() {
         // A rotation on a superseded epoch is stale whatever it carries: the client's answer is to re-open and rebuild.
-        assertSame(RotationDecision.Stale, plan(currentEpoch = 5, statedEpoch = 5, open = setOf("adm-a")))
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 5, statedEpoch = 5, open = setOf("inv-a")))
     }
 
     @Test
-    fun reGrantsEveryNonPendingMemberTheClientListed() {
+    fun reGrantsEveryMemberTheClientListed() {
+        // A `pendingConsent` proposal is a member here like any other: it holds a grant from its proposal on (ADR 0111
+        // decision 4), so the policy no longer knows the flag at all.
         val grants = listOf(grant("owner"), grant("alice"))
         val p = committed(plan(members = listOf(member("owner"), member("alice")), grants = grants))
-        assertEquals(grants, p.grants, "an ordinary re-grant delivers to every listed key-holder")
-    }
-
-    @Test
-    fun neverGrantsAPendingConsentProposalEvenWhenTheClientListsIt() {
-        val p = committed(
-            plan(currentEpoch = 2, members = listOf(member("owner"), member("partner", pending = true)), grants = listOf(grant("owner"), grant("partner"))),
-        )
-        assertEquals(listOf(grant("owner")), p.grants, "K_SC must never be wrapped onto a pendingConsent proposal (cr-0094)")
+        assertEquals(grants, p.grants, "an ordinary re-grant delivers to every listed member")
     }
 
     @Test
@@ -78,103 +72,101 @@ class RotationPolicyTest {
         assertEquals(listOf(grant("owner")), p.grants, "a grant with no membership to wrap onto is dropped")
     }
 
-    // --- no open admission is left behind (ADR 0020 move 6) ---
+    // --- no open tenant invite is left behind silently (ADR 0111 decision 2) ---
 
     @Test
-    fun refusesARotationThatLeavesAnOpenAdmissionUnTagged() {
-        // The bite: a pending member's admission is open, and the rotation re-tags only the owner's. A worker admits
-        // only a tag at its own current epoch, so the pending member could never be delivered to again.
-        val d = plan(open = setOf("adm-owner", "adm-pending"), retags = listOf("adm-owner" to "t1"))
-        assertSame(RotationDecision.AdmissionsIncomplete, d, "an open admission neither re-tagged nor dropped refuses the rotation")
+    fun refusesARotationThatLeavesAnOpenInviteBehind() {
+        // The bite: two invites are open and the rotation re-grants one. The other's newcomer would open a key the
+        // members already left.
+        val d = plan(open = setOf("inv-a", "inv-b"), inviteGrants = listOf(inviteGrant("inv-a")))
+        assertSame(RotationDecision.Incomplete, d, "an open invite neither re-granted nor declared pending refuses the rotation")
     }
 
     @Test
-    fun commitsWhenEveryOpenAdmissionIsReTagged() {
-        // The control: the same rotation carrying both admissions commits and writes both new tags.
-        val p = committed(plan(open = setOf("adm-owner", "adm-pending"), retags = listOf("adm-owner" to "t1", "adm-pending" to "t2")))
-        assertEquals(mapOf("adm-owner" to "t1", "adm-pending" to "t2"), p.retags)
-        assertEquals(emptySet<String>(), p.dropped)
+    fun commitsWhenEveryOpenInviteIsReGranted() {
+        // The control: the same rotation carrying both commits and writes both re-grants.
+        val p = committed(plan(open = setOf("inv-a", "inv-b"), inviteGrants = listOf(inviteGrant("inv-a"), inviteGrant("inv-b"))))
+        assertEquals(listOf(inviteGrant("inv-a"), inviteGrant("inv-b")), p.inviteGrants)
     }
 
     @Test
-    fun anAdmissionTheRotatorDropsCountsAsHandled() {
-        // A tag that failed the rotator's check is dropped on purpose, not forgotten: the rotation commits and the
-        // admission is cleared, so no client delivers to it again.
-        val p = committed(plan(open = setOf("adm-owner", "adm-forged"), retags = listOf("adm-owner" to "t1"), dropped = setOf("adm-forged")))
-        assertEquals(mapOf("adm-owner" to "t1"), p.retags)
-        assertEquals(setOf("adm-forged"), p.dropped)
+    fun aDeclaredPendingInviteCountsAsCarried() {
+        // An invite the rotator could not verify is declared pending on purpose, not forgotten: the rotation commits and
+        // writes nothing to it — it keeps the grant it holds.
+        val p = committed(plan(open = setOf("inv-a", "inv-b"), inviteGrants = listOf(inviteGrant("inv-a")), pending = setOf("inv-b")))
+        assertEquals(listOf(inviteGrant("inv-a")), p.inviteGrants)
     }
 
     @Test
-    fun aDroppedAdmissionIsNeverAlsoReTagged() {
-        // Named in both lists: the conservative reading wins — dropped, so nothing ever delivers to it.
-        val p = committed(plan(open = setOf("adm-x"), retags = listOf("adm-x" to "t"), dropped = setOf("adm-x")))
-        assertEquals(emptyMap<String, String>(), p.retags)
-        assertEquals(setOf("adm-x"), p.dropped)
+    fun everyOpenInviteMayBeDeclaredPending() {
+        assertEquals(emptyList<InviteGrant>(), committed(plan(open = setOf("inv-a", "inv-b"), pending = setOf("inv-a", "inv-b"))).inviteGrants)
     }
 
     @Test
-    fun ignoresReTagsAndDropsOfAdmissionsTheScopeDoesNotHold() {
-        // Nothing to write them onto: a tag for an unknown admission id must not be stored anywhere.
-        val p = committed(plan(open = setOf("adm-a"), retags = listOf("adm-a" to "t", "adm-ghost" to "g"), dropped = setOf("adm-other")))
-        assertEquals(mapOf("adm-a" to "t"), p.retags)
-        assertEquals(emptySet<String>(), p.dropped)
+    fun ignoresReGrantsOfInvitesTheScopeDoesNotHold() {
+        // An id that names no open invite — revoked or accepted since the rotator read the list — has nothing to be
+        // written onto: the rotation commits, and only the open invite's re-grant is applied.
+        val p = committed(plan(open = setOf("inv-a"), inviteGrants = listOf(inviteGrant("inv-a"), inviteGrant("inv-ghost")), pending = setOf("inv-other")))
+        assertEquals(listOf(inviteGrant("inv-a")), p.inviteGrants)
     }
 
     @Test
-    fun aScopeWithNoOpenAdmissionNeedsNone() {
-        // A pre-admission membership carries none, so there is nothing to carry — the rotation commits.
+    fun anUnknownIdDoesNotStandInForAMissingOne() {
+        // The same count, the wrong ids: a re-grant and a pending declaration of invites the scope does not hold do not
+        // carry the one it does.
+        val d = plan(open = setOf("inv-a", "inv-b"), inviteGrants = listOf(inviteGrant("inv-a"), inviteGrant("inv-ghost")), pending = setOf("inv-other"))
+        assertSame(RotationDecision.Incomplete, d)
+    }
+
+    @Test
+    fun aScopeWithNoOpenInviteNeedsNone() {
+        // A group or personal scope holds none, and neither does a tenant nobody is invited to — the rotation commits.
         assertEquals(1, committed(plan(open = emptySet())).newEpoch)
     }
 
     // --- a removal-rotation: the removal and its rotation are one request (ADR 0024 Decision 4) ---
 
-    private val group = listOf(member("owner", owner = true, admission = "adm-owner"), member("bob", admission = "adm-bob"))
+    private val group = listOf(member("owner", owner = true), member("bob"))
 
     @Test
     fun refusesARemovalWhoseGrantsNameTheRemovedMember() {
         // The bite: the request wraps the new epoch to the very member it removes. Whatever list the server served
         // the remover, the new key must never reach them — layer 1 refuses it, nothing stored.
-        val d = plan(members = group, open = setOf("adm-owner", "adm-bob"), grants = listOf(grant("owner"), grant("bob")), retags = listOf("adm-owner" to "t"), removes = "bob")
+        val d = plan(members = group, grants = listOf(grant("owner"), grant("bob")), removes = "bob")
         assertSame(RotationDecision.RemovedMemberGranted, d)
     }
 
     @Test
     fun aRemovalThatGrantsOnlyTheRemainingMembersCommitsAndNamesWhomItRemoves() {
         // The control on the same predicate: without bob's grant it commits, removing bob and granting the owner.
-        val p = committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), grants = listOf(grant("owner")), retags = listOf("adm-owner" to "t"), removes = "bob"))
+        val p = committed(plan(members = group, grants = listOf(grant("owner")), removes = "bob"))
         assertEquals("bob", p.removes)
         assertEquals(listOf(grant("owner")), p.grants)
-        assertEquals(mapOf("adm-owner" to "t"), p.retags, "the removed member's admission goes with the membership — neither required nor written")
     }
 
     @Test
     fun aRotationThatRemovesNoOneNamesNoOne() {
-        assertEquals(null, committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"))).removes)
+        assertEquals(null, committed(plan(members = group, grants = listOf(grant("owner"), grant("bob")))).removes)
     }
 
     @Test
-    fun theRemovedMembersAdmissionIsNeverReTaggedEvenWhenCarried() {
-        val p = committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"), removes = "bob"))
-        assertEquals(mapOf("adm-owner" to "t"), p.retags)
-    }
-
-    @Test
-    fun aRemovalStillCarriesEveryOtherOpenAdmission() {
-        // Removing bob does not excuse leaving carol's admission behind.
-        val d = plan(members = group + member("carol", admission = "adm-carol"), open = setOf("adm-owner", "adm-bob", "adm-carol"), retags = listOf("adm-owner" to "t"), removes = "bob")
-        assertSame(RotationDecision.AdmissionsIncomplete, d)
+    fun aRemovalStillCarriesEveryOpenInvite() {
+        // Removing bob from a tenant does not excuse leaving an open invite behind.
+        val d = plan(members = group, open = setOf("inv-c"), grants = listOf(grant("owner")), removes = "bob")
+        assertSame(RotationDecision.Incomplete, d)
+        // Control: carried, it commits.
+        assertEquals("bob", committed(plan(members = group, open = setOf("inv-c"), grants = listOf(grant("owner")), pending = setOf("inv-c"), removes = "bob")).removes)
     }
 
     @Test
     fun refusesRemovingSomeoneWhoIsNotAMember() {
-        assertSame(RotationDecision.MemberNotFound, plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"), removes = "stranger"))
+        assertSame(RotationDecision.MemberNotFound, plan(members = group, removes = "stranger"))
     }
 
     @Test
     fun refusesRemovingTheLastOwner() {
         // The last-owner guard (ADR 0007) is unchanged by the removal moving into the rotation.
-        assertSame(RotationDecision.LastOwner, plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-bob" to "u"), removes = "owner"))
+        assertSame(RotationDecision.LastOwner, plan(members = group, grants = listOf(grant("bob")), removes = "owner"))
     }
 
     @Test

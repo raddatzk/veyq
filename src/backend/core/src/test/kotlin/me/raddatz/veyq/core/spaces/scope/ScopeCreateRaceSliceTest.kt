@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.TestIds
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -63,7 +63,7 @@ class ScopeCreateRaceSliceTest {
         val tenantId = domain.removePrefix("t-").removeSuffix(".example.com")
         raceRounds { round ->
             val userId = member(domain)
-            val grant = SignedGrant(personalGrant, TestAdmission.SIGNATURE)
+            val grant = SignedGrant(personalGrant, TestGrants.SIGNATURE)
             val second = whileUncommitted(
                 change = { assertEquals(true, store.createPersonal(TestIds.uuid(), userId, tenantId, grant), "round $round") },
                 overlapping = { handler.createPersonal(userId, tenantId, TestIds.uuid(), grant) },
@@ -118,10 +118,10 @@ class ScopeCreateRaceSliceTest {
     }
 
     private fun personalBody(scopeId: String) =
-        """{"scopeId":"$scopeId","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}"""
+        """{"scopeId":"$scopeId","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}"""
 
     private fun groupBody(scopeId: String) =
-        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}"""
+        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}"""
 
     private fun createPersonal(userId: String, domain: String, body: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)

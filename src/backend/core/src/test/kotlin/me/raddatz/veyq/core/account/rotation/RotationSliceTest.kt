@@ -17,7 +17,7 @@ import me.raddatz.veyq.core.crypto.TestProofKey
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -214,7 +214,7 @@ class RotationSliceTest {
                 """{"epoch":1,"wrappedPrev":"$ROT_PREV","grants":[
                    {"userId":"$rotator","wrappedGrant":"$ROTATOR_GRANT","grantSignature":"$SIG_FOR_ROTATOR"},
                    {"userId":"$coOwner","wrappedGrant":"$CO_OWNER_GRANT","grantSignature":"$SIG_FOR_CO_OWNER"}],
-                   ${TestAdmission.openJson(shared.scopeId)}}""",
+                   ${TestGrants.openInvitesJson(shared.scopeId)}}""",
             )
             .`when`().post("/api/scopes/${shared.scopeId}/epochs").then().statusCode(201)
         assertGrantServedTo(coOwner, shared, OLD_IDENTITY_PUB) // before: nothing has rotated yet
@@ -481,7 +481,7 @@ class RotationSliceTest {
         // Re-admission ends it: grant-delivery writes the rotator the current epoch, through the real reconcile.
         val delivery = claimJob(coOwner, group, CapabilityTags.GRANT_DELIVERY)
         given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"cmUtYWRtaXR0ZWQ=","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"cmUtYWRtaXR0ZWQ=","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$delivery/complete").then().statusCode(204)
         commit(rotator, group, rotator, coOwner).then().statusCode(201)
 
@@ -716,8 +716,8 @@ class RotationSliceTest {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":${epochOf(scope) + 1},"wrappedPrev":"$ROT_PREV","grants":[${
-                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$ROTATOR_GRANT",${TestAdmission.SIGNATURE_JSON}}""" }
-                }],${TestAdmission.openJson(scope.scopeId)}}""",
+                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$ROTATOR_GRANT",${TestGrants.SIGNATURE_JSON}}""" }
+                }],${TestGrants.openInvitesJson(scope.scopeId)}}""",
             )
             .`when`().post("/api/scopes/${scope.scopeId}/epochs")
 
@@ -852,7 +852,7 @@ class RotationSliceTest {
         JobEntity.update("leaseExpiresAt = ?1 where id = ?2", Instant.now().minusSeconds(60), jobId)
     }
 
-    private fun epochOf(scope: SeededScope): Int = TestAdmission.epochOf(scope.scopeId)
+    private fun epochOf(scope: SeededScope): Int = TestGrants.epochOf(scope.scopeId)
 
     private fun chainLinks(scope: SeededScope): Long =
         QuarkusTransaction.requiringNew().call { ScopeEpochEntity.count("scopeId", scope.scopeId) }

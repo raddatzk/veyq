@@ -112,9 +112,6 @@ class TasksResource(
                 targetUserId = UUID.fromString(it.targetUserId),
                 targetMembershipId = UUID.fromString(it.targetMembershipId),
                 identityPublicKey = it.identityPublicKey,
-                admissionId = it.admission?.let { a -> UUID.fromString(a.id) },
-                admissionEpoch = it.admission?.epoch,
-                admissionTag = it.admission?.tag,
             )
         },
     )

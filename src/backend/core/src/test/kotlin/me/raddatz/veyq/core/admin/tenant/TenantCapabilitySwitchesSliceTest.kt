@@ -2,7 +2,7 @@ package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.TenantRoots
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.GROUP_SPACE
@@ -204,7 +204,7 @@ class TenantCapabilitySwitchesSliceTest {
 
     private fun createGroup(owner: String, domain: String): Response =
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes/groups")
 
     private data class OwnedTenant(val id: String, val owner: String, val member: String)

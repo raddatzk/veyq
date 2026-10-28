@@ -5,10 +5,8 @@ import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
 import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
-import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
-import me.raddatz.veyq.core.membership.admit
 import me.raddatz.veyq.core.membership.MembershipStore
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -42,17 +40,44 @@ data class TenantView(
 data class InviteView(val ownerEmail: String, val status: String, val expiresAt: Instant, val bootstrapSecret: String? = null)
 
 /** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. */
-data class PendingInviteRow(
-    val inviteId: String, val email: String, val status: String, val expiresAt: Instant,
-    /** The invite's admission (ADR 0020 move 6), served so a rotation of the tenant scope can carry it forward. */
-    val admission: Admission?,
+data class PendingInviteRow(val inviteId: String, val email: String, val status: String, val expiresAt: Instant)
+
+/**
+ * A member invite's key and grant as the owner's client built them (ADR 0111 decisions 1-2) — what
+ * [TenantStore.mintMemberInvite] stores. The signer is the caller, with their identity key read in the write's own
+ * transaction; the grant's granter is the signer too.
+ */
+data class MemberInviteKey(
+    val inviteId: String,
+    val invitePublicKey: String,
+    val inviteKeySignature: String,
+    val signerUserId: String,
+    val signerIdentityPublicKey: String,
+    val epoch: Int,
+    val grant: SignedGrant,
 )
 
-/** An invite's admission, or null when it carries none (an owner invite, or one a rotation dropped). */
-fun TenantInviteEntity.admission(): Admission? {
-    val id = admissionId ?: return null
-    return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
+/** Why a member invite was not minted (nothing written), or its id. */
+sealed interface MintMemberInvite {
+    data class Minted(val inviteId: String) : MintMemberInvite
+    /** The grant is not of the tenant scope's current epoch, read under the rotation's lock. */
+    data object StaleEpoch : MintMemberInvite
+    /** The client-minted invite id names an invite that exists. */
+    data object IdTaken : MintMemberInvite
 }
+
+/** An open member invite as a rotator reads it (ADR 0111 decision 2): enough to verify and wrap to it — no email. */
+data class OpenInviteRow(
+    val inviteId: String,
+    val invitePublicKey: String,
+    val inviteKeySignature: String,
+    val signerUserId: String,
+    val signerIdentityPublicKey: String,
+    val expiresAt: Instant,
+)
+
+/** One open invite a tenant rotation re-grants: the new epoch's key wrapped to the invite key, signed by the rotator. */
+data class InviteRegrant(val inviteId: String, val grant: SignedGrant)
 
 /** A tenant's current terms (cr-0114). `markdownByLocale` is the raw
  *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
@@ -118,38 +143,33 @@ class TenantStore(
     @Transactional
     fun consumeLiveInvite(inviteId: String): Boolean =
         TenantInviteEntity.update(
-            "status = ?1 where id = ?2 and status = ?3 and expiresAt > ?4",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where id = ?2 and status = ?3 and expiresAt > ?4",
             TenantInviteEntity.CONSUMED, inviteId, TenantInviteEntity.ACTIVE, Instant.now(),
         ) == 1
 
     /**
-     * Take the tenant scope's row lock — the lock a rotation, [mintMemberInvite] and every admission write take — so
-     * a MEMBER accept cannot copy an admission that a concurrent rotation is replacing (ADR 0020 move 6). Taken
-     * before the spend; the admission is then read with [currentAdmission].
+     * Take the tenant scope's row lock — the lock a rotation and [mintMemberInvite] take — and return the scope's
+     * current epoch (null: no tenant scope). A MEMBER accept takes it before the spend, so a rotation cannot re-grant
+     * the invite between the accept's read of it and the membership it writes, and the self-grant's epoch is judged
+     * against the epoch as committed now.
      */
     @Transactional
-    fun lockTenantScope(tenantId: String) {
-        ScopeEntity.lockRow(tenantId)
-    }
+    fun lockTenantScope(tenantId: String): Int? = ScopeEntity.lockRow(tenantId)?.currentEpoch
 
-    /**
-     * The invite's admission as committed **now** — after [lockTenantScope], so a rotation that re-tagged it is seen.
-     * A refresh, not a find: a find would hand back the copy this transaction read before the lock.
-     */
-    fun currentAdmission(invite: TenantInviteEntity): Admission? {
+    /** The invite as committed **now** — after [lockTenantScope], so a rotation that re-granted it is seen. A refresh,
+     *  not a find: a find would hand back the copy this transaction read before the lock. */
+    fun refreshInvite(invite: TenantInviteEntity) {
         TenantInviteEntity.getEntityManager().refresh(invite)
-        return invite.admission()
     }
 
     /**
      * Activate a tenant on acceptance — **atomic**: record the owner's `OWNER` membership + grant and flip the
      * tenant `ACTIVE`. The invite was already spent by [consumeLiveInvite], first in the same transaction. The grant
-     * is opaque ciphertext stored verbatim, with the owner's self-signature over it (ADR 0028 Decision 6) and the
-     * admission the owner self-tagged under `E_0`, so the tenant's first rotation has a tag to carry forward
-     * (ADR 0020 move 6).
+     * is opaque ciphertext stored verbatim, with the owner's self-signature over it (ADR 0028 Decision 6). The first
+     * owner is the tenant's trust root (ADR 0111 decision 3): nobody vouches for them, so they have no join record.
      */
     @Transactional
-    fun activate(tenantId: String, userId: String, grant: SignedGrant, admission: Admission) {
+    fun activate(tenantId: String, userId: String, grant: SignedGrant) {
         // The TENANT root scope is born with the owner membership; keyed id == tenantId (cr-0026).
         ScopeEntity().apply {
             id = tenantId
@@ -166,29 +186,32 @@ class TenantStore(
             granterUserId = userId
             granterIdentityPublicKey = VeyqUser.findById(userId)?.identityPublicKey
             grantSignature = grant.signature
-            admit(admission)
             createdAt = Instant.now()
         }.persist()
         TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
     }
 
     /**
-     * Join an **already-active** tenant as a grant-less MEMBER (cr-0077): record a hollow membership (role, no
-     * grant) on the existing TENANT scope — **no** scope birth, **no** tenant status change. The invite was already
-     * spent by [consumeLiveInvite]. Creating the grant-less membership is what cr-0076 reconciles into a
-     * `grant-delivery` job; a key-holder then wraps `K_SC` to this member — once [admission], read from the invite by
-     * [currentAdmission], verifies (ADR 0020 move 6). Idempotent-friendly: the caller checks membership first.
+     * Join an **already-active** tenant as a MEMBER **with the grant it gave itself** (ADR 0111 decision 3): the
+     * newcomer opened its invite's grant and sealed that epoch's key to its own identity. Its granter is the newcomer,
+     * with its identity key read here; at [epoch] — the tenant's current one, or older for an invite a rotation
+     * declared pending, which leaves the membership behind for the grant delivery to bring current. The invite was
+     * already spent by [consumeLiveInvite]. One writer for both accepts (sign-in and register). Idempotent-friendly:
+     * the caller checks membership first.
      */
     @Transactional
-    fun joinAsMember(tenantId: String, userId: String, admission: Admission?) {
+    fun joinAsMember(tenantId: String, userId: String, grant: SignedGrant, epoch: Int) {
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
             this.tenantId = tenantId
             scopeId = tenantId // the TENANT root scope is keyed id == tenantId (cr-0026)
             role = MembershipEntity.MEMBER
-            wrappedGrant = null // grant-less: delivered later by a key-holder (cr-0076)
-            admit(admission)
+            wrappedGrant = grant.wrappedGrant
+            grantedEpoch = epoch
+            granterUserId = userId
+            granterIdentityPublicKey = VeyqUser.findById(userId)?.identityPublicKey
+            grantSignature = grant.signature
             createdAt = Instant.now()
         }.persist()
     }
@@ -201,33 +224,64 @@ class TenantStore(
      *  carrying this `tenantId`. Delegates to the single home in `core/membership/`. */
     fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
 
-    /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email, carrying
-     *  [admission] (ADR 0020 move 6). A fresh invite ([checkEpoch]) is refused — null, nothing written — when its
-     *  admission was tagged at an epoch that is no longer the tenant scope's current one, read under the lock a
-     *  rotation takes: a rotation that committed in between could not have carried it. A reissue keeps the admission
-     *  it replaces as it is. */
+    /**
+     * Mint a single-use MEMBER invite on an active tenant — a placeholder member holding [key] (ADR 0111 decisions 1-2)
+     * — superseding any prior ACTIVE invite to that email (whose key and grant go with it). Refused, nothing written,
+     * when the grant is not of the tenant scope's current epoch, read under the lock a rotation takes: a rotation that
+     * committed in between could not have carried it ([MintMemberInvite.StaleEpoch]); and when the client-minted id is
+     * taken. The invite's granter is its signer, the caller.
+     */
     @Transactional
-    fun mintMemberInvite(
-        tenantId: String, email: String, tokenHash: String, expiresAt: Instant, admission: Admission?, checkEpoch: Boolean,
-    ): String? {
-        if (checkEpoch && admission != null &&
-            ScopeEntity.lockRow(tenantId)?.currentEpoch != admission.epoch
-        ) return null
+    fun mintMemberInvite(tenantId: String, email: String, tokenHash: String, expiresAt: Instant, key: MemberInviteKey): MintMemberInvite {
+        if (ScopeEntity.lockRow(tenantId)?.currentEpoch != key.epoch) return MintMemberInvite.StaleEpoch
+        if (TenantInviteEntity.findById(key.inviteId) != null) return MintMemberInvite.IdTaken
         TenantInviteEntity.update(
-            "status = ?1 where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
             TenantInviteEntity.SUPERSEDED, tenantId, email, TenantInviteEntity.ACTIVE,
         )
-        return mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now(), TenantInviteEntity.MEMBER, admission)
+        TenantInviteEntity().apply {
+            id = key.inviteId
+            this.tenantId = tenantId
+            ownerEmail = email
+            this.tokenHash = tokenHash
+            status = TenantInviteEntity.ACTIVE
+            role = TenantInviteEntity.MEMBER
+            this.expiresAt = expiresAt
+            createdAt = Instant.now()
+            invitePublicKey = key.invitePublicKey
+            inviteKeySignature = key.inviteKeySignature
+            signerUserId = key.signerUserId
+            signerIdentityPublicKey = key.signerIdentityPublicKey
+            wrappedGrant = key.grant.wrappedGrant
+            grantedEpoch = key.epoch
+            grantSignature = key.grant.signature
+            granterUserId = key.signerUserId
+            granterIdentityPublicKey = key.signerIdentityPublicKey
+        }.persist()
+        return MintMemberInvite.Minted(key.inviteId)
     }
 
     /** The tenant's pending (ACTIVE + unexpired) MEMBER invites — metadata only, for the owner's tracking list. */
     fun listPendingMemberInvites(tenantId: String): List<PendingInviteRow> =
-        openMemberInvites(tenantId).map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt, it.admission()) }
+        openMemberInvites(tenantId).map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt) }
 
-    /** The tenant's open MEMBER invites (ACTIVE + unexpired) — the one predicate both the owner's list and a tenant
-     *  rotation's completeness check use, so a rotator is required to carry exactly the invites it was shown
-     *  (ADR 0020 move 6). An invite that expires unswept is left behind; reissuing it keeps its old tag, which a
-     *  worker then declines as `admission_unverified` — the owner invites anew. */
+    /** The tenant's open MEMBER invites with their keys — what every member reads to carry them through a rotation
+     *  (`listOpenInvites`). An open invite always holds its key; one that does not is skipped. */
+    fun openInviteKeys(tenantId: String): List<OpenInviteRow> =
+        openMemberInvites(tenantId).mapNotNull {
+            OpenInviteRow(
+                it.id,
+                it.invitePublicKey ?: return@mapNotNull null,
+                it.inviteKeySignature ?: return@mapNotNull null,
+                it.signerUserId ?: return@mapNotNull null,
+                it.signerIdentityPublicKey ?: return@mapNotNull null,
+                it.expiresAt,
+            )
+        }
+
+    /** The tenant's open MEMBER invites (ACTIVE + unexpired) — the one predicate both lists and a tenant rotation's
+     *  completeness check use, so a rotator is required to carry exactly the invites it was shown (ADR 0111 decision
+     *  2). An invite that expires unswept is left behind; the sweep drops its key. */
     fun openMemberInvites(tenantId: String): List<TenantInviteEntity> =
         TenantInviteEntity.find(
             "tenantId = ?1 and role = ?2 and status = ?3 and expiresAt > ?4",
@@ -242,43 +296,36 @@ class TenantStore(
         ).firstResult()
 
     /**
-     * Soft-revoke a live invite (→ SUPERSEDED terminal) so its secret replays as no-longer-valid. A compare-and-set
-     * like [consumeLiveInvite], so a revoke that lost to an accept does not re-tag the spent invite, and an accept
-     * that lost to it cannot join. Returns whether this call revoked it.
+     * Soft-revoke a live invite (→ SUPERSEDED terminal) so its secret replays as no-longer-valid, dropping its key and
+     * grant in the same statement (ADR 0111 decision 2). A compare-and-set like [consumeLiveInvite], so a revoke that
+     * lost to an accept changes nothing, and an accept that lost to it cannot join. Returns whether this call revoked
+     * it. The tenant does not rotate (ADR 0025).
      */
     @Transactional
     fun revokeInvite(inviteId: String): Boolean =
         TenantInviteEntity.update(
-            "status = ?1 where id = ?2 and status = ?3",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where id = ?2 and status = ?3",
             TenantInviteEntity.SUPERSEDED, inviteId, TenantInviteEntity.ACTIVE,
         ) == 1
 
     /**
-     * Carry the open invites a rotation was shown into its new epoch (ADR 0020 move 6): re-tag or drop each one's
-     * admission. A **bulk update of the admission columns only, guarded by `status = ACTIVE`**, never a save of the
-     * entities read: the rotation read [invites] under the scope lock, which neither a revoke nor a member accept's
-     * spend takes, and a managed save would write their stale `status` back — a revoked or spent secret live again.
-     * An invite spent or revoked meanwhile is left as it is: it has nothing left to carry, and the completeness check
-     * already ran on the list the rotator was shown. (Panache's positional parameters are non-null, hence the literal
-     * `null`s of a drop.)
+     * Re-grant the open invites a tenant rotation carries into its new epoch (ADR 0111 decision 2): each listed one
+     * gets the new epoch's key wrapped to its invite key, signed by [rotatorId] — the rotation's granter, with their
+     * identity key read here. A **bulk update of the grant columns only, guarded by `status = ACTIVE`**, never a save
+     * of the entities read: the rotation read the invites under the scope lock, which neither a revoke nor a member
+     * accept's spend takes, and a managed save would write their stale `status` back — a revoked or spent secret live
+     * again. An invite spent or revoked meanwhile is left as it is: it has no key left to wrap to, and the completeness
+     * check already ran on the list the rotator was shown. A declared-pending invite keeps the grant it holds.
      */
     @Transactional
-    fun carryInvites(invites: List<TenantInviteEntity>, newEpoch: Int, retags: Map<String, String>, dropped: Set<String>) {
-        invites.forEach { inv ->
-            val id = inv.admissionId ?: return@forEach
-            if (id in dropped) {
-                TenantInviteEntity.update(
-                    "admissionId = null, admissionEpoch = null, admissionTag = null where id = ?1 and status = ?2",
-                    inv.id, TenantInviteEntity.ACTIVE,
-                )
-            } else {
-                retags[id]?.let {
-                    TenantInviteEntity.update(
-                        "admissionEpoch = ?1, admissionTag = ?2 where id = ?3 and status = ?4",
-                        newEpoch, it, inv.id, TenantInviteEntity.ACTIVE,
-                    )
-                }
-            }
+    fun carryInvites(regrants: List<InviteRegrant>, newEpoch: Int, rotatorId: String) {
+        val rotatorKey = VeyqUser.findById(rotatorId)?.identityPublicKey ?: return
+        regrants.forEach { r ->
+            TenantInviteEntity.update(
+                "wrappedGrant = ?1, grantedEpoch = ?2, grantSignature = ?3, granterUserId = ?4, " +
+                    "granterIdentityPublicKey = ?5 where id = ?6 and status = ?7",
+                r.grant.wrappedGrant, newEpoch, r.grant.signature, rotatorId, rotatorKey, r.inviteId, TenantInviteEntity.ACTIVE,
+            )
         }
     }
 
@@ -322,7 +369,7 @@ class TenantStore(
         expiresAt: Instant,
     ): InviteView {
         TenantInviteEntity.update(
-            "status = ?1 where tenantId = ?2 and status = ?3",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where tenantId = ?2 and status = ?3",
             TenantInviteEntity.SUPERSEDED, tenantId, TenantInviteEntity.ACTIVE,
         )
         mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, Instant.now())
@@ -442,7 +489,7 @@ class TenantStore(
     @Transactional
     fun mintOwnerInvite(tenantId: String, email: String, tokenHash: String, expiresAt: Instant): InviteView {
         TenantInviteEntity.update(
-            "status = ?1 where tenantId = ?2 and status = ?3 and role = ?4",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where tenantId = ?2 and status = ?3 and role = ?4",
             TenantInviteEntity.SUPERSEDED, tenantId, TenantInviteEntity.ACTIVE, TenantInviteEntity.OWNER,
         )
         mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now())
@@ -575,11 +622,12 @@ class TenantStore(
 
     // --- scheduled cleanup (see TenantInvitePurge) ---
 
-    /** Flip ACTIVE invites whose TTL has passed to EXPIRED. Returns how many were expired. */
+    /** Flip ACTIVE invites whose TTL has passed to EXPIRED, dropping their keys and grants in the same statement
+     *  (ADR 0111 decision 2). Returns how many were expired. */
     @Transactional
     fun expireOverdueInvites(now: Instant): Long =
         TenantInviteEntity.update(
-            "status = ?1 where status = ?2 and expiresAt < ?3",
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where status = ?2 and expiresAt < ?3",
             TenantInviteEntity.EXPIRED, TenantInviteEntity.ACTIVE, now,
         ).toLong()
 
@@ -591,13 +639,8 @@ class TenantStore(
             TenantInviteEntity.TERMINAL, cutoff,
         )
 
-    /** Returns the new invite's id — the member paths need it to revoke the invite again if its mail fails to
-     *  send (ADR 0055 §6); the owner-bootstrap paths ignore it. */
-    private fun mintInvite(
-        tenantId: String, ownerEmail: String, tokenHash: String, expiresAt: Instant, now: Instant,
-        role: String = TenantInviteEntity.OWNER,
-        admission: Admission? = null,
-    ): String {
+    /** An OWNER invite — the bootstrap one or a handover (ADR 0101 decision 9): no key, there is no grant to hand over. */
+    private fun mintInvite(tenantId: String, ownerEmail: String, tokenHash: String, expiresAt: Instant, now: Instant): String {
         val inviteId = UUID.randomUUID().toString()
         TenantInviteEntity().apply {
             id = inviteId
@@ -605,12 +648,9 @@ class TenantStore(
             this.ownerEmail = ownerEmail
             this.tokenHash = tokenHash
             status = TenantInviteEntity.ACTIVE
-            this.role = role
+            role = TenantInviteEntity.OWNER
             this.expiresAt = expiresAt
             createdAt = now
-            admissionId = admission?.id
-            admissionEpoch = admission?.epoch
-            admissionTag = admission?.tag
         }.persist()
         return inviteId
     }

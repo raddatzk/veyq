@@ -187,9 +187,11 @@ class AccountErasureHandler(
 
         // 4. Sessions and everything pending.
         sessions.revokeAllForUser(accountId)
+        // Invites to the account, and the member invites it signed (ADR 0111 decision 1): an invite its signer no
+        // longer stands behind ends, and its key and grant go in the same statement.
         TenantInviteEntity.update(
-            "status = ?1 where ownerEmail = ?2 and status = ?3",
-            TenantInviteEntity.SUPERSEDED, user.email, TenantInviteEntity.ACTIVE,
+            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where (ownerEmail = ?2 or signerUserId = ?3) and status = ?4",
+            TenantInviteEntity.SUPERSEDED, user.email, accountId, TenantInviteEntity.ACTIVE,
         )
         pairings.supersede(pairings.liveChannels(accountId).map { it.id })
         AccountRecoveryEntity.update(

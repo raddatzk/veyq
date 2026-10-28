@@ -121,8 +121,13 @@ class TenantMailSettingsEntity : PanacheEntityBase {
  * Several writers transition `status` (accept, revoke, reissue, the expiry sweep), each by a guarded bulk update
  * whose row count decides (developer-styleguide §12); a new writer of `status` joins them rather than saving the
  * entity. Like every entity this one is `@DynamicUpdate`, so a managed write of other columns cannot write back the
- * `status` it read — before that, a rotation's re-tag brought a revoked invite back to `ACTIVE`. The re-tag is a
- * column-scoped bulk update all the same (`TenantStore.carryInvites`).
+ * `status` it read — before that, a rotation's re-tag brought a revoked invite back to `ACTIVE`. A rotation's re-grant
+ * is a column-scoped bulk update all the same (`TenantStore.carryInvites`).
+ *
+ * A MEMBER invite is a **placeholder member** (ADR 0111 decisions 1-2): it holds the invite key the owner signed and a
+ * grant wrapped to it, the columns a membership's grant has. Every statement that moves an invite out of `ACTIVE` nulls
+ * them in the same statement ([INVITE_KEY_DROPPED]), so an accepted, revoked, superseded or expired invite holds no key
+ * and no grant.
  */
 @Entity
 @Table(name = "veyq_tenant_invite")
@@ -144,8 +149,8 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "status", nullable = false, length = 16)
     lateinit var status: String
 
-    /** The role this invite grants on acceptance (cr-0077): OWNER cold-births the tenant, MEMBER joins it
-     *  grant-less. Defaults OWNER so pre-cr-0077 rows + the owner-invite flows are unchanged. */
+    /** The role this invite grants on acceptance (cr-0077): OWNER cold-births the tenant, MEMBER joins it through the
+     *  invite key below. Defaults OWNER so the owner-invite flows are unchanged. */
     @Column(name = "role", nullable = false, length = 16)
     var role: String = OWNER
 
@@ -155,17 +160,39 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
-    /** A MEMBER invite's admission (ADR 0020 move 6) — tagged by the owner's client under the tenant scope's epoch
-     *  key, kept by a reissue, and copied onto the membership its acceptance creates. Null on an owner invite (the
-     *  tenant has no key yet). Never verified here. */
-    @Column(name = "admission_id", columnDefinition = "uuid")
-    var admissionId: String? = null
+    /** A live MEMBER invite's key (ADR 0111 decision 1): its public bundle, the inviting owner's `invite-key` signature
+     *  over it, and that owner with their identity key **as it signed** — so an owner who rotates later does not void
+     *  the invite. Null on an owner invite and on every invite that is no longer ACTIVE. Never verified here, except
+     *  the invite key's proof at accept (`TenantAcceptHandler`). */
+    @Column(name = "invite_public_key")
+    var invitePublicKey: String? = null
 
-    @Column(name = "admission_epoch")
-    var admissionEpoch: Int? = null
+    @Column(name = "invite_key_signature")
+    var inviteKeySignature: String? = null
 
-    @Column(name = "admission_tag")
-    var admissionTag: String? = null
+    @Column(name = "signer_user_id", columnDefinition = "uuid")
+    var signerUserId: String? = null
+
+    @Column(name = "signer_identity_public_key")
+    var signerIdentityPublicKey: String? = null
+
+    /** The invite's grant (ADR 0111 decision 2): the tenant scope's epoch key at [grantedEpoch], wrapped to the invite
+     *  key, and its granter — the inviting owner, then whoever's rotation re-wrapped it — with the granter's key as it
+     *  signed (`scripts/validate_grant_writer_arity.py` holds every writer to set all three). */
+    @Column(name = "wrapped_grant")
+    var wrappedGrant: String? = null
+
+    @Column(name = "granted_epoch")
+    var grantedEpoch: Int? = null
+
+    @Column(name = "grant_signature")
+    var grantSignature: String? = null
+
+    @Column(name = "granter_user_id", columnDefinition = "uuid")
+    var granterUserId: String? = null
+
+    @Column(name = "granter_identity_public_key")
+    var granterIdentityPublicKey: String? = null
 
     companion object : PanacheCompanionBase<TenantInviteEntity, String> {
         const val ACTIVE = "ACTIVE"
@@ -179,5 +206,12 @@ class TenantInviteEntity : PanacheEntityBase {
 
         /** The terminal states a scheduled purge may physically delete. */
         val TERMINAL = listOf(SUPERSEDED, CONSUMED, EXPIRED)
+
+        /** The assignments every status transition out of `ACTIVE` carries in its own bulk update: the invite's key
+         *  and grant go with its last chance to be redeemed. */
+        const val INVITE_KEY_DROPPED =
+            "invitePublicKey = null, inviteKeySignature = null, signerUserId = null, signerIdentityPublicKey = null, " +
+                "wrappedGrant = null, grantedEpoch = null, grantSignature = null, granterUserId = null, " +
+                "granterIdentityPublicKey = null"
     }
 }
