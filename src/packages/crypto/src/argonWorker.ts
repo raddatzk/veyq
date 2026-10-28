@@ -164,3 +164,13 @@ export async function sharesPwTokenAsync(password: string, salt: Uint8Array, par
     v1.sharesPwToken(password, salt, params),
   )
 }
+
+/**
+ * Derive a member invite link's KEK = Argon2id(code or password, salt) (ADR 0111 decision 1) — off the main thread when
+ * possible. The owner pays it once when sealing the link, the invitee once when opening it.
+ */
+export async function inviteLinkKekAsync(secret: Uint8Array, salt: Uint8Array, params?: ArgonParams): Promise<Uint8Array> {
+  const w = getWorker()
+  if (!w) return v1.kekInviteLink(secret, salt, params)
+  return dispatch<Uint8Array>(w, { op: 'inviteLinkKek', secret, salt, params }, () => v1.kekInviteLink(secret, salt, params))
+}

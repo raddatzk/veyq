@@ -10,6 +10,7 @@ type Request =
   | { id: number; op: 'deviceKek'; deviceFactor: Uint8Array; password: string; salt: Uint8Array; params?: ArgonParams }
   | { id: number; op: 'recoveryKek'; secretKey: Uint8Array; salt: Uint8Array; params?: ArgonParams }
   | { id: number; op: 'sharesPwToken'; password: string; salt: Uint8Array; params?: ArgonParams }
+  | { id: number; op: 'inviteLinkKek'; secret: Uint8Array; salt: Uint8Array; params?: ArgonParams }
 
 const ctx = self as unknown as { postMessage(message: unknown): void }
 
@@ -22,6 +23,7 @@ self.addEventListener('message', (event: MessageEvent<Request>) => {
     else if (msg.op === 'deviceKek') result = v1.kekDevicePassword(msg.deviceFactor, msg.password, msg.salt, msg.params)
     else if (msg.op === 'recoveryKek') result = v1.kekRecovery(msg.secretKey, msg.salt, msg.params)
     else if (msg.op === 'sharesPwToken') result = v1.sharesPwToken(msg.password, msg.salt, msg.params)
+    else if (msg.op === 'inviteLinkKek') result = v1.kekInviteLink(msg.secret, msg.salt, msg.params)
     else throw new Error('unknown_op') // explicit — a new op must be wired here (argonOps.ts; argon.worker.test.ts sends each)
     ctx.postMessage({ id: msg.id, ok: true, result })
   } catch (err) {

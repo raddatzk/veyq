@@ -162,9 +162,6 @@ paths:
               encryptedName: c2VhbGVkLW5hbWU=
               wrappedGrant: AQ==
               grantSignature: c2lnbmF0dXJl
-              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-              admissionEpoch: 0
-              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
       responses:
         "201":
           description: The group scope was created and the caller holds its grant.
@@ -215,14 +212,14 @@ paths:
     get:
       tags: [scopes]
       operationId: listScopeMembers
-      summary: List a scope's members with their identity public keys + grant status (the member directory).
+      summary: List a scope's members with their identity public keys (the member directory).
       description: >
-        Returns every membership in the scope — each member's `userId`, `role`, **identity public key**, and
-        whether they already hold a grant (`hasGrant`: granted vs. *pending*). The directory a key-holder uses
-        to add + track members (uc.spaces.add-member, ADR 0020): the pending members are the ones a
-        `grant-delivery` job will wrap `K_SC` to. Operator-blind — the server returns only already-stored
-        operational metadata (pubkeys/roles/grant-present), **never** a scope key; and it is scoped to *this
-        scope's own members*, not a global user search. Any key-holder in the scope may read it (authorization
+        Returns every membership in the scope — each member's `userId`, `role` and **identity public key**, and in
+        a TENANT scope their sealed join record. The directory a key-holder uses to add members and to wrap to them
+        in a rotation (uc.spaces.add-member, ADR 0020). Every membership is born with a grant (ADR 0111 decisions
+        3-4), so there is no *pending* member to list. Operator-blind — the server returns only already-stored
+        operational metadata (pubkeys/roles) and opaque sealed fields, **never** a scope key; and it is scoped to
+        *this scope's own members*, not a global user search. Any key-holder in the scope may read it (authorization
         is enforced by code, not this spec, ADR 0008). Membership is the **first** gate (ADR 0042): a caller who
         is not a member gets `404 scope_not_found` — the same answer as for a scope id that does not exist, so
         scope existence is not enumerable. A member who holds no grant yet gets `403 not_key_holder`.
@@ -248,13 +245,12 @@ paths:
                   avatarRevision: 1
                   role: OWNER
                   identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
-                  hasGrant: true
                 - userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                   username: partner
                   avatarRevision: 0
                   role: MEMBER
                   identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
-                  hasGrant: false
+                  sealedJoinRecord: c2VhbGVkLWpvaW4tcmVjb3Jk
         "401":
           description: Generic authentication failure.
           content:
@@ -279,30 +275,27 @@ paths:
     post:
       tags: [scopes]
       operationId: addGroupMember
-      summary: Add an existing tenant member to a group by username (admission; the key is delivered later).
+      summary: Add an existing tenant member to a group by username, with their grant.
       description: >
-        Admits an existing member of the scope's tenant to a **GROUP** scope, picked by their per-tenant
+        Adds an existing member of the scope's tenant to a **GROUP** scope, picked by their per-tenant
         `username` (uc.spaces.add-group-member, cr-0086). The server resolves the username **within the scope's
-        own tenant** (never a global user-search, ADR 0020) and records a **grant-less** GROUP membership
-        (`role=MEMBER`, no grant) — admission only. **No key crosses the wire**: `K_SC` is delivered afterwards by
-        any group key-holder's `grant-delivery` job (ADR 0020/0021, cr-0076), so the returned member starts with
-        `hasGrant=false` (*awaiting access*). Only the group **OWNER** may add a member (the tenant owner has no
-        say over groups, ADR 0014 §4) — authorization is enforced by code, not this spec (ADR 0008).
+        own tenant** (never a global user-search, ADR 0020) and records a GROUP membership (`role=MEMBER`) **with
+        the grant the owner's client wrapped** to the target's identity key from `resolveGroupMember`
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 4): the group's current epoch key, signed by the owner. A group needs no
+        invite key — the target already has an account, and the owner's client checked their key (the pin check)
+        before it wrapped. The server checks the grant is of the scope's current epoch under its row lock (`409
+        stale_epoch`) and addressed to the target's current identity key (`409 recipient_key_not_current`). Only the
+        group **OWNER** may add a member (the tenant owner has no say over groups, ADR 0014 §4) — authorization is
+        enforced by code, not this spec (ADR 0008).
 
 
         **Consent (uc.spaces.consent-group-add, cr-0096/ADR 0027):** if the target turned on "ask before adding me
         to groups", the add must carry `sealedNameKey` (the group's derived name-key `K_name` sealed to their
         identity, which opens the canonical `encryptedName`) and is recorded as a **soft `pendingConsent`**
-        membership — grant-delivery skips it, so `K_SC` is gated **before** the wrap — until the invitee accepts
-        (`…/invitations/accept`). The owner learns consent is required from the prior member-resolve; a
+        membership holding the same grant — the group is not listed to the invitee until they accept
+        (`…/invitations/accept`), which changes nothing about keys; a decline queues the group's rotation, since the
+        invitee held its key. The owner learns consent is required from the prior member-resolve; a
         `requiresConsent` target added **without** `sealedNameKey` is rejected `400 consent_required`.
-
-
-        **Admission is a key-holder act ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6).**
-        Both paths carry the admission tag the owner's client computed under the scope's current epoch key, bound to
-        the resolved target's `userId`; no group key-holder wraps `K_SC` to a member whose tag does not verify. The
-        server stores it and never verifies it; it only refuses a tag stated at an epoch that is no longer the
-        scope's current one (`409 stale_epoch`), because a rotation that committed in between could not carry it.
       security:
         - bearerAuth: []
       parameters:
@@ -318,15 +311,15 @@ paths:
             schema: { $ref: "#/components/schemas/AddGroupMemberRequest" }
             example:
               username: partner
-              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-              admissionEpoch: 0
-              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+              epoch: 0
+              wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
       responses:
         "201":
           description: >
-            The member was admitted. For a direct-add: grant-less, `hasGrant=false`, awaiting delivery. For a
-            consent proposal (`sealedNameKey` sent to a `requiresConsent` target): a soft `pendingConsent=true`
-            row, gated before any key wrap.
+            The member was added with their grant. For a consent proposal (`sealedNameKey` sent to a
+            `requiresConsent` target): a soft `pendingConsent=true` row holding the grant until they accept.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeMember" }
@@ -337,7 +330,6 @@ paths:
                 avatarRevision: 0
                 role: MEMBER
                 identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
-                hasGrant: false
                 pendingConsent: false
         "400":
           description: >
@@ -370,7 +362,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: member_not_found }
         "409":
-          description: That user is already a member of the group or already has an open proposal (`already_member`), the admission was tagged at an epoch that is no longer the scope's current one (`stale_epoch` — re-tag and retry), or the group is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: That user is already a member of the group or already has an open proposal (`already_member`), the grant is of an epoch that is no longer the scope's current one (`stale_epoch` — re-open the group and rewrap), its `recipientIdentityDigest` is not the target's current identity key (`recipient_key_not_current` — resolve again), or the group is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -551,6 +543,15 @@ paths:
         ciphertext. Owner-gated (`403 not_scope_owner`). Grants for members not listed here are delivered afterwards by
         grant-delivery (stale-epoch reconcile, ADR 0020/0021).
 
+        **A TENANT rotation carries every open invite** ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2): each open member invite
+        is either re-granted the new epoch (`inviteGrants`, wrapped to the invite key from `listOpenInvites` once the
+        rotator verified the owner's signature on it and passed the signer's pin check) or declared pending
+        (`pendingInviteIds`). Under the scope's row lock the server requires the two lists together to be exactly the
+        open invites, else `409 rotation_incomplete` with nothing stored — an invite a rotation forgot would hand its
+        newcomer a key the members already left. A pending invite stays redeemable: its newcomer joins at the epoch
+        its grant carries, behind, and the grant delivery brings it current. A GROUP or PERSONAL rotation carries
+        neither list.
+
         **The caller must be a current key-holder who is not excluded** (ADR 0060 Decision 4). After the owner
         check, under the scope's row lock: a caller whose account rotation queued a still-live rotation job of
         this scope (the job carries their exclusion) is refused `403 rotation_excluded`, and a caller whose own
@@ -563,8 +564,7 @@ paths:
         deletes that membership — with the per-member rows the applications keep for it and the public shares it created in the group — and
         commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
         leaves the member in place. The request's grants must not name that member (`422
-        removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). The removed
-        member's admission goes with the membership, so the rotation need not re-tag or drop it. With
+        removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). With
         `revokeLinks: true` the same transaction also turns off **every** enabled public share of the group, whoever
         created it — a link the removed member could have copied from the manage panel then `404`s, and each
         share's owner re-issues the ones they still want
@@ -583,7 +583,6 @@ paths:
               epoch: 1
               wrappedPrev: AQ==
               grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ==, grantSignature: c2lnbmF0dXJl }]
-              admissions: [{ admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d, admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg= }]
               removesUserId: 4e2a9b1d-8b2c-4f2d-9e4a-5b6c7c3f0e2a
       responses:
         "201":
@@ -592,14 +591,49 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeRotated" }
               example: { epoch: 1 }
-        "400": { description: "Malformed (missing/invalid link or grant), or `revokeLinks` without `removesUserId`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "400": { description: "Malformed (missing/invalid link or grant), `revokeLinks` without `removesUserId`, or invite grants on a scope that is no TENANT.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), an account rotation of the caller queued a rotation of this scope that is still live and excludes them (`rotation_excluded`, nothing stored, ADR 0060 Decision 4), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read `listOpenInvites` and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
+  /api/scopes/{scopeId}/open-invites:
+    get:
+      tags: [scopes]
+      operationId: listOpenInvites
+      summary: List a tenant's open member invites — the placeholder members a rotation carries.
+      description: >
+        Every open (not yet accepted, revoked, superseded or expired) member invite of the TENANT scope `scopeId`,
+        each with its invite key, the inviting owner's signature over it and that owner's key as it signed
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2). Any member may rotate the tenant's key and so must carry every open invite,
+        which is why every member reads this, not only an owner — and why it carries **no email** (that stays the
+        owner's `listMemberInvites`). Membership is the first gate (ADR 0042): a non-member gets `404
+        scope_not_found`. A scope that is no TENANT has no invites: an empty list. Operator-blind: public keys and
+        opaque signatures the server stores.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: scopeId, in: path, required: true, description: Opaque id of the TENANT scope., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The open invites.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OpenInvite" }
+              example:
+                - inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+                  invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+                  inviteKeySignature: c2lnbmF0dXJl
+                  signerUserId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+                  signerIdentityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                  expiresAt: 2026-07-11T12:00:00Z
+        "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
+        "403": { description: "The tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: tenant_suspended } } } }
+        "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
   /api/scopes/{scopeId}/rotation/requeue:
     post:
       tags: [scopes]
@@ -922,12 +956,12 @@ paths:
     post:
       tags: [scopes]
       operationId: acceptGroupInvitation
-      summary: Accept a pending group-consent proposal — become a grant-less member (key delivered next).
+      summary: Accept a pending group-consent proposal — become a member, with the grant the proposal holds.
       description: >
         The invitee accepts the consent proposal for this GROUP scope (uc.spaces.consent-group-add, cr-0094):
-        clears the `pendingConsent` flag on **their own** soft membership, so it becomes an ordinary grant-less
-        membership and the usual `grant-delivery` wraps `K_SC` to them (first-online-wins, *awaiting access* →
-        Active). Acts only on the caller's own proposal (invitee-gated); a scope where the caller has no open
+        clears the `pendingConsent` flag on **their own** soft membership, so it becomes an ordinary membership —
+        with the grant the owner wrapped when proposing (ADR 0111 decision 4); nothing about keys changes, and the
+        group opens at once. Acts only on the caller's own proposal (invitee-gated); a scope where the caller has no open
         proposal is `404 invitation_not_found`. Idempotent-safe: a re-accept of an already-accepted membership
         is a no-op `204`. Enforced by code, not this spec (ADR 0008).
       security:
@@ -935,7 +969,7 @@ paths:
       parameters:
         - { name: scopeId, in: path, required: true, description: Opaque id of the GROUP scope proposed., schema: { type: string, format: uuid } }
       responses:
-        "204": { description: "The proposal was accepted (now a grant-less member; key delivered next)." }
+        "204": { description: "The proposal was accepted (now a member holding the group's key)." }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "404": { description: The caller has no pending proposal in this scope., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invitation_not_found } } } }
 
@@ -943,11 +977,13 @@ paths:
     post:
       tags: [scopes]
       operationId: declineGroupInvitation
-      summary: Decline a pending group-consent proposal — silent drop, nothing was wrapped.
+      summary: Decline a pending group-consent proposal — the proposal goes, and the group rotates.
       description: >
         The invitee declines the consent proposal for this GROUP scope (uc.spaces.consent-group-add, cr-0094):
-        **deletes** their soft `pendingConsent` membership. Nothing was ever wrapped, so no key is retracted and
-        **no rotation** occurs; no `declined` state is kept (a silent drop — the owner may propose again later).
+        **deletes** their soft `pendingConsent` membership. The proposal held a grant of the group's key (ADR 0111
+        decision 4), so the decline **queues the group's rotation**, as a removal's cascade does: the next online
+        owner mints an epoch the decliner never held. No `declined` state is kept (a silent drop — the owner may
+        propose again later).
         Acts only on the caller's own proposal (invitee-gated); **idempotent** — a scope where the caller has no
         open proposal is still `204` (no enumeration). Enforced by code, not this spec (ADR 0008).
       security:
@@ -1032,7 +1068,7 @@ components:
 
     CreateGroupRequest:
       type: object
-      required: [scopeId, encryptedName, wrappedGrant, grantSignature, admissionId, admissionEpoch, admissionTag]
+      required: [scopeId, encryptedName, wrappedGrant, grantSignature]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -1073,36 +1109,6 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        admissionId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the creator's own membership, self-tagged at birth under `E_0` (so `admissionEpoch` is 0) and bound to the creator's user id, so a later rotation has a tag to carry forward.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        admissionEpoch:
-          x-veyq-visibility: structure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
-        admissionTag:
-          type: string
-          description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
-          contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RenameGroupRequest:
       type: object
@@ -1183,7 +1189,7 @@ components:
 
     AddGroupMemberRequest:
       type: object
-      required: [username, admissionId, admissionEpoch, admissionTag]
+      required: [username, epoch, wrappedGrant, grantSignature, recipientIdentityDigest]
       properties:
         username:
           x-veyq-visibility: pii
@@ -1207,44 +1213,46 @@ components:
             (`asymWrap(inviteePub, K_name, "group-name-key")`, opaque base64), where `K_name =
             HKDF(E_e, "veyq/v1/group-name-key")` for the name's current epoch. Handing the invitee the key — not a
             name copy — lets them open the **same canonical `encryptedName`** the members read, so a modified owner
-            cannot privately show a divergent name. When present, the add is recorded as a **soft, grant-less
-            `pendingConsent`** membership — grant-delivery skips it, so `K_SC` is gated **before** the wrap — until
-            the invitee accepts. Omit for the default direct-add (target consent off). The owner learns whether it
+            cannot privately show a divergent name. When present, the add is recorded as a **soft
+            `pendingConsent`** membership, holding the grant, until the invitee accepts. Omit for the default direct-add (target consent off). The owner learns whether it
             is required from the prior member-resolve (`requiresConsent`); a `requiresConsent` target added
             **without** this field is rejected `400 consent_required`.
           contentEncoding: base64
           maxLength: 8192
           example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        admissionId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the group add, bound to the resolved target's user id — the same for a consent proposal.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        admissionEpoch:
+        epoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
+          description: The group epoch whose key `wrappedGrant` carries — its current one, checked under its row lock (`409 stale_epoch`).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
-        admissionTag:
+        wrappedGrant:
           type: string
           description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            The group's current epoch key sealed to the target's identity key as `resolveGroupMember` served it
+            (`sealTo(scope-grant: scopeId, epoch)`), after the owner's client ran its pin check on that key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: The owner's `grant` signature over it (kind `GROUP`, the target as recipient), ADR 0028 Decision 6.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: string
+          description: >
+            SHA-256 of the identity bundle the grant is wrapped to. The server compares it with the target's current
+            identity key and refuses another (`409 recipient_key_not_current`).
           contentEncoding: base64
           maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     SetMemberRoleRequest:
@@ -1306,31 +1314,44 @@ components:
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    ScopeAdmissionEntry:
+    InviteGrantEntry:
       type: object
-      required: [admissionId, admissionTag]
+      description: One open tenant invite re-granted by a rotation (ADR 0111 decision 2).
+      required: [inviteId, wrappedGrant, grantSignature, recipientIdentityDigest]
       properties:
-        admissionId:
+        inviteId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: An open admission of the scope — a membership's or an open tenant invite's `admissionId`.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+          description: The open invite being re-granted.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        admissionTag:
+        wrappedGrant:
           type: string
           description: >
-            The admission re-tagged under the rotation's **new** epoch key, after the rotator verified its old tag
-            under the old one (ADR 0020 move 6, ADR 0024 §4). The server stores it with `admissionEpoch` = the new
-            epoch and never verifies it.
+            The new epoch key sealed to the invite key (`sealTo(scope-grant: tenantId, epoch)`).
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: The rotator's `grant` signature over it — the invite id as recipient, the invite bundle as its identity.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: string
+          description: SHA-256 of the invite bundle — compared with the one the server stores for that invite (`409 recipient_key_not_current`).
           contentEncoding: base64
           maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotateScopeRequest:
       type: object
-      required: [epoch, wrappedPrev, grants, admissions]
+      required: [epoch, wrappedPrev, grants]
       # `revokeLinks` belongs to a removal-rotation (ScopesHandler.rotateScope): with it true, `removesUserId` is
       # required and not null — the schema's own rule (inbox #507). Under `dependentSchemas`, never at the top, where an
       # `if` turns a sibling-annotated `$ref` to this schema into `Any`; there both generators ignore it (measured on
@@ -1367,24 +1388,21 @@ components:
           description: The remaining members re-granted the new epoch (any not listed are re-granted later by grant-delivery).
           items: { $ref: "#/components/schemas/ScopeGrantEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
-        admissions:
-          type: array
+        inviteGrants:
+          type: [array, "null"]
           description: >
-            A new tag for **every open admission** of the scope — each membership's (granted, pending, or a consent
-            proposal) and, for a TENANT scope, each open member invite's — computed under the new epoch key
-            (ADR 0020 move 6, ADR 0024 §4). The server refuses a rotation that leaves any open admission out of both
-            this list and `droppedAdmissions` (`409 admissions_incomplete`, nothing stored): an admission a rotation
-            forgot could never be delivered to again.
-          items: { $ref: "#/components/schemas/ScopeAdmissionEntry" }
+            TENANT only: the open member invites this rotation re-grants the new epoch. With `pendingInviteIds`, exactly
+            the tenant's open invites — else `409 rotation_incomplete`. Omitted = none.
+          items: { $ref: "#/components/schemas/InviteGrantEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
-        droppedAdmissions:
+        pendingInviteIds:
           x-veyq-visibility: id
           type: [array, "null"]
           description: >
-            Open admissions whose **old** tag did not verify under the old epoch key, so the rotator did not carry
-            them. The server clears each one's tag — no client will deliver to that membership or invite again
-            unless an owner re-admits it — and the rotator surfaces it. Omitted = none.
-          items: { type: string, format: uuid, example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d }
+            TENANT only: the open member invites this rotation declares pending — the rotator could not verify the
+            owner's signature on their key or anchor its signer. Each keeps the grant it holds; its newcomer joins
+            behind and is brought current by the grant delivery. Omitted = none.
+          items: { type: string, format: uuid, example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c }
         removesUserId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -1463,8 +1481,7 @@ components:
             The caller's **own** grant for this tenant — the tenant scope key sealed to their identity public key
             (opaque base64), so the switcher can open the tenant's `sealedIcon` without a per-tenant scopes call
             (en.spaces.tenant-scope). The client `asymUnwrap`s it locally; the server never interprets it. `null`
-            while the caller is grant-less — the transient awaiting-access window, during which the icon renders
-            as the initial — and while the tenant is `SUSPENDED`, which withholds it as a standing reason
+            while the tenant is `SUSPENDED`, which withholds it as a standing reason
             (en.spaces.tenant-scope E1a): suspension refuses its members every read, this one included.
           contentEncoding: base64
           maxLength: 8192
@@ -1542,7 +1559,7 @@ components:
 
     ScopeMember:
       type: object
-      required: [userId, username, avatarRevision, role, identityPublicKey, hasGrant]
+      required: [userId, username, avatarRevision, role, identityPublicKey]
       properties:
         userId:
           x-veyq-visibility: id
@@ -1565,8 +1582,7 @@ components:
           type: [string, "null"]
           description: >
             The member's real name (first + last) **sealed under a field key derived from `K_tenant`** (opaque base64), decrypted locally
-            by any tenant member. `null` when not yet sealed (a grant-less "awaiting access" member has no
-            `K_tenant` yet). The server never sees the plaintext name.
+            by any tenant member. `null` when not sealed (the member left it out). The server never sees the plaintext name.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
@@ -1607,46 +1623,67 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: bWVtYmVyLXB1YmxpYy1rZXk=
-        hasGrant:
-          x-veyq-visibility: flag
-          type: boolean
-          description: True if the member already holds a grant (a key-holder); false = pending, awaiting delivery.
-          example: false
         pendingConsent:
           x-veyq-visibility: flag
           type: boolean
           description: >
             True if this is a **soft consent proposal** the target has not yet accepted (uc.spaces.consent-group-add,
-            cr-0094): a grant-less membership that grant-delivery **skips** (no `K_SC` wrap) until the invitee
-            accepts. **Owner-visible only** — the directory omits `pendingConsent` rows for non-owners, so ordinary
+            cr-0094): it holds the grant the owner wrapped, and the group is not listed to the target until they
+            accept. **Owner-visible only** — the directory omits `pendingConsent` rows for non-owners, so ordinary
             members see a proposed person only once they accept. `false`/absent for an ordinary member.
           example: false
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: this membership's, served so a rotation can verify it before carrying it forward. All three are `null` when the membership carries none (never admitted by a key-holder, or dropped by a rotation).
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-        admissionTag:
+        sealedJoinRecord:
           type: [string, "null"]
           description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            TENANT scope only: the member's join record ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3 and 12) — who they joined
+            as, through which owner-signed invite, signed by the invite key and by their identity — sealed under the
+            tenant key (field `member-join-record`, bound to the tenant scope and this member). Written once at the
+            invite's accept and never by the profile op; `null` for the tenant's first owner (its trust root, born
+            through the Server Owner's invite) and in every other kind of scope.
           contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          maxLength: 8192
+          example: c2VhbGVkLWpvaW4tcmVjb3Jk
+
+    OpenInvite:
+      type: object
+      description: An open member invite as a rotator reads it — enough to verify it and wrap to it, nothing to contact anyone by.
+      required: [inviteId, invitePublicKey, inviteKeySignature, signerUserId, signerIdentityPublicKey, expiresAt]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+        invitePublicKey:
+          type: string
+          description: The invite key's public bundle (`serializeIdentityPublic`).
+          contentEncoding: base64
+          maxLength: 8192
+          example: aW52aXRlLXB1YmxpYy1rZXk=
+        inviteKeySignature:
+          type: string
+          description: The inviting owner's `invite-key` signature over it.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        signerUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The inviting owner.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        signerIdentityPublicKey:
+          type: string
+          description: The inviting owner's identity public bundle as it signed — what the rotator's pin check judges.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: The invite's expiry, as the owner signed it.
+          example: 2026-07-11T12:00:00Z
 
     ResolvedGroupCandidate:
       type: object
@@ -1835,7 +1872,7 @@ components:
           format: uuid
           description: >
             The account that posted the caller's grant — its signature is `grantSignature` (ADR 0028 Decision 6).
-            Null for a grant written before grants were signed — which the client refuses to open (the scope reads as awaiting access).
+            Null for a grant written before grants were signed — which the client refuses to open (the scope does not open).
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
         grantSignature:
           type: [string, "null"]

@@ -113,6 +113,10 @@ export const SEAL_PURPOSES = {
   // K_facts is unique to the statement, and the seal still binds the case and the statement id the moderator's browser
   // mints, as a field under its own K_field keeps its object binding (ADR 0072 Decisions 1-3).
   'moderation-statement-facts': [['caseId', 'id'], ['statementId', 'id']],
+  // A member invite's link secret — the invite key's seed, the inviting owner's fingerprint and account (ADR 0111
+  // decision 1, ./invite.ts) — under `Argon2id(code or password, salt)`. The KEK is unique to the link, and the seal
+  // still binds the tenant and the invite, so a sealed part pasted behind another invite's token does not open.
+  'invite-link': [['tenantId', 'id'], ['inviteId', 'id']],
 } as const satisfies Schema
 
 /**
@@ -138,6 +142,9 @@ export const FIELD_PURPOSES = {
   'member-name': [['scopeId', 'id'], ['userId', 'id']],
   // A member's profile picture (ADR 0084): its own purpose, so a blob sealed for the name never opens as the picture.
   'member-avatar': [['scopeId', 'id'], ['userId', 'id']],
+  // A member's join record (ADR 0111 decisions 3 and 12, ./invite.ts): written once at the invite's accept, beside the
+  // name and the picture. Not `join-record`, which is the statement both of its signatures cover.
+  'member-join-record': [['scopeId', 'id'], ['userId', 'id']],
   // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
   // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
   // body. It keeps the object binding though K_rev is unique to the revision (ADR 0072 Decision 2), so a body served as
@@ -327,7 +334,7 @@ function encode(schema: Schema, context: { purpose: string }): Uint8Array {
 /**
  * The canonical encoding of a context: `lp(utf8(purpose)) || lp(field)…` in the table's field order, where an id
  * is its UTF-8 canonical string, an integer is u64be, and a role is its UTF-8 name. Exposed because a signature
- * over a bound object reuses it (a grant's admission statement), and pinned per purpose by the vectors' `aad`.
+ * over a bound object reuses it (a signed statement), and pinned per purpose by the vectors' `aad`.
  */
 export const encodeSealContext = (context: SealContext): Uint8Array => encode(SEAL_PURPOSES, context)
 export const encodeSealToContext = (context: SealToContext): Uint8Array => encode(SEAL_TO_PURPOSES, context)
@@ -335,14 +342,12 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
 
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
- * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#admission_tag`,
- * `#grant_signature`, `#item_mark_self`, `#pairing_channel`).
- *   - `admission-tag` (ADR 0020 move 6): what the scope's current epoch key MACs to admit a membership. `userId` is
- *     the target's account for a group add and absent (`null`, the empty field) for a tenant invite, whose invitee
- *     has no account yet. It binds neither the role nor the identity key, on purpose (ADR 0020 move 6).
+ * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#grant_signature`,
+ * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
- *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext.
+ *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext. A grant to an open
+ *     tenant invite names the invite's id as its recipient and the invite key's bundle as its identity.
  *   - `item-mark-self` (ADR 0068 §9): what a member's Master-Key-derived key MACs over their marks on one node, so
  *     their own client can tell their entry from a co-member's without the read naming anyone. `marks` is SHA-256
  *     over the marked ids, de-duplicated and sorted — the SET, bound whole, so a copied tag answers for no other set.
@@ -353,9 +358,15 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *   - `moderation-proof` (ADR 0099 § 2): what the current epoch's moderation signing key signs to prove the key on one
  *     moderation call — the server's single-use challenge, the contract operation it is for, and the case it acts on
  *     (absent, the empty field, for an operation on no case). The server rebuilds it from the operation it matched.
+ *   - `invite-key` (ADR 0111 decision 1): what an inviting owner's identity key signs over an invite's key — the
+ *     tenant, the invite, SHA-256 of the invite key's public bundle and the invite's expiry in Unix seconds.
+ *   - `invite-accept` (ADR 0111 decision 3): what the invite key signs when its invitee redeems it — the invite, the
+ *     new member's account and SHA-256 of their identity public bundle. The server checks it under the stored invite
+ *     key, so a redeem with the token alone is refused.
+ *   - `join-record` (ADR 0111 decisions 3 and 12): what the invite key AND the new identity both sign — who joined
+ *     (account, identity digest, Secret-Key proof public key) through which owner-signed invite.
  */
 export const STATEMENT_PURPOSES = {
-  'admission-tag': [['scopeId', 'id'], ['epoch', 'uint'], ['admissionId', 'id'], ['userId', 'optionalId']],
   grant: [
     ['scopeId', 'id'],
     ['scopeKind', 'scopeKind'],
@@ -369,6 +380,20 @@ export const STATEMENT_PURPOSES = {
   'pairing-sign-in-answer': [['transportKey', 'bytes'], ['code', 'pairingCode']],
   'pairing-envelope': [['envelope', 'bytes']],
   'moderation-proof': [['challenge', 'bytes'], ['operationId', 'operationId'], ['caseId', 'optionalId']],
+  'invite-key': [['tenantId', 'id'], ['inviteId', 'id'], ['inviteKeyDigest', 'digest'], ['expiresAt', 'uint']],
+  'invite-accept': [['inviteId', 'id'], ['userId', 'id'], ['identityDigest', 'digest']],
+  'join-record': [
+    ['tenantId', 'id'],
+    ['userId', 'id'],
+    ['identityDigest', 'digest'],
+    ['secretKeyProofPublicKey', 'bytes'],
+    ['inviteId', 'id'],
+    ['inviteKeyDigest', 'digest'],
+    ['inviteKeySignature', 'bytes'],
+    ['inviteExpiresAt', 'uint'],
+    ['signerUserId', 'id'],
+    ['signerIdentityDigest', 'digest'],
+  ],
 } as const satisfies Schema
 
 /** A statement's context: its label and exactly its fields. */
