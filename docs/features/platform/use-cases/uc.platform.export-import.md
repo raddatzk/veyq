@@ -58,6 +58,12 @@
   never stays at "Writing the file…" and never reports the file saved. Without the file picker the browser's own download
   is told the ZIP's exact length up front, its `Content-Length`, so it can show progress against the whole (ADR 0082, ADR
   0047 § The download route; F11, unit-tested; the stack lane's `export-import` spec is its browser proof).
+- **E10 — another member rotates the space while the import runs:** what the import already created stays at the epoch
+  it started with, so its next write there - a node below it, a medium, a cover, a Pot's records or a receipt, a file's
+  content - is refused until that node is re-keyed. Each such write brings the node forward on the importer's own device
+  and is sealed again under the node's new key, and the import goes on; nothing is created twice. Below a drop box it
+  waits for an owner's device, and only if none comes is the import rolled back (E3)
+  ([uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md) E9, ADR 0111 decision 11).
 
 ## What an import does not carry, by design
 

@@ -282,8 +282,18 @@ the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-
   ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write that carries
   ciphertext under the old key is rebuilt, not resent: a cover's or a banner's whole save runs again under the re-read
   key (`writeUnderMemberNode`), a medium's meta edit re-bases on the re-sealed tier (`persistMeta`); an import or a copy
-  pulls its target (`memberCreateOptions`). A write stating an older node epoch (`409 stale_epoch`) re-reads once. A **guest**, holding no key above its root, waits and retries until a
-  member's or an owner's device reached its node.
+  pulls its target (`memberCreateOptions`). A write stating an older node epoch (`409 stale_epoch`) re-reads once,
+  running the pull first when it has not run: another member's device re-keyed the node, and this device opens the new
+  key only once it re-opened the scope at the epoch that minted it. A **guest**, holding no key above its root, waits and
+  retries until a member's or an owner's device reached its node.
+- **A long run keeps up with a rotation.** An import or a copy creates its nodes at the epoch it started with, so a
+  rotation landing mid-run leaves them behind too. Every create states the scope's epoch as the device holds it at that
+  attempt (`CreateNodeOptions.epochs`), and each write into a node the run created goes through that node's
+  `memberNodeWriter`: one write — a medium, a cover, a banner, a Pot's batch or receipt — pulled, re-read and sealed
+  again, the writer keeping the key it landed under for the run's next write and for the children created below. Never
+  the kind's whole import again, which would create the node twice. A create at the scope root re-opens the scope on a
+  `stale_epoch` (the pull of an empty path). A pull refused below a drop box still re-opens a scope held behind, so the
+  write's re-read after the wait opens an owner's re-key.
 
 ## Securing the account
 

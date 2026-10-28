@@ -43,6 +43,9 @@
 - **E2 — a stop part-way** (a refused write, quota, a failed upload, the tab closed): what was created is moved to the
   trash, and the message says "N of M" - the import's rollback.
 - **E3 — a kind this build cannot copy** (no hooks): left out with its subtree and named before anything is written.
+- **E4 — another member rotates the space while the copy runs:** as the import's E10 - each write into what the copy
+  already created brings that node forward on this device and is sealed again under its new key; below a drop box it
+  waits for an owner's device ([uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md) E9).
 
 ## What a copy does not carry, by design
 
