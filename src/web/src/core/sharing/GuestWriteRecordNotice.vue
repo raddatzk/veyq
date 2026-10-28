@@ -6,8 +6,8 @@
 // of its own (Art. 21(4)). `days` null — a READ link, where nothing is recorded, or a locked answer — renders nothing;
 // the record has no switch (ADR 0093 § 10), so a writing link's unlocked answer always carries N.
 //
-// The wording waits on counsel (ADR 0093 § Legal basis, Still open 4: what the port is worth behind an operator's own
-// NAT). The full Art. 13 text — who the controller is, the purpose, the basis, N and B, the recipients, the rights and
+// The wording is a draft; what the port is worth behind an operator's own NAT is a question not pursued (ADR 0093
+// § Legal basis, Still open 4). The full Art. 13 text — who the controller is, the purpose, the basis, N and B, the recipients, the rights and
 // the objection — is the instance privacy notice's (ADR 0035 decision 8, the one home of every Art. 13 passage): the
 // notice links its record passage (`/privacy#guest-write-record`), in a tab of its own so the share page keeps its
 // fragment key.

@@ -610,8 +610,8 @@ It states what **this** instance does, from what it is set to, so keeping it tru
 An empty value reads *not stated by this operator* (the recipients' passage too, while you name none). It is shown on
 every instance — a household may owe no notice, but every passage is still true of your instance.
 
-**It is a draft too**, and says so on every rendering. Questions only counsel answers, and that the notice answers as
-veyq is built until then: whether each space's owner is a joint controller with you for its members' accounts (the
+**It is a draft too**, and says so on every rendering. Questions the law leaves open, which veyq does not pursue and
+the notice answers as veyq is built: whether each space's owner is a joint controller with you for its members' accounts (the
 notice names you alone), whether the breached-password check and the exchange rates may run by default (the notice
 states each as it runs, its recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
 towards a person a report names. The record of processing, your contracts with processors, a breach and an access
@@ -619,8 +619,8 @@ request are [Data protection](/veyq/run/data-protection/)'s.
 
 ## Not built
 
-- **A child-sexual-abuse case's hold running until the handover past 90 days**: it waits on counsel (§ 184b(5) StGB,
-  see [In an emergency](#in-an-emergency)); such a hold ends at the handover or after 90 days, whichever comes first.
+- **A child-sexual-abuse case's hold running until the handover past 90 days**: whether § 184b(5) StGB covers it is a
+  question the law leaves open and veyq does not pursue (see [In an emergency](#in-an-emergency)); such a hold ends at the handover or after 90 days, whichever comes first.
 - **Keeping a case's records longer while proceedings are pending**: there is no extension for the records yet, only
   for a hold.
 - **A time-bound link for the police to a held copy** — not built, and not to be built without the police's or a

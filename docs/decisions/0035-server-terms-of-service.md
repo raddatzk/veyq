@@ -184,9 +184,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    (the provider identification's footer, which the app shell gains). It is information, not consent: no gate, no
    acceptance, and its revision moves only with its text. It is shown on every instance, in one form, an empty value showing as "not stated by this
    operator" and nothing warning (ADR 0093 § 14). Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
-   run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
+   run by default are left open and not pursued (ADR 0093 Still open 6 and 7); the notice names the Server Owner as the
    controller and states the check as it runs. Its text is a **draft until a qualified legal review** too, and the
-   questions only counsel answers are ADR 0093 Still open 6, 7 and 10.
+   questions the law leaves open for it are ADR 0093 Still open 6, 7 and 10.
 
    The notice is shown on **every instance**, every passage being a fact of the software true on every instance (for a household the exemption only
    makes it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to
