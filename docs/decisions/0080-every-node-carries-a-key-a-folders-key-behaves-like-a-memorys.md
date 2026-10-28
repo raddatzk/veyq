@@ -149,8 +149,9 @@ Memory, an expense and a file side by side).
     nothing again). Members may only delete, move out or copy from a drop box and place
     nothing of their own there (a server placement rule); a guest — a `READ`/`READ_WRITE` guest of a folder link
     above the drop box included, which holds its key and reads its guests' folders — moves nothing out of it; moving out re-wraps and re-slugs under the target, where
-    the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
-    folders it writes by the URL-segment rule above, so it stays unambiguous inside a drop box too. Revoking the link
+    the normal index applies, so every other folder stays unique; a ZIP export names the identity folders it writes
+    by [ADR 0082](0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
+    decision 3's rule, which numbers two names of one directory that meet, so it stays unambiguous inside a drop box too. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
     nodes); this rule is for nodes guests create, built with the first application that needs it (Depot). Since a
     re-key re-seals what lies under a node's key, it is a write onto the node: while any member re-keys a node after a
