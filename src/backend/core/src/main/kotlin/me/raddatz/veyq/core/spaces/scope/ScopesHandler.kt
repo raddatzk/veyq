@@ -504,12 +504,24 @@ class ScopesHandler(
      * Accept a consent proposal (cr-0094): clear the caller's own `pendingConsent` flag, so it becomes an ordinary
      * membership — with the grant the proposal already holds (ADR 0111 decision 4). Invitee-gated (acts only on the caller's
      * membership); idempotent — an already-accepted membership is a no-op Ok; no membership at all is NotFound.
+     *
+     * **Under the scope row's lock**, taken first in the accept's own transaction (lock order scope → membership, as the
+     * decline's), and the proposal asked for again beneath it (inbox #599). A tenant removal holds that lock from before
+     * it reads the group's members until its deletes commit: it decides from an unaccepted proposal that the group is its
+     * leaver's own (tombstone it, expire the proposals) or that the leaver's own row is a proposal (drop it as a decline
+     * would). An accept that committed between that read and those deletes was no proposal any more, so the delete took
+     * nothing: the accepter survived as a member of a tombstoned group nobody owned, or as a member of a group in a tenant
+     * that had removed them. Waiting on the lock, it finds the proposal gone and answers NotFound, as an accept after the
+     * removal does.
      */
     fun acceptInvitation(callerId: String, scopeId: String): AcceptInvitationOutcome =
-        when {
-            store.clearPendingConsent(callerId, scopeId) > 0 -> AcceptInvitationOutcome.Ok
-            store.consentState(callerId, scopeId) == ConsentState.ACTIVE -> AcceptInvitationOutcome.Ok // already accepted
-            else -> AcceptInvitationOutcome.NotFound
+        QuarkusTransaction.requiringNew().call {
+            store.lockScope(scopeId)
+            when {
+                store.clearPendingConsent(callerId, scopeId) > 0 -> AcceptInvitationOutcome.Ok
+                store.consentState(callerId, scopeId) == ConsentState.ACTIVE -> AcceptInvitationOutcome.Ok // already accepted
+                else -> AcceptInvitationOutcome.NotFound
+            }
         }
 
     /**
