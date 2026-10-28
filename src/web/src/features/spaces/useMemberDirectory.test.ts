@@ -27,7 +27,7 @@ function harness<T>(factory: () => T) {
 }
 
 const member = (userId: string): ScopeMember =>
-  ({ userId, username: userId, role: 'MEMBER', avatarRevision: 0, identityPublicKey: `pk-${userId}`, sealedName: '' })
+  ({ userId, username: userId, role: 'MEMBER', avatarRevision: 0, identityPublicKey: `pk-${userId}`, keyChainHead: `head-${userId}`, pending: false, sealedName: '' })
 
 beforeEach(() => {
   push.mockClear()
@@ -36,14 +36,19 @@ beforeEach(() => {
 
 describe('useMemberDirectory', () => {
   it('loads rows + ownership on mount and refreshes trust', async () => {
-    vi.mocked(trustStates).mockResolvedValueOnce({ a: { state: 'changed', pinVerified: false } })
+    vi.mocked(trustStates).mockResolvedValueOnce({ a: { state: 'anomaly' } })
     const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a'), member('b')], isOwner: true })))
     expect(api.loading.value).toBe(true)
     await flushPromises()
     expect(api.loading.value).toBe(false)
     expect(api.members.value.map((m) => m.userId)).toEqual(['a', 'b'])
     expect(api.isOwner.value).toBe(true)
-    expect(api.trust.value).toEqual({ a: { state: 'changed', pinVerified: false } })
+    expect(api.trust.value).toEqual({ a: { state: 'anomaly' } })
+    // Each member is judged against the key AND the head the directory served for them.
+    expect(trustStates).toHaveBeenCalledWith([
+      { userId: 'a', identityPublicKey: 'pk-a', keyChainHead: 'head-a' },
+      { userId: 'b', identityPublicKey: 'pk-b', keyChainHead: 'head-b' },
+    ])
     expect(api.loadError.value).toBe('')
   })
 
@@ -75,14 +80,6 @@ describe('useMemberDirectory', () => {
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'login' })
     expect(api.loadError.value).toBe('') // 401 → the redirect handles it, no error shown
-  })
-
-  it('openReview targets a member and opens the dialog', async () => {
-    const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: false })))
-    await flushPromises()
-    api.openReview(api.members.value[0])
-    expect(api.reviewTarget.value?.userId).toBe('a')
-    expect(api.reviewOpen.value).toBe(true)
   })
 
   it('reload re-runs the load body', async () => {

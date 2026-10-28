@@ -4,8 +4,9 @@ import { httpError } from '../../test/httpError'
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
-// The TOFU pin store is exercised in its own test; here we drive checkAndPin's outcome directly.
-vi.mock('../account/identityPins', () => ({ checkAndPin: vi.fn() }))
+// The anchor gate is exercised in identityPins.test.ts, and with a real pin store and real chains in
+// grantDeliveryWorker.anchor.test.ts; here we drive its answer directly.
+vi.mock('../account/identityPins', () => ({ anchorIdentity: vi.fn() }))
 // The worker's own identity — its signing key signs every grant it posts (ADR 0028 Decision 6). A fresh copy per
 // call, like the real vault, because the worker zeroes what it is handed.
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
@@ -15,7 +16,7 @@ import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import type { ClaimedJob, TasksApi } from '../../api/generated/tasks'
-import { checkAndPin } from '../account/identityPins'
+import { anchorIdentity } from '../account/identityPins'
 import { TrustStateRefused } from '../account/trustMarks'
 import { identityPrivate } from '../../app/vault'
 import { grantSignatureVerifies } from '../spaces/grant'
@@ -27,6 +28,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 const target = v1.generateIdentity()
 const targetPubB64 = b64std(v1.serializeIdentityPublic(target.pub))
 const TARGET = '7a26e000-0000-4000-8000-0000000000b1'
+const TARGET_HEAD = 'ERERERERERERERERERERERERERERERERERERERERERE='
 const worker = v1.generateIdentity()
 // The scope the worker holds a key for — a canonical id, since the grant is sealed bound to it (ADR 0072).
 const S1 = '5c09e000-0000-4000-8000-0000000000a1'
@@ -37,7 +39,7 @@ const openAsTarget = (wrap: string, epoch: number) =>
 /** A claimed grant-delivery job for the target (a member a rotation left behind; ADR 0111 left the pin check as its only gate). */
 const job = (): ClaimedJob => ({
   jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
-  grantDelivery: { targetUserId: TARGET, targetMembershipId: 'm1', identityPublicKey: targetPubB64 },
+  grantDelivery: { targetUserId: TARGET, targetMembershipId: 'm1', identityPublicKey: targetPubB64, keyChainHead: TARGET_HEAD },
 })
 
 function mockTasks(
@@ -61,7 +63,7 @@ function oneJob(claimed: ClaimedJob) {
 beforeEach(() => {
   vi.clearAllMocks()
   // Default: the target is new or unchanged → the worker proceeds with the wrap (TOFU). Overridden per test.
-  vi.mocked(checkAndPin).mockResolvedValue('firstUse')
+  vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
   vi.mocked(identityPrivate).mockImplementation(() => ({
     kemSeed: worker.priv.kemSeed.slice(), sign: worker.priv.sign.slice(),
   }))
@@ -93,6 +95,10 @@ describe('runGrantDeliveryWorker', () => {
     const to = { userId: TARGET, identityPublicKeyB64: targetPubB64 }
     expect(grantSignatureVerifies(worker.pub.sign, scope, to, sealedResult, grantSignature)).toBe(true)
     expect(grantSignatureVerifies(target.pub.sign, scope, to, sealedResult, grantSignature)).toBe(false)
+    // It names the key it is wrapped to (ADR 0111 decision 10): SHA-256 of the target's bundle.
+    expect(completeTask.mock.calls[0][0].completeRequest?.recipientIdentityDigest).toBe(b64std(v1.sha256Digest(fromB64std(targetPubB64))))
+    // The target was judged against the key AND the head the claim served.
+    expect(anchorIdentity).toHaveBeenCalledWith(TARGET, job().grantDelivery)
   })
 
   // The poll hands the worker the ACTIVE SPACE's write key, and leaving or re-entering the space zeroes that array in
@@ -109,7 +115,7 @@ describe('runGrantDeliveryWorker', () => {
       claimTask.mockReset()
       claimTask.mockImplementationOnce(async () => (held.fill(0), job())).mockResolvedValueOnce(null)
     } else {
-      vi.mocked(checkAndPin).mockImplementationOnce(async () => (held.fill(0), 'firstUse'))
+      vi.mocked(anchorIdentity).mockImplementationOnce(async () => (held.fill(0), 'firstUse'))
     }
 
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: held, epoch: 0 })).toBe(1)
@@ -129,26 +135,34 @@ describe('runGrantDeliveryWorker', () => {
     expect(grantSignatureVerifies(worker.pub.sign, { scopeId: S1, kind: 'GROUP', epoch: 0 }, to, sealedResult as string, grantSignature as string)).toBe(false)
   })
 
-  it('declines the job (does not wrap) when the target identity key CHANGED — TOFU block (cr-0098)', async () => {
-    // The pin store holds a DIFFERENT key for this contact → the human-less worker must NOT seal K_SC to the
-    // possibly-substituted key. It declines the job (release to others + never re-offer to this worker) and moves on.
-    vi.mocked(checkAndPin).mockResolvedValue('changed')
+  it('declines the job (does not wrap) when the target key is an anomaly — identity_unanchored (decision 10)', async () => {
+    // The chain does not reach the served key from the head this account pinned → the human-less worker must NOT seal
+    // K_SC to it. It declines the job (release to others + never re-offer to this account) and moves on.
+    vi.mocked(anchorIdentity).mockResolvedValue('anomaly')
     const K_SC = v1.randomBytes(32)
     const { completeTask, declineTask } = oneJob(job())
 
     const delivered = await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })
 
     expect(delivered).toBe(0)
-    expect(completeTask).not.toHaveBeenCalled() // never wrapped to the changed key
+    expect(completeTask).not.toHaveBeenCalled() // never wrapped to the unanchored key
     expect(declineTask).toHaveBeenCalledTimes(1)
     expect(declineTask.mock.calls[0][0].jobId).toBe('j1')
-    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe('identity_changed')
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe('identity_unanchored')
+  })
+
+  it.each(['match', 'advanced'] as const)('control: a target key the chain anchors (%s) is delivered, nothing declined', async (anchor) => {
+    vi.mocked(anchorIdentity).mockResolvedValue(anchor)
+    const { completeTask, declineTask } = oneJob(job())
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(1)
+    expect(completeTask).toHaveBeenCalledTimes(1)
+    expect(declineTask).not.toHaveBeenCalled()
   })
 
   it('pauses (neither wraps nor declines) when this device refuses its own pin store (ADR 0028 Decision 7)', async () => {
     // A rolled-back store says nothing about THIS target, so a decline — which excludes this worker from the job
     // for good — would be the wrong answer; nothing may be wrapped either, since no key can be judged.
-    vi.mocked(checkAndPin).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
+    vi.mocked(anchorIdentity).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
     const K_SC = v1.randomBytes(32)
     const { completeTask, declineTask } = oneJob(job())
 
@@ -158,7 +172,7 @@ describe('runGrantDeliveryWorker', () => {
   })
 
   it('any other pin-store failure still propagates as itself — the pause is for the refusal only', async () => {
-    vi.mocked(checkAndPin).mockRejectedValue(new Error('network down'))
+    vi.mocked(anchorIdentity).mockRejectedValue(new Error('network down'))
     const K_SC = v1.randomBytes(32)
     oneJob(job())
     await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toThrow('network down')
@@ -203,6 +217,15 @@ describe('runGrantDeliveryWorker', () => {
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
     expect(claimTask).toHaveBeenCalledTimes(1) // no re-claim spin on the job it was just refused for
     expect(completeTask).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops draining on a 409 recipient_key_not_current — the target secured their account after the claim', async () => {
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job())
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockRejectedValue(httpError(409, 'recipient_key_not_current'))
+    mockTasks(claimTask, completeTask)
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(0)
+    expect(claimTask).toHaveBeenCalledTimes(1) // the next pass claims it with the target's current key
   })
 
   it('a non-stale completion failure still propagates', async () => {

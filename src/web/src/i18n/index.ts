@@ -93,6 +93,7 @@ const en = {
     hint: 'Nothing is wrong with your account or data — this is only a version check to avoid errors.',
   },
   members: {
+    pending: 'Waiting for someone who can confirm their key',
     title: 'Members',
     sub: 'People in this shared space and their access.',
     promote: 'Make co-owner',
@@ -182,26 +183,16 @@ const en = {
     stale: 'This space changed just now (a key rotation). Please reopen and try again.',
   },
   verify: {
-    badgeChanged: 'Key changed',
-    review: 'Review key',
-    reviewTitle: "Review {name}'s changed key",
-    reviewIntro:
-      "This member's security key differs from the one you trusted before. Compare both numbers out-of-band. Accept only once you've confirmed the new key is really theirs — otherwise refuse and leave sharing blocked.",
-    expectedLabel: 'Expected — what you trusted',
-    currentLabel: 'Current — shown now',
-    accept: 'Accept new key',
-    refuse: 'Refuse',
-    reviewPendingRekey:
-      'If this member changed their keys while a shared space is still waiting for its new key, accepting first gives it that key wherever you can. Where you can’t, the space stays closed to you until another member does it.',
-    acceptFailed: 'Could not accept the key. Please try again.',
-    currentUnreadable:
-      'The key the server sent for this member cannot be read on this device, so there is no safety number to compare. Refuse for now: nothing is shared with a key that cannot be checked.',
-    expectedUnreadable:
-      'The key you trusted before cannot be read on this device, so its number is missing. Compare the current number with the one this member sees in their own app.',
     trustRolledBack:
       'The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.',
     trustUnreadable:
       'The list of the keys you trust could not be opened. Nothing is shared with a key it cannot check until it can be read again.',
+  },
+  trust: {
+    anomaly: 'Can’t confirm this key',
+    anomalyNote:
+      'This person’s key doesn’t follow from the one you knew. Nothing is shared with it until it does. Compare your safety numbers in person.',
+    rotated: 'New identity, signed by their previous key, on {date}.',
   },
   settings: {
     title: 'Settings',
@@ -774,7 +765,7 @@ const en = {
     unlockFailed: 'The key could not be opened. Check your password and Secret Key.',
     bundleMismatch: 'Stopped: the moderation key the server publishes for epoch {epoch} is not the one you hold. Tell the Server Owner.',
     delivered: 'You passed the key on to {count} new moderator. | You passed the key on to {count} new moderators.',
-    declined: 'The key was not passed to {count} moderator whose account keys changed. Check their safety number first. | The key was not passed to {count} moderators whose account keys changed. Check their safety numbers first.',
+    declined: 'The key was not passed to {count} moderator whose key can’t be confirmed. Compare your safety numbers in person. | The key was not passed to {count} moderators whose keys can’t be confirmed. Compare your safety numbers in person.',
     awaitingKey: 'You do not hold the moderation key yet. It reaches you when a moderator who holds it next opens this page.',
     queue: 'Reports',
     queueEmpty: 'Nothing has been reported.',
@@ -1443,8 +1434,6 @@ const en = {
     removeRevokeLinksHint: 'Anyone who leaves may have copied any of them. Each link’s owner can renew the ones still needed.',
     removeMemberFailed: 'Could not remove the member. Please try again.',
     invitationSent: 'Invitation sent — awaiting their consent.',
-    identityChanged: "This member's security key changed since you last shared with them — it could be a new device or someone impersonating them. Verify it's really them before continuing.",
-    acceptKeyChange: 'Accept the new key and continue',
     rescind: 'Withdraw',
     rescindFailed: 'Could not withdraw the invitation. Please try again.',
     untitled: 'Untitled group',
@@ -1513,7 +1502,6 @@ const en = {
     stateUnverified: 'Not verified',
     loadError: 'The safety number could not be loaded.',
     unreadable: 'The key the server sent for this member cannot be read on this device, so there is no number to compare.',
-    changedNote: 'The server now lists a different key for {name} than the one you trust. Review the change before you compare.',
     scan: 'Scan their code',
     compare: 'Compare digits',
     compareHint: 'Read the digits aloud with {name}, or hold both screens side by side.',
@@ -1527,12 +1515,6 @@ const en = {
     foreign: 'That is not a veyq safety number code. Scan the code on their profile page.',
     moved: 'The key you trust for {name} changed while you compared, so nothing was marked. Compare again.',
     failed: 'Could not mark as verified. Please try again.',
-    // A VERIFIED contact's key changed (ADR 0028 Decision 3): the member lists, the profile and the review say it louder.
-    badgeVerifiedChanged: 'Verified key changed',
-    changedVerifiedNote:
-      'You verified {name}’s key before, and the server now lists a different one. Review the change before you compare: accepting it does not verify the new key.',
-    reviewVerifiedIntro:
-      'You verified {name}’s key by comparing it, and this is a different key. A real change happens when someone replaces their keys - ask {name} directly, outside veyq, before you accept. Accepting does not verify the new key: compare again on their profile afterwards.',
   },
   node: {
     folders: 'Folders',
@@ -2087,6 +2069,7 @@ const de: typeof en = {
     hint: 'Mit deinem Konto oder deinen Daten ist nichts falsch — das ist nur eine Versionsprüfung, um Fehler zu vermeiden.',
   },
   members: {
+    pending: 'Wartet auf jemanden, der den Schlüssel bestätigen kann',
     title: 'Mitglieder',
     sub: 'Personen in diesem geteilten Bereich und ihr Zugang.',
     promote: 'Mitbesitz geben',
@@ -2174,26 +2157,16 @@ const de: typeof en = {
     stale: 'Der Bereich hat sich gerade geändert (eine Schlüsselrotation). Bitte erneut öffnen und versuchen.',
   },
   verify: {
-    badgeChanged: 'Schlüssel geändert',
-    review: 'Schlüssel prüfen',
-    reviewTitle: 'Geänderten Schlüssel von {name} prüfen',
-    reviewIntro:
-      'Der Sicherheitsschlüssel dieses Mitglieds unterscheidet sich von dem, dem du zuvor vertraut hast. Vergleicht beide Zahlen außerhalb der App. Akzeptiere erst, wenn du bestätigt hast, dass der neue Schlüssel wirklich zu dieser Person gehört — andernfalls lehne ab und lass das Teilen blockiert.',
-    expectedLabel: 'Erwartet — dein vertrauter',
-    currentLabel: 'Aktuell — jetzt gezeigt',
-    accept: 'Neuen Schlüssel akzeptieren',
-    refuse: 'Ablehnen',
-    reviewPendingRekey:
-      'Wenn dieses Mitglied seine Schlüssel getauscht hat, während ein geteilter Bereich noch auf seinen neuen Schlüssel wartet, gibt das Akzeptieren ihm diesen Schlüssel zuerst, wo du das kannst. Wo nicht, bleibt der Bereich für dich zu, bis ein anderes Mitglied das erledigt.',
-    acceptFailed: 'Der Schlüssel konnte nicht akzeptiert werden. Bitte erneut versuchen.',
-    currentUnreadable:
-      'Der Schlüssel, den der Server für dieses Mitglied geschickt hat, lässt sich auf diesem Gerät nicht lesen, daher gibt es keine Sicherheitsnummer zum Vergleichen. Lehne vorerst ab: Mit einem Schlüssel, der sich nicht prüfen lässt, wird nichts geteilt.',
-    expectedUnreadable:
-      'Der Schlüssel, dem du zuvor vertraut hast, lässt sich auf diesem Gerät nicht lesen, daher fehlt seine Nummer. Vergleiche die aktuelle Nummer mit der, die dieses Mitglied in der eigenen App sieht.',
     trustRolledBack:
       'Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist.',
     trustUnreadable:
       'Die Liste deiner vertrauten Schlüssel ließ sich nicht öffnen. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis sie wieder lesbar ist.',
+  },
+  trust: {
+    anomaly: 'Schlüssel nicht bestätigt',
+    anomalyNote:
+      'Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern persönlich.',
+    rotated: 'Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben, am {date}.',
   },
   settings: {
     title: 'Einstellungen',
@@ -2742,7 +2715,7 @@ const de: typeof en = {
     unlockFailed: 'Der Schlüssel konnte nicht geöffnet werden. Prüfe Passwort und Secret Key.',
     bundleMismatch: 'Abgebrochen: Der Moderationsschlüssel, den der Server für Epoche {epoch} veröffentlicht, ist nicht der, den du hältst. Sag der Person Bescheid, die den Server betreibt.',
     delivered: 'Du hast den Schlüssel an {count} neue moderierende Person weitergegeben. | Du hast den Schlüssel an {count} neue moderierende Personen weitergegeben.',
-    declined: 'Der Schlüssel ging nicht an {count} Person, deren Kontoschlüssel sich geändert haben. Prüfe zuerst ihre Sicherheitsnummer. | Der Schlüssel ging nicht an {count} Personen, deren Kontoschlüssel sich geändert haben. Prüfe zuerst ihre Sicherheitsnummern.',
+    declined: 'Der Schlüssel ging nicht an {count} Person, deren Schlüssel nicht bestätigt ist. Vergleicht eure Sicherheitsnummern persönlich. | Der Schlüssel ging nicht an {count} Personen, deren Schlüssel nicht bestätigt sind. Vergleicht eure Sicherheitsnummern persönlich.',
     awaitingKey: 'Du hältst den Moderationsschlüssel noch nicht. Er erreicht dich, wenn eine Person, die ihn hält, diese Seite das nächste Mal öffnet.',
     queue: 'Meldungen',
     queueEmpty: 'Es wurde nichts gemeldet.',
@@ -3395,8 +3368,6 @@ const de: typeof en = {
     removeRevokeLinksHint: 'Wer die Gruppe verlässt, kann jeden davon kopiert haben. Wem ein Link gehört, kann die noch benötigten erneuern.',
     removeMemberFailed: 'Das Mitglied konnte nicht entfernt werden. Bitte erneut versuchen.',
     invitationSent: 'Einladung gesendet — wartet auf ihre Zustimmung.',
-    identityChanged: 'Der Sicherheitsschlüssel dieses Mitglieds hat sich seit dem letzten Teilen geändert — das kann ein neues Gerät sein oder eine Person, die sich als diese Person ausgibt. Vergewissere dich, dass es wirklich diese Person ist, bevor du fortfährst.',
-    acceptKeyChange: 'Neuen Schlüssel akzeptieren und fortfahren',
     rescind: 'Zurückziehen',
     rescindFailed: 'Die Einladung konnte nicht zurückgezogen werden. Bitte erneut versuchen.',
     untitled: 'Unbenannte Gruppe',
@@ -3459,7 +3430,6 @@ const de: typeof en = {
     stateUnverified: 'Nicht verifiziert',
     loadError: 'Die Sicherheitsnummer konnte nicht geladen werden.',
     unreadable: 'Der Schlüssel, den der Server für dieses Mitglied geschickt hat, lässt sich auf diesem Gerät nicht lesen, daher gibt es keine Nummer zum Vergleichen.',
-    changedNote: 'Der Server zeigt für {name} jetzt einen anderen Schlüssel als den, dem du vertraust. Prüfe die Änderung, bevor du vergleichst.',
     scan: 'Code scannen',
     compare: 'Ziffern vergleichen',
     compareHint: 'Lest die Ziffern gemeinsam mit {name} vor oder haltet beide Bildschirme nebeneinander.',
@@ -3473,11 +3443,6 @@ const de: typeof en = {
     foreign: 'Das ist kein veyq-Sicherheitsnummern-Code. Scanne den Code auf der Profilseite.',
     moved: 'Der Schlüssel, dem du für {name} vertraust, hat sich während des Vergleichs geändert, daher wurde nichts markiert. Vergleicht erneut.',
     failed: 'Konnte nicht als verifiziert markiert werden. Bitte versuche es erneut.',
-    badgeVerifiedChanged: 'Verifizierter Schlüssel geändert',
-    changedVerifiedNote:
-      'Du hattest den Schlüssel von {name} verifiziert, und der Server zeigt jetzt einen anderen. Prüfe die Änderung, bevor du vergleichst: Annehmen verifiziert den neuen Schlüssel nicht.',
-    reviewVerifiedIntro:
-      'Du hattest den Schlüssel von {name} durch einen Vergleich verifiziert, und das hier ist ein anderer. Eine echte Änderung entsteht, wenn jemand die eigenen Schlüssel ersetzt - frag {name} direkt, außerhalb von veyq, bevor du annimmst. Annehmen verifiziert den neuen Schlüssel nicht: Vergleicht danach erneut im Profil.',
   },
   node: {
     folders: 'Ordner',

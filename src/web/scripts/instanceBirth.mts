@@ -10,7 +10,7 @@ import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { moderationEpochOne } from '../src/test/moderationEpochOne'
 import { sealName } from '../src/features/account/profile/memberName'
-import { sealGrant } from '../src/features/spaces/grant'
+import { recipientIdentityDigest, sealGrant } from '../src/features/spaces/grant'
 import { Configuration as SetupConfiguration, SetupApi, type SetupStatus } from '../src/api/generated'
 import { Configuration as AuthConfiguration, LoginApi } from '../src/api/generated/auth'
 import { AccountApi, Configuration as AccountConfiguration } from '../src/api/generated/account'
@@ -113,6 +113,7 @@ export async function birthTenant(token: string, built: BuiltAccount, t: {
   await orThrow('accept', new TenantsApi(new TenantsConfiguration(onTenant)).acceptTenantInvite({
     acceptInviteRequest: {
       bootstrapSecret, username: t.username, grant: birth.wrappedGrant, grantSignature: birth.grantSignature,
+      recipientIdentityDigest: recipientIdentityDigest(ownerPub),
       ...(sealedName ? { sealedName } : {}),
     },
   }))
@@ -125,7 +126,7 @@ export async function birthPersonalScope(token: string, domain: string, ownerId:
   const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
   const grant = sealGrant(v1.randomBytes(32), { scopeId, kind: 'PERSONAL', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
   const scope = await orThrow('createPersonalScope', new ScopesApi(new ScopesConfiguration(tenantChannel(domain, token))).createPersonalScope({
-    createPersonalScopeRequest: { scopeId, ...grant },
+    createPersonalScopeRequest: { scopeId, ...grant, recipientIdentityDigest: recipientIdentityDigest(ownerPub) },
   }))
   return scope.scopeId
 }

@@ -24,8 +24,9 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/GroupMembersPanel.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
   - id: verified-contact-key-change-is-louder
-    text: A verified contact whose directory key differs from the pin reads as such - "Verified key changed" in the member lists and on the profile, and the changed-key review says the contact was verified and that accepting does not verify the new key. Accepting re-pins as pinned, and the profile then offers the compare again.
+    # Rewritten by cr-secure-the-account phase 3 to the built web trust layer (ADR 0111 decisions 9, 15); phase 6 aligns the use case.
+    text: A verified contact whose key chain moves to a new key the chain reaches from the pinned head is pinned at the new head as pinned - verified drops, and returns only through a new compare on the profile, which then shows the new key's number and "New identity, signed by their previous key". A key the chain does not reach reads as an anomaly ("Can't confirm this key") in the member lists and on the profile, verified or not, with no accept.
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/MemberTrustBadge.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/MemberTrustBadge.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
 gaps:
   backend: "No backend surface: verification is client-only and its one write is the pin store's existing sealed PUT, whose wire shape uc.spaces.verify-identity covers (IdentityPinsSliceTest)."

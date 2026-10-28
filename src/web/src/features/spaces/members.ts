@@ -9,7 +9,7 @@ import { openScopeById } from './scopes'
 import { buildMemberInvite, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { writeKey, zeroEpochKeys } from './epochs'
-import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { SetTenantMemberRoleRequestRoleEnum, type MemberInviteState, type PendingMemberInvite } from '../../api/generated/tenants'
@@ -100,9 +100,9 @@ export function setTenantMemberRole(tenantId: string, userId: string, role: SetT
  * Add an existing tenant member to a **group** by username (uc.spaces.add-group-member, cr-0086) — owner-gated
  * (`403 not_scope_owner`), tenant-scoped resolve (`404 member_not_found`), idempotency (`409 already_member`).
  * **A group needs no invite key** (ADR 0111 decision 4): the target has an account, so the owner's client wraps the
- * group's current epoch key to the identity key [targetIdentityPublicKeyB64] the resolve served — after the pin check
- * passed it, as the name-key's wrap is gated ({@link ./scopes#wrapGroupNameKeyForInvitee}); a CHANGED key throws
- * {@link IdentityChangedError} and nothing is sent. The member holds the key from the add on.
+ * group's current epoch key to the identity key [target] the resolve served — once it is anchored (the key and its
+ * `keyChainHead`, {@link anchorIdentity}), as the name-key's wrap is gated ({@link ./scopes#wrapGroupNameKeyForInvitee});
+ * an anomaly throws {@link IdentityUnanchoredError} and nothing is sent. The member holds the key from the add on.
  *
  * Consent (cr-0096): when the target has "ask before adding me to groups" on, pass `sealedNameKey` (the group's
  * derived name-key `K_name` wrapped to their identity) — the add becomes a soft `pendingConsent` proposal holding the
@@ -110,9 +110,10 @@ export function setTenantMemberRole(tenantId: string, userId: string, role: SetT
  * `400 consent_required` (resolve first to learn whether it is required).
  */
 export async function addGroupMember(
-  scopeId: string, username: string, targetUserId: string, targetIdentityPublicKeyB64: string, sealedNameKey?: string,
+  scopeId: string, username: string, targetUserId: string, target: ServedIdentity, sealedNameKey?: string,
 ): Promise<ScopeMember> {
-  if ((await checkAndPin(targetUserId, targetIdentityPublicKeyB64)) === 'changed') throw new IdentityChangedError(targetUserId)
+  if ((await anchorIdentity(targetUserId, target)) === 'anomaly') throw new IdentityUnanchoredError(targetUserId)
+  const targetIdentityPublicKeyB64 = target.identityPublicKey
   return onceMoreIfStale(async () => {
     const opened = await openScopeById(scopeId)
     if (!opened) throw new Error('cannot open the group to add — the vault is locked or no grant is held')

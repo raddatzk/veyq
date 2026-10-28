@@ -10,9 +10,9 @@ import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
-import { checkAndPin, type CheckResult } from '../account/identityPins'
+import { anchorIdentity, type Anchor } from '../account/identityPins'
 import { TrustStateRefused } from '../account/trustMarks'
-import { sealGrant } from '../spaces/grant'
+import { recipientIdentityDigest, sealGrant } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'
 import type { ClaimedJob } from '../../api/generated/tasks'
 import type { ScopeKind } from '../../api/generated/scopes'
@@ -60,15 +60,14 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
       await failJob(job.jobId, 'not-grant-delivery')
       continue
     }
-    // TOFU gate (cr-0098, ADR 0028): pin the target's identity key on first sight, proceed on a match, but on a
-    // CHANGED key never seal K_SC to a possibly-substituted key. This worker is human-less, so it BLOCKS +
-    // DECLINES the job (release to other key-holders + never re-offer it to this worker) instead of wrapping — a
-    // human resolves the change in the UI. Per key-holder, not a global veto: the exclusion is keyed on this
-    // account (its other devices too), while a *different* key-holder without a conflicting pin still
-    // TOFU-delivers. `acceptKeyChange` is what lifts it once a human resolves the change (ADR 0060 Decision 7).
-    let pin: CheckResult
+    // The anchor gate (cr-secure-the-account decision 9): wrap only to a target key the chain reaches from the head this
+    // account pinned (`match` / `advanced`), or to a first-seen one (`firstUse`, pinned now). An `anomaly` is never
+    // sealed to: this worker is human-less, so it DECLINES the job (`identity_unanchored`: released to other key-holders,
+    // never re-offered to this account) — another member whose client anchors the key delivers it (decision 10). A
+    // decline is lifted by the target's next rotation, which clears every decline against it (decision 10).
+    let anchor: Anchor
     try {
-      pin = await checkAndPin(target.targetUserId, target.identityPublicKey)
+      anchor = await anchorIdentity(target.targetUserId, target)
     } catch (e) {
       // This device refused the pin store itself (ADR 0028 Decision 7): no pin can be read or written, so no key
       // can be judged. PAUSE, never decline — a decline is about this target and excludes this worker for good,
@@ -76,8 +75,8 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
       if (e instanceof TrustStateRefused) break
       throw e
     }
-    if (pin === 'changed') {
-      await declineJob(job.jobId, 'identity_changed')
+    if (anchor === 'anomaly') {
+      await declineJob(job.jobId, 'identity_unanchored')
       continue
     }
     const signed = sealGrant(
@@ -85,12 +84,16 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
       { userId: target.targetUserId, identityPublicKeyB64: target.identityPublicKey }, signPrivateKey,
     )
     try {
-      await completeJob(job.jobId, signed.wrappedGrant, scope.epoch, signed.grantSignature)
+      await completeJob(job.jobId, signed.wrappedGrant, scope.epoch, signed.grantSignature, recipientIdentityDigest(target.identityPublicKey))
     } catch (e) {
       // Our key is not the scope's current epoch (a rotation landed, or we still hold an older grant): the server
       // wrote nothing and released the job, so a key-holder at the current epoch delivers it. Stop draining —
       // every further job would meet the same answer, and re-claiming would only spin on this one.
       if (await isCodedError(e, HttpStatus.conflict, 'stale_epoch')) break
+      // The target secured their account between the claim and the completion (ADR 0111 decision 10): the key we wrapped
+      // to is retired, the server wrote nothing and released the job without spending an attempt. The next pass claims
+      // it with the target's current key; re-claiming now would only meet this job again.
+      if (await isCodedError(e, HttpStatus.conflict, 'recipient_key_not_current')) break
       throw e
     }
     delivered++
@@ -105,8 +108,12 @@ async function claimGrantDelivery(scopeId: string): Promise<ClaimedJob | null> {
   return job ?? null
 }
 
-async function completeJob(jobId: string, sealedResult: string, epoch: number, grantSignature: string): Promise<void> {
-  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: { sealedResult, epoch, grantSignature } }))
+async function completeJob(
+  jobId: string, sealedResult: string, epoch: number, grantSignature: string, recipientIdentityDigest: string,
+): Promise<void> {
+  await withRefresh(() =>
+    tasksApi().completeTask({ jobId, completeRequest: { sealedResult, epoch, grantSignature, recipientIdentityDigest } }),
+  )
 }
 
 async function failJob(jobId: string, reason: string): Promise<void> {
@@ -114,7 +121,7 @@ async function failJob(jobId: string, reason: string): Promise<void> {
 }
 
 /** Decline a job back to the queue without a failed attempt (cr-0098): release it to other workers + never
- *  re-offer it to this one. Used when the target's identity key changed (this worker refuses to wrap to it). */
+ *  re-offer it to this one. Used when the target's key is not anchored (this worker refuses to wrap to it). */
 async function declineJob(jobId: string, reason: string): Promise<void> {
   await withRefresh(() => tasksApi().declineTask({ jobId, declineRequest: { reason } }))
 }

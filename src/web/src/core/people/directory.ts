@@ -38,11 +38,13 @@ export function displayNameOf(username: string, name: MemberName | null | undefi
 let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
 /** One tenant member as the roster read holds it: the username, the opened real name, and the identity bundle the directory
- *  serves for them (base64) - the key a profile's safety-number compare starts from (ADR 0028 Decision 3). */
+ *  serves for them (base64) with the key-chain head beside it - the key a profile's safety-number compare starts from
+ *  (ADR 0028 Decision 3), and what the profile judges against the pinned head (cr-secure-the-account decision 9). */
 interface TenantRow {
   username: string
   name: MemberName | null
   identityPublicKey: string
+  keyChainHead: string
 }
 let namesCache: { at: number; tenantScopeId: string; names: Map<string, TenantRow> } | null = null
 
@@ -98,6 +100,7 @@ async function tenantNames(): Promise<Map<string, TenantRow>> {
         username: m.username,
         name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null,
         identityPublicKey: m.identityPublicKey,
+        keyChainHead: m.keyChainHead,
       }] as const),
     )
     namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
@@ -135,8 +138,10 @@ export async function loadTenantPeople(): Promise<Map<string, Person>> {
   return new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
 }
 
-/** The identity bundle (base64) the tenant's directory serves for `userId`, or null for a user it does not list (a former
- *  member). Read with the roster, so it is as fresh as the names: a profile's compare starts from it when no pin exists. */
-export async function loadIdentityKey(userId: string): Promise<string | null> {
-  return (await tenantNames()).get(userId)?.identityPublicKey ?? null
+/** The identity bundle (base64) and key-chain head the tenant's directory serves for `userId`, or null for a user it does
+ *  not list (a former member). Read with the roster, so it is as fresh as the names: a profile's compare starts from it
+ *  when no pin exists. */
+export async function loadServedIdentity(userId: string): Promise<{ identityPublicKey: string; keyChainHead: string } | null> {
+  const row = (await tenantNames()).get(userId)
+  return row ? { identityPublicKey: row.identityPublicKey, keyChainHead: row.keyChainHead } : null
 }

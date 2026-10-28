@@ -36,7 +36,7 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
     api = stubInvite()
   })
 
-  const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln' }
+  const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln', recipientIdentityDigest: 'ZGlnZXN0' }
 
   it('acceptInvite threads the birth and the optional sealedName onto the accept request (cr-0106)', async () => {
     await acceptInvite('secret', 'kevin', BIRTH, 'c2VhbGVkLW5hbWU=')
@@ -171,13 +171,14 @@ describe('openMemberInvite — the checks before anything is sent', () => {
     const forged = inviteGrant(f.tenantId, 0, v1.randomBytes(32), f.served.inviteId, f.inviteKey, operator)
     const served = { ...f.served, ...forged, granterUserId: f.served.signerUserId, granterIdentityPublicKey: bundleOf(operator) }
     expect(await refusal(openWith(f, served))).toBe('check:bad_signature')
-    // Control: a grant a rotation re-wrapped names ANOTHER member as granter — trusted on first use, and handed back
-    // for the caller to pin.
+    // Control: a grant a rotation re-wrapped names ANOTHER member as granter — trusted on first use, and handed back,
+    // with the head the invite serves for them, for the caller's pin store to judge (`memberInviteAnchored`).
     const rotator = v1.generateIdentity()
     const rewrapped = inviteGrant(f.tenantId, 0, f.tenantKey, f.served.inviteId, f.inviteKey, rotator)
     const rotatorId = crypto.randomUUID()
-    const opened = await openWith(f, { ...f.served, ...rewrapped, granterUserId: rotatorId, granterIdentityPublicKey: bundleOf(rotator) })
-    expect(opened.foreignGranter).toEqual({ userId: rotatorId, identityPublicKey: bundleOf(rotator) })
+    const head = 'ERERERERERERERERERERERERERERERERERERERERERE='
+    const opened = await openWith(f, { ...f.served, ...rewrapped, granterUserId: rotatorId, granterIdentityPublicKey: bundleOf(rotator), granterKeyChainHead: head })
+    expect(opened.foreignGranter).toEqual({ userId: rotatorId, identityPublicKey: bundleOf(rotator), keyChainHead: head })
     expect((await openWith(f)).foreignGranter).toBeNull()
   })
 

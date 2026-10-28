@@ -20,7 +20,7 @@ import { account } from '../../app/account'
 import { session } from '../../app/session'
 import { withRefresh } from '../../app/sessionRefresh'
 import { clearVault, identityPrivate } from '../../app/vault'
-import { checkAndPin } from '../account/identityPins'
+import { anchorChainKey, type ChainKeyAnchor } from '../account/identityPins'
 import { login } from '../account/login/login'
 import { TrustStateRefused } from '../account/trustMarks'
 import { unlockMasterKey } from '../account/unlock/unlock'
@@ -40,7 +40,7 @@ export type ModerationUnlock = {
   holdsCurrent: boolean
   /** Moderators the key was delivered to in this unlock. */
   delivered: number
-  /** Deliveries declined because the recipient's identity changed since this account pinned it (review, ADR 0028). */
+  /** Deliveries declined because the recipient's key is not anchored from the head this account pinned (decision 9). */
   declined: number
 }
 
@@ -88,7 +88,13 @@ function openGrants(epochs: ModerationEpochGrant[]): Map<number, Uint8Array> {
   }
 }
 
-/** Seal what each pending moderator misses to their identity, after the pin check; a changed identity is declined. */
+/** Seal what each pending moderator misses to their identity, once it is anchored; any other is declined.
+ *
+ * A pending delivery serves the moderator's key with no key-chain head (`ModerationPendingDelivery`), so it is judged by
+ * {@link anchorChainKey}: the pinned key matches with no fetch, another key must be the newest of a chain that verifies
+ * from the pinned head (cr-secure-the-account decision 9). A retired key of that chain is never sealed to — the
+ * moderator has a newer one — and neither is an anomaly, nor a key whose chain this account is not served (a moderator
+ * who shares no tenant with it): each is declined here, for another holder to deliver. */
 async function deliverPending(opened: Map<number, Uint8Array>): Promise<{ delivered: number; declined: number }> {
   const list = await withRefresh(async () =>
     moderationApi().listPendingModerationDeliveries(await proofFor('listPendingModerationDeliveries')),
@@ -96,14 +102,14 @@ async function deliverPending(opened: Map<number, Uint8Array>): Promise<{ delive
   let delivered = 0
   let declined = 0
   for (const d of list.deliveries) {
-    let pin
+    let key: ChainKeyAnchor
     try {
-      pin = await checkAndPin(d.accountId, d.identityPublicKey)
+      key = await anchorChainKey(d.accountId, d.identityPublicKey)
     } catch (e) {
       if (e instanceof TrustStateRefused) break // the local trust state cannot vouch: deliver nothing more, decline nothing
       throw e
     }
-    if (pin === 'changed') {
+    if (key.anchor === 'anomaly' || key.retired) {
       declined++
       continue
     }

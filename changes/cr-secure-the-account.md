@@ -908,7 +908,7 @@ above; after it, `GET /api/account/rotation/scopes` reads `waiting` until the ac
 Decisions 6 (client half), 9, 10. Lands before the rotation mechanism because every grant the mechanism writes is read
 through it.
 
-- The pin entry with `head`; the one function replacing `checkAndPin`; the five sites; the retired-key epoch rule;
+- The pin entry with `head`; the one function replacing `checkAndPin`; the eight sites (§ Context); the retired-key epoch rule;
   `recipientIdentityDigest` on every grant the web sends; `pendingUserIds` in `commitRotation` (the anchor gate decides
   who is pending); the delivery worker's `identity_unanchored`; `ChangedKeyReviewDialog`, `acceptChangedKey`,
   `acceptKeyChange` and their entry points removed; the anomaly badge and the profile's rotation line.
@@ -927,6 +927,70 @@ phase 1):
   both lists → the fake server's completeness check refuses.
 
 **Done when:** `npm run check` in `src/web/` is green.
+
+#### Phase 3 built (2026-10-28) — where it differs from the text above, and what phases 4–5 inherit
+
+- **The pin entry** is `{u, f, h, s, t}` in that order (`identityPins.ts` `sealEntry`/`openEntry`); an entry without a
+  32-byte `h` is unreadable, so a store written before this phase is refused, as decision 9's regenerated vector wants
+  (no release, no migration). The vector entry opens with its synthetic head (`identityPins.test.ts`, first case).
+- **Two entry points over one walk, not one function** (deviation): `anchorIdentity(userId, {identityPublicKey,
+  keyChainHead}, opts?)` → `firstUse | match | advanced | anomaly` for every read that serves a head (member lists,
+  group candidates, delivery targets, open invites, served invites), and `anchorChainKey(userId, key)` →
+  `{anchor, retired}` for a key served **without** a head — the per-grant snapshot (decision 2 gives it none) and the
+  moderation pending delivery (whose schema carries none). Both walk the chain through one pure `readChain(pin, userId,
+  chain)` (`verifyKeyChain` from the pinned head; the key at the pinned head must be the pinned fingerprint; the
+  chain's `head` field must be the head its steps make; another account's chain is refused). `match` on the pinned
+  head is local; the chain is read only when the served head differs, or on first use; a chain the server does not
+  serve (`404`) is an anomaly, never a bare-key pin.
+- **The retired-key rule** answers its own refusal, `granter_key_retired` (beside `granter_key_unanchored`), so a test
+  anchors on which rule refused. A key is retired only in the chain this device walked: a pin still at the old head
+  matches the old key with no chain read (the snapshot carries no head to say otherwise) — the residual until a
+  directory read serving the new head moves the pin.
+- **The invite accept** (deviation in mechanism, not in what is trusted): the accepting account is no co-member yet, so
+  `getKeyChain` answers it `404`. The signer — whose key the link's fingerprint already checked — goes through
+  `anchorIdentity(…, {firstUse: 'served'})`: pinned at the served head unread on first use (reading the chain would not
+  strengthen a first contact: the operator serves its chain as freely as its head), judged by the chain once pinned. A
+  **foreign granter** this account never met stays trusted on first use (#565) and is **not pinned** at the accept: the
+  grant's snapshot may be a key its granter has since retired, and pinning it beside their current head would pin a pair
+  that never was — a permanent anomaly with no way back; the account pins them through their chain at its first contact
+  as a co-member. One already pinned is judged by `anchorChainKey` (an anomaly or a retired key refuses the accept).
+  `memberInviteAnchored` in `tenantInvite.ts`.
+- **The moderation unlock** declines an anomaly **and** a retired key (the moderator holds a newer one). A moderator who
+  shares no tenant with the delivering holder is served no chain, so a first delivery to them is declined where the
+  fingerprint-only check delivered — fail closed, another holder who shares a tenant delivers. *Open:* a head on
+  `ModerationPendingDelivery` and a key-chain gate that admits moderation-key holders would close it; neither is in this
+  CR's contract.
+- **`commitRotation`** judges every member but the rotator (`anchorIdentity(m.userId, m)`): an anomaly goes into
+  `pendingUserIds`, everyone else is granted with `recipientIdentityDigest`; the rotator's own grant goes to the identity
+  it holds, unjudged. Nobody is dropped from both lists.
+- **Grant delivery** sends `recipientIdentityDigest` and treats `409 recipient_key_not_current` as `stale_epoch` (stop
+  draining; the next pass claims with the current key).
+- **Display:** the member lists badge `verified` (the personal state stays until `cr-trust-records-in-the-tenant`) and
+  `anomaly` with `trust.anomalyNote` beside it in the row; `members.pending` badges `ScopeMember.pending`. The profile
+  (`PersonSafetyNumber.vue`) reads `personTrust` — always the chain, for `trust.rotated`'s date — and compares the key
+  the pin holds after the read. A badge read moves an advanced pin (decision 16: the store holds the highest head seen),
+  never pins an unpinned contact, and a failed chain read gives that contact no badge rather than a false anomaly. The
+  group add's anomaly says `trust.anomalyNote`. `moderation.declined`'s copy said "account keys changed … check their
+  safety number first"; it now says the key can't be confirmed (EN + DE), in the anomaly note's words.
+- **Removed:** `ChangedKeyReviewDialog` (+ test), `acceptChangedKey`, `acceptKeyChange`, `checkAndPin`,
+  `IdentityChangedError` (→ `IdentityUnanchoredError`), `ContactTrust.pinVerified`, `trustState`, and the i18n keys that
+  lost their last reader (`verify.badgeChanged … expectedUnreadable`, `safety.changedNote`, `.badgeVerifiedChanged`,
+  `.changedVerifiedNote`, `.reviewVerifiedIntro`, `groups.identityChanged`, `.acceptKeyChange`). `loadIdentityKey` became
+  `loadServedIdentity` (key and head). The coverage criteria that cited the dialog were rewritten to the built layer,
+  each marked for phase 6.
+- **The seeder** (`scripts/instanceBirth.mts`) sends `recipientIdentityDigest` on the owner birth and the personal scope.
+- **Bites**, each snapshotted, broken, its named test red, restored and `cmp`-identical: skip the proof-key check in
+  `verifyKeyChain` → "a step signed by the retired identity only" (and the grantTrust/worker anomaly cases) red; anchor on
+  the identity alone (walk from genesis, find the pinned fingerprint anywhere) → both prefix-attack cases red; re-read a
+  head the pin is not in as a first contact → the rollback case red (and the prefix cases); drop the served-head
+  equality → "first use refuses a served head the chain does not end at" red; drop the floor rule → "above the floor it
+  is refused" red; drop the anomaly refusal → the recipient anomaly cases red; drop an anomaly member from both lists in
+  `commitRotation` → the fake server's completeness check refuses (`409 rotation_incomplete`); deliver to an anomaly → the
+  worker's `identity_unanchored` cases red.
+- **Phase 4 inherits:** `commitRotation(scopeId, members, rotator?, removes?, revokeLinks?)` decides pending by
+  `anchorIdentity` per member and always grants the `rotator`'s identity; the members it is handed must be
+  `ScopeMember`s with `keyChainHead` (`listScopeMembers`). `rotateKeys.ts`, `KeyRotationPanel.vue` and their tests stay
+  red on the phase-1 contract (11 typecheck errors, `rotateKeys.test.ts` 28 failing at runtime) — phase 4/5's.
 
 ### Phase 4: web, the rotation mechanism
 

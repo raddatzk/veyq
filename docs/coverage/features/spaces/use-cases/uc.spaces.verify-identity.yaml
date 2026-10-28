@@ -14,7 +14,8 @@ acceptanceCriteria:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
   - id: change-surfaced-not-trusted
-    text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker), leaving the directory's changed badge as the review surface. A change is attack-or-legitimate-rotation, resolved by a human.
+    # Rewritten by cr-secure-the-account phase 3 to the built web trust layer (ADR 0111 decisions 9, 15); phase 6 aligns the use case.
+    text: A served key is trusted only when the contact's key chain reaches it from the head this account pinned (both signatures of every step, ADR 0111 decision 7); anything else - a rollback to an older head, a step not signed by the retired Secret Key, an invented prefix naming the pinned identity - is an anomaly. In the UI it is a notice with no accept; at a rotation the member is declared pending; on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline `identity_unanchored` back to the server (do not re-offer this account). A legitimate rotation is always signed, so it never reaches a human.
     # "a human-review flag" (the pre-split wording) named a field that was never built — the decline + the
     # directory's `changed` badge (trustState/trustStates) IS the review surface; corrected on this split
     # rather than left to overclaim next to its own new refs.
@@ -22,17 +23,14 @@ acceptanceCriteria:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/tasks/grantDeliveryWorker.test.ts] }
       backend: { unit: [TasksSliceTest.declineReleasesJobToOtherWorkersButNeverBackToTheDecliner] }
   - id: changed-key-review
-    text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key as pinned - verified returns only through a new compare on the profile) or refuses (leave blocked, the wrap/delivery stays gated).
-    # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
-    # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare
-    # (ChangedKeyReviewDialog.test.ts: the accept's ordering, an unreadable key, a verified contact said louder).
-    # The accept was only HALF an accept until cr-account-key-rotation-after-compromise: a decline is permanent —
-    # nothing expired one — so the re-pin authorised a wrap that nothing then performed (ADR 0028 (2)'s "the wrap
-    # then proceeds" did not hold; ADR 0060 Decision 7). `acceptKeyChange` now also clears this key-holder's own
-    # declines against that contact, and the backend refs below are that seam: the delivery becomes claimable
-    # again, and — the half that shares a table with it — a rotator's exclusion from their own rotation does not.
+    # Rewritten by cr-secure-the-account phase 3 to the built web trust layer (ADR 0111 decisions 9, 15); phase 6 aligns the use case.
+    # The human review (ChangedKeyReviewDialog, acceptKeyChange) is gone: a key moves only through the chain. The id is
+    # kept until phase 6 rewrites the use case; the bites are in identityPins.test.ts (skip the proof signature in the
+    # walk → the identity-only step is accepted; anchor on the identity alone → the prefix attack is accepted).
+    text: A key the chain reaches from the pinned head moves the pin to the new head (verified dropped) with no review; a key it does not reach is an anomaly with its reason ("This person's key doesn't follow from the one you knew") and no accept, and the declines of a delivery against an account clear when that account's chain advances (the publish clears them, cr-secure-the-account decision 10).
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts] }
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/grantTrust.test.ts, src/features/tasks/grantDeliveryWorker.anchor.test.ts] }
+      backend: { integration: [RotationSliceTest.thePublishClearsDeclinesTargetingTheRotator] }
   - id: operator-blind-pinning
     text: Verification is client-only (compare against the sealed pin, no server call) and every pin is a Master-Key-sealed entry at an opaque id, so the operator never learns who pinned or verified whom — the trust graph stays off the server. It does learn how many pins an account holds, as it always could (ADR 0104 decision 5).
     # Real but indirect: no test asserts the negative (that what the server stores names no contact) as its own

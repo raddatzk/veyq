@@ -37,7 +37,6 @@ import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
-import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 import MemberTrustBadge from './MemberTrustBadge.vue'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
@@ -78,7 +77,7 @@ const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeS
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The load body is Tenant-specific: fetch
 // the roster, decrypt each real name with K_tenant (operator-blind, on-device), then read the owner-only invite
 // list — and resolve ownership from the tenant role.
-const { members, isOwner, trust, trustRefusal, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401 } =
   useMemberDirectory(async () => {
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
@@ -386,24 +385,14 @@ async function revoke(invite: PendingMemberInvite) {
               </span>
               <div class="veyq-row-meta">
                 <span class="veyq-badge success">{{ t('members.statusActive') }}</span>
-                <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
-                     when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
-                     verified contact. -->
+                <!-- Behind the tenant's epoch, declared pending by a rotation (cr-secure-the-account decision 10). -->
+                <span v-if="member.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
+                <!-- Identity trust (cr-secure-the-account decision 9): "Verified" after a compare on the member's profile,
+                     an anomaly when the served key does not follow from the pinned head. -->
                 <MemberTrustBadge :trust="trust[member.userId]" />
               </div>
             </div>
             <div class="management-actions">
-              <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
-                   then accept (re-pin) or refuse (leave blocked). -->
-              <VeyqButton
-                v-if="trust[member.userId]?.state === 'changed'"
-                :label="t('verify.review')"
-                icon="exclamation-triangle"
-                variant="warn"
-                appearance="text"
-                size="small"
-                @click="openReview(member)"
-              />
               <VeyqButton
                 v-if="isOwner && member.role === 'MEMBER'"
                 :label="t('members.promote')"
@@ -517,7 +506,6 @@ async function revoke(invite: PendingMemberInvite) {
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
     <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->
-    <ChangedKeyReviewDialog v-if="reviewTarget" v-model:visible="reviewOpen" :member="reviewTarget" @accepted="refreshTrust" />
   </section>
 </template>
 

@@ -52,7 +52,7 @@ beforeAll(() => {
  *  to the identity key the resolve served — the member holds it from the add on, no grant delivery behind it. */
 async function addToGroup(scopeId: string, who: Actor): Promise<void> {
   const candidate = await resolveGroupMember(scopeId, who.username)
-  await addGroupMember(scopeId, who.username, candidate.userId, candidate.identityPublicKey)
+  await addGroupMember(scopeId, who.username, candidate.userId, candidate)
 }
 
 async function claimRotation() {

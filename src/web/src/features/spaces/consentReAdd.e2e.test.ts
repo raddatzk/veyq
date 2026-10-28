@@ -22,8 +22,8 @@ import { recordCanaries } from '../../test/canaries'
 async function propose(scopeId: string, who: Actor): Promise<void> {
   const candidate = await resolveGroupMember(scopeId, who.username)
   expect(candidate.requiresConsent, 'the target asked to be consulted').toBe(true)
-  const sealedNameKey = await wrapGroupNameKeyForInvitee(scopeId, candidate.userId, candidate.identityPublicKey)
-  await addGroupMember(scopeId, who.username, candidate.userId, candidate.identityPublicKey, sealedNameKey!)
+  const sealedNameKey = await wrapGroupNameKeyForInvitee(scopeId, candidate.userId, candidate)
+  await addGroupMember(scopeId, who.username, candidate.userId, candidate, sealedNameKey!)
 }
 
 describe.skipIf(!process.env.VEYQ_E2E)('consent group-add — re-adding a member who declined (live, real crypto)', () => {

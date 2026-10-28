@@ -41,7 +41,7 @@ function mockTasks(
 }
 
 /** The surviving directory the worker fetches post-cut and rotates forward. */
-const SURVIVORS: ScopeMember[] = [{ userId: 'u2', username: 'u2', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'AA==' }]
+const SURVIVORS: ScopeMember[] = [{ userId: 'u2', username: 'u2', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false }]
 
 beforeEach(() => {
   vi.clearAllMocks()

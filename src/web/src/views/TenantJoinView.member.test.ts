@@ -20,7 +20,7 @@ vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn(), sealA
 vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn() }))
 vi.mock('../app/vault', async (o) => ({ ...(await o<typeof import('../app/vault')>()), identityPrivate: vi.fn() }))
-vi.mock('../features/account/identityPins', () => ({ checkAndPin: vi.fn() }))
+vi.mock('../features/account/identityPins', () => ({ anchorIdentity: vi.fn(), anchorChainKey: vi.fn(), getPin: vi.fn() }))
 vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn(async () => 0) }))
 vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: {
@@ -48,7 +48,7 @@ import { fakeApi, stubApi } from '../test/apiMock'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { sealAvatar, sealName, myUserId } from '../features/account/profile/profile'
 import { identityPrivate } from '../app/vault'
-import { checkAndPin } from '../features/account/identityPins'
+import { anchorChainKey, anchorIdentity, getPin } from '../features/account/identityPins'
 import { InviteRole, TenantStatus, type ServedMemberInvite, type TenantsApi } from '../api/generated/tenants'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
@@ -121,7 +121,9 @@ beforeEach(() => {
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
   vi.mocked(sealName).mockReturnValue('SEALED-NAME')
   vi.mocked(sealAvatar).mockReturnValue('SEALED-AVATAR')
-  vi.mocked(checkAndPin).mockResolvedValue('firstUse')
+  vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
+  vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
+  vi.mocked(getPin).mockResolvedValue(null)
 })
 
 describe('TenantJoinView — a member invite asks for the code first', () => {
@@ -252,7 +254,10 @@ describe('TenantJoinView — a member invite to an existing account', () => {
   it('signs in and accepts with a join whose record names the proof key the typed Secret Key derives', async () => {
     const w = await mountAt()
     await signIn(w)
-    expect(checkAndPin).toHaveBeenCalledWith(f.ownerId, f.served.signerIdentityPublicKey)
+    // The inviting owner is pinned at the head the invite serves (the link vouched for the key; no chain is served yet).
+    expect(anchorIdentity).toHaveBeenCalledWith(
+      f.ownerId, { identityPublicKey: f.served.signerIdentityPublicKey, keyChainHead: f.served.signerKeyChainHead }, { firstUse: 'served' },
+    )
     const body = api.acceptTenantInvite.mock.calls[0][0].acceptInviteRequest
     const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId: ME }, fromB64std(body.sealedJoinRecord!))
     expect(invite.joinRecordVerifies({ tenantId: f.tenantId, userId: ME }, record)).toBe(true)
@@ -260,11 +265,55 @@ describe('TenantJoinView — a member invite to an existing account', () => {
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
   })
 
-  it('refuses when this account already knows the inviting owner under another key — nothing is posted', async () => {
-    vi.mocked(checkAndPin).mockResolvedValue('changed')
+  it('refuses when this account knows the inviting owner under a key their chain does not reach — nothing is posted', async () => {
+    vi.mocked(anchorIdentity).mockResolvedValue('anomaly')
     const w = await mountAt()
     await signIn(w)
     expect(w.text()).toContain(t('tenant.join.inviteUncheckable'))
     nothingPosted()
+  })
+
+  /** The invite's grant as a rotation by ROTATOR re-wrapped it (a foreign granter, inbox #565). */
+  const ROTATOR = '5c09e000-0000-4000-8000-0000000000d4'
+  function rewrappedBy(rotator: v1.Identity) {
+    serve({
+      ...f.served,
+      ...inviteGrant(f.tenantId, 1, f.tenantKey, f.served.inviteId, f.inviteKey, rotator),
+      granterUserId: ROTATOR, granterIdentityPublicKey: bundleOf(rotator), granterKeyChainHead: f.served.signerKeyChainHead,
+    }, true)
+  }
+
+  it('a foreign granter this account never met is trusted on first use and NOT pinned here (#565)', async () => {
+    rewrappedBy(v1.generateIdentity())
+    const w = await mountAt()
+    await signIn(w)
+    expect(getPin).toHaveBeenCalledWith(ROTATOR)
+    expect(anchorChainKey).not.toHaveBeenCalled()
+    expect(anchorIdentity).not.toHaveBeenCalledWith(ROTATOR, expect.anything(), expect.anything())
+    expect(api.acceptTenantInvite).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['an anomaly', { anchor: 'anomaly', retired: false }],
+    ['a retired key of their chain', { anchor: 'match', retired: true }],
+  ] as const)('a foreign granter this account pinned, whose grant key is %s, is refused — nothing is posted', async (_l, judged) => {
+    const rotator = v1.generateIdentity()
+    rewrappedBy(rotator)
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(anchorChainKey).mockResolvedValue(judged)
+    const w = await mountAt()
+    await signIn(w)
+    expect(anchorChainKey).toHaveBeenCalledWith(ROTATOR, bundleOf(rotator))
+    expect(w.text()).toContain(t('tenant.join.inviteUncheckable'))
+    nothingPosted()
+  })
+
+  it('control: a foreign granter this account pinned, whose key the chain reaches, is accepted', async () => {
+    rewrappedBy(v1.generateIdentity())
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'AA==', head: 'AA==', state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'advanced', retired: false })
+    const w = await mountAt()
+    await signIn(w)
+    expect(api.acceptTenantInvite).toHaveBeenCalledTimes(1)
   })
 })

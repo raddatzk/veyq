@@ -12,7 +12,7 @@ import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type
 import { grantContext, recipientIdentityDigest, sealGrant, type GrantScope, type SignedGrant } from './grant'
 import * as invite from '@veyq/crypto/invite'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
-import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
 import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
@@ -105,7 +105,11 @@ export async function ensurePersonalScope(): Promise<boolean> {
     // Self-signed, kind PERSONAL (ADR 0028 Decision 6): the only personal grant this client will ever open.
     const self = await me(priv)
     const grant = sealGrant(scopeKey, { scopeId, kind: ScopeKind.Personal, epoch: 0 }, recipientOf(self), priv.sign)
-    await withRefresh(() => scopesApi().createPersonalScope({ createPersonalScopeRequest: { scopeId, ...grant } }))
+    await withRefresh(() =>
+      scopesApi().createPersonalScope({
+        createPersonalScopeRequest: { scopeId, ...grant, recipientIdentityDigest: recipientIdentityDigest(self.pubB64) },
+      }),
+    )
     return true
   } finally {
     scopeKey.fill(0)
@@ -132,7 +136,9 @@ export async function createGroup(name: string): Promise<string> {
     const self = await me(priv)
     const grant = sealGrant(scopeKey, { scopeId, kind: ScopeKind.Group, epoch: 0 }, recipientOf(self), priv.sign)
     const created = await withRefresh(() =>
-      scopesApi().createGroup({ createGroupRequest: { scopeId, encryptedName, ...grant } }),
+      scopesApi().createGroup({
+        createGroupRequest: { scopeId, encryptedName, ...grant, recipientIdentityDigest: recipientIdentityDigest(self.pubB64) },
+      }),
     )
     return created.scopeId
   } finally {
@@ -405,14 +411,13 @@ export async function openPersonalScope(): Promise<Uint8Array | null> {
 export async function wrapGroupNameKeyForInvitee(
   scopeId: string,
   inviteeUserId: string,
-  inviteeIdentityPublicKeyB64: string,
+  invitee: ServedIdentity,
 ): Promise<string | null> {
-  // TOFU gate (cr-0098, ADR 0028): this is the invite's first wrap to the invitee's *foreign* identity — pin it on
-  // first sight, proceed on a match, but on a CHANGED key surface it (this is a human/UI path) rather than sealing
-  // K_name to a possibly-substituted key. The caller catches IdentityChangedError → a notice + accept → re-pin.
-  if ((await checkAndPin(inviteeUserId, inviteeIdentityPublicKeyB64)) === 'changed') {
-    throw new IdentityChangedError(inviteeUserId)
-  }
+  // The anchor gate (cr-secure-the-account decision 9): this is the invite's first wrap to the invitee's *foreign*
+  // identity — pinned on first sight, a key the chain reaches from the pinned head proceeds, an anomaly is never sealed
+  // to: the caller catches IdentityUnanchoredError and says so, with no accept.
+  if ((await anchorIdentity(inviteeUserId, invitee)) === 'anomaly') throw new IdentityUnanchoredError(inviteeUserId)
+  const inviteeIdentityPublicKeyB64 = invitee.identityPublicKey
   const opened = await openScopeById(scopeId)
   if (!opened) return null
   const nameKey = deriveGroupNameKey(keyAt(opened.epochs, opened.nameEpoch))
@@ -580,8 +585,9 @@ export async function rotateGroupForRemoval(
   return commitRotation(scopeId, pickedFrom, undefined, removedUserId, revokeLinks)
 }
 
-/** One re-grant a rotation carries: the new epoch key wrapped to a member's identity, signed by the rotator. */
-export type RotationGrant = { userId: string } & SignedGrant
+/** One re-grant a rotation carries: the new epoch key wrapped to a member's identity, signed by the rotator, naming the
+ *  key it is wrapped to (ADR 0111 decision 10: the server refuses one to a key that is not the member's current one). */
+export type RotationGrant = { userId: string; recipientIdentityDigest: string } & SignedGrant
 
 /** Who performs a rotation: the account, the identity bundle its own re-grant is sealed to, and the key that signs
  *  every re-grant. The vault's identity by default; an account key rotation passes its NEW identity, which the
@@ -591,8 +597,9 @@ export type Rotator = { userId: string; identityPublicKeyB64: string; signPrivat
 /**
  * Carry a tenant's open member invites into a new epoch (ADR 0111 decision 2): an invite is a placeholder member, so it
  * is re-granted like one — wrapped to its invite key, with the invite's id as the grant's recipient — once the owner's
- * signature over its key verifies under the signer's served key and that key passes the pin check (first use pins it,
- * a changed key does not pass). Any other is **declared pending**: it keeps the grant it holds, and its newcomer joins
+ * signature over its key verifies under the signer's served key and that key is anchored ({@link anchorIdentity}: first
+ * use pins it, a key the signer's chain reaches from the pinned head passes, an anomaly does not). Any other is
+ * **declared pending**: it keeps the grant it holds, and its newcomer joins
  * behind and is brought current by the grant delivery. The server refuses a rotation that names neither for an open one.
  */
 async function carryOpenInvites(
@@ -612,9 +619,9 @@ async function carryOpenInvites(
   return { inviteGrants, pendingInviteIds }
 }
 
-/** Whether an open invite's key is the one its owner signed, under a signer key this device anchors (the pin check —
- *  `cr-secure-the-account`'s anchor function takes its place once it lands). False — never a throw — for anything
- *  malformed: every byte here came from the server. */
+/** Whether an open invite's key is the one its owner signed, under a signer key this device anchors (the signer's
+ *  served key and `signerKeyChainHead`, {@link anchorIdentity}). False — never a throw — for anything malformed: every
+ *  byte here came from the server. */
 async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolean> {
   try {
     const signer = v1.deserializeIdentityPublic(fromB64std(open.signerIdentityPublicKey))
@@ -624,7 +631,9 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
       fromB64std(open.inviteKeySignature),
     )
     // Only a signature that verified may pin its signer's key (as for a grant's granter, ADR 0028 Decision 6).
-    return signed && (await checkAndPin(open.signerUserId, open.signerIdentityPublicKey)) !== 'changed'
+    if (!signed) return false
+    const served = { identityPublicKey: open.signerIdentityPublicKey, keyChainHead: open.signerKeyChainHead }
+    return (await anchorIdentity(open.signerUserId, served)) !== 'anomaly'
   } catch {
     return false
   }
@@ -639,8 +648,10 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
  * its predecessor. On that answer — or on `409 rotation_incomplete`, an invite minted meanwhile — the whole attempt runs
  * **once** more from a re-opened grant.
  *
- * Every member whose key passes the TOFU gate is re-granted — a pending consent proposal too, which holds a grant from
- * its proposal on (ADR 0111 decision 4) — and the rotator itself unconditionally, to the identity it holds.
+ * Every member whose key is anchored ({@link anchorIdentity}: `firstUse`, `match` or `advanced`) is re-granted — a
+ * pending consent proposal too, which holds a grant from its proposal on (ADR 0111 decision 4) — and the rotator itself
+ * unconditionally, to the identity it holds; every other member (an `anomaly`) is named in `pendingUserIds`, so the
+ * request covers every membership but the removed one (cr-secure-the-account decision 10, `409 rotation_incomplete`).
  *
  * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
  * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
@@ -667,26 +678,31 @@ export async function commitRotation(
       const wrappedPrev = b64std(v1.seal(epochLinkContext(scopeId, epoch), newKey, oldKey))
       const next: GrantScope = { scopeId, kind: opened.kind, epoch }
       const grants: RotationGrant[] = []
+      const pendingUserIds: string[] = []
+      const grantTo = (userId: string, identityPublicKeyB64: string) =>
+        grants.push({
+          userId, ...sealGrant(newKey, next, { userId, identityPublicKeyB64 }, who.signPrivateKey),
+          recipientIdentityDigest: recipientIdentityDigest(identityPublicKeyB64),
+        })
       // Sequential so the pin store's version-guarded writes don't race each other.
       for (const m of carry) {
-        if (m.userId === who.userId) {
-          // Our own re-grant targets the identity we hold, never the directory's copy of it.
-          grants.push({ userId: m.userId, ...sealGrant(newKey, next, { userId: m.userId, identityPublicKeyB64: who.identityPublicKeyB64 }, who.signPrivateKey) })
-          continue
-        }
-        // Never to a CHANGED identity key (cr-0098, ADR 0028): that member stays behind, a visible anomaly, until a
-        // human accepts the change and the grant delivery brings them current. The rotation itself still proceeds —
-        // forward secrecy against the removed member cannot hinge on them.
-        if ((await checkAndPin(m.userId, m.identityPublicKey)) === 'changed') continue
-        grants.push({ userId: m.userId, ...sealGrant(newKey, next, { userId: m.userId, identityPublicKeyB64: m.identityPublicKey }, who.signPrivateKey) })
+        // Our own re-grant targets the identity we hold, never the directory's copy of it.
+        if (m.userId === who.userId) grantTo(m.userId, who.identityPublicKeyB64)
+        // Never to a key the chain does not reach from the pinned head (cr-secure-the-account decision 9): that member
+        // is DECLARED pending (decision 10) — never skipped silently, the server refuses a rotation that names neither —
+        // and any member whose client anchors their key brings them current through the grant delivery. The rotation
+        // itself still proceeds: forward secrecy against the removed member cannot hinge on them.
+        else if ((await anchorIdentity(m.userId, m)) === 'anomaly') pendingUserIds.push(m.userId)
+        else grantTo(m.userId, m.identityPublicKey)
       }
       // A tenant's open member invites are placeholder members (ADR 0111 decision 2): each is re-granted or declared.
       const invites = opened.kind === ScopeKind.Tenant
         ? await carryOpenInvites(scopeId, newKey, next, who.signPrivateKey)
         : { inviteGrants: [], pendingInviteIds: [] }
-      const rotated = await withRefresh(() =>
-        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined } }),
-      )
+      const rotateScopeRequest = {
+        epoch, wrappedPrev, grants, pendingUserIds, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined,
+      }
+      const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest }))
       // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
       // server took as the next one; a server that later serves the older grant meets the floor.
       await raiseEpochFloor(scopeId, epoch)
