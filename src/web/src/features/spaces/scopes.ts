@@ -151,8 +151,8 @@ export async function createGroup(name: string): Promise<string> {
 
 /** The group's display name from its epoch keys: derive `K_name` from the name-epoch key, open the canonical
  *  `encryptedName` under it (cr-0096/ADR 0027). Members read the same blob a pending invitee is handed the key for.
- *  Every name opened here is also remembered in memory for this page ({@link rememberGroupName}): the one label a
- *  compromise rotation's panel has for a group the account can no longer open (inbox #280). */
+ *  Every name opened here is also remembered in memory for this page ({@link rememberGroupName}): the one label the
+ *  security panel has for a group, whose plan serves no name (inbox #280). */
 function openGroupName(scopeId: string, epochs: EpochKeys, nameEpoch: number, encryptedName: string): string {
   const nameKey = deriveGroupNameKey(keyAt(epochs, nameEpoch))
   try {
