@@ -279,8 +279,10 @@ the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-
   background, which resumes any scope its row marks *re-keying* (`resumeRekeys`) and skips the owner-only nodes.
 - **A member's write pulls its path forward.** A write into a node not yet re-keyed is `409 node_rekey_pending`; the
   client's one retry helper (`writeAtNodeEpoch`, `src/web/src/shared/rekeyRetry.ts`) re-keys that node and its lagging
-  ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write stating an older
-  node epoch (`409 stale_epoch`) re-reads once. A **guest**, holding no key above its root, waits and retries until a
+  ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write that carries
+  ciphertext under the old key is rebuilt, not resent: a cover's or a banner's whole save runs again under the re-read
+  key (`writeUnderMemberNode`), a medium's meta edit re-bases on the re-sealed tier (`persistMeta`); an import or a copy
+  pulls its target (`memberCreateOptions`). A write stating an older node epoch (`409 stale_epoch`) re-reads once. A **guest**, holding no key above its root, waits and retries until a
   member's or an owner's device reached its node.
 
 ## Securing the account

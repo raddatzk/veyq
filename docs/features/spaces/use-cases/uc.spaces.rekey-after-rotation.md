@@ -62,9 +62,12 @@
   owner's device runs), a member's operation on one is `403 not_scope_owner`, and a member's write into one waits
   like a guest's. A Memory or chapter with an uploader link carries a drop key too, but members write into it: any
   member re-keys it, its drop key included (ADR 0111 decision 11).
-- **E8 — a member's write that carries ciphertext under the old key.** A cover, a banner and a medium's meta edit
-  hold a wrap or a sealed copy under the node's key from before, and an import writes through its own steps: these
-  are not pulled forward yet and wait for the background re-key or are refused at the device floor (inbox #563).
+- **E8 — a member's write that carries ciphertext under the old key.** A cover and a banner upload a blob wrapped under
+  the node's key, and a medium's meta edit starts from a tier sealed under it. Each pulls its path like any member's write
+  and is then rebuilt, not resent: a cover or a banner runs again from scratch under the re-read key, the upload included
+  (a kept one's wraps read from the meta the re-key re-sealed); a meta edit re-applies its change to the tier's plaintext
+  as listed and re-bases on the re-sealed tier through `409 stale_revision`. An import or a copy pulls the target it
+  creates under; what it creates is minted current. Into a drop box each waits for an owner (E7).
 
 ## Quality notes
 

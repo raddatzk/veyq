@@ -366,7 +366,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const sealer = date || location
       ? (key: Uint8Array, addr: Parameters<typeof sealNodeMeta>[1]) => sealNodeMeta(key, addr, { v: 1, ...(date ? { date } : {}), ...(location ? { location } : {}) })
       : undefined
-    const { nodeId, contentKey: nodeKey, epoch: nodeEpoch } = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer)
+    const { nodeId, contentKey: nodeKey, epoch: nodeEpoch } = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer, ctx.createOptions)
 
     const copying = ctx.purpose === 'copy'
     const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)

@@ -22,7 +22,7 @@ import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } f
 import type { GuestAccess } from '../../core/access'
 import { makeChunkProvider, openBlobVia, presignAllChunks } from '../../core/blob/transport'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
-import { contentKeyChain } from '../../core/node/tree'
+import { contentKeyChain, type TreeNode } from '../../core/node/tree'
 import { treeStore } from '../../core/node/treeStore'
 import { useGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import type { OpenedBlobMeta } from '../../core/blob/meta'
@@ -47,6 +47,7 @@ import {
   purgeMedia,
   setMediaMeta,
   backfillPlaceName,
+  type MediaMetaWriteOptions,
   downloadRef,
   listBuckets,
   createBucket,
@@ -187,6 +188,13 @@ export interface BannerDoor {
     nodeId: string, key: Uint8Array, prepared: PreparedBanner, opts?: { onProgress?: (fraction: number) => void; signal?: AbortSignal },
   ): Promise<UploadedBanner>
   write(args: Omit<WriteMemoryBannerArgs, 'scopeId'>): Promise<SealedMetaState>
+  /**
+   * Run one banner save at the node's key `at` (its key and the epoch it was read at): the device floor before each attempt
+   * and, on an epoch refusal, the node's path pulled forward on this device and the key re-read (ADR 0111 decision 11) —
+   * `save` then runs again from scratch under it, the upload included (the first upload's `K_blob` is wrapped under the key
+   * the re-key replaced), handed the node as the re-read tree holds it (null on the first attempt).
+   */
+  under<T>(nodeId: string, at: { key: Uint8Array; epoch: number }, save: (at: { key: Uint8Array; epoch: number }, reread: TreeNode | null) => Promise<T>): Promise<T>
 }
 
 /** The item marks (ADR 0068): sealed under `K_SC` at `E_0`, the scope members' own. */
@@ -280,6 +288,11 @@ export function useMemoryView(): MemoryView {
  *  door is today's call, unchanged — the wire is `media.ts`'s (`uploadWire.*` snapshots). */
 export function memberMemorySource(from: { scopeId: () => string }): MemorySource {
   const scope = from.scopeId
+  const mediaMetaOptions = (nodeId: string): MediaMetaWriteOptions => ({
+    atFloor: (epoch) => assertActiveScopeFloor(scope(), { id: nodeId, epoch }),
+    reread: rereadMemberKey(scope(), nodeId),
+    pull: pullRekeyPath(scope(), [nodeId]),
+  })
   return {
     scopeId: scope,
     batchKey: (nodeId) => nodeId,
@@ -342,16 +355,14 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     banner: {
       upload: (nodeId, key, prepared, opts) => uploadBanner(scope(), nodeId, key, prepared, opts),
       write: (args) => writeMemoryBanner({ ...args, scopeId: scope() }),
+      under: (nodeId, at, save) => writeUnderMemberNode(scope(), nodeId, at, save),
     },
+    // A medium's meta is re-sealed under its node's key: the floor before each attempt, and after an epoch refusal the
+    // node's path pulled forward on this device and the key re-read for a rebuild (ADR 0111 decision 11, `persistMeta`).
     mediaMeta: {
-      set: (target, key, node, overrideMs) => {
-        assertActiveScopeFloor(scope(), node)
-        return setMediaMeta(scope(), target, key, node.epoch, overrideMs)
-      },
-      backfillPlace: (target, key, node, name, level) => {
-        assertActiveScopeFloor(scope(), node)
-        return backfillPlaceName(scope(), target, key, node.epoch, name, level)
-      },
+      set: (target, key, node, overrideMs) => setMediaMeta(scope(), target, key, node.epoch, overrideMs, mediaMetaOptions(node.id)),
+      backfillPlace: (target, key, node, name, level) =>
+        backfillPlaceName(scope(), target, key, node.epoch, name, level, mediaMetaOptions(node.id)),
     },
     marks: {
       load: (nodeId, scopeKey) => loadItemFavoritesFor(scope(), nodeId, scopeKey),

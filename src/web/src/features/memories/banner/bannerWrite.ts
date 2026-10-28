@@ -222,8 +222,10 @@ export async function writeMemoryBanner(a: WriteMemoryBannerArgs): Promise<Seale
       return edit(meta, ctx)
     },
     send,
-    // The banner names blobs wrapped under the key they were uploaded with: no rebuild under another (no `reread`), the
-    // refusal is the caller's. The floor runs first — a banner is a member's write (ADR 0109 point 6).
+    // The banner names blobs wrapped under the key they were uploaded with: no rebuild here under another (no `reread`) -
+    // the caller runs the whole save again, the upload included, after pulling the node's path forward (`useBannerEditor`
+    // through the source's `banner.under`, ADR 0111 decision 11). The floor runs first — a banner is a member's write
+    // (ADR 0109 point 6).
     { atFloor: (epoch) => assertActiveScopeFloor(scopeId, { id: nodeId, epoch }) },
   )
   return state

@@ -316,7 +316,7 @@ export const importPot: ImportContentHook = async (ctx) => {
   const base = { currency: content.baseCurrency as string, minorUnits: content.baseMinorUnits as number }
   const total = [...uploads.values()].flat().reduce((s, u) => s + u.receipt.file.size, 0)
   let done = 0
-  const created = await createPotNode(ctx.scopeId, ctx.epochs, ctx.parent, ctx.name, base, {}, categories)
+  const created = await createPotNode(ctx.scopeId, ctx.epochs, ctx.parent, ctx.name, base, ctx.createOptions, categories)
   const target = { kind: 'member' as const, scopeId: ctx.scopeId, nodeId: created.nodeId }
   const key = { key: created.nodeKey, epoch: created.epoch }
   /** The receipts of [batch]'s entries, uploaded into the new Pot and completed against them. */

@@ -19,6 +19,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { createContentNode, deleteNode, type NodeParent, type TreeNode } from '../node/tree'
+import { memberCreateOptions } from '../node/rereadNode'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { ZipError } from './zip'
 import { isArchivePath } from './archiveName'
@@ -325,12 +326,16 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
     let lastError: unknown = null
     const nodeBytes = collectPayloads(n).reduce((s, p) => s + p.size, 0)
     const kind = createdKind(n)
+    // A member's create under `at`: a target not re-keyed since a rotation is pulled forward on this device and re-read, and
+    // the create retried, never refused (ADR 0111 decision 11). Only the import's target (and its ancestors) can lag: what
+    // this run creates is minted at the current epoch.
+    const createOptions = memberCreateOptions(scopeId, at)
     for (const name of candidates(n.name)) {
       const slug = registry.slugFor(kind, name)
       if (used.has(slug)) continue
       try {
         if (kind === FOLDER_KIND) {
-          const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at, FOLDER_KIND, name)
+          const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at, FOLDER_KIND, name, undefined, createOptions)
           used.add(slug)
           return { nodeId, nodeKey: contentKey }
         }
@@ -338,7 +343,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
         if (!hook.supported || !hook.importContent) throw new ExportError('nothing_to_import', `no import for ${n.kind}`)
         const filesBefore = bytesDone
         const made = await hook.importContent({
-          purpose: item.purpose ?? 'import', scopeId, epochs, parent: at, name, node: n, signal, cache, payload: item.payload,
+          purpose: item.purpose ?? 'import', scopeId, epochs, parent: at, createOptions, name, node: n, signal, cache, payload: item.payload,
           onProgress: (fraction) => {
             bytesDone = filesBefore + Math.round(fraction * nodeBytes)
             report()
