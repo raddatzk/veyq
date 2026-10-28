@@ -805,6 +805,143 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: avatar_not_found }
 
+  /api/tenants/{tenantId}/verifications:
+    get:
+      tags: [tenants]
+      operationId: listVerifications
+      summary: Read the verifications members of a tenant made of each other.
+      description: >
+        Every member's signed verifications of other members in this tenant
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+        decisions 12–13): each a statement *"in this tenant, this verifier at this head of their key chain confirmed
+        this subject at this head of theirs"*, signed by the verifier's identity and sealed under the tenant key
+        (field `member-verification`, bound to the tenant, the verifier, the subject and the epoch it is sealed at). A
+        member's client opens each with that epoch's key from its chain and counts one only while it names the
+        subject's current head and verifies under the verifier's current identity — so *verified by …* counts for every
+        member of the tenant, and only there. The server stores and relays opaque rows and cannot tell which count.
+
+        Optionally narrowed to one subject or one verifier; ordered by verifier, then subject, and paged by `after`
+        (the last row's `verifierUserId:subjectUserId`). Gated on **tenant membership** like the directory: a caller
+        who is not an accepted member gets the `404 tenant_not_found` of
+        [ADR 0042](../../docs/decisions/0042-http-failure-projection.md).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: subjectUserId
+          x-veyq-visibility: id
+          in: query
+          required: false
+          description: Only the verifications of this member.
+          schema: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
+        - name: verifierUserId
+          x-veyq-visibility: id
+          in: query
+          required: false
+          description: Only the verifications this member made — what a rotation re-signs (decision 13).
+          schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+        - name: after
+          x-veyq-visibility: structure
+          in: query
+          required: false
+          description: The page cursor — the last row's `verifierUserId:subjectUserId`; rows after it are served.
+          schema:
+            type: string
+            maxLength: 73
+            pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c:9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        - name: limit
+          x-veyq-visibility: measure
+          in: query
+          required: false
+          description: The most rows one page serves.
+          schema: { type: integer, format: int32, minimum: 1, maximum: 1000, default: 1000, example: 1000 }
+      responses:
+        "200":
+          description: One page of the tenant's verifications.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationPage" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No such tenant, or the caller is not a member of it (`tenant_not_found`, deliberately indistinguishable, ADR
+            0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/{tenantId}/verifications/{subjectUserId}:
+    put:
+      tags: [tenants]
+      operationId: putMyVerification
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer per row: the verifier is the caller and owns the row alone, and a newer verification replaces the
+          older, decided under the tenant scope's lock. A stale device that writes an older head only makes its own
+          verification stop counting (a reader counts one only at the subject's current head) - a display falls away,
+          nothing opens.
+      summary: Write the caller's verification of another member of the tenant.
+      description: >
+        Store the caller's signed verification of `subjectUserId` in this tenant
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+        decision 12): written **only into the caller's own records** — the verifier is always the caller, never a field
+        of the body — one row per (tenant, caller, subject), replaced by a newer one. A matching safety-number and
+        chain-code compare writes it; a rotation of the caller re-signs each of the caller's rows with the new
+        identity (decision 13). The server cannot open or check the statement; it checks only that the caller and the
+        subject are accepted members of the tenant, that they differ, and that `epoch` is one the tenant scope has
+        reached. Nothing here blocks anybody's write.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: subjectUserId
+          x-veyq-visibility: id
+          in: path
+          required: true
+          description: The member the caller verified.
+          schema: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutVerificationRequest" }
+      responses:
+        "204":
+          description: Stored — it replaced the caller's previous verification of that member, if any.
+        "400":
+          description: >
+            Malformed request — the body outside its contract or an epoch the tenant scope has not reached
+            (`invalid_request`), or the caller named as the subject (`verification_of_self`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: verification_of_self } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No such tenant, or the caller is not a member of it (`tenant_not_found`, ADR 0042); or the subject is no
+            accepted member of it (`member_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: member_not_found }
+
   /api/tenants/{tenantId}:
     delete:
       tags: [tenants]
@@ -3705,6 +3842,85 @@ components:
           maxLength: 64
           example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    PutVerificationRequest:
+      type: object
+      description: The caller's sealed verification of one member, and the tenant epoch it is sealed under.
+      required: [epoch, sealedStatement]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int32
+          minimum: 0
+          description: >
+            The tenant scope's epoch whose key seals `sealedStatement` — bound into its seal, so a reader takes that
+            epoch's key from its chain. At most the scope's current epoch.
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        sealedStatement:
+          type: string
+          description: >
+            The verification — both heads and the verifier's signature over the `verification` statement — sealed under
+            the tenant key of `epoch` (field `member-verification`, bound to the tenant, the caller, the subject and the
+            epoch). Opaque, constant-length base64 (the `verification` crypto vector).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    MemberVerification:
+      type: object
+      description: One member's verification of another, as stored — opaque to the server.
+      required: [verifierUserId, subjectUserId, epoch, sealedStatement, createdAt]
+      properties:
+        verifierUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member who verified — the only one who can write this row.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        subjectUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member verified.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 0
+          description: The tenant epoch whose key seals the row, as it was written.
+          example: 0
+        sealedStatement:
+          type: string
+          description: The sealed verification (`member-verification`), verbatim.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            When the server stored this row (server-observed). Never what decides whether a verification counts — the
+            heads it names do.
+          example: "2026-10-28T12:00:00Z"
+
+    VerificationPage:
+      type: object
+      required: [verifications, more]
+      properties:
+        verifications:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/MemberVerification" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: True when rows follow the last one served; ask again with `after`.
+          example: false
 
     MemberAvatar:
       type: object
