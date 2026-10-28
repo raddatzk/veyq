@@ -289,7 +289,9 @@ the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-
   key (`writeUnderMemberNode`), a medium's meta edit re-bases on the re-sealed tier (`persistMeta`); an import or a copy
   pulls its target (`memberCreateOptions`). A write stating an older node epoch (`409 stale_epoch`) re-reads once,
   running the pull first when it has not run: another member's device re-keyed the node, and this device opens the new
-  key only once it re-opened the scope at the epoch that minted it. A **guest**, holding no key above its root, waits and
+  key only once it re-opened the scope at the epoch that minted it. A member's medium completion answers either refusal
+  per item, inside a `200`; the client throws each as the HTTP refusal it stands for (`NodeRekeyPendingError`,
+  `StaleNodeEpochError`), or the write would not know it. A **guest**, holding no key above its root, waits and
   retries until a member's or an owner's device reached its node.
 - **A long run keeps up with a rotation.** An import or a copy creates its nodes at the epoch it started with, so a
   rotation landing mid-run leaves them behind too. Every create states the scope's epoch as the device holds it at that

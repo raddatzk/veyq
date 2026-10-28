@@ -14,7 +14,7 @@ import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { NODE_REKEY_PENDING, NodeRekeyPendingError, writeAtNodeEpoch } from '../../shared/rekeyRetry'
+import { NODE_REKEY_PENDING, NodeRekeyPendingError, STALE_NODE_EPOCH, StaleNodeEpochError, writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
@@ -752,8 +752,9 @@ function mediaApiTransport(scopeId: string, nodeId: string, nodeEpoch: number): 
         }),
       )
       const m = done.results[0]
-      // the per-item refusal of a node not re-keyed yet, as the retry reads a `409 node_rekey_pending`
+      // the per-item epoch refusals (`MediaStore.attach`), as the retry reads a `409 node_rekey_pending` / `409 stale_epoch`
       if (m?.error === NODE_REKEY_PENDING) throw new NodeRekeyPendingError()
+      if (m?.error === STALE_NODE_EPOCH) throw new StaleNodeEpochError()
       if (!m || m.error || !m.blobId || !m.mediaId) throw new Error(m?.error ?? 'attach_failed')
       return { blobId: m.blobId, mediaId: m.mediaId }
     },

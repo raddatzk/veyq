@@ -69,6 +69,7 @@ import {
 import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
+import { isRekeyPending, isStaleNodeEpoch } from '../../shared/rekeyRetry'
 import { planBlob, readBlobMeta, unwrapBlobKey } from '../../core/blob/transport'
 import { rememberDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
@@ -889,6 +890,25 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(meta).toMatchObject({ v: 1, w: 640, h: 480 })
     expect(effectiveCapturedAt(meta)).toBe(FILE_MTIME) // file-date fallback
     expect(meta?.capturedAtSource).toBe('file') // marked untrustworthy for the Memory `auto` range
+  })
+
+  it('a completion\'s per-item epoch refusals are thrown as the refusals a member\'s write acts on (inbox #701)', async () => {
+    const store = fakeStore()
+    const api = fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const add = () => addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+    // the server answers both inside a 200, one item of the batch (`MediaStore.attach`'s EpochRefused)
+    for (const [code, is, isNot] of [['node_rekey_pending', isRekeyPending, isStaleNodeEpoch], ['stale_epoch', isStaleNodeEpoch, isRekeyPending]] as const) {
+      api.completeMedia.mockResolvedValueOnce({ results: [{ blobId: null, mediaId: null, error: code }] })
+      const refused = await add().then(() => null, (e: unknown) => e)
+      expect(await is(refused), code).toBe(true)
+      expect(await isNot(refused), `${code} is not the other refusal`).toBe(false)
+    }
+    // control: another per-item error is neither
+    api.completeMedia.mockResolvedValueOnce({ results: [{ blobId: null, mediaId: null, error: 'node_not_found' }] })
+    const other = await add().then(() => null, (e: unknown) => e)
+    expect([await isRekeyPending(other), await isStaleNodeEpoch(other), (other as Error).message]).toEqual([false, false, 'node_not_found'])
   })
 
   it('an import\'s restored facts - a corrected capture time and a place name - are sealed into the listed tier at birth (inbox #700)', async () => {

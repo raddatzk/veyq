@@ -2,7 +2,7 @@
 // is waited for and the write re-run (re-reading from the second attempt on), until the waits run out; a stale epoch is
 // never waited for by `retryWhileRekeying` and re-run exactly once by `writeAtNodeEpoch`.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { retryWhileRekeying, writeAtNodeEpoch, isRekeyPending, NodeRekeyPendingError } from './rekeyRetry'
+import { retryWhileRekeying, writeAtNodeEpoch, isRekeyPending, isStaleNodeEpoch, NodeRekeyPendingError, StaleNodeEpochError } from './rekeyRetry'
 import { NodeKeyBelowFloorError } from '../core/node/rekey/floor'
 
 afterEach(() => vi.useRealTimers())
@@ -91,6 +91,13 @@ describe('retryWhileRekeying with a member\'s pull (ADR 0111 decision 11)', () =
     expect(await isRekeyPending(new NodeRekeyPendingError())).toBe(true)
     expect(await isRekeyPending(new Error('node_rekey_pending')), 'a bare message is not it').toBe(false)
   })
+
+  it('reads a per-item stale_epoch (StaleNodeEpochError) as the HTTP refusal (inbox #701)', async () => {
+    expect(await isStaleNodeEpoch(new StaleNodeEpochError())).toBe(true)
+    expect(await isStaleNodeEpoch(refusal('stale_epoch'))).toBe(true)
+    expect(await isStaleNodeEpoch(new Error('stale_epoch')), 'a bare message is not it').toBe(false)
+    expect(await isRekeyPending(new StaleNodeEpochError()), 'nor the other refusal').toBe(false)
+  })
 })
 
 describe('writeAtNodeEpoch', () => {
@@ -113,6 +120,16 @@ describe('writeAtNodeEpoch', () => {
       return 'written'
     }, { delaysMs: NO_WAIT })).resolves.toBe('written')
     expect(rereads).toEqual([false, true, true])
+  })
+
+  it('re-reads and re-runs a per-item stale_epoch once, as the HTTP one (inbox #701)', async () => {
+    const rereads: boolean[] = []
+    await expect(writeAtNodeEpoch(async (reread) => {
+      rereads.push(reread)
+      if (rereads.length === 1) throw new StaleNodeEpochError()
+      return 'written'
+    }, { delaysMs: NO_WAIT })).resolves.toBe('written')
+    expect(rereads).toEqual([false, true])
   })
 
   it('throws any other refusal at once, without a re-read', async () => {

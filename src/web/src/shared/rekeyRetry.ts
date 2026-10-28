@@ -27,14 +27,24 @@ export class NodeRekeyPendingError extends Error {
   }
 }
 
+/** `stale_epoch` answered inside a 200, as {@link NodeRekeyPendingError} is: a member's medium completion that states an
+ *  epoch another member's device re-keyed the node past. Without it the refusal reached the write as a bare `Error` the
+ *  re-read below does not know, and an import met by a rotation and re-key was rolled back (found live, inbox #701). */
+export class StaleNodeEpochError extends Error {
+  constructor() {
+    super(STALE_NODE_EPOCH)
+    this.name = 'StaleNodeEpochError'
+  }
+}
+
 /** The node a write named is not re-keyed since the scope's last rotation: pull or wait, and retry. */
 export async function isRekeyPending(e: unknown): Promise<boolean> {
   return (e instanceof Error && e.name === 'NodeRekeyPendingError') || isCodedError(e, HttpStatus.conflict, NODE_REKEY_PENDING)
 }
 
 /** The node's epoch moved since the caller read it: re-read and rebuild. */
-export function isStaleNodeEpoch(e: unknown): Promise<boolean> {
-  return isCodedError(e, HttpStatus.conflict, STALE_NODE_EPOCH)
+export async function isStaleNodeEpoch(e: unknown): Promise<boolean> {
+  return (e instanceof Error && e.name === 'StaleNodeEpochError') || isCodedError(e, HttpStatus.conflict, STALE_NODE_EPOCH)
 }
 
 /** The device floor refused the write (`core/node/rekey/floor.ts` `NodeKeyBelowFloorError`), recognised by its name so

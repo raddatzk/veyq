@@ -48,6 +48,7 @@ import { FOLDER_KIND } from '../node/kind'
 import { openName } from '../node/tree'
 import { pullRekeyPath } from '../node/rekey/rekeyScope'
 import { NodeKeyBelowFloorError, nodeKeyForWrite } from '../node/rekey/floor'
+import { NodeRekeyPendingError, StaleNodeEpochError } from '../../shared/rekeyRetry'
 import { reserveAndPump } from '../blob/transport'
 import { uploadCoverImage, writeNodeCover, type UploadedCover, type WriteNodeCoverResult } from '../node/cover/coverWrite'
 import { addCopiedMedia, addMedia } from '../../features/memories/media'
@@ -80,6 +81,13 @@ function gate(nodeId: string, stated: number): void {
   const node = server.nodes.get(nodeId)!
   if (stated !== node.epoch) throw refusal('stale_epoch')
   if (node.epoch < server.current) throw refusal('node_rekey_pending')
+}
+/** A medium's completion through the same gate - answered per item inside a 200 (`MediaStore.attach`), which the media
+ *  transport throws as these two (found live, inbox #701: the stale one was once a bare `Error`). */
+function mediaGate(nodeId: string, stated: number): void {
+  const node = server.nodes.get(nodeId)!
+  if (stated !== node.epoch) throw new StaleNodeEpochError()
+  if (node.epoch < server.current) throw new NodeRekeyPendingError()
 }
 /** Another member rotates the scope (and, with `rekeyed`, its device re-keys those nodes before this run writes again). */
 function rotate(rekeyed: string[] = []): void {
@@ -144,10 +152,10 @@ beforeEach(() => {
     plans.push(...ps.map((p) => ({ blobId: p.blobId, chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey })))
     return ps.map((_, i) => `upload-${plans.length}-${i}`)
   })
-  // a medium's completion states the node's epoch through the same gate
+  // a medium's completion states the node's epoch through the same gate, refused per item
   const media = async (_s: string, nodeId: string, _k: Uint8Array, _src: unknown, ...rest: unknown[]) => {
     const opts = rest.at(-1) as { nodeEpoch: number }
-    gate(nodeId, opts.nodeEpoch)
+    mediaGate(nodeId, opts.nodeEpoch)
     return { blobId: crypto.randomUUID(), mediaId: crypto.randomUUID() }
   }
   vi.mocked(addMedia).mockImplementation(media as unknown as typeof addMedia)
@@ -205,7 +213,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
   it('a Memory\'s next medium meets node_rekey_pending: the Memory is pulled forward on this device and that medium sealed again under its new key', async () => {
     let added = 0
     vi.mocked(addMedia).mockImplementation(async (_s, nodeId, _k, _src, _d, opts) => {
-      gate(nodeId, opts!.nodeEpoch!)
+      mediaGate(nodeId, opts!.nodeEpoch!)
       if (++added === 1) rotate() // another member rotates right after the first medium landed
       return { blobId: crypto.randomUUID(), mediaId: crypto.randomUUID() }
     })
@@ -256,7 +264,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     let added = 0
     vi.mocked(addMedia).mockImplementation(async (_s, nodeId, _k, _src, _d, opts) => {
       if (++added === 1) rotate()
-      gate(nodeId, opts!.nodeEpoch!)
+      mediaGate(nodeId, opts!.nodeEpoch!)
       return { blobId: crypto.randomUUID(), mediaId: crypto.randomUUID() }
     })
     const day: ManifestNode = { id: 'c', name: 'Day 1', kind: CHAPTER_KIND, content: { type: CHAPTER_CONTENT, schema: 1, media: [] } }
@@ -327,7 +335,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     // the server's media rows: each tier as the server holds it, re-sealed under the node's key by any re-key since
     const served: { nodeId: string; mediaId: string; tier: object }[] = []
     vi.mocked(addMedia).mockImplementation(async (_s, nodeId, _k, _src, _d, opts) => {
-      gate(nodeId, opts!.nodeEpoch!)
+      mediaGate(nodeId, opts!.nodeEpoch!)
       const mediaId = crypto.randomUUID()
       served.push({ nodeId, mediaId, tier: { v: 1, capturedAt: 1, ...opts!.restored } })
       rotate([PARENT, nodeId]) // another member's device rotates and re-keys the Memory right after its last medium landed
