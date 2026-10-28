@@ -81,7 +81,7 @@ and which is confidential even from the tenant owner.**
      one honest low-sensitivity exception). The owner-gate is convenience, not confidentiality — code and contract
      must not present it as the latter.
    - **Default = direct add.** The owner picks the member → the owner's client wraps the group's current epoch to
-     the target's key after the pin check, and the server records the GROUP membership holding that grant, refusing
+     the target's key after the anchor check, and the server records the GROUP membership holding that grant, refusing
      one at a stale epoch or naming another key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 3). They
      simply find themselves in the group.
    - **Optional consent (a per-user "ask before adding me" toggle) makes the add a proposal.** A non-auto-join
