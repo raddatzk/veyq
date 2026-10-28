@@ -102,4 +102,4 @@ acceptanceCriteria:
       that fails after a removal says the lock is not in.
     coverage:
       backend: { integration: [TenantRekeySliceTest.anOwnerReKeysTheTenantAfterARemovalGrantingWhoRemainsAndDeclaringTheRest, TenantRekeySliceTest.aMemberWhoIsNotAnOwnerCannotReKeyTheTenant] }
-      web: { unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/members.test.ts, src/shared/ui/ConfirmDialog.test.ts] }
+      web: { unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/members.test.ts, src/shared/ui/ConfirmDialog.test.ts], e2e: [src/features/spaces/tenantRekey.e2e.test.ts] }
