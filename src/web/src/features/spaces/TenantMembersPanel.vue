@@ -595,6 +595,13 @@ async function revoke(invite: PendingMemberInvite) {
   }
 }
 
+/* A whole-space action beside a long explanation keeps its label on one line: the shared header lets the button shrink,
+   which wrapped "Neues Schloss einbauen" over three lines and clipped it at 1280 px. */
+.space-links .settings-section-header > button,
+.space-lock .settings-section-header > button {
+  flex-shrink: 0;
+}
+
 .reissue-link {
   display: flex;
   flex-direction: column;
