@@ -230,6 +230,59 @@ class ConsentGroupAddSliceTest {
     }
 
     @Test
+    fun aProposalCannotBeMadeAnOwnerSoTheLastAcceptedOwnerStays() {
+        // Inbox #597, measured on f9b83edeb: the promote answered 200 and wrote OWNER onto the unaccepted row, the owner
+        // count counted it, and the last accepted owner then stepped down (200). A decline left the group with no owner:
+        // nobody could add, remove, rotate, rename or delete it, and the rotation the decline queued is offered to owners
+        // only, so the key the proposal held was never rotated away. A proposal is no member until it accepts.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
+        addSoft(owner, domain, groupId, partner)
+
+        setRole(owner, groupId, partner, "OWNER").then().statusCode(404).body("code", equalTo("member_not_found"))
+        QuarkusTransaction.requiringNew().run {
+            val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", partner, groupId).firstResult()!!
+            assertEquals(MembershipEntity.MEMBER, m.role, "the refused promote wrote nothing")
+            assertEquals(true, m.pendingConsent)
+        }
+        setRole(owner, groupId, owner, "MEMBER").then().statusCode(409).body("code", equalTo("last_owner"))
+
+        // Control: once accepted, the same promote lands.
+        given().header("Authorization", bearer(partner))
+            .`when`().post("/api/scopes/$groupId/invitations/accept").then().statusCode(204)
+        setRole(owner, groupId, partner, "OWNER").then().statusCode(200).body("role", equalTo("OWNER"))
+    }
+
+    @Test
+    fun aProposalHoldingOwnerIsNoOwnerToTheLastOwnerGuard() {
+        // A proposal whose row says OWNER — what a promote wrote before #597's gate, and what the tenant removal's orphan
+        // rule still writes (inbox #598) — counts as no owner: the last accepted owner can neither step down nor remove
+        // themselves, by role change or by removal-rotation. Measured on f9b83edeb: both answered 200/201.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); userId = partner; tenantId = tenantIdOf(domain); scopeId = groupId
+                role = MembershipEntity.OWNER; pendingConsent = true; sealedNameKey = "bmFtZS1rZXk="
+                addedBy = owner; wrappedGrant = TestGrants.WRAPPED; grantedEpoch = 0; createdAt = Instant.now()
+            }.persist()
+        }
+
+        setRole(owner, groupId, owner, "MEMBER").then().statusCode(409).body("code", equalTo("last_owner"))
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[],"pendingUserIds":["$partner"],"removesUserId":"$owner"}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(409).body("code", equalTo("last_owner"))
+        QuarkusTransaction.requiringNew().run {
+            val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", owner, groupId).firstResult()!!
+            assertEquals(MembershipEntity.OWNER, m.role, "the last accepted owner is still one")
+            assertEquals(0, ScopeEntity.findById(groupId)!!.currentEpoch, "…and nothing rotated")
+        }
+    }
+
+    @Test
     fun consentOffIsUnchangedDirectAdd() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
@@ -334,6 +387,12 @@ class ConsentGroupAddSliceTest {
             .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
+
+    /** [caller] sets [targetId]'s role on [groupId] (uc.spaces.manage-group-members). */
+    private fun setRole(caller: String, groupId: String, targetId: String, role: String) =
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
+            .body("""{"role":"$role"}""")
+            .`when`().patch("/api/scopes/$groupId/members/$targetId")
 
     /** The owner proposes the consent-on "partner" (a soft pending add). */
     private fun addSoft(owner: String, domain: String, groupId: String, partner: String) {

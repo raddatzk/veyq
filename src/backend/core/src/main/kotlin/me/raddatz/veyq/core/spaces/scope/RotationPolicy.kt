@@ -5,7 +5,8 @@ import me.raddatz.veyq.core.membership.SignedGrant
 
 /** The membership facts the rotation decision needs: a member's id and their role (the last-owner guard of a
  *  removal). Lifted out of the persistence row so the decision is testable without a DB. A soft `pendingConsent`
- *  proposal is a member here like any other: it holds the grant its proposer wrapped (ADR 0111 decision 4). */
+ *  proposal is a member here like any other: it holds the grant its proposer wrapped (ADR 0111 decision 4) — but never
+ *  an owner: the shell hands it in as a MEMBER, whatever its row says, so the last-owner guard counts accepted owners. */
 data class RotationMember(
     val userId: String,
     val role: String = MembershipEntity.MEMBER,
