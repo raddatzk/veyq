@@ -18,7 +18,7 @@ import { httpError } from '../../../test/httpError'
 import { fakeApi } from '../../../test/apiMock'
 import type { TokenApi } from '../../../api/generated/auth'
 import type { AccountApi, AccountKeyMaterial } from '../../../api/generated/account'
-import { fakePinServer, identityKey, sealPinStore, SOME_HEAD } from '../../../test/pinStore'
+import { fakePinServer, sealPinStore } from '../../../test/pinStore'
 
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
@@ -54,7 +54,8 @@ vi.mock('../trustDevice/trustDevice', () => ({
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { unlockWithGrantedMasterKey } from '../unlock/unlock'
 import { accountApi, tokenApi } from '../../../api/client'
-import { anchorIdentity } from '../identityPins'
+import { anchorServedChain } from '../identityPins'
+import { chainKeys, genesis, served, servedIdentity } from '../../../test/keyChain'
 import { channelKeys, mintPairingSecret, openGrant, sealGrant } from './pairing'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
@@ -384,19 +385,20 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
   /** The pin store as the server serves it on this device's first read: a valid, empty store at `revision`. */
   const servePins = (mk: Uint8Array, revision: number) => fakePinServer(sealPinStore(mk, {}, revision)).writeIdentityPins
   const CONTACT = 'c0ffee00-0000-4000-8000-0000000000a1'
-  const CONTACT_KEY = identityKey()
+  // A first contact as a member invite serves its owner: a chain, judged against the pin store with nothing fetched.
+  const CONTACT_CHAIN = genesis(CONTACT, chainKeys())
 
   it('linked by a device whose pin mark is 5, a v4 pin store on the first read is refused', async () => {
     const mk = await linkedBy(5)
     const write = servePins(mk, 4)
-    await expect(anchorIdentity(CONTACT, { identityPublicKey: CONTACT_KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    await expect(anchorServedChain(CONTACT, served(CONTACT_CHAIN), servedIdentity(CONTACT_CHAIN))).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
     expect(write).not.toHaveBeenCalled()
   })
 
   it('control: served v5, the store is accepted', async () => {
     const mk = await linkedBy(5)
     const write = servePins(mk, 5)
-    expect(await anchorIdentity(CONTACT, { identityPublicKey: CONTACT_KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).toBe('firstUse')
+    expect(await anchorServedChain(CONTACT, served(CONTACT_CHAIN), servedIdentity(CONTACT_CHAIN))).toBe('firstUse')
     expect(write).toHaveBeenCalledTimes(1)
   })
 })

@@ -4,8 +4,10 @@
 // NEW invitee registers cold (Emergency Kit) here, an EXISTING one signs in + unlocks. An OWNER invite cold-births the
 // TENANT scope and seals the first grant to its own identity. A MEMBER invite (ADR 0111 decisions 1 and 3) carries a
 // sealed part after the token (`#<token>.<sealed>`): the invitee types the code the owner passed on, the client opens
-// the invite and checks it against the owner's fingerprint inside the seal before anything is sent, grants itself the
-// tenant key the invite holds and writes its join record — it is in the space at once. No key leaves the device.
+// the invite and checks it — the owner's chain from the head inside the seal, the owner's anchor grant — before anything
+// is sent, grants itself the tenant key the invite holds and writes its join record — it is in the space at once. When the
+// owner secured their account between the check and the accept (`409 invite_changed`), the invite is checked again and
+// accepted once more without asking for the code (cr-trust-anchors-survive-rotation decision 7). No key leaves the device.
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -19,9 +21,9 @@ import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import {
   previewInvite, acceptInvite, acceptOwnership, registerAndAccept, bornTenantScope, tenantError, openMemberInvite, forgetMemberInvite,
-  memberInviteAnchored,
+  memberInviteAnchored, acceptCheckedInvite,
   buildMemberJoin, inviteLinkMode, InviteCodeWrong, InviteCheckFailed,
-  type TenantBirth, type TenantOwner, type OpenedMemberInvite, type MemberJoin,
+  type TenantOwner, type OpenedMemberInvite, type MemberJoin,
 } from '../features/tenant/tenantInvite'
 import type { ServedMemberInvite } from '../api/generated/tenants'
 import { parseInviteFragment } from '@veyq/crypto/invite'
@@ -177,12 +179,17 @@ async function openWithCode() {
   }
 }
 
-/** The MEMBER join for [userId] under [identity] (ADR 0111 decision 3), with the Secret-Key proof key it names. */
+/** The MEMBER join for [userId] under [identity] through [opened] (ADR 0111 decision 3), with the Secret-Key proof key
+ *  it names. */
 function memberJoinFor(
-  userId: string, identity: TenantOwner['identity'], secretKeyProofPublicKey: Uint8Array,
+  opened: OpenedMemberInvite, userId: string, identity: TenantOwner['identity'], secretKeyProofPublicKey: Uint8Array,
 ): MemberJoin {
-  if (!openedInvite) throw new Error('invite not opened')
-  return buildMemberJoin(openedInvite, { userId, identity, secretKeyProofPublicKey })
+  return buildMemberJoin(opened, { userId, identity, secretKeyProofPublicKey })
+}
+
+/** The invite as the preview serves it now — what a `409 invite_changed` re-checks ({@link acceptCheckedInvite}). */
+async function rereadInvite(): Promise<ServedMemberInvite | undefined> {
+  return (await previewInvite(secret)).invite ?? undefined
 }
 
 /** Register step 1: build the account on-device and show its Emergency Kit before activating. */
@@ -238,20 +245,21 @@ async function finishRegistration() {
     // its join record (ADR 0111 decision 3). Either holds K_tenant here, so the optional name and picture are sealed at
     // join (cr-0106). The new account's id is minted here, before the account exists — everything is bound to it.
     const userId = crypto.randomUUID()
-    let birth: TenantBirth | undefined
-    let join: MemberJoin | undefined
-    let tenantKey: Uint8Array
+    const acct = built
+    const handle = username.value.trim().toLowerCase()
     if (isMember.value) {
-      join = memberJoinFor(userId, built.identity, fromB64std(built.material.secretKeyProofPublicKey))
-      tenantKey = openedInvite!.epochKey
+      // Everything sealed under the tenant key is built from the invite it is handed: a re-check after `409
+      // invite_changed` may carry the tenant key at another epoch.
+      await acceptCheckedInvite(openedInvite!, (opened) => {
+        const join = memberJoinFor(opened, userId, acct.identity, fromB64std(acct.material.secretKeyProofPublicKey))
+        const key = opened.epochKey
+        return registerAndAccept(secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
+      }, rereadInvite)
     } else {
-      const born = bornTenantScope({ userId, identity: built.identity }, tenantId.value)
-      birth = born.birth
-      tenantKey = born.scopeRootKey
+      const born = bornTenantScope({ userId, identity: acct.identity }, tenantId.value)
+      const key = born.scopeRootKey
+      await registerAndAccept(secret, userId, handle, acct.material, born.birth, sealedNameFor(key, userId), sealedAvatarFor(key, userId))
     }
-    const sealedName = sealedNameFor(tenantKey, userId)
-    const sealedAvatar = sealedAvatarFor(tenantKey, userId)
-    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName, sealedAvatar, join)
     finish()
   } catch (e) {
     error.value = await mapError(e)
@@ -276,17 +284,21 @@ async function signInAndAccept() {
     const priv = identityPrivate()
     if (!priv) throw new Error('locked')
     if (isMember.value) {
-      // The link anchored the inviting owner's key; this account's pin store must not know them under a key their chain
-      // does not reach. A grant a rotation re-wrapped is trusted on first use, and refused on an anomaly.
+      // The checks walked the inviting owner's chain from the link's head; this account's pin store must not know them
+      // at a head that chain does not pass. A pinned foreign granter is judged by its own chain.
       if (!(await memberInviteAnchored(openedInvite!))) {
         error.value = t('tenant.join.inviteUncheckable')
         return
       }
       const userId = await myUserId()
       const proofKey = deriveSecretKeyProofKeypair(fromB64std(secretKey.value.trim())).publicKey
-      const join = memberJoinFor(userId, ownerOf(userId, priv).identity, proofKey)
-      const tenantKey = openedInvite!.epochKey
-      await acceptInvite(secret, username.value.trim().toLowerCase(), undefined, sealedNameFor(tenantKey, userId), sealedAvatarFor(tenantKey, userId), join)
+      const identity = ownerOf(userId, priv).identity
+      const handle = username.value.trim().toLowerCase()
+      await acceptCheckedInvite(openedInvite!, (opened) => {
+        const join = memberJoinFor(opened, userId, identity, proofKey)
+        const key = opened.epochKey
+        return acceptInvite(secret, handle, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
+      }, rereadInvite, memberInviteAnchored)
       finish()
       return
     }
@@ -376,6 +388,8 @@ async function reauthAndAccept() {
 }
 
 async function mapError(e: unknown): Promise<string> {
+  // A re-check after `409 invite_changed` that refused the invite: "ask for a new one", as at the code step.
+  if (e instanceof InviteCheckFailed) return t('tenant.join.inviteUncheckable')
   const { status, code } = await tenantError(e)
   if (status === HttpStatus.gone) return t('tenant.join.expired')
   if (status === HttpStatus.notFound) return t('tenant.join.invalid')

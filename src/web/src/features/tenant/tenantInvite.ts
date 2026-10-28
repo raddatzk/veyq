@@ -10,8 +10,9 @@ import * as invite from '@veyq/crypto/invite'
 import { inviteLinkKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
-import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../spaces/grant'
-import { anchorChainKey, anchorIdentity, getPin } from '../account/identityPins'
+import { recipientIdentityDigest, sealGrant } from '../spaces/grant'
+import { anchorChainKey, anchorServedChain, getPin, linkOf } from '../account/identityPins'
+import { HttpStatus, isCodedError } from '../../shared/httpError'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'
@@ -117,8 +118,10 @@ export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
 
 // ── A member invite: the invitee's half (ADR 0111 decisions 1 and 3) ──────────────────────────────────────────
 
-/** A MEMBER accept's join: the self-grant, the invite key's proof and the sealed join record, as the wire carries them. */
-export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string }
+/** A MEMBER accept's join, as the wire carries it: the self-grant, the invite key's proof, the sealed join record, and
+ *  the digest of the inviting owner's key the record names — the key this client checked, which the server compares
+ *  with the invite's stored signer key (`409 invite_changed`, cr-trust-anchors-survive-rotation decision 7). */
+export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string; signerIdentityDigest: string }
 
 /** The code (or password) does not open the link's sealed part — mistyped, or another invite's link. */
 export class InviteCodeWrong extends Error {
@@ -131,15 +134,24 @@ export class InviteCodeWrong extends Error {
 export { InviteCheckFailed } from '@veyq/crypto/invite'
 
 /** A member invite the invitee's client opened and checked: the invite key, the tenant key its grant carries (at
- *  [grantedEpoch]) and the served facts the checks vouched for. Transient: zero it with {@link forgetMemberInvite}. */
+ *  [grantedEpoch]), the inviting owner as the check walked their chain, and the served facts the checks vouched for.
+ *  Transient: zero it with {@link forgetMemberInvite}. */
 export type OpenedMemberInvite = {
   tenantId: string
   served: ServedMemberInvite
   inviteKey: v1.Identity
   epochKey: Uint8Array
   grantedEpoch: number
-  /** The member whose rotation re-wrapped the invite's grant, when it is not the inviting owner — trusted on first use
-   *  (inbox #565): their key as the grant's snapshot carries it, and the head the invite serves for them. */
+  /** Where the inviting owner's served chain ended, walked from the head inside the link: its head, index and key —
+   *  the key the join record names and the accept's `signerIdentityDigest` states. */
+  signer: { head: Uint8Array; index: number; identityPublicKey: Uint8Array }
+  /** What the link's sealed part held, kept so a `409 invite_changed` can re-run the checks without the code
+   *  ({@link acceptCheckedInvite}): the seed (as secret as the invite key it derives, zeroed with it), the owner's head
+   *  and account (not secret). */
+  link: invite.InviteLinkPayload
+  /** The member whose rotation re-wrapped the invite's grant above its anchor, when it is not the inviting owner: their
+   *  key as the grant's snapshot carries it, and the head the invite serves for them. Nothing vouches for it — the epoch
+   *  link down to the owner's anchor vouches for the grant — so it is only judged where this account pinned them. */
   foreignGranter: { userId: string; identityPublicKey: string; keyChainHead: string } | null
 }
 
@@ -154,12 +166,12 @@ export function inviteLinkMode(sealedPart: string): invite.InviteLinkMode | null
 }
 
 /**
- * Open and check a member invite before anything is sent (ADR 0111 decisions 1 and 3): open the link's
- * sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then {@link invite.checkInvite}
- * — the key the seed derives must be the served one, the served signer must hash to the fingerprint inside the seal and
- * the owner's signature must verify under it ({@link invite.InviteCheckFailed} otherwise) — then verify the invite
- * grant's signature (the signer's checked key when the signer granted it, else the served granter key) and open it with
- * the invite key. Nothing the result relies on comes from the server unchecked.
+ * Open and check a member invite before anything is sent (ADR 0111 decision 1, cr-trust-anchors-survive-rotation decision
+ * 4): open the link's sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then
+ * {@link invite.checkInvite} — the key the seed derives is the served one, the owner's served chain passes through the
+ * head inside the seal and ends at the served owner key, which signed the invite key and the anchor grant, and the tenant
+ * key is the anchor's or peels down to it through the tenant's epoch links ({@link invite.InviteCheckFailed} naming the
+ * check otherwise). Nothing the result relies on comes from the server unchecked.
  */
 export async function openMemberInvite(tenantId: string, served: ServedMemberInvite, sealedPart: string, typed: string): Promise<OpenedMemberInvite> {
   let link: invite.SealedInviteLink
@@ -180,57 +192,69 @@ export async function openMemberInvite(tenantId: string, served: ServedMemberInv
     kek.fill(0)
     secret.fill(0)
   }
-  const servedInvite: invite.ServedInvite = {
-    tenantId,
-    inviteId: served.inviteId,
-    invitePublicKey: fromB64std(served.invitePublicKey),
-    inviteKeySignature: fromB64std(served.inviteKeySignature),
-    expiresAt: Math.floor(served.expiresAt.getTime() / 1000),
-    signerUserId: served.signerUserId,
-    signerIdentityPublicKey: fromB64std(served.signerIdentityPublicKey),
-  }
-  let inviteKey: v1.Identity
   try {
-    inviteKey = invite.checkInvite(payload, servedInvite)
+    return checkMemberInvite(tenantId, served, payload)
   } finally {
     payload.seed.fill(0)
   }
-  // A grant the inviting owner wrapped verifies under the key the link anchored — the checked signer key, never a second
-  // served copy of it: the same account under another key is refused. One a rotation re-wrapped names another member
-  // as its granter, whom the newcomer cannot anchor yet: that key is trusted on first use, as every member trusts a
-  // foreign granter (ADR 0028 Decision 6), and handed back so a client with a pin store pins it (`foreignGranter`).
-  const ownersGrant = served.granterUserId === served.signerUserId
-  if (ownersGrant && served.granterIdentityPublicKey !== served.signerIdentityPublicKey) throw new invite.InviteCheckFailed('bad_signature')
-  const granterKey = ownersGrant ? served.signerIdentityPublicKey : served.granterIdentityPublicKey
-  let granterSign: Uint8Array
+}
+
+/** {@link invite.checkInvite} over what the preview served, decoded; the opened invite keeps a copy of the link's facts.
+ *  A served byte string that is no base64 is refused as no invite the link names (`key_mismatch`). */
+function checkMemberInvite(tenantId: string, served: ServedMemberInvite, payload: invite.InviteLinkPayload): OpenedMemberInvite {
+  let servedInvite: invite.ServedInvite
   try {
-    granterSign = v1.deserializeIdentityPublic(fromB64std(granterKey)).sign
+    servedInvite = {
+      tenantId,
+      inviteId: served.inviteId,
+      invitePublicKey: fromB64std(served.invitePublicKey),
+      inviteKeySignature: fromB64std(served.inviteKeySignature),
+      expiresAt: Math.floor(served.expiresAt.getTime() / 1000),
+      signerUserId: served.signerUserId,
+      signerIdentityPublicKey: fromB64std(served.signerIdentityPublicKey),
+      signerKeyChain: served.signerKeyChain.map(linkOf),
+      anchorWrappedGrant: fromB64std(served.anchorWrappedGrant),
+      anchorEpoch: served.anchorEpoch,
+      anchorGrantSignature: fromB64std(served.anchorGrantSignature),
+      wrappedGrant: fromB64std(served.wrappedGrant),
+      grantedEpoch: served.grantedEpoch,
+      grantSignature: fromB64std(served.grantSignature),
+      granterIdentityPublicKey: fromB64std(served.granterIdentityPublicKey),
+      epochLinks: served.epochLinks.map((l) => ({ epoch: l.epoch, wrappedPrev: fromB64std(l.wrappedPrev) })),
+    }
   } catch {
-    throw new invite.InviteCheckFailed('bad_signature')
+    throw new invite.InviteCheckFailed('key_mismatch')
   }
-  const grantScope = { scopeId: tenantId, kind: 'TENANT', epoch: served.grantedEpoch } as const
-  const recipient = { userId: served.inviteId, identityPublicKeyB64: served.invitePublicKey }
-  if (!grantSignatureVerifies(granterSign, grantScope, recipient, served.wrappedGrant, served.grantSignature)) {
-    throw new invite.InviteCheckFailed('bad_signature')
-  }
-  const epochKey = v1.openAs(grantContext(tenantId, served.grantedEpoch), v1.hybridSecret(inviteKey.priv), fromB64std(served.wrappedGrant))
+  const checked = invite.checkInvite(payload, servedInvite)
+  // A grant a rotation re-wrapped above the anchor names its rotator as granter. The epoch link vouches for the grant;
+  // the rotator is handed back only so a client that pinned them judges them ({@link memberInviteAnchored}).
+  const foreign = served.grantedEpoch > served.anchorEpoch && served.granterUserId !== served.signerUserId
   return {
-    tenantId, served, inviteKey, epochKey, grantedEpoch: served.grantedEpoch,
-    foreignGranter: ownersGrant
-      ? null
-      : { userId: served.granterUserId, identityPublicKey: served.granterIdentityPublicKey, keyChainHead: served.granterKeyChainHead },
+    tenantId,
+    served,
+    inviteKey: checked.inviteKey,
+    epochKey: checked.epochKey,
+    grantedEpoch: checked.grantedEpoch,
+    signer: checked.signer,
+    link: { seed: payload.seed.slice(), signerHead: payload.signerHead.slice(), signerUserId: payload.signerUserId },
+    foreignGranter: foreign
+      ? { userId: served.granterUserId, identityPublicKey: served.granterIdentityPublicKey, keyChainHead: served.granterKeyChainHead }
+      : null,
   }
 }
 
 /**
- * Whether a signed-in account may accept an opened member invite against its pin store (ADR 0028 Decision 2). The account is not yet a co-member, so the server serves it nobody's key chain here:
- * - **the inviting owner** — whose key the link's fingerprint already vouched for ({@link openMemberInvite}) — is pinned
- *   at the head the invite serves on first use, and judged by the chain from the pinned head when it is known;
+ * Whether a signed-in account may accept an opened member invite against its pin store (ADR 0028 Decision 2,
+ * cr-trust-anchors-survive-rotation decision 5). The account is not yet a co-member, so the server serves it nobody's
+ * key chain through `getKeyChain`:
+ * - **the inviting owner** is judged by the chain the invite served, which {@link openMemberInvite} walked from the head
+ *   inside the link to the served key ({@link anchorServedChain}): a pinned head must lie on it and carry the pinned key,
+ *   and a first use pins the walked head at its real index;
  * - **a foreign granter** (a rotation re-wrapped the grant) the account already pinned is judged against its chain like
- *   any granter: a key the chain does not reach, or a retired key of it, is refused (the invite's epoch is above every
- *   floor of a tenant this device never held). One it never met stays trusted on first use (inbox #565) and is NOT pinned
- *   here: the grant's snapshot may be a key its granter has since retired, which beside their current head would pin a
- *   pair that never was; the account pins them through their chain at its first contact as a co-member.
+ *   any granter: a key the chain does not reach, or a retired key of it, is refused. One it never met is NOT pinned
+ *   here: the epoch link down to the owner's anchor, not its key, vouches for the grant, and the grant's snapshot may be
+ *   a key its granter has since retired, which beside their current head would pin a pair that never was; the account
+ *   pins them through their chain at its first contact as a co-member.
  */
 export async function memberInviteAnchored(opened: OpenedMemberInvite): Promise<boolean> {
   const granter = opened.foreignGranter
@@ -238,8 +262,41 @@ export async function memberInviteAnchored(opened: OpenedMemberInvite): Promise<
     const judged = await anchorChainKey(granter.userId, granter.identityPublicKey)
     if (judged.anchor === 'anomaly' || judged.retired) return false
   }
-  const signer = { identityPublicKey: opened.served.signerIdentityPublicKey, keyChainHead: opened.served.signerKeyChainHead }
-  return (await anchorIdentity(opened.served.signerUserId, signer, { firstUse: 'served' })) !== 'anomaly'
+  const head = b64std(opened.signer.head)
+  const chain = { userId: opened.served.signerUserId, head, steps: opened.served.signerKeyChain }
+  const signer = { identityPublicKey: b64std(opened.signer.identityPublicKey), keyChainHead: head }
+  return (await anchorServedChain(opened.served.signerUserId, chain, signer)) !== 'anomaly'
+}
+
+/**
+ * Send a member accept built from [opened] (cr-trust-anchors-survive-rotation decision 7). When the server answers `409
+ * invite_changed` — the inviting owner secured their account between this client's check and the accept, so the join
+ * record would name a key their securing retired — the preview is read again through [reread], the checks run again with
+ * the link's facts [opened] kept (no code is asked for again), [anchored] judges the re-checked invite where the account
+ * has a pin store, and [send] goes once more with it. Once: a second refusal is the caller's. [send] builds everything it
+ * seals under the tenant key from the invite it is handed. An invite re-opened here is zeroed before this returns;
+ * [opened] stays the caller's to forget.
+ */
+export async function acceptCheckedInvite<T>(
+  opened: OpenedMemberInvite,
+  send: (opened: OpenedMemberInvite) => Promise<T>,
+  reread: () => Promise<ServedMemberInvite | null | undefined>,
+  anchored?: (opened: OpenedMemberInvite) => Promise<boolean>,
+): Promise<T> {
+  try {
+    return await send(opened)
+  } catch (e) {
+    if (!(await isCodedError(e, HttpStatus.conflict, 'invite_changed'))) throw e
+  }
+  const served = await reread()
+  if (!served || served.inviteId !== opened.served.inviteId) throw new invite.InviteCheckFailed('key_mismatch')
+  const again = checkMemberInvite(opened.tenantId, served, opened.link)
+  try {
+    if (anchored && !(await anchored(again))) throw new invite.InviteCheckFailed('signer_chain_mismatch')
+    return await send(again)
+  } finally {
+    forgetMemberInvite(again)
+  }
 }
 
 /** Zero an opened invite's private parts. */
@@ -247,6 +304,7 @@ export function forgetMemberInvite(opened: OpenedMemberInvite): void {
   opened.epochKey.fill(0)
   opened.inviteKey.priv.kemSeed.fill(0)
   opened.inviteKey.priv.sign.fill(0)
+  opened.link.seed.fill(0)
 }
 
 /** The newcomer as its join needs it: the account id, its identity, and its Secret-Key proof public key (raw bytes). */
@@ -260,10 +318,11 @@ export type Newcomer = {
  * The newcomer grants itself and writes its join record (ADR 0111 decision 3): the invite grant's epoch key sealed to
  * its own identity and signed by it; the invite key's proof over (invite, account, identity) that the server checks;
  * and the join record — identity and Secret-Key proof key, the owner-signed invite it came through — signed by the
- * invite key and by the new identity, sealed under the tenant key as the field `member-join-record`.
+ * invite key and by the new identity, sealed under the tenant key as the field `member-join-record`; and the digest of the
+ * owner key the record names — the one the checks walked to (decision 7).
  */
 export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer): MemberJoin {
-  const { tenantId, served, inviteKey, epochKey, grantedEpoch } = opened
+  const { tenantId, served, inviteKey, epochKey, grantedEpoch, signer } = opened
   const identityPublicKey = v1.serializeIdentityPublic(newcomer.identity.pub)
   const identityB64 = b64std(identityPublicKey)
   const signed = sealGrant(
@@ -280,11 +339,12 @@ export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer):
     inviteKeySignature: fromB64std(served.inviteKeySignature),
     inviteExpiresAt: Math.floor(served.expiresAt.getTime() / 1000),
     signerUserId: served.signerUserId,
-    signerIdentityPublicKey: fromB64std(served.signerIdentityPublicKey),
+    signerIdentityPublicKey: signer.identityPublicKey,
   }, inviteKey.priv.sign, newcomer.identity.priv.sign)
   return {
     selfGrant: { ...signed, epoch: grantedEpoch, recipientIdentityDigest: recipientIdentityDigest(identityB64) },
     inviteProof: b64std(inviteProof),
     sealedJoinRecord: b64std(invite.sealJoinRecord(epochKey, address, record)),
+    signerIdentityDigest: b64std(v1.sha256Digest(signer.identityPublicKey)),
   }
 }

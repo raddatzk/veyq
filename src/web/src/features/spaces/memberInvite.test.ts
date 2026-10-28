@@ -7,6 +7,8 @@ vi.mock('../../api/client', () => ({ tenantsApi: vi.fn(), scopesApi: vi.fn() }))
 vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 vi.mock('./grantTrust', () => ({ me: vi.fn() }))
+// The owner's head (decision 1) is `myChainHead`'s — its walk of the served chain is tenantTrust's own suite.
+vi.mock('../account/tenantTrust', () => ({ myChainHead: vi.fn(), tenantViewOfScope: vi.fn() }))
 // The link's KEK is real Argon2id at a light cost — input-sensitive, which "another code does not open it" depends on
 // (a constant stub would open with any code). Production cost is the conformance vectors' job (`#invite_link`).
 const LIGHT = { t: 1, m: 64, p: 1, dkLen: 32 }
@@ -20,6 +22,8 @@ import { tenantsApi } from '../../api/client'
 import { listMyTenants, openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
 import { me } from './grantTrust'
+import { myChainHead } from '../account/tenantTrust'
+import { genesisHeadOf } from '../../test/keyChain'
 import { grantContext, grantSignatureVerifies } from './grant'
 import { fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
@@ -37,6 +41,8 @@ const TTL = 3600
 const EPOCH = 4
 const TENANT_KEY = v1.randomBytes(32)
 const CODE = invite.generateInviteCode()
+/** The owner's key-chain head as their walked chain ends at it. */
+const OWNER_HEAD = genesisHeadOf(OWNER_ID, OWNER)
 /** The last tenant scope handed to the data layer — to look at after it returns. */
 let lastOpened: ReturnType<typeof openedScope> | null = null
 
@@ -52,6 +58,7 @@ beforeEach(() => {
   })
   vi.mocked(identityPrivate).mockImplementation(() => ({ kemSeed: OWNER.priv.kemSeed.slice(), sign: OWNER.priv.sign.slice() }))
   vi.mocked(me).mockResolvedValue({ userId: OWNER_ID, pub: OWNER.pub, pubB64: b64std(v1.serializeIdentityPublic(OWNER.pub)) })
+  vi.mocked(myChainHead).mockResolvedValue({ userId: OWNER_ID, head: OWNER_HEAD })
 })
 
 /** Invite b@x.z with [secret] and return the request the server received. */
@@ -73,11 +80,11 @@ function openLink(req: MemberInviteRequest, typed: string, address = { tenantId:
 }
 
 describe('the link: sealed under the code, holding the seed and the owner', () => {
-  it('opens with the code — to the seed of the posted invite key, the owner\'s fingerprint and account', async () => {
+  it('opens with the code — to the seed of the posted invite key, the owner\'s key-chain head and account', async () => {
     const req = await posted()
     const payload = openLink(req, CODE)
     expect(b64std(v1.serializeIdentityPublic(invite.inviteKeyFromSeed(payload.seed).pub))).toBe(req.invitePublicKey)
-    expect(Array.from(payload.signerFingerprintHash)).toEqual(Array.from(v1.fingerprintHash(OWNER.pub)))
+    expect(b64std(payload.signerHead)).toBe(OWNER_HEAD)
     expect(payload.signerUserId).toBe(OWNER_ID)
     // As typed by a person: grouped, lower case — the same code.
     expect(() => openLink(req, invite.formatInviteCode(CODE).toLowerCase())).not.toThrow()
@@ -101,6 +108,15 @@ describe('the link: sealed under the code, holding the seed and the owner', () =
     expect(invite.parseSealedInviteLink(b64url(fromB64std(req.sealedLink))).mode).toBe('password')
     expect(() => openLink(req, 'correct horse battery')).not.toThrow()
     expect(() => openLink(req, 'correct horse battery!')).toThrow()
+  })
+
+  it('an own chain that does not end at this vault\'s identity mints nothing (myChainHead refuses) — nothing is opened or sent', async () => {
+    const send = vi.fn<TenantsApi['inviteTenantMember']>()
+    fakeApi(tenantsApi, { inviteTenantMember: send })
+    vi.mocked(myChainHead).mockRejectedValue(new Error('the served key chain does not end at this account’s identity'))
+    await expect(inviteMember(T, 'b@x.z', { mode: 'code', code: CODE })).rejects.toThrow()
+    expect(openScopeById).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
   })
 
   it('refuses a secret that is no code before anything is opened or sent', async () => {

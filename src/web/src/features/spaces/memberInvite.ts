@@ -1,18 +1,21 @@
 // The owner's half of a member invite (ADR 0111 decisions 1-2, uc.spaces.add-member): an invite is a placeholder member.
 // The owner's client mints an invite key from a fresh seed, signs its public half with the owner's identity, wraps the
-// tenant scope's current epoch key to it, and seals the seed — with the owner's fingerprint and account — into the
-// link's secret part under a generated code (or a password the owner chose). The server receives the public key, the
+// tenant scope's current epoch key to it, and seals the seed — with the head of the owner's key chain and the owner's
+// account — into the link's secret part under a generated code (or a password the owner chose). The grant it wraps is
+// the invite's anchor (cr-trust-anchors-survive-rotation decision 2): whatever a later rotation re-wraps, the invitee
+// checks it against this one. The server receives the public key, the
 // signature, the grant and the sealed part, mails the link and forgets the sealed part; the seed and the code never
 // reach it. The owner passes the code on outside veyq: the operator mails the link, so a link alone must not open.
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { inviteLinkKekAsync } from '@veyq/crypto/argonWorker'
-import { b64std, fromB64url } from '@veyq/crypto/base64'
+import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { identityPrivate } from '../../app/vault'
 import { me } from './grantTrust'
 import { listMyTenants, openScopeById } from './scopes'
 import { writeKey, zeroEpochKeys } from './epochs'
 import { recipientIdentityDigest, sealGrant } from './grant'
+import { myChainHead } from '../account/tenantTrust'
 import type { MemberInviteRequest } from '../../api/generated/tenants'
 
 /** What opens the link: a code minted here (shown once, passed on by the owner), or a password the owner chose. */
@@ -38,6 +41,9 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
     throw new Error('invite secret is not a code or a password')
   }
   const ttl = await inviteTtlSeconds(tenantId)
+  // The head the link carries (decision 1): this account's chain as served, walked to the identity this vault holds —
+  // a chain that withholds this account's newest step is refused rather than sealed into a link.
+  const { head } = await myChainHead()
   const opened = await openScopeById(tenantId) // the tenant scope's id IS the tenant id
   if (!opened) throw new Error('cannot open the tenant scope to invite — the vault is locked or no grant is held')
   const priv = identityPrivate()
@@ -45,7 +51,7 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
     if (!priv) throw new Error('vault is locked — cannot invite')
     const self = await me(priv)
     return await sealMemberInvite(
-      tenantId, email, secret, { userId: self.userId, pub: self.pub, signPrivateKey: priv.sign },
+      tenantId, email, secret, { userId: self.userId, pub: self.pub, head: fromB64std(head), signPrivateKey: priv.sign },
       { epoch: opened.epochs.current, key: writeKey(opened.epochs) }, ttl,
     )
   } finally {
@@ -55,8 +61,9 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
   }
 }
 
-/** Who signs an invite and grants it the tenant key: the owner's account, identity bundle and signing key. */
-export type InviteSigner = { userId: string; pub: v1.Identity['pub']; signPrivateKey: Uint8Array }
+/** Who signs an invite and grants it the tenant key: the owner's account, identity bundle, the head of their key chain at
+ *  that identity (32 bytes) and signing key. */
+export type InviteSigner = { userId: string; pub: v1.Identity['pub']; head: Uint8Array; signPrivateKey: Uint8Array }
 
 /** The tenant key an invite's grant carries: the tenant scope's current epoch and its key. */
 export type InviteEpoch = { epoch: number; key: Uint8Array }
@@ -88,7 +95,7 @@ export async function sealMemberInvite(
     )
     kek = await inviteLinkKekAsync(secretBytes, salt)
     const sealed = invite.sealInviteLink({ tenantId, inviteId }, secret.mode, kek, salt, {
-      seed, signerFingerprintHash: v1.fingerprintHash(signer.pub), signerUserId: signer.userId,
+      seed, signerHead: signer.head, signerUserId: signer.userId,
     })
     return {
       email,
