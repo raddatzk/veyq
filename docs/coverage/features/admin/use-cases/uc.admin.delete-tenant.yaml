@@ -33,11 +33,14 @@ acceptanceCriteria:
     # ADR 0101 decisions 6 and 10, inbox #593.
     text: >-
       A member a moderation case names when the purge starts keeps their terms acceptance rows past the tenant's
-      erasure, and the sweep of kept rows deletes them once no case names the member; every other member's rows of the
-      tenant go with it, and a living member's rows in a living tenant are never swept.
+      erasure, and the sweep of kept rows deletes them once no case names the member; a deletion over content names the
+      owners its statement told, to the step's own date; every other member's rows of the tenant go with it, and a
+      living member's rows in a living tenant are never swept.
     coverage:
       backend:
-        integration: [TenantDeletionSliceTest.aCaseNamingAMemberKeepsItsTermsRowsPastTheTenantsErasureUntilNoCaseNamesItAnyMore]
+        integration:
+          - TenantDeletionSliceTest.aCaseNamingAMemberKeepsItsTermsRowsPastTheTenantsErasureUntilNoCaseNamesItAnyMore
+          - ServerOwnerStatementSliceTest.aTenantDeletedOverContentKeepsItsOwnersTermsRowsPastItsPurgeForAsLongAsTheStepIsKept
   - id: members-keep-their-accounts
     text: Every member is told by mail that the tenant is being deleted, and every account stays, also one the deletion leaves in no tenant.
     coverage:

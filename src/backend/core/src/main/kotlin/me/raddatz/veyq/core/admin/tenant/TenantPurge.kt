@@ -25,7 +25,8 @@ import org.jboss.logging.Logger
  * Pending or complete, never partial: a failure rolls the tenant back, is logged, and the next tick tries again.
  *
  * What stays: holds and the moderation records hang on cases, not tenants, so they survive to their own ends; the terms
- * acceptance rows of a member a case names stay as an account's erasure keeps them ([TermsEvidence]); every account
+ * acceptance rows of a member a case names — its owners too, when the tenant's own step over content told them — stay as
+ * an account's erasure keeps them ([TermsEvidence]); every account
  * stays, also one this leaves in no tenant (owner, Q20). `scripts/validate_account_erasure_arity.py` holds
  * that every table reachable by foreign key from `veyq_tenant` is deleted here, is the scope erasure's, or cascades.
  * Operator-blind: nothing is decrypted; store objects go only through the reclaim list (ADR 0062).
@@ -82,8 +83,9 @@ class TenantPurge(
         if (cutoff != null && tenant.deletionDueAt?.isAfter(cutoff) != false) return
         // The terms acceptance history, as an account's erasure keeps it (ADR 0101 decision 6): a member a moderation
         // case names keeps their rows here past the tenant, under the opaque ids, until AccountPurge's sweep finds no case
-        // naming them. Asked before the scopes go, whose purge ends the measures on their content: the question is about
-        // the state the erasure found, and a measure it ends still counts.
+        // naming them. An owner this tenant's own step over content told counts as named (ADR 0101 decision 6). Asked before the
+        // scopes go, whose purge ends the measures on their content, and before the tenant's step ends below: the question
+        // is about the state the erasure found, and a measure it ends still counts.
         val members = TenantTermsAcceptanceEntity.list("tenantId", tenantId).map { it.userId }.distinct()
         val evidence = members.filter { TermsEvidence.namesAtErasure(it) }
         // Every scope, the TENANT scope last: ascending ids for the groups and personal scopes, the order every

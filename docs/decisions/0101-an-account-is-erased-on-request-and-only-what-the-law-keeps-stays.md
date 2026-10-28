@@ -89,9 +89,11 @@ Deleted with the account (ADR 0035 decision 4 names the table for this), **excep
 account — a measure on it in force, or a case about its content not closed: then its rows stay under the opaque id
 until that case's log retention date (31 December of the third year after it closes, ADR 0093 § 11), as the evidence of
 which terms a breach was measured against (Art. 17(3)(e)). No new period: the case's — or, for a Server Owner's step on
-no case (ADR 0093 § 7), the step's own: 31 December of the third year after its lift. A tenant's erasure (decision 10)
-keeps them by the same rule, asked when it starts: the evidence is the account's, and erasing the space it was given in
-does not settle the case.
+no case (ADR 0093 § 7), the step's own: 31 December of the third year after its lift. A step on a tenant (taken offline
+or deleted over content) names the tenant's owners at the time of the step — the recipients of its statement — and is
+then a measure on each of them (owner, the safe side): it targets the tenant id and often answers no case, so without
+this a tenant deleted over its content would lose its owners' rows at its purge while the step's record stays to its date. A tenant's erasure (decision 10) keeps them by the same rule, asked when it starts: the evidence is the
+account's, and erasing the space it was given in does not settle the case.
 
 ### 7. What survives, and is said to survive
 
