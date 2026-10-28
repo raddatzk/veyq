@@ -47,6 +47,13 @@ acceptanceCriteria:
       backend:
         integration: [MemberRemoveSliceTest.aRemovedMemberWhoIsOnlyAProposalNeverReownsNorTombstonesTheGroup]
         unit: [RemovalPolicyTest.aTargetOnlyProposedToAGroupDropsTheProposalAndNeverTombstonesNorHandsOver, RemovalPolicyTest.aProposalRowThatSaysOwnerIsStillOnlyDropped]
+  - id: an-accept-never-outlives-the-removal
+    text: An accept of a consent proposal that overlaps a removal deciding from that proposal — the group's only accepted owner leaving (the group tombstoned, its proposals expired) or the invitee removed (their proposal dropped) — waits on the group's lock the removal holds and answers 404 invitation_not_found; the accepter is never left a member of the tombstoned group, nor of a group in a tenant that removed them (inbox #599, forced on MariaDB).
+    coverage:
+      backend:
+        integration:
+          - RemovalRaceCoreSliceTest.anAcceptOverlappingTheRemovalThatTombstonesItsGroupFindsNoInvitation
+          - RemovalRaceCoreSliceTest.anAcceptOverlappingTheInviteesOwnRemovalFindsNoInvitation
   - id: own-scope-grace-read
     text: The removed member's personal scope (and any solo group) is grace-tombstoned but their membership is KEPT — they retain read-only access to read/export their own memories for the grace window, then ScopePurge erases them.
     coverage:

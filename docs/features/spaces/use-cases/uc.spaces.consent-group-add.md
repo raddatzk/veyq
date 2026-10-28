@@ -50,7 +50,8 @@ owner-typed claim), and the **accept/decline** step.
    already visible to them) + the tenant.
    - **Accept** → the server clears `pendingConsent`; the proposal is now a normal membership with the grant it
      already held — consenting changes nothing about keys — and the group opens for them at once. From here it is
-     identical to direct-add step 4.
+     identical to direct-add step 4. The accept is decided under the group's lock, the one a decline, an add and a
+     tenant removal take, and asks under it whether the proposal is still there (inbox #599).
    - **Decline** → the server **deletes** the soft membership and, in the same transaction under the scope's lock,
      **queues the group's rotation** (the invitee held the key). No `declined` state is kept (silent drop). The
      owner may propose again later.
@@ -92,7 +93,9 @@ sequenceDiagram
   A proposal is never handed the group. If accepted members remain, the oldest is promoted and the group's queued
   rotation takes the proposals' key away with the departed owner's; if none remains, the group is tombstoned and
   nothing rotates ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) step 4). An invitee removed
-  from the tenant loses their own proposal as a decline would (its A7).
+  from the tenant loses their own proposal as a decline would (its A7). An accept that overlaps either removal waits on
+  the group's lock the removal holds and then answers `404 invitation_not_found` — never a member of a group the removal
+  tombstoned, nor of one in a tenant that removed them.
 - **A3a — a proposed member is not a member yet, on any route.** Until they accept, the invitee reads and
   answers their own invitation and nothing of the group: every group operation — content, media, favorites,
   shares, roster, jobs — answers them exactly as it answers a stranger (the same 404,

@@ -354,7 +354,9 @@ not documented; the code is the source of truth for that.
   the outcome.** It is not where a concurrent cleanup enumerates the rows it must clean (a member's removal, a purge)
   before the gated write's row exists: the write then re-checks under a lock the cleanup also holds, or the cleanup's
   selection is itself the lock. A share create, a re-issue and an item-favorite write take the scope row a removal
-  holds; a group create and a group add take the tenant root a tenant removal holds; a purge selects with
+  holds; a group create and a group add take the tenant root a tenant removal holds; a consent proposal's accept takes
+  the group's row a tenant removal holds while it decides from that proposal, and asks under it whether the proposal is
+  still there (inbox #599); a purge selects with
   `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits). A sign-in, a device wrap
   and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change, a
   key rotation and a sign-out everywhere else take first, and re-read under it what those change — the auth key, the

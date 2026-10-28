@@ -320,8 +320,13 @@ const val OVERLAP_BOUND_S = 60L
  * [change] must write in the transaction this opens. A writer that opens its own (`QuarkusTransaction.requiringNew`,
  * as `TenantHandler.removeMember` does) commits inside the hold, and the race overlaps nothing — green for the wrong
  * reason. Hold such a writer as its first writes, through the store calls it makes (`RemovalRaceSliceTest`).
+ *
+ * [beforeCommit] runs in [change]'s transaction after the hold, just before its commit: the rest of a writer whose
+ * window is between a read and a later write of its own — the hold sits after the read, and the write that read decided
+ * comes after the overlapping side had its chance (a tenant removal's plan read and its deletes, inbox #599). A side the
+ * hold saw waiting is released only by the commit, so it meets those writes too.
  */
-fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T): T {
+fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T, beforeCommit: () -> Unit = {}): T {
     val changed = CountDownLatch(1)
     val other = AtomicReference<Future<T>?>()
     val pool = Executors.newFixedThreadPool(2)
@@ -332,7 +337,7 @@ fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T): T {
                     change()
                     Arc.container().instance(EntityManager::class.java).get().flush()
                     changed.countDown()
-                    holdForOverlap { other.get()?.isDone == true }
+                    holdForOverlap { other.get()?.isDone == true }.also { beforeCommit() }
                 }
             },
         )

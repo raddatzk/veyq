@@ -625,7 +625,9 @@ class ScopesStore(
             ?.let { if (it.pendingConsent) ConsentState.PENDING else ConsentState.ACTIVE } ?: ConsentState.NONE
 
     /** Accept a proposal (cr-0096): clear `pendingConsent` (and the now-moot wrapped name-key / addedBy) on the
-     *  caller's own soft membership — it already holds its grant. Returns rows updated (0 if none was pending). */
+     *  caller's own soft membership — it already holds its grant. Returns rows updated (0 if none was pending). The
+     *  caller holds the scope row's lock (`ScopesHandler.acceptInvitation`, inbox #599): a tenant removal decides from a
+     *  proposal under it, and an accept that lands between that read and its deletes outlives the removal. */
     @Transactional
     fun clearPendingConsent(userId: String, scopeId: String): Int =
         MembershipEntity.update(
