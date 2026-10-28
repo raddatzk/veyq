@@ -626,7 +626,10 @@ paths:
         grant signature from the stage and the new identity as the invite's signer key — and, where the grant the invite
         carries is its anchor (the same epoch, the caller its granter), that grant's signature and granter key too. So
         the invite's newcomer checks it under the key this publish installs, and the rotation the account commits next
-        carries it (the rotator is its signer: its anchor moves to the new epoch).
+        carries it (the rotator is its signer: its anchor moves to the new epoch). An invite staged **declared** (both
+        signatures `null`: one the client found its outgoing key never signed) is **ended** instead, in the statement
+        every ending uses — revoked, its key, grant and anchor dropped — so no invite keeps a retired key's signature and
+        one the operator minted cannot block the caller's securing.
 
         **The join records the caller rooted are endorsed or declared** (decision 12). The server requires every tenant
         profile whose join the caller rooted (`join_signer_user_id`) and that holds a join record to be staged
@@ -908,7 +911,8 @@ paths:
         as recipient) — and the two signatures the caller's current key made. The client re-signs both statements with
         the identity it is about to publish and stages them (`putRotationStageInvites`) — **only** for an invite whose
         two current signatures verify under its own outgoing identity: the list is the server's word, and re-signing an
-        invite the caller never signed would vouch for an invite key and a tenant key the operator chose. Operator-blind:
+        invite the caller never signed would vouch for an invite key and a tenant key the operator chose; any other it
+        stages declared (both signatures `null`), and the publish ends it. Operator-blind:
         public keys, signatures and ciphertext the server already serves the invite's holder.
       security:
         - bearerAuth: []
@@ -989,10 +993,14 @@ paths:
         Each carries the identity the stage declares' signature over the invite's `invite-key` statement (the tenant,
         the invite, SHA-256 of its stored invite bundle, its stored expiry) and over its anchor grant's `grant` statement
         (kind `TENANT`, `anchorEpoch`, the invite as recipient, the stored anchor grant): both are **verified here**,
-        under that bundle, over what the server stores — `422 invite_resign_invalid` otherwise. An invite the caller did
-        not sign, that is not open, or whose anchor epoch is no longer `anchorEpoch` is `409 rotation_plan_changed`. A
-        re-signed invite hands nobody a key, so the stage digest does not cover it (decision 13). Nothing of a refused
-        chunk is written; nothing staged is applied before the publish.
+        under that bundle, over what the server stores — `422 invite_resign_invalid` otherwise. An entry whose two
+        signatures are both `null` **declares** the invite instead: the client found that its two current signatures do
+        not verify under its own outgoing identity (the plan is the server's word), so it vouches for nothing, and the
+        publish ends the invite rather than leaving it signed by a retired key. One signature without the other is `400
+        invalid_request`. An invite the caller did not sign, that is not open, or whose anchor epoch is no longer
+        `anchorEpoch` is `409 rotation_plan_changed`, declared or not. A re-signed invite hands nobody a key, so the stage
+        digest does not cover it (decision 13). Nothing of a refused chunk is written; nothing staged is applied before
+        the publish.
       security:
         - bearerAuth: []
       parameters:
@@ -1006,7 +1014,9 @@ paths:
         "204":
           description: The chunk is staged.
         "400":
-          description: The request was malformed (more than 256 invites, a missing, oversized or non-base64 field).
+          description: >
+            The request was malformed (more than 256 invites, a missing, oversized or non-base64 field, or an entry with
+            one signature `null` and the other not).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2466,7 +2476,8 @@ components:
       type: object
       description: >
         An open member invite the caller signed, with what its two signatures cover (cr-trust-anchors-survive-rotation
-        decision 6). The client re-signs it only when both signatures verify under its own outgoing identity.
+        decision 6). The client re-signs it only when both signatures verify under its own outgoing identity, and declares
+        it otherwise (`StagedInviteResign`).
       required: [tenantId, inviteId, invitePublicKey, expiresAt, inviteKeySignature, anchorWrappedGrant, anchorEpoch, anchorGrantSignature]
       properties:
         tenantId:
@@ -2570,8 +2581,11 @@ components:
       type: object
       description: >
         An open invite the caller signed, re-signed by the identity the stage declares: its `invite-key` statement and its
-        anchor grant's `grant` statement, both rebuilt by the server from what it stores.
-      required: [inviteId, anchorEpoch, inviteKeySignature, anchorGrantSignature]
+        anchor grant's `grant` statement, both rebuilt by the server from what it stores — or **declared**, both
+        signatures `null` (both or neither, else `400 invalid_request`): an invite whose current signatures the client
+        found not to be its outgoing key's, which the publish ends rather than re-signs. Without the declaration one
+        invite the operator minted in the caller's name would block every securing of the account.
+      required: [inviteId, anchorEpoch]
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -2591,19 +2605,25 @@ components:
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         inviteKeySignature:
-          type: string
-          description: The stage identity's `invite-key` signature over the invite — verified at upload (`422 invite_resign_invalid`).
+          type: [string, "null"]
+          description: >
+            The stage identity's `invite-key` signature over the invite — verified at upload (`422 invite_resign_invalid`);
+            `null` with `anchorGrantSignature` declares the invite, and the publish ends it.
           contentEncoding: base64
+          minLength: 1
           maxLength: 128
           example: c2lnbmF0dXJl
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         anchorGrantSignature:
-          type: string
-          description: The stage identity's `grant` signature over the anchor grant at `anchorEpoch` — verified at upload (`422 invite_resign_invalid`).
+          type: [string, "null"]
+          description: >
+            The stage identity's `grant` signature over the anchor grant at `anchorEpoch` — verified at upload (`422
+            invite_resign_invalid`); `null` with `inviteKeySignature` declares the invite, and the publish ends it.
           contentEncoding: base64
+          minLength: 1
           maxLength: 128
           example: c2lnbmF0dXJl
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotationStageJoinEndorsements:
       type: object
