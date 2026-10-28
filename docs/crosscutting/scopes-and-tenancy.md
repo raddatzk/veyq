@@ -152,12 +152,13 @@ third scope role. The same shape repeats per scope kind:
   pure role change (no key moves); a role without a grant is a hollow title (can neither read nor invite —
   inviting needs the scope key). See [ADR 0006](../decisions/0006-cold-tenant-scope-birth.md).
 - **Several owners, never none.** A tenant and a group may have several owners; removing or demoting the last one
-  is refused (`409 last_owner`). A group whose sole owner is removed from the tenant passes to its oldest other
+  is refused (`409 last_owner`), counting accepted owners only. A group whose sole owner is removed from the tenant passes to its oldest other
   member ([ADR 0014](../decisions/0014-group-scopes-and-governance.md) §6); a tenant left without an owner by an
   erasure waits for the Server Owner's owner invite to one of its members
   ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9).
 - **Belonging is an accepted row.** A member belongs to a tenant when it holds an accepted membership of the tenant's
-  root scope; a group member proposed with consent holds an unaccepted row until it accepts.
+  root scope; a group member proposed with consent holds an unaccepted row until it accepts, and is no member to any
+  role decision until then.
 - **The Server Owner is a separate axis.** `veyq_user.server_role` is `SERVER_OWNER` or `MEMBER`, one per account; it
   is never a scope role, confers no grant and no content, and no scope or tenant gate reads it
   ([cc.security.authorization](cc.security.authorization.md) § The gate dimensions). A Server Owner who is also a
@@ -174,15 +175,15 @@ an owner of the tenant's root scope. The mechanics behind a row — what a grant
 | Create a tenant, suspend, reactivate or delete it, change its domain and quota; invite its first owner | the **Server Owner** — no scope role, no key ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md), [ADR 0066](../decisions/0066-tenant-suspension.md)) |
 | Invite one of a tenant's members to own it | the **Server Owner** ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) |
 | Invite a person into a tenant (by email); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
-| Remove a member from the tenant | a tenant owner; never the last owner |
+| Remove a member from the tenant | a tenant owner, by the removal cascade only; never the last owner |
 | Make a tenant member an owner, or demote one | a tenant owner; never the last owner |
 | Set the tenant's terms, mail settings and per-link storage limit; see members' email | a tenant owner |
 | Create a group or one's own personal scope | any member of the tenant (a group also needs its capability) |
 | Add a tenant member to a group (by username) | a group owner — the tenant owner has **no** power over a group it does not own ([ADR 0014](../decisions/0014-group-scopes-and-governance.md)) |
 | Remove a group member | a group owner, as a removal-rotation; never the last owner |
-| Make a group member an owner, or demote one | a group owner; never the last owner |
+| Make a group member an owner, or demote one | a group owner, of an accepted member (a consent proposal is refused `404 member_not_found`); never the last owner |
 | Rename a group or set its icon; delete it into its grace and restore it | a group owner |
-| Rotate a scope's key | an owner of the scope, any kind; a non-owner only for a scope its own account's securing left pending, and never with a removal |
+| Rotate a scope's key | an owner of the scope, any kind, with a removal on a group only (`400 invalid_request` elsewhere); a non-owner only for a scope its own account's securing left pending, and never with a removal |
 | Re-key a node after a rotation | any member holding the current epoch; a drop box, a guest identity folder and below one: an owner of the scope |
 | Create a public link; re-activate or re-issue a switched-off link; re-seal the root's name on links | any member of the scope |
 | Edit or switch off one link; re-issue an enabled one | that link's owner |
