@@ -70,7 +70,7 @@ serves the full fixed texts, and a value the Server Owner leaves empty shows as 
 - A field on its own other than a node's name as a report's item (inbox #516), and the reporter's handover of a guest's
   identity key (inbox #515) — ADR 0093 § 1.
 - A case's records kept longer while proceedings are pending, as a logged extension — ADR 0093 § 11.
-- The open legal questions (ADR 0093 § Legal basis, Still open, inbox #563–#576) — among them a hold until the handover
+- The open legal questions (ADR 0093 § Legal basis, Still open, inbox #575–#588) — among them a hold until the handover
   past 90 days and an authority's link to a held copy — each answered by counsel before veyq is offered as a service.
 
 ## Use-cases

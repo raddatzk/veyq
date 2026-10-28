@@ -578,17 +578,17 @@ release. Nothing they name is built on that assumption (no hold past 90 days, no
 stays a draft. **Before veyq is offered as a service, each is answered by counsel**, and an answer that differs is a
 legal duty that wins over what is built (`CLAUDE.md`). Each is an [inbox](../inbox.md) row:
 
-1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator — #563.
-2. A time-bound authority link to a hold snapshot — #564.
-3. Whether the German IP-retention bill has passed — #565.
-4. What the recorded source port is worth behind an operator's own NAT — #566.
-5. § 184b(5) StGB for a club's volunteer moderators — #567.
-6. Who is the controller of a member's account data — #568.
-7. The breached-password check and the exchange rates on by default — #569.
-8. Whether a non-economic club is an "enterprise" for DSA Art. 15(2) — #570.
-9. Whether TCO Art. 3(7) excuses a private operator who cannot be reached within the hour — #571.
-10. The layered Art. 13 information on a guest page, and Art. 14 for people a report names — #572.
-11. Reported content inside a backup capture — #573.
-12. Whether erasing a switched-off application's content needs a basis in the terms — #574.
-13. Whether the notice of that erasure is adequate — #575.
-14. Whether switching an application off is a moderation decision — #576.
+1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator — #575.
+2. A time-bound authority link to a hold snapshot — #576.
+3. Whether the German IP-retention bill has passed — #577.
+4. What the recorded source port is worth behind an operator's own NAT — #578.
+5. § 184b(5) StGB for a club's volunteer moderators — #579.
+6. Who is the controller of a member's account data — #580.
+7. The breached-password check and the exchange rates on by default — #581.
+8. Whether a non-economic club is an "enterprise" for DSA Art. 15(2) — #582.
+9. Whether TCO Art. 3(7) excuses a private operator who cannot be reached within the hour — #583.
+10. The layered Art. 13 information on a guest page, and Art. 14 for people a report names — #584.
+11. Reported content inside a backup capture — #585.
+12. Whether erasing a switched-off application's content needs a basis in the terms — #586.
+13. Whether the notice of that erasure is adequate — #587.
+14. Whether switching an application off is a moderation decision — #588.

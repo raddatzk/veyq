@@ -143,20 +143,20 @@ Each is an inbox row. The ADRs keep their own *Still open* numbering, since code
 
 | Question | Row | Cited as |
 |---|---|---|
-| § 184b(5) StGB beyond the 90 days, and for a non-commercial operator | #563 | ADR 0093 Still open 1 |
-| A time-bound authority link to a hold snapshot | #564 | ADR 0093 Still open 2 |
-| Whether the German IP-retention bill has passed | #565 | ADR 0093 Still open 3 |
-| What the recorded source port is worth behind the operator's own NAT | #566 | ADR 0093 Still open 4 |
-| § 184b(5) StGB for a club's volunteer moderators | #567 | ADR 0093 Still open 5 |
-| Who is the controller of a member's account data | #568 | ADR 0093 Still open 6 |
-| Third-party requests on by default: the breached-password check and the exchange rates | #569 | ADR 0093 Still open 7 |
-| Whether a non-economic club is an "enterprise" for DSA Art. 15(2) | #570 | ADR 0093 Still open 8 |
-| Whether TCO Art. 3(7) excuses an unattended private operator | #571 | ADR 0093 Still open 9 |
-| Layered Art. 13 information on a guest page, and Art. 14 for people a report names | #572 | ADR 0093 Still open 10 |
-| Reported content inside a backup capture | #573 | ADR 0093 Still open 11 |
-| Whether erasing a switched-off application's content needs a basis in the terms | #574 | ADR 0093 Still open 12 |
-| Whether the notice of that erasure is adequate | #575 | ADR 0093 Still open 13 |
-| Whether switching an application off is a moderation decision | #576 | ADR 0093 Still open 14 |
-| A log's period stated as a criterion | #577 | ADR 0092 Still open 1 |
-| The admin console's error log names the hop | #578 | ADR 0092 Still open 2 |
+| § 184b(5) StGB beyond the 90 days, and for a non-commercial operator | #575 | ADR 0093 Still open 1 |
+| A time-bound authority link to a hold snapshot | #576 | ADR 0093 Still open 2 |
+| Whether the German IP-retention bill has passed | #577 | ADR 0093 Still open 3 |
+| What the recorded source port is worth behind the operator's own NAT | #578 | ADR 0093 Still open 4 |
+| § 184b(5) StGB for a club's volunteer moderators | #579 | ADR 0093 Still open 5 |
+| Who is the controller of a member's account data | #580 | ADR 0093 Still open 6 |
+| Third-party requests on by default: the breached-password check and the exchange rates | #581 | ADR 0093 Still open 7 |
+| Whether a non-economic club is an "enterprise" for DSA Art. 15(2) | #582 | ADR 0093 Still open 8 |
+| Whether TCO Art. 3(7) excuses an unattended private operator | #583 | ADR 0093 Still open 9 |
+| Layered Art. 13 information on a guest page, and Art. 14 for people a report names | #584 | ADR 0093 Still open 10 |
+| Reported content inside a backup capture | #585 | ADR 0093 Still open 11 |
+| Whether erasing a switched-off application's content needs a basis in the terms | #586 | ADR 0093 Still open 12 |
+| Whether the notice of that erasure is adequate | #587 | ADR 0093 Still open 13 |
+| Whether switching an application off is a moderation decision | #588 | ADR 0093 Still open 14 |
+| A log's period stated as a criterion | #589 | ADR 0092 Still open 1 |
+| The admin console's error log names the hop | #590 | ADR 0092 Still open 2 |
 | Whether DSA Art. 14(1) reaches a space's own terms before sign-in | — | ADR 0035 decision 6 |

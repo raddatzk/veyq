@@ -151,14 +151,14 @@ pins with it. A case's sealed parts, and what decided it, are lost with a captur
 **Limits, stated:** a restore onto a new host re-applies only the ledger it is given, so the Run docs list the file
 beside the key among what to carry; erasures made in the last sweep interval (a minute) before a crash that also lost
 the file are not re-applied. Whether ciphertext of reported content kept in a capture until B is possession under
-§ 184b StGB is an open legal question (inbox #573).
+§ 184b StGB is an open legal question (inbox #585).
 
 ## Decided, not built
 
 - **A case's records kept longer while proceedings are pending**, as a logged extension
   ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 11);
   a hold's extension is built.
-- **A child-sexual-abuse hold until the handover past 90 days** — not decided either (inbox #563).
+- **A child-sexual-abuse hold until the handover past 90 days** — not decided either (inbox #575).
 
 ## Known gaps
 
@@ -166,11 +166,11 @@ Found measuring this register; each is an inbox row.
 
 - **An old address outlives an address change** in `veyq_tenant.owner_email` (and in a settled invite until its purge):
   the address change rewrites only `veyq_user.email`, and the account's erasure blanks only the current address
-  (`TenantStore.forgetOwnerAddress`). Inbox #579.
+  (`TenantStore.forgetOwnerAddress`). Inbox #591.
 - **`erasures.log` is trimmed to B only at startup** (`ErasureLedgerStart`; `ErasureLedgerFile.rewrite` has no other
-  caller): an instance that runs for months keeps lines with account and moderator ids longer than B. Inbox #580.
+  caller): an instance that runs for months keeps lines with account and moderator ids longer than B. Inbox #592.
 - **A tenant's erasure deletes terms evidence an account's erasure keeps**: `veyq_tenant_terms_acceptance` cascades
-  with its tenant, also for rows `TermsEvidence` keeps for an erased account a case names. Inbox #581.
+  with its tenant, also for rows `TermsEvidence` keeps for an erased account a case names. Inbox #593.
 - **No eraser of their own**, each going only with a larger erasure: a removed moderator's row (with the account), a
   link's tombstone (with its scope), finished job rows, an abandoned store-reclaim row, the operator's own details
   (overwrite only). A terms acceptance of a living member has no time bound, also for a tenant they left.

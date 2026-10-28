@@ -140,9 +140,9 @@ holds back a CR or a release; before it is, each is answered by counsel, and an 
 that wins over what is built (`CLAUDE.md`).
 
 1. Whether a period stated as a criterion — size-based rotation and recreation, no time bound — meets Art. 5(1)(e) for a
-   log holding pseudonymous ids only — inbox #577.
+   log holding pseudonymous ids only — inbox #589.
 2. Whether an operator who exposes the admin console must be told more than § 5 says about its error log naming the
-   hop — inbox #578.
+   hop — inbox #590.
 
 ### 7. Structure and correlation
 

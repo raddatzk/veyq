@@ -115,7 +115,7 @@ a change). The guest page shows one first-layer sentence with that N wherever th
 write — core's `GuestNaming` in every shape: the naming dialog of a `READ_WRITE` link, the line that says whose session
 the device holds, the drop pages of Memories and Depot — and the right to object (GDPR Art. 21) as a sentence of its
 own. A `READ` guest sees nothing, because nothing is recorded. Its
-wording waits on counsel (ADR 0093 § Legal basis, Still open 4; inbox #566). The full GDPR Art. 13 text — controller and contact,
+wording waits on counsel (ADR 0093 § Legal basis, Still open 4; inbox #578). The full GDPR Art. 13 text — controller and contact,
 purpose, basis and legitimate interest, the data, N, what a hold keeps, the recipients, the rights and the supervisory
 authority, N + B, with the right to object apart — is the record passage of the instance privacy notice
 ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8, the one home of every Art. 13 passage), there
