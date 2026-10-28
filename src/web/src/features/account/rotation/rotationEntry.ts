@@ -28,10 +28,11 @@ export type RotationEntry = {
 /**
  * The entry's facts. A space this device cannot open (judged by the stage's own rule, a dry run that writes nothing) is
  * already closed to the account — `unreadable` wins over a plan reason, because it does not pass. A read that fails
- * leaves that part empty rather than guessing: the entry is information, and the publish judges for itself.
+ * leaves that part empty rather than guessing: the entry is information, and the publish judges for itself. `read` is a
+ * plan the caller already holds (the panel names its rows from it before the dry run is done).
  */
-export async function readRotationEntry(): Promise<RotationEntry> {
-  const plan = await readRotationPlan()
+export async function readRotationEntry(read?: RotationPlanScope[]): Promise<RotationEntry> {
+  const plan = read ?? (await readRotationPlan())
   const unreadable = new Set(await unreadableOnThisDevice(plan).catch((): string[] => []))
   const blocked: EntryBlocked[] = []
   for (const row of plan) {

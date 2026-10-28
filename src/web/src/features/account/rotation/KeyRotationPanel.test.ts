@@ -26,7 +26,7 @@ vi.mock('../coldCredential', () => ({
     }
   },
 }))
-vi.mock('./finishRotation', () => ({ listRotationStates: vi.fn() }))
+vi.mock('./finishRotation', () => ({ listRotationStates: vi.fn(), readRotationPlan: vi.fn() }))
 vi.mock('./rotationEntry', () => ({ readRotationEntry: vi.fn() }))
 vi.mock('../../../app/vault', () => ({ unlockOrigin: () => 'cold' }))
 vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn(), listMyScopes: vi.fn(), openScopeById: vi.fn() }))
@@ -38,7 +38,7 @@ vi.mock('../passwordWarning', () => ({ useBreachCheck: vi.fn() }))
 import KeyRotationPanel from './KeyRotationPanel.vue'
 import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused } from './rotateKeys'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
-import { listRotationStates } from './finishRotation'
+import { listRotationStates, readRotationPlan } from './finishRotation'
 import { readRotationEntry, type RotationEntry } from './rotationEntry'
 import { listMyScopes, listMyTenants, openScopeById } from '../../spaces/scopes'
 import { sharesApi } from '../../../api/client'
@@ -96,7 +96,8 @@ beforeEach(() => {
   forgetGroupNamesSeen()
   vi.mocked(mintSecretKey).mockReturnValue(MINTED)
   vi.mocked(listRotationStates).mockResolvedValue([])
-  vi.mocked(readRotationEntry).mockResolvedValue(noEntry())
+  vi.mocked(readRotationEntry).mockImplementation(async (plan) => ({ ...noEntry(), plan: plan ?? [] }))
+  vi.mocked(readRotationPlan).mockResolvedValue([])
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(listMyScopes).mockResolvedValue([scopeSummary('s-here')])
   vi.mocked(openScopeById).mockResolvedValue(null)
@@ -316,9 +317,7 @@ describe('the spaces of the last rotation, as the server reads them (decision 8)
   it('each state with its badge and hint; a blocked one says why; each named, never by id', async () => {
     vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 's-root', name: 'Raddatz' })])
     rememberGroupName('s-group', 'Familie')
-    vi.mocked(readRotationEntry).mockResolvedValue({
-      ...noEntry(), plan: [planRow({ scopeId: 's-personal', kind: 'PERSONAL', tenantId: 't2' })],
-    })
+    vi.mocked(readRotationPlan).mockResolvedValue([planRow({ scopeId: 's-personal', kind: 'PERSONAL', tenantId: 't2' })])
     const states: RotationScopeState[] = [
       { scopeId: 's-personal', state: 'secured' },
       { scopeId: 's-root', state: 'rekeying' },
@@ -374,7 +373,7 @@ describe('the links to renew (decision 13)', () => {
 
   it('a link in another tenant’s space says to open that tenant, with no button; an upload link says to make a new one', async () => {
     vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't2', name: 'Verein' })])
-    vi.mocked(readRotationEntry).mockResolvedValue({ ...noEntry(), plan: [planRow({ scopeId: 's-there', tenantId: 't2' })] })
+    vi.mocked(readRotationPlan).mockResolvedValue([planRow({ scopeId: 's-there', tenantId: 't2' })])
     const w = await afterRotation([share({ shareId: 'there', scopeId: 's-there' }), share({ shareId: 'drop', role: ShareRole.WriteOnly })])
     expect(row(w, 'data-renew-share', 'there').text()).toContain(t('rotation.linkElsewhere', { tenant: 'Verein' }))
     expect(row(w, 'data-renew-share', 'there').find('button').exists()).toBe(false)

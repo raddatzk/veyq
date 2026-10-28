@@ -36,13 +36,13 @@ import { account } from '../../../app/account'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused, type RotationResult } from './rotateKeys'
-import { listRotationStates } from './finishRotation'
+import { listRotationStates, readRotationPlan } from './finishRotation'
 import { readRotationEntry, type RotationEntry } from './rotationEntry'
 import { listLinksToRenew, openRenewDialog, type LinkToRenew, type RenewDialog } from './linksToRenew'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { listMyTenants } from '../../spaces/scopes'
 import { groupNameSeen } from '../../spaces/groupNamesSeen'
-import { RotationPlanScopeKindEnum, type RotationScopeState } from '../../../api/generated/account'
+import { RotationPlanScopeKindEnum, type RotationPlanScope, type RotationScopeState } from '../../../api/generated/account'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../../../shared/passwordPolicy'
@@ -73,6 +73,8 @@ const error = ref('')
 const trustRefused = ref(false)
 const result = ref<RotationResult | null>(null)
 
+/** The account rotation's plan (decision 5) — every tenant's rows, so the lists below name a space by its kind. */
+const plan = ref<RotationPlanScope[]>([])
 /** The entry's facts from the plan (decision 11); null until read, and left null when the read fails. */
 const entry = ref<RotationEntry | null>(null)
 /** Every scope of this account's last rotation, as the SERVER reads it (decision 8) — on every visit. */
@@ -90,8 +92,10 @@ onMounted(async () => {
 })
 onBeforeUnmount(forgetSecrets)
 
+/** The plan first — a cheap read the labels need at once — then the entry's facts, whose dry run opens every grant. */
 async function loadEntry() {
-  entry.value = await readRotationEntry().catch(() => null)
+  plan.value = await readRotationPlan().catch(() => [])
+  entry.value = await readRotationEntry(plan.value).catch(() => null)
 }
 async function loadQueued() {
   queued.value = await listRotationStates().catch(() => [])
@@ -116,7 +120,7 @@ function scopeLabel(scopeId: string): Label {
   const seen = groupNameSeen(scopeId)
   return seen ? { text: seen, stale: true } : { text: t('rotation.scopeNameUnavailable'), stale: true }
 }
-const planRow = (scopeId: string) => entry.value?.plan.find((r) => r.scopeId === scopeId)
+const planRow = (scopeId: string) => plan.value.find((r) => r.scopeId === scopeId)
 /** The name of the tenant a link's space lives in, for "open that tenant". */
 function tenantOf(scopeId: string): string {
   const tenantId = planRow(scopeId)?.tenantId
