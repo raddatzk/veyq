@@ -16,9 +16,10 @@
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) and `uc.account.unlock`
   (identity → scope key → `K_SC` → `K_node`).
 - **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped (the blob keys wrap
-  under it); a configured object store — a **hard instance requirement** (`%dev`/`%prod` fail loud without one,
-  [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)), so a running instance always has
-  a byte path.
+  under it); a store that has passed its check — a **hard requirement of a working instance**
+  ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 1): without one no tenant can be
+  created, so a Memory always has a byte path. The store itself is
+  [cc.storage.object-lifecycle](../../../crosscutting/cc.storage.object-lifecycle.md).
 - **Postconditions (success):** the blob's **ciphertext chunks** live in the object store; the server holds the
   blob's **metadata + chunk manifest + the `K_blob` wrap** and a **media** record linking the blob to a node.
   The server learned **no bytes of plaintext** and holds **no content key**.
@@ -58,9 +59,11 @@
   download name, the type draws the video badge and the lightbox's `<video>` branch — and neither is ever sent in the
   clear: the server's view of a media is still no pixel, no name and no type. (Before inbox #397 the name rode the
   EXIF tier, #395 F10, and the type the listed tier with a lazy backfill on the first download; both copies are gone,
-  and the listed tier shrank by the type.) One blob can be
-  attached by more than one media record (e.g. cover + in-body) **within the owner circle** — that is a
-  metadata reference the members already see, not content dedup. Each media record also carries its **bucket
+  and the listed tier shrank by the type.) A blob row is referenced by exactly one media record (or one derivative,
+  attachment or receipt; its `K_blob` wrap is sealed to its owner and role, ADR 0072); a cover or banner equal to a stored
+  file is a second blob row on the same stored object, never a second record on one blob row
+  ([cc.storage.object-lifecycle](../../../crosscutting/cc.storage.object-lifecycle.md) § What names a stored object).
+  Each media record also carries its **bucket
   linkage** — a **`bucket_id`** (nullable; `null` = the uploader's primary) and a denormalized **`created_by`** =
   the uploader's opaque **`owner_key`** (`user:{id}` / `share:{id}`), the operator-visible attribution the
   [buckets](../use-cases/uc.memory.buckets.md) grouping reads. The bucket data model + the sealed names
@@ -123,10 +126,10 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **E1 — no object store configured:** a byte path is a **hard requirement**, so this is a **fail-loud startup
-  error** in `%dev`/`%prod` (not a runtime "unavailable" state a client soft-gates on — there is no
-  `directTransport` flag). Only the `%test` slice profile runs the in-memory stub (metadata only, no transport)
-  ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)).
+- **E1 — no object store set:** the instance boots, but refuses every upload with `store_unavailable` and creates no
+  tenant until a store has passed its check; there is no flag a client soft-gates on. Only the `%test` slice profile
+  runs the in-memory stub (metadata only, no transport)
+  ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 1).
 - **E2 — declared shape refused** (a `chunkCount` that does not follow from `byteSize`, or a size over the
   ceiling), **or actual objects that do not match it at complete** (a chunk missing, or not at its exact size):
   the server rejects and **purges** the staged objects (declare-then-verify, ADR 0013 §3).
@@ -141,13 +144,10 @@ sequenceDiagram
   action is unavailable until unlock + the Memory is opened.
 - **E5 — chunk tampered / reordered:** `openFrame` fails the AAD position check → the frame is rejected (the
   server cannot forge a valid frame without `K_blob`).
-- **E6 — the store refuses the delete:** every path that removes a row carrying a `storage_key` writes the key
-  to a durable reclaim list **in the same transaction**, and one sweep drains it, so the knowledge of which
-  bytes to delete cannot die with the row that held it. A refused delete keeps its row, counts the attempt and
-  retries with backoff; past a bounded number of attempts the row is marked abandoned and kept. Nothing
-  user-facing is affected either way — the item has already left every read — and the residual loss against a
-  permanently unreachable store is not claimed to be impossible, only **countable**
-  ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)).
+- **E6 — the store refuses the delete:** nothing user-facing is affected — the item has already left every read; the
+  key waits on the durable reclaim list and is retried, and a permanent failure is countable
+  ([cc.storage.object-lifecycle](../../../crosscutting/cc.storage.object-lifecycle.md) § Reclaim,
+  [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)).
 
 ## Quality notes
 

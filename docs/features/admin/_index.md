@@ -74,7 +74,8 @@ handling of reported shares.
 - ★ [Back up & restore the instance](use-cases/uc.admin.back-up-and-restore-instance.md) — **built** (the operator tool
   `src/tools/instance_backup.py`; capture and restore onto an empty instance are rehearsed in the web e2e run)
   ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md); three legs not two, a cold
-  capture that stops only the writer, and a store leg captured as objects rather than volumes)
+  capture that stops only the writer, and a store leg captured logically as an index of its objects — key, size and
+  MD5, `backupFormat` 3 — with the objects copied only into an object pool when one is named)
 - ★ [Know which release runs, and which a backup came from](use-cases/uc.admin.identify-instance-release.md) —
   **built (backend + admin-web, cr-release-identity)** ([ADR 0057](../../decisions/0057-release-identity-and-deployment-recipe.md); the release version is
   the operator's, the pre-auth `major`/`build` is the client's; they share the major
@@ -91,7 +92,8 @@ handling of reported shares.
   migrating upgrade of a published release has run
 - ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **built**
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
-  console notices, and instance mail for the Server Owner only)
+  console notices, and the release notices mailed to the Server Owner through the instance's own mail — which also
+  carries the host's other notices, [cc.mail](../../crosscutting/cc.mail.md))
 - ★ [Publish who runs the instance](use-cases/uc.admin.operator-details.md) —
   **built** ([ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–8; the contact and the provider
@@ -101,6 +103,8 @@ handling of reported shares.
   ([ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13): fixed text with the
   instance's values and the switches on for the host's space, public at `/privacy` on every tenant host and linked
   wherever data is collected; a draft until a qualified legal review.
-- Act on a reported public share — planned, under [Moderation](../moderation/_index.md): who moderates and the key a
-  report is sealed to are [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md)
-  (the Server Owner's side, on admin-web)
+- Act on what is reported — **built**, under [Moderation](../moderation/_index.md): the Server Owner's side on admin-web
+  is [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md) (the roster and the
+  moderation key, [ADR 0099](../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md))
+  and the steps beyond what was reported; review and decisions are the moderators', in src/web/ (ADR 0099 § 6), and
+  every accepted moderator is mailed a new case (ADR 0099 § 7)

@@ -9,6 +9,8 @@ sources:
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
   - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
+  - docs/crosscutting/cc.storage.object-lifecycle.md
+  - docs/crosscutting/cc.mail.md
 ---
 
 ## The object store
