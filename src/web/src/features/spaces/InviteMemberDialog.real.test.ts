@@ -6,10 +6,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 
-vi.mock('./members', () => ({ inviteMember: vi.fn(), memberError: vi.fn() }))
+vi.mock('./members', () => ({ inviteMember: vi.fn(), memberError: vi.fn(), prepareInviteCode: vi.fn() }))
 
 import InviteMemberDialog from './InviteMemberDialog.vue'
-import { inviteMember } from './members'
+import { inviteMember, prepareInviteCode } from './members'
 import { realI18n, t } from '../../test/i18n'
 
 let wrapper: VueWrapper | undefined
@@ -22,6 +22,7 @@ describe('InviteMemberDialog over the real Dialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(inviteMember).mockResolvedValue({ email: 'x@y.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT' })
+    vi.mocked(prepareInviteCode).mockImplementation(() => ({ mode: 'code', code: '0123456789', ahead: { take: vi.fn(() => null), discard: vi.fn() } }))
   })
 
   it('draws the confirmation naming the address after a 201, and keeps it while the host refreshes behind it', async () => {
@@ -50,7 +51,7 @@ describe('InviteMemberDialog over the real Dialog', () => {
     ;(document.body.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await flushPromises()
 
-    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com', { mode: 'code', code: expect.any(String) })
+    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com', expect.objectContaining({ mode: 'code', code: expect.any(String) }), expect.any(Function))
     expect(refreshing.value).toBe(true)
     expect(document.body.textContent).toContain(t('members.inviteSentTo', { email: 'partner@example.com' }))
     expect(document.body.querySelector('form')).toBeNull()

@@ -6,16 +6,19 @@
 // There is deliberately NO copy-link: the invite token is minted for the invited person, so it must not pass
 // through whoever is looking at the owner's screen (ADR 0055 §2). Mail is the only channel, and a tenant that
 // cannot send is refused by the server before anything is minted.
-import { computed, ref, watch } from 'vue'
+// The code is minted as the dialog opens and its link key's Argon2id derivation started then (inbox #566), so the send does
+// not wait for it; while the send runs, a status line says which phase it is in (sealing on this device, then sending).
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
-import { inviteMember, memberError } from './members'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import { inviteMember, memberError, prepareInviteCode, type InvitePhase, type InviteSecret } from './members'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
-import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
+import { formatInviteCode } from '@veyq/crypto/invite'
 import { MIN_PASSWORD_LENGTH } from '../../shared/passwordPolicy'
 
 const props = defineProps<{ tenantId: string }>()
@@ -34,17 +37,39 @@ const sentCode = ref('')
 const canSubmit = computed(
   () => email.value.trim().length > 0 && (!usePassword.value || password.value.length >= MIN_PASSWORD_LENGTH),
 )
+// Which phase a running send is in, for the status line; null while none runs.
+const phase = ref<InvitePhase | null>(null)
 
-watch(visible, (isVisible) => {
-  if (isVisible) {
-    error.value = ''
-    email.value = ''
-    sentTo.value = ''
-    usePassword.value = false
-    password.value = ''
-    sentCode.value = ''
-  }
-})
+// The next invite's code, its link key already deriving: outside reactivity, and one per invite — a send takes it, a closed
+// dialog or a failed send zeroes what it derived.
+let prepared: ReturnType<typeof prepareInviteCode> | null = null
+function prepare() {
+  prepared?.ahead.discard()
+  prepared = prepareInviteCode()
+}
+function dropPrepared() {
+  prepared?.ahead.discard()
+  prepared = null
+}
+onBeforeUnmount(dropPrepared)
+
+watch(
+  visible,
+  (isVisible) => {
+    if (isVisible) {
+      error.value = ''
+      email.value = ''
+      sentTo.value = ''
+      usePassword.value = false
+      password.value = ''
+      sentCode.value = ''
+      prepare()
+    } else {
+      dropPrepared()
+    }
+  },
+  { immediate: true },
+)
 
 async function copyCode() {
   await navigator.clipboard?.writeText(sentCode.value).catch(() => undefined)
@@ -53,10 +78,27 @@ async function copyCode() {
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const recipient = email.value.trim().toLowerCase()
-    const code = usePassword.value ? '' : generateInviteCode()
-    // 201 means the mail went out; the response carries no secret, and the code never left this device.
-    await inviteMember(props.tenantId, recipient, usePassword.value ? { mode: 'password', password: password.value } : { mode: 'code', code })
-    sentCode.value = code ? formatInviteCode(code) : ''
+    let secret: InviteSecret
+    if (usePassword.value) {
+      secret = { mode: 'password', password: password.value }
+    } else {
+      secret = prepared ?? prepareInviteCode()
+      prepared = null // this send owns it now
+    }
+    try {
+      // 201 means the mail went out; the response carries no secret, and the code never left this device.
+      await inviteMember(props.tenantId, recipient, secret, (p) => (phase.value = p))
+    } catch (e) {
+      // A failed send draws a new code for the next try: what it derived is zeroed, the code is never reused.
+      if (secret.mode === 'code') {
+        secret.ahead?.discard()
+        if (visible.value) prepare()
+      }
+      throw e
+    } finally {
+      phase.value = null
+    }
+    sentCode.value = secret.mode === 'code' ? formatInviteCode(secret.code) : ''
     password.value = ''
     sentTo.value = recipient
     emit('invited') // refresh the directory behind the dialog
@@ -108,6 +150,9 @@ async function submit() {
         @click="usePassword = !usePassword"
       />
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+      <p v-if="loading && phase" class="dialog-intro invite-progress" role="status" data-testid="invite-progress">
+        <VeyqIcon name="spinner" spin />{{ phase === 'sending' ? t('members.inviteSending') : t('members.inviteSecuring') }}
+      </p>
       <div class="veyq-dialog-action-row">
         <VeyqButton
           :label="t('common.cancel')"
@@ -152,6 +197,12 @@ async function submit() {
   margin: 0 0 0.5rem;
   color: var(--app-muted);
   font-size: 0.9em;
+}
+
+.invite-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 </style>

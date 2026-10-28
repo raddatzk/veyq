@@ -25,15 +25,26 @@ export { SetTenantMemberRoleRequestRoleEnum } from '../../api/generated/tenants'
 export { DeliveryResult } from '../../api/generated/tenants'
 
 export type { InviteSecret } from './memberInvite'
+export { prepareInviteCode } from './memberInvite'
+
+/** Where an invite's send stands, for the dialog's progress line (inbox #566): `securing` while the client opens the tenant key
+ *  and seals the invite (the link key's Argon2id included, unless it was derived ahead), `sending` while the server stores it
+ *  and mails the link — its answer waits for the mail to be handed over. */
+export type InvitePhase = 'securing' | 'sending'
 
 /**
  * Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). The invite is a
  * placeholder member (ADR 0111 decisions 1-2, {@link buildMemberInvite}): it needs the unlocked vault and the tenant's
- * key. A `409 stale_epoch` — a rotation landed while it was built — is rebuilt once against the new epoch.
+ * key. A `409 stale_epoch` — a rotation landed while it was built — is rebuilt once against the new epoch. [onPhase] hears
+ * each phase as it begins.
  */
-export async function inviteMember(tenantId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+export async function inviteMember(
+  tenantId: string, email: string, secret: InviteSecret, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteState> {
   return onceMoreIfStale(async () => {
+    onPhase?.('securing')
     const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    onPhase?.('sending')
     return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest }))
   })
 }
