@@ -1,12 +1,10 @@
 // uc.account.rotate-keys (web) — what the ceremony's entry says before any field (cr-secure-the-account).
 // Read from the account rotation's plan (decision 5), which serves every scope the account holds a membership on in every
-// tenant, Host-independently: which spaces cannot get their new lock yet and why, and whether this account signed open
-// invitations its rotation ends (§ Order, `factInvites`). Under ADR 0111 no space waits for an owner, so nothing here
-// asks who owns what (the former sole-owner warning went with the mechanism it described).
-import { RotationPlanScopeKindEnum, type RotationPlanScope } from '../../../api/generated/account'
-import { scopesApi } from '../../../api/client'
-import { withRefresh } from '../../../app/sessionRefresh'
-import { account } from '../../../app/account'
+// tenant, Host-independently: which spaces cannot get their new lock yet and why. Under ADR 0111 no space waits for an
+// owner, so nothing here asks who owns what (the former sole-owner warning went with the mechanism it described); and the
+// account's open invitations survive its securing, re-signed by the new key (cr-trust-anchors-survive-rotation decision
+// 6), so nothing here warns about them either.
+import type { RotationPlanScope } from '../../../api/generated/account'
 import { readRotationPlan } from './finishRotation'
 import { unreadableOnThisDevice } from './rotateKeys'
 
@@ -20,9 +18,6 @@ export type RotationEntry = {
   /** The plan as read — the panel names its rows (kind, tenant) and the links' spaces from it. */
   plan: RotationPlanScope[]
   blocked: EntryBlocked[]
-  /** This account signed at least one open member invitation in a tenant it is in: those die with its rotation
-   *  (§ Order — an owner's open invites do not survive the owner's rotation). */
-  signedOpenInvites: boolean
 }
 
 /**
@@ -39,21 +34,5 @@ export async function readRotationEntry(read?: RotationPlanScope[]): Promise<Rot
     const reason: EntryBlockReason | undefined = unreadable.has(row.scopeId) ? 'unreadable' : row.blocked ?? undefined
     if (reason) blocked.push({ scopeId: row.scopeId, kind: row.kind, tenantId: row.tenantId, reason })
   }
-  return { plan, blocked, signedOpenInvites: await signedOpenInvites(plan) }
-}
-
-/** Whether an open member invite of a tenant this account is in was signed by this account (`signerUserId`). Every
- *  member reads a tenant's open invites (`listOpenInvites`, no email); a tenant whose read fails counts as none. */
-async function signedOpenInvites(plan: RotationPlanScope[]): Promise<boolean> {
-  const me = account.userId
-  if (!me) return false
-  const tenants = plan.filter((r) => r.kind === RotationPlanScopeKindEnum.Tenant)
-  const signed = await Promise.all(
-    tenants.map((r) =>
-      withRefresh(() => scopesApi().listOpenInvites({ scopeId: r.scopeId }))
-        .then((invites) => invites.some((i) => i.signerUserId === me))
-        .catch(() => false),
-    ),
-  )
-  return signed.some(Boolean)
+  return { plan, blocked }
 }

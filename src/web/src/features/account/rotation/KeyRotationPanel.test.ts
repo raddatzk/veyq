@@ -81,7 +81,7 @@ const NEW_PASSWORD = 'a brand new passphrase'
 const planRow = (o: Partial<RotationPlanScope> & Pick<RotationPlanScope, 'scopeId'>): RotationPlanScope => ({
   kind: 'GROUP', tenantId: 't1', currentEpoch: 0, wrappedGrant: 'AA==', grantedEpoch: 0, ...o,
 })
-const noEntry = (): RotationEntry => ({ plan: [], blocked: [], signedOpenInvites: false })
+const noEntry = (): RotationEntry => ({ plan: [], blocked: [] })
 const share = (o: Partial<ShareSummary> & Pick<ShareSummary, 'shareId'>): ShareSummary => ({
   nodeId: `node-${o.shareId}`, scopeId: 's-here', role: ShareRole.Read, sealedName: 'AA==', enabled: true, mine: true,
   reissueRequired: true, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [], createdAt: new Date(0), ...o,
@@ -165,7 +165,6 @@ describe('the entry: plain words before any field, from the plan (decision 11)',
         { scopeId: 's-going', kind: 'GROUP', tenantId: 't1', reason: 'scope_deleting' },
         { scopeId: 's-closed', kind: 'GROUP', tenantId: 't1', reason: 'unreadable' },
       ],
-      signedOpenInvites: false,
     })
     const w = await mountPanel()
     expect(w.find('[data-testid="rotation-blocked"]').text()).toContain(t('rotation.blockedTitle'))
@@ -185,13 +184,6 @@ describe('the entry: plain words before any field, from the plan (decision 11)',
     expect(w.find('[data-testid="rotation-blocked"]').exists()).toBe(false)
     expect(w.text()).toContain(t('rotation.factSharedSpaces'))
     expect(w.text()).toContain(t('rotation.factNewKit'))
-  })
-
-  it('says invitations stop working only when this account signed open ones', async () => {
-    vi.mocked(readRotationEntry).mockResolvedValue({ ...noEntry(), signedOpenInvites: true })
-    expect((await mountPanel()).text()).toContain(t('rotation.factInvites'))
-    vi.mocked(readRotationEntry).mockResolvedValue(noEntry())
-    expect((await mountPanel()).text()).not.toContain(t('rotation.factInvites'))
   })
 })
 

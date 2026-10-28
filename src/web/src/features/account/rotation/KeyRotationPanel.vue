@@ -275,9 +275,6 @@ async function renewClosed() {
               <li><VeyqIcon name="sign-out" /><span>{{ t('rotation.factSignsOut') }}</span></li>
               <li><VeyqIcon name="id-card" /><span>{{ t('rotation.factNewKit') }}</span></li>
               <li><VeyqIcon name="key" /><span>{{ t('rotation.factPassword') }}</span></li>
-              <li v-if="entry?.signedOpenInvites" data-testid="rotation-fact-invites">
-                <VeyqIcon name="envelope" /><span>{{ t('rotation.factInvites') }}</span>
-              </li>
               <li><VeyqIcon name="history" /><span>{{ t('rotation.factNotRepair') }}</span></li>
               <li><VeyqIcon name="link" /><span>{{ t('rotation.factLinks') }}</span></li>
             </ul>
