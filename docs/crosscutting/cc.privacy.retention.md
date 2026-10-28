@@ -107,7 +107,7 @@ The mechanism is in the four moderation enablers; this table holds their periods
 | The admin console's access log: time, method, path, status, size — no address, no User-Agent; its error log names the hop | admin nginx's stdout | (f) operating the administration surface | as the app's log | rotation | no | 0092 § 5 |
 | Garage at `warn`, MariaDB's startup and errors, Traefik at `ERROR` with no access log | their stdout | (f) | as the app's log | rotation | no | 0092 § 5 |
 | A gateway's or Traefik's access log, a log shipper | the operator's own | the operator's | the operator's | the operator's | — | 0092 § 5: the operator's own processing |
-| The erasure ledger: per hard erasure its kind, opaque id and time, and every moderation block, lift, case change and hold end | `erasures.log` beside the config-secret key, and its outbox `veyq_erasure_outbox` | (c) Art. 17, Art. 5(1)(e) | lines older than B | `ErasureLedgerStart` at startup; the outbox's sent rows by `ErasureLedgerFile` (every minute) | outside the three legs; carried beside the key | [0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8 |
+| The erasure ledger: per hard erasure its kind, opaque id and time, and every moderation block, lift, case change and hold end | `erasures.log` beside the config-secret key, and its outbox `veyq_erasure_outbox` | (c) Art. 17, Art. 5(1)(e) | lines older than B | `ErasureLedgerFile`'s trim, at startup (`ErasureLedgerStart`) and hourly while the instance runs (`veyq.erasure-ledger.purge.every`); the outbox's sent rows by its sweep (every minute) | outside the three legs; carried beside the key | [0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8 |
 
 ## Backups and the erasure ledger
 
@@ -164,8 +164,6 @@ the file are not re-applied. Whether ciphertext of reported content kept in a ca
 
 Found measuring this register; each is an inbox row.
 
-- **`erasures.log` is trimmed to B only at startup** (`ErasureLedgerStart`; `ErasureLedgerFile.rewrite` has no other
-  caller): an instance that runs for months keeps lines with account and moderator ids longer than B. Inbox #592.
 - **A tenant's erasure deletes terms evidence an account's erasure keeps**: `veyq_tenant_terms_acceptance` cascades
   with its tenant, also for rows `TermsEvidence` keeps for an erased account a case names. Inbox #593.
 - **No eraser of their own**, each going only with a larger erasure: a removed moderator's row (with the account), a

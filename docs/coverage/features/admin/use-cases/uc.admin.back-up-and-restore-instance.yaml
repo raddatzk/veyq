@@ -246,8 +246,8 @@ acceptanceCriteria:
       Every hard erasure no restored row would trigger again writes a line to the erasure ledger in its own
       transaction, and a sweep appends it to a file beside leg (c)'s key that no restore touches. At every start,
       before the instance answers a request, every listed object whose row exists is erased through its kind's own
-      eraser; applying a line twice changes nothing; a line older than B is dropped. The ledger holds kinds, opaque ids
-      and times, never content or a name.
+      eraser; applying a line twice changes nothing; a line older than B is dropped, at start and hourly while the
+      instance runs. The ledger holds kinds, opaque ids and times, never content or a name.
     coverage:
       backend:
         integration:
@@ -259,6 +259,7 @@ acceptanceCriteria:
           - ErasureLedgerSliceTest.aRevokedTenantComesBackAndIsDeletedAgain
           - ErasureLedgerSliceTest.aReclaimedKeyIsALineAndARestoredRowStillNamingItIsCounted
           - ErasureLedgerSliceTest.aLineOlderThanBIsDroppedAtStartAndAYoungerOneStays
+          - ErasureLedgerSliceTest.aLineOlderThanBIsDroppedWhileTheInstanceRunsWithoutARestart
           - ErasureLedgerSliceTest.aLineOfAKindNoApplicationClaimsIsCountedAndAppliesNothing
           - MemoriesErasuresSliceTest.aDeletedMediumComesBackLiveAndIsErasedAgain
   - id: moderation-survives-a-restore
