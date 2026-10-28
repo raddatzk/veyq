@@ -13,7 +13,8 @@
 // (held with the count fed every member, too: the test's bite of both layers is the one that goes red); that only the
 // anchored are counted at all is the cost's choice, not the gate.
 //
-// Cost (cr-who-is-who decision 9): the anchor checks run one after another, as `tenantBadges` runs them (the pin store's
+// Cost (measured at 50 members: fewer requests than the members list's `tenantBadges`, inbox #710 holds the rest): the
+// anchor checks run one after another, as `tenantBadges` runs them (the pin store's
 // writes must not race); the pin store is then read ONCE for every pin; the verifications are listed once; a key chain is
 // read for the rotation date only when the anchored head is not the chain's first (a pin at index 0 is a genesis: nothing
 // rotated), a few at a time.
