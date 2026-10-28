@@ -5,7 +5,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../account/login/login', () => ({ login: vi.fn() }))
-vi.mock('../account/identityPins', () => ({ checkAndPin: vi.fn() }))
+vi.mock('../account/identityPins', () => ({ anchorIdentity: vi.fn() }))
 vi.mock('../account/unlock/unlock', () => ({ unlockMasterKey: vi.fn() }))
 
 import { moderationApi } from '../../api/client'
@@ -15,7 +15,7 @@ import { fakeApi } from '../../test/apiMock'
 import { identityPrivate, masterKey, setUnlocked, vaultState } from '../../app/vault'
 import { session } from '../../app/session'
 import { account } from '../../app/account'
-import { checkAndPin } from '../account/identityPins'
+import { anchorIdentity } from '../account/identityPins'
 import { login } from '../account/login/login'
 import { unlockMasterKey } from '../account/unlock/unlock'
 import { clearModerationKeys, currentModerationKey } from './moderationKeys'
@@ -31,6 +31,7 @@ const me = v1.generateIdentity()
 const them = v1.generateIdentity()
 const theirKey = b64std(v1.serializeIdentityPublic(them.pub))
 const THEM = '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a'
+const THEIR_HEAD = b64std(new Uint8Array(32).fill(3))
 
 function epoch(n: number, m: Uint8Array, sealedTo = me.pub.kem): ModerationEpochGrant {
   const bundle = v1.moderationBundle(m)
@@ -46,7 +47,7 @@ let m1: Uint8Array
 let m2: Uint8Array
 let puts: { accountId: string; moderationDelivery: { identityPublicKey: string; grants: { epoch: number; sealedGrant: string }[] } }[]
 
-function serve(epochs: ModerationEpochGrant[], current: number, pending = [{ accountId: THEM, identityPublicKey: theirKey, epochs: [1, 2] }]) {
+function serve(epochs: ModerationEpochGrant[], current: number, pending = [{ accountId: THEM, identityPublicKey: theirKey, keyChainHead: THEIR_HEAD, epochs: [1, 2] }]) {
   puts = []
   fakeApi(moderationApi, {
     listMyModerationGrants: async () => ({ currentEpoch: current, epochs }),
@@ -65,7 +66,7 @@ beforeEach(() => {
   m2 = v1.generateModerationKey()
   session.accessToken = 'token'
   account.email = 'deputy@example.com'
-  vi.mocked(checkAndPin).mockResolvedValue('firstUse')
+  vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
   vi.mocked(login).mockResolvedValue(undefined)
   vi.mocked(unlockMasterKey).mockImplementation(async () => {
     setUnlocked(new Uint8Array(32).fill(9), { kemSeed: me.priv.kemSeed.slice(), sign: me.priv.sign.slice() }, 'cold')
@@ -91,7 +92,7 @@ describe('unlockModeration', () => {
     expect(unlockMasterKey).toHaveBeenCalledWith('pw', 'sk', { noteDevice: false })
     expect(login).not.toHaveBeenCalled()
     // Each delivered grant opens, for the recipient, to the epoch's key.
-    expect(checkAndPin).toHaveBeenCalledWith(THEM, theirKey)
+    expect(anchorIdentity).toHaveBeenCalledWith(THEM, { identityPublicKey: theirKey, keyChainHead: THEIR_HEAD })
     expect(puts).toHaveLength(1)
     const sent = puts[0].moderationDelivery.grants
     expect(sent.map((g) => g.epoch)).toEqual([1, 2])
@@ -114,13 +115,19 @@ describe('unlockModeration', () => {
     expect(puts).toEqual([])
   })
 
-  it('declines a recipient whose identity changed, and delivers to nobody else in its place', async () => {
-    serve([epoch(1, m1)], 1, [{ accountId: THEM, identityPublicKey: theirKey, epochs: [1] }])
-    vi.mocked(checkAndPin).mockResolvedValue('changed')
+  it('declines a recipient whose key is an anomaly — the chain does not reach it from the pinned head, a retired key included', async () => {
+    serve([epoch(1, m1)], 1, [{ accountId: THEM, identityPublicKey: theirKey, keyChainHead: THEIR_HEAD, epochs: [1] }])
+    vi.mocked(anchorIdentity).mockResolvedValue('anomaly')
     const result = await unlockModeration('deputy@example.com', 'pw', 'sk')
     expect(result).toEqual({ holdsCurrent: true, delivered: 0, declined: 1 })
     expect(puts).toEqual([])
     expect(masterKey()).toBeNull()
+  })
+
+  it('control: a key the chain reached (advanced) is delivered', async () => {
+    serve([epoch(1, m1)], 1, [{ accountId: THEM, identityPublicKey: theirKey, keyChainHead: THEIR_HEAD, epochs: [1] }])
+    vi.mocked(anchorIdentity).mockResolvedValue('advanced')
+    expect(await unlockModeration('deputy@example.com', 'pw', 'sk')).toEqual({ holdsCurrent: true, delivered: 1, declined: 0 })
   })
 
   it('a moderator still waiting for the current epoch delivers nothing and holds no current key', async () => {

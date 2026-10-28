@@ -61,14 +61,14 @@ beforeEach(() => {
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==' },
-  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==' },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false },
+  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', keyChainHead: 'BB==', pending: false },
 ]
 
 const PENDING: PendingMemberInvite[] = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]
 
-async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING) {
-  vi.mocked(listScopeMembers).mockResolvedValue(MEMBERS)
+async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING, members = MEMBERS) {
+  vi.mocked(listScopeMembers).mockResolvedValue(members)
   vi.mocked(listMemberInvites).mockResolvedValue(pending)
   vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', name: 'Fam', domain: '127.0.0.1', role })])
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
@@ -260,20 +260,23 @@ describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
 
   const rowOf = (w: Awaited<ReturnType<typeof mountPanel>>, username: string) => w.findAll('.member-row').find((r) => r.text().includes('@' + username))!
 
-  it('shows "verified" in the member list, and a verified contact\'s changed key louder, with the review', async () => {
-    vi.mocked(trustStates).mockResolvedValue({
-      'u-own': { state: 'verified', pinVerified: true },
-      'u-pend': { state: 'changed', pinVerified: true },
-    })
+  it('shows "verified" in the member list, and an anomaly with its note — and no review or accept anywhere', async () => {
+    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'verified' }, 'u-pend': { state: 'anomaly' } })
     const w = await mountPanel('MEMBER')
     expect(rowOf(w, 'owner').get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
-    expect(rowOf(w, 'partner').get('[data-testid="member-trust-changed"]').text()).toBe(t('safety.badgeVerifiedChanged'))
-    expect(rowOf(w, 'partner').text()).toContain(t('verify.review'))
-    expect(rowOf(w, 'owner').text()).not.toContain(t('verify.review'))
+    expect(rowOf(w, 'partner').get('[data-testid="member-trust-anomaly"]').text()).toBe(t('trust.anomaly'))
+    expect(rowOf(w, 'partner').text()).toContain(t('trust.anomalyNote'))
+    expect(rowOf(w, 'owner').find('[data-testid="member-trust-anomaly"]').exists()).toBe(false)
+  })
+
+  it('a member a rotation declared pending reads "waiting for someone who can confirm their key"', async () => {
+    const w = await mountPanel('MEMBER', PENDING, [MEMBERS[0], { ...MEMBERS[1], pending: true }])
+    expect(rowOf(w, 'partner').get('[data-testid="member-pending"]').text()).toBe(t('members.pending'))
+    expect(rowOf(w, 'owner').find('[data-testid="member-pending"]').exists()).toBe(false)
   })
 
   it('control: a pinned member carries no trust badge', async () => {
-    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned', pinVerified: false } })
+    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned' } })
     const w = await mountPanel('MEMBER')
     expect(rowOf(w, 'owner').find('[data-testid^="member-trust-"]').exists()).toBe(false)
   })

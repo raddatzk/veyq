@@ -4,11 +4,17 @@
   **decisions 1–5 are built** (2026-10-28: an invite is a placeholder member, the invitee grants itself and writes a
   join record, a group add wraps directly, the admission tag and *awaiting access* are gone — ADR 0020 states it) and
   **decision 11 is built** (2026-10-27: any member re-keys, a member's write pulls its path forward, a drop box stays
-  an owner's — ADR 0109 point 7 states it), **nothing else of it is.** What is built besides is what [ADR 0020](0020-grant-distribution-invite-wrap.md),
-  [ADR 0024](0024-scope-key-rotation.md), [ADR 0028](0028-identity-authenticity-tofu-verification.md),
-  [ADR 0060](0060-key-rotation-after-compromise.md) and [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
-  describe; each of them marks in place the part this record replaces, and that part stays true of the running code
-  until this record is built.
+  an owner's — ADR 0109 point 7 states it), **decisions 6–10 are built** (2026-10-28: securing the account replaces
+  identity, Master Key and Secret Key in one doubly signed key-chain step, applies the self-grants staged before it, the
+  account mints every next epoch itself, a grant names its recipient key on every writer, and an omission is declared —
+  [ADR 0060](0060-key-rotation-after-compromise.md) states it), and so is **decision 16's counter** (the pin entry holds
+  the key-chain head, and a key is accepted where the chain reaches it — [ADR 0028](0028-identity-authenticity-tofu-verification.md)
+  and [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) state it). **Not built:**
+  decisions 12–14 and 18, decision 15's anchor in the join record and its *verified by …* display (until then the pinned
+  head is the anchor, and a person without one is trusted on first use), and decision 16's replacement of the personal
+  *verified* mark (§ What stays open). [ADR 0020](0020-grant-distribution-invite-wrap.md),
+  [ADR 0024](0024-scope-key-rotation.md), ADR 0028, ADR 0060 and [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
+  each state in place the part of them this record replaced.
 - Date: 2026-10-27
 
 ## Context
@@ -34,9 +40,9 @@ What today's model makes hard:
   the operator redeemed a genuine admission with a key of its own. Whether it could also **copy** an existing tenant
   admission onto a membership it invented was a hypothesis no test checked; this record never rested on it, and it
   died untested with the tag.
-- **After a rotation the rotator is outside every shared scope** until another key-holder accepts the new key
-  (ADR 0060 Decisions 4 and 6). An owner who rotated and then commits a scope's rotation is refused by every other
-  member as `granter_key_changed` once that member has accepted the new key (ADR 0028 § What is still open).
+- **After a rotation the rotator was outside every shared scope** until another key-holder accepted the new key
+  (ADR 0060's human re-admission, replaced by decisions 6–10). An owner who rotated and then committed a scope's
+  rotation was refused by every other member as `granter_key_changed` once that member had accepted the new key.
 - **Only an owner re-keys a node** (until decision 11, built 2026-10-27). The re-key endpoint refused anyone else (`RekeyAccess.check`, `not_scope_owner`),
   and a scope's *re-keying* status is served to owners only (`ScopesStore.kt`, the `rekeying` field of a scope row).
   A write into a node not yet re-keyed is `409 node_rekey_pending` (ADR 0109 point 6). So after any rotation a member
@@ -48,13 +54,13 @@ Facts the design rests on, read in the code on 2026-10-27:
   There is no read-only member role: every accepted member may write. Placing or renaming is refused only into a
   guest's identity folder (`NodesHandler.kt`, the placement rule of [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   Decision 11).
-- The Secret-Key proof public key appears only in the registration requests (`AccountRegistration` in
-  `contracts/api/tenants.openapi.yaml` and `contracts/api/setup.openapi.yaml`). No response serves another user's.
+- The Secret-Key proof public key appeared only in the registration requests (`AccountRegistration` in
+  `contracts/api/tenants.openapi.yaml` and `contracts/api/setup.openapi.yaml`); no response served another user's.
+  (Since decision 7 was built, the key chain serves it to the readers that decision names.)
 - A grant names its recipient by user id only (`wrappedGrant`, `grantSignature`, `userId` in
   `contracts/api/scopes.openapi.yaml`), so the server cannot tell which key a grant was wrapped to. (Since decisions
-  1–5 were built, the four grant writers they added — an invite, its accept, a rotation's re-grant of an invite, a
-  group add — carry `recipientIdentityDigest`, the SHA-256 of the key they wrap to, and the server refuses one that is
-  not the recipient's current key, `409 recipient_key_not_current`; the older writers still do not.)
+  1–10 were built, every grant writer carries `recipientIdentityDigest`, the SHA-256 of the key it wraps to, and the
+  server refuses one that is not the recipient's current key, `409 recipient_key_not_current`.)
 - `RotationStore.applyRotation` keeps no copy of the old identity's private material.
 - The server mails a member invite (`SmtpTenantInviteMailer`), so the operator knows every link it mails; the secret
   rides the URL fragment.
@@ -86,7 +92,7 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
    key (its recipient is the invite id, and it names the key by `recipientIdentityDigest`); the server takes it only
    at the current epoch, under the tenant scope's lock (`409 stale_epoch`). **Every rotation of the tenant re-grants
    each open invite or declares it pending** (`inviteGrants`, `pendingInviteIds`): the rotator's client re-grants one
-   whose owner signature verifies under the stored signer key and whose signer passes its pin check, and declares the
+   whose owner signature verifies under the stored signer key and whose signer passes its anchor check, and declares the
    rest; the server refuses a rotation that leaves an open invite out (`409 rotation_incomplete`). Every member reads
    the open invites' keys for this (`listOpenInvites`, never an email). **Revoking an invite is removing a member** —
    accept, revoke, supersede, expiry and the erasure of the signer's or the addressee's account null its key and grant
@@ -114,7 +120,7 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
    anything yet (decisions 12 and 15). A member accept by an existing account signs in with the Secret Key, because
    the join record names its proof key.
 4. **A group needs no invite key.** The target already has an account, so the group owner wraps the group's current
-   epoch directly to the target's key, after the pin check — the key the target's join record anchors once decision 12
+   epoch directly to the target's key, after the anchor check — the key the target's join record anchors once decision 12
    is built. A `pendingConsent` proposal holds that grant from the add on, consenting changes nothing about keys, a
    group rotation re-grants a pending proposal like a member, and a decline or an owner's rescind of a proposal queues
    the group's rotation, since the target held the key.
@@ -125,27 +131,61 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
 
 ### Identity rotation: self-service, the scopes included
 
-6. **One publish replaces identity, Master Key and Secret Key**, gated on password and Secret Key and checked by the
-   server ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2). The Secret Key is no longer kept across a
-   rotation: a rotation is also the remedy for a Secret Key that leaked (inbox #559), and a new Secret Key is a new proof
-   key.
+6. **One publish replaces identity, Master Key and Secret Key, and applies the self-grants staged before it**, gated on
+   password and Secret Key and checked by the server ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2).
+   The Secret Key is no longer kept across a rotation: a rotation is also the remedy for a Secret Key that leaked, and a
+   new Secret Key is a new proof key.
+   - **The stage.** Before the publish the client stages one **self-grant** per scope the account holds a grant on —
+     personal, tenant and group, in every tenant, a group invitation it has not answered included: the scope's
+     **current** epoch key, granted to the new identity, naming it (`recipientIdentityDigest`) and signed by it. The
+     stage declares the new identity bundle (`openRotationStage`; one stage per account, a second open replaces the
+     first) and takes the grants in chunks of at most 256 (`putRotationStageGrants`); the server verifies each under the
+     identity the stage declares at upload (`422 self_grant_invalid`). **Nothing staged is applied before the
+     publish**: a stage is ciphertext and scope ids the server already holds as grant rows, and it expires an hour after
+     it opened (`veyq.account.rotation.stage.ttl`, server-observed) and is purged.
+   - **The publish names the stage and its digest** (`stageId`, `stagedGrantsDigest`) inside the statement the
+     Secret-Key proof signs, and publishes the identity that stage declares. Its one transaction takes each scope's row
+     lock and applies the stage **only if every grant-carrying membership of the account is staged at its scope's
+     current epoch, or declared unreadable** (`unreadableScopeIds`: a grant this device cannot open, which keeps its
+     grant untouched); otherwise `409 rotation_plan_changed`, nothing is written, and the client re-stages the delta.
+     From the commit on, every scope the account was in holds its current epoch for the new identity, so a lost answer,
+     a closed tab, a failed next epoch or a space in another tenant strands nothing.
+   - *Why staged rather than carried in the publish, measured when it was built:* no cap bounds an account's
+     memberships, and any co-member can add an account to groups (a pending proposal holds a grant from the add on). A
+     real self-grant is 1,845 bytes on the wire, and 477 fit beside a full pin store under the default
+     10,485,760-byte request limit. A membership cap would be a limit another member can push someone into; smaller
+     grants or a larger limit only move the ceiling. The stage bounds nothing and keeps the grants in the publish's
+     transaction.
 7. **Each rotation is a step of a key chain, signed twice** — by the **old identity** and by the **old Secret-Key
    proof key** — naming the new identity and the new proof public key and carrying the hash of the step before it.
    A stolen logged-in device holds the identity but never the Secret Key, so a thief, even with the operator's help,
-   cannot forge a step; only someone holding password **and** Secret Key can. The first step's old proof key is the one
-   the join record anchors (decision 3). The chain — public keys and signatures, nothing secret — is stored **once**,
-   next to the identity, and **served only to users who share a tenant with its person** (server-enforced: an honest
-   server's rule; the operator knows the rotations anyway). It has one **head**, the same in every tenant.
+   cannot forge a step; only someone holding password **and** Secret Key can. The chain begins at the account's birth
+   with an unsigned **genesis** naming the birth identity and proof key, whose proof key is the one the join record
+   anchors (decision 3). The chain — public keys and signatures, nothing secret — is stored **once**, next to the
+   identity (`getKeyChain`), and **served only to the person, to users who share a tenant with them, and between two
+   accepted moderators of the instance** (server-enforced: an honest server's rule; the operator knows the rotations
+   anyway). The moderators are readers because a holder of the moderation key anchors the moderator it delivers to
+   ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)), and two moderators may share no
+   tenant; the roster is the instance's, so they already know each other. It has one **head** — the hash of its newest
+   step — the same in every tenant, and every read that serves another user's key to a check serves that head beside it.
 8. **The rotator mints the next epoch of every scope it is in, itself**, and grants it to every member and to its own
    new identity — never to the old one. Another member accepts that epoch because its chain link
    `symWrap(E_{n+1}, E_n)` opens under the `E_n` it holds (the minter held `E_n`; the operator does not), and because
-   the granter's new key is reachable by the doubly signed chain from the key it anchored.
+   the granter's new key is reachable by the doubly signed chain from the key it anchored. The publish leaves a
+   pending row per scope it re-granted; `rotateScope` accepts a caller who is not an owner of the scope only with such
+   a row at the scope's current epoch and no removal (a removal stays an owner's act), so any unlocked device of the
+   account, one opened with the new Emergency Kit included, finishes each scope. A commit by someone else in between
+   meets the row as well, because it could not grant the old identity (decision 10).
 9. **An omission is allowed, and visible.** The rotator grants every member whose key it can anchor and may leave out
    one whose key is anomalous (not reachable from its anchor, decision 12). The server refuses a rotation that leaves
    anyone out **silently**: every omission is declared and stored as **pending** for that member. The server cannot
    judge an omission — the anchor is not server-side — so **any other member whose client anchors the omitted member's
    key grants them the new epoch**. A narrow grant delivery for pending members therefore stays; a rotator who omits
-   everyone delays access, it does not remove it.
+   everyone delays access, it does not remove it. Built as: `rotateScope` names the omitted in `pendingUserIds`, and the
+   server refuses a rotation whose grants, pending members and removal do not cover every membership
+   (`409 rotation_incomplete`); a member's grant behind the current epoch **is** the stored pending marker. The delivery
+   worker declines a target it cannot anchor (`identity_unanchored`), and the publish clears the declines of every job
+   whose target is the rotating account, so a worker that could not anchor the old key tries the new one.
 10. **The server refuses any grant to a key that is no longer the account's current identity.** Concurrent rotations
     keep ADR 0024 Decision 4's rule: the server takes only `current + 1`, the loser gets `409 stale_epoch` and rebuilds
     from the newest grant with a fresh key. Each rotator excludes by its own choice, so both exclusions survive, and
@@ -227,7 +267,8 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
     [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) holds, per person, the
     highest key-chain head this account has seen, under ADR 0028 Decision 7's rollback rules. What it replaces is the
     pinned fingerprint's role as the thing a key change is judged against, and the personal *verified* mark, which
-    becomes the signed verification of decision 12.
+    becomes the signed verification of decision 12. The first half is built: the entry holds the head, and a served key
+    is judged by walking the chain from it (ADR 0028 Decision 2); the personal mark stays until decision 12 is.
 17. **Key Transparency stays later, in a design of its own; this record stays KT-ready.** A hash-chained key chain
     with one head, and that head in the compare, is what a later log commits to without a format change.
 
@@ -281,7 +322,7 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   lists, sealed in the tenant profile; the Secret-Key proof public key in the directory; a pending marker per declared
   omission; and a grant that names the key it is wrapped to, without which decision 10 cannot be checked. The server
   learns that an invite exists and that an account rotated, as it does today, and nothing about who verified whom.
-- **What it changes in the records it builds on**, each marked there in place: ADR 0020 moves 3, 5 and 6 (admission
+- **What it changes in the records it builds on**, each stated there in place: ADR 0020 moves 3, 5 and 6 (admission
   and delivery); ADR 0024 Decision 4's admission tags, Decision 5's re-grant of new members and § Guarantee's queued
   account rotation; ADR 0028 Decisions 2, 5 and 6 and the role of the pin; ADR 0060 Decision 2's Secret Key kept across a
   rotation and Decisions 4, 6 and 7; ADR 0104's entry content; ADR 0109 point 7's owner-only re-key; ADR 0080 Decision 11
@@ -294,12 +335,12 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
 
 ## Alternatives rejected
 
-- **The rotator may not re-admit itself** (ADR 0060 Decision 4). Its reason was that an attacker holding the old
+- **The rotator may not re-admit itself** (ADR 0060's Decision 4 before this record). Its reason was that an attacker holding the old
   identity would mint the new epoch for their own new key and shut the person out. The doubly signed step (decision 7)
   answers it: an attacker without the Secret Key cannot make a step anyone accepts, and the server takes no grant to a
   retired key (decision 10). Keeping the rule would keep the rotator outside every shared space until somebody else
   acts, and the human re-admission with it.
-- **Keeping the Secret Key across a rotation** (ADR 0060 § Consequences, so the Emergency Kit stays valid). It leaves a
+- **Keeping the Secret Key across a rotation** (ADR 0060 before this record, so the Emergency Kit stayed valid). It leaves a
   leaked Secret Key irreplaceable (inbox #559). That the rotation invalidates the kit it required is the point: it
   issues the new one.
 - **A signature of the old identity alone on a rotation.** A rotation happens when that identity may be stolen, so its
@@ -334,26 +375,39 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
 
 ## What stays open
 
-- **Decisions 6–10 and 12–18 are not built.** The CRs that build them are reworked from this record; until then
-  ADRs 0024, 0028, 0060 and 0104 describe the code for them.
+- **Decisions 12–14 and 18 are not built**, nor decision 15's anchor in the join record with its *verified by …*
+  display, nor decision 16's replacement of the personal *verified* mark. Until they are, the anchor is the head this
+  account pinned, a person it never pinned is trusted on first use, and a verification is the personal mark ADR 0028
+  Decision 3 describes.
 - **The admission-tag replay hypothesis** died untested with the tag (decision 5); nothing claims it.
 - **A membership the server made is wrapped to today.** With the tag gone and no join record read yet (decisions 12
   and 15), every wrap to another member — a rotation's re-grant, the delivery to a behind member, a group add — takes
-  the pin check only, so a membership the operator invents is, to a key-holder that never pinned its account, a first
-  use: wrapped to and pinned. This is the operator's class only: an honest server verifies an invite's owner
+  the anchor check against this account's pin only, so a membership the operator invents is, to a key-holder that
+  never pinned its account, a first use: wrapped to and pinned at the head the server serves. This is the operator's class only: an honest server verifies an invite's owner
   signature under the caller's identity key before it mints, so a session without the owner's vault mints no invite
   (`TenantHandler.signedByCaller`). Decision 18 and decision 12's anchor close it; whether a rotation should then still wrap
   to a membership without a join record, or treat it as an anomaly, is not decided.
 - **A grant a rotation re-wrapped to an open invite names a member the newcomer cannot anchor yet.** Only a grant
   the inviting owner wrapped verifies under the key the link anchors; one a rotation re-wrapped is signed by the
-  rotator, whose key the newcomer trusts on first use and pins (`openMemberInvite`,
-  `src/web/src/features/tenant/tenantInvite.ts`) until join records anchor rotators (decision 12).
+  rotator, whose key the newcomer trusts on first use (`memberInviteAnchored`,
+  `src/web/src/features/tenant/tenantInvite.ts`) until join records anchor rotators (decision 12; inbox #565). The key
+  chain does not close it: it anchors a key from a head someone pinned, and a newcomer has pinned no rotator. Nor is
+  that rotator pinned at the accept: the grant's granter key may be one its granter has since retired, and pinning it
+  beside their current head would pin a pair that never existed, a permanent anomaly; the newcomer pins them through
+  their chain at its first contact as a co-member.
 - **A join record is sealed under the tenant epoch its invite's grant carried**, the epoch current at the accept (or
   an older one, for an invite a rotation declared pending), so a later reader opens it with that epoch's key from its
   epoch chain, never with the current key alone.
-- **An owner whose identity changed after signing an invite**, and whose own rotation then re-grants it, voids that
-  invite for its invitee: a grant the inviting owner wrapped must verify under the key the link anchored, the new key
-  is not that key, and the invitee is told to ask for a new invite.
+- **An owner's open invites end with the owner's rotation.** The link anchors the owner's identity **fingerprint**
+  only, and a grant the inviting owner wrapped must verify under that key. Accepting the rotated owner through the key
+  chain would need the invitee to anchor the step old → new, but a fingerprint pins the identity and not the proof key:
+  an operator holding a stolen device's identity could serve an invented genesis naming that identity with a proof key
+  of its choosing, then sign a step to a key of its own — the prefix decision 16's pinned head exists to refuse.
+  Re-signing the invite under the new identity fails the fingerprint for the same reason. So a rotator re-grants an
+  open invite only while the chain from the head it pinned for the owner ends at the signer key, the invitee refuses one
+  whose signer is not the key at the served head, and is told to ask for a new invite; the ceremony's entry tells an
+  owner who signed open invites that they stop working. Keeping them soundly needs the owner's **head** inside the
+  link's seal, so the invitee walks the chain from a pinned head — a change of the built link format (inbox #568).
 - **Who counts as an owner is the server's word.** A member checking a join record knows the tenant's owners from the
   server's role list and its own pins; roles are not signed. A former owner, or a member the server presents as owner,
   can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member residual,
@@ -362,3 +416,5 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   a first-time reader cannot tell on its own (the fork, until Key Transparency).
 - **A malicious server on a retry** may re-list a revoked invite to the other of two concurrent rotators — the
   honest-operator class, as today.
+- **The operator class of a first use stays until join records are read**: everything in this list that reads "trusted
+  on first use" is closed by decisions 12 and 15, not by the key chain.

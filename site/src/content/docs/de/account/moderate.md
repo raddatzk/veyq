@@ -43,9 +43,9 @@ er nicht mehr, wähle **Neuen Code senden**. Änderst du die Adresse deines Kont
 3. Bist du neu, hältst du den Schlüssel noch nicht. Er erreicht dich, wenn eine Person, die ihn hält, diese Seite das
    nächste Mal öffnet; die Seite sagt das.
 4. Hältst du den Schlüssel und wartet jemand anderes darauf, gibt deine Seite ihn weiter, nachdem sie geprüft hat, dass
-   der Schlüssel dieser Person der ist, den du schon kennst. Hat sich ihr Kontoschlüssel geändert, geht er nicht
-   weiter, und die Seite sagt das: Vergleiche zuerst ihre Sicherheitsnummer
-   ([Eine Person verifizieren](/veyq/de/account/verify-a-person/)).
+   der Schlüssel dieser Person aus dem folgt, den du schon kennst (beim ersten Mal: aus dem, den der Server zeigt).
+   Lässt er sich nicht bestätigen, geht er nicht weiter, und die Seite sagt das: Vergleicht eure Sicherheitsnummern
+   persönlich ([Ein Schlüssel lässt sich nicht bestätigen](/veyq/de/help/key-changed/)).
 5. Danach zeigt die Seite **Meldungen**, die Fälle aller Bereiche auf dem Server.
 
 Sagt die Seite, sie habe **abgebrochen**, weil der Schlüssel, den der Server veröffentlicht, nicht der ist, den du

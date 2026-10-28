@@ -114,7 +114,7 @@ class EmailConfirmationSliceTest {
         val owner = seedUser(email = fresh("owner-acc"))
         val ownerSecret = pendingTenant(emailOf(owner))
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$ownerSecret","username":"${handle("own")}","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"bootstrapSecret":"$ownerSecret","username":"${handle("own")}",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assertFalse(confirmed(owner), "an OWNER sign-in accept is not a mailbox proof")
     }
@@ -436,7 +436,7 @@ class EmailConfirmationSliceTest {
 
     /** A register-and-accept body; an OWNER birth ([grant]) also carries the first grant, a MEMBER's its join under [key]. */
     private fun registerBody(secret: String, userId: String, grant: Boolean, key: TestInviteKey? = null): String {
-        val birth = if (grant) ""","grant":"AQ==",${TestGrants.SIGNATURE_JSON}"""
+        val birth = if (grant) """,${TestGrants.ownerBirthJson(IDENTITY)}"""
         else key?.let { ",${TestGrants.memberJoinJson(it, it.inviteId, userId, IDENTITY)}" } ?: ""
         return """
             {"bootstrapSecret":"$secret","userId":"$userId","username":"${handle("reg")}",

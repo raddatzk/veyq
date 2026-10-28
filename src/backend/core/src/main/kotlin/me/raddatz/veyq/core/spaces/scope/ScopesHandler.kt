@@ -4,7 +4,6 @@ import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
-import me.raddatz.veyq.core.tasks.CompromiseRotationPolicy
 import me.raddatz.veyq.core.tasks.CompromiseRotationState
 import me.raddatz.veyq.core.tasks.RequeueResult
 import me.raddatz.veyq.core.tasks.TasksStore
@@ -37,6 +36,8 @@ sealed interface CreatePersonalOutcome {
     object NoTenant : CreatePersonalOutcome, HttpFailure by Failures.tenantNotFound
     object AlreadyExists : CreatePersonalOutcome, HttpFailure by httpFailure("personal_scope_exists", CONFLICT)
     object IdTaken : CreatePersonalOutcome, HttpFailure by Failures.idTaken
+    /** The self-grant names a key that is not the caller's current identity (ADR 0111 decision 10) — nothing written. */
+    object RecipientKeyNotCurrent : CreatePersonalOutcome, HttpFailure by Failures.recipientKeyNotCurrent
 }
 
 /** Outcome of creating a group scope. Group names are not unique, so there is no "already exists" case. */
@@ -49,6 +50,8 @@ sealed interface CreateGroupOutcome {
      *  decision 5) and no other group operation asks the capability. */
     object CapabilityDisabled : CreateGroupOutcome, HttpFailure by Failures.capabilityDisabled
     object IdTaken : CreateGroupOutcome, HttpFailure by Failures.idTaken
+    /** The self-grant names a key that is not the caller's current identity (ADR 0111 decision 10) — nothing written. */
+    object RecipientKeyNotCurrent : CreateGroupOutcome, HttpFailure by Failures.recipientKeyNotCurrent
 }
 
 /** Outcome of an owner re-queueing the scope's dead-lettered compromise rotation (uc.spaces.complete-queued-rotation E8). */
@@ -143,12 +146,11 @@ sealed interface RotateOutcome {
     object Deleting : RotateOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RotateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RotateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    /** The caller's account rotation queued a still-live rotation of this scope that excludes them (ADR 0060 Decision 4). */
-    object RotationExcluded : RotateOutcome, HttpFailure by httpFailure("rotation_excluded", FORBIDDEN)
     object StaleEpoch : RotateOutcome, HttpFailure by Failures.staleEpoch
-    /** A TENANT rotation leaves an open member invite neither re-granted nor declared pending (ADR 0111 decision 2). */
+    /** A member or an open member invite is neither re-granted nor declared pending (ADR 0111 decisions 2 and 9). */
     object Incomplete : RotateOutcome, HttpFailure by httpFailure("rotation_incomplete", CONFLICT)
-    /** An invite re-grant names a key that is not the invite's — nothing stored. */
+    /** A re-grant names a key that is not its recipient's current one (a member's identity, an invite's key) — nothing
+     *  stored (ADR 0111 decision 10). */
     object RecipientKeyNotCurrent : RotateOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     /** A removal-rotation names no member of the scope — nothing stored. */
     object MemberNotFound : RotateOutcome, HttpFailure by Failures.memberNotFound
@@ -253,7 +255,9 @@ class ScopesHandler(
 ) {
     private val maxAttempts: Int = config.tasks().maxAttempts()
 
-    fun createPersonal(userId: String, tenantId: String?, scopeId: String, grant: SignedGrant): CreatePersonalOutcome {
+    fun createPersonal(
+        userId: String, tenantId: String?, scopeId: String, grant: SignedGrant, recipientIdentityDigest: String,
+    ): CreatePersonalOutcome {
         tenantId ?: return CreatePersonalOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
@@ -276,6 +280,11 @@ class ScopesHandler(
             store.lockScope(tenantId)
             access.check(userId, tenantId, WRITE)
                 .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return@createOrConflict it }
+            // The self-grant names the caller's current identity (ADR 0111 decision 10), read under the tenant root's lock
+            // — the one the publish of the caller's own rotation also takes — or nothing is written.
+            if (!InviteAcceptProof.digestMatches(store.identityPublicKeyOf(userId), recipientIdentityDigest)) {
+                return@createOrConflict CreatePersonalOutcome.RecipientKeyNotCurrent
+            }
             if (store.createPersonal(scopeId, userId, tenantId, grant)) {
                 CreatePersonalOutcome.Created(scopeId)
             } else {
@@ -290,7 +299,7 @@ class ScopesHandler(
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
     fun createGroup(
-        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant,
+        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, recipientIdentityDigest: String,
     ): CreateGroupOutcome {
         // Policy first (ADR 0032, ADR 0088): a personal-only instance or tenant switches group scopes off → 422,
         // enforced server-side even if a stale client still offers the affordance. The instance level is asked even
@@ -305,6 +314,9 @@ class ScopesHandler(
             store.lockScope(tenantId)
             access.check(userId, tenantId, WRITE)
                 .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return@createOrConflict it }
+            if (!InviteAcceptProof.digestMatches(store.identityPublicKeyOf(userId), recipientIdentityDigest)) {
+                return@createOrConflict CreateGroupOutcome.RecipientKeyNotCurrent
+            }
             if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
         }
     }
@@ -482,8 +494,9 @@ class ScopesHandler(
         val targetId = store.resolveUsernameInTenant(tenantId, username) ?: return ResolveCandidateOutcome.MemberNotFound
         if (!store.belongsToTenant(targetId, tenantId)) return ResolveCandidateOutcome.MemberNotFound
         val pubkey = store.identityPublicKeyOf(targetId) ?: return ResolveCandidateOutcome.MemberNotFound
+        val head = store.keyChainHeadOf(targetId) ?: return ResolveCandidateOutcome.MemberNotFound
         return ResolveCandidateOutcome.Ok(
-            ResolvedCandidateRow(targetId, username.trim().lowercase(), pubkey, consentRequired(targetId, tenantId)),
+            ResolvedCandidateRow(targetId, username.trim().lowercase(), pubkey, consentRequired(targetId, tenantId), head),
         )
     }
 
@@ -571,7 +584,14 @@ class ScopesHandler(
     /**
      * Commit a scope-key rotation (cr-0088, ADR 0024 §4): commit the stated [epoch] iff it is the scope's next one,
      * store the chain-link, re-grant the listed remaining members; any other epoch is `409 stale_epoch` with nothing
-     * stored. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
+     * stored. Every member is re-granted or declared pending ([pendingUserIds], `409 rotation_incomplete` otherwise), and
+     * every re-grant names its member's current identity (`409 recipient_key_not_current`). The client minted the new
+     * epoch on-device (the server stores only ciphertext).
+     *
+     * **Who may commit** (ADR 0111 decision 8): an owner of the scope; or a member that secured its account and holds a
+     * pending re-key row for the scope — only while that row's epoch is the scope's current one (else `409 stale_epoch`:
+     * someone else's commit already met it) and never with a removal, which stays an owner's act. Anyone else is
+     * `403 not_scope_owner`.
      *
      * With [removes] it is a **removal-rotation** (ADR 0024 Decision 4): [ScopesStore.rotate] deletes the membership
      * and soft-revokes the public shares that member created in the group (cr-0104) in the **same transaction** as
@@ -581,17 +601,22 @@ class ScopesHandler(
     fun rotateScope(
         callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
         grants: List<RotationGrant>, inviteGrants: List<InviteGrant>, pendingInviteIds: Set<String>, removes: String? = null,
-        revokeLinks: Boolean = false,
+        revokeLinks: Boolean = false, pendingUserIds: Set<String> = emptySet(),
     ): RotateOutcome {
         // A request-shape refusal, like the bean validation before it: `revokeLinks` belongs to a removal (ADR 0075).
         if (revokeLinks && removes == null) return RotateOutcome.InvalidRequest
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
-        if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
+        val owner = store.isScopeOwner(callerId, scopeId)
+        if (!owner && (removes != null || store.regrantEpoch(callerId, scopeId) == null)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, inviteGrants, pendingInviteIds, removes, revokeLinks)) {
+        return when (
+            val d = store.rotate(
+                scopeId, epoch, wrappedPrev, callerId, grants, inviteGrants, pendingInviteIds, removes, revokeLinks, pendingUserIds,
+                regranted = !owner,
+            )
+        ) {
             is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
-            RotationDecision.Excluded -> RotateOutcome.RotationExcluded
             RotationDecision.Stale -> RotateOutcome.StaleEpoch
             RotationDecision.Incomplete -> RotateOutcome.Incomplete
             RotationDecision.RecipientKeyNotCurrent -> RotateOutcome.RecipientKeyNotCurrent
@@ -602,12 +627,11 @@ class ScopesHandler(
     }
 
     /**
-     * An owner queues the scope's dead-lettered compromise rotation again (uc.spaces.complete-queued-rotation E8,
-     * ADR 0060 Decision 6) — the action behind the owner row's `failed`. Membership first (ADR 0042), then ownership;
-     * then, under the scope row's lock, every rotated account whose rotation here is `FAILED` is excluded from a joined
-     * or fresh job again, and the caller is not (unless they are one of them), so their own worker can claim it.
-     * Anything but `FAILED` is `409 rotation_not_failed` with nothing written. The state gate is also its rate
-     * bound: at most one live covering job, and a job needs every one of its attempts failed before it is
+     * An owner queues the scope's dead-lettered rotation again (uc.spaces.complete-queued-rotation E8) — the action
+     * behind the owner row's `failed`; a removal cascade queued it (ADR 0025). Membership first (ADR 0042), then
+     * ownership; then, under the scope row's lock, the rotation is originated again, excluding nobody, so the caller's
+     * own worker can claim it. Anything but `FAILED` is `409 rotation_not_failed` with nothing written. The state gate is
+     * also its rate bound: at most one live job, and a job needs every one of its attempts failed before it is
      * re-queueable.
      */
     fun requeueScopeRotation(callerId: String, scopeId: String): RequeueScopeRotationOutcome {
@@ -615,9 +639,8 @@ class ScopesHandler(
             .refusal(RequeueScopeRotationOutcome.ScopeNotFound, RequeueScopeRotationOutcome.Suspended, RequeueScopeRotationOutcome.Deleting)
             ?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RequeueScopeRotationOutcome.NotOwner
-        return when (val r = tasks.requeueFailedRotations(scopeId, null, maxAttempts)) {
-            is RequeueResult.Requeued ->
-                RequeueScopeRotationOutcome.Requeued(CompromiseRotationPolicy.ownerView(r.rows.map { it.state }))
+        return when (val r = tasks.requeueFailedRotation(scopeId, maxAttempts)) {
+            is RequeueResult.Requeued -> RequeueScopeRotationOutcome.Requeued(r.view)
             RequeueResult.NoRotation, RequeueResult.NotFailed -> RequeueScopeRotationOutcome.NotFailed
         }
     }

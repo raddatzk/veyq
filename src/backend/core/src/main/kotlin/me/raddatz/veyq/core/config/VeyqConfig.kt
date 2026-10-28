@@ -381,9 +381,24 @@ interface VeyqConfig {
      *  (`veyq.scope.delete.retention`): an account goes when its own scopes go. */
     interface Account {
         fun erasure(): Erasure
+        fun rotation(): Rotation
 
         interface Erasure {
             fun purge(): Interval
+        }
+
+        /** `veyq.account.rotation.*` — securing the account (ADR 0111 decision 6). */
+        interface Rotation {
+            fun stage(): Stage
+
+            interface Stage {
+                /** How long a stage of self-grants lives after it opened (server-observed) before a publish must apply
+                 *  it; past it the publish answers `409 rotation_plan_changed` and `RotationStagePurge` deletes it. */
+                @WithDefault("PT1H")
+                fun ttl(): Duration
+
+                fun purge(): Interval
+            }
         }
     }
 

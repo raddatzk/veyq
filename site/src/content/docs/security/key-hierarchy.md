@@ -127,7 +127,8 @@ What each account key is for:
 - **Master Key** — the account's root. It opens the identity private key, and it seals the account's own private
   state (the identity-pin store, the device register, private node pins).
 - **Identity keypair** — the account as other members see it. Scope keys are sealed to its encryption key; its
-  signing key signs every grant the account issues. TOFU pins it and the safety number is computed over it.
+  signing key signs every grant the account issues. The safety number is computed over it; a contact pins the head of
+  the account's key chain, which names it.
 - **Auth keypair** — signing in. It proves knowledge of the password to the server without sending it, and opens
   nothing.
 - **Secret-Key proof keypair** — authorising credential changes. It proves possession of the Secret Key to the
@@ -135,15 +136,15 @@ What each account key is for:
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing it means |
 |---|---|---|---|---|---|
-| **Secret Key** | 256 random bits, generated on the device at account birth | Nothing. It is printed in the Emergency Kit and **never stored server-side** | Only the user (Emergency Kit). A device uses it once, at the first sign-in there, and stores it nowhere; it keeps its own automatically written wrap instead (`DEVICE`, or `DEVICE_KEY` with **Stay signed in on this device** on). A device linked by QR never sees it ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)) | Never. No operation rotates it today; a key rotation keeps it, so the kit stays valid | Recovery narrows to another enrolled device, and the account can no longer rotate its keys ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Consequences) |
+| **Secret Key** | 256 random bits, generated on the device at account birth | Nothing. It is printed in the Emergency Kit and **never stored server-side** | Only the user (Emergency Kit). A device uses it once, at the first sign-in there, and stores it nowhere; it keeps its own automatically written wrap instead (`DEVICE`, or `DEVICE_KEY` with **Stay signed in on this device** on). A device linked by QR never sees it ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)) | Only when the account is secured: the rotation mints a new one and issues a new Emergency Kit, saved and confirmed before anything is published; the old kit stops working. A password change, a reset and a change of the sign-in address keep it | Recovery narrows to another enrolled device, and the account can no longer be secured ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Consequences) |
 | **Unlock KEK** (one per method) | Derived fresh on the device each unlock (see the table below), then discarded | Not wrapped; never stored or sent | Nobody at rest | Changes with its inputs (a new password, a new device key) | Its one wrap no longer opens; other methods still do |
 | **Master Key** | A 32-byte symmetric key, generated on the device at registration | One copy per unlock method (`MasterKeyWrap`), each under that method's KEK: still one key, many locks | The unlocked client; the server stores only the wraps | Only in a compromise rotation, together with the identity. A password change or reset keeps it | Losing **every** unlock path loses the account's content; there is no escrow |
 | **Identity keypair**: a hybrid post-quantum encryption key and an Ed25519 signing key | Generated on the device at registration | Private half: only under the Master Key. Public half: published in the key directory | The unlocked client; the public half is visible to fellow members | Only together with the Master Key | Same as the Master Key: it exists only wrapped under it |
 | **Auth keypair** (Ed25519) | Derived from the password with Argon2id over a salt derived from the account address | Not wrapped; the private key is derived on demand, never stored or sent. The server stores the public key | Derived on the client at sign-in | Whenever the password changes (re-derived, public key re-registered) | A forgotten password: one of the recovery paths below. A cracked one: a session, never content |
-| **Secret-Key proof keypair** (Ed25519) | Derived from the Secret Key **alone** | Not wrapped. The public half is registered at account birth | The client, whenever it holds the Secret Key | Never while the Secret Key is unchanged | It decrypts nothing; without it the server refuses rotation, password change, recovery completion and a change of the sign-in address |
+| **Secret-Key proof keypair** (Ed25519) | Derived from the Secret Key **alone** | Not wrapped. The public half is registered at account birth | The client, whenever it holds the Secret Key | With the Secret Key: securing the account registers the new public half under a signature of the current one | It decrypts nothing; without it the server refuses rotation, password change, recovery completion and a change of the sign-in address |
 
 The identity key's two halves do different work. Others seal scope grants to its encryption key; its signing key
-signs every grant this user issues. Its public bundle is what TOFU pins and what the safety number is computed over
+signs every grant this user issues. Its public bundle is what the safety number is computed over, and the key chain's head that a contact pins names it
 ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md);
 [Protocols](/veyq/security/protocols/)). The Master Key also seals the account's **identity-pin store** — one entry
 per pin, at an id derived under a key of its own (`veyq/v1/identity-pin-index`), and a head over all of them — and the
@@ -192,21 +193,29 @@ An Ed25519 keypair derived from the Secret Key **alone**; its public half is reg
 request that mints a cold credential — a key rotation, a password change, completing a recovery, changing the
 sign-in address — must carry a signature with it, and the server checks that signature against the registered
 public key ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-Decision 2). So the server can check that the requester holds the Secret Key without ever seeing it, and someone who
+Decision 2). It changes only when the account is secured: the rotation registers the new public half under a
+signature of the current one and a signature of the new one, which proves the new key is held. So the server can check that the requester holds the Secret Key without ever seeing it, and someone who
 has only the password, a session, or a linked device (which never receives the Secret Key) cannot replace the
 account's keys or credentials. It is a check the server runs, so it binds every caller except the operator.
 
 ### Rotation after a compromise
 
-The Master Key and the identity keypair rotate **together, always**: the identity private key exists only under the
-Master Key, so a leaked identity implies a leaked Master Key, and a new identity wrapped under the old Master Key
-would still be readable ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-Decision 1). Rotation needs a cold unlock, and the server checks a Secret-Key proof signature over what the request
-installs. That is the material a phished linked device never received, so the attacker cannot rotate first and lock
-the holder out. Rotation also re-keys every scope the account belongs to, every node of it included. The rotator is not allowed to re-admit
-themselves: another owner of each shared scope runs the scope rotation, and the new identity is re-admitted through
-the human changed-key review. Every `DEVICE` and `DEVICE_KEY` wrap dies. Rotation is **forward secrecy, not
-repair**: what was already read stays read.
+The Master Key, the identity keypair and the Secret Key rotate **together, always**, as one step of the account's
+**key chain**: the identity private key exists only under the Master Key, so a leaked identity implies a leaked
+Master Key, and someone holding the password and the Secret Key is otherwise indistinguishable from the holder
+([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Decisions 1 and 2). The
+step is signed by the **old identity and the old Secret-Key proof key**; a phished linked device holds the identity
+but never the Secret Key, so it cannot rotate first and lock the holder out, and it cannot sign a step anyone accepts.
+The new Emergency Kit is saved and confirmed before anything is published.
+
+**Access moves first, security after.** One transaction appends the step and re-grants every scope the account
+holds a grant on, in every tenant, at its current epoch, to the new identity; the grants were staged just before and
+are verified under that identity ([Protocols](/veyq/security/protocols/#7-the-key-chain-and-securing-an-account)). Then
+the account mints each scope's next epoch itself, from any of its devices, and any member re-keys the nodes
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 6–11). No retired private
+key is kept anywhere; the chain keeps the retired public keys. Other members accept the new identity because the
+chain reaches it from the head they pinned, with no review. Every `DEVICE` and `DEVICE_KEY` wrap dies. Rotation is
+**forward secrecy, not repair**: what was already read stays read.
 
 ### Recovery
 
@@ -242,7 +251,8 @@ is mandatory because the server mails the link: without the code, the operator h
 except by guessing offline. The newcomer then grants the epoch to itself, so no other member has to be online
 ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decisions 1–5). Every other wrap to a member — a rotation's re-grant, a grant delivery, a group add — trusts the
-recipient's key on first use; the join records are the anchor meant to replace that, and nothing checks them yet
+recipient's key on first use and from then on only where the recipient's key chain reaches it from the head this
+account pinned; the join records are the anchor meant to replace the first use, and nothing checks them yet
 ([Known limitations](/veyq/security/known-limitations/#identity-keys-tofus-first-use-gap)).
 
 **Freshness has one mark here.** Each device remembers the highest epoch it has held for each scope. It never

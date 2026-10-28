@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
 vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 // The pin store is identityPins.test.ts's; here its answer for the target is driven directly.
-vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), checkAndPin: vi.fn() }))
+vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), anchorIdentity: vi.fn() }))
 
 import {
   addGroupMember,
@@ -22,7 +22,7 @@ import { scopesApi, tenantsApi } from '../../api/client'
 import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
 import { openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
-import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { anchorIdentity, IdentityUnanchoredError } from '../account/identityPins'
 import { grantContext, grantSignatureVerifies } from './grant'
 import { stubApi, fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
@@ -35,6 +35,9 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 const OWNER = v1.generateIdentity()
 const TARGET = v1.generateIdentity()
 const TARGET_PUB = b64std(v1.serializeIdentityPublic(TARGET.pub))
+const TARGET_HEAD = 'ERERERERERERERERERERERERERERERERERERERERERE='
+/** The target as the resolve serves them: their key and the head of their key chain. */
+const TARGET_SERVED = { identityPublicKey: TARGET_PUB, keyChainHead: TARGET_HEAD }
 const G = '9a000000-0000-4000-8000-0000000000a1'
 const U = '9a000000-0000-4000-8000-0000000000b1'
 /** The group's key per epoch, as this test holds it; the data layer gets a fresh copy (it zeroes what it opened). */
@@ -50,16 +53,16 @@ beforeEach(() => {
   heldEpoch = 2
   vi.mocked(openScopeById).mockImplementation(async () => openGroup())
   vi.mocked(identityPrivate).mockImplementation(() => ({ kemSeed: OWNER.priv.kemSeed.slice(), sign: OWNER.priv.sign.slice() }))
-  vi.mocked(checkAndPin).mockResolvedValue('firstUse')
+  vi.mocked(anchorIdentity).mockResolvedValue('firstUse')
 })
 
 describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decision 4)', () => {
-  const row: ScopeMember = { userId: U, username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: TARGET_PUB }
+  const row: ScopeMember = { userId: U, username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: TARGET_PUB, keyChainHead: TARGET_HEAD, pending: false }
 
   it('wraps the group\'s current key to the resolved identity, signed by the owner, and posts it with the add', async () => {
     const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
 
-    expect(await addGroupMember(G, 'partner', U, TARGET_PUB, 'bmFtZWtleQ==')).toEqual(row)
+    expect(await addGroupMember(G, 'partner', U, TARGET_SERVED, 'bmFtZWtleQ==')).toEqual(row)
 
     const body = vi.mocked(add).mock.calls[0][0].addGroupMemberRequest
     expect(body).toMatchObject({ username: 'partner', sealedNameKey: 'bmFtZWtleQ==', epoch: 2 })
@@ -74,23 +77,23 @@ describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decis
     expect(grantSignatureVerifies(TARGET.pub.sign, { scopeId: G, kind: 'GROUP', epoch: 2 }, to, body.wrappedGrant, body.grantSignature)).toBe(false)
     // And it names the key it is wrapped to: SHA-256 of the target's bundle.
     expect(body.recipientIdentityDigest).toBe(b64std(v1.sha256Digest(fromB64std(TARGET_PUB))))
-    expect(checkAndPin).toHaveBeenCalledWith(U, TARGET_PUB)
+    expect(anchorIdentity).toHaveBeenCalledWith(U, TARGET_SERVED)
   })
 
-  it('refuses a target whose identity key CHANGED since it was pinned — nothing is opened or sent', async () => {
+  it('refuses a target whose key the chain does not reach from the pinned head — nothing is opened or sent', async () => {
     const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
-    vi.mocked(checkAndPin).mockResolvedValue('changed')
+    vi.mocked(anchorIdentity).mockResolvedValue('anomaly')
 
-    await expect(addGroupMember(G, 'partner', U, TARGET_PUB)).rejects.toBeInstanceOf(IdentityChangedError)
+    await expect(addGroupMember(G, 'partner', U, TARGET_SERVED)).rejects.toBeInstanceOf(IdentityUnanchoredError)
     expect(add).not.toHaveBeenCalled()
     expect(openScopeById).not.toHaveBeenCalled()
   })
 
-  it('control: a key that matches its pin is added', async () => {
+  it.each(['match', 'advanced'] as const)('control: a key the pin anchors (%s) is added', async (anchor) => {
     const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
-    vi.mocked(checkAndPin).mockResolvedValue('match')
+    vi.mocked(anchorIdentity).mockResolvedValue(anchor)
 
-    await addGroupMember(G, 'partner', U, TARGET_PUB)
+    await addGroupMember(G, 'partner', U, TARGET_SERVED)
     expect(add).toHaveBeenCalledTimes(1)
   })
 
@@ -103,7 +106,7 @@ describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decis
       .mockResolvedValueOnce(row)
     fakeApi(scopesApi, { addGroupMember: add })
 
-    await addGroupMember(G, 'partner', U, TARGET_PUB)
+    await addGroupMember(G, 'partner', U, TARGET_SERVED)
 
     expect(add.mock.calls.map((c) => c[0].addGroupMemberRequest.epoch)).toEqual([2, 3])
     const retry = add.mock.calls[1][0].addGroupMemberRequest
@@ -114,7 +117,7 @@ describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decis
 describe('setMemberRole (cr-0088)', () => {
   it('promotes a member by patching the member endpoint with the role', async () => {
     const { setMemberRole: setRole } = stubApi(scopesApi, {
-      setMemberRole: { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=' },
+      setMemberRole: { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=', keyChainHead: TARGET_HEAD, pending: false },
     })
 
     const result = await setMemberRole('g1', 'u1', SetMemberRoleRequestRoleEnum.Owner)
@@ -167,8 +170,8 @@ describe('removeTenantMember (cr-0091)', () => {
 describe('listScopeMembers', () => {
   it('reads a scope’s member directory by id (operator-blind operational metadata only)', async () => {
     const rows: ScopeMember[] = [
-      { userId: 'o', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=' },
-      { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGs=' },
+      { userId: 'o', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=', keyChainHead: TARGET_HEAD, pending: false },
+      { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGs=', keyChainHead: TARGET_HEAD, pending: true },
     ]
     const { listScopeMembers: listFn } = stubApi(scopesApi, { listScopeMembers: rows })
 

@@ -9,7 +9,7 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 Every member has a **safety number**, made from their key. When yours and someone else's app show the same number
 for that person, you know the server gave you their real key and not someone else's. Comparing it once is optional;
-it matters most when a key has changed.
+it matters most when a key can't be confirmed.
 
 ## Compare a safety number
 
@@ -30,23 +30,25 @@ same way, by choosing their own name, for example on a file or photo they added.
 If the numbers do not match, do not mark the person as verified: the key you have may not be theirs. Ask them to
 check their own profile, and compare again.
 
-## When a key has changed
+## When someone secures their account
 
-If the server starts showing a different key for a member, veyq notices: their profile and the member lists under
-**Settings** show **Key changed** and a **Review key** button. This happens when someone
-[replaced their keys](/veyq/account/replace-your-keys/), and it is exactly what you would also see if someone tried
-to pass off a key as theirs.
+When a person [secures their account](/veyq/account/replace-your-keys/), they get a new key, signed by their previous
+one. Your app checks that signature by itself and goes on sharing with them; you don't have to do anything. Their
+profile shows **New identity, signed by their previous key** with the date. A **Verified** mark from before does not
+carry over: compare the safety number again if you want them verified.
 
-1. Choose **Review key**. The dialog shows two numbers: **Expected — what you trusted** and **Current — shown now**.
-2. Ask the person directly, outside veyq, whether they replaced their keys, and compare the current number with the
-   one on their own profile.
-3. Only when you are sure it is really theirs, choose **Accept new key**. Otherwise choose **Refuse**.
+## When a key can't be confirmed
 
-<Screenshot id="account-review-key" shows="The Review changed key dialog with the Expected and Current numbers and the Refuse and Accept new key buttons" />
+If the server hands out a key for a member that does not follow from the one your app knew, their profile and the
+member lists under **Settings** show **Can't confirm this key**: *This person's key doesn't follow from the one you
+knew. Nothing is shared with it until it does. Compare your safety numbers in person.* A real change of keys is
+always signed, so this is not what securing an account looks like: it can be someone trying to pass off a key as
+theirs.
 
-Until you accept, your device hands that member no space key and does not add them to a group: a changed key could
-be a new device, or someone pretending to be them. Accepting does not verify the new key; compare again afterwards
-if you want it verified.
+Your device hands that key no space key and does not add it to a group. If a space gets a new lock meanwhile, the
+member list shows **Waiting for someone who can confirm their key** beside them: another member whose app does
+confirm their key passes it on. Nobody's adding or posting is held up by it, and there is no button to accept the key
+anyway. Ask the person, outside veyq, and compare your safety numbers in person: [What to do](/veyq/help/key-changed/).
 
 veyq only ever trusts a key your own device has checked; the server can pass keys along, but it cannot swap one in
 without your app showing it: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

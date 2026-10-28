@@ -44,9 +44,9 @@ keys after they are opened, so there veyq holds against a passive operator only
 | **HKDF-SHA256** | Turning a KEM shared secret into a wrap key; deriving sub-keys from a parent key (for example the slug-token key, an invite key's two halves from its seed, the share write token, and a field's own key, `veyq/v1/field/<purpose>` with a fresh salt per write) |
 | **AES-256-GCM** | All symmetric encryption: content frames, sealed metadata, key wraps |
 | **Argon2id** | Deriving an unlock key from a password (with the Secret Key or a device factor), the login auth key, and the key that seals a member invite's link from its code or password |
-| **Ed25519** | Login challenge signatures, the identity signing key that signs every grant and every invite key an owner mints, the Secret-Key proof key, an invite key's proof at accept and its signature on the join record |
+| **Ed25519** | Login challenge signatures, the identity signing key that signs every grant and every invite key an owner mints, the Secret-Key proof key, an invite key's proof at accept and its signature on the join record, and each step of an account's key chain (signed by the old identity and the old Secret-Key proof key) |
 | **HMAC-SHA256** | Keyed tokens the server stores but cannot reverse: per-parent name tokens |
-| **SHA-256** | The safety number (a digest of a member's full identity public key, shown as 6 × 5 digits), and the stored verifiers of share passwords and write tokens |
+| **SHA-256** | The safety number (a digest of a member's full identity public key, shown as 6 × 5 digits), the head of an account's key chain and the link from each step to the one before, and the stored verifiers of share passwords and write tokens |
 
 ## The hybrid KEM is X-Wing
 

@@ -2,8 +2,6 @@ package me.raddatz.veyq.core.tasks
 
 import me.raddatz.veyq.core.generated.api.TasksApi
 import me.raddatz.veyq.core.generated.model.ClaimRequest
-import me.raddatz.veyq.core.generated.model.ClearDeclinesRequest
-import me.raddatz.veyq.core.generated.model.DeclinesCleared
 import me.raddatz.veyq.core.generated.model.ClaimedJob
 import me.raddatz.veyq.core.generated.model.CompleteRequest
 import me.raddatz.veyq.core.generated.model.DeclineRequest
@@ -77,6 +75,7 @@ class TasksResource(
     override fun completeTask(jobId: UUID, completeRequest: CompleteRequest?): Response =
         when (val r = handler.complete(
             me, jobId.toString(), completeRequest?.sealedResult, completeRequest?.epoch, completeRequest?.grantSignature,
+            completeRequest?.recipientIdentityDigest,
         )) {
             CompleteResult.Done -> Response.noContent().build()
             is HttpFailure -> httpError(r)
@@ -94,11 +93,6 @@ class TasksResource(
             is HttpFailure -> httpError(r)
         }
 
-    override fun clearDeclinesForAcceptedKey(clearDeclinesRequest: ClearDeclinesRequest): Response =
-        Response.ok(
-            DeclinesCleared(cleared = handler.clearDeclines(me, clearDeclinesRequest.targetUserId.toString())),
-        ).build()
-
     private fun ClaimedJobView.toDto() = ClaimedJob(
         jobId = UUID.fromString(jobId),
         scopeId = UUID.fromString(scopeId),
@@ -111,7 +105,7 @@ class TasksResource(
             GrantDeliveryTarget(
                 targetUserId = UUID.fromString(it.targetUserId),
                 targetMembershipId = UUID.fromString(it.targetMembershipId),
-                identityPublicKey = it.identityPublicKey,
+                identityPublicKey = it.identityPublicKey, keyChainHead = it.keyChainHead,
             )
         },
     )

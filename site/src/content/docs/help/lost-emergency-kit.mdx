@@ -3,10 +3,12 @@ title: "Lost Emergency Kit"
 sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.onboard-device.md
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
 ---
 
-veyq cannot make you a new Emergency Kit: the Secret Key in it is not stored anywhere else, not on your devices and
-not on the server. What you can still do depends on whether you are signed in somewhere.
+Without your kit, veyq cannot make you a new one: the Secret Key in it is not stored anywhere else, not on your devices
+and not on the server, and a new kit comes only from [securing your account](/veyq/account/replace-your-keys/), which
+asks for that Secret Key. What you can still do depends on whether you are signed in somewhere.
 
 ## You are still signed in on a device
 
@@ -18,7 +20,7 @@ Nothing is lost yet. That device keeps opening your space as long as it keeps it
 3. Keep **Stay signed in on this device** on for a device you hold, and avoid signing it out: a device that signs out
    asks for the Secret Key the next time.
 
-Without the kit you cannot reset a forgotten password and cannot [replace your keys](/veyq/account/replace-your-keys/).
+Without the kit you cannot reset a forgotten password and cannot [secure your account](/veyq/account/replace-your-keys/).
 If you also forget your password, or the last of your devices loses its key, everything you keep is gone.
 
 ## You are not signed in anywhere
@@ -28,6 +30,12 @@ in and still remembers you, your email and password are enough ([Sign in](/veyq/
 
 If that does not work either, the data cannot be opened any more. Nobody can bring it back, not the person who owns your
 space and not the person who runs the server.
+
+## Someone else may have your kit
+
+If you still have it but someone else may have seen or copied it, [secure your account](/veyq/account/replace-your-keys/).
+That needs your password and the kit you have now, and it gives you a new kit with a new Secret Key; the old one stops
+working.
 
 The same thing that keeps everyone else out also keeps rescue out: there is no master key and no back door:
 [Is my data safe?](/veyq/privacy/is-my-data-safe/)

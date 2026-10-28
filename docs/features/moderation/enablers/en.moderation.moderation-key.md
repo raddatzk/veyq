@@ -14,7 +14,7 @@
   [uc.moderation.serve-as-moderator](../use-cases/uc.moderation.serve-as-moderator.md); later the report and the review
   (ADR 0093 §§ 1–3).
 - **Depends on:** [en.account.key-model](../../account/enablers/en.account.key-model.md) (the identity a grant is
-  sealed to), [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the pin check before
+  sealed to), [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the anchor check before
   a holder delivers).
 
 ## What is derived from what
@@ -40,7 +40,7 @@ client compares each epoch's derived public bundle with the published one on eve
 
 - **Minted** by admin-web for every accepted moderator at once (epoch 1 by first-run setup, to the Server Owner alone); the server refuses
   a mint whose grants do not cover exactly the accepted moderators.
-- **Delivered** by a holder's client to an accepted moderator missing an epoch, after the pin check; only by an
+- **Delivered** by a holder's client to an accepted moderator missing an epoch, after the anchor check; only by an
   account holding a grant of that epoch, only to an accepted moderator, idempotent.
 - **Deleted** for every epoch at once when the moderator is removed, steps down, or rotates their identity (then the
   delivery becomes pending again at the new identity).

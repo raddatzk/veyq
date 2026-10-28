@@ -224,7 +224,7 @@ class MemberAvatarSliceTest {
         val id = pendingTenant("av-acc.example.com", "owner@av-acc.example.com", secret)
         val userId = seedUser(email = "owner@av-acc.example.com")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"avowner","grant":"AQ==",${TestGrants.SIGNATURE_JSON},"sealedAvatar":"c2VhbGVkLWF2YXRhcg=="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"avowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"c2VhbGVkLWF2YXRhcg=="}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         val p = stored(id, userId)
         assertEquals("c2VhbGVkLWF2YXRhcg==", p.sealedAvatar)
@@ -236,7 +236,7 @@ class MemberAvatarSliceTest {
         val id2 = pendingTenant("av-acc2.example.com", "owner2@av-acc.example.com", secret2)
         val user2 = seedUser(email = "owner2@av-acc.example.com")
         given().header("Authorization", bearer(user2)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret2","username":"avowner2","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"bootstrapSecret":"$secret2","username":"avowner2",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assertNull(stored(id2, user2).sealedAvatar)
         assertEquals(0, stored(id2, user2).avatarRevision)
@@ -272,12 +272,12 @@ class MemberAvatarSliceTest {
         val userId = seedUser(email = "owner@av-bad.example.com")
         for (bad in listOf(full + "AAAA", "not base64!!")) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"bootstrapSecret":"$secret","username":"badowner","grant":"AQ==",${TestGrants.SIGNATURE_JSON},"sealedAvatar":"$bad"}""")
+                .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"$bad"}""")
                 .`when`().post("/api/tenants/accept").then().statusCode(400).body("code", equalTo("invalid_request"))
         }
         // the invite survived the refusals: a clean accept still works
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"badowner","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
     }
 
@@ -328,7 +328,7 @@ class MemberAvatarSliceTest {
         }
 
     private fun registerBody(secret: String, userId: String, username: String, owner: Boolean, avatar: String, key: TestInviteKey? = null): String {
-        val grant = if (owner) """"grant":"AQ==",${TestGrants.SIGNATURE_JSON},"""
+        val grant = if (owner) """${TestGrants.ownerBirthJson("aWRlbnRpdHktcHVibGljLWtleQ==")},"""
         else key?.let { "${TestGrants.memberJoinJson(it, it.inviteId, userId, "aWRlbnRpdHktcHVibGljLWtleQ==")}," } ?: ""
         return """
             {"bootstrapSecret":"$secret","userId":"$userId","username":"$username",$grant"sealedAvatar":"$avatar",

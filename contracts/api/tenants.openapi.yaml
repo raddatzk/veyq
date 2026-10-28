@@ -2178,7 +2178,7 @@ paths:
           description: >
             A conflict — the tenant is already active (`tenant_not_pending`), the chosen `username` is already
             taken in this tenant (`username_taken`), the self-grant names an epoch above the tenant scope's current
-            one (`stale_epoch`), or its `recipientIdentityDigest` is not the caller's current identity key
+            one (`stale_epoch`), or its (or an OWNER invite's tenant birth's) `recipientIdentityDigest` is not the caller's current identity key
             (`recipient_key_not_current`). The specific case is in the response `code`.
           content:
             application/json:
@@ -2322,7 +2322,7 @@ paths:
           description: >
             A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
             chosen `username` is already taken in this tenant (`username_taken`), the `userId` is already taken
-            (`id_taken`), the self-grant names an epoch above the tenant scope's current one (`stale_epoch`), or its
+            (`id_taken`), the self-grant names an epoch above the tenant scope's current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's)
             `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`). The
             specific case is in `code`.
           content:
@@ -3451,7 +3451,7 @@ components:
         A member invite as its invitee reads it. Every byte is the server's word until the invitee's client checked it:
         the invite key must be the one the link's seed derives, the signer's key must hash to the fingerprint inside the
         link's seal, and the signature must verify under it.
-      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey]
+      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, signerKeyChainHead, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey, granterKeyChainHead]
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -3484,10 +3484,21 @@ components:
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
         signerIdentityPublicKey:
           type: string
-          description: The inviting owner's identity public bundle as it was when they signed (kept, so a later rotation of theirs does not void the invite).
+          description: >
+            The inviting owner's identity public bundle as it was when they signed. The invitee checks it against the
+            fingerprint inside the link's seal.
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
+        signerKeyChainHead:
+          type: string
+          description: >
+            The head of the inviting owner's key chain now (ADR 0111 decision 7). The invitee pins it with the signer —
+            and refuses the invite when the key at that head is not the one the link's fingerprint names: an owner who
+            secured their account since signing ended their open invites (cr-secure-the-account).
+          contentEncoding: base64
+          maxLength: 64
+          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDE=
         wrappedGrant:
           type: string
           description: The invite's grant — the tenant scope's epoch key at `grantedEpoch`, sealed to the invite key.
@@ -3520,6 +3531,14 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
+        granterKeyChainHead:
+          type: string
+          description: >
+            The head of the granter's key chain now (ADR 0111 decision 7) — what the invitee's client walks the
+            granter's chain to before it accepts the grant from a granter other than the inviting owner.
+          contentEncoding: base64
+          maxLength: 64
+          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
 
     AcceptOwnershipRequest:
       type: object
@@ -3582,6 +3601,16 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: [string, "null"]
+          description: >
+            Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite: SHA-256 of the
+            identity bundle `grant` is sealed to — the caller's own. The server compares it with the account's current
+            identity key and refuses another (`409 recipient_key_not_current`, ADR 0111 decision 10).
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         selfGrant:
           description: >
             **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the
@@ -3779,6 +3808,16 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: [string, "null"]
+          description: >
+            Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite: SHA-256 of the
+            identity bundle `grant` is sealed to — the caller's own. The server compares it with the account's current
+            identity key and refuses another (`409 recipient_key_not_current`, ADR 0111 decision 10).
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         selfGrant:
           description: >
             **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the

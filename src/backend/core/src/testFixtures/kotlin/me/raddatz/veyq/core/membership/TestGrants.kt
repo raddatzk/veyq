@@ -40,6 +40,16 @@ object TestGrants {
     fun digest(identityPublicKeyB64: String): String =
         Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(identityPublicKeyB64)))
 
+    /** An OWNER accept's birth grant as JSON members (no braces): the first grant, its signature, and the digest of the
+     *  identity it is wrapped to (ADR 0111 decision 10) — [identityPublicKeyB64], the fixture's by default (every
+     *  `seedUser` account holds it). */
+    fun ownerBirthJson(identityPublicKeyB64: String = TestFixtures.IDENTITY_PUBLIC_KEY, grant: String = "AQ=="): String =
+        """"grant":"$grant",$SIGNATURE_JSON,"recipientIdentityDigest":"${digest(identityPublicKeyB64)}""""
+
+    /** The digest of [TestFixtures.IDENTITY_PUBLIC_KEY] — every `seedUser` account's current key unless it says otherwise:
+     *  what a scope birth by such an account names (ADR 0111 decision 10). */
+    val FIXTURE_DIGEST: String get() = digest(TestFixtures.IDENTITY_PUBLIC_KEY)
+
     /** The digest of [userId]'s current identity key. */
     fun digestOf(userId: String): String =
         digest(QuarkusTransaction.requiringNew().call { VeyqUser.findById(userId)!!.identityPublicKey })
@@ -65,6 +75,14 @@ object TestGrants {
                 scopeId, TenantInviteEntity.MEMBER, TenantInviteEntity.ACTIVE, Instant.now(),
             ).list().map { it.id }
         }.joinToString(",", prefix = "\"pendingInviteIds\":[", postfix = "]") { "\"$it\"" }
+
+    /** Every member of [scopeId] but [covered] (the granted and the removed), declared pending, as the `pendingUserIds`
+     *  JSON member (no braces) a rotation that grants only [covered] must carry (ADR 0111 decision 9) — read at call
+     *  time, so it names exactly the memberships the server holds. */
+    fun othersPendingJson(scopeId: String, vararg covered: String?): String =
+        QuarkusTransaction.requiringNew().call { MembershipEntity.find("scopeId", scopeId).list().map { it.userId } }
+            .filter { it !in covered }.distinct()
+            .joinToString(",", prefix = "\"pendingUserIds\":[", postfix = "]") { "\"$it\"" }
 
     /** A member invite request's fields as JSON members (no braces), for [email], keyed by [key], its grant of
      *  [epoch] (default: the tenant scope's current one, read now), expiring at the server's lifetime (7 days,

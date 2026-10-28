@@ -145,6 +145,8 @@ export const scopeMember = (o: Partial<ScopeMember> = {}): ScopeMember => ({
   avatarRevision: 0,
   role: 'MEMBER',
   identityPublicKey: 'AAAA',
+  keyChainHead: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  pending: false,
   ...o,
 })
 

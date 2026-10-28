@@ -34,13 +34,15 @@ data class NewAccount(
 
 /**
  * What an OWNER accept brings for the tenant's cold birth: the first grant with the owner's self-signature over it
- * (ADR 0028 Decision 6). All or nothing — a birth missing a part is no birth, and the accept answers it as a missing
+ * (ADR 0028 Decision 6), and the digest of the identity it is wrapped to (ADR 0111 decision 10: refused unless it is the
+ * owner's current one). All or nothing — a birth missing a part is no birth, and the accept answers it as a missing
  * grant.
  */
-data class OwnerBirth(val grant: SignedGrant) {
+data class OwnerBirth(val grant: SignedGrant, val recipientIdentityDigest: String) {
     companion object {
-        fun of(grant: String?, signature: String?): OwnerBirth? =
-            if (grant == null || signature == null) null else OwnerBirth(SignedGrant(grant, signature))
+        fun of(grant: String?, signature: String?, recipientIdentityDigest: String?): OwnerBirth? =
+            if (grant == null || signature == null || recipientIdentityDigest == null) null
+            else OwnerBirth(SignedGrant(grant, signature), recipientIdentityDigest)
     }
 }
 
@@ -80,6 +82,8 @@ sealed interface PreviewOutcome {
         val handover: Boolean,
         /** A MEMBER invite's key, signature and grant (ADR 0111 decision 1) — the invitee checks them against its link. */
         val invite: TenantInviteEntity?,
+        /** The key-chain heads of the invite's signer and granter (ADR 0111 decision 7), by user id. */
+        val heads: Map<String, String> = emptyMap(),
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
@@ -145,6 +149,7 @@ class TenantAcceptHandler(
         val tenant = store.findTenant(invite.tenantId) ?: return PreviewOutcome.NotFound
         if (!access.isTenantLive(tenant.id)) return PreviewOutcome.NoLongerValid
         // The invited email is the invite's own — for a MEMBER invite it differs from the tenant owner's.
+        val served = invite.takeIf { it.role == TenantInviteEntity.MEMBER && it.invitePublicKey != null }
         return PreviewOutcome.Found(
             tenantId = tenant.id,
             tenantName = tenant.name,
@@ -153,7 +158,8 @@ class TenantAcceptHandler(
             hasAccount = accounts.findByEmail(invite.ownerEmail) != null,
             role = invite.role,
             handover = invite.role == TenantInviteEntity.OWNER && tenant.status == TenantEntity.ACTIVE,
-            invite = invite.takeIf { it.role == TenantInviteEntity.MEMBER && it.invitePublicKey != null },
+            invite = served,
+            heads = served?.let { store.keyChainHeads(listOfNotNull(it.signerUserId, it.granterUserId)) }.orEmpty(),
         )
     }
 
@@ -198,7 +204,10 @@ class TenantAcceptHandler(
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return AcceptOutcome.NotFound
 
-        val caller = VeyqUser.findById(userId) ?: return AcceptOutcome.NotInvitedOwner
+        // The caller's account row, locked first (the order the publish of a rotation takes, account → scopes): the
+        // self-grant below is checked against the identity it holds, and no rotation of this account can publish another
+        // between that check and this commit (ADR 0111 decision 10).
+        val caller = accounts.lock(userId) ?: return AcceptOutcome.NotInvitedOwner
         if (caller.email != invite.ownerEmail) return AcceptOutcome.NotInvitedOwner
 
         return if (invite.role == TenantInviteEntity.MEMBER) {
@@ -237,6 +246,7 @@ class TenantAcceptHandler(
             AcceptOutcome.Activated(tenant.id)
         } else {
             val b = birth ?: return AcceptOutcome.MissingGrant
+            if (!InviteAcceptProof.digestMatches(caller.identityPublicKey, b.recipientIdentityDigest)) return AcceptOutcome.RecipientKeyNotCurrent
             // An OWNER accept has no scope to lock yet: the spend alone serializes it.
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
             if (tenant.status != TenantEntity.PENDING) return unspend(AcceptOutcome.AlreadyActive)
@@ -270,6 +280,10 @@ class TenantAcceptHandler(
 
         val member = invite.role == TenantInviteEntity.MEMBER
         if (!member && birth == null) return RegisterAcceptOutcome.MissingGrant
+        // The newborn's first grant is wrapped to the identity it registers (ADR 0111 decision 10).
+        if (!member && !InviteAcceptProof.digestMatches(account.identityPublicKey, birth!!.recipientIdentityDigest)) {
+            return RegisterAcceptOutcome.RecipientKeyNotCurrent
+        }
         // A MEMBER takes the rotation's lock first and checks its join under it, as in [accept]; then the spend, before
         // anything is born.
         if (member) {

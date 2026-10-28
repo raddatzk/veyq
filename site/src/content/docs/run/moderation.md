@@ -527,7 +527,7 @@ were made under; only later ones use the new key.
 **When a moderator steps down.** A moderator can step down in `/moderation`, and you can step down too while another
 moderator holds the key. Their access ends at once, but until you rotate, reports are still sealed to the key they
 held. The panel then says **rotation due**, and the instance mail tells you once. Rotate when you see it. The same
-happens when a moderator replaces their account keys; they get the key again from another moderator.
+happens when a moderator secures their account; they get the key again from another moderator.
 
 **What is logged.** Every appointment, acceptance, handing on of the key, removal, step-down and new key is an entry
 in the moderation log: who, when and for whom, never a key. Entries are kept until 31 December of the third year after

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
 import { fakeApi } from '../../../test/apiMock'
-import { fakePinServer, identityKey, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import { fakePinServer, identityKey, pinOf, pinsOn, sealPinStore, SOME_HEAD, type PinServerState } from '../../../test/pinStore'
 import type { AccountDeviceRegisterApi, DeviceRegister } from '../../../api/generated/account'
 
 // Starting a refused trust document over (ADR 0028 Decision 7's way back, inbox #192). The endpoints and the vault
@@ -19,7 +19,7 @@ vi.mock('../../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.f
 
 import { resetAccountDocument } from './trustReset'
 import { refusedDocuments } from './refusedDocuments'
-import { checkAndPin, forgetVerifiedPins, getPin } from '../identityPins'
+import { anchorIdentity, forgetVerifiedPins, getPin } from '../identityPins'
 import { readRegisterView } from '../deviceRegister'
 import { raiseMarks, readMarks } from '../trustMarks'
 import { accountDeviceRegisterApi, accountIdentityPinsApi } from '../../../api/client'
@@ -175,11 +175,11 @@ describe('what the reset buys, and what it costs (ADR 0028 Decision 7)', () => {
   it('after starting the pins over, a contact reads as first use again', async () => {
     await raiseMarks(MK, { pins: 3 })
     fakeServer({ pins: garbage('pins', 3) })
-    await expect(checkAndPin(U1, KEY)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    await expect(anchorIdentity(U1, { identityPublicKey: KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).rejects.toMatchObject({ code: 'trust_state_unreadable' })
 
     await resetAccountDocument('pins')
 
-    expect(await checkAndPin(U1, KEY)).toBe('firstUse')
+    expect(await anchorIdentity(U1, { identityPublicKey: KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).toBe('firstUse')
   })
 
   it('past the bound of stale writes it rejects, and the mark is unchanged', async () => {

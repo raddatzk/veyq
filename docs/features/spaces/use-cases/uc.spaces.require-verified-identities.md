@@ -4,25 +4,25 @@
 - **Primary actor:** **an account holder** (or, in a scope-wide design, a scope owner) who wants a verified identity
   *required* before a scope key reaches anyone.
 - **Goal:** an unverified member is never silently trusted with a share: no wrap to them — a group add, a
-  rotation's re-grant, a grant delivery — happens until someone verifies them, and a changed key is a hard block
-  rather than a notice.
+  rotation's re-grant, a grant delivery — happens until someone verifies them. (A key the contact's key chain does not
+  reach is already never wrapped to, strict mode or not; what strict mode adds is the unverified member.)
 - **Preconditions:** an **authenticated, unlocked** caller; the verification ceremony this gates on exists —
   [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) (compare a member's safety
   number on their profile, mark them *verified*).
 - **Status:** **planned, and not buildable as specified** — its shape is open (A1).
 - **Postconditions (success):** with strict mode on, the caller's client wraps no scope key to an **unverified**
-  member and nothing to a **changed** key; both wait until a human verifies them. Operator-blind: the
+  member; it waits until a human verifies them. Operator-blind: the
   setting never leaves the client as anything a server could key on.
 
 ## Main flow
 
 1. **Turn it on.** The caller switches on "require verification before sharing" ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
-   Decision 4). Off by default: the default flow is advisory TOFU ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)).
+   Decision 4). Off by default: the default flow is TOFU with the key chain ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)).
 2. **A wrap waits for verification.** Where the caller's client would wrap a scope key to a member whose pin is not
    `verified` — adding them to a group, re-granting them in a rotation (declared pending), delivering to them — it
    does not.
-3. **A changed key is a hard block.** A directory key that differs from the pin blocks the wrap on every path, the
-   UI's included, until the member is verified again on their profile.
+3. **A rotation keeps the gate.** A verified contact who secures their account drops to `pinned` (the chain moves the
+   pin), so the next wrap to them waits for a new compare.
 4. **Verify to release.** Once the caller verifies the member
    ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)), the next wrap goes ahead.
 

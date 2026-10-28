@@ -90,13 +90,14 @@ class RemovalRaceCoreSliceTest {
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
+            val digest = TestGrants.digestOf(member)
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, member) },
-                overlapping = { handler.createGroup(member, t.id, scopeId, NAME, GRANT) },
+                overlapping = { handler.createGroup(member, t.id, scopeId, NAME, GRANT, digest) },
             )
             assertEquals(CreateGroupOutcome.NoTenant, outcome, "round $round: a removed member created a group")
             assertNull(tx { ScopeEntity.findById(scopeId) }, "round $round: nothing written")
-            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), NAME, GRANT)
+            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), NAME, GRANT, TestGrants.digestOf(t.owner))
             assertTrue(control is CreateGroupOutcome.Created, "round $round: control $control")
         }
     }
@@ -107,13 +108,14 @@ class RemovalRaceCoreSliceTest {
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
+            val digest = TestGrants.digestOf(member)
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, member) },
-                overlapping = { handler.createPersonal(member, t.id, scopeId, GRANT) },
+                overlapping = { handler.createPersonal(member, t.id, scopeId, GRANT, digest) },
             )
             assertEquals(CreatePersonalOutcome.NoTenant, outcome, "round $round: a removed member created a personal space")
             assertNull(tx { ScopeEntity.findById(scopeId) }, "round $round: nothing written")
-            val control = handler.createPersonal(t.owner, t.id, UUID.randomUUID().toString(), GRANT)
+            val control = handler.createPersonal(t.owner, t.id, UUID.randomUUID().toString(), GRANT, TestGrants.digestOf(t.owner))
             assertTrue(control is CreatePersonalOutcome.Created, "round $round: control $control")
         }
     }

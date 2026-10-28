@@ -52,11 +52,11 @@ vault") is an explicit, rare action. This is the established practice for per-us
 2. **Tenant — ACL-revoke by default; no automatic content-key rotation on routine removal.** Removing a member
    **deletes the membership** (instant 403) and stops there. Content-key rotation is offered as an **explicit,
    owner-triggered "re-key this space"** action, reserved for the **compromise case** (a member's key leaked or
-   device stolen), where the `O(N)` re-grant is justified and rare. When invoked it runs **async and distributed**
-   via grant-delivery ([ADR 0021](0021-operator-blind-background-tasks.md) / [ADR 0024](0024-scope-key-rotation.md) §5 —
-   the reconciler already re-grants *stale-epoch* members, first-online-wins), so no single device bears a
-   synchronous `O(N)` burst. Under [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (not built) an account rotation re-keys the tenant on the rotator's own
-   device and grants every member from there; only the node re-key is spread across members' devices.
+   device stolen), where the `O(N)` re-grant is justified and rare. Its caller is an account rotation
+   ([ADR 0060](0060-key-rotation-after-compromise.md)), which re-keys the tenant on the rotator's own device and
+   grants every member from there ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 8); only the node re-key is spread across members' devices, and a member it declares pending is brought
+   current by grant-delivery ([ADR 0024](0024-scope-key-rotation.md) §5).
 
 3. **Personal — never** (a single member; nothing to rotate away from).
 

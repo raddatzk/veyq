@@ -30,9 +30,9 @@ Governance (who may add, the name stays sealed, no tenant-owner power) is [ADR 0
    username-reachable variant scoped to the tenant is the group case's concern). The username is a plaintext,
    unique-in-tenant handle every tenant member already sees, so this leaks nothing new
    ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
-2. The GroupOwner picks the resolved member. Their client runs the **pin check** on the served key
-   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md): pinned on first use, a
-   **changed** key refused with nothing sent), then **wraps** the group's current epoch key to it — `sealTo` under
+2. The GroupOwner picks the resolved member. Their client runs the **anchor check** on the served key and head
+   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2: pinned on first use,
+   followed along the target's key chain, a key the chain does not reach refused with nothing sent), then **wraps** the group's current epoch key to it — `sealTo` under
    the `scope-grant` purpose, bound to the scope and epoch ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)),
    signed with the owner's identity key (Decision 6) — and posts it with the add, naming the key it is wrapped to
    (`recipientIdentityDigest`).
@@ -46,7 +46,7 @@ Governance (who may add, the name stays sealed, no tenant-owner power) is [ADR 0
 
 ```mermaid
 ---
-title: Add a group member — resolve by username, pin check, wrap K_SC with the add (blind; server never holds K_SC)
+title: Add a group member — resolve by username, anchor check, wrap K_SC with the add (blind; server never holds K_SC)
 ---
 sequenceDiagram
   actor O as GroupOwner
@@ -55,7 +55,7 @@ sequenceDiagram
   participant CT as Client<br>(target)
   O->>S: resolve username → identity pubkey (scoped to the tenant)
   S-->>O: { userId, identityPublicKey }
-  O->>O: pin check → grant = seal K_SC to pubkey(target) (scope-grant, scope, epoch), signed
+  O->>O: anchor check → grant = seal K_SC to pubkey(target) (scope-grant, scope, epoch), signed
   O->>S: add member + grant (opaque) + recipient key digest
   S->>S: current epoch? current key? → record GROUP membership holding the grant
   T->>CT: next entry → verify granter signature → open own grant → K_SC → open name → browse group
@@ -77,7 +77,8 @@ sequenceDiagram
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
 - **E2 — key-substitution by a malicious operator:** the owner's client wraps to the identity key the server
   resolved. The stance is [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md):
-  **TOFU-pin on first use**, a **changed** key refused with the review offered, and out-of-band
+  **TOFU-pin on first use**, a key the target's chain does not reach refused with "Can't confirm this key" and no
+  accept, and out-of-band
   **safety-number verification** ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md))
   elevates a contact to *verified*; an opt-in **strict mode** is not built
   ([uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)). What remains is a substituted

@@ -11,7 +11,6 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
-import me.raddatz.veyq.core.tasks.TasksStore
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -23,24 +22,24 @@ sealed interface RekeyRight {
     object Suspended : RekeyRight, RekeyOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : RekeyRight, RekeyOutcome, HttpFailure by Failures.scopeDeleting
     object NotOwner : RekeyRight, RekeyOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    object Excluded : RekeyRight, RekeyOutcome, HttpFailure by httpFailure("rotation_excluded", FORBIDDEN)
     object GrantBehind : RekeyRight, RekeyOutcome, HttpFailure by httpFailure("grant_behind", FORBIDDEN)
 }
 
 /**
  * Who may read and commit a re-key (ADR 0109; ADR 0111 decision 11): **any member** of the scope who holds its
- * **current** grant and is **not excluded** by a live rotation job. A re-key is not governance — it changes neither
+ * **current** grant. A re-key is not governance — it changes neither
  * membership nor content nor who holds a link (re-wrapping a share from its recovery copy keeps it working), so it
  * needs only the current epoch, which every such member holds. It is still a write path onto the node (it re-seals
  * names, meta and EXIF the server cannot check), so it is open where the caller may write: everywhere a member may,
  * **except** a node only an owner re-keys ([OwnerOnlyRekey]: a drop box, a guest's identity folder or below one, where
- * members place nothing, ADR 0080 Decision 11) — there a member is [RekeyRight.NotOwner]. An account that rotated
- * its keys after a compromise is excluded until re-admitted (ADR 0060 Decision 4), so the old identity never re-keys.
+ * members place nothing, ADR 0080 Decision 11) — there a member is [RekeyRight.NotOwner]. The old identity of an account
+ * that secured itself holds no current grant once the account's next epoch is in (ADR 0111 decision 8), so it re-keys
+ * nothing after that.
  * The scope-access gate first, as everywhere (ADR 0042): a non-member learns nothing; a read of a deleting group is
  * answered, a write refused.
  */
 @ApplicationScoped
-class RekeyAccess(private val access: ScopeAccess, private val tasks: TasksStore, private val ownerOnly: OwnerOnlyRekey) {
+class RekeyAccess(private val access: ScopeAccess, private val ownerOnly: OwnerOnlyRekey) {
 
     /** The caller's right to re-key [scopeId] — at [nodeId] when the operation names a node (null for the listing, which
      *  serves every node and marks the owner-only ones instead). */
@@ -53,7 +52,6 @@ class RekeyAccess(private val access: ScopeAccess, private val tasks: TasksStore
         }
         val membership = MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult()
             ?: return RekeyRight.NoScope
-        if (tasks.isRotationExcluded(scopeId, userId)) return RekeyRight.Excluded
         val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
         if (membership.wrappedGrant == null || membership.grantedEpoch < current) return RekeyRight.GrantBehind
         if (membership.role != MembershipEntity.OWNER && nodeId != null && ownerOnly.at(scopeId, nodeId)) return RekeyRight.NotOwner

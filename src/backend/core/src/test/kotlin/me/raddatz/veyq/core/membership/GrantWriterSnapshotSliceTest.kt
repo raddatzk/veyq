@@ -1,5 +1,8 @@
 package me.raddatz.veyq.core.membership
 
+import me.raddatz.veyq.core.account.rotation.TestAccountKeys
+import me.raddatz.veyq.core.account.rotation.TestRotation
+import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.admin.tenant.TestMailbox
@@ -29,11 +32,11 @@ import java.util.UUID
  * recipient refuses the grant as unsigned.
  *
  * One leg per writer, each through the writer's real HTTP path, each granter holding an identity key no other
- * account in the suite holds — so a leg cannot pass on a key some other row happens to carry. The legs are the nine
- * writers `scripts/validate_grant_writer_arity.py` derives from the stores and pins by name: a tenth writer turns
+ * account in the suite holds — so a leg cannot pass on a key some other row happens to carry. The legs are the ten
+ * writers `scripts/validate_grant_writer_arity.py` derives from the stores and pins by name: an eleventh writer turns
  * that guard red until it is named there, and it owes a leg here. Four of them are ADR 0111's: a member invite's grant
  * (on the invite row), its accept's self-grant, a tenant rotation's re-grant of an open invite (on the invite row) and
- * a group add.
+ * a group add; the tenth is a secured account's self-grant (`RotationStore.applySelfGrant`, cr-secure-the-account).
  */
 @QuarkusTest
 class GrantWriterSnapshotSliceTest {
@@ -48,7 +51,7 @@ class GrantWriterSnapshotSliceTest {
         val scopeId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$scopeId","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"$scopeId","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
             .`when`().post("/api/scopes").then().statusCode(201)
 
         assertEquals(owner to key, snapshotOf(owner, scopeId))
@@ -61,7 +64,7 @@ class GrantWriterSnapshotSliceTest {
         val scopeId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$scopeId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"$scopeId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
 
         assertEquals(owner to key, snapshotOf(owner, scopeId))
@@ -78,7 +81,7 @@ class GrantWriterSnapshotSliceTest {
             ).first
         }
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"snapowner","grant":"$GRANT",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"bootstrapSecret":"$secret","username":"snapowner",${TestGrants.ownerBirthJson(key, GRANT)}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
 
         assertEquals(owner to key, snapshotOf(owner, tenantId))
@@ -98,8 +101,8 @@ class GrantWriterSnapshotSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[
-                   {"userId":"$owner","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}},
-                   {"userId":"$member","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}}],
+                   {"userId":"$owner","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"},
+                   {"userId":"$member","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(member)}"}],
                    ${TestGrants.openInvitesJson(tenantId)}}""",
             )
             .`when`().post("/api/scopes/$tenantId/epochs").then().statusCode(201)
@@ -126,7 +129,7 @@ class GrantWriterSnapshotSliceTest {
             .body("""{"capabilityTags":["${CapabilityTags.GRANT_DELIVERY}"]}""")
             .`when`().post("/api/tasks/claim").then().statusCode(200).extract().path<String>("jobId")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$GRANT","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"$GRANT","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(worker to key, snapshotOf(target, tenantId))
@@ -183,7 +186,7 @@ class GrantWriterSnapshotSliceTest {
         }
         given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$rotator","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}}],
+                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$rotator","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}],
                    "inviteGrants":[{"inviteId":"${invite.inviteId}","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(invite.bundle)}"}]}""",
             )
             .`when`().post("/api/scopes/$tenantId/epochs").then().statusCode(201)
@@ -198,7 +201,7 @@ class GrantWriterSnapshotSliceTest {
         val groupId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
         val target = seedUser()
         QuarkusTransaction.requiringNew().run {
@@ -213,6 +216,27 @@ class GrantWriterSnapshotSliceTest {
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
 
         assertEquals(owner to key, snapshotOf(target, groupId))
+    }
+
+    @Test
+    fun aSecuredAccountsSelfGrantRecordsItsNewKey() {
+        // The publish's self-grant (ADR 0111 decision 6): the account is its own granter, and the key it
+        // records is the identity the publish installs — the one that signed the staged grant — never the retired one.
+        val keys = TestAccountKeys()
+        val owner = seedUser(identityPublicKey = keys.bundle, authPublicKey = keys.auth.publicKey, secretKeyProofPublicKey = keys.proof.publicKey)
+        QuarkusTransaction.requiringNew().run {
+            listOf("PASSWORD", "RECOVERY").forEach { method ->
+                MasterKeyWrapEntity().apply {
+                    id = UUID.randomUUID().toString(); userId = owner; this.method = method; wrappedKey = "d3JhcA=="; kdfParams = "a2Rm"
+                }.persist()
+            }
+        }
+        val tenantId = seedTenant(owner = owner)
+        val rotation = TestRotation(owner, keys) { bearer(owner) }
+
+        rotation.run().then().statusCode(200)
+
+        assertEquals(owner to rotation.next.bundle, snapshotOf(owner, tenantId))
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------

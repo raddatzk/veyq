@@ -253,7 +253,7 @@ class TenantsSliceTest {
         val userId = UUID.randomUUID().toString()
         ensureUser(userId, invitedEmail, "MEMBER")
         return given().header("Authorization", bearer(userId))
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept")
     }
 

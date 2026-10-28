@@ -40,11 +40,13 @@ this page says so.
 
 ## Key Transparency
 
-**Today.** Identity keys are trust-on-first-use: a client pins a member's identity public key the first time it wraps
-to it, surfaces a changed key (a notice in the UI, a refusal in the grant-delivery worker), and lets two members
-compare safety numbers on their profiles to mark each other *verified*. The operator writes the key directory itself,
-so it **can** install an identity of its own on an account; only a member who pinned the old key sees `changed`. And
-a key substituted before anyone pinned it goes unnoticed until the members compare safety numbers.
+**Today.** Identity keys are trust-on-first-use: a client pins the head of a member's **key chain** the first time it
+meets them, accepts a new key only where a step signed by the old identity and the old Secret-Key proof key reaches it
+from that head, shows any other key as *Can't confirm this key* and wraps nothing to it, and lets two members compare
+safety numbers on their profiles to mark each other *verified*. The operator writes the key directory itself, so it
+**can** install an identity of its own on an account; a member who pinned the account's head sees it as an anomaly,
+one who never did trusts it on first use. A key substituted before anyone pinned it goes unnoticed until the members
+compare safety numbers, and a step withheld from a member who never saw a newer one is not seen at all.
 
 **Gap it would close.** The security-model's *What holds today* table names Key Transparency as what closes the
 "installs an identity of its own on an account" row, and the key-directory section names it as the eventual end-state
@@ -54,8 +56,9 @@ for TOFU's first-use gap.
 [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
 (alternative (f)) calls it far heavier than TOFU plus verification, which is the near-term step it later subsumes;
 [ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-(alternative (g)) adds that it would subsume the human re-admission review after a key rotation rather than compete
-with it.
+(alternative (g)) names it the correct end-state for judging a key change. The key chain is built to be committed to
+by such a log without a format change
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 17).
 
 **Decided in:** [security-model § What holds today](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve),
 ADR 0060 (g), ADR 0028.
@@ -63,13 +66,12 @@ ADR 0060 (g), ADR 0028.
 ## Strict verification mode
 
 **Today.** Verification is built and advisory. A member compares another member's safety number (QR scan or digits)
-and marks them *verified*; a changed key is a notice a human reviews, and the automated worker refuses to wrap to a
-changed key. Nothing refuses to share with a member nobody has verified.
+and marks them *verified*; a key the member's key chain does not reach from the pinned head is an anomaly nobody
+wraps to, and no human accepts one. Nothing refuses to share with a member nobody has verified.
 
 **Gap it would close.** The goal stated in its use-case: *an unverified member is never silently trusted with a
 share*. With it on, no client would wrap a key to an unverified member (in a group add, a rotation's re-grant or a
-grant delivery), and a changed key would be a hard block on every path, the UI's included, until a human verifies
-the member again.
+grant delivery).
 
 **Design state.** Decided in principle, not built, and **not buildable as specified: its shape is open.** A
 per-account toggle cannot protect a shared scope, because any co-member can key an unverified identity regardless of

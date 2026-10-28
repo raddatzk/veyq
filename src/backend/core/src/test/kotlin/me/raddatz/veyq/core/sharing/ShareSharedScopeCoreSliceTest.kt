@@ -100,8 +100,8 @@ class ShareSharedScopeCoreSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":${TestGrants.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
-                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON}}],""" +
-                    TestGrants.openInvitesJson(group) +
+                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                    TestGrants.openInvitesJson(group) + "," + TestGrants.othersPendingJson(group, owner, member) +
                     (member?.let { ""","removesUserId":"$it"""" } ?: "") +
                     (revokeLinks?.let { ""","revokeLinks":$it""" } ?: "") + "}",
             )

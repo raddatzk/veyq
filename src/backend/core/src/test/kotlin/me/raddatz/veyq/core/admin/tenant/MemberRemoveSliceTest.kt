@@ -189,7 +189,7 @@ class MemberRemoveSliceTest {
         given().header("Authorization", bearer(keyholder)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$keyholder","wrappedGrant":"Z3JhbnQ=",""" +
-                    """${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(group)}}""",
+                    """${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(keyholder)}"}],${TestGrants.openInvitesJson(group)}}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
         given().header("Authorization", bearer(keyholder)).contentType(ContentType.JSON).body("{}")

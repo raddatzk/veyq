@@ -67,7 +67,7 @@ key, wraps, or unwraps.** Concretely:
      wraps the epoch to its **own** identity (move 1, the granter being the newcomer). It is a member with the key at
      once; no key-holder needs to be online.
    - **A group add wraps directly** — the target already has an account, so the group owner's client wraps the
-     group's current epoch to the target's directory key after the pin check, and the membership (a consent proposal
+     group's current epoch to the target's directory key after the anchor check (ADR 0028 Decision 2), and the membership (a consent proposal
      too) holds that grant from the add on.
    - **Delivery stays only for a member who is behind.** A **`grant-delivery` job on the operator-blind
      background-task mechanism** ([ADR 0021](0021-operator-blind-background-tasks.md)) — any key-holder's device,
@@ -80,8 +80,9 @@ key, wraps, or unwraps.** Concretely:
    its own key and read future wraps; in the default **self-hosted** deployment the operator is the user, so the
    gap is moot ([security-model](../crosscutting/security-model.md)). The grant-distribution *mechanism* is
    unchanged by authenticity — the granter still `asymWrap`s to a directory pubkey — but **which** key it trusts is
-   now governed by **TOFU pinning + safety-number verification** (ADR 0028): a first-seen key is pinned + used, a
-   changed key is a UI notice / a worker-block, and the **fingerprint / safety-number** (a near-free digest of the
+   now governed by **TOFU pinning + safety-number verification** (ADR 0028): a first-seen key is pinned at its
+   key-chain head and used, a key the chain reaches from the pinned head is accepted, one it does not reach is never
+   wrapped to (a rotation declares that member pending, a worker declines), and the **fingerprint / safety-number** (a near-free digest of the
    pubkey) is compared out-of-band to elevate to *verified*. Key Transparency remains the end-state. This flow
    inherits that model without reshaping.
 
@@ -101,7 +102,7 @@ key, wraps, or unwraps.** Concretely:
    no user and no key, so the operator could still redeem a genuine admission with a key of its own. Its place in the
    invite is the owner-signed invite key (move 3); its place in the members' wraps is the owner-rooted join record
    each newcomer writes, which no wrap reads yet (ADR 0111 decisions 12 and 15) — so today every wrap to another member
-   takes the pin check only (§ Consequences).
+   takes the anchor check against the wrapper's own pin only (§ Consequences).
 
 ## Consequences
 

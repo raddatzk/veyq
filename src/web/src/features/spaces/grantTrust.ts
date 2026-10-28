@@ -6,11 +6,12 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { checkAndPin } from '../account/identityPins'
+import { anchorChainKey, type ChainKeyAnchor } from '../account/identityPins'
+import { epochFloor } from '../account/trustMarks'
 import { grantSignatureVerifies, type GrantScope } from './grant'
 
 /** Why a grant was not opened. The key inside is never used; the scope does not open (it waits for a current grant). */
-export type GrantRefusal = 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_changed'
+export type GrantRefusal = 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_unanchored' | 'granter_key_retired'
 
 export class GrantRefused extends Error {
   constructor(readonly scopeId: string, readonly reason: GrantRefusal) {
@@ -40,8 +41,8 @@ export async function me(priv: v1.Identity['priv']): Promise<Me> {
 // Pin writes are version-guarded read-modify-writes; several grants verified at once (the switcher opens every
 // group) would race each other's re-base. One at a time, the way the rotation's re-grant loop already pins.
 let pinQueue: Promise<unknown> = Promise.resolve()
-function pinSerially(userId: string, keyB64: string): ReturnType<typeof checkAndPin> {
-  const next = pinQueue.then(() => checkAndPin(userId, keyB64))
+function anchorSerially(userId: string, keyB64: string): Promise<ChainKeyAnchor> {
+  const next = pinQueue.then(() => anchorChainKey(userId, keyB64))
   pinQueue = next.catch(() => undefined)
   return next
 }
@@ -59,9 +60,15 @@ export type GrantRow = {
  *   signing key, which comes from the vault — never from the directory.
  * - **PERSONAL**: only a self-granted grant opens. The kind is signed, so a group's genuine grant served in the
  *   personal scope's row does not verify as `PERSONAL`, and a foreign-signed one is refused outright.
- * - **Shared**: the signature must verify under the granter's served key, and that key must pass the TOFU gate — a
- *   first-seen key is pinned (only after it verified, so a forged grant pins nothing), a changed key is refused and
- *   surfaces through the changed-key notice.
+ * - **Shared**: the signature must verify under the granter's key the grant row carries (its per-grant snapshot), and
+ *   the granter's key chain must reach that key from the head this account pinned (ADR 0028 Decision 2,
+ *   `anchorChainKey`): the pinned key matches with no fetch; a first-seen chain is pinned and a chain that advanced
+ *   moves the pin (only after the signature verified, so a forged grant pins nothing); anything else is refused as
+ *   `granter_key_unanchored` — with no accept, the key returns only through the chain.
+ * - **A retired key of that chain** (an earlier step's) signed the grant before its granter secured their account; a new
+ *   epoch from it is what a thief holding the old identity would forge, since the honest granter signs every new epoch
+ *   with the new key. So it opens only at an epoch at or below this device's floor for the scope — an epoch this device
+ *   already held — and is refused above it as `granter_key_retired`.
  */
 export async function verifyOwnGrant(scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me): Promise<void> {
   const refuse = (reason: GrantRefusal) => new GrantRefused(scope.scopeId, reason)
@@ -80,5 +87,7 @@ export async function verifyOwnGrant(scope: GrantScope, wrappedGrant: string, ro
     throw refuse('bad_signature')
   }
   if (!grantSignatureVerifies(granterSign, scope, to, wrappedGrant, row.grantSignature)) throw refuse('bad_signature')
-  if ((await pinSerially(row.granterUserId, row.granterIdentityPublicKey)) === 'changed') throw refuse('granter_key_changed')
+  const granter = await anchorSerially(row.granterUserId, row.granterIdentityPublicKey)
+  if (granter.anchor === 'anomaly') throw refuse('granter_key_unanchored')
+  if (granter.retired && scope.epoch > (await epochFloor(scope.scopeId))) throw refuse('granter_key_retired')
 }

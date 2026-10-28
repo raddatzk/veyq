@@ -541,8 +541,8 @@ paths:
         the scope's current epoch and every node of it, live **and** trashed — a trashed node is re-keyed too, so a
         restore never brings back a key the excluded party holds (ADR 0109 point 1). A node whose `epoch` is below
         `currentEpoch` still has its key from before the rotation. The rows carry what `listNodes` carries, plus
-        `trashed` and `ownerOnly`. Any member of the scope who holds its current grant and is not excluded by a live
-        rotation job may read it — the one who may commit a re-key ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+        `trashed` and `ownerOnly`. Any member of the scope who holds its current grant may read it — the one who may
+        commit a re-key ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
         decision 11: a re-key is not governance); anyone else is `403`. A member is served every node, the ones only an
         owner re-keys included (`ownerOnly`), so its re-key knows which lagging nodes are not its own to finish. Nothing
         here is new to the server: it is the tree and the trash it already serves, unfiltered by `deleted_at`.
@@ -562,8 +562,8 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
           description: >
-            The caller is a member but may not re-key the scope — excluded by a live rotation job
-            (`rotation_excluded`), or its grant lags the current epoch (`grant_behind`) — or the tenant is suspended.
+            The caller is a member but may not re-key the scope — its grant lags the current epoch (`grant_behind`) —
+            or the tenant is suspended.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: grant_behind } }
         "404":

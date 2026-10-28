@@ -82,7 +82,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     // A group add carries the grant (ADR 0111 decision 4): B and C hold the group's key from the add on.
     for (const who of [B, C]) {
       const candidate = await resolveGroupMember(gG, who.username)
-      await addGroupMember(gG, who.username, candidate.userId, candidate.identityPublicKey)
+      await addGroupMember(gG, who.username, candidate.userId, candidate)
     }
     const openedA = (await openScopeById(gG))!
     const folderId = await createFolder(gG, openedA.epochs, FOLDER_NAME)

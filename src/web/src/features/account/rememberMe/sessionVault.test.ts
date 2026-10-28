@@ -4,7 +4,7 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
-import { cacheSessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported, readdressSessionVault } from './sessionVault'
+import { cacheSessionVault, carrySessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported, readdressSessionVault } from './sessionVault'
 import { b64std } from '@veyq/crypto/base64'
 import { memoryStorage } from '../../../test/memoryStorage'
 
@@ -83,5 +83,41 @@ describe('readdressSessionVault (uc.account.change-email)', () => {
     await cacheSessionVault('someone@example.com', masterKey())
     readdressSessionVault('old@example.com', 'new@example.com')
     expect((await loadSessionVault())?.email).toBe('someone@example.com')
+  })
+})
+
+// cr-secure-the-account (the front matter's invariant: no retired private material in the browser either). A secured
+// account's publish swaps the vault to a NEW Master Key; a session vault this tab still held sealed the RETIRED one, and
+// a reload would have restored it. The swap re-seals it under the new key — or, with no record, writes none.
+describe('carrySessionVault (a secured account’s vault swap)', () => {
+  const retired = () => new Uint8Array(32).fill(7)
+  const published = () => new Uint8Array(32).fill(9)
+
+  beforeEach(() => {
+    sessionStorage.clear()
+    globalThis.indexedDB = new IDBFactory()
+  })
+
+  it('re-seals the record under the NEW Master Key, at the same address; the retired key is nowhere', async () => {
+    await cacheSessionVault('a@b.com', retired())
+    const before = sessionStorage.getItem('veyq.session-vault')
+    await carrySessionVault(published())
+    const v = await loadSessionVault()
+    expect(v?.email).toBe('a@b.com')
+    expect(v?.masterKey).toEqual(published())
+    expect(v?.masterKey).not.toEqual(retired())
+    expect(sessionStorage.getItem('veyq.session-vault')).not.toBe(before) // a fresh seal, not the old ciphertext
+  })
+
+  it('control: a tab with no session vault gets none — the swap never opts a device into a tier', async () => {
+    await carrySessionVault(published())
+    expect(sessionStorage.getItem('veyq.session-vault')).toBeNull()
+    expect(await loadSessionVault()).toBeNull()
+  })
+
+  it('an unreadable record is dropped, never left beside the new key', async () => {
+    sessionStorage.setItem('veyq.session-vault', 'not-json')
+    await carrySessionVault(published())
+    expect(sessionStorage.getItem('veyq.session-vault')).toBeNull()
   })
 })

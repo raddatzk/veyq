@@ -80,7 +80,7 @@ sequenceDiagram
   accept; the join record names the proof key their Secret Key derives. *(The existing-member, by-username variant
   is [uc.spaces.add-group-member](uc.spaces.add-group-member.md).)*
 - **A2 — a rotation of the tenant meets an open invite:** the rotator re-grants the new epoch to every open invite
-  whose owner signature verifies and whose signer passes its pin check, and declares the rest **pending**; the
+  whose owner signature verifies and whose signer passes its anchor check, and declares the rest **pending**; the
   server refuses a rotation that does neither for an open invite (`409 rotation_incomplete`) and ignores an id that
   names no open invite. Every member reads the open invites' keys for this (`listOpenInvites`, no email). A pending
   invite's newcomer self-grants the epoch it can open and joins **behind**; the narrow grant delivery brings it
@@ -122,7 +122,7 @@ sequenceDiagram
   password — creates no invite any client would carry or deliver to: the role the admission tag played, on an honest
   server.
 - **What no wrap checks yet.** Because nothing reads the join record, a membership the operator writes into the
-  database is wrapped to by the next rotation or delivery after the pin check, as a first use
+  database is wrapped to by the next rotation or delivery after the anchor check, as a first use
   ([security-model](../../../crosscutting/security-model.md)).
 - **Inviting is owner-only.** Only a tenant OWNER mints, re-issues or revokes a member invite (`403
   not_tenant_owner`); a member never hands the key to someone the owner did not invite.

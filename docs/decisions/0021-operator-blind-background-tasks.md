@@ -63,8 +63,8 @@ result**.
    `jobId`-keyed result post are idempotent. **Every claimed job has a holder, and only the holder acts on it:**
    heartbeat, complete, fail and decline all require the current lease (`409 not_lease_holder` otherwise), and
    completing an already-`done` job stays a no-op success. A result post that skipped the claim would also skip
-   everything the claim decides — above all a worker's own decline, which the rotation exclusion of
-   [ADR 0060](0060-key-rotation-after-compromise.md) Decision 4 is built on.
+   everything the claim decides — above all a worker's own decline, which keeps a key-holder that cannot anchor a
+   delivery's target from being offered it again ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2).
    Claims, like every other job write, happen only in a live scope of a non-suspended tenant
    ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)).
 7. **Result = a sealed artifact, usually via existing paths.** Most results are normal veyq writes (a grant onto
@@ -76,7 +76,8 @@ result**.
    [ADR 0024](0024-scope-key-rotation.md), or a newcomer whose invite a rotation declared pending; every membership is
    born with a grant since [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decisions 1–5), and an **event** it witnessed
-   but cannot complete itself (a co-shared member cut, an account rotation → a `scope-rotation` job).
+   but cannot complete itself (a co-shared member cut → a `scope-rotation` job; an account rotation queues none, its
+   rotator mints its scopes' epochs itself, [ADR 0060](0060-key-rotation-after-compromise.md) Decision 4).
    **Content-processing jobs are originated by a client/agent** and posted ready, so the server never *picks* a
    content-semantic task type. The converse holds too: a tag the registry names as server-originated
    (`server-structural`, `server-event`) is refused at a client's enqueue, so no client fabricates a delivery

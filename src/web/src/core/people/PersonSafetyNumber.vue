@@ -7,27 +7,32 @@
 // compare it with the number the other member's own device shows (`MySafetyNumber`): SCAN their QR - a code that is not a
 // veyq safety code, or one of a different key, is said as such and never accepted - or COMPARE the digits read aloud.
 // A match is one user action: `markVerified` on the compared fingerprint, which for an unpinned member pins it verified
-// in the same sealed write (`pinIfUnpinned`). A key that moved under the compare (`IdentityMovedError`) writes nothing
-// and says so. A mismatch never writes; where the pin differs from the directory the changed-key review is one click.
+// at the head the directory served, in the same sealed write (`pinAtHead`). A key that moved under the compare
+// (`IdentityMovedError`) writes nothing and says so. A mismatch never writes.
 //
-// Operator-blind: the only server call is the pin store's sealed write; who verified whom never leaves the device.
+// Their key chain (ADR 0028 Decision 2) is read here: a key it reaches from the pinned head moves the pin
+// (and drops a `verified`), and the date of its newest step, when that is a rotation, is said ("New identity, signed by
+// their previous key"); a key it does not reach is an ANOMALY, shown with its note and no accept — it returns only
+// through the chain.
+//
+// Operator-blind: the server calls are the chain read and the pin store's sealed write; who verified whom never leaves
+// the device.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
-import { getPin, foldTrust, markVerified, safetyNumberOfFingerprint, IdentityMovedError, type TrustState } from '../../features/account/identityPins'
+import { personTrust, markVerified, safetyNumberOfFingerprint, IdentityMovedError, type TrustState } from '../../features/account/identityPins'
 import { compareScan, fingerprintDigestB64 } from '../../features/account/safetyCode'
 import { TrustStateRefused, refusalMessageKey } from '../../features/account/trustMarks'
 import TrustResetLink from '../../features/account/trustReset/TrustResetLink.vue'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
-import ChangedKeyReviewDialog from '../../features/spaces/ChangedKeyReviewDialog.vue'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
-import { loadIdentityKey } from './directory'
+import { loadServedIdentity } from './directory'
 import SafetyDigits from './SafetyDigits.vue'
 
 const props = defineProps<{ userId: string; name: string; username: string }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 type View =
   | { kind: 'loading' }
@@ -36,15 +41,16 @@ type View =
   | { kind: 'error' }
   | {
       kind: 'ready'
-      directoryKey: string
-      /** The fingerprint the compare is about: the pin's, else the directory key's; null when this device cannot decode
-       *  the directory key (nothing to compare then). */
+      /** The key-chain head the directory served beside the key - an unpinned member is pinned at it on a match. */
+      servedHead: string
+      /** The fingerprint the compare is about: the pin's (after the read moved it along the chain), else the directory
+       *  key's; null when this device cannot decode the directory key (nothing to compare then). */
       compareFingerprint: string | null
       /** Whether a pin existed when this was read - a match on an unpinned member pins it (ADR 0028 Decision 3). */
       pinned: boolean
       state: TrustState
-      /** The pin is `verified` - on `changed`, a verified contact's key changed (ADR 0028 Decision 3). */
-      pinVerified: boolean
+      /** When their chain's newest step - a rotation the chain reaches - was made, or null. */
+      rotatedAt: Date | null
       /** The compared fingerprint's digits, or null when there is none to compare. */
       number: string | null
     }
@@ -55,18 +61,18 @@ async function load() {
   const mine = ++token
   view.value = { kind: 'loading' }
   try {
-    const directoryKey = await loadIdentityKey(props.userId)
+    const served = await loadServedIdentity(props.userId)
     if (mine !== token) return
-    if (!directoryKey) {
+    if (!served) {
       view.value = { kind: 'absent' }
       return
     }
-    const pin = await getPin(props.userId)
+    const { state, pin, rotatedAt } = await personTrust(props.userId, served)
     if (mine !== token) return
-    const compareFingerprint = pin?.fingerprint ?? fingerprintOf(directoryKey)
+    const compareFingerprint = pin?.fingerprint ?? fingerprintOf(served.identityPublicKey)
     view.value = {
-      kind: 'ready', directoryKey, compareFingerprint, pinned: Boolean(pin), state: foldTrust(pin, directoryKey),
-      pinVerified: pin?.state === 'verified', number: compareFingerprint === null ? null : numberOf(compareFingerprint),
+      kind: 'ready', servedHead: served.keyChainHead, compareFingerprint, pinned: Boolean(pin), state, rotatedAt,
+      number: compareFingerprint === null ? null : numberOf(compareFingerprint),
     }
   } catch (e) {
     if (mine !== token) return
@@ -96,7 +102,6 @@ const outcome = ref<Outcome>('')
 const outcomeRefusal = ref('')
 const comparing = ref(false)
 const scanOpen = ref(false)
-const reviewOpen = ref(false)
 
 const ready = computed(() => (view.value.kind === 'ready' ? view.value : null))
 
@@ -104,7 +109,7 @@ const { run: runVerify, pending: verifying } = useAsyncAction(
   async () => {
     const v = ready.value
     if (!v?.compareFingerprint) return
-    await markVerified(props.userId, v.compareFingerprint, { pinIfUnpinned: !v.pinned })
+    await markVerified(props.userId, v.compareFingerprint, v.pinned ? {} : { pinAtHead: v.servedHead })
     outcome.value = 'verified'
     await load()
   },
@@ -147,7 +152,11 @@ async function onScanned(text: string) {
   else outcome.value = verdict
 }
 
-const reviewMember = computed(() => (ready.value ? { userId: props.userId, username: props.username, identityPublicKey: ready.value.directoryKey } : null))
+const rotatedOn = computed(() =>
+  ready.value?.rotatedAt
+    ? ready.value.rotatedAt.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' })
+    : null,
+)
 
 onMounted(load)
 watch(() => props.userId, () => {
@@ -167,8 +176,8 @@ watch(() => props.userId, () => {
           <span v-if="ready.state === 'verified'" class="veyq-badge success" data-testid="person-safety-state">
             <VeyqIcon name="verified" />{{ t('safety.stateVerified') }}
           </span>
-          <span v-else-if="ready.state === 'changed'" class="veyq-badge changed" data-testid="person-safety-state">
-            <VeyqIcon name="exclamation-triangle" />{{ ready.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
+          <span v-else-if="ready.state === 'anomaly'" class="veyq-badge changed" data-testid="person-safety-state">
+            <VeyqIcon name="exclamation-triangle" />{{ t('trust.anomaly') }}
           </span>
           <span v-else class="veyq-badge muted" data-testid="person-safety-state">{{ t('safety.stateUnverified') }}</span>
         </template>
@@ -190,12 +199,12 @@ watch(() => props.userId, () => {
         <template v-else>
           <SafetyDigits v-if="!comparing" :number="ready.number" />
 
-          <VeyqMessage v-if="ready.state === 'changed'" tone="warn" data-testid="person-safety-changed">
-            {{ ready.pinVerified ? t('safety.changedVerifiedNote', { name }) : t('safety.changedNote', { name }) }}
-            <div class="person-safety-inline">
-              <VeyqButton :label="t('verify.review')" icon="exclamation-triangle" variant="warn" appearance="text" size="small" data-testid="person-safety-review" @click="reviewOpen = true" />
-            </div>
+          <VeyqMessage v-if="ready.state === 'anomaly'" tone="warn" data-testid="person-safety-anomaly">
+            {{ t('trust.anomalyNote') }}
           </VeyqMessage>
+          <p v-else-if="rotatedOn" class="veyq-form-copy" data-testid="person-safety-rotated">
+            {{ t('trust.rotated', { date: rotatedOn }) }}
+          </p>
 
           <div v-if="comparing" class="person-safety-compare" data-testid="person-safety-compare">
             <p class="veyq-form-copy">{{ t('safety.compareHint', { name }) }}</p>
@@ -224,7 +233,6 @@ watch(() => props.userId, () => {
     </template>
 
     <KitScanner v-if="scanOpen" :hint="t('safety.scanHint', { name })" :error-text="t('safety.scanError')" @found="onScanned" @close="scanOpen = false" />
-    <ChangedKeyReviewDialog v-if="reviewMember" v-model:visible="reviewOpen" :member="reviewMember" @accepted="load" />
   </section>
 </template>
 
@@ -240,8 +248,5 @@ watch(() => props.userId, () => {
 .person-safety-compare {
   display: grid;
   gap: 0.75rem;
-}
-.person-safety-inline {
-  margin-top: 0.35rem;
 }
 </style>

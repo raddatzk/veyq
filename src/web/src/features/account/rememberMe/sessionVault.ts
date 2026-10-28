@@ -105,6 +105,28 @@ export function readdressSessionVault(oldEmail: string, newEmail: string): void 
   }
 }
 
+/**
+ * The vault took a NEW Master Key (a secured account's publish, or a retry that found it committed — cr-secure-the-account
+ * decision 12): a session vault this tab holds still seals the RETIRED one, and the CR's invariant keeps no retired
+ * private material in the browser either. So the record is re-sealed under a fresh key for the new Master Key, at the
+ * address it was cached for — a reload keeps opening this tab with no prompt, now on the published key. A tab with no
+ * session vault (the persistent tier, or none) gets none: this never opts a device into a tier. A re-seal that fails
+ * drops the record instead (the next reload asks for the password), so the retired key never outlives the swap.
+ */
+export async function carrySessionVault(masterKey: Uint8Array): Promise<void> {
+  let email: string | undefined
+  try {
+    const raw = sessionStorage.getItem(SS_KEY)
+    if (!raw) return
+    email = (JSON.parse(raw) as Partial<StoredVault>)?.email
+  } catch {
+    /* unreadable record — dropped below */
+  }
+  // Drop first: the retired key's ciphertext and its key K are gone before anything else can fail.
+  await dropSessionVault()
+  if (email) await cacheSessionVault(email, masterKey)
+}
+
 /** Drop the session vault (logout, switching to the persistent tier, or a no-session boot): both the
  *  sessionStorage ciphertext and the IndexedDB key. */
 export async function clearSessionVault(): Promise<void> {

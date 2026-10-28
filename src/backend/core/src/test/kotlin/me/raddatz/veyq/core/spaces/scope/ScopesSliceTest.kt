@@ -144,7 +144,7 @@ class ScopesSliceTest {
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":${TestGrants.epochOf(scopeId) + 1},"wrappedPrev":"$rotPrev","grants":[""" +
-                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}}""" } +
+                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}""" } +
                     """],${TestGrants.openInvitesJson(scopeId)},"removesUserId":"$removes"}""",
             )
             .`when`().post("/api/scopes/$scopeId/epochs")
@@ -226,7 +226,7 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner")
         // Key the partner: a rotation that re-grants them.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201)
 
         given().header("Authorization", bearer(owner))
@@ -280,7 +280,7 @@ class ScopesSliceTest {
 
         // Rotate: owner mints E1 (chain-link) + re-grants self to the new epoch.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
@@ -339,7 +339,7 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner") // partner is a MEMBER, not owner
 
         given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
     }
@@ -365,14 +365,14 @@ class ScopesSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"$linkByOwner","grants":[""" +
-                    """{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}},{"userId":"$coOwner","wrappedGrant":"$coOwnerGrantFromOwner",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""",
+                    """{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$coOwner","wrappedGrant":"$coOwnerGrantFromOwner",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(coOwner)}"}],${TestGrants.openInvitesJson(groupId)}}""",
             )
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
         // The co-owner's rotation, built on epoch 0, arrives second. It must not commit.
         given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$linkByCoOwner","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$linkByCoOwner","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
 
@@ -396,7 +396,7 @@ class ScopesSliceTest {
         // Re-opened at epoch 1 (the grant the owner's rotation gave it), the co-owner's retry commits epoch 2.
         // Without this, a scope that refused every second rotation would pass the refusal above.
         given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(2))
     }
@@ -415,7 +415,7 @@ class ScopesSliceTest {
                 listOf(rotPrev, newGrant).map { link ->
                     java.util.concurrent.Callable {
                         val request = given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-                            .body("""{"epoch":1,"wrappedPrev":"$link","grants":[],${TestGrants.openInvitesJson(groupId)}}""")
+                            .body("""{"epoch":1,"wrappedPrev":"$link","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
                         barrier.await() // release both commits as tightly together as possible
                         request.`when`().post("/api/scopes/$groupId/epochs").then().extract()
                             .let { it.statusCode() to it.path<String?>("code") }
@@ -440,7 +440,7 @@ class ScopesSliceTest {
         // signature over the grant, and their current identity key — the server verifies none of it.
         val (owner, domain) = seedMember()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes").then().statusCode(201)
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
@@ -475,7 +475,7 @@ class ScopesSliceTest {
     /** A rotation of [scopeId] to epoch 1 that re-grants nobody and declares every open invite pending (a TENANT's). */
     private fun rotate(owner: String, scopeId: String) =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(scopeId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(scopeId)},${TestGrants.othersPendingJson(scopeId)}}""")
             .`when`().post("/api/scopes/$scopeId/epochs")
 
     // --- rename a group (uc.spaces.rename-group, cr-0097) ---
@@ -570,7 +570,7 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A rename at the OLD epoch 0 is now stale.
@@ -633,7 +633,7 @@ class ScopesSliceTest {
     /** The real rotation commit (ADR 0024 §4) of a group whose only member is its owner, from epoch 0 to 1. */
     private fun rotateToEpochOne(owner: String, scopeId: String, round: Int) {
         val decision = scopes.rotate(
-            scopeId, 1, rotPrev, owner, listOf(RotationGrant(owner, SignedGrant(newGrant, TestGrants.SIGNATURE))),
+            scopeId, 1, rotPrev, owner, listOf(RotationGrant(owner, SignedGrant(newGrant, TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
             emptyList(), emptySet(),
         )
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
@@ -796,7 +796,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val personalId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes").then().statusCode(201).extract().path<String>("scopeId")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
@@ -861,7 +861,7 @@ class ScopesSliceTest {
 
         // Rotate 0 → 1 (owner mints E1 + re-grants self).
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON}}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A set at the OLD epoch 0 is now stale → 409; the icon stays unset.
@@ -925,7 +925,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val scopeId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(201)
             .body("kind", equalTo("PERSONAL"))
@@ -967,12 +967,12 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes").then().statusCode(201)
 
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(409).body("code", equalTo("personal_scope_exists"))
     }
@@ -982,7 +982,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val scopeId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201)
             .body("kind", equalTo("GROUP"))
@@ -1009,7 +1009,7 @@ class ScopesSliceTest {
         val outsider = seedUser()
         given().header("Authorization", bearer(outsider))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -1089,7 +1089,7 @@ class ScopesSliceTest {
         val (userId, _) = seedMember()
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", "nobody-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -1101,7 +1101,7 @@ class ScopesSliceTest {
         val outsider = seedUser()
         given().header("Authorization", bearer(outsider))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -1109,7 +1109,7 @@ class ScopesSliceTest {
     @Test
     fun unauthenticatedIs401() {
         given().header("X-Forwarded-Host", "x-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -1518,7 +1518,7 @@ class ScopesSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 

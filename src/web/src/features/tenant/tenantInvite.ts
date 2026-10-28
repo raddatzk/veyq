@@ -11,6 +11,7 @@ import { inviteLinkKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
 import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../spaces/grant'
+import { anchorChainKey, anchorIdentity, getPin } from '../account/identityPins'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'
@@ -77,11 +78,14 @@ export function registerAndAccept(
   })
 }
 
-/** What an OWNER accept carries for the tenant's cold birth: the first grant and the owner's self-signature over it
- *  (ADR 0028 Decision 6). The first owner is the tenant's trust root (ADR 0111 decision 3): no join record. */
+/** What an OWNER accept carries for the tenant's cold birth: the first grant, the owner's self-signature over it
+ *  (ADR 0028 Decision 6) and the digest of the key it is wrapped to (ADR 0111 decision 10: the server refuses a grant to a
+ *  key that is not the recipient's current one). The first owner is the tenant's trust root (ADR 0111 decision 3): no
+ *  join record. */
 export type TenantBirth = {
   grant: string
   grantSignature: string
+  recipientIdentityDigest: string
 }
 
 /** The owner an OWNER accept births the tenant for: their account id and their identity (the signing half signs the
@@ -100,7 +104,10 @@ export function bornTenantScope(owner: TenantOwner, tenantId: string): { birth: 
   const scope = { scopeId: tenantId, kind: 'TENANT', epoch: 0 } as const
   const to = { userId: owner.userId, identityPublicKeyB64: b64std(v1.serializeIdentityPublic(owner.identity.pub)) }
   const signed = sealGrant(scopeRootKey, scope, to, owner.identity.priv.sign)
-  return { birth: { grant: signed.wrappedGrant, grantSignature: signed.grantSignature }, scopeRootKey }
+  const birth = {
+    grant: signed.wrappedGrant, grantSignature: signed.grantSignature, recipientIdentityDigest: recipientIdentityDigest(to.identityPublicKeyB64),
+  }
+  return { birth, scopeRootKey }
 }
 
 /** Just the birth from a fresh tenant-scope birth (for callers that don't seal a name). */
@@ -131,8 +138,9 @@ export type OpenedMemberInvite = {
   inviteKey: v1.Identity
   epochKey: Uint8Array
   grantedEpoch: number
-  /** The member whose rotation re-wrapped the invite's grant, when it is not the inviting owner — trusted on first use. */
-  foreignGranter: { userId: string; identityPublicKey: string } | null
+  /** The member whose rotation re-wrapped the invite's grant, when it is not the inviting owner — trusted on first use
+   *  (inbox #565): their key as the grant's snapshot carries it, and the head the invite serves for them. */
+  foreignGranter: { userId: string; identityPublicKey: string; keyChainHead: string } | null
 }
 
 /** How the link's sealed part asks to be opened — a generated code or a password — or null for a part that is no
@@ -208,8 +216,30 @@ export async function openMemberInvite(tenantId: string, served: ServedMemberInv
   const epochKey = v1.openAs(grantContext(tenantId, served.grantedEpoch), v1.hybridSecret(inviteKey.priv), fromB64std(served.wrappedGrant))
   return {
     tenantId, served, inviteKey, epochKey, grantedEpoch: served.grantedEpoch,
-    foreignGranter: ownersGrant ? null : { userId: served.granterUserId, identityPublicKey: served.granterIdentityPublicKey },
+    foreignGranter: ownersGrant
+      ? null
+      : { userId: served.granterUserId, identityPublicKey: served.granterIdentityPublicKey, keyChainHead: served.granterKeyChainHead },
   }
+}
+
+/**
+ * Whether a signed-in account may accept an opened member invite against its pin store (ADR 0028 Decision 2). The account is not yet a co-member, so the server serves it nobody's key chain here:
+ * - **the inviting owner** — whose key the link's fingerprint already vouched for ({@link openMemberInvite}) — is pinned
+ *   at the head the invite serves on first use, and judged by the chain from the pinned head when it is known;
+ * - **a foreign granter** (a rotation re-wrapped the grant) the account already pinned is judged against its chain like
+ *   any granter: a key the chain does not reach, or a retired key of it, is refused (the invite's epoch is above every
+ *   floor of a tenant this device never held). One it never met stays trusted on first use (inbox #565) and is NOT pinned
+ *   here: the grant's snapshot may be a key its granter has since retired, which beside their current head would pin a
+ *   pair that never was; the account pins them through their chain at its first contact as a co-member.
+ */
+export async function memberInviteAnchored(opened: OpenedMemberInvite): Promise<boolean> {
+  const granter = opened.foreignGranter
+  if (granter && (await getPin(granter.userId))) {
+    const judged = await anchorChainKey(granter.userId, granter.identityPublicKey)
+    if (judged.anchor === 'anomaly' || judged.retired) return false
+  }
+  const signer = { identityPublicKey: opened.served.signerIdentityPublicKey, keyChainHead: opened.served.signerKeyChainHead }
+  return (await anchorIdentity(opened.served.signerUserId, signer, { firstUse: 'served' })) !== 'anomaly'
 }
 
 /** Zero an opened invite's private parts. */

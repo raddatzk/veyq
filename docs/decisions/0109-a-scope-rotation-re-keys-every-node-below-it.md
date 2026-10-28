@@ -2,8 +2,8 @@
 
 - Status: Accepted 2026-10-23 (owner); built 2026-10-23 (cr-scope-rotation-rekeys-nodes: contracts, backend, web).
   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11 (built 2026-10-27) changed who runs the re-key — any member where it may write, a drop box an
-  owner only — and kept it eager; point 7 and § Consequences state it. The rest of ADR 0111 (not built) changes point
-  7's last sentence, marked there.
+  owner only — and kept it eager; point 7 and § Consequences state it. Its decisions 6–10 (built 2026-10-28) made an
+  account rotation's epochs the rotator's own, which point 7's last sentence states.
 - Date: 2026-10-23
 
 ## Context
@@ -37,11 +37,11 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
 ## Decision
 
 1. **Every rotation of `K_SC` re-keys every node of the scope** — the group removal's own rotation, a queued
-   rotation (an account's after a compromise, a tenant removal's of a co-shared group), an explicit re-key, and the
+   rotation (an account's after a compromise, which its own devices commit, a tenant removal's of a co-shared group), an explicit re-key, and the
    personal scope's self-served one. Live **and trashed** nodes: a restore must not bring back a key the excluded
    party holds. A rotation is **done** only once every node's key was minted at the scope's current epoch; until then
-   its status is *re-keying*, a fifth state beside [ADR 0060](0060-key-rotation-after-compromise.md) Decision 6's
-   four, and the server derives it from the node rows it already holds.
+   its status is *re-keying* (for an account's rotation, one of [ADR 0060](0060-key-rotation-after-compromise.md)
+   Decision 6's states), and the server derives it from the node rows it already holds.
 2. **A node's re-key is one atomic commit.** It mints a fresh random key `K_X'`, writes the node's own entry under its
    parent's current key (under the new epoch at the scope root), and re-seals **every field sealed under `K_X`**
    under `K_X'`: each child's entry (its current key re-wrapped, its name re-sealed, its slug token recomputed), the
@@ -100,9 +100,8 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
    only the node's old key, which opens the drop private key and through it each guest's `K_up`, and each link's
    recovery copy, and a member already sets that drop key with a first link and trashes any guest's upload. A queued
    job is `done` only once no node of the scope lags (the completion is refused before). The rotator of an account
-   rotation never runs it in a shared scope: they hold no current grant there ([ADR 0060](0060-key-rotation-after-compromise.md)
-   Decision 4; under ADR 0111 decisions 6–10, not built, the rotator commits its shared epochs itself, and this
-   sentence goes).
+   rotation commits its scopes' next epochs itself ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 4) and,
+   as a member, may re-key their nodes like any other member.
 8. **What the server stores and learns.** Rewritten ciphertext in rows it already holds, and each node's epoch moving
    to the current one, right after an epoch change it already sees. No key, no new correlation. Moderation hold copies
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)) are snapshots of

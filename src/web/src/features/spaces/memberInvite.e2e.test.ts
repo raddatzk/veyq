@@ -136,8 +136,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('a member invite is a placeholder member 
     const candidate = await resolveGroupMember(g, B.username)
     expect(candidate.requiresConsent, 'B asked to be consulted').toBe(true)
     expect(candidate.identityPublicKey, 'the resolve serves B\'s identity key').toBe(b64std(v1.serializeIdentityPublic(B.built.identity.pub)))
-    const sealedNameKey = await wrapGroupNameKeyForInvitee(g, candidate.userId, candidate.identityPublicKey)
-    await addGroupMember(g, B.username, candidate.userId, candidate.identityPublicKey, sealedNameKey!)
+    const sealedNameKey = await wrapGroupNameKeyForInvitee(g, candidate.userId, candidate)
+    await addGroupMember(g, B.username, candidate.userId, candidate, sealedNameKey!)
     expect((await listScopeMembers(g)).find((m) => m.userId === B.userId)?.pendingConsent, 'a proposal until B accepts').toBe(true)
 
     await become(B)

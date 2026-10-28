@@ -1,13 +1,12 @@
 useCase: uc.account.rotate-keys
 feature: account
-title: Rotate my keys after a compromise
-# Built by cr-account-key-rotation-after-compromise (ADR 0060, settling ADR 0028 Decision 5). What the flow
-# DRIVES was already built end-to-end and stays covered under its own use-cases — the epoch chain + POST
-# /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation), the grant-delivery stale-epoch
-# reconcile, the SCOPE_ROTATION job, the TOFU gate at all three foreign-wrap sites and the changed-key review
-# (uc.spaces.verify-identity). What this CR added is the account-side operation, its gate, and the two seams a
-# changed key had never legitimately needed: the rotator's exclusion from their own rotation, and the clearing
-# of a decline when a human accepts.
+title: Secure my account after a compromise
+# ADR 0060 in the form ADR 0111 decisions 6-10 gave it. What the flow DRIVES stays covered under its own use-cases:
+# the epoch chain + POST /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation), the node re-key
+# (uc.spaces.rekey-after-rotation) and how other members follow the new key through the key chain
+# (uc.spaces.verify-identity). What is covered here is the account-side operation: its gate, the new Secret Key and
+# kit, the key-chain step, the stage and the publish that applies it, the next epochs the account mints itself, and
+# the result.
 #
 # One structural claim below is held by a guard rather than by a test, and deliberately: `one-mode-…` rests on
 # the ABSENCE of a request field, which no passing test can notice. `scripts/validate_rotation_shape.py` pins
@@ -15,10 +14,13 @@ title: Rotate my keys after a compromise
 # omission). It is not listed as coverage because `scripts/` is not a coverage surface (ADR 0040); the tests
 # below cover what the one producer actually sends.
 acceptanceCriteria:
-  - id: one-mode-master-and-identity
-    text: Rotation replaces the Master Key and the identity keypair together — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, and the Secret-Key proof key is left as it is — the Secret Key does not rotate.
+  - id: one-mode-every-key-together
+    text: Securing the account replaces the Master Key, the identity keypair and the Secret Key together, as one step of the account's key chain — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, the new Secret-Key proof key replaces the stored one, and the chain gains a step whose head every directory read then serves.
     coverage:
-      backend: { integration: [RotationSliceTest.rotationReplacesEveryKeyRewritesBothColdWrapsAndDeletesTheDeviceOnes] }
+      backend:
+        integration:
+          - RotationSliceTest.rotationReplacesEveryKeyRewritesBothColdWrapsAndDeletesTheDeviceOnes
+          - RotationSliceTest.theChainGainsTheStepAndTheHeadMoves
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: cold-credential-gate
     # Reworded at implement time, and the change is a sharpening rather than a relaxation. The gate cannot be
@@ -27,28 +29,45 @@ acceptanceCriteria:
     # stored floor is both free and stronger — it proves possession NOW. A device-opened session upgrades in
     # place (uc §E1's "asks in place"), which is what the recorded origin is read for: the explanation, not the
     # refusal.
-    text: Rotation runs only against a live proof of the cold credential — the password + Secret Key are re-derived into the floor KEK and must open the stored PASSWORD wrap to the Master Key the vault already holds. A DEVICE, DEVICE_KEY or restored-session unlock is asked for that credential in place and rotates only once it produces it; the attacker this defends against holds a device wrap and never the Secret Key, so they fail the proof from whichever screen they reach it.
+    text: Securing the account runs only against a live proof of the cold credential — the password + Secret Key are re-derived into the floor KEK and must open the stored PASSWORD wrap to the Master Key the vault already holds — proven before the new kit is printed. A DEVICE, DEVICE_KEY or restored-session unlock is asked for that credential in place and proceeds only once it produces it; the attacker this defends against holds a device wrap and never the Secret Key, so they fail the proof from whichever screen they reach it.
     coverage:
-      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/account/rotation/KeyRotationPanel.test.ts] }
   - id: secret-key-proof-required
     # The server half of the gate above, and inbox #159's second door. Bitten against the tree that accepted the
     # new field but did not yet verify it: a session plus a signature from another key rotated (200), which is
     # what a device-link holder can do. Each negative carries its control on the same request.
-    text: Rotation is refused without a signature of the account's Secret-Key proof key over the identity it replaces, the new identity, the new wrapped identity private key and both rewritten wraps. The server rebuilds that statement from the request and the account's current identity and answers secret_key_proof_failed with nothing written — a valid session with any other key is refused, a captured signature cannot be replayed once its rotation applied, and an account with no proof key cannot rotate.
+    text: The publish is refused without a signature of the account's current Secret-Key proof key over the identity it replaces, the new identity, the new wrapped identity private key, both rewritten wraps, the key-chain step, the current and the new auth key, the new proof key and the stage (its id and digest); without the new proof key's signature over the same statement (possession); and without the current auth key's attestation over the new auth key. The server rebuilds the statement from the request and the account's stored state and answers secret_key_proof_failed or attestation_failed with nothing written — a valid session with any other key is refused, a captured signature cannot be replayed once its rotation applied, and an account with no proof key cannot rotate.
     coverage:
       backend:
         integration:
           - RotationSliceTest.aSessionWithoutTheSecretKeyCannotRotate
           - RotationSliceTest.aCapturedRotationSignatureCannotBeReplayed
           - RotationSliceTest.anAccountWithNoProofKeyCannotRotate
+          - RotationSliceTest.aPossessionSignatureByAnotherKeyIsRefused
+          - RotationSliceTest.aWrongAttestationIsRefused
         unit: [SecretKeyProofTest.theRotationStatementIsTheVectorsAndItsSignatureVerifies]
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: wraps-and-sealed-blobs-follow
     # The wrap deletion is asserted as a whitelist of survivors (PASSKEY dies too), not as a DEVICE/DEVICE_KEY
     # blacklist — a method added later must default to deleted rather than silently keep the old Master Key.
-    text: The PASSWORD and RECOVERY wraps are rewritten under their existing KEKs (so the Emergency Kit stays valid — the Secret Key is unchanged, though each wrap gets a fresh salt), every DEVICE/DEVICE_KEY/PASSKEY wrap is deleted because its key material cannot be rewritten, and every Master-Key-sealed blob (identity-pin store, device register) is re-sealed under the new Master Key.
+    text: The PASSWORD and RECOVERY wraps are rewritten under KEKs of the NEW Secret Key, with fresh salts, so the old Emergency Kit opens nothing; every DEVICE/DEVICE_KEY/PASSKEY wrap is deleted because its key material cannot be rewritten; and every Master-Key-sealed blob (identity-pin store, device register) is re-sealed under the new Master Key.
     coverage:
       backend: { integration: [RotationSliceTest.rotationReplacesEveryKeyRewritesBothColdWrapsAndDeletesTheDeviceOnes] }
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: the-new-kit-is-saved-before-the-publish
+    # uc §E11. Bitten in the ceremony's build: EmergencyKitSave ready on the download alone, and the panel's gate
+    # without the kit's readiness, each reddened the case that the action stays disabled until the confirm.
+    text: The new Emergency Kit, printed from the Secret Key the publish installs, is shown before anything is published, and the publish stays disabled until it is downloaded AND confirmed saved; the step says to keep the old kit until the result says the account is secured.
+    coverage:
+      web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts] }
+  - id: the-new-secret-key-binds-every-later-flow
+    text: From the publish on, change-password, recovery, a change of the sign-in address and the next rotation verify under the new proof key — the old one is refused — and an address change requested before the publish no longer confirms.
+    coverage:
+      backend:
+        integration:
+          - RotationSliceTest.theNextCredentialFlowVerifiesUnderTheNewProofKey
+          - RotationSliceTest.anOpenEmailChangeDoesNotSurviveThePublish
+          - RotationSliceTest.aRotatedAccountCanBeSecuredAgainFromTheNewHead
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: item-marks-re-tagged-under-the-old-key
     text: >
@@ -101,90 +120,133 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [CredentialResetRaceSliceTest.aDeviceWrapDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aChangeOrRotationDecidesAgainstWhatTheCleanupItWaitedForWrote]
-  - id: self-served-scopes-rekeyed
-    text: Every scope the holder is the sole member of (the personal scope) is advanced to a new epoch, chain-linked to its predecessor and granted to the NEW identity, so the old identity reads no post-rotation content there.
-    coverage:
-      backend: { integration: [RotationSliceTest.aSoleMemberScopeIsLeftForTheCallerAndQueuesNothing] }
-      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
-  - id: shared-scopes-queued-not-self-served
-    # The negative owes a control, and here it is the same job: the co-member's claim SUCCEEDS on the very job
-    # the rotator is refused. Without it the assertion passes equally against a rotation nobody can complete.
+  - id: every-scope-regranted-in-the-publish
     text: >
-      Every shared scope gets a SCOPE_ROTATION job that ANOTHER OWNER completes; the rotator may never drive their own
-      re-grant — not by claiming it (on a job already queued when the rotation ran, or a leased one whose lease
-      lapses, from both of which they are excluded), and not by committing the rotation directly with a client of
-      their own: rotateScope refuses them while a live job carries their exclusion (403 rotation_excluded), and
-      afterwards while their own grant is behind (409 stale_epoch), until a human re-admits them. Without this an
-      attacker holding the old identity would mint the new epoch, wrap it to their own new identity and exclude the
-      legitimate holder.
+      Every scope the holder holds a grant on — personal, tenant and group, in every tenant — is staged before the
+      publish as a self-grant of its current epoch to the NEW identity, signed by it and verified at upload under the
+      identity the stage declares (one signed by another key is refused whole, 422 self_grant_invalid); nothing staged
+      is applied before the publish, and an expired stage is purged. The publish applies the stage in its transaction
+      only if every grant-carrying membership is staged at its current epoch or declared unreadable — a scope added or
+      rotated in between, a digest other than the staged rows or a stage of another identity is 409
+      rotation_plan_changed with nothing written, and the client re-stages only the delta. A declared scope keeps its
+      grant and gets no pending row.
+    coverage:
+      backend:
+        integration:
+          - RotationSliceTest.everyScopeIsRegrantedToTheNewIdentityInThePublish
+          - RotationSliceTest.aScopeInAnotherTenantIsRegrantedToo
+          - RotationSliceTest.aStagedGrantSignedByTheOldIdentityIsRefusedAtUpload
+          - RotationSliceTest.aStagedScopeTheCallerHoldsNoGrantOnIsRefused
+          - RotationSliceTest.aStageAppliesNothingBeforeThePublish
+          - RotationSliceTest.anExpiredStageIsPurged
+          - RotationSliceTest.aPublishMissingAScopeIsRefused
+          - RotationSliceTest.aSelfGrantAtAStaleEpochIsRefused
+          - RotationSliceTest.aStageDigestOtherThanTheStagedRowsIsRefused
+          - RotationSliceTest.aStageOfAnotherIdentityIsRefused
+          - RotationSliceTest.anExpiredOrMissingStageIsRefused
+          - RotationSliceTest.anUnreadableScopeKeepsItsGrantAndGetsNoRow
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: the-account-mints-every-next-epoch
+    text: >
+      The account mints each re-granted scope's next epoch itself, from any of its unlocked devices — the rotating one
+      right after the publish, any other at its next unlock — through the pending re-key row that lets a non-owner
+      commit exactly that one epoch, granting its new identity and every member it anchors and declaring the rest
+      pending; a member who joined after the publish is granted too.
+    coverage:
+      backend: { integration: [RotationSliceTest.aMemberWithAWaitingRowCommitsTheNextEpoch] }
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/tasks/scopeRotationWorker.test.ts] }
+  - id: the-old-identity-can-mint-nothing
+    text: >
+      Nobody else is waited on, and the old identity can mint nothing: a key-chain step is accepted only when signed by
+      the stored identity AND the stored Secret-Key proof key over the stored head (a device thief holds the identity,
+      never the Secret Key); a grant to a key that is not its recipient's current one is refused (409
+      recipient_key_not_current); and a non-owner commits only through its pending re-key row — never with a removal
+      (403 not_scope_owner), and not once someone else's commit met the row (409 stale_epoch).
     coverage:
       backend:
         unit:
-          - RotationPolicyTest.refusesACallerAnAccountRotationExcluded
           - RotationPolicyTest.refusesACallerWhoseGrantIsBehindTheScope
           - RotationPolicyTest.refusesACallerWhoHoldsNoGrant
+          - RotationPolicyTest.aRowSomeoneElsesCommitMovedPastIsStale
         integration:
-          - RotationSliceTest.theRotatorCannotClaimTheirOwnRotationButACoMemberCan
-          - RotationSliceTest.aScopeThatAlreadyHadALiveRotationStillExcludesTheRotator
-          - RotationSliceTest.anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth
-          - RotationSliceTest.theRotatorCannotCommitWhileTheirExclusionIsLive
-          - RotationSliceTest.afterTheCoveringRotationTheRotatorIsBehindUntilReAdmitted
-  - id: queued-rotation-state-readable
+          - RotationSliceTest.aStepNotSignedByTheStoredIdentityIsRefused
+          - RotationSliceTest.aStepNotSignedByTheStoredProofKeyIsRefused
+          - RotationSliceTest.aStepWithAStalePredecessorIsRefused
+          - RotationSliceTest.theGateRefusesWithoutTheRowOrWithARemoval
+          - RotationSliceTest.afterSomeoneElsesCommitTheRowAnswersStaleEpoch
+          - RecipientKeySliceTest.aRotationGrantToTheRetiredIdentityIsRefused
+  - id: scope-states-readable
     text: >
-      §9/E3/E4: the rotator reads, at any time, the server's state of every rotation their rotation queued —
-      waiting, stalled (no owner may complete it), secured (their own grant is behind, or the covering job is done)
-      or failed (it dead-lettered, also when still LEASED with no attempts left) — derived from the newest job
-      carrying their exclusion, never synthesised once by the client; secured is never shown while the old identity
-      can hold the current epoch. From failed, and only from failed, they can queue it again, still excluded: that
-      re-arms rotateScope's refusal (409 rotation_not_failed otherwise, 404 rotation_not_found on a scope their
-      rotation never queued). The security panel reads it on every visit and offers the re-queue on failed only.
+      §9: the holder reads, at any time, the server's state of every scope its latest publish re-granted, derived from
+      its pending re-key rows — blocked (with the reason) while the tenant is suspended or the scope is being deleted,
+      waiting while the scope's epoch is still the one it had, rekeying while a node lags, secured otherwise. No job
+      backs it, so there is no stalled or failed.
     coverage:
       backend:
-        # The rule order is the safety property, so the pure derivation is in the PIT scope (inbox #279).
         unit:
-          - CompromiseRotationPolicyTest.aGrantBehindTheScopeIsSecuredWhateverTheJobSays
-          - CompromiseRotationPolicyTest.aGrantAtTheCurrentEpochIsNeverSecuredByTheGrantRule
-          - CompromiseRotationPolicyTest.aLeasedJobIsDeadOnlyWhenEveryConditionHolds
-          - CompromiseRotationPolicyTest.anOwnerSeesFailedOverStalledAndNothingForStatesThatNeedNobody
-        integration: [RotationSliceTest.theRotatorReadsEachQueuedRotationsStateFromTheServer, RotationSliceTest.fromFailedTheRotatorRequeuesAndTheExclusionIsBack]
+          - RotationScopeStatesTest.theEpochItHadAtTheRotationIsWaiting
+          - RotationScopeStatesTest.aBlockedScopeIsBlockedWhateverElseHolds
+          - RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags
+        integration: [RotationSliceTest.theStatesFollowTheRows, RotationSliceTest.afterSomeoneElsesCommitTheRowAnswersStaleEpoch]
       web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
-  - id: outside-until-readmitted
-    text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state — the self-served scopes by the client's own outcome, the queued ones by the server's re-readable state (queued-rotation-state-readable).
-    coverage:
-      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
-  - id: accept-clears-the-decline
-    # The seam ADR 0028 (2) promised and nothing implemented. Its own trap is that the two mechanisms share a
-    # table, so the backend test asserts BOTH halves in one run: the delivery unblocks, the rotation exclusion
-    # does not — which holds by the shape of the query (a scope-rotation job has no delivery target for a
-    # membership id to resolve to) rather than by a special case in it.
-    text: Accepting a changed key clears the declining worker's per-job exclusion, so ADR 0028 (2)'s "the wrap then proceeds" actually holds — and clears only the caller's own declines, only on grant-delivery jobs, only for that contact, so it can never free the exclusion that keeps a rotator off their own rotation.
+  - id: interrupted-after-the-publish-loses-nothing
+    # uc §E7, inbox #556: the four ways a rotation stranded a space (a lost answer, a closed tab, a failed next epoch,
+    # a space in another tenant), each red on the untouched client. Bitten: a self-grant signed by the old identity, the
+    # vault swapped after the finish, and the finish's former one-member refusal each reddened their case.
+    text: >
+      Each space the holder was in holds its current epoch for the new identity from the publish on, so a lost answer,
+      a closed tab, a next epoch that fails or a space in another tenant loses nothing: the space reads waiting, and the
+      next device that unlocks the account — one opened with the new kit included — commits its epoch. The vault holds
+      the published keys as soon as the publish is known committed, and nothing of the old identity is kept.
     coverage:
       backend:
         integration:
-          - TasksSliceTest.acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain
-          - TasksSliceTest.clearingDeclinesNeverFreesARotationExclusion
+          - RotationSliceTest.everyScopeIsRegrantedToTheNewIdentityInThePublish
+          - RotationSliceTest.aRolledBackRotationLeavesNothing
+      web:
+        unit:
+          - src/features/account/rotation/rotateKeys.test.ts
+          - src/features/tasks/scopeRotationWorker.test.ts
+          - src/app/vault.test.ts
+          - src/features/account/rememberMe/sessionVault.test.ts
+        e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
+  - id: an-unanswered-publish-is-read-back-never-re-minted
+    # uc §E7. Bitten: vaultStale without its identity check reddened the control whose floor opens a Master Key that
+    # does not open the served identity.
+    text: >
+      A publish the server did not answer with a declared refusal is read back: the published identity opening under
+      the minted Master Key is a commit, under the old one a failure that changed nothing, anything else locks the vault
+      and says the outcome is unknown — never that nothing was changed. A retry whose credential opens a Master Key
+      other than the vault's that opens the published identity finishes with no kit step and no second publish.
+    coverage:
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/account/rotation/KeyRotationPanel.test.ts] }
+  - id: the-publish-clears-declines-targeting-the-rotator
+    text: >
+      The publish clears every decline of a grant-delivery job whose target is the account, whoever declined it, so a
+      worker that could not anchor the old key tries the new one the key chain now reaches; a decline about anyone else
+      stays.
+    coverage:
+      backend: { integration: [RotationSliceTest.thePublishClearsDeclinesTargetingTheRotator] }
       web: { unit: [src/features/account/identityPins.test.ts] }
   - id: grants-outlive-their-granters-rotation
     # Inbox #233. The reads served the granter's CURRENT key, so after this account rotated every grant it had signed
     # failed `bad_signature` before the recipient's pin was read — and an owner holding one could not open the scope
     # to complete the covering rotation. B1 was red on the untouched backend (served the new key); its lever is
-    # granterOf reading the current key again, which reddens it on each read. The web unit cases pin, with real
-    # signatures, what the client does with each served key (green on both trees — the client did not change);
-    # the dialog and panel cases were red on the untouched client (no worker pass), lever: the pass after the pin.
+    # granterOf reading the current key again, which reddens it on each read.
+    # grantTrust.test.ts walks real chains: a retired key's grant above the floor is refused (lever: drop the floor rule
+    # in verifyOwnGrant → red), at or below it opened.
     text: >
       A grant is served with the identity key its granter held when the server wrote it, so this account's rotation
-      leaves every grant it signed verifiable under each recipient's existing pin, and an owner it granted can
-      complete the covering rotation (whose re-grant skips this account's changed key). A recipient who accepts the
-      new key before that rotation reached them refuses those grants — the retired key is never trusted again — so
-      accepting a changed key first runs one pass of the scope-rotation worker, and a failing pass never blocks the
-      accept.
+      leaves every grant it signed verifiable under each recipient's existing pin. A recipient whose pin already follows the granter's chain past that key reads it
+      as a retired key of the chain: the grant opens at an epoch at or below that device's floor for the scope (it is
+      from before the rotation), and is refused above it (`granter_key_retired`) — a new epoch from a retired key is
+      what a thief holding the old identity would forge. No human accepts a key; there is nothing to accept.
     coverage:
       backend: { integration: [RotationSliceTest.aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt] }
       web:
         unit:
           - src/features/spaces/scopes.test.ts
-          - src/features/spaces/ChangedKeyReviewDialog.test.ts
-          - src/features/spaces/GroupMembersPanel.test.ts
+          - src/features/spaces/grantTrust.test.ts
         e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
   - id: forward-secrecy-not-repair
     # No test can assert "no surface implies repair" — that is prose, and the coverage refs below reach only
@@ -194,7 +256,7 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: operator-blind-rotation
-    text: The server sees only a replaced directory value, rewritten ciphertext wraps, epoch indices and queued jobs — the same metadata classes it already holds. It never learns a key, and the re-admission decision is never made server-side.
+    text: The server sees only a replaced directory value, a key-chain step (public keys and signatures), rewritten ciphertext wraps, staged grants it already holds as grant rows and epoch indices — the same metadata classes it already holds. It never learns a key, and no trust decision is made server-side.
     coverage:
       backend: { integration: [RotationSliceTest.rotationSupersedesLivePairingChannelsAndRevokesEveryOtherSession] }
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
@@ -202,30 +264,30 @@ acceptanceCriteria:
     # ADR 0109. The re-key itself is uc.spaces.rekey-after-rotation's (its refs run it through the real crypto); what
     # this criterion adds is who runs it for an account rotation.
     text: >
-      Every scope the rotation advances re-keys every node of it — a sole-member scope on the rotating device right
-      after its new epoch, a shared scope on the device of the owner who completes the covering rotation — so what is
-      added afterwards inside a folder, Memory or chapter that existed before opens with no key of the old identity.
-      What existed at the rotation, and every link made before until it is renewed, stay in its reach. A sole-member
-      re-key that stops leaves the scope rekeying, and that device's scope-rotation worker resumes it.
+      Every scope the rotation advances re-keys every node of it, on the device that committed its epoch and on any
+      member's — so what is added afterwards inside a folder, Memory or chapter that existed before opens with no key of
+      the old identity. What existed at the rotation, and every link made before until it is renewed, stay in its
+      reach. A re-key that stops leaves the scope rekeying, and any member's scope-rotation worker resumes it.
     coverage:
       backend: { integration: [RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone] }
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: secured-only-once-rekeyed
     text: >
-      The rotator's state of a queued rotation reads rekeying, never secured, while a node of the scope still carries a
-      key from before — by the grant rule and by the done rule alike — and an owner's row needs nobody for it, since a
-      worker resumes it.
+      A re-granted scope reads rekeying, never secured, while a node of it still carries a key from before its new
+      epoch.
     coverage:
-      backend: { unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying] }
-# Backend built by cr-account-key-rotation-after-compromise: POST /api/account/rotation (RotationResource →
-# RotationHandler → RotationStore, one transaction), the member-count split on MembershipStore, the
-# rotator-excluding origination on TasksStore, and POST /api/tasks/declines/clear. Web: the Security section of
-# the settings hub, the rotation data layer, the three-valued unlock-origin record on the vault, and the two
-# re-seal seams on the pin store + device register.
-#
-# What no green run here proves, stated so nobody quotes it as more: the live suite drives the rotation and its
-# covering rotation (scopeRotation.e2e's last leg: a co-owner whose grant the rotator signed completes it, and the
-# rotator is not re-granted), but not the re-admission — that a second, real key-holder accepts the new key and
-# delivers needs the accept surface live and is not exercised. The slice tests prove the exclusion and the
-# clearing against a seeded queue. That is a gap in *depth*, not in surface, which is why it is a note rather
-# than a `gaps:` entry (both surfaces carry refs, and a covered area may not also be a gap).
+      backend:
+        unit: [RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags]
+        integration: [RotationSliceTest.theStatesFollowTheRows]
+  - id: the-result-lists-states-and-links
+    text: >
+      The entry lists, before any field, the spaces that cannot get their new lock now (a suspended tenant, a scope
+      being deleted, a grant this device cannot open) and, when the account signed open invitations, that they stop
+      working; the result names every space with its state, and lists the account's own links marked for re-issue with
+      Renew, which opens the node's own share dialog. An upload link is replaced rather than renewed, and a link in
+      another tenant is renewed from there.
+    coverage:
+      web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotationEntry.test.ts] }
+# What no green run here proves, stated so nobody quotes it as more: scopeRotation.e2e's last leg drives securing the
+# account, abandoned right after the publish and finished from a fresh sign-in with the new kit, and a second member
+# reading what follows; it is a live suite, run once at the end of V1, not on every change.

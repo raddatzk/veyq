@@ -157,21 +157,23 @@ More: [What happens to my photos when quantum computers arrive?](/veyq/privacy/q
 When you share with a friend, your app needs your friend's key, which it gets from our server. A
 dishonest operator could, in theory, hand your app the *wrong* key.
 
-**Your app remembers the key it first saw.** If the server later hands over a different one, that person is
-marked **"Key changed"**, and your app gives them no keys until you have looked at it. **"Review key"** shows
-the number you trusted next to the one shown now — every key has a short **safety number** — so the two of
-you can compare them over a call, and then you accept the new key or refuse it. A change is often harmless
-(your friend replaced their keys), but it can also be someone posing as them.
+**Your app remembers the key it first saw.** When your friend
+[secures their account](/veyq/account/replace-your-keys/), their new key is signed by their previous one, and your
+app follows that signature from the key it remembered: it goes on sharing with them, and their profile says **"New
+identity, signed by their previous key"**. If the server hands over a key that does *not* follow from the one your
+app remembered, that person is marked **"Can't confirm this key"**, and your app gives that key nothing. There is no
+button to accept it: a real change is always signed, so a key that isn't can be someone posing as them. The two of
+you then compare your **safety numbers** — every key has a short one — in person. Meanwhile someone else in the space
+whose app does confirm their key passes them the space's key, and nobody's posting waits for it.
 
 **Checking before anything changes.** Remembering only helps from the first key your app saw: if the server
 handed you a wrong key from the very start, nothing would look wrong. So you can check it yourself. Your own
 profile shows *your* safety number and a code; open a friend's profile, scan the code on their screen or read the
 digits to each other, and if it matches they are marked **"Verified"** — on their profile and in every member list
 (step by step: [Verify a person](/veyq/account/verify-a-person/)).
-If a verified friend's key ever changes, the app says so more loudly, and you compare again.
+When a verified friend secures their account, the mark doesn't carry over to the new key; compare again to restore it.
 
-**The honest part:** the comparing is up to you. Accepting a changed key is a single tap, and the app cannot tell
-whether you really compared — accepting does not mark anyone verified, only a new compare does. Nothing requires
+**The honest part:** the comparing is up to you. Nothing requires
 you to verify anyone before you share with them; a setting that would does not exist yet. The stronger system,
 where the server can't lie about keys at all, is **planned, not built** — and we'd rather tell you than imply
 otherwise.

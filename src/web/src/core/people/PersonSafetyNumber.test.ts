@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-// The safety number on a profile (uc.spaces.enforce-verified-identities main flow 0-3, A1, E1; ADR 0028 Decision 3).
-// The pin store's write door (`markVerified`) and its read (`getPin`) are mocked so each test can say exactly what was
-// written; the number, the fold and the QR codec are REAL (the vector-pinned `safetyNumber`, `foldTrust`, `safetyCode`),
-// so a scanned code is compared the way the app compares it. The store's own one-write/merge behaviour is
-// identityPins.test.ts' "pinIfUnpinned" block.
+// The safety number on a profile (uc.spaces.enforce-verified-identities main flow 0-3, A1, E1; ADR 0028 Decision 3;
+// ADR 0028 Decision 2). The pin store's write door (`markVerified`) and its read (`personTrust` — the fold
+// against the served key and head, and the chain's newest step) are mocked so each test can say exactly what was read and
+// written; the number and the QR codec are REAL (the vector-pinned `safetyNumber`, `safetyCode`), so a scanned code is
+// compared the way the app compares it. The fold itself, the chain walk and the store's one-write/merge behaviour are
+// identityPins.test.ts' ("personTrust", "pinAtHead").
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
@@ -12,38 +13,36 @@ import { b64std } from '@veyq/crypto/base64'
 
 vi.mock('../../features/account/identityPins', async (orig) => ({
   ...(await orig<typeof import('../../features/account/identityPins')>()),
-  getPin: vi.fn(),
+  personTrust: vi.fn(),
   markVerified: vi.fn(),
   myIdentityPublicKeyB64: vi.fn(),
 }))
-vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadIdentityKey: vi.fn() }))
+vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadServedIdentity: vi.fn() }))
 
 import PersonSafetyNumber from './PersonSafetyNumber.vue'
 import MySafetyNumber from './MySafetyNumber.vue'
-import { getPin, markVerified, myIdentityPublicKeyB64, safetyNumber, IdentityMovedError } from '../../features/account/identityPins'
+import { personTrust, markVerified, myIdentityPublicKeyB64, safetyNumber, IdentityMovedError, type Pin, type TrustState } from '../../features/account/identityPins'
 import { fingerprintDigestB64, safetyCodePayload } from '../../features/account/safetyCode'
 import { TrustStateRefused } from '../../features/account/trustMarks'
-import { loadIdentityKey } from './directory'
+import { loadServedIdentity } from './directory'
 import { realI18n, t } from '../../test/i18n'
 
 const bundle = () => b64std(v1.serializeIdentityPublic(v1.generateIdentity().pub))
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const DIR = bundle() // the key the directory serves for Anna
 const OTHER = bundle() // any other key
+const HEAD = 'ERERERERERERERERERERERERERERERERERERERERERE=' // the head the directory serves beside DIR
 
-// The camera and the dialogs are not what is under test: the scanner is a stub the test makes "find" a string, the
-// review dialog a stub that records the member it was handed.
+const pinOf = (key: string, state: Pin['state'] = 'pinned'): Pin => ({ fingerprint: fingerprintDigestB64(key), head: HEAD, state, firstSeenAt: 1 })
+/** What the profile's read of Anna comes to: the badge, the pin after the read, and the date of a rotation. */
+const reads = (state: TrustState, pin: Pin | null, rotatedAt: Date | null = null) =>
+  vi.mocked(personTrust).mockResolvedValue({ state, pin, rotatedAt })
+
+// The camera is not what is under test: the scanner is a stub the test makes "find" a string.
 const Scanner = defineComponent({ name: 'KitScanner', props: ['hint', 'errorText'], emits: ['found', 'close'], setup: () => () => h('div', { class: 'scanner-stub' }) })
-const Review = defineComponent({
-  name: 'ChangedKeyReviewDialog',
-  props: ['member', 'visible'],
-  emits: ['update:visible', 'accepted'],
-  setup: (p) => () => (p.visible ? h('div', { class: 'review-stub' }, p.member.identityPublicKey) : null),
-})
 const Plate = defineComponent({ name: 'PairingCode', props: ['payload', 'alt', 'failedText'], setup: (p) => () => h('div', { class: 'plate-stub' }, p.payload) })
 const stubs = {
   KitScanner: Scanner,
-  ChangedKeyReviewDialog: Review,
   PairingCode: Plate,
   VeyqButton: { props: ['label', 'loading', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
   VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
@@ -65,8 +64,8 @@ async function scan(w: Awaited<ReturnType<typeof mountTheirs>>, text: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(loadIdentityKey).mockResolvedValue(DIR)
-  vi.mocked(getPin).mockResolvedValue(null)
+  vi.mocked(loadServedIdentity).mockResolvedValue({ identityPublicKey: DIR, keyChainHead: HEAD })
+  reads('unpinned', null)
   vi.mocked(markVerified).mockResolvedValue(undefined)
 })
 
@@ -98,43 +97,58 @@ describe('another member’s safety number (main flow 1-3)', () => {
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateUnverified'))
   })
 
-  it('pinned: shows the PIN’s number, not the directory’s, and a changed key points at the review', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 })
-    const w = await mountTheirs()
-    expect(digits(w)).toBe(safetyNumber(OTHER))
-    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('verify.badgeChanged'))
-    await w.get('[data-testid="person-safety-review"]').trigger('click')
-    expect(w.get('.review-stub').text()).toBe(DIR) // the review compares against what the directory serves now
+  it('the read is judged against the key AND the head the directory serves', async () => {
+    await mountTheirs()
+    expect(personTrust).toHaveBeenCalledWith(ANNA, { identityPublicKey: DIR, keyChainHead: HEAD })
   })
 
-  it('control: a pin that holds the directory key reads as pinned, with no review offered', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
+  it('an anomaly: shows the PIN’s number, not the directory’s, with the note — and no review, no accept', async () => {
+    reads('anomaly', pinOf(OTHER))
+    const w = await mountTheirs()
+    expect(digits(w)).toBe(safetyNumber(OTHER))
+    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('trust.anomaly'))
+    expect(w.get('[data-testid="person-safety-anomaly"]').text()).toBe(t('trust.anomalyNote'))
+    expect(w.findAll('button').map((b) => b.text())).toEqual([t('safety.scan'), t('safety.compare')])
+  })
+
+  it('control: a pin that holds the directory key reads as pinned, with no note', async () => {
+    reads('pinned', pinOf(DIR))
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateUnverified'))
-    expect(w.find('[data-testid="person-safety-changed"]').exists()).toBe(false)
+    expect(w.find('[data-testid="person-safety-anomaly"]').exists()).toBe(false)
+    expect(w.find('[data-testid="person-safety-rotated"]').exists()).toBe(false)
+  })
+
+  it('a rotation the chain reached: the new key\'s number, and "New identity, signed by their previous key, on <date>"', async () => {
+    const at = new Date('2026-10-20T12:00:00Z')
+    reads('pinned', pinOf(DIR), at)
+    const w = await mountTheirs()
+    expect(digits(w)).toBe(safetyNumber(DIR))
+    const date = at.toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })
+    expect(w.get('[data-testid="person-safety-rotated"]').text()).toBe(t('trust.rotated', { date }))
   })
 
   it('a verified pin reads as verified', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'verified', firstSeenAt: 1 })
+    reads('verified', pinOf(DIR, 'verified'))
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateVerified'))
   })
 
-  it('a scanned code of the shown key on an UNPINNED member verifies it, pinning the compared key (one action)', async () => {
+  it('a scanned code of the shown key on an UNPINNED member verifies it, pinning the compared key at the served head (one action)', async () => {
     const w = await mountTheirs()
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'verified', firstSeenAt: 1 }) // what the store holds after
+    reads('verified', pinOf(DIR, 'verified')) // what the store holds after
     await scan(w, safetyCodePayload(DIR))
     expect(markVerified).toHaveBeenCalledTimes(1)
-    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: true })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinAtHead: HEAD })
     expect(outcome(w)).toBe(t('safety.verified', { name: 'Anna Meyer' }))
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateVerified'))
   })
 
   it('on a PINNED member the match verifies the pin’s key and never asks to pin', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
+    reads('pinned', pinOf(DIR))
     const w = await mountTheirs()
     await scan(w, safetyCodePayload(DIR))
-    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: false })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), {})
   })
 
   it('a code of a DIFFERENT key is a mismatch: said, and nothing is written', async () => {
@@ -163,57 +177,29 @@ describe('another member’s safety number (main flow 1-3)', () => {
     await w.get('[data-testid="person-safety-compare-start"]').trigger('click')
     await w.get('[data-testid="person-safety-match"]').trigger('click')
     await flushPromises()
-    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: true })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinAtHead: HEAD })
   })
 
   it('a key that moved under the compare says so and re-reads what the store holds', async () => {
     vi.mocked(markVerified).mockRejectedValue(new IdentityMovedError(ANNA))
     const w = await mountTheirs()
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 }) // a concurrent pin landed
+    reads('anomaly', pinOf(OTHER)) // a concurrent pin landed
     await scan(w, safetyCodePayload(DIR))
     expect(outcome(w)).toBe(t('safety.moved', { name: 'Anna Meyer' }))
     expect(digits(w)).toBe(safetyNumber(OTHER)) // the number shown is now the key the store holds
   })
 
   it('a refused pin store is said with the way back, never read as unpinned', async () => {
-    vi.mocked(getPin).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
+    vi.mocked(personTrust).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
     const w = await mountTheirs()
     expect(w.text()).toContain(t('verify.trustRolledBack'))
     expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(false)
   })
 
   it('a former member (no directory key) shows no safety section content at all', async () => {
-    vi.mocked(loadIdentityKey).mockResolvedValue(null)
+    vi.mocked(loadServedIdentity).mockResolvedValue(null)
     const w = await mountTheirs()
     expect(w.text()).toBe('')
-    expect(getPin).not.toHaveBeenCalled()
-  })
-})
-
-describe('a verified contact\'s key changed, on the profile (ADR 0028 Decision 3)', () => {
-  it('reads louder, and after the review\'s accept the profile reads pinned and offers the compare again', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'verified', firstSeenAt: 1 })
-    const w = await mountTheirs()
-    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.badgeVerifiedChanged'))
-    expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedVerifiedNote', { name: 'Anna Meyer' }))
-
-    // The review accepts: the store now pins the directory key as `pinned` (acceptKeyChange's own suite pins that).
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
-    await w.get('[data-testid="person-safety-review"]').trigger('click')
-    w.getComponent(Review).vm.$emit('accepted')
-    await flushPromises()
-    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateUnverified'))
-    expect(digits(w)).toBe(safetyNumber(DIR))
-    expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(true)
-    expect(w.find('[data-testid="person-safety-compare-start"]').exists()).toBe(true)
-    await scan(w, safetyCodePayload(DIR))
-    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: false })
-  })
-
-  it('control: an ordinary pinned contact\'s change reads as "Key changed"', async () => {
-    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 })
-    const w = await mountTheirs()
-    expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('verify.badgeChanged'))
-    expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedNote', { name: 'Anna Meyer' }))
+    expect(personTrust).not.toHaveBeenCalled()
   })
 })

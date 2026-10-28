@@ -1,7 +1,7 @@
-// The group names this page has opened, by scope id — a device-local label for a group the account can no longer
-// open (inbox #280). After a compromise rotation the rotator's grants are wrapped to the identity they replaced, so
-// a shared group's name stays sealed until someone there re-admits them; the security panel then labels the queued
-// row with the name this page last opened, marked as possibly out of date, instead of the raw scope id.
+// The group names this page has opened, by scope id — a device-local label for a group (inbox #280). Securing the
+// account lists every scope of every tenant from its plan, which serves no group name, and this page opens only the
+// active tenant's groups; so the security panel labels a group's row with the name this page last opened, marked as
+// possibly out of date, instead of the raw scope id.
 //
 // **Memory only, never persisted.** A decrypted name never reaches IndexedDB or Web Storage here — it lives exactly
 // as long as the page, like every other decrypted value the app holds, and the session ending's document load

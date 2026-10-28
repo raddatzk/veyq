@@ -10,7 +10,7 @@ import Screenshot from '../../../../components/Screenshot.astro';
 Jedes Mitglied hat eine **Sicherheitsnummer**, die aus seinem Schlüssel entsteht. Zeigen deine App und die einer
 anderen Person für diese Person dieselbe Nummer, weißt du, dass der Server dir ihren echten Schlüssel gegeben hat und
 nicht den von jemand anderem. Einmal zu vergleichen ist freiwillig; am wichtigsten ist es, wenn sich ein Schlüssel
-geändert hat.
+nicht bestätigen lässt.
 
 ## Eine Sicherheitsnummer vergleichen
 
@@ -32,25 +32,28 @@ Die andere Person findet ihre eigene Nummer auf ihrer eigenen Profilseite unter 
 Stimmen die Nummern nicht überein, markiere die Person nicht als verifiziert: Der Schlüssel, den du hast, gehört
 womöglich nicht zu ihr. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut.
 
-## Wenn sich ein Schlüssel geändert hat
+## Wenn jemand sein Konto absichert
 
-Zeigt der Server für ein Mitglied plötzlich einen anderen Schlüssel, merkt veyq das: Ihr Profil und die
-Mitgliederlisten unter **Einstellungen** zeigen **Schlüssel geändert** und eine Schaltfläche **Schlüssel prüfen**. Das
-passiert, wenn jemand [seine Schlüssel ersetzt hat](/veyq/de/account/replace-your-keys/), und genau das würdest du auch
-sehen, wenn jemand versucht, einen Schlüssel als den dieser Person auszugeben.
+Sichert eine Person [ihr Konto ab](/veyq/de/account/replace-your-keys/), bekommt sie einen neuen Schlüssel, mit ihrem
+vorherigen unterschrieben. Deine App prüft diese Unterschrift selbst und teilt weiter mit ihr; du musst nichts tun. In
+ihrem Profil steht **Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben** mit dem Datum. Ein
+**Verifiziert** von vorher gilt nicht weiter: Vergleicht die Sicherheitsnummer erneut, wenn du sie verifiziert haben
+willst.
 
-1. Wähle **Schlüssel prüfen**. Der Dialog zeigt zwei Nummern: **Erwartet — dein vertrauter** und **Aktuell — jetzt
-   gezeigt**.
-2. Frag die Person direkt, außerhalb von veyq, ob sie ihre Schlüssel ersetzt hat, und vergleicht die aktuelle Nummer
-   mit der in ihrem eigenen Profil.
-3. Erst wenn du sicher bist, dass er wirklich ihr gehört, wähle **Neuen Schlüssel akzeptieren**. Sonst wähle
-   **Ablehnen**.
+## Wenn sich ein Schlüssel nicht bestätigen lässt
 
-<Screenshot id="account-review-key" shows="Der Dialog Geänderten Schlüssel prüfen mit den Nummern Erwartet und Aktuell und den Schaltflächen Ablehnen und Neuen Schlüssel akzeptieren" />
+Gibt der Server für ein Mitglied einen Schlüssel aus, der nicht aus dem folgt, den deine App kannte, zeigen ihr Profil
+und die Mitgliederlisten unter **Einstellungen** **Schlüssel nicht bestätigt**: *Der Schlüssel dieser Person folgt
+nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern
+persönlich.* Ein echter Schlüsselwechsel ist immer unterschrieben, so sieht ein abgesichertes Konto also nicht aus:
+Es kann jemand sein, der versucht, einen Schlüssel als den dieser Person auszugeben.
 
-Bis du akzeptierst, gibt dein Gerät diesem Mitglied keinen Schlüssel eines Bereichs und fügt es keiner Gruppe hinzu:
-Ein geänderter Schlüssel kann ein neues Gerät sein oder jemand, der sich als diese Person ausgibt. Akzeptieren
-verifiziert den neuen Schlüssel nicht; vergleicht danach erneut, wenn du ihn verifiziert haben willst.
+Dein Gerät gibt diesem Schlüssel keinen Schlüssel eines Bereichs und fügt ihn keiner Gruppe hinzu. Bekommt ein
+Bereich in der Zeit ein neues Schloss, steht in der Mitgliederliste daneben **Wartet auf jemanden, der den Schlüssel
+bestätigen kann**: Ein anderes Mitglied, dessen App den Schlüssel bestätigen kann, gibt ihn weiter. Niemand wird dabei
+beim Hinzufügen oder Posten aufgehalten, und eine Schaltfläche zum Annehmen des Schlüssels gibt es ohnehin nicht. Frag
+die Person außerhalb von veyq und vergleicht eure Sicherheitsnummern persönlich:
+[Was du tun kannst](/veyq/de/help/key-changed/).
 
 veyq vertraut nur einem Schlüssel, den dein eigenes Gerät geprüft hat; der Server kann Schlüssel weiterreichen, aber
 keinen unterschieben, ohne dass deine App es zeigt: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

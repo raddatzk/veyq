@@ -60,11 +60,13 @@ class TasksHandler(
         return store.heartbeat(userId, jobId, leaseTtl)
     }
 
-    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?): CompleteResult {
+    fun complete(
+        userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?, recipientIdentityDigest: String?,
+    ): CompleteResult {
         val job = store.find(jobId) ?: return CompleteResult.NotFound
         access.check(userId, job.scopeId, WRITE)
             .refusal(CompleteResult.NotFound, CompleteResult.Suspended, CompleteResult.Deleting)?.let { return it }
-        return store.complete(userId, jobId, sealedResult, statedEpoch, grantSignature)
+        return store.complete(userId, jobId, sealedResult, statedEpoch, grantSignature, recipientIdentityDigest)
     }
 
     fun fail(userId: String, jobId: String): FailResult {
@@ -80,18 +82,6 @@ class TasksHandler(
             .refusal(DeclineResult.NotFound, DeclineResult.Suspended, DeclineResult.Deleting)?.let { return it }
         return store.decline(userId, jobId, reason)
     }
-
-    /**
-     * Clear the caller's own declines against a contact whose changed identity key they just accepted
-     * (ADR 0028 (2), ADR 0060 Decision 7) — the seam that makes *"the wrap then proceeds"* true.
-     *
-     * No scope-access gate, and deliberately so: unlike [enqueue] this names no scope, so there is no
-     * scope existence to disclose. It touches only rows the caller wrote themselves, so an unknown or unrelated
-     * `targetUserId` simply clears nothing — `0` is the ordinary answer, and it is the same answer for a
-     * stranger as for a contact this caller never declined.
-     */
-    fun clearDeclines(userId: String, targetUserId: String): Int =
-        store.clearDeclinesForTarget(userId, targetUserId)
 
     /**
      * Enqueue a client-originated job. The **scope-access gate is the first guard** (ADR 0042): a non-member

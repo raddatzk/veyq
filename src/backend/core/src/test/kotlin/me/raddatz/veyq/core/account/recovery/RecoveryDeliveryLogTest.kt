@@ -54,7 +54,7 @@ class RecoveryDeliveryLogTest {
     }
 
     /** A lookup that fails the way a database does: with the bound value in its message. */
-    class FailingStore : AccountStore() {
+    class FailingStore : AccountStore(me.raddatz.veyq.core.identity.keychain.KeyChainStore()) {
         override fun findByEmail(email: String, lock: Boolean): VeyqUser? =
             throw PersistenceException("could not execute statement [select … where email=?] bound '$email'")
     }

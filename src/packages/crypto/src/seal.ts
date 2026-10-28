@@ -343,7 +343,7 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
  * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#grant_signature`,
- * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`).
+ * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`, `#key_chain`).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext. A grant to an open
@@ -365,6 +365,13 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     key, so a redeem with the token alone is refused.
  *   - `join-record` (ADR 0111 decisions 3 and 12): what the invite key AND the new identity both sign — who joined
  *     (account, identity digest, Secret-Key proof public key) through which owner-signed invite.
+ *   - `key-chain-genesis` (ADR 0111 decision 7, cr-secure-the-account): step 0 of an account's key chain — the identity
+ *     public bundle and the Secret-Key proof public key the account was born with, in full. Never signed: there is no
+ *     key before it. Its own label, so a genesis can never be read as a step and no step as a genesis.
+ *   - `key-chain-step` (the same): step `index ≥ 1` — the head of the step before it, SHA-256 of the identity bundle and
+ *     of the proof public key it retires, and the new bundle and proof public key in full. Signed twice over the same
+ *     bytes, by the retired identity AND by the retired proof key, so a thief holding a device's identity alone cannot
+ *     forge one.
  */
 export const STATEMENT_PURPOSES = {
   grant: [
@@ -393,6 +400,16 @@ export const STATEMENT_PURPOSES = {
     ['inviteExpiresAt', 'uint'],
     ['signerUserId', 'id'],
     ['signerIdentityDigest', 'digest'],
+  ],
+  'key-chain-genesis': [['userId', 'id'], ['identityPublicKey', 'bytes'], ['secretKeyProofPublicKey', 'bytes']],
+  'key-chain-step': [
+    ['userId', 'id'],
+    ['index', 'uint'],
+    ['previousHead', 'digest'],
+    ['previousIdentityDigest', 'digest'],
+    ['previousProofKeyDigest', 'digest'],
+    ['identityPublicKey', 'bytes'],
+    ['secretKeyProofPublicKey', 'bytes'],
   ],
 } as const satisfies Schema
 

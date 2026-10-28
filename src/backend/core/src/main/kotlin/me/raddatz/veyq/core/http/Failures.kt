@@ -82,6 +82,11 @@ object Failures {
      *  recipient's key and rewraps (ADR 0111: a grant names its recipient key from birth). */
     val recipientKeyNotCurrent: HttpFailure = httpFailure("recipient_key_not_current", CONFLICT)
 
+    /** Securing the account (ADR 0111 decision 6): the stage or the account's set of grant-carrying
+     *  memberships is not what the request names → 409; nothing written. The client re-reads the plan, re-stages the
+     *  delta (or opens a new stage) and resubmits. */
+    val rotationPlanChanged: HttpFailure = httpFailure("rotation_plan_changed", CONFLICT)
+
     /** A write sealed under the key of a node the scope's last rotation has not re-keyed yet → 409; nothing was
      *  written, and the writer retries once the re-key reached the node (ADR 0109 point 6). Only that node waits. */
     val nodeRekeyPending: HttpFailure = httpFailure("node_rekey_pending", CONFLICT)

@@ -28,7 +28,7 @@ import {
   Configuration as AccountConfiguration,
 } from './generated/account'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
-import { Configuration as ScopesConfiguration, ScopesApi } from './generated/scopes'
+import { Configuration as ScopesConfiguration, KeyChainApi, ScopesApi } from './generated/scopes'
 import { ContentApi, Configuration as ContentConfiguration, RekeyApi } from './generated/content'
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
@@ -152,6 +152,12 @@ export function tenantsApi(): TenantsApi {
 
 export function scopesApi(): ScopesApi {
   return new ScopesApi(new ScopesConfiguration(bearerParams()))
+}
+
+// A person's key chain (ADR 0111 decision 7, the `key-chain` tag): read by the pin check when a served head moved, and by
+// a profile for the date of the newest step. Served to co-members of a tenant only.
+export function keyChainApi(): KeyChainApi {
+  return new KeyChainApi(new ScopesConfiguration(bearerParams()))
 }
 
 // The member's node pins (ADR 0068, core's): one sealed blob per (user, scope). No guest route exists.

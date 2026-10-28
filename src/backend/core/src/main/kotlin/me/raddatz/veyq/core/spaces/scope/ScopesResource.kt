@@ -71,6 +71,7 @@ class ScopesResource(
         when (val outcome = handler.createPersonal(
             identity.principal.name, activeTenantId(), createPersonalScopeRequest.scopeId.toString(),
             SignedGrant(createPersonalScopeRequest.wrappedGrant, createPersonalScopeRequest.grantSignature),
+            createPersonalScopeRequest.recipientIdentityDigest,
         )) {
             is CreatePersonalOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -81,7 +82,7 @@ class ScopesResource(
     override fun createGroup(createGroupRequest: CreateGroupRequest): Response =
         when (val outcome = handler.createGroup(
             identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
-            SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature),
+            SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature), createGroupRequest.recipientIdentityDigest,
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -126,7 +127,8 @@ class ScopesResource(
             is ResolveCandidateOutcome.Ok -> Response.ok(
                 ResolvedGroupCandidate(
                     userId = UUID.fromString(outcome.row.userId), username = outcome.row.username,
-                    identityPublicKey = outcome.row.identityPublicKey, requiresConsent = outcome.row.requiresConsent,
+                    identityPublicKey = outcome.row.identityPublicKey, keyChainHead = outcome.row.keyChainHead,
+                    requiresConsent = outcome.row.requiresConsent,
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -171,13 +173,16 @@ class ScopesResource(
     override fun rotateScope(scopeId: UUID, rotateScopeRequest: RotateScopeRequest): Response =
         when (val outcome = handler.rotateScope(
             identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch, rotateScopeRequest.wrappedPrev,
-            rotateScopeRequest.grants.map { RotationGrant(it.userId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature)) },
+            rotateScopeRequest.grants.map {
+                RotationGrant(it.userId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature), it.recipientIdentityDigest)
+            },
             rotateScopeRequest.inviteGrants.orEmpty().map {
                 InviteGrant(it.inviteId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature), it.recipientIdentityDigest)
             },
             rotateScopeRequest.pendingInviteIds.orEmpty().map { it.toString() }.toSet(),
             rotateScopeRequest.removesUserId?.toString(),
             rotateScopeRequest.revokeLinks ?: false,
+            rotateScopeRequest.pendingUserIds.orEmpty().map { it.toString() }.toSet(),
         )) {
             is RotateOutcome.Ok -> Response.status(Response.Status.CREATED).entity(ScopeRotated(epoch = outcome.epoch)).build()
             is HttpFailure -> httpError(outcome)
@@ -191,7 +196,7 @@ class ScopesResource(
                     OpenInvite(
                         inviteId = UUID.fromString(it.inviteId), invitePublicKey = it.invitePublicKey,
                         inviteKeySignature = it.inviteKeySignature, signerUserId = UUID.fromString(it.signerUserId),
-                        signerIdentityPublicKey = it.signerIdentityPublicKey,
+                        signerIdentityPublicKey = it.signerIdentityPublicKey, signerKeyChainHead = it.signerKeyChainHead,
                         expiresAt = OffsetDateTime.ofInstant(it.expiresAt, ZoneOffset.UTC),
                     )
                 },
@@ -265,6 +270,7 @@ class ScopesResource(
     private fun scopeMember(row: ScopeMemberRow) = ScopeMember(
         userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName, avatarRevision = row.avatarRevision,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
+        keyChainHead = row.keyChainHead, pending = row.pending,
         pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord,
     )
 
@@ -284,8 +290,6 @@ class ScopesResource(
     private fun CompromiseRotationState.toWire(): CompromiseRotation = when (this) {
         CompromiseRotationState.STALLED -> CompromiseRotation.stalled
         CompromiseRotationState.FAILED -> CompromiseRotation.failed
-        CompromiseRotationState.WAITING, CompromiseRotationState.REKEYING, CompromiseRotationState.SECURED ->
-            error("$this needs no owner and is never served")
     }
 
     override fun revokeScopeShares(scopeId: UUID): Response =

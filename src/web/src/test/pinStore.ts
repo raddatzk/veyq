@@ -2,9 +2,9 @@
 // endpoint (ADR 0104): a head plus one sealed entry per pin, with the store's compare-and-set and keyset listing.
 //
 // The writer here is independent of the module on purpose: it seals the documented format (v1.json#identity_pin — the
-// padded `{ userId, fingerprint, state, firstSeenAt }` entry at `HMAC(K_pinIndex, userId)`, the `{ version: 2, count,
-// digest }` head at its revision), so a store "another device wrote" is the wire's, not the module's own idea of it,
-// and `pinsOn` reads what the module wrote back the same way.
+// padded `{ u: userId, f: fingerprint, h: head, s: state, t: firstSeenAt }` entry at `HMAC(K_pinIndex, userId)`, the
+// `{ version: 2, count, digest }` head at its revision), so a store "another device wrote" is the wire's, not the
+// module's own idea of it, and `pinsOn` reads what the module wrote back the same way.
 import { expect, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -26,9 +26,13 @@ export type PinServerState = { blob: string | undefined; revision: number; entri
 /** A store never written. */
 export const emptyPinStore = (): PinServerState => ({ blob: undefined, revision: 0, entries: new Map() })
 
-/** A pin of a served identity bundle, as the store holds it — its fingerprint, not the bundle. */
-export const pinOf = (identityPublicKeyB64: string, state: Pin['state'] = 'pinned', firstSeenAt = 1): Pin => ({
+/** A head that names no chain — for a pin whose head no test reads a chain for (32 bytes of 0x11, base64). */
+export const SOME_HEAD = 'ERERERERERERERERERERERERERERERERERERERERERE='
+
+/** A pin of a served identity bundle, as the store holds it — its fingerprint, not the bundle — at `head`. */
+export const pinOf = (identityPublicKeyB64: string, state: Pin['state'] = 'pinned', firstSeenAt = 1, head = SOME_HEAD): Pin => ({
   fingerprint: fingerprintDigestB64(identityPublicKeyB64),
+  head,
   state,
   firstSeenAt,
 })
@@ -42,7 +46,7 @@ export const pinIdOf = (mk: Uint8Array, userId: string): string =>
 
 /** One entry sealed in the documented format, for `userId`, at the hex id `at`. */
 export function sealPinEntry(mk: Uint8Array, userId: string, pin: Pin, at = pinIdOf(mk, userId)): string {
-  const body = enc.encode(JSON.stringify({ userId, fingerprint: pin.fingerprint, state: pin.state, firstSeenAt: pin.firstSeenAt }))
+  const body = enc.encode(JSON.stringify({ u: userId, f: pin.fingerprint, h: pin.head, s: pin.state, t: pin.firstSeenAt }))
   const padded = new Uint8Array(ENTRY_BYTES).fill(0x20)
   padded.set(body)
   return b64std(v1.seal({ purpose: 'identity-pin', pinId: unhex(at) }, mk, padded))
@@ -71,9 +75,12 @@ export function pinsOn(mk: Uint8Array, state: PinServerState): Record<string, Pi
   for (const [id, entry] of state.entries) {
     const plain = v1.open({ purpose: 'identity-pin', pinId: unhex(id) }, mk, fromB64std(entry))
     expect(plain.length).toBe(ENTRY_BYTES)
-    const { userId, ...pin } = JSON.parse(dec.decode(plain)) as Pin & { userId: string }
+    const { u: userId, f: fingerprint, h: head, s: state, t: firstSeenAt, ...rest } = JSON.parse(dec.decode(plain)) as {
+      u: string; f: string; h: string; s: Pin['state']; t: number
+    }
+    expect(rest).toEqual({})
     expect(pinIdOf(mk, userId)).toBe(id)
-    out[userId] = pin
+    out[userId] = { fingerprint, head, state, firstSeenAt }
   }
   const head = JSON.parse(dec.decode(v1.open({ purpose: 'identity-pins', revision: state.revision }, mk, fromB64std(state.blob!))))
   expect(head).toEqual({ version: 2, count: state.entries.size, digest: digestOf(state.entries) })

@@ -179,7 +179,7 @@ class CapabilityDisabledSliceTest {
 
     private fun createGroup(owner: String, domain: String): Response =
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$GROUP_NAME","wrappedGrant":"$GROUP_GRANT",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$GROUP_NAME","wrappedGrant":"$GROUP_GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
 
     /** The error code of a response, or null for one without a JSON body (a 204). */

@@ -70,15 +70,19 @@ A stronger unlock method does not change this: a passkey's secret is consumed by
 To share with a member, a client wraps a key to that member's identity public key (a hybrid post-quantum encryption
 key and an Ed25519 signing key), which the server relays from its directory. What is built:
 
-- **Pin on first use.** The first time a client wraps to a member's identity, it pins the full public bundle in a pin
-  store that is client-side, synced across the user's devices and sealed under the Master Key. The server never
-  sees a pin or who trusts whom.
-- **A changed key is surfaced.** In the UI it is a notice the user reviews; the automated grant-delivery worker
-  refuses to wrap to a changed key and declines the job back to the server.
+- **Pin on first use.** The first time a client meets a member's identity, it pins the fingerprint of the full public
+  bundle and the head of the member's **key chain** in a pin store that is client-side, synced across the user's
+  devices and sealed under the Master Key. The server never sees a pin or who trusts whom.
+- **A new key is accepted only through the chain.** A member who secures their account adds a step signed by their
+  old identity **and** their old Secret-Key proof key; a client accepts the new key when the chain reaches it from the
+  head it pinned, with no review. Any other key is an anomaly (*Can't confirm this key*): nobody wraps to it, a
+  rotation declares that member pending, and the grant-delivery worker declines the job back to the server
+  ([Protocols](/veyq/security/protocols/#7-the-key-chain-and-securing-an-account)).
 - **Safety numbers.** Each member's profile shows their safety number and a QR of it; another member scans the QR
   or compares the digits and marks them *verified*.
 - **Grants are signed.** Every grant carries its granter's Ed25519 signature, which the recipient verifies before
-  opening it: in the personal scope only under its own key, in a shared scope under the granter's pinned key.
+  opening it: in the personal scope only under its own key, in a shared scope under a key of the granter's pinned
+  chain (a retired one only for an epoch at or below the device's epoch floor).
 - **A tenant invite is anchored by its link.** The invitee's client derives the invite key from the seed sealed in the
   link and checks the owner's signature on it against the owner fingerprint sealed beside it, so the operator, which
   mails the link, cannot swap the key or the owner in it. The seal opens only with a code the owner passes on outside
@@ -93,8 +97,8 @@ compare safety numbers. The same gap covers further cases:
 - **A device with no trust-state mark yet** — one that signed in with the password and Secret Key, or lost its local
   storage — trusts the first pin store it is served (ADR 0028 Decision 7; see
   [Freshness](#freshness-only-where-a-device-keeps-a-mark)).
-- **A member the operator invents.** A key-holder's client wraps to every member the server lists, behind the TOFU
-  gate alone: a rotation re-grants them, and grant delivery brings a membership whose grant is behind the current
+- **A member the operator invents.** A key-holder's client wraps to every member the server lists, behind the anchor
+  gate alone, which trusts a person it never pinned on first use: a rotation re-grants them, and grant delivery brings a membership whose grant is behind the current
   epoch up to date. An operator that writes a membership of its own therefore receives the current key from the next
   key-holder that has not pinned that account. Each accept now writes a join record that chains the newcomer's key to
   an owner's signature, which is the anchor meant to close this; nothing checks the records yet (ADR 0111 decisions 12
@@ -112,16 +116,22 @@ compare safety numbers. The same gap covers further cases:
 
 - **The operator can install an identity of its own on an account.** It writes the directory itself. Through the
   API, a session or a password no longer suffices — rotation, change-password and recovery need a signature from the
-  Secret-Key proof key — but that binds every caller except the operator. Until Key Transparency exists, only a
-  member who pinned the old key sees the change
+  Secret-Key proof key — but that binds every caller except the operator. A member who pinned the account's head sees
+  the installed key as an anomaly, because no chain step the operator can sign reaches it; a member who never pinned
+  it trusts it on first use until Key Transparency exists
   ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
   Decision 2).
-- **A worker's refusal is per key-holder, not a global veto.** A key-holder who pinned the old key refuses and
-  flags; a different key-holder who never saw the member has no conflicting pin, accepts the new key on first use
-  and delivers. Deliberate: the blind server must not adjudicate a cryptographic claim, and a global quarantine on
+- **A worker's decline is per key-holder, not a global veto.** A key-holder whose pinned chain does not reach the
+  key declines; a different key-holder who never saw the member has no pin, trusts the served head on first use and
+  delivers. Deliberate: the blind server must not adjudicate a cryptographic claim, and a global quarantine on
   one worker's say-so would be a denial of service.
-- **Verification is advisory.** Nothing enforces it before a first share. A user who reflexively accepts a
-  changed-key notice is, for that contact, no safer than having no pin at all.
+- **Verification is advisory.** Nothing enforces it before a first share, and the compare does not yet show the
+  key-chain head, so a withheld step is seen only by a device that already saw a newer one.
+- **An owner's open invites end when the owner secures their account.** The link anchors the owner's fingerprint, not
+  the owner's chain head, so the invitee cannot follow the rotation and is told to ask for a new invite.
+- **A moderation statement's recipients are sealed to as served.** The keys `getModerationStatementRecipients` returns
+  are sealed to without the anchor gate, though its contract asks for a pin check first; the recipients may share no
+  tenant with the moderator. Open, not decided.
 
 **Decided in:** [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md),
   [security-model § Key-directory trust](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#key-directory-trust--tofu-pinning--out-of-band-verification-adr-0028).
@@ -187,7 +197,7 @@ Three things it does not cover:
   rotation after a compromise, are completed by whichever owner of the scope is next online. That client knows only
   the member list the server returns and has nothing of its own to exclude by, so these hold against an honest
   operator only.
-- **A member the server adds to the list.** A rotation wraps to the members it reads, behind the TOFU gate alone, so
+- **A member the server adds to the list.** A rotation wraps to the members it reads, behind the anchor gate alone, so
   a membership the operator writes before a rotation is re-granted by it (see
   [TOFU's first-use gap](#identity-keys-tofus-first-use-gap)).
 

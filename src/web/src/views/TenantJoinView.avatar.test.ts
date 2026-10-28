@@ -89,7 +89,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(registerAndAccept).mockResolvedValue({ tenantId: TENANT_ID, status: TenantStatus.Active, userId: 'user-1' })
   vi.mocked(bornTenantScope).mockReturnValue({
-    birth: { grant: 'AQ==', grantSignature: 'AQ==' },
+    birth: { grant: 'AQ==', grantSignature: 'AQ==', recipientIdentityDigest: 'AQ==' },
     scopeRootKey: BORN_KEY,
   })
   vi.mocked(buildAccount).mockResolvedValue({

@@ -275,7 +275,7 @@ class TenantsResource(
                     hasAccount = outcome.hasAccount,
                     role = InviteRole.decode(outcome.role),
                     handover = outcome.handover,
-                    invite = outcome.invite?.served(),
+                    invite = outcome.invite?.served(outcome.heads),
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -295,7 +295,7 @@ class TenantsResource(
         when (val outcome = acceptHandler.accept(
             identity.principal.name,
             acceptInviteRequest.bootstrapSecret,
-            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature) },
+            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(acceptInviteRequest) { selfGrant.join(inviteProof, sealedJoinRecord) },
             acceptInviteRequest.username,
             acceptInviteRequest.sealedName,
@@ -320,7 +320,7 @@ class TenantsResource(
         )
         return when (val outcome = acceptHandler.registerAndAccept(
             registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account,
-            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature) },
+            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(registerAndAcceptRequest) { selfGrant.join(inviteProof, sealedJoinRecord) },
             registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName, registerAndAcceptRequest.sealedAvatar,
         )) {
@@ -565,7 +565,7 @@ private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String
     MemberJoin.of(this?.wrappedGrant, this?.grantSignature, this?.epoch, this?.recipientIdentityDigest, inviteProof, sealedJoinRecord)
 
 /** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check). */
-private fun TenantInviteEntity.served(): ServedMemberInvite? = ServedMemberInvite(
+private fun TenantInviteEntity.served(heads: Map<String, String>): ServedMemberInvite? = ServedMemberInvite(
     inviteId = UUID.fromString(id),
     invitePublicKey = invitePublicKey ?: return null,
     inviteKeySignature = inviteKeySignature ?: return null,
@@ -577,4 +577,6 @@ private fun TenantInviteEntity.served(): ServedMemberInvite? = ServedMemberInvit
     grantSignature = grantSignature ?: return null,
     granterUserId = UUID.fromString(granterUserId ?: return null),
     granterIdentityPublicKey = granterIdentityPublicKey ?: return null,
+    signerKeyChainHead = heads[signerUserId] ?: return null,
+    granterKeyChainHead = heads[granterUserId] ?: return null,
 )

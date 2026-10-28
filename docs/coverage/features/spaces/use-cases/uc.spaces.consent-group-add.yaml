@@ -41,7 +41,7 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.pendingProposalIsOwnerVisibleOnly] }
   - id: operator-blind-consent
-    text: The server stores only a membership row with its opaque grant + one opaque wrapped name-key + relays pubkeys and the already-stored encryptedName ciphertext to the invitee — never K_SC, never a name-key it can use, never the plaintext name; both wraps go to the key the owner's pin check passed (ADR 0028).
+    text: The server stores only a membership row with its opaque grant + one opaque wrapped name-key + relays pubkeys and the already-stored encryptedName ciphertext to the invitee — never K_SC, never a name-key it can use, never the plaintext name; both wraps go to the key the owner's anchor check passed (ADR 0028).
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsASoftRowHoldingTheGrant] }
       web: { unit: [src/features/spaces/inviteName.test.ts] }

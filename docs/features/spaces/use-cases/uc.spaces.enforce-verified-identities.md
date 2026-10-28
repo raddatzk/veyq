@@ -6,7 +6,7 @@
 - **Goal:** confirm out-of-band that a member's identity public key is really theirs — elevate the pin to
   **verified** — and see who is verified wherever members are listed. This is the proactive half of
   [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (Decision 3); the
-  passive half — pin on first sight, notice and review a changed key — is
+  passive half — pin on first sight, follow the key chain, surface a key it does not reach — is
   [uc.spaces.verify-identity](uc.spaces.verify-identity.md), which this use-case builds on rather than repeats.
   *Requiring* verification before sharing (strict mode) is
   [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md), still open. (The id predates
@@ -19,7 +19,7 @@
   "Not verified" and 6x5 digits equal to the number computed independently from the member's stored identity key (the
   crypto package's `fingerprint` over the database's `identity_public_key`); "Compare digits" → "They match" turned it
   "Verified" with "… is verified on this account", the tenant's member list showed "Verified", and both survived a full
-  reload. Not exercised in the browser: the camera scan, "They don't match", a verified contact's key change.
+  reload. Not exercised in the browser: the camera scan, "They don't match", a verified contact's rotation.
 - **Postconditions (success):** the target's pin is **verified**, on the key the compare confirmed; the profile and
   the tenant's and groups' member lists say "Verified". Operator-blind throughout: the only server call is the pin
   store's sealed write, so the operator never learns who verified whom.
@@ -33,16 +33,15 @@
    from the caller's own vault, not from the directory.
 1. **Open their profile.** The caller opens a member's profile → the app shows the safety number of the key it
    would **trust** — the pin's, or the directory's when there is no pin — the state (*Not verified*, *Verified*,
-   *Key changed*) and two ways to compare: **Scan their code** and **Compare digits**.
+   *Can't confirm this key*) and two ways to compare: **Scan their code** and **Compare digits**. A contact who
+   secured their account also reads "New identity, signed by their previous key, on {date}".
 2. **Compare out-of-band.** **Scan:** the caller scans the QR on the other member's own profile; the app compares
    the scanned digest with the digest of the key it shows. **Compare digits** (A1): the number is shown large and
    the two read it aloud, then the caller answers "They match" or "They don't match".
 3. **Feedback.** **Match** (a scanned code of that key, or "They match") → `markVerified` on the compared key in one
    sealed write — pinning it first, in the same write, when there was no pin (E1); the state reads *Verified* on
    the profile and in the tenant's and groups' member lists from then on. **Mismatch** (a code of a different key,
-   or "They don't match") → *these are different keys, do not mark them verified*; nothing is written, and where
-   the pin already differs from the directory the changed-key review is one click
-   ([uc.spaces.verify-identity](uc.spaces.verify-identity.md) handles the review from there).
+   or "They don't match") → *these are different keys, do not mark them verified*; nothing is written.
 
 ```mermaid
 ---
@@ -72,14 +71,15 @@ sequenceDiagram
   this path.
 - **A2 — a QR that is not a safety code** (another app's code, an Emergency Kit, a pairing code): said as such,
   never compared and never accepted; nothing is written.
-- **A3 — a verified contact's key changes:** the member lists and the profile say "Verified key changed", and the
-  changed-key review ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)) says the contact was verified
-  and that accepting does not verify the new key. Accepting re-pins as `pinned`; *Verified* returns only through a
-  new compare on the profile, which then offers it again (ADR 0028 Decision 3).
+- **A3 — a verified contact secures their account:** their key chain reaches the new key from the pinned head, so
+  the pin moves to the new head as `pinned` with no review — *Verified* drops and returns only through a new compare on
+  the profile, which then shows the new key's number and "New identity, signed by their previous key"
+  ([uc.spaces.verify-identity](uc.spaces.verify-identity.md), ADR 0028 Decision 3). A key the chain does not reach
+  reads "Can't confirm this key" whether the contact was verified or not, and offers no accept.
 - **E1 — the target has no pin yet:** the profile shows the directory's key; a match pins that key **already
   verified** in the one write. Until a compare happens, a profile view pins nothing (ADR 0028 Decision 3).
 - **E2 — the key moved under the compare:** a pin of a different key appeared between the read and the write (a
-  concurrent device, the delivery worker's first-use pin, an accepted change) → `IdentityMovedError`: nothing is
+  concurrent device, the delivery worker's first-use pin, a pin moved along the chain) → `IdentityMovedError`: nothing is
   written, the profile says so and shows the key the store now holds, and the compare starts over.
 - **E3 — this device refuses its pin store** (ADR 0028 Decision 7): the profile says why, with the link to the
   settings hub's reset, and offers no compare.
@@ -101,7 +101,7 @@ sequenceDiagram
 ## User impact
 
 You can be sure a member really is who they say by comparing a safety number with them, and veyq marks them Verified
-everywhere and warns loudly if their key ever changes.
+everywhere, and you see when someone's key no longer follows from the one you knew.
 
 ## Related
 
@@ -109,7 +109,7 @@ everywhere and warns loudly if their key ever changes.
 - Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the sealed pin
   store + `markVerified`/`safetyNumber` this ceremony drives)
 - Use-cases: [uc.spaces.verify-identity](uc.spaces.verify-identity.md) (the passive half this builds on — pin on
-  first sight, notice and review a changed key), [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)
+  first sight, follow the key chain), [uc.spaces.require-verified-identities](uc.spaces.require-verified-identities.md)
   (strict mode, which would require this), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md)
   (the profile page this lives on)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the authenticity

@@ -227,14 +227,11 @@ class OperatorBlindProbeTest {
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },
         // The control's live group carries no compromise rotation, so it answers `409 rotation_not_failed` — past the gate.
         "requeueScopeRotation" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/rotation/requeue") },
-        // An account-rotation route that names a scope: the control's owner never rotated, so `404 rotation_not_found`
-        // — a code of its own, answered past the gate, never the gate's `scope_not_found`.
-        "requeueRotationScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/account/rotation/scopes/${s.scopeId}/requeue") },
         // Host-resolved: the Host names the tenant, so its root is what the gate checks. The suspended persona
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
-        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON}}""", host = s.domain) },
+        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""", host = s.domain) },
         "createGroup" to Probe(Address.HOST) { s ->
-            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON}}""", host = s.domain)
+            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""", host = s.domain)
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
@@ -355,13 +352,28 @@ class OperatorBlindProbeTest {
             "getInstanceBackupRetention", "setInstanceBackupRetention",
         )
         reason(
-            "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +
-                "where claims are refused.",
+            "account-wide: addresses the caller's own account, no space.",
             "getAccountKeyMaterial", "addAccountWrap", "deleteAccountWrap", "getIdentityPins", "writeIdentityPins",
-            "listIdentityPinEntries", "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
+            "listIdentityPinEntries", "getDeviceRegister", "putDeviceRegister", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
-            "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail", "listRotationScopeStates",
-            "getOwnAccountErasurePreview", "eraseOwnAccount",
+            "getAccountEmail", "confirmEmail", "getOwnAccountErasurePreview", "eraseOwnAccount",
+        )
+        reason(
+            "securing the account (ADR 0111 decision 6, uc.account.rotate-keys, ADR 0060 Decision 6): addresses the caller's own account and " +
+                "reaches every scope it holds a grant on, across every tenant — a suspended tenant's and a deleting " +
+                "group's included, on purpose: the publish re-grants each to the new identity so none is stranded, and " +
+                "the plan and the states report such a scope as `blocked` rather than hide it. A scope id in a staged " +
+                "chunk the caller holds no grant on is `409 rotation_plan_changed` whether it exists or not, so nothing " +
+                "here is an existence oracle; RotationSliceTest owns these answers.",
+            "rotateAccountKeys", "getAccountRotationPlan", "openRotationStage", "putRotationStageGrants",
+            "listRotationScopeStates",
+        )
+        reason(
+            "person-addressed (ADR 0111 decision 7): names an account, not a space. Its gate is shared tenancy — a " +
+                "person who shares no tenant with the caller answers the unknown user's `404 not_found` (ADR 0042) — and " +
+                "a suspended tenant does not hide public keys a person's other tenants serve too; the key-chain read's " +
+                "own slice test pins it (cr-secure-the-account).",
+            "getKeyChain",
         )
         reason(
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +

@@ -90,6 +90,13 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
 - The account's **Ed25519 auth public key**, which verifies a signed login challenge. It is not a credential, and
   the password never reaches the server
   ([ADR 0003](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0003-operator-blind-password-auth.md)).
+- The account's **Secret-Key proof public key**, which verifies a credential change, and its **key chain**: each
+  identity and proof public key the account has had, the two signatures on each step and when the step was written.
+  The chain is served only to the person, to members of a tenant they are in, and between two accepted moderators.
+  While an account is being secured, a **stage** of its self-grants: the new identity public key it declares, one
+  grant per scope as ciphertext, and when it expires; the publish deletes it, and an abandoned one is purged
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decisions 6–7).
 
 ### Structure and ids
 

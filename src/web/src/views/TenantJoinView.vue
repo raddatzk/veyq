@@ -19,13 +19,13 @@ import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import {
   previewInvite, acceptInvite, acceptOwnership, registerAndAccept, bornTenantScope, tenantError, openMemberInvite, forgetMemberInvite,
+  memberInviteAnchored,
   buildMemberJoin, inviteLinkMode, InviteCodeWrong, InviteCheckFailed,
   type TenantBirth, type TenantOwner, type OpenedMemberInvite, type MemberJoin,
 } from '../features/tenant/tenantInvite'
 import type { ServedMemberInvite } from '../api/generated/tenants'
 import { parseInviteFragment } from '@veyq/crypto/invite'
 import { deriveSecretKeyProofKeypair } from '@veyq/crypto/v1'
-import { checkAndPin } from '../features/account/identityPins'
 import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
@@ -276,11 +276,9 @@ async function signInAndAccept() {
     const priv = identityPrivate()
     if (!priv) throw new Error('locked')
     if (isMember.value) {
-      // The link anchored the inviting owner's key; this account's pin store must not know them under another one.
-      // A grant a rotation re-wrapped is trusted on first use like any foreign granter's — and refused on a changed key.
-      const granter = openedInvite!.foreignGranter
-      const granterChanged = granter !== null && (await checkAndPin(granter.userId, granter.identityPublicKey)) === 'changed'
-      if (granterChanged || (await checkAndPin(served!.signerUserId, served!.signerIdentityPublicKey)) === 'changed') {
+      // The link anchored the inviting owner's key; this account's pin store must not know them under a key their chain
+      // does not reach. A grant a rotation re-wrapped is trusted on first use, and refused on an anomaly.
+      if (!(await memberInviteAnchored(openedInvite!))) {
         error.value = t('tenant.join.inviteUncheckable')
         return
       }

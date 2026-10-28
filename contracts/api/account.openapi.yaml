@@ -23,12 +23,15 @@ info:
     wraps and receive only ciphertext + KDF params — never a key, a password, or the Secret Key. The PASSWORD
     floor (and RECOVERY/PASSKEY) cannot be removed this way.
 
-    `POST /api/account/rotation` ends a compromise (uc.account.rotate-keys, ADR 0060): the Master Key and the
-    identity keypair are replaced **together**, in one transaction, and every scope the account shares gets a
-    queued rotation for another owner of that scope. It is forward secrecy, not repair — what the old identity
-    already read stays read — and it receives, as everything here does, only ciphertext and a public key.
-    `GET /api/account/rotation/scopes` reads back, at any time, the state of each rotation queued that way, and
-    `POST /api/account/rotation/scopes/{scopeId}/requeue` queues a dead-lettered one again.
+    `POST /api/account/rotation` secures the account after a compromise (uc.account.rotate-keys, ADR 0060, ADR 0111
+    decisions 6-10): the Master Key, the identity keypair and the Secret Key are replaced **together**, in one
+    transaction, as one doubly signed step of the account's key chain, and every scope the account holds a grant on
+    is re-granted at its current epoch to the new identity from self-grants staged just before
+    (`POST /api/account/rotation/stage`, `PUT /api/account/rotation/stage/{stageId}/grants`). The account then mints
+    each scope's next epoch itself. It is forward secrecy, not repair — what the old identity already read stays
+    read — and it receives, as everything here does, only ciphertext, public keys and signatures.
+    `GET /api/account/rotation/plan` lists, across every tenant, the scopes a rotation must carry and the caller's
+    own grant on each; `GET /api/account/rotation/scopes` reads back, at any time, how far each scope got.
 
     `/api/account/email` shows the caller the address a password reset would mail and whether they have
     confirmed reading it, and runs that confirmation (uc.account.confirm-email-address, ADR 0074). The record
@@ -57,8 +60,9 @@ tags:
       (ADR 0004) can be shown named without the server gaining anything to correlate
       (en.account.device-register). Separate tag → its own resource interface.
   - name: account-rotation
-    description: Key rotation after a compromise — the account-side half of uc.account.rotate-keys (ADR 0060).
-      Separate tag → its own resource interface.
+    description: Securing the account after a compromise — the account-side half of uc.account.rotate-keys (ADR 0060,
+      ADR 0111 decisions 6-10) - the plan, the stage of self-grants, the publish and the per-scope states. Separate
+      tag → its own resource interface.
   - name: account-password
     description: Change the password of a signed-in, unlocked account — uc.account.change-password. Separate
       tag → its own resource interface.
@@ -586,38 +590,65 @@ paths:
     post:
       tags: [account-rotation]
       operationId: rotateAccountKeys
-      summary: Replace the Master Key and the identity keypair together after a compromise.
+      summary: Secure the account - replace the Master Key, the identity keypair and the Secret Key in one step of its key chain.
       description: >
-        Applies the account half of a key rotation as **one transaction, all writes or none**
-        (uc.account.rotate-keys, ADR 0060): publish the new identity public key; replace
-        `wrappedIdentityPrivateKey` with the identity private key sealed under the new Master Key; rewrite the
-        `PASSWORD` and `RECOVERY` wraps; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their
-        key material is device-held and cannot be rewritten from here); store the identity-pin store and the
-        device register re-sealed under the new Master Key, each guarded by the revision the client read;
-        supersede every live pairing channel (an unspent envelope carries the *old* Master Key and a live
-        delegated session, so a later collect would hand a device a dead key and a working login); revoke every
-        other session; and originate a `scope-rotation` job for each scope the caller shares with somebody.
+        Applies the publish of securing the account as **one transaction, all writes or none**
+        (uc.account.rotate-keys, ADR 0060, ADR 0111 decisions 6-10): append the key-chain step `keyChainStep` to the
+        account's chain; publish the new identity public key; replace `wrappedIdentityPrivateKey` with the identity
+        private key sealed under the new Master Key; rewrite the `PASSWORD` and `RECOVERY` wraps, which open under the
+        **new** Secret Key; store `secretKeyProofPublicKey` as the account's Secret-Key proof key and `authPublicKey`
+        as its auth key; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their key material is
+        device-held and cannot be rewritten from here); store the identity-pin store and the device register re-sealed
+        under the new Master Key, each guarded by the revision the client read; supersede every live pairing channel
+        (an unspent envelope carries the *old* Master Key and a live delegated session); void every open change of the
+        sign-in address (its proof was taken under the old proof key); delete the declines of every `grant-delivery`
+        job whose target is this account (a worker that could not anchor the old key tries the new one); revoke every
+        other session; and **apply the stage** `stageId`.
 
-        **One mode, and the request cannot express another.** There is no `mode`, no `identityOnly`, no
-        `scopes` subset. Every path to the identity private key runs through the Master Key, so an identity
-        compromise implies a Master-Key compromise, and rotating only one half is the variant
-        [ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) already rejected as
-        useless (ADR 0060 Decision 1). `scripts/validate_rotation_shape.py` pins the request's property set so
-        that negative cannot be undone by an additive field.
+        **The stage is applied here and nowhere else.** Under the account lock the server takes the stage: missing,
+        expired, of another account, or declaring another identity bundle than `identityPublicKey` is
+        `409 rotation_plan_changed`, and so is a `stagedGrantsDigest` other than the digest it recomputes over the
+        staged rows (`rotationStageDigest`, the `rotation_stage` crypto vector) — both before any proof is checked.
+        Then, in one ascending pass under each scope's row lock, it recomputes the account's memberships that carry a
+        grant, in **every** tenant, and requires each one to be staged **at the scope's current epoch** or named in
+        `unreadableScopeIds`; otherwise `409 rotation_plan_changed`, nothing written (a membership arrived, or a scope
+        rotated, after staging). It writes each staged self-grant as the account's grant on that scope (granter = the
+        caller, `granter_identity_public_key` = the new key) and a pending re-key row (`epoch_at_rotation`); a staged
+        grant for a scope the account no longer holds a grant on is not written, and an unreadable scope keeps its
+        grant untouched and gets no row. The stage is deleted in the same transaction. From the moment this commits,
+        every scope the account holds a grant on holds a grant of its current epoch to the published identity.
 
-        **The cold-credential gate has two halves, and the server holds the one both attackers lack.** A
-        session is not enough: a device-link holder has one with no password at all, and so does whoever
-        phished or cracked the password. So `secretKeyProofSignature` is **required** — an Ed25519 signature
-        under the account's **Secret-Key proof key**, derived from the Secret Key alone and registered at
-        account birth, over what this rotation installs and the identity it replaces (ADR 0060 Decision 2). The
-        server rebuilds that statement itself and verifies it against the stored public key before anything is
-        written; a signature that does not verify is `403 secret_key_proof_failed`. The other half, the
-        password, is proven on the client by re-opening the current `PASSWORD` wrap. The proof key survives
-        the rotation unchanged, because the Secret Key does.
+        **One mode, and the request cannot express another.** There is no `mode`, no `identityOnly`, no `scopes`
+        subset, and every field is required. Every path to the identity private key runs through the Master Key, so an
+        identity compromise implies a Master-Key compromise (ADR 0060 Decision 1); the Secret Key rotates with them,
+        because whoever holds it and the password is otherwise indistinguishable from the member (ADR 0111 decision 6).
+        `scripts/validate_rotation_shape.py` pins the request's property set so that negative cannot be undone by an
+        additive field.
 
-        **Forward secrecy, not repair.** What the old identity already read stays read. The response is a
-        per-scope split rather than a success tick, because between rotating and being re-admitted the caller is
-        outside every shared scope — the property that stops an attacker rotating their way back in (Decision 6).
+        **The cold-credential gate has two halves, and the server holds the one both attackers lack.** A session is
+        not enough: a device-link holder has one with no password at all, and so does whoever phished or cracked the
+        password. `secretKeyProofSignature` is an Ed25519 signature under the account's **current** Secret-Key proof
+        key over `veyq/v1/secret-key-proof/rotation` (the `secret_key_proof` crypto vector), which binds the identity
+        and auth key it replaces, everything this request installs, the key-chain step and the stage; the server
+        rebuilds that statement itself and verifies it against the stored proof key before anything is written.
+        `secretKeyProofPossession` is the **new** proof key's signature over the same statement, so a client bug
+        cannot register a proof key nobody holds. The password half: `attestationSignature`, the current auth key's
+        signature over `authPublicKey` (keeping the password derives the same key, and the attestation still
+        verifies — both are always sent).
+
+        **The key-chain step** (ADR 0111 decision 7) retires the stored identity and proof key for `identityPublicKey`
+        and `secretKeyProofPublicKey`. The server rebuilds its statement (the `key_chain` crypto vector) from the
+        account's stored head, its next index, the stored keys and the two new ones, and verifies
+        `keyChainStep.identitySignature` under the stored identity and `keyChainStep.proofSignature` under the stored
+        proof key. A failing proof half is `403 secret_key_proof_failed`, a failing identity half
+        `422 key_chain_step_invalid`. Nothing is written on either. That is an honest server's check: every reader
+        verifies the chain itself (`getKeyChain`).
+
+        **Forward secrecy, not repair.** What the old identity already read stays read. The self-grants hand the new
+        identity each scope's current epoch, which everyone able to publish this already reads; what closes the old
+        identity out is the next epoch, which the account mints for every scope in `regrantedScopeIds` afterwards,
+        from any of its devices (`rotateScope`, ADR 0111 decision 8) and which no grant to the old identity can reach
+        (`409 recipient_key_not_current`).
       security:
         - bearerAuth: []
       requestBody:
@@ -628,15 +659,14 @@ paths:
       responses:
         "200":
           description: >
-            Applied. The body says which scopes the caller must re-key alone and which now carry a queued
-            rotation for somebody else — uc.account.rotate-keys §9's honest per-scope status.
+            Applied. The body names the scopes re-granted to the new identity, each now waiting for its next epoch.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RotateAccountKeysResult" }
         "400":
           description: >
-            The request was malformed (a missing, oversized or non-base64 field), or `identityPins` is not a whole set:
-            no `replaceAll`, or a `remove` beside it.
+            The request was malformed (a missing, oversized or non-base64 field, more than 10000 `unreadableScopeIds`),
+            or `identityPins` is not a whole set: no `replaceAll`, or a `remove` beside it.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -649,63 +679,224 @@ paths:
               example: { code: authentication_failed }
         "403":
           description: >
-            `secret_key_proof_failed` — `secretKeyProofSignature` did not verify against the account's
-            Secret-Key proof key, over the statement the server rebuilt from this request and the account's
-            current identity. The caller is authenticated; they did not prove the Secret Key. **Nothing was
-            written.**
+            One of the cold-credential proofs failed; the code says which. `secret_key_proof_failed` —
+            `secretKeyProofSignature` did not verify under the account's stored Secret-Key proof key over the statement
+            the server rebuilt, `secretKeyProofPossession` did not verify under `secretKeyProofPublicKey`, or
+            `keyChainStep.proofSignature` did not verify under the stored proof key: the caller did not prove the
+            Secret Key. `attestation_failed` — `attestationSignature` did not verify under the stored auth key: the
+            caller did not prove the password. **Nothing was written.**
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: secret_key_proof_failed }
+              examples:
+                proof: { value: { code: secret_key_proof_failed } }
+                attestation: { value: { code: attestation_failed } }
         "409":
           description: >
             `rotation_unavailable` — the account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the
             rotation cannot be applied whole. `stale_revision` — the `revision` sent with `identityPins` or
             `deviceRegister` is no longer the stored one (another device wrote it meanwhile); the client re-reads,
-            re-seals and resubmits with the same new keys and the same signature, which does not cover the two
-            documents. **Nothing was written** in either case — a half-rotated account is a lockout, not a
-            degraded state.
+            re-seals and resubmits with the same new keys and the same signatures, which do not cover the two
+            documents. `rotation_plan_changed` — the stage is missing, expired or declares another identity, its digest
+            is not `stagedGrantsDigest`, or a membership that carries a grant is neither staged at its scope's current
+            epoch nor in `unreadableScopeIds`; the client re-reads the plan, re-stages the delta (or opens a new stage)
+            and resubmits. **Nothing was written** in any case — a half-rotated account is a lockout, not a degraded
+            state.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               examples:
                 unavailable: { value: { code: rotation_unavailable } }
                 stale: { value: { code: stale_revision } }
+                planChanged: { value: { code: rotation_plan_changed } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             `identityPins` contradicts itself — a `pinId` put twice, removed twice, or both put and removed
-            (`pins_contradictory`, as `writeIdentityPins` answers it). **Nothing was written.**
+            (`pins_contradictory`, as `writeIdentityPins` answers it); or `keyChainStep.identitySignature` does not
+            verify under the stored identity over the step the server rebuilt from the stored head
+            (`key_chain_step_invalid`). **Nothing was written.**
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: pins_contradictory }
+              examples:
+                pins: { value: { code: pins_contradictory } }
+                step: { value: { code: key_chain_step_invalid } }
+
+  /api/account/rotation/plan:
+    get:
+      tags: [account-rotation]
+      operationId: getAccountRotationPlan
+      summary: Every scope a rotation of the caller's account must carry, across every tenant, with the caller's own grant.
+      description: >
+        Host-independent (uc.account.rotate-keys, cr-secure-the-account): one entry per scope the caller
+        holds a membership on, in **every** tenant — PERSONAL, TENANT and GROUP, a group proposal the caller has not
+        answered yet included (it holds a grant from the add on, ADR 0111 decision 4). Each carries the scope's kind,
+        tenant and current epoch, why its next epoch cannot be minted now (`blocked`), and the caller's own grant row —
+        what the client opens with its current identity to stage the self-grant (`putRotationStageGrants`) and, after
+        the publish, to mint the next epoch from any device. Operator-blind: only rows the server already serves the
+        caller tenant by tenant through `listMyScopes` — ids, epochs and ciphertext. Only the caller's own rows.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: One entry per scope the caller holds a membership on, in every tenant.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RotationPlanScope" }
+              example:
+                - scopeId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  kind: PERSONAL
+                  tenantId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+                  currentEpoch: 2
+                  wrappedGrant: AQ==
+                  grantedEpoch: 2
+                  granterUserId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+                  grantSignature: c2lnbmF0dXJl
+                  granterIdentityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/rotation/stage:
+    post:
+      tags: [account-rotation]
+      operationId: openRotationStage
+      summary: Open the account's one stage for the self-grants of a rotation, declaring the new identity.
+      description: >
+        Opens the caller's stage for the self-grants the next `rotateAccountKeys` applies (cr-secure-the-account
+        decision 3): one stage per account, so a second open **replaces** the first and every grant staged in it. The
+        stage declares `identityPublicKey`, the identity the rotation will publish: every grant staged into it must
+        verify under that bundle, and the publish applies the stage only if it publishes that same bundle. **Nothing
+        staged is applied before the publish**: a stage holds ciphertext and scope ids the server already holds as
+        grant rows, inert until a Secret-Key-proved `rotateAccountKeys` names it. A stage expires
+        `veyq.account.rotation.stage.ttl` (default one hour, server-observed) after it opened and is then purged; the
+        account's erasure removes it.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OpenRotationStageRequest" }
+      responses:
+        "201":
+          description: The stage is open; any stage before it is gone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RotationStage" }
+              example: { stageId: 5a6e0000-0000-4000-8000-0000000000a1, expiresAt: 2026-07-11T13:00:00Z }
+        "400":
+          description: The request was malformed (a missing, oversized or non-base64 `identityPublicKey`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+
+  /api/account/rotation/stage/{stageId}/grants:
+    put:
+      tags: [account-rotation]
+      operationId: putRotationStageGrants
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder stages into their own stage, and a grant staged twice for one scope is
+          the same key for the same identity. What the publish applies is not the last write but the set it names by
+          `stagedGrantsDigest` under the Secret Key's proof, recomputed over the staged rows.
+      summary: Stage one chunk of self-grants into the caller's open stage.
+      description: >
+        Upserts up to 256 self-grants into the stage, by `scopeId` (ADR 0111 decision 6): the client
+        stages every scope of the plan in chunks, and after a `409 rotation_plan_changed` re-stages only the delta. Each
+        grant hands the scope's epoch key to the identity the stage declares: it is **verified here**, under that
+        bundle — the `grant` statement (`grant_signature` crypto vector) with the scope's own kind, `epoch`, the caller
+        as recipient, SHA-256 of the stage's bundle and of `wrappedGrant` — and its `recipientIdentityDigest` must be
+        SHA-256 of that bundle. This is the one place the server checks a grant signature: a consistency check of the
+        stage against the identity the publish then registers under the Secret Key's proof, not a trust judgment (ADR
+        0028 Decision 6). The epoch is not judged here — the publish does, against the scope's current one. Nothing of
+        a refused chunk is written; nothing staged is applied before the publish.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: stageId, in: path, required: true, description: The stage `openRotationStage` answered., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RotationStageGrants" }
+      responses:
+        "204":
+          description: The chunk is staged.
+        "400":
+          description: The request was malformed (more than 256 grants, a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No open stage of the caller has this id — unknown, expired, replaced, or another account's (indistinguishable,
+            `rotation_stage_not_found`). The client opens a new stage and stages everything again. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_stage_not_found }
+        "409":
+          description: >
+            A grant names a scope the caller holds no grant on (`rotation_plan_changed` — the same answer for a scope
+            that does not exist); the client re-reads the plan. Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_plan_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            A grant's signature does not verify under the identity the stage declares, or its `recipientIdentityDigest`
+            is not SHA-256 of that bundle (`self_grant_invalid`). Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: self_grant_invalid }
 
   /api/account/rotation/scopes:
     get:
       tags: [account-rotation]
       operationId: listRotationScopeStates
-      summary: The state of every rotation the caller's own account rotation queued.
+      summary: How far each scope of the caller's latest rotation got.
       description: >
-        For every scope where an account rotation of the **caller** queued a `scope-rotation` job (the scope's
-        jobs carry the caller's rotation exclusion) and the caller is still a member, the state of the newest such
-        job, derived from rows the server already holds (uc.account.rotate-keys §9, ADR 0060 Decision 6) — first
-        match wins:
-        `secured` when the caller's own grant on the scope is behind the scope's epoch or absent (the old identity
-        then holds no grant to the current epoch, whatever the jobs say), or when the job is `done` (its holder
-        committed an epoch during its lease) — but `rekeying` instead while a live or trashed node of the scope lags
-        the current epoch, its key still the one from before (ADR 0109 point 1: a rotation is done only once its
-        re-key is); `failed` when the job dead-lettered — `failed`, or still `leased`
-        with an expired lease and no attempts left; `stalled` when it is live and no owner of the scope both holds
-        a grant and has not declined it (uc.account.rotate-keys E4); `waiting` otherwise. Until a scope reads
-        `secured`, the old identity can still read what is new there (while `rekeying`, what is new in a node not yet
-        re-keyed). Empty for an account that never rotated.
-        Only the caller's own rows; operator-blind: scope ids the server routes on and one enum per scope.
+        Host-independent. For every scope the caller's latest `rotateAccountKeys` re-granted (its pending re-key row)
+        and the caller is still a member of, a state derived from rows the server already holds
+        (uc.account.rotate-keys §9, ADR 0060 Decision 6) — first match wins: `blocked` (with `reason`)
+        while the scope's tenant is suspended (`tenant_suspended`) or the scope is being deleted (`scope_deleting`);
+        `waiting` while the scope's current epoch is still the one it had at the rotation — its next epoch is the
+        account's to mint, from any of its devices; `rekeying` while a live or trashed node of the scope lags the
+        current epoch (ADR 0109 point 1: a rotation is done only once its re-key is); `secured` otherwise — someone
+        committed the next epoch, which no grant to the old identity can carry (`409 recipient_key_not_current`). Until
+        a scope reads `secured`, the old identity can still read what is new there. Empty for an account that never
+        rotated. Only the caller's own rows; operator-blind: scope ids the server routes on and one enum per scope.
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: One entry per scope a rotation of the caller's account queued.
+          description: One entry per scope the caller's latest rotation re-granted.
           content:
             application/json:
               schema:
@@ -713,67 +904,13 @@ paths:
                 items: { $ref: "#/components/schemas/RotationScopeState" }
               example:
                 - { scopeId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f, state: waiting }
+                - { scopeId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, state: blocked, reason: tenant_suspended }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
-
-  /api/account/rotation/scopes/{scopeId}/requeue:
-    post:
-      tags: [account-rotation]
-      operationId: requeueRotationScope
-      summary: Queue a dead-lettered rotation of one scope again, still excluded from it.
-      description: >
-        From the `failed` state only (see `listRotationScopeStates`): originates the scope's rotation again with
-        the caller excluded, exactly as their account rotation did — it joins the scope's unclaimed rotation job
-        if one exists (a removal may have queued one since), creates one otherwise, and excludes the caller from
-        every live rotation job of the scope. From that moment `rotateScope` refuses the caller there again
-        (`403 rotation_excluded`, ADR 0060 Decision 4), which closes the window the dead-letter opened. Answers the
-        scope's new state (`waiting` or `stalled`). Membership is the first gate (ADR 0042): a caller who is not a
-        member of the scope gets `404 scope_not_found`, the answer for a scope id that does not exist; a member
-        whose account rotation never queued a rotation there gets `404 rotation_not_found`.
-      security:
-        - bearerAuth: []
-      parameters:
-        - { name: scopeId, in: path, required: true, description: Opaque id of the scope., schema: { type: string, format: uuid } }
-      responses:
-        "200":
-          description: Queued again; the scope's state now.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RotationScopeState" }
-              example: { scopeId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f, state: waiting }
-        "401":
-          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: authentication_failed }
-        "403":
-          description: The tenant is suspended (`tenant_suspended`, uc.spaces.scope-access). Nothing was written.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: tenant_suspended }
-        "404":
-          description: >
-            No such scope, or the caller is not a member of it (`scope_not_found`, indistinguishable, ADR 0042); or
-            the caller is a member and no rotation of their account was ever queued on it (`rotation_not_found`).
-            Nothing was written.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: scope_not_found }
-        "409":
-          description: >
-            The state is not `failed` (`rotation_not_failed`) — the rotation is waiting, stalled or secured, so there
-            is nothing to queue again — or the space is being deleted (`scope_deleting`). Nothing was written.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: rotation_not_failed }
 
   /api/account/email:
     get:
@@ -1689,8 +1826,10 @@ components:
     RotatedWrap:
       type: object
       description: >
-        One cold wrap, rewritten to hold the **new** Master Key under the same secret it always took — password
-        + Secret Key for the `PASSWORD` floor, the Secret Key alone for `RECOVERY`.
+        One cold wrap, rewritten to hold the **new** Master Key under the kind of secret it always took — password
+        + Secret Key for the `PASSWORD` floor, the Secret Key alone for `RECOVERY`. A change of the password keeps the
+        Secret Key; securing the account (`rotateAccountKeys`) writes both wraps under the **new** Secret Key, so the
+        old Emergency Kit opens neither.
 
         It carries **no `method`**: which wrap this is, is the field it arrived in. That is what makes "rewrite
         one cold wrap and leave the other holding the old Master Key" unsayable rather than merely rejected —
@@ -1699,8 +1838,8 @@ components:
         The salt is **fresh** on both, and that is why no previously-stored `kdfParams` is needed here: the
         `RECOVERY` wrap is deliberately withheld from `GET /api/account/key-material`
         ([ADR 0054](../../docs/decisions/0054-password-recovery-two-factor-release.md)), so its salt is not the
-        client's to read, and re-using a salt would leak the rewrite to anyone diffing two dumps. The Emergency
-        Kit stays valid because the *Secret Key* is unchanged — not because the salt is.
+        client's to read, and re-using a salt would leak the rewrite to anyone diffing two dumps. Whether the
+        Emergency Kit still opens a wrap is the *Secret Key's* to decide — never the salt's.
       required: [wrappedKey, kdfParams]
       properties:
         wrappedKey:
@@ -1721,18 +1860,21 @@ components:
     RotateAccountKeysRequest:
       type: object
       description: >
-        Everything the account half of a rotation replaces, in one body, applied atomically or not at all — a
-        partial apply leaves an account nothing can unlock.
+        Everything securing the account replaces, in one body, applied atomically or not at all — a partial apply
+        leaves an account nothing can unlock.
 
         **This property set is pinned by `scripts/validate_rotation_shape.py`.** ADR 0060 Decision 1 says there
         is exactly one mode, and the shortcut that would quietly undo it is a *request field*: a `mode`, an
         `identityOnly`, a `scopes` subset would let identity-only rotation return as a flag while every test
-        stayed green. A negative has nothing else that can hold it.
+        stayed green. A negative has nothing else that can hold it. Every property is required: an optional one is
+        a mode spelled by omission.
 
-        What is deliberately absent, so the next reader does not add it back: no `authPublicKey` — the password
-        does not change, so what logs in is untouched and the Emergency Kit survives; no wrap `method` — see
-        `RotatedWrap`; no list of wraps to delete — every non-cold wrap goes, always, because device-held key
-        material cannot be rewritten from here.
+        What is deliberately absent, so the next reader does not add it back: no wrap `method` — see `RotatedWrap`; no
+        list of wraps to delete — every non-cold wrap goes, always, because device-held key material cannot be
+        rewritten from here; no self-grants — they are staged before the publish (`putRotationStageGrants`), because
+        no bound caps an account's memberships and one request cannot carry them all (cr-secure-the-account),
+        and the publish names the stage by `stageId` and `stagedGrantsDigest`; no step index or predecessor — the
+        server takes both from the account's stored chain.
 
         **The two Master-Key-sealed account documents ride in the same body** (`identityPins`,
         `deviceRegister`), re-sealed under the new Master Key and written by the same transaction as everything
@@ -1744,14 +1886,15 @@ components:
         defends against a session holder without the Secret Key, and that holder can already write both
         documents through their own endpoints with the session alone; binding them would change the
         conformance-pinned statement for no defended case.
-      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature, identityPins, deviceRegister]
+      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature, identityPins, deviceRegister, keyChainStep, stageId, stagedGrantsDigest, unreadableScopeIds, authPublicKey, attestationSignature, secretKeyProofPublicKey, secretKeyProofPossession]
       properties:
         identityPublicKey:
           type: string
           description: >
             The freshly minted identity public bundle (serialized, opaque base64) — replaces the directory
-            value. From the moment it lands, every contact who ever pinned this account reads `changed` and
-            every automated wrap to it declines (ADR 0028); that is the intended effect, not a side effect.
+            value, and is the identity `keyChainStep` installs and the stage `stageId` declares. A contact's client
+            accepts it because the account's key chain reaches it from the head it pinned (ADR 0111 decision 15),
+            with no review.
           contentEncoding: base64
           maxLength: 8192
           example: bmV3LWlkZW50aXR5LXB1YmxpYy1rZXk=
@@ -1772,11 +1915,12 @@ components:
         secretKeyProofSignature:
           type: string
           description: >
-            Ed25519 signature under the account's Secret-Key proof key (ADR 0060 Decision 2) over
-            `veyq/v1/secret-key-proof/rotation`: digests of the account's **current** identity public key, of
-            the three new values above and of both rewritten wraps. The encoding is pinned by the
-            `secret_key_proof` crypto vector. Binding the current identity is what makes a captured signature
-            useless after the rotation it authorised.
+            Ed25519 signature under the account's **current** Secret-Key proof key (ADR 0060 Decision 2) over
+            `veyq/v1/secret-key-proof/rotation`: digests of the account's current identity public key, of the three
+            new values above, of both rewritten wraps and of the key-chain step's statement; the current auth public
+            key and `authPublicKey`; `secretKeyProofPublicKey`; `stageId` and `stagedGrantsDigest`. The encoding is
+            pinned by the `secret_key_proof` crypto vector. Binding the current identity and auth key is what makes a
+            captured signature useless after the rotation it authorised.
           contentEncoding: base64
           maxLength: 128
           example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
@@ -1787,50 +1931,300 @@ components:
         deviceRegister:
           $ref: "#/components/schemas/DeviceRegisterUpdate"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        keyChainStep:
+          $ref: "#/components/schemas/KeyChainStepSignatures"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        stageId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The stage (`openRotationStage`) whose self-grants this publish applies — it must declare
+            `identityPublicKey` (`409 rotation_plan_changed` otherwise).
+          example: 5a6e0000-0000-4000-8000-0000000000a1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        stagedGrantsDigest:
+          type: string
+          description: >
+            `rotationStageDigest` over the self-grants the client staged (the `rotation_stage` crypto vector), bound into
+            the proof statement. The server recomputes it over the staged rows and refuses another
+            (`409 rotation_plan_changed`), so the Secret Key's proof covers exactly what is applied.
+          contentEncoding: base64
+          maxLength: 64
+          example: c3RhZ2VkLWdyYW50cy1kaWdlc3Q=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        unreadableScopeIds:
+          x-veyq-visibility: id
+          type: array
+          description: >
+            The scopes the caller holds a grant on that this device cannot open (the grant's signature or the epoch
+            floor refuses it) — declared, so the server's completeness check can tell "left out on purpose" from
+            "forgotten". Each keeps its grant untouched and gets no pending re-key row. Empty in the ordinary case.
+          maxItems: 10000
+          items: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+          example: []
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 10000)'
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 auth public key derived from the password the account keeps after this rotation (ADR 0003) —
+            a new one when the member chose a new password, the same one when they kept theirs. Always sent, so
+            "keep the password" is not a mode by omission.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LWF1dGgtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        attestationSignature:
+          type: string
+          description: >
+            Ed25519 signature over `authPublicKey`'s raw bytes, produced with the **current** auth private key — the
+            password half of the gate, verified as `changePassword` verifies its own (`403 attestation_failed`).
+          contentEncoding: base64
+          maxLength: 256
+          example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        secretKeyProofPublicKey:
+          type: string
+          description: >
+            The Secret-Key proof public key of the **new** Secret Key (ADR 0111 decision 6) — what change-password,
+            recovery, change-email and the next rotation verify against from the commit on. Installed by
+            `keyChainStep` beside the new identity.
+          contentEncoding: base64
+          maxLength: 128
+          example: bmV3LXNlY3JldC1rZXktcHJvb2YtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        secretKeyProofPossession:
+          type: string
+          description: >
+            The **new** proof key's Ed25519 signature over the same rotation statement `secretKeyProofSignature`
+            signs — proof that `secretKeyProofPublicKey` is held, so a client bug cannot register a key nobody has
+            (`403 secret_key_proof_failed`).
+          contentEncoding: base64
+          maxLength: 128
+          example: cG9zc2Vzc2lvbi1zaWduYXR1cmU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    KeyChainStepSignatures:
+      type: object
+      description: >
+        The two signatures of the key-chain step this rotation appends (ADR 0111 decision 7, the `key_chain` crypto
+        vector). The step's statement is not sent: the server rebuilds it from the account's stored head and next
+        index, the stored identity and proof key it retires, and the request's `identityPublicKey` and
+        `secretKeyProofPublicKey` it installs — so a step cannot name keys the request does not publish.
+      required: [identitySignature, proofSignature]
+      properties:
+        identitySignature:
+          type: string
+          description: >
+            The **current** identity's Ed25519 signature over the step statement (`422 key_chain_step_invalid` when it
+            does not verify under the stored identity).
+          contentEncoding: base64
+          maxLength: 128
+          example: c3RlcC1pZGVudGl0eS1zaWduYXR1cmU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        proofSignature:
+          type: string
+          description: >
+            The **current** Secret-Key proof key's Ed25519 signature over the same statement
+            (`403 secret_key_proof_failed` when it does not verify under the stored proof key).
+          contentEncoding: base64
+          maxLength: 128
+          example: c3RlcC1wcm9vZi1zaWduYXR1cmU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotateAccountKeysResult:
       type: object
       description: >
-        What the rotation left, and for whom (uc.account.rotate-keys §9). The two lists partition the caller's
-        scopes on the only thing that decides who may re-key: whether anybody else is in there. Neither is a
-        success tick — `queuedScopeIds` is precisely the set the caller is **outside** until a human there
-        accepts their new identity key.
-      required: [soleMemberScopeIds, queuedScopeIds]
+        What the publish left (uc.account.rotate-keys §9): the scopes it re-granted to the new identity. Not a success
+        tick — each of them still waits for its next epoch, which the account mints itself, from any of its devices,
+        and `listRotationScopeStates` follows each until it reads `secured`.
+      required: [regrantedScopeIds]
       properties:
-        soleMemberScopeIds:
+        regrantedScopeIds:
           x-veyq-visibility: id
           type: array
           description: >
-            Scopes where the caller is the **only** member: nobody to be re-admitted by, and nobody to exclude
-            but their own old identity. The client mints the next epoch for each itself
-            (`POST /api/scopes/{scopeId}/epochs`) and grants it to the new identity. The personal scope is the
-            ordinary case; a group nobody else has joined behaves identically, which is why the split is drawn
-            on member count rather than on scope kind.
+            Every scope, in every tenant, whose current epoch the publish granted to the new identity — the account's
+            memberships that carry a grant, minus `unreadableScopeIds`. Each has a pending re-key row and reads
+            `waiting` (or `blocked`) until its next epoch is committed.
           items:
             type: string
             maxLength: 36
-          example: [7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c]
-        queuedScopeIds:
+          example: [7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f]
+
+    RotationBlockedReason:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        Why a scope's next epoch cannot be committed now: its tenant is suspended (`tenant_suspended`), or the scope is
+        being deleted (`scope_deleting`). Both are writes the scope refuses to everyone (uc.spaces.scope-access).
+      enum: [tenant_suspended, scope_deleting]
+      example: tenant_suspended
+
+    RotationPlanScope:
+      type: object
+      description: >
+        One scope a rotation must carry, and the caller's own grant on it — what `toOpenedScope` reads from a
+        `listMyScopes` row, served for every tenant (`getAccountRotationPlan`).
+      required: [scopeId, kind, tenantId, currentEpoch, wrappedGrant, grantedEpoch]
+      properties:
+        scopeId:
           x-veyq-visibility: id
-          type: array
+          type: string
+          format: uuid
+          description: Opaque id of the scope.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: The scope's kind — what its grant statement signs.
+          enum: [TENANT, GROUP, PERSONAL]
+          example: PERSONAL
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The tenant the scope lives in.
+          example: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+        currentEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The scope's current epoch — the one the self-grant must carry.
+          minimum: 0
+          example: 2
+        blocked:
+          description: Absent or `null` when the scope's next epoch can be committed now; otherwise why not.
+          oneOf:
+            - $ref: "#/components/schemas/RotationBlockedReason"
+            - type: "null"
+        wrappedGrant:
+          type: string
+          description: The caller's own grant on the scope (opaque base64), sealed to the caller's current identity.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+        grantedEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The epoch the caller's grant carries — behind `currentEpoch` when a rotation left the caller pending.
+          minimum: 0
+          example: 2
+        granterUserId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: Who wrapped the caller's grant, as `ScopeSummary.granterUserId`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        grantSignature:
+          type: [string, "null"]
+          description: The granter's `grant` signature over it, as `ScopeSummary.grantSignature`.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        granterIdentityPublicKey:
+          type: [string, "null"]
+          description: The granter's identity public bundle as it signed, as `ScopeSummary.granterIdentityPublicKey`.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+
+    OpenRotationStageRequest:
+      type: object
+      description: The identity the stage declares — the one the publish will install.
+      required: [identityPublicKey]
+      properties:
+        identityPublicKey:
+          type: string
           description: >
-            Shared scopes that now carry a `scope-rotation` job for **another owner** to complete — the
-            rotator is excluded from claiming their own (ADR 0060 Decision 4: a rotator who could drive their own
-            re-grant would let an attacker holding the old identity re-admit only themselves). A scope whose
-            rotation was already queued is listed here too: queued is queued, and the client's status must not
-            read differently for a coalesced job. Until someone accepts the changed key there, the caller is
-            outside these scopes. This list is the moment of the rotation; the state of each over time is
-            `GET /api/account/rotation/scopes`.
-          items:
-            type: string
-            maxLength: 36
-          example: [1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f]
+            The new identity public bundle (serialized, opaque base64). Every grant staged into this stage must verify
+            under it and name it, and the publish applies the stage only with this same `identityPublicKey`.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LWlkZW50aXR5LXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotationStage:
+      type: object
+      required: [stageId, expiresAt]
+      properties:
+        stageId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The account's open stage.
+          example: 5a6e0000-0000-4000-8000-0000000000a1
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the stage expires and is purged, unless a publish applied it before.
+          example: 2026-07-11T13:00:00Z
+
+    RotationStageGrants:
+      type: object
+      description: One chunk of self-grants. At most 256 a chunk; a stage holds as many chunks as the plan needs.
+      required: [grants]
+      properties:
+        grants:
+          type: array
+          description: The self-grants of this chunk, upserted by `scopeId`.
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/StagedSelfGrant" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 256)'
+
+    StagedSelfGrant:
+      type: object
+      description: >
+        A scope's epoch key granted to the identity the stage declares, signed by it — the `grant` statement with the
+        scope's kind, `epoch` and the caller as recipient (ADR 0028 Decision 6).
+      required: [scopeId, epoch, wrappedGrant, grantSignature, recipientIdentityDigest]
+      properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The scope this self-grant is for — one the caller holds a grant on.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The epoch whose key `wrappedGrant` carries — the scope's current one when staged; the publish requires it to
+            still be current (`409 rotation_plan_changed`).
+          minimum: 0
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        wrappedGrant:
+          type: string
+          description: >
+            The epoch key sealed to the stage's identity (`sealTo(scope-grant: scopeId, epoch)`, opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: The stage identity's own `grant` signature over it — verified at upload (`422 self_grant_invalid`).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: string
+          description: SHA-256 of the stage's identity bundle — another one is `422 self_grant_invalid`.
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotationScopeState:
       type: object
       description: >
-        One scope an account rotation of the caller queued, and the state of its covering rotation (see
-        `listRotationScopeStates` for the derivation).
+        One scope the caller's latest rotation re-granted, and how far it got (see `listRotationScopeStates` for the
+        derivation).
       required: [scopeId, state]
       properties:
         scopeId:
@@ -1843,12 +2237,17 @@ components:
           x-veyq-visibility: enum
           type: string
           description: >
-            `waiting` — an owner who may complete it exists; `stalled` — no owner may (promote a co-owner);
-            `rekeying` — the new epoch is in, and a member's device is re-keying the scope's nodes (some still carry
-            a key from before, ADR 0109); `secured` — the old identity holds no grant to the scope's current epoch and
-            every node of the scope is re-keyed; `failed` — the job dead-lettered, and it can be queued again.
-          enum: [waiting, stalled, rekeying, secured, failed]
+            `waiting` — the scope still runs on the epoch it had at the rotation; the next device of the account that
+            unlocks mints the next one. `rekeying` — the new epoch is in, and a member's device is re-keying the
+            scope's nodes (ADR 0109). `secured` — the old identity holds no grant to the scope's current epoch and
+            every node of the scope is re-keyed. `blocked` — the next epoch cannot be committed now (`reason`).
+          enum: [waiting, rekeying, secured, blocked]
           example: waiting
+        reason:
+          description: Present exactly when `state` is `blocked`.
+          oneOf:
+            - $ref: "#/components/schemas/RotationBlockedReason"
+            - type: "null"
 
     ChangePasswordRequest:
       type: object

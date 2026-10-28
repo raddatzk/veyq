@@ -10,6 +10,7 @@ import * as invite from '@veyq/crypto/invite'
 import { TEST_ARGON } from '@veyq/crypto/testArgon'
 import { b64std } from '@veyq/crypto/base64'
 import { sealGrant } from '../features/spaces/grant'
+import { genesisHeadOf } from './keyChain'
 import type { ServedMemberInvite } from '../api/generated/tenants'
 
 export type MemberInviteFixture = {
@@ -70,9 +71,11 @@ export function memberInviteFixture(o: { tenantId?: string; epoch?: number } = {
     expiresAt,
     signerUserId: ownerId,
     signerIdentityPublicKey: bundleOf(owner),
+    signerKeyChainHead: genesisHeadOf(ownerId, owner),
     ...inviteGrant(tenantId, epoch, tenantKey, inviteId, inviteKey, owner),
     granterUserId: ownerId,
     granterIdentityPublicKey: bundleOf(owner),
+    granterKeyChainHead: genesisHeadOf(ownerId, owner),
   }
   return { tenantId, served, sealedPart, code, tenantKey, inviteKey, owner, ownerId }
 }

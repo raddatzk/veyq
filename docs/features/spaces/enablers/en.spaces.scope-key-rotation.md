@@ -12,20 +12,21 @@
   § Guarantee states — and **without re-encrypting anything in the store**.
 - **Serves (use-cases/enablers):** [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
   (member removal triggers a rotation), [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
-  (a compromise re-keys **every** scope the holder is in) and
+  (a compromise re-keys **every** scope the holder is in, each next epoch committed by the holder's own devices) and
   [uc.spaces.complete-queued-rotation](../use-cases/uc.spaces.complete-queued-rotation.md) (an owner completes a
-  rotation either trigger had to queue). The two are different triggers on one mechanism, and
+  rotation a removal had to queue). The two are different triggers on one mechanism, and
   the *scope-type policy* in [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) governs only
   the first: on **removal** a tenant is ACL-revoked and a personal scope has nobody to rotate away from, but on
-  **compromise** both rotate — the tenant by ADR 0025 §2's explicit owner-triggered re-key, the personal scope
-  self-served by its single owner.
+  **compromise** both rotate — the tenant by ADR 0025 §2's explicit re-key, every scope the holder is in committed by
+  the holder itself ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the
   **grant-distribution primitive** generalized to re-grant existing members ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)),
   **grant-delivery** for a membership behind the epoch ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
   the **content-key hierarchy** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)). **No new crypto
   primitive** — the epoch chain composes the existing `symWrap` / `asymWrap`.
 - **Preconditions:** A group with ≥1 remaining owner online who holds its current grant, to perform the rotation
-  (mint + wrap are client-side; the blind server cannot).
+  (mint + wrap are client-side; the blind server cannot). After an account was secured, that account commits its
+  scopes' next epochs itself, owner or not, through the pending row its publish left (ADR 0060 Decision 4).
 - **Postconditions (success):** The scope carries a new **current epoch**; the new epoch is `symWrap`'d over the
   previous (the backward chain) and `asymWrap`'d to each remaining member; new content seals under it, and every
   live and trashed node carries a fresh key minted at it ([uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md));
@@ -46,18 +47,23 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 1. A remaining owner's device **mints** a fresh `E_{n+1}` and posts the chain-link `symWrap(E_{n+1}, E_n)`, stating
    the epoch `n+1` it creates. `E_n` is the device's own grant, so the server commits only if that is the scope's
    current epoch + 1 (E3). The server does not take the client's word for that grant: an owner whose own grant is
-   behind the scope's epoch, or absent, is refused `409 stale_epoch` with nothing stored, and an owner who rotated
-   their account keys is refused `403 rotation_excluded` while a live rotation job of the scope carries their
-   exclusion ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
-2. It **re-grants** `E_{n+1}`, signed by the rotator, to the remaining members it can reach (`asymWrap` to each
-   identity) — a pending consent proposal included, which holds the key from its add on. For a **tenant** scope it
+   behind the scope's epoch, or absent, is refused `409 stale_epoch` with nothing stored. A caller who is not an owner
+   commits only with a pending row a secured account's publish left for that scope at its current epoch, and never
+   with a removal (`403 not_scope_owner`; [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
+   Decision 4).
+2. It **re-grants** `E_{n+1}`, signed by the rotator, to every remaining member whose key its client anchors
+   (`asymWrap` to each identity, naming the key in `recipientIdentityDigest`; the server refuses a grant to a key that
+   is not the recipient's current one, `409 recipient_key_not_current`) — a pending consent proposal included, which
+   holds the key from its add on — and declares every member it cannot anchor **pending** (`pendingUserIds`). The
+   server refuses a rotation whose grants, pending members and removal do not cover every membership
+   (`409 rotation_incomplete`), so nobody is left out silently. For a **tenant** scope it
    also carries every **open member invite** ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2): it reads
    them from `listOpenInvites`, re-grants the new epoch to each invite whose owner signature verifies under the
-   signer key and whose signer passes its pin check, and declares the rest **pending**. The server refuses a
+   signer key and whose signer passes its anchor check, and declares the rest **pending**. The server refuses a
    rotation that leaves an open invite neither re-granted nor declared (`409 rotation_incomplete`) — one it forgot
    would hand its newcomer a key the members already left — and ignores an id that names no open invite. The
    **grant-delivery** reconciler finishes the rest: every membership behind the epoch (a member the re-grant
-   skipped, a newcomer who joined through a pending invite), first-online-wins, idempotent
+   declared pending, a newcomer who joined through a pending invite), first-online-wins, idempotent
    ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
 3. New content (names, `slug_token`s, `K_node`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
 4. The same device re-keys every existing node of the scope under `E_{n+1}`, top-down: a fresh key per node, every
@@ -113,15 +119,16 @@ sequenceDiagram
   - **A corrupt or unreadable pubkey** — the grant-delivery **stale-epoch trigger** (cr-0093) treats
     `grantedEpoch < currentEpoch` as behind and queues a delivery, so the next online key-holder
     re-wraps `E_current` and records `grantedEpoch = currentEpoch`. No manual intervention needed.
-  - **A *changed* identity key (a rotation, or a substitution — indistinguishable on-wire)** — the reconciler
-    **must not** auto-re-grant, and does not: every wrap-to-foreign-identity site is TOFU-gated
-    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md),
-    [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)), so the worker
-    **declines** the job and the re-grant loop **skips** that member while the rotation itself proceeds. They
-    stay *waiting for the current key* until a human accepts the new key in the changed-key review. That is the intended
-    behaviour and the reason an attacker cannot rotate their way back into a scope
-    ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)); it is also why an accept must clear
-    the declining worker's exclusion, or the re-admission it authorises is never delivered.
+  - **A key the rotator's client cannot anchor** (one the member's key chain does not reach from its pin — a
+    substitution, never a legitimate rotation, which is a signed step) — the rotation declares that member pending
+    and proceeds; every wrap-to-foreign-identity site runs the anchor check
+    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2,
+    [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)), so a worker that cannot
+    anchor the member likewise **declines** the delivery (`identity_unanchored`). They stay *waiting for the current key*
+    until **any** member whose client anchors them delivers the epoch; their row reads "Waiting for someone who can
+    confirm their key". When that member secures their account, the publish clears every decline that targeted them
+    ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 7), so a declining worker tries the
+    new key.
 - **E3 — the rotation was built on a superseded epoch:** another rotation committed first (two owners, two tabs,
   a job reclaimed after its lease lapsed, or a panel removal meeting a queued job), or the rotating device's
   grant lags the scope (E2's skipped member). The server answers `409 stale_epoch` and stores nothing: no link and

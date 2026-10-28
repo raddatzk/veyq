@@ -11,8 +11,9 @@ data class RotationMember(
     val role: String = MembershipEntity.MEMBER,
 )
 
-/** One client-minted re-grant: the member it is for, and the grant with the rotator's signature over it. */
-data class RotationGrant(val userId: String, val grant: SignedGrant)
+/** One client-minted re-grant: the member it is for, the grant with the rotator's signature over it, and the digest of
+ *  the identity bundle it is wrapped to (ADR 0111 decision 10 — compared with the member's current key). */
+data class RotationGrant(val userId: String, val grant: SignedGrant, val recipientIdentityDigest: String)
 
 /** One client-minted re-grant of an open tenant invite (ADR 0111 decision 2): the invite, the new epoch's key wrapped
  *  to its invite key with the rotator's signature, and the digest of the key it names. */
@@ -31,14 +32,12 @@ data class RotationPlan(
 /** What a rotation request comes to: commit this plan, or refuse it with nothing stored. */
 sealed interface RotationDecision {
     data class Commit(val plan: RotationPlan) : RotationDecision
-    /** The stated epoch is not the scope's next one, or the caller's own grant is behind or absent (`409 stale_epoch`). */
+    /** The stated epoch is not the scope's next one, the caller's own grant is behind or absent, or the caller was let
+     *  in by a pending re-key row the scope has moved past (`409 stale_epoch`). */
     object Stale : RotationDecision
-    /** The caller's account rotation queued a still-live rotation of this scope that excludes them
-     *  (`403 rotation_excluded`, ADR 0060 Decision 4). */
-    object Excluded : RotationDecision
-    /** An open tenant invite is neither re-granted nor declared pending (`409 rotation_incomplete`). */
+    /** A member or an open tenant invite is neither re-granted nor declared pending (`409 rotation_incomplete`). */
     object Incomplete : RotationDecision
-    /** An invite re-grant names a key that is not the invite's (`409 recipient_key_not_current`). */
+    /** A re-grant names a key that is not its recipient's current one (`409 recipient_key_not_current`). */
     object RecipientKeyNotCurrent : RotationDecision
     /** A removal-rotation names someone who holds no membership on the scope (`404 member_not_found`). */
     object MemberNotFound : RotationDecision
@@ -54,30 +53,30 @@ sealed interface RotationDecision {
  * states it creates, its membership directory, its open tenant invites and the client-minted grants, it decides
  * whether the rotation commits and what it writes.
  *
- * Three load-bearing rules — and the reason this is a security decision, not plumbing:
+ * Four load-bearing rules — and the reason this is a security decision, not plumbing:
  * - **Only the next epoch commits** (ADR 0024 §4). The client builds its chain-link from its **own grant**, not from
  *   the scope's epoch, so a rotation that lost a race or rode a lagging grant links the new epoch to a key that is
  *   not its predecessor. Committed, every epoch skipped that way is unreachable for every member. Such a rotation
  *   states an epoch that is not `currentEpoch + 1`: stale, nothing stored.
- * - A grant addressed to someone who holds no membership on the scope is dropped — there is nothing to wrap it onto.
- *   A `pendingConsent` proposal holds a grant from its proposal on (ADR 0111 decision 4), so it is re-granted like
- *   any member: a proposal a rotation skipped would open on accept to a key the group already left.
+ * - **No member is left behind silently** (ADR 0111 decision 9). The rotator grants every member whose key its client
+ *   anchors and declares the rest pending ([pendingUserIds]); a request that does neither for any one member (the
+ *   removed one aside) is refused, so a member left behind is always a declared one — its grant behind the current
+ *   epoch is the stored pending marker, which the grant delivery then brings current. A grant addressed to someone who
+ *   holds no membership on the scope is dropped — there is nothing to wrap it onto. A `pendingConsent` proposal holds a
+ *   grant from its proposal on (ADR 0111 decision 4), so it is a member here like any other.
  * - **No open tenant invite is left behind silently** (ADR 0111 decision 2). An invite is a placeholder member: one a
  *   rotation forgot would hand its newcomer a key the members already left. The rotator either re-grants it the new
  *   epoch (after verifying the owner's signature on its key and anchoring the signer) or declares it pending, and a
  *   request that does neither for any one of them is refused. An id that names no open invite is ignored — one
  *   revoked or accepted since the rotator read the list has nothing left to carry. The server checks presence and the
  *   key a grant names, never the signature: whether the invite is genuine is every client's question.
+ * - **A non-owner commits only the epoch its pending re-key row names** (ADR 0111 decision 8): an account that secured
+ *   itself mints the next epoch of every scope it was re-granted, owner or not, but only that one — [callerRegrantEpoch]
+ *   must still be the scope's current epoch, else someone else's commit already met the row's purpose (stale).
  *
- * Two facts about the **caller** come first, both read under the scope row's lock (ADR 0060 Decision 4, #206):
- * - **Excluded** — a still-live rotation job of the scope carries the caller's rotation exclusion: their account
- *   rotated after a compromise, and the rotation that excludes their old identity has not landed. For an owner rotator
- *   the owner gate is no reason at all, so this is where the exclusion binds a client of their own.
- * - **Behind** — the caller's own grant is older than the scope's epoch, or absent: they hold no key to chain the new
- *   epoch from, whatever epoch they state. This is the answer the contract already gave for "the caller's grant lags
- *   the scope", now taken from the server's row instead of the client's word. Once the covering rotation landed (and
- *   skipped the rotator's changed key) it is what still holds the rotator; once a human re-admits them, neither fact
- *   applies, which is the intended end of the exclusion.
+ * One fact about the **caller** comes first, read under the scope row's lock (#206): **behind** — the caller's own
+ * grant is older than the scope's epoch, or absent: they hold no key to chain the new epoch from, whatever epoch they
+ * state.
  *
  * A **removal-rotation** ([removes] set, ADR 0024 Decision 4) also deletes that member's membership in the same
  * commit, so a removal can never end without its rotation. Its grants must not name that member: the remover's client
@@ -94,13 +93,14 @@ object RotationPolicy {
         grants: List<RotationGrant>,
         inviteGrants: List<InviteGrant>,
         pendingInviteIds: Set<String>,
+        pendingUserIds: Set<String>,
         removes: String?,
-        callerExcluded: Boolean,
         callerGrantedEpoch: Int?,
+        callerRegrantEpoch: Int? = null,
     ): RotationDecision {
-        if (callerExcluded) return RotationDecision.Excluded
         if (callerGrantedEpoch == null || callerGrantedEpoch < currentEpoch) return RotationDecision.Stale
         if (statedEpoch != currentEpoch + 1) return RotationDecision.Stale
+        if (callerRegrantEpoch != null && callerRegrantEpoch != currentEpoch) return RotationDecision.Stale
         var remaining = members
         if (removes != null) {
             val removed = members.firstOrNull { it.userId == removes } ?: return RotationDecision.MemberNotFound
@@ -114,6 +114,7 @@ object RotationPolicy {
             remaining = members - removed
         }
         val grantable = remaining.map { it.userId }
+        if ((grantable - grants.map { it.userId }.toSet() - pendingUserIds).isNotEmpty()) return RotationDecision.Incomplete
         val carried = inviteGrants.filter { it.inviteId in openInvites }
         if ((openInvites - carried.map { it.inviteId }.toSet() - pendingInviteIds).isNotEmpty()) return RotationDecision.Incomplete
         return RotationDecision.Commit(

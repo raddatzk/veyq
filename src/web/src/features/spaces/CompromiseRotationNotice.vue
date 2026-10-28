@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// An owner's notice that a compromise rotation queued on this space needs an owner
-// (uc.spaces.complete-queued-rotation E2/E8, ADR 0060 Decision 6): a member re-secured their account, and the rotation
-// that shuts their old key out of this space is stuck. The value comes from the owner's own scope row (`compromiseRotation`, owner-only on
-// the server), so a plain member never sees this.
+// An owner's notice that a rotation queued on this space needs an owner (uc.spaces.complete-queued-rotation E2/E8): a
+// tenant member's removal cut their membership here, and the rotation that shuts their key out of this space is stuck.
+// The value comes from the owner's own scope row (`compromiseRotation`, owner-only on the server), so a plain member
+// never sees this.
 //
-//  - `failed` — it dead-lettered: offer the re-queue. The server excludes the rotated account again and not this
-//    caller, so this device's own worker can claim it on its next pass.
-//  - `stalled` — no owner may complete it: the remedy is promoting a co-owner (E4), which the member list below
+//  - `failed` — it dead-lettered: offer the re-queue. The server re-originates it excluding nobody, so this device's
+//    own worker can claim it on its next pass.
+//  - `stalled` — no owner may complete it: the remedy is promoting a co-owner (E2), which the member list below
 //    already offers; no action of its own here.
 //
 // Both say in plain words that until the re-key lands the old key still reads what is new in this space —
