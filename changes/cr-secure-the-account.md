@@ -1164,6 +1164,110 @@ two-member tenant on a throwaway instance (#553's recipe; securing the dev seed'
 - **a link to renew** is listed and **Renew** opens its dialog.
 If this phase cannot run a browser, it says so, and the pass stays open here.
 
+#### Phase 5 built (2026-10-28) — where it differs from the text above, and what phase 6 inherits
+
+- **The ceremony** (`KeyRotationPanel.vue`): the entry (the facts of § Copy before any field; the blocked list; the
+  invitations line), the gate (password + current Secret Key, "Also choose a new password" pre-selected with the
+  change-password fields, policy hint and breach notice reused), the new kit (`EmergencyKitSave` with `kitKeepOld`),
+  the confirm dialog, the publish, the result (`doneOldKit`, the per-space states, the links to renew). Minted secrets
+  live only in the component and are dropped once spent and on unmount. *A JS string cannot be zero-filled:
+  `mintSecretKey` zeroes its bytes and hands back the kit's encoding, so dropping the last reference is what the panel
+  can do.*
+- **The gate is proven before the kit is printed** *(decision: a kit printed for a credential that then fails is one
+  the person saved for nothing)*: "Continue" runs `proveColdCredential`; a refusal stays on the gate with its copy.
+  `vaultStale` there (an earlier publish committed) skips the kit and runs `rotateKeys` at once, which resumes and mints
+  nothing (decision 12) — the kit printed for that attempt would never be published.
+- **The entry** (`rotationEntry.ts`): from `readRotationPlan()`; a row is `unreadable` when `unreadableOnThisDevice`
+  (exported from `rotateKeys.ts`, the stage's own rule `openOrDeclare` run as a dry run, every opened key zeroed) names
+  it, which wins over the plan's `blocked`; `factInvites` shows when `listOpenInvites` of any TENANT row of the plan
+  carries an invite whose `signerUserId` is the caller. A failed dry run lists the plan's reasons alone; a failed invite
+  read counts as none. The panel reads the plan first and hands it to the entry: the browser pass showed the personal
+  space under the neutral label until the dry run finished, because the labels read the plan from the entry.
+  `soleOwnerSpaces.ts` and its test are gone.
+- **Names from the plan, every tenant**: a space's label (personal by the plan's `kind`, a tenant root by
+  `listMyTenants`, a group by the name this device last opened) is read for the blocked list, the states and the links
+  alike — the personal space of another tenant is named, which the active tenant's `listMyScopes` could not do.
+- **The links to renew** (`linksToRenew.ts`): `listShares()` without `nodeId`, the caller's own (`mine`) with
+  `reissueRequired`, each named by its node as this device opens the space's tree (keys zeroed after). **Renew** opens
+  the node's own share dialog — `registry.kind(node.kind).shareDialog`, mounted by the panel with the props the node's
+  page hands it (`openScopeById`, `listTree`, `nodeContentKey`; `contribute: false`, fail closed — a renew keeps the
+  link's role); closing it zeroes the node key and the epoch keys. **Deviation:** the drop-box rule is by the link's
+  ROLE, not the node's kind — core may not name `DEPOT_DROPBOX` (`validate_web_core_imports_no_applications.py`), and a
+  Memory's upload link is `WRITE_ONLY` too and can be reissued in its uploader dialog. So a `WRITE_ONLY` row says
+  `linkUpload` ("make a new one, then switch this one off" — true for both) and its button opens the dialog's uploader
+  variant (`linkOpen`). A link of a space not in the active tenant's list says `linkElsewhere` with the tenant's name
+  and has no button.
+- **The session vault** (the front-matter invariant in the browser): `carrySessionVault(mk)` re-seals this tab's
+  session vault under the published Master Key at the swap (`rotateKeys`, right after `setUnlocked`) and after a resume
+  (`resumeCommitted`); a tab with no record gets none (it never opts a device into a tier), an unreadable one is dropped.
+  An unknown outcome drops it with the vault (`clearSessionVault`). *Decision: re-seal rather than clear, so a reload
+  after securing keeps opening the tab with no prompt; it is in the mechanism and not in `app/vault.ts`, because the
+  seal is a feature module `app/` may not import (ADR 0070).*
+- **Error copy**: each `RotationRefused` reason has its arm; `RotationOutcomeUnknown` → `errorUnknownOutcome`; a
+  `ColdCredentialRefused` at the gate maps the same way. `errorCredential` no longer says "Nothing was changed" — the
+  floor refusing a credential says nothing about whether the account was secured elsewhere — and names the new kit
+  (§ Copy). `errorFailed` keeps it: it is shown only for a declared refusal, a re-read that found the old identity, or a
+  failure before the publish.
+- **Copy**: § Copy's keys EN + DE as written; the rail label `settings.security` is § Copy's title; the panel's former
+  "what / why / when" blocks, `factIdentity`, `soleOwner` and `factNeedsKit` went (the facts of § Copy replace them).
+  The new keys are in § Copy's third table. "Cannot be replaced" is gone from `kit.pdfKeepSafe` (web and admin-web),
+  `tenant.join.saveKitSub`, admin-web's `kitSub`; "replaced their keys" from `share.reissueRequiredHint` and admin-web's
+  `moderation.rotationDue`. `i18n.test.ts`'s #248 rule for `rotation.factSignsOut` asks for the new Emergency Kit
+  instead of the Secret Key (decision 7: the devices come back with the new kit).
+- **Tests and bites** (each lever snapshotted, applied, its test red, restored byte-identical): `KeyRotationPanel.test.ts`
+  (25: the entry's blocked list with each reason and the invitations line with its control; the password pre-selected
+  and installed, unticked → none; the gate refusing before a kit; the mismatch; `vaultStale` finishing without a kit;
+  the REAL `EmergencyKitSave` — disabled after the download alone, enabled after the confirm; the kit printed from the
+  installed key; every error arm to its own copy and to no other; `errorCredential`/`errorUnknownOutcome` EN+DE never
+  "nothing was changed"; the states named, never by id; a `reissueRequired` link renders **Renew**, one without the flag
+  or someone else's does not; another tenant's link and an upload link; Renew mounting the registry's dialog with its
+  props and zeroing its keys on close). Bites: `EmergencyKitSave` ready on the download alone → "the publish stays
+  disabled after the download until the kit is confirmed saved" red; the panel's gate without `kitReady` → the same
+  case red; the links filter without `reissueRequired` → the Renew case and its control red. `rotationEntry.test.ts`
+  (4). `sessionVault.test.ts` (+3: re-sealed under the new key, none created, an unreadable record dropped; bite: the
+  carry not re-caching → 2 red). `rotateKeys.test.ts` (+5: the carry after the swap with the published key, after a
+  resume, an unknown outcome drops it, a refusal leaves it alone; the dry run agrees with the stage; bite: the carry
+  dropped from the swap → its case red).
+- **The browser pass** (2026-10-28, headless installed Chrome through the worktree's Playwright, `locale: de-DE`): this
+  worktree's fast-jar (`quarkusBuild -x test`, booted as a copy under `%e2e` with every store, database and port
+  overridden) on its own MariaDB, Garage and Mailpit containers (the dev images by id), this worktree's Vite on
+  `sec5.localhost:48581`; a throwaway owner A and member B seeded by a temporary copy of `bootstrap-user.mts` (its own
+  env file outside the repo and its own Mailpit SMTP port; deleted after). The shared stack was not touched; every
+  process and container was stopped by PID and name after. Seen:
+  - **the entry**: the five facts before the fields, the rail and the title read "Konto absichern", the new password
+    pre-selected; no blocked list (none blocked);
+  - **the kit gate**: the action disabled before the kit, still disabled after the download alone, enabled after the
+    confirm;
+  - **way 1 live**: a route on `POST /api/account/rotation` ran `route.fetch()` (the server answered `200`) and aborted
+    the request in the browser — the page showed "Dein Konto ist abgesichert …", not "Es wurde nichts geändert", both
+    spaces "Neues Schloss";
+  - **end to end**: a fresh context signed in with the new password and the NEW kit (the downloaded PDF uploaded into the
+    sign-in form) and opened the tenant space and the personal space with the folders made before; the OLD kit with
+    the same password stayed on the sign-in page ("Entsperren fehlgeschlagen …"); A posted a folder afterwards;
+  - **the other member**: B, signed in before the rotation and again after it, read A's folder made after the rotation
+    with no dialog and no anomaly copy, and A's profile read "Neue Identität, mit ihrem vorherigen Schlüssel
+    unterschrieben, am 28. Oktober 2026.";
+  - **way 2 live**: the same route, and the page closed the moment the server answered; the database then held the
+    chain's step 2 and both spaces `waiting` (`epoch_at_rotation` = current epoch); a fresh context with the round's NEW
+    kit opened both spaces (the previous kit refused), and after the worker pass both read "Neues Schloss" (the epoch
+    moved to 2 in the database);
+  - **a link to renew**: the tenant folder's link was listed under "Links zum Erneuern"; **Erneuern** opened "Diesen
+    Ordner teilen" with the link marked "Muss erneuert werden" and its renew action;
+  - **the session vault**: after a third (way-1) round, a reload of the tab re-opened the vault with no prompt and the
+    tenant space opened — the cached key was the published one.
+  Not seen live: a blocked or unreadable space and the invitations line (no such state on the instance; unit-tested);
+  an explicit sign-out click (each sign-in after a rotation ran in a fresh browser context instead).
+- **Green at the end of phase 5**: `npm run check` in `src/web/` (5,232 tests, load 7.6 at start; the first run was red
+  only on a timeout of an unrelated suite, `FileViewer.pdf.test.ts`, at load 18, and the re-run was green); `npm run
+  check` in `src/admin-web/` (534 tests, load 9.5); every `scripts/validate_*.py` but `validate_guard_gaps.py` (no
+  validator changed).
+
+**Phase 6 inherits**: the Use page's steps are now the ceremony's (entry → gate with the new password pre-selected →
+the new kit, downloaded and confirmed → confirm → result with the spaces and the links to renew); the gate is proven
+before the kit; a retry with the new kit finishes without a kit step; a link of an upload link is replaced, not
+renewed; a link in another tenant is renewed from there; a reload after securing keeps the tab unlocked (the session
+vault moves to the new key), every other device signs in with the new kit.
+
 ### Phase 6: durable docs and site
 
 - **ADR 0060:** Decision 1's "one mode" includes the Secret Key and the chain step; Decision 2 "It changes only when the
@@ -1288,6 +1392,30 @@ it's you"). New *(assistant, for owner review; the owner finds the key topic har
 They keep the panel's lock wording (`i18n/index.ts:304-322`), name no key but the Emergency Kit in the ceremony, and a
 suspended tenant reads "paused" as `share.spaceUnavailable` does (`:1859`, DE `:3746`). German follows
 `cc.inclusive-language.md` ("Person", "die anderen dort").
+
+Added in phase 5 *(assistant, for owner review; the same voice, no key named but the Emergency Kit)*:
+
+| Key | EN | DE |
+|---|---|---|
+| `afterTitle` | What happens | Was passiert |
+| `next` / `back` | Continue / Back | Weiter / Zurück |
+| `kitTitle` | Your new Emergency Kit | Dein neues Notfall-Kit |
+| `kitSub` | It holds your new Secret Key. Download it and keep it where only you can reach it; nothing changes before you have. | Darin steht dein neuer Secret Key. Lade es herunter und bewahr es so auf, dass nur du drankommst; vorher ändert sich nichts. |
+| `confirmTitle` | Secure your account? | Konto wirklich absichern? |
+| `confirmBody` | All your devices are signed out, your old Emergency Kit stops working, and every space gets a new lock. This can’t be undone. | Alle deine Geräte werden abgemeldet, dein altes Notfall-Kit funktioniert nicht mehr, und jeder Bereich bekommt ein neues Schloss. Das lässt sich nicht rückgängig machen. |
+| `errorCredential` | That password or Secret Key didn’t match. If your account was already secured, use the Secret Key from your new Emergency Kit. | Passwort oder Secret Key haben nicht gepasst. Wurde dein Konto schon abgesichert, nimm den Secret Key aus deinem neuen Notfall-Kit. |
+| `errorLocked` | Unlock veyq on this device first, then secure your account. | Entsperre veyq zuerst auf diesem Gerät, dann kannst du dein Konto absichern. |
+| `errorNoFloor` | This account has no password sign-in to check against, so it can’t be secured here. | Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lässt es sich hier nicht absichern. |
+| `errorFailed` | Your account could not be secured. Nothing was changed — please try again. | Dein Konto konnte nicht abgesichert werden. Es wurde nichts geändert — bitte versuche es erneut. |
+| `errorTooLarge` | the former text, "Your keys could not be replaced" → "Your account could not be secured" | the former text, „Deine Schlüssel konnten nicht ersetzt werden“ → „Dein Konto konnte nicht abgesichert werden“ |
+| `doneSpaces` | Below, each space shows whether its new lock is in. | Unten steht bei jedem Bereich, ob sein neues Schloss drin ist. |
+| `status.blocked` | Not possible yet | Noch nicht möglich |
+| `linkOpen` | Open | Öffnen |
+| `linkUpload` | An upload link: make a new one, then switch this one off. | Ein Upload-Link: Erstell einen neuen und schalte diesen dann ab. |
+| `linkElsewhere` | This link is in “{tenant}”. Open veyq there to renew it. | Dieser Link liegt in „{tenant}“. Öffne veyq dort, um ihn zu erneuern. |
+| `linkNameUnavailable` | A link (its name isn’t available here) | Ein Link (sein Name ist hier nicht verfügbar) |
+| `renewFailed` | This link’s dialog couldn’t be opened here. Open its space and renew it there. | Der Dialog dieses Links ließ sich hier nicht öffnen. Öffne seinen Bereich und erneuere ihn dort. |
+| `tenant.join.saveKitSub` (web), `setup.kitSub` (admin-web) | … if you forget your password. If someone else may have it, you get a new one by securing your account. … | … falls du dein Passwort vergisst. Könnte ihn jemand anderes haben, bekommst du einen neuen, indem du dein Konto absicherst. … |
 
 ## Definition of done
 
