@@ -1,7 +1,7 @@
 ---
 id: cr-who-is-who
 title: An overview "who's who" per tenant - whose key is confirmed, who verified whom, who has a new identity
-status: in-progress
+status: done
 satisfies: ["uc.spaces.enforce-verified-identities"]
 adrs: ["0111", "0028", "0104", "0022"]
 invariants:
@@ -89,17 +89,17 @@ Locators: `git grep -n "tenantBadges\|personInTenant" -- src/web/src` (the two r
 
 ## Phases
 
-- [ ] 1 web, the read - `peopleOverview.ts` with tests first; bite tests: an anomaly with a valid verification row of
+- [x] 1 web, the read - `peopleOverview.ts` with tests first; bite tests: an anomaly with a valid verification row of
       its served head is shown as the anomaly with nobody in *verified by*; a verification at the subject's old head
       (they rotated) does not count; a rotation older than 14 days shows no line (control: younger does); this account
       and a pending proposal are not listed; a failed chain read is no anomaly; a genesis head reads no chain.
       · Done when: `npm run check` green in `src/web`.
-- [ ] 2 web, the page - panel, rail entry, copy. · Done when: `npm run check` green.
-- [ ] 3 measure - the overview at 50 members (requests and time), the load recorded. · Done when: the numbers are in
+- [x] 2 web, the page - panel, rail entry, copy. · Done when: `npm run check` green.
+- [x] 3 measure - the overview at 50 members (requests and time), the load recorded. · Done when: the numbers are in
       this CR's retrospective and, if the anchor check dominates, an inbox row.
-- [ ] 4 browser - own fast-jar and database: three members, one verification, one rotation, the overview clicked in
+- [x] 4 browser - own fast-jar and database: three members, one verification, one rotation, the overview clicked in
       headless Chrome (German UI). · Done when: the overview shows the three states as decided.
-- [ ] 5 docs - use case step + criterion, coverage, model, ADR bullet, Use page EN+DE; delete row #562 and this CR.
+- [x] 5 docs - use case step + criterion, coverage, model, ADR bullet, Use page EN+DE; delete row #562 and this CR.
       · Done when: every `scripts/validate_*.py` (but `validate_guard_gaps.py`) and the site check green.
 
 ## Definition of done
@@ -109,4 +109,20 @@ says where the overview is, EN+DE, and `npm run check` in `site/` is green; the 
 
 ## Retrospective
 
-*(filled at implement time)*
+- **Phase 3's numbers** (load named per run): faked server, 50 members, load ~9: Who's who 154 requests warm (99 pin-store
+  head reads, 54 key chains, 1 verification list), ~0.2 s CPU, 3.8 s at 20 ms per request; the members list
+  (`tenantBadges`) on the same tenant 197 (147 head reads), 4.6 s at 20 ms. Headless Chrome on this worktree's fast-jar,
+  49 others, load ~16: 206 requests and 1.75 s with 47 first contacts, 158 and 1.2-1.6 s after. The overview adds
+  nothing over the members list (decision 9 saves a pin read per member); the cost is the anchor check's own - a pin
+  head read per `anchorIdentity`/`anchorChainKey` and the inviting owner anchored again per joined member - in the two
+  files the trust-risk CR edits: inbox #710.
+- **Planning:** the row carried a performance note as a question ("measure, cache if needed") and no number. A counting
+  fake server answered it in minutes and showed the cost was not where the row put it. *Next time:* a refine that cites
+  a cost note counts requests per endpoint with the existing fakes before it decides the scope.
+- **Execution:** the first full `npm run check` ran while the next phase's files were being written (the substrate rule
+  in `docs/ai/README.md` step 3); and two test-only type errors (an untyped `vi.fn()` in `fakeApi`, `exists` on a
+  `get()` wrapper) were found by `vue-tsc`, not by the focused `vitest` runs. *Next time:* `npm run typecheck` beside the
+  focused test run, and no edits in the tree a check reads. The first bite of the anomaly rule stayed green because the
+  rule held at a second layer; the comment now names the gate and the bite hits both layers.
+- **Process:** under a shared load of 25-99 the full check was red twice with timeouts only; the re-run at a lower load
+  is the one recorded. Nothing in the brief was missing.
