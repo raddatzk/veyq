@@ -178,8 +178,8 @@ paths:
       operationId: revokeShare
       summary: Revoke a share (soft — the next guest request 404s).
       description: >
-        Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — a
-        missing/already-disabled share the caller owns still returns 204. Only its creator, and only while they
+        Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — an
+        already-disabled share the caller owns still returns 204; a missing or deleted one is `404`. Only its creator, and only while they
         are still a member of its space (uc.sharing.share-shared-scope A3). Soft (L1) revocation: already-
         downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation).
       security:
@@ -188,7 +188,7 @@ paths:
         - $ref: "#/components/parameters/ShareId"
       responses:
         "204":
-          description: The share is disabled (or was already gone).
+          description: The share is disabled (or was already disabled).
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:

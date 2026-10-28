@@ -73,6 +73,41 @@ describe('DropBoxShareDialog — the space\'s link requirements', () => {
   })
 })
 
+// inbox #596: the server switches a link off only for its owner (`SharingStore.revoke`, the served `mine`) and deletes
+// it only where the served `deletable` says so (`SharingHandler.deletable`); every other caller is a 404. The dialog
+// offers each action only where the server would take it, read from those two flags — never a rule of its own.
+describe('DropBoxShareDialog — switch-off and delete only where the server allows them (#596)', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const base = {
+    scopeId: 's', nodeId: 'n', role: 'WRITE_ONLY', createdAt: new Date(), expiresAt: null, sealedNote: null,
+    sealedShareName: null, sealedShareKey: null, sealedShareKeyEpoch: null, passwordRequired: false, sealedPassword: null,
+    reissueRequired: false, newGuestsRefused: false, writeVerifierMissing: false,
+  } as const
+  const offers = (row: ReturnType<ReturnType<typeof mountDialog>['findAll']>[number]) => ({
+    switchOff: row.find(`button[aria-label="${t('depot.dropBox.shareRevoke')}"]`).exists(),
+    switchOn: row.find(`button[aria-label="${t('depot.dropBox.shareReactivate')}"]`).exists(),
+    remove: row.find(`button[aria-label="${t('depot.dropBox.shareDelete')}"]`).exists(),
+  })
+
+  it('offers an own link both, a co-member\'s neither, and a departed owner\'s link only what the server takes', async () => {
+    vi.mocked(listSharesFor).mockResolvedValue([
+      { ...base, shareId: 'own', enabled: true, mine: true, deletable: true, guestStops: [] },
+      { ...base, shareId: 'co-member', enabled: true, mine: false, deletable: false, guestStops: [] },
+      { ...base, shareId: 'orphan', enabled: false, mine: false, deletable: true, guestStops: [] },
+      { ...base, shareId: 'co-member-off', enabled: false, mine: false, deletable: false, guestStops: [] },
+    ])
+    const w = mountDialog()
+    await flushPromises()
+    const rows = w.findAll('.veyq-list-row')
+    expect(rows.map(offers)).toEqual([
+      { switchOff: true, switchOn: false, remove: true },
+      { switchOff: false, switchOn: false, remove: false },
+      { switchOff: false, switchOn: true, remove: true },
+      { switchOff: false, switchOn: true, remove: false },
+    ])
+  })
+})
+
 // inbox #457: the drop box's rows say why a link serves no guest too — and offer no fix, since this dialog builds no
 // edit and no renew (a link that misses a requirement is switched off and replaced by a new one).
 describe('DropBoxShareDialog — a link that serves no guest says why (#457)', () => {

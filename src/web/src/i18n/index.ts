@@ -1935,7 +1935,7 @@ const en = {
       nameTitle: 'What is your name?',
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
       // the guest-write record's first-layer notice (core/sharing/GuestWriteRecordNotice.vue, ADR 0093 § 10): N as the
-      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. Wording awaits counsel.
+      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. The wording is a draft.
       recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
       recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
       recordMore: 'Who keeps it, why, and your rights',

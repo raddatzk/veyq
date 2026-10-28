@@ -613,7 +613,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - { name: scopeId, in: path, required: true, description: Opaque id of the GROUP scope., schema: { type: string, format: uuid } }
+        - { name: scopeId, in: path, required: true, description: "Opaque id of the scope — a TENANT, GROUP or PERSONAL one (a removal-rotation's is a GROUP).", schema: { type: string, format: uuid } }
       requestBody:
         required: true
         content:
@@ -648,9 +648,10 @@ paths:
       description: >
         Every open (not yet accepted, revoked, superseded or expired) member invite of the TENANT scope `scopeId`,
         each with its invite key, the inviting owner's signature over it and that owner's key as it signed
-        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2). Any member may rotate the tenant's key and so must carry every open invite,
-        which is why every member reads this, not only an owner — and why it carries **no email** (that stays the
-        owner's `listMemberInvites`). Membership is the first gate (ADR 0042): a non-member gets `404
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2). Every rotation of the tenant's key must carry every open invite, and not only an
+        owner rotates it: a member whose own account rotation left a pending re-key row for the tenant commits its
+        rotation too (`rotateScope`, Who may commit). Any member may come to be that rotator, which is why every member
+        reads this, not only an owner — and why it carries **no email** (that stays the owner's `listMemberInvites`). Membership is the first gate (ADR 0042): a non-member gets `404
         scope_not_found`. A scope that is no TENANT has no invites: an empty list. Operator-blind: public keys and
         opaque signatures the server stores.
       security:

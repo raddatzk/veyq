@@ -151,14 +151,15 @@ pins with it. A case's sealed parts, and what decided it, are lost with a captur
 **Limits, stated:** a restore onto a new host re-applies only the ledger it is given, so the Run docs list the file
 beside the key among what to carry; erasures made in the last sweep interval (a minute) before a crash that also lost
 the file are not re-applied. Whether ciphertext of reported content kept in a capture until B is possession under
-§ 184b StGB is an open legal question (inbox #585).
+§ 184b StGB is a question the law leaves open, not pursued (ADR 0093 § Legal basis, Still open 11).
 
 ## Decided, not built
 
 - **A case's records kept longer while proceedings are pending**, as a logged extension
   ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 11);
   a hold's extension is built.
-- **A child-sexual-abuse hold until the handover past 90 days** — not decided either (inbox #575).
+- **A child-sexual-abuse hold until the handover past 90 days** — not decided either (ADR 0093 § Legal basis, Still
+  open 1, not pursued).
 
 ## Known gaps
 
