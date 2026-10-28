@@ -1,18 +1,19 @@
 useCase: uc.account.rotate-keys
 feature: account
 title: Secure my account after a compromise
-# ADR 0060 in the form ADR 0111 decisions 6-10 gave it. What the flow DRIVES stays covered under its own use-cases:
+# ADR 0060 in the form ADR 0111 decisions 6-10, 20 and 21 gave it. What the flow DRIVES stays covered under its own use-cases:
 # the epoch chain + POST /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation), the node re-key
 # (uc.spaces.rekey-after-rotation) and how other members follow the new key through the key chain
 # (uc.spaces.verify-identity). What is covered here is the account-side operation: its gate, the new Secret Key and
 # kit, the key-chain step, the stage and the publish that applies it, the next epochs the account mints itself, and
 # the result.
 #
-# One structural claim below is held by a guard rather than by a test, and deliberately: `one-mode-…` rests on
-# the ABSENCE of a request field, which no passing test can notice. `scripts/validate_rotation_shape.py` pins
-# the request's property set (and that every field is required — an optional one is a discriminator spelled by
-# omission). It is not listed as coverage because `scripts/` is not a coverage surface (ADR 0040); the tests
-# below cover what the one producer actually sends.
+# Two structural claims below are held by a guard rather than by a test, and deliberately: `one-mode-…` rests on
+# the ABSENCE of a request field, which no passing test can notice, and E10's "a rotation at every cap fits" rests on
+# the contract's caps, which no test enumerates. `scripts/validate_rotation_shape.py` pins the request's property set
+# (and that every field is required — an optional one is a discriminator spelled by omission) and computes the
+# longest body the contract admits against the server's limit (ADR 0111 decision 22). It is not listed as coverage
+# because `scripts/` is not a coverage surface (ADR 0040); the tests below cover what the one producer actually sends.
 acceptanceCriteria:
   - id: one-mode-every-key-together
     text: Securing the account replaces the Master Key, the identity keypair and the Secret Key together, as one step of the account's key chain — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, the new Secret-Key proof key replaces the stored one, and the chain gains a step whose head every directory read then serves.
@@ -260,6 +261,42 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts, src/features/account/tenantTrust.test.ts] }
       backend: { integration: [VerificationSliceTest.theVerifierIsAlwaysTheCallerAndASecondPutReplacesTheFirst] }
+  - id: what-the-account-rooted-survives-the-rotation
+    # ADR 0111 decisions 20 and 21, uc §E3. The thief case on the reader's side (a retired-key record without an
+    # endorsement is unanchored, with one by the current key it is joined, with one by the retired key it is not)
+    # lives in tenantTrust.test.ts under uc.spaces.verify-identity; here the plan, the stage and the publish.
+    text: >
+      The plan lists every open member invite the account signed and every join record it rooted, in every tenant.
+      The client re-signs, with the new identity, an invite's `invite-key` and anchor `grant` statements only when both
+      current signatures verify under the outgoing key, and declares the invite otherwise; it endorses a join record
+      with the new identity, over the sealed record as stored, only when the record verifies, names the account and
+      names its outgoing key or carries an endorsement by it, and declares any other. Each staged re-signature and
+      endorsement is verified under the stage's identity (422 `invite_resign_invalid`, 422 `join_endorsement_invalid`);
+      an invite the caller did not sign, not open or not at its anchor epoch, and a record it did not root, are 409
+      `rotation_plan_changed`. The publish requires every open invite and every rooted record staged as they stand now
+      — an invite minted, an anchor moved, a record written or replaced, an accept between stage and publish are 409
+      `rotation_plan_changed`, and the client stages only the delta into the same stage — then writes the re-signed
+      invites under the new signer key, ends the declared ones, and writes the endorsements (a declared record's
+      cleared). After it, an accept naming the retired key is 409 `invite_changed`.
+    coverage:
+      backend:
+        integration:
+          - RotationRootedSliceTest.thePlansListTheCallersOpenInvitesAndTheRecordsItRootedInEveryTenant
+          - RotationRootedSliceTest.aPublishReSignsTheInvitesEndsTheDeclaredOnesAndEndorsesTheRecords
+          - RotationRootedSliceTest.aDeclaredRecordClearsItsEndorsement
+          - RotationRootedSliceTest.anOpenInviteLeftUnstagedRefusesThePublish
+          - RotationRootedSliceTest.aRootedRecordLeftUnstagedRefusesThePublish
+          - RotationRootedSliceTest.anAcceptBetweenStageAndPublishRefusesItUntilTheNewRecordIsStaged
+          - RotationRootedSliceTest.anAcceptUncommittedInATenantTheOwnerLeftHoldsThePublishUntilItIsSeen
+          - RotationRootedSliceTest.aRecordReplacedSinceStagingRefusesThePublish
+          - RotationRootedSliceTest.anInviteWhoseAnchorMovedSinceStagingRefusesThePublish
+          - RotationRootedSliceTest.afterThePublishAnAcceptNamingTheRetiredKeyIsInviteChanged
+          - RotationRootedSliceTest.aReSignatureNotByTheStagesIdentityIsRefused
+          - RotationRootedSliceTest.aStagedInviteMustBeTheCallersOpenOneAtItsAnchorEpoch
+          - RotationRootedSliceTest.aStagedInviteWithOneSignatureIsMalformed
+          - RotationRootedSliceTest.anEndorsementNotByTheStagesIdentityOrForAnotherRecordIsRefused
+          - RotationRootedSliceTest.anEndorsementOfARecordTheCallerDidNotRootIsRefused
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: forward-secrecy-not-repair
     # No test can assert "no surface implies repair" — that is prose, and the coverage refs below reach only
     # the copy keys that carry it. What actually holds this is review of the four facts the panel states before
@@ -294,10 +331,9 @@ acceptanceCriteria:
   - id: the-result-lists-states-and-links
     text: >
       The entry lists, before any field, the spaces that cannot get their new lock now (a suspended tenant, a scope
-      being deleted, a grant this device cannot open) and, when the account signed open invitations, that they stop
-      working; the result names every space with its state, and lists the account's own links marked for re-issue with
-      Renew, which opens the node's own share dialog. An upload link is replaced rather than renewed, and a link in
-      another tenant is renewed from there.
+      being deleted, a grant this device cannot open); the result names every space with its state, and lists the
+      account's own links marked for re-issue with Renew, which opens the node's own share dialog. An upload link is
+      replaced rather than renewed, and a link in another tenant is renewed from there.
     coverage:
       web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotationEntry.test.ts] }
 # What no green run here proves, stated so nobody quotes it as more: scopeRotation.e2e's last leg drives securing the

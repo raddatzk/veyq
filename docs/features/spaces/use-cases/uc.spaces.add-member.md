@@ -26,32 +26,38 @@ This use-case is the tenant consumer of the grant-distribution primitive
    decision 1): it mints an **invite key** from a fresh 32-byte seed, **signs** its public half with the owner's
    identity (statement `invite-key` over tenant, invite, the key's hash and the expiry, which is the instance's
    invite lifetime `MyTenant.memberInviteTtlSeconds` from now), **wraps the tenant's current epoch key** to it (a
-   grant whose recipient is the invite id), and **seals** the seed, the owner's fingerprint hash and the owner's
-   account under `Argon2id(code)` — the link's secret part. The **code** is 10 Crockford base32 characters, minted
+   grant whose recipient is the invite id), and **seals** the seed, the owner's **key-chain head** and the owner's
+   account under `Argon2id(code)` — the link's secret part (`invite-link` v2). The **code** is 10 Crockford base32 characters, minted
    on the owner's device and shown once with a copy button; the owner may type a **password** instead (at least
    the account password's length floor). The link is always sealed: the server mails it, so an unsealed link would
    hand the operator the invite.
 2. The server checks the grant is of the **current** epoch under the tenant's lock (`409 stale_epoch`), that it
    names the invite key it stores beside it (`409 recipient_key_not_current`), and that the signed expiry is its
    own lifetime within a minute (`400`); it stores the public key, the signature, the signer's key as it signed and
-   the grant on the invite row, mints the **single-use** token (hashed), and **mails** `…/tenant/accept#<token>.<sealed>`
+   the grant on the invite row — the grant a second time as the invite's **anchor** (ADR 0111 decision 19) — mints the **single-use** token (hashed), and **mails** `…/tenant/accept#<token>.<sealed>`
    to the address — keeping no copy of the sealed part. Mail is the **only** channel: the response carries no
    secret ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). A tenant with no
    sendable mail settings is **refused** (`503 mail_unavailable`) before anything is minted.
 3. The owner passes the **code** on themselves, never by email.
-4. The invitee opens the link and types the code. Their client opens the seal and **checks the invite before it
-   sends anything**: the key the seed derives must be the served invite key, the served owner key must hash to the
-   fingerprint inside the seal, and the owner's signature over the invite key must verify under it. It then
-   verifies the invite grant's signature and opens it with the invite key. A wrong code is the invitee's to retype;
-   a failed check is "This invite can't be checked — ask for a new one", and nothing is sent.
+4. The invitee opens the link and types the code. The preview serves the invite with the owner's whole key chain,
+   the anchor grant and the tenant's epoch links above the anchor's epoch. Their client opens the seal and **checks
+   the invite before it sends anything** (`checkInvite`, ADR 0111 decision 19): the key the seed derives must be the
+   served invite key and the seal's signer the served one; the owner's chain must pass through the head inside the
+   seal and end at the served owner key; the owner's signatures over the invite key and over the anchor grant must
+   verify under that key; and the grant it is handed must be the anchor or peel down through the served links to
+   exactly the anchor's key. An existing account also judges the owner against its pin with that chain. It then opens
+   the grant with the invite key. A wrong code is the invitee's to retype; a failed check is "This invite can't be
+   checked — ask for a new one", and nothing is sent.
 5. The invitee **registers** (identity born cold on-device, the Emergency Kit issued) or, with an account already, signs in with their Secret Key. Their client **grants itself** the tenant key — a
    grant sealed to its own identity, naming that key's digest — signs the `invite-accept` proof with the invite key,
    and writes the **join record**: its identity and Secret-Key proof public keys and the owner-signed invite,
    signed by the invite key **and** the new identity, sealed under the tenant key (field `member-join-record`,
-   bound to tenant and member). The optional name and picture are sealed under the same key at join.
-6. The server verifies the proof under the stored invite key (`403 invite_proof_invalid`), writes the MEMBER
-   membership **with** the self-grant and the profile with its join record, and consumes the invite, nulling its
-   key and grant in the same statement. The newcomer is in the shared space at once
+   bound to tenant and member). The accept names the owner key that record carries (`signerIdentityDigest`). The
+   optional name and picture are sealed under the same key at join.
+6. The server verifies the proof under the stored invite key (`403 invite_proof_invalid`) and that the named owner
+   key is still the invite's (`409 invite_changed`, E4), writes the MEMBER membership **with** the self-grant and the
+   profile with its join record and the owner who rooted it, and consumes the invite, nulling its key, grant and
+   anchor in the same statement. The newcomer is in the shared space at once
    ([uc.spaces.switch-spaces](uc.spaces.switch-spaces.md)).
 
 ```mermaid
@@ -63,14 +69,17 @@ sequenceDiagram
   participant S as Server<br>(blind)
   actor I as Invitee
   participant CI as Client<br>(invitee)
-  O->>O: invite key from seed#59; sign it#59; grant K_SC to it#59; seal seed + fingerprint under Argon2id(code)
+  O->>O: invite key from seed#59; sign it#59; grant K_SC to it#59; seal seed + owner head under Argon2id(code)
   O->>S: email, invite public key, signature, grant, sealed part
+  S->>S: keep the grant as the invite's anchor
   S-->>I: mail: link #token.sealed (no copy kept)
   O-->>I: the code, outside veyq
   I->>CI: open link, type code
-  CI->>CI: open seal → derive invite key = served? fingerprint = served owner? signature ok? → open grant
-  CI->>S: register or sign in + self-grant + invite-accept proof + sealed join record
-  S->>S: verify proof → membership with grant, profile with join record, invite key and grant nulled
+  CI->>S: preview
+  S-->>CI: invite, owner's chain, anchor, grant, epoch links
+  CI->>CI: open seal → derived key = served? chain through the sealed head? signatures ok? grant peels to the anchor? → open grant
+  CI->>S: register or sign in + self-grant + invite-accept proof + owner key digest + sealed join record
+  S->>S: verify proof and owner key → membership with grant, profile with join record, invite key, grant and anchor nulled
   Note right of S: server saw public keys, signatures,<br>opaque grants and record — never K_SC or the code
 ```
 
@@ -82,29 +91,43 @@ sequenceDiagram
 - **A2 — a rotation of the tenant meets an open invite:** the rotator re-grants the new epoch to every open invite
   whose owner signature verifies and whose signer passes its anchor check, and declares the rest **pending**; the
   server refuses a rotation that does neither for an open invite (`409 rotation_incomplete`) and ignores an id that
-  names no open invite. Every member reads the open invites' keys for this (`listOpenInvites`, no email). A pending
-  invite's newcomer self-grants the epoch it can open and joins **behind**; the narrow grant delivery brings it
+  names no open invite. The anchor moves to the new epoch only when the invite's signer commits the rotation under
+  the invite's signer key; any other rotation leaves the owner's grant as the anchor. Every member reads the open
+  invites' keys for this (`listOpenInvites`, no email). A pending invite's newcomer self-grants the epoch it can open and joins **behind**; the narrow grant delivery brings it
   current ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) E2), and until then the
   sidebar says *Waiting for the current key*.
 - **A3 — a grant a rotation re-wrapped:** it names that rotator, not the inviting owner, as its granter. The
-  newcomer cannot anchor that member yet and trusts its key on first use, pinning it; a grant naming the inviting
-  owner verifies only under the key the link anchored, so an invite whose grant the inviting owner re-wrapped in a
-  rotation after changing identity reads "ask for a new one".
+  newcomer neither anchors nor pins that member: the grant counts because its epoch peels down through the served
+  links to the owner's anchor, which the operator cannot fake without the anchor's key (ADR 0111 decision 19). A
+  rotator this account already pinned is still judged against its pin.
+- **A4 — the owner secured their account after inviting:** their securing re-signed the open invite with the new
+  identity ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E3), and the newcomer reaches
+  that key through the owner's chain from the head in the link — the step signed by the old identity **and** the old
+  Secret-Key proof key. The invite keeps working; anything the owner's retired key signs is refused.
 - **E1 — the invite is expired, revoked or already consumed:** a generic failure that points at whoever invited;
   the token is single-use, and an ended invite holds no key and no grant.
 - **E2 — the operator against the invite:** it mails the link, so it holds the sealed part and may guess offline —
   against a 50-bit code behind Argon2id at the production profile. It cannot swap the owner's key or the invite key,
-  because the fingerprint sits inside the seal and the invitee derives the invite key itself. A password the owner
-  chose is only as strong as that password. Self-hosted makes it moot.
+  because the owner's head sits inside the seal and the invitee derives the invite key itself, nor hand the newcomer
+  a tenant key of its own, which links to no anchor. A password the owner chose is only as strong as that password.
+  Self-hosted makes it moot. What it can still do is ADR 0111 § What stays open's: with a party that held the
+  anchor's epoch, plant a later one for an invite someone other than the owner carried; with a thief of the owner's
+  retired key, withhold the owner's securing step from a new account, whose join record then reads as an anomaly to
+  every co-member.
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open
   the tenant → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a
   wipe), matching [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md) E3.
+- **E4 — the owner secured their account between the check and the accept:** the server refuses the accept with
+  `409 invite_changed`, because the owner key the join record names is no longer the invite's. The client re-reads
+  the preview and re-runs the checks once with the invite key and the link facts it kept — no code asked for again —
+  and accepts with the record naming the new key; a second refusal, or a re-read that no longer checks, is "ask for a
+  new one". So no join record lands naming a key the owner's securing retired.
 
 ## Quality notes
 
 - **Operator-blind.** The server stores the invite's public key, the owner's signature and the signer's key as it
-  signed, opaque grants and the sealed join record. The invite's private key and the code never reach it; the
-  sealed part of the link is mailed and dropped.
+  signed, opaque grants (the anchor among them), the sealed join record and who rooted it. The invite's private key
+  and the code never reach it; the sealed part of the link is mailed and dropped.
 - **Member identity ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), cr-0083).** Each
   member shows a per-tenant **`username`** (plaintext handle, chosen at join, unique in the tenant) and their
   **real name sealed under a field key derived from `K_tenant`** — decrypted on-device by any member, never seen by the server;
@@ -114,8 +137,10 @@ sequenceDiagram
   its grant.
 - **The owner is the trust root.** The owner's signature on the invite key and the invite key's signature on the
   join record chain **owner → invite → newcomer**, and every member's client reads the join record as the anchor of
-  the newcomer's key in the tenant; the tenant's first owner has none ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 3, 12 and 15).
+  the newcomer's key in the tenant; the tenant's first owner has none. When the owner secures their account, they
+  endorse each record they rooted with the new key, without which a record their retired key signed counts nowhere
+  ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decisions 3, 12, 15 and 21).
 - **A session alone mints no invite.** The server verifies the invite key's `invite-key` signature under the
   caller's stored identity key before it mints or re-issues (`TenantHandler.signedByCaller`, `400 invalid_request`,
   also for a signed expiry with a fraction of a second), so a session without the owner's unlocked vault — a phished

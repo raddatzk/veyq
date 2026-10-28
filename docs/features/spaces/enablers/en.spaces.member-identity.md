@@ -62,8 +62,12 @@ member's own group rows) and splits it by sensitivity:
      invite's grant carried (field `member-join-record`, bound to tenant and member). It is written only at accept,
      never by a profile update, served to co-members on the tenant listing (`ScopeMember.sealedJoinRecord`), and
      null for the tenant's first owner, the trust root. Every member's client reads it as the anchor of that member's
-     key in the tenant
-     ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3, 12, 15).
+     key in the tenant. Beside it the profile keeps who rooted the join (`join_signer_user_id`, the invite's signer,
+     written at accept) and that owner's **endorsement** of the record (`ScopeMember.joinEndorsement`, the
+     `join-endorsement` statement over the sealed record as stored), which their securing writes with the new key: a
+     record signed by a key the owner has since retired counts only with it. Both go with the profile (removal, erasure,
+     purge)
+     ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3, 12, 15, 21).
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
    **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`. A name saved under an
    earlier tenant epoch still opens after a rotation, and its member's own client moves it forward

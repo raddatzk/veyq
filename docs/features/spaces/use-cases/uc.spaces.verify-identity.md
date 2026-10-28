@@ -47,7 +47,10 @@ This use-case narrates the gate from the caller's side; the pin store and the ch
 5. **In a tenant, the join record first.** A wrap in a tenant — a rotation's re-grant, a delivery, a group add and its
    name key, an open invite's carry — and a group grant from the active tenant ask the member's standing there
    (`loadTenantView`): their join record must open under the tenant key, verify owner → invite → newcomer, and name as
-   signer an owner the server lists whose key in it is anchored in the tenant in turn; the chain is then walked from
+   signer an owner the server lists whose key in it is anchored in the tenant in turn — a key that owner has since
+   retired only with their endorsement of the record by their current key, which their securing writes
+   ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 21); the chain is then walked from
    the step that installs the identity and proof key the record names, with the pin as the counter. An owner with no
    join record is a root, judged by the pin as in steps 1–3. **A non-owner without a join record, or with one that
    does not verify, is an anomaly** (step 4) with no chain read — a membership only the server can have made. A pin

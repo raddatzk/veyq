@@ -71,8 +71,10 @@ by the contact's signed key chain. Key Transparency stays the (out-of-scope) end
    counter: a pinned head off that chain is **`replaced`** when the anchored chain is at least as long as the pinned one
    was, an anomaly when it is shorter (a possible rollback). An owner the server lists with no join record is a
    **root**, judged by the pin alone. **Any other member is an anomaly** — a non-owner without a join record is a
-   membership only the server can have made. Without a shared tenant — the invite accept, the moderation delivery —
-   the pin alone decides. The standings and the walk are
+   membership only the server can have made. Without a shared tenant the pin alone decides — for the moderation
+   delivery, and for the invite accept against the inviting owner's chain the invite serves, walked from the head
+   sealed in the link ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 19). The standings and the walk are
    [keys-grants-and-trust § The anchor, per tenant](../crosscutting/keys-grants-and-trust.md#the-anchor-per-tenant).
 
    An anomaly is **never wrapped to and never accepted as a granter**: a rotation declares that member pending, the
@@ -209,10 +211,11 @@ by the contact's signed key chain. Key Transparency stays the (out-of-scope) end
 - **The first-use gap remains (honest).** If the operator substitutes a key **before** a client ever pinned the
   real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** (the compare of
   Decision 3) or Key Transparency. TOFU cannot detect a lie told before first sight. Three things narrow the gap.
-  A newcomer's first contact with its inviting owner is anchored by the owner's fingerprint inside the invite link's
-  seal, which the operator that mails the link cannot open without the code
+  A newcomer's first contact with its inviting owner is anchored by the owner's key-chain head inside the invite
+  link's seal, which the operator that mails the link cannot open without the code, and the tenant key it is handed
+  by the owner's own grant beside the invite
   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 1). It does not reach the personal scope at all (Decision 6). And inside a tenant it is left only for
+  decision 19). It does not reach the personal scope at all (Decision 6). And inside a tenant it is left only for
   owners: every other member is anchored by the owner-rooted join record they wrote at their accept, and a non-owner
   without one — a membership the operator invents — is an anomaly nobody wraps to (Decision 2). A root owner is still
   trusted on first use, and who is an owner is the server's word

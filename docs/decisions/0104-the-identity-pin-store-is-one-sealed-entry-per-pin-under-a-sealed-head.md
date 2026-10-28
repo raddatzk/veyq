@@ -36,7 +36,7 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
    Its plaintext names the `userId`, and a reader refuses an entry whose `userId` does not derive its `pinId`, so the
    server cannot move an entry to another contact's slot. The plaintext is compact JSON `{u, f, h, i, t, r}` — the
    `userId`, the fingerprint, the contact's key-chain **head** (ADR 0111 decision 16), the index of that head's step in
-   the chain (`-1` for a head pinned unread at an invite's accept), `firstSeenAt`, and `r` = 1 when a join record
+   the chain, `firstSeenAt`, and `r` = 1 when a join record
    replaced a pin that was not on its chain (ADR 0111 decision 15) — padded with spaces to 192 bytes, so any two
    contacts seal to the same size — 221 bytes, 296 base64 characters. There is no state: whether someone is verified is
    a signed statement in the tenant (ADR 0111 decision 12), and the index is what tells a pin the anchored chain does
@@ -89,7 +89,7 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   about 2,700 beside them**, so at the cap it sends **9,602,700 bytes (91.6 %)** and is answered `200`. With every
   other field at its contract maximum — the identity bundle and its wrapped private key, both cold wraps, the
   signature, the device register, the head — it would send about **9.70 MB (92.5 %)**, so the limit carries
-  **≈ 27,000 pins** even then (`IdentityPinsSliceTest` holds that worst case against the configured limit). A body past
+  **≈ 27,000 pins** even then. A body past
   the limit is `413 request_too_large`, answered on its `Content-Length` before authentication, and nothing is written.
   A browser reads that answer while it is still sending (headless Chrome over HTTP/1.1, bodies of 1.1×, 2× and 10× the
   limit, direct to the jar and through Traefik), so the client maps it to a refusal of its own that names the Server
@@ -97,9 +97,13 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   **The cap and the one request stay**: the measured margin is 883 KB. Securing the account
   ([ADR 0060](0060-key-rotation-after-compromise.md)) adds fixed fields of 2,424 bytes and 39 bytes per scope this
   device cannot open (at most 10,000), measured with the real encoders: about 9,605,224 bytes at the cap
-  with nothing unreadable, and about 10,092,524 with every field at its contract cap — still under the limit. Its
-  self-grants do not ride in this request; they are staged before it (ADR 0111 decision 6). Above the cap a rotation
-  would need the pin store staged as well (inbox #569). One new pin writes about 400 bytes instead of the whole store.
+  with nothing unreadable. Its self-grants, re-signed invites and join-record endorsements do not ride in this request;
+  they are staged before it (ADR 0111 decisions 6, 20 and 21). **The bound is guarded, not measured once:**
+  `scripts/validate_rotation_shape.py` computes the longest body `RotateAccountKeysRequest` admits from the contract's
+  own caps — every pin entry exactly 296 characters — and fails on a field without a cap or a total above the server's
+  limit; on 2026-10-28 that is 10,101,123 bytes ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 22). The pin store stays in the publish: staging it would only matter for a higher cap. One new pin writes
+  about 400 bytes instead of the whole store.
 - **What the operator learns per write changes shape, not amount.** It sees which entry was written, where it saw that
   the store was. Linking an entry to a contact by timing (a write right after a directory read of that contact) works
   for both shapes alike, and the server already relays the grant the pin precedes.
