@@ -51,7 +51,7 @@ result**.
    does **not** hide the type from a *correlating* operator (see consequences) — keyed-per-scope tags
    (`PRF(K_SC-derived, type)`) are a documented **seam** for future low-footprint, ambiguous-processing types,
    where correlation would not already reveal the kind.
-6. **Lease = at-least-once + idempotent.** An atomic claim (`WHERE status='pending'`, MariaDB `SKIP LOCKED`) sets
+6. **Lease = at-least-once + idempotent.** An atomic claim — a compare-and-set on the job's `status` — sets
    an opaque `leaseHolder` + `leaseExpiry`. The job carries a **TTL**; long jobs **heartbeat** to extend it. The TTL
    is `veyq.tasks.lease.ttl`, **2 min** by default, and a worker renews it every **30 s** while it works (the web's
    `LEASE_RENEW_MS`), so a hidden tab whose timers the browser throttles to one a minute still keeps it. A Server
@@ -86,9 +86,11 @@ result**.
    it validates the core loop
    end-to-end. Transcode + face-recognition/ML are the **informing** heavy consumers that shaped the
    lease/tags/result but are built later (floor, not ceiling).
-10. **Persistence: buy, don't build.** The boring queue/claim/lease machinery uses a maintained JVM/DB job library
-    or MariaDB `SKIP LOCKED` directly (evaluated at CR time — JobRunr / db-scheduler / thin SKIP-LOCKED); only the
-    **blind layer** (envelope, key-eligibility, sealed body/result, tag registry) is veyq-specific. That blind
+10. **Persistence: buy, don't build.** What is bought is the database's own atomic primitive, not a job framework: the
+    queue/claim/lease machinery is a thin compare-and-set on `status`, the same on the H2 test database and MariaDB. A server-side job framework
+    (JobRunr, db-scheduler) does not fit: it runs jobs *on the server*, and the workers here are remote key-holders
+    that pull over HTTP, because a blind server holds no key. MariaDB's `SKIP LOCKED` stays available as a throughput
+    optimisation if contention ever warrants it, never needed for correctness. Only the **blind layer** (envelope, key-eligibility, sealed body/result, tag registry) is veyq-specific. That blind
     layer stays a thin, decoupled module so it *could* later be extracted as an OSS spec — but not now.
 
 ## Consequences
