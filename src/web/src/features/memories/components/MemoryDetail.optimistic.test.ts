@@ -13,6 +13,9 @@ vi.mock('../../../api/client', () => ({
 }))
 vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+// The justified layout, counted (inbox #640): the real one behind a spy (set in `beforeEach`), so a test can say how
+// often the grid laid out.
+vi.mock('../mediaGridLayout', async (orig) => ({ ...(await orig<typeof import('../mediaGridLayout')>()), calculateJustifiedMediaLayout: vi.fn() }))
 
 // Control the upload queue the component subscribes to: a reactive batches array the test drives directly, so
 // we don't depend on the real sequential runner/timers. retryFile is a spy.
@@ -51,6 +54,7 @@ import { treeNode, memberMemoryRights } from '../../../test/models'
 import type { UpdateNodeOperationRequest } from '../../../api/generated/content'
 import { unsealMemoryDate } from '../memoryDate'
 import { epochMsToIsoDate } from '../../../shared/isoDate'
+import { calculateJustifiedMediaLayout } from '../mediaGridLayout'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -110,8 +114,10 @@ function mountDetail(memoryKey: Uint8Array) {
   })
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
+  const layout = await vi.importActual<typeof import('../mediaGridLayout')>('../mediaGridLayout')
+  vi.mocked(calculateJustifiedMediaLayout).mockImplementation(layout.calculateJustifiedMediaLayout)
   hoisted.ref.batches.length = 0
   stubApi(contentApi, { updateNode: undefined })
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
@@ -292,6 +298,62 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
     wrapper.unmount()
     expect(revoke).toHaveBeenCalledWith(src)
+  })
+})
+
+// Inbox #640: each chunk's progress wrote the queue item, every optimistic tile was rebuilt from it, the gallery's tile
+// list re-sorted and the grid ran the justified layout over every tile again — 23.6 % of the main thread of a 50-photo
+// upload at CPU throttle 4. The layout's input is now only what places a tile; the tile reads its stage and progress
+// itself. The control is the last half: a tile that appears or settles still lays the grid out, so a spy that never
+// counted could not make the first half green.
+describe('MemoryDetail — an upload\'s progress does not lay the gallery out again (inbox #640)', () => {
+  const tileOf = (wrapper: ReturnType<typeof mountDetail>, name: string) =>
+    wrapper.findAll('.gallery-tile-optimistic').find((t) => t.find('img').attributes('alt') === name)!
+  const fileOf = (batch: number, file: number) =>
+    (hoisted.ref.batches[batch] as { files: { status: string; progress: number; mediaId?: string }[] }).files[file]
+
+  it('N progress ticks and a stage change move the ring, not the layout; appearing and settling do', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png', lastModified: NEW }, stubDeriver())
+    const wrapper = mountDetail(memoryKey)
+    await flushPromises()
+    await flushPromises()
+
+    pushBatch([uploadFile('u1', 'preparing', { lastModified: OLD }), uploadFile('u2', 'queued', { lastModified: OLD + 1 })])
+    await flushPromises()
+    await flushPromises()
+    const layout = vi.mocked(calculateJustifiedMediaLayout)
+    const before = layout.mock.calls.length
+    expect(before, 'the spy counts the grid\'s layout').toBeGreaterThan(0)
+
+    // the first progress flips the stage (preparing → uploading), then N chunks land
+    const N = 20
+    for (let i = 0; i <= N; i++) {
+      fileOf(0, 0).status = 'uploading'
+      fileOf(0, 0).progress = i / N
+      await flushPromises()
+    }
+    expect(layout.mock.calls.length - before, 'a progress tick or a stage change laid the grid out').toBe(0)
+    // …while the tile itself follows every tick and names its stage
+    expect(tileOf(wrapper, 'u1.jpg').find('.upload-ring-fill').attributes('stroke-dasharray')).toBe(`${2 * Math.PI * 16} ${2 * Math.PI * 16}`)
+    expect(tileOf(wrapper, 'u1.jpg').text()).toContain(t('media.uploadStatus.uploading'))
+    expect(tileOf(wrapper, 'u2.jpg').text()).toContain(t('media.uploadStatus.queued')) // its neighbour did not move
+    expect(gridOrder(wrapper)).toEqual([store.media[0].mediaId, 'u2.jpg', 'u1.jpg'])
+
+    // the control: a tile that appears, and one that settles onto a listed media, still lay the grid out
+    pushBatch([uploadFile('u3', 'queued', { lastModified: NEW + 1 })])
+    await flushPromises()
+    const afterAppear = layout.mock.calls.length
+    expect(afterAppear, 'a new tile lays the grid out').toBeGreaterThan(before)
+    expect(gridOrder(wrapper)[0]).toBe('u3.jpg')
+    settle(0, 0, store.media[0].mediaId)
+    await flushPromises()
+    expect(layout.mock.calls.length, 'a settled tile lays the grid out').toBeGreaterThan(afterAppear)
+    expect(gridOrder(wrapper)).not.toContain('u1.jpg')
   })
 })
 

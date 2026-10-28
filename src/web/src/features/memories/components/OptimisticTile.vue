@@ -10,6 +10,10 @@
 // tray already rendered them; only the tile failed to ask. Shared by the internal gallery (MemoryDetail) and the anonymous contributor viewer
 // (ShareView). Positioning (transform + width/height) is applied by the parent via inherited attrs. Not
 // clickable — the lightbox opens the real media once it lands.
+//
+// **The stage and progress are read HERE, off `tile.upload`** (inbox #640): every chunk writes them, so read in this
+// render they re-render this one tile. Never pass them in as props from the grid's slot — the slot runs in the grid's
+// render, and every chunk would re-render the grid.
 import { useI18n } from 'vue-i18n'
 import type { OptimisticTileVM } from '../useOptimisticTiles'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -29,19 +33,19 @@ const emit = defineEmits<{ retry: [fileId: string]; delete: [fileId: string] }>(
 const { t } = useI18n()
 const RING_CIRCUMFERENCE = 2 * Math.PI * 16 // matches the SVG circle radius below
 /** What this file is doing right now, in the user's language — the same string the upload tray shows. */
-const statusLabel = () => t(`media.uploadStatus.${props.tile.status}`)
+const statusLabel = () => t(`media.uploadStatus.${props.tile.upload.status}`)
 // A settled uploader tile stays in the grid (its upload lists no media for the uploader) with a delete affordance
 // instead of the progress ring — the local preview IS the session-only own-view.
-const isDoneDeletable = () => props.deletable === true && props.tile.status === 'done'
-const isLinkFull = () => props.link === true && props.tile.status === 'failed' && props.tile.error === 'quota_exceeded'
+const isDoneDeletable = () => props.deletable === true && props.tile.upload.status === 'done'
+const isLinkFull = () => props.link === true && props.tile.upload.status === 'failed' && props.tile.upload.error === 'quota_exceeded'
 // Memories is switched off here (uc.platform.switch-application-off): the server refused the start; no retry helps.
-const isSwitchedOff = () => props.tile.status === 'failed' && props.tile.error === APPLICATION_OFF
+const isSwitchedOff = () => props.tile.upload.status === 'failed' && props.tile.upload.error === APPLICATION_OFF
 </script>
 
 <template>
   <div
     class="gallery-tile gallery-tile-optimistic"
-    :class="{ 'is-failed': tile.status === 'failed', 'is-done': isDoneDeletable() }"
+    :class="{ 'is-failed': tile.upload.status === 'failed', 'is-done': isDoneDeletable() }"
     :data-upload-id="tile.fileId"
     :aria-label="`${statusLabel()} – ${tile.name}`"
   >
@@ -49,7 +53,7 @@ const isSwitchedOff = () => props.tile.status === 'failed' && props.tile.error =
          progress ring below carry the state — no separate placeholder glyph (the ring is the signal, #105). The
          play badge marks a settled video. -->
     <img v-if="tile.url" class="media-grid-tile-media" :src="tile.url" :alt="tile.name" />
-    <span v-if="tile.isVideo && tile.url && tile.status === 'done'" class="optimistic-tile-play" aria-hidden="true">
+    <span v-if="tile.isVideo && tile.url && tile.upload.status === 'done'" class="optimistic-tile-play" aria-hidden="true">
       <VeyqIcon name="play" />
     </span>
     <!-- cr-0102 uploader: a settled tile is the session-only own-view — no ring, just a delete affordance -->
@@ -72,7 +76,7 @@ const isSwitchedOff = () => props.tile.status === 'failed' && props.tile.error =
       <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
       <span class="upload-tile-failed-label">{{ t('media.uploadTileSwitchedOff') }}</span>
     </div>
-    <div v-else-if="tile.status === 'failed'" class="upload-tile-state upload-tile-failed">
+    <div v-else-if="tile.upload.status === 'failed'" class="upload-tile-state upload-tile-failed">
       <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
       <span class="upload-tile-failed-label">{{ t('media.uploadTileFailed') }}</span>
       <button type="button" class="upload-tile-retry" @click.stop="emit('retry', tile.fileId)">
@@ -85,11 +89,11 @@ const isSwitchedOff = () => props.tile.status === 'failed' && props.tile.error =
         <circle class="upload-ring-track" cx="18" cy="18" r="16" />
         <circle
           class="upload-ring-fill"
-          :class="{ 'is-indeterminate': tile.status === 'queued' || tile.status === 'preparing' }"
+          :class="{ 'is-indeterminate': tile.upload.status === 'queued' || tile.upload.status === 'preparing' }"
           cx="18"
           cy="18"
           r="16"
-          :stroke-dasharray="`${tile.progress * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`"
+          :stroke-dasharray="`${tile.upload.progress * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`"
         />
       </svg>
       <!-- Same slot the failed state uses for its label, so this adds no control and no new geometry. -->

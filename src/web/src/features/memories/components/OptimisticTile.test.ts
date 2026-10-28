@@ -10,8 +10,8 @@ import { realI18n, t } from '../../../test/i18n'
 
 function failedTile(error: string): OptimisticTileVM {
   return {
-    layoutId: 'optimistic:f-1', fileId: 'f-1', name: 'a.jpg', url: null, aspectRatio: 1,
-    status: 'failed', error, progress: 0, isVideo: false,
+    layoutId: 'optimistic:f-1', fileId: 'f-1', name: 'a.jpg', url: null, aspectRatio: 1, isVideo: false,
+    upload: { status: 'failed', error, progress: 0 },
   }
 }
 
