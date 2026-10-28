@@ -38,6 +38,7 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.tasks.JobDeclineEntity
 import me.raddatz.veyq.core.tasks.JobEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
@@ -194,19 +195,23 @@ class AccountPurge(
     }
 
     /**
-     * The terms acceptance rows an erasure kept (ADR 0101 decision 6) go once no moderation case names their account
-     * any more — the case's log retention date, no period of their own. Rows whose account still exists are never
-     * touched: their account was not erased.
+     * The terms acceptance rows an erasure kept (ADR 0101 decision 6) — this account purge's or a tenant's
+     * ([me.raddatz.veyq.core.admin.tenant.TenantPurge]) — go once no moderation case names their account any more: the
+     * case's log retention date, no period of their own. A kept row is one whose account or tenant no longer exists; a
+     * row of a living account in a living tenant is never touched, neither of them was erased.
      */
     fun sweepKeptTerms(now: Instant) {
-        val orphaned = TenantTermsAcceptanceEntity.getEntityManager()
+        val kept = TenantTermsAcceptanceEntity.getEntityManager()
             .createQuery(
-                "select distinct a.userId from TenantTermsAcceptanceEntity a where not exists " +
-                    "(select 1 from VeyqUser u where u.id = a.userId)",
-                String::class.java,
+                "select a.id, a.userId from TenantTermsAcceptanceEntity a where " +
+                    "not exists (select 1 from VeyqUser u where u.id = a.userId) or " +
+                    "not exists (select 1 from TenantEntity t where t.id = a.tenantId)",
+                Array<Any>::class.java,
             ).resultList
-        orphaned.filterNot { TermsEvidence.namesUntil(it, now) }
-            .forEach { TenantTermsAcceptanceEntity.delete("userId", it) }
+        kept.groupBy({ it[1] as String }, { it[0] as String })
+            .filterKeys { !TermsEvidence.namesUntil(it, now) }
+            .values.flatten().chunked(500)
+            .forEach { TenantTermsAcceptanceEntity.delete("id in ?1", it) }
     }
 
     companion object {

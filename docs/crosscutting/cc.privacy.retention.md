@@ -27,8 +27,9 @@ or pictures ([security-model](security-model.md)). What follows is what the serv
   date ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)). It runs
   30 days after the request (`veyq.scope.delete.retention`), by `AccountPurge`
   (`veyq.account.erasure.purge.every`, hourly).
-- **A tenant's erasure** (`TenantPurge`, hourly) purges every scope of it, then its profiles and invites, then the
-  tenant row, whose foreign keys take its terms acceptances, mail settings and switches with it.
+- **A tenant's erasure** (`TenantPurge`, hourly) purges every scope of it, then its profiles, invites and the terms
+  acceptances no moderation case keeps (as an account's erasure keeps them), then the tenant row, whose foreign keys take
+  its mail settings and switches with it.
 - **A backup holds everything the database held when it was taken**, except the guest-write record's rows; it lives at
   most B days, and an erasure made after it is re-applied when it is restored ([§ Backups](#backups-and-the-erasure-ledger)).
 
@@ -59,7 +60,7 @@ pruned at B days.
 | The address a tenant's owner invite named | `veyq_tenant.owner_email` | (b) | while the tenant lives; it follows its account's address change (`EmailChangeHandler` → `TenantStore.followOwnerAddress`) | blanked when the account holding that address is erased; the tenant's erasure | yes | 0101 decision 4 |
 | A member's tenant profile: username, sealed name and picture | `veyq_tenant_profile` | (b) | while account and tenant live | `AccountPurge`; `TenantPurge` | yes | [0023](../decisions/0023-per-tenant-member-identity.md), [0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md) |
 | A membership: who added and who granted, when | `veyq_membership` | (b) | while the membership lives; `added_by` and the granter in another member's row outlive their account | `ScopePurge` | yes | [0007](../decisions/0007-membership-role-grant-relation.md) |
-| The terms acceptance history: one row per accepted (space revision, section revision), its time | `veyq_tenant_terms_acceptance` | (f) evidence of what a member accepted | while account and tenant live; after the account's erasure only while a moderation case names it, to that case's log date (`TermsEvidence`) | `AccountPurge` and its sweep of kept rows; the tenant's erasure (cascade) | yes | [0035](../decisions/0035-server-terms-of-service.md) decision 4, 0101 decision 6 |
+| The terms acceptance history: one row per accepted (space revision, section revision), its time | `veyq_tenant_terms_acceptance` | (f) evidence of what a member accepted | while account and tenant live; after the account's or the tenant's erasure only while a moderation case names the account, to that case's log date (`TermsEvidence`) | `AccountPurge`, `TenantPurge`, and `AccountPurge`'s sweep of kept rows | yes | [0035](../decisions/0035-server-terms-of-service.md) decision 4, 0101 decision 6 |
 | A guest's accepted terms | the guest's own browser (`veyq:terms-accepted:<tenant>`, the last two pairs) | — | the browser's | the browser | no | 0035 decision 3 |
 
 ### Who wrote what
@@ -164,8 +165,6 @@ the file are not re-applied. Whether ciphertext of reported content kept in a ca
 
 Found measuring this register; each is an inbox row.
 
-- **A tenant's erasure deletes terms evidence an account's erasure keeps**: `veyq_tenant_terms_acceptance` cascades
-  with its tenant, also for rows `TermsEvidence` keeps for an erased account a case names. Inbox #593.
 - **No eraser of their own**, each going only with a larger erasure: a removed moderator's row (with the account), a
   link's tombstone (with its scope), finished job rows, an abandoned store-reclaim row, the operator's own details
   (overwrite only). A terms acceptance of a living member has no time bound, also for a tenant they left.
