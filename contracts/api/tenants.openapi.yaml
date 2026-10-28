@@ -676,17 +676,20 @@ paths:
         **cascade**, distinct from the scope-level `removeMember` (a single group membership). Cuts the target's
         **shared** access at once — deletes their TENANT-scope membership and every **co-shared** GROUP membership
         (an instant 403 on shared content; the tenant content key is **not** rotated, ADR 0025 — ACL-revoke). Applies
-        the **orphan rule** to groups they solely owned: transfer OWNER to the **oldest** remaining member, else the
-        solo group is grace-tombstoned. The target's **own** scopes (personal + any solo group) are grace-tombstoned
-        with their **membership kept** (read-only grace, then `ScopePurge` — cr-0090), so they can read/export their
-        own content before erasure. Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042),
-        then owner-gated (`403 not_tenant_owner`); the **last-owner guard** rejects removing
-        the last tenant OWNER (`409 last_owner`, ADR 0007). Operator-blind: only membership deletions + a lifecycle
-        timestamp — never a key. Enforced by code, not this spec (ADR 0008).
+        the **orphan rule** to groups they were the only accepted owner of: OWNER passes to the **oldest accepted**
+        member, every open consent proposal on the group expires (deleted) and the group's rotation is queued, since
+        the proposals held its key. A group with no other accepted member is the target's own: grace-tombstoned, its
+        open proposals deleted, nothing rotated. The target's **own** scopes (personal + any such group) are
+        grace-tombstoned with their **membership kept** (read-only grace, then `ScopePurge` — cr-0090), so they can
+        read/export their own content before erasure. A group the target is only proposed to loses that proposal as a
+        decline would (its rotation queued, no removal counted), and keeps its owner. Membership-gated first (a
+        non-member gets `404 tenant_not_found`, ADR 0042), then owner-gated (`403 not_tenant_owner`); the **last-owner
+        guard** rejects removing the last tenant OWNER (`409 last_owner`, ADR 0007). Operator-blind: only membership
+        deletions + a lifecycle timestamp — never a key. Enforced by code, not this spec (ADR 0008).
 
-        Every scope the removal cuts — the TENANT scope and each co-shared GROUP — counts the removal in the same
-        transaction, so a co-member's link minted before it, which the removed member could have rebuilt from its
-        recovery copy, can no longer be re-activated, only re-issued
+        Every scope the removal cuts — the TENANT scope and each co-shared GROUP the target was an accepted member
+        of — counts the removal in the same transaction, so a co-member's link minted before it, which the removed
+        member could have rebuilt from its recovery copy, can no longer be re-activated, only re-issued
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4). With
         `revokeLinks=true` the same transaction also turns off **every** enabled public share of the **TENANT scope**,
         whoever created it, each then coming back only by re-issue (point 5) — not the co-shared groups', which the
