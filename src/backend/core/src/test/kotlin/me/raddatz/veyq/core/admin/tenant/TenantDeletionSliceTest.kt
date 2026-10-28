@@ -162,6 +162,43 @@ class TenantDeletionSliceTest {
         }
     }
 
+    /**
+     * The tenant's erasure asks the sweep's question too (ADR 0101 decision 6): a case closed the day before, whose
+     * measure on a member was lifted, still names the member while its records are kept, so the member's terms rows
+     * outlive the tenant to that case's log date; a member no record names loses them at once.
+     */
+    @Test
+    fun aCaseClosedTheDayBeforeTheTenantsErasureKeepsTheNamedMembersTermsRowsToItsDate() {
+        val tenant = seedTenant(owner = seedUser())
+        val named = seedUser()
+        val control = seedUser()
+        val closed = Instant.now().minus(Duration.ofDays(1))
+        QuarkusTransaction.requiringNew().run {
+            listOf(named, control).forEach { TenantRoots.join(it, tenant); accept(it, tenant) }
+            val caseId = UUID.randomUUID().toString()
+            ModerationCaseEntity().apply {
+                id = caseId; itemKind = "NODE"; itemId = UUID.randomUUID().toString(); scopeId = tenant; category = "OTHER"
+                state = "CLOSED"; decidedAt = closed; closedAt = closed
+            }.persist()
+            ModerationBlockEntity().apply {
+                id = UUID.randomUUID().toString(); kind = "MEMBER_SIGN_IN"; targetId = named; this.caseId = caseId
+                takenBy = UUID.randomUUID().toString(); takenAt = closed.minus(Duration.ofDays(2))
+                liftedAt = closed; liftedBy = takenBy; activeKey = null
+            }.persist()
+        }
+        delete(tenant, domainOf(tenant)).then().statusCode(200)
+        purge.purge(tenant)
+        QuarkusTransaction.requiringNew().run {
+            assertNull(TenantEntity.findById(tenant))
+            assertEquals(1L, TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", named, tenant), "a kept case keeps the evidence")
+            assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", control), "control: no record, no rows")
+        }
+        QuarkusTransaction.requiringNew().run { accounts.sweepKeptTerms(ModerationLog.retentionEnd(closed).minusSeconds(60)) }
+        assertEquals(1L, QuarkusTransaction.requiringNew().call { TenantTermsAcceptanceEntity.count("userId", named) }, "kept while the case's records are")
+        QuarkusTransaction.requiringNew().run { accounts.sweepKeptTerms(ModerationLog.retentionEnd(closed).plusSeconds(60)) }
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { TenantTermsAcceptanceEntity.count("userId", named) }, "past the case's date they go")
+    }
+
     @Test
     fun anOwnerMakesAMemberAnOwnerAndTheLastOwnerCannotBeDemoted() {
         val owner = seedUser()

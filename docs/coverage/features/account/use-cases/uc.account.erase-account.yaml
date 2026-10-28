@@ -52,12 +52,13 @@ acceptanceCriteria:
           The guard half is `scripts/validate_account_erasure_arity.py` (the FK closure below `veyq_user`, and every
           column naming an account or its address without a key classified), which the trust-chain glob runs.
   - id: what-the-law-keeps-stays
-    text: Holds, moderation records and, while a case or a step on no case names the account (a step over content on a tenant naming the owners its statement told), its terms acceptance rows stay under the opaque id to their own ends, a measure on the account ending with the purge; content in shared scopes keeps its attribution.
+    text: Holds, moderation records and, while a record still kept — a case, also one closed the day before, or a step on no case, also one lifted — names the account (a step over content on a tenant naming the owners its statement told), its terms acceptance rows stay under the opaque id to their own ends, a measure on the account ending with the purge; content in shared scopes keeps its attribution.
     coverage:
       backend:
         integration:
           - AccountErasureSliceTest.aMeasureOnTheAccountKeepsItsTermsRowsUntilNoCaseNamesItAnyMore
           - ServerOwnerStatementSliceTest.anOwnerOfATenantTakenOfflineOverContentKeepsTheTermsRowsPastTheirErasureForAsLongAsTheStepIsKept
+          - AccountErasureSliceTest.aStepLiftedTheDayBeforeTheErasureKeepsTheTermsRowsToItsDate
           - ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate
           - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
           - MemoriesAccountErasureSliceTest.aSharedMemoryKeepsTheErasedMembersMediaAndLosesTheirFavorites

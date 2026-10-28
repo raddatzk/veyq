@@ -82,12 +82,13 @@ class TenantPurge(
         if (tenant.status != TenantEntity.PENDING_DELETION) return
         if (cutoff != null && tenant.deletionDueAt?.isAfter(cutoff) != false) return
         // The terms acceptance history, as an account's erasure keeps it (ADR 0101 decision 6): a member a moderation
-        // case names keeps their rows here past the tenant, under the opaque ids, until AccountPurge's sweep finds no case
-        // naming them. An owner this tenant's own step over content told counts as named (ADR 0101 decision 6). Asked before the
-        // scopes go, whose purge ends the measures on their content, and before the tenant's step ends below: the question
-        // is about the state the erasure found, and a measure it ends still counts.
+        // record still kept names keeps their rows here past the tenant, under the opaque ids, until AccountPurge's sweep
+        // asks the same question and no record names them any more. An owner this tenant's own step over content told
+        // counts as named. Asked before the scopes go, whose purge ends the measures on their content, and before the
+        // tenant's step ends below: the question is about the state the erasure found.
         val members = TenantTermsAcceptanceEntity.list("tenantId", tenantId).map { it.userId }.distinct()
-        val evidence = members.filter { TermsEvidence.namesAtErasure(it) }
+        val now = Instant.now()
+        val evidence = members.filter { TermsEvidence.namesUntil(it, now) }
         // Every scope, the TENANT scope last: ascending ids for the groups and personal scopes, the order every
         // multi-scope lock takes, then the root the others' members joined through.
         ScopeEntity.list("tenantId", tenantId).map { it.id }.filter { it != tenantId }.sorted()

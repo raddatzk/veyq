@@ -49,6 +49,7 @@ import org.junit.jupiter.api.Test
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
+import java.time.Duration
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
@@ -168,6 +169,39 @@ class AccountErasureSliceTest {
         // Past that date nothing names the account any more, and the sweep deletes them.
         QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).plusSeconds(60)) }
         tx { assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", named)) }
+    }
+
+    /**
+     * The erasure asks the sweep's question (ADR 0101 decision 6): a step on no case lifted the day before still names the
+     * account while its record is kept, so the erasure keeps the terms rows to the step's own date, not only a measure in
+     * force does.
+     */
+    @Test
+    fun aStepLiftedTheDayBeforeTheErasureKeepsTheTermsRowsToItsDate() {
+        val tenant = seedTenant(owner = seedUser())
+        val named = seedUser()
+        val control = seedUser()
+        val lifted = Instant.now().minus(Duration.ofDays(1))
+        QuarkusTransaction.requiringNew().run {
+            listOf(named, control).forEach { TenantRoots.join(it, tenant); accept(it, tenant) }
+            ModerationBlockEntity().apply {
+                id = UUID.randomUUID().toString(); kind = "MEMBER_SIGN_IN"; targetId = named; takenBy = UUID.randomUUID().toString()
+                takenAt = lifted.minus(Duration.ofDays(1)); liftedAt = lifted; liftedBy = takenBy; activeKey = null
+            }.persist()
+        }
+        val ownerToken = serverOwnerToken()
+        listOf(named, control).forEach { eraseByOwner(ownerToken, emailOf(it)).then().statusCode(200) }
+        purge.purge(named)
+        purge.purge(control)
+        tx {
+            assertNull(VeyqUser.findById(named))
+            assertEquals(1L, TenantTermsAcceptanceEntity.count("userId", named), "a kept record of a lifted step keeps the evidence")
+            assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", control), "control: no record, no rows")
+        }
+        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).minusSeconds(60)) }
+        tx { assertEquals(1L, TenantTermsAcceptanceEntity.count("userId", named), "kept while the step's record is") }
+        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).plusSeconds(60)) }
+        tx { assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", named), "past the step's date they go") }
     }
 
     @Test

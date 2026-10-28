@@ -26,16 +26,12 @@ object TermsEvidence {
     /** The steps whose statement tells their tenant's owners (ADR 0093 § 7, owner decision Q25). */
     private val TENANT_STEPS = listOf(BlockKind.TENANT_OFFLINE.name, BlockKind.TENANT_DELETED.name)
 
-    /** At the erasure: a measure naming the account in force, or a case about its content not closed. */
-    fun namesAtErasure(accountId: String): Boolean {
-        val told = statementsTo(accountId)
-        return measuresNaming(accountId, told).any { it.activeKey != null } || casesOf(told).any { it.closedAt == null }
-    }
-
     /**
-     * Later, for a row an erasure kept: a measure naming the account still in force, a step on no case inside its own
-     * retention ([ModerationLog.retentionEnd] of its lift), or a case naming the account that is open or inside its log
-     * retention ([ModerationLog.retentionEnd] of its close).
+     * Whether a record still kept at [now] names the account: a measure naming it in force, a step on no case inside its
+     * own retention ([ModerationLog.retentionEnd] of its lift), or a case naming it that is open or inside its log
+     * retention ([ModerationLog.retentionEnd] of its close). One question for both erasures, asked as they start, and for
+     * the sweep of the rows they kept: a record kept past the erasure keeps the evidence with it, so an account erased the
+     * day after its case closed keeps its rows exactly as one erased the day before.
      */
     fun namesUntil(accountId: String, now: Instant): Boolean {
         val told = statementsTo(accountId)
