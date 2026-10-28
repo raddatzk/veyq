@@ -174,9 +174,10 @@ keypair on the client and installs it only when the new address is proven:
   - **The old Emergency Kit names the old address.** Its Secret Key still works; the new kit is offered, not forced.
   - **Open tenant invites addressed to the old address** can no longer be accepted by the account, because an
     invite matches by address.
-  - **A member invite mailed to a wrong address** can still be redeemed by that mailbox's owner. The
-    key-holder's admission step is the human check there ([ADR 0020](0020-grant-distribution-invite-wrap.md)),
-    not this record.
+  - **A member invite mailed to a wrong address** cannot be redeemed by that mailbox's owner alone: the link opens
+    only with the code the inviting owner passes on outside veyq
+    ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+    decision 1), which is the human check there, not this record.
 - **Recovery gates on the mailed token, never on this record** (Decision 3); ADR 0054 § Consequences states the
   same from its side. A reader who expects "verification" to gate recovery, as an earlier reading of #112 did,
   will find the reason there and here.

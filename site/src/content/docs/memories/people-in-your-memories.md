@@ -32,9 +32,9 @@ took part in.
 - **Give yourself a picture.** In **Settings → Your profile**, or on **your own** profile page (**Edit profile**), you can
   choose a picture and frame it. It then shows instead of your letter wherever you appear in the space: the header of a
   Memory, the list of people, the members list and your profile. Remove it any time and the letter comes back. On
-  other people's profiles there is nothing to edit — only they can change their own picture. If you joined a space as a
-  member, a small notice offers to finish your name and picture after you first unlock; "Not now" hides it for good.
-  (If you own the space, you can pick a picture right when you accept the invitation.)
+  other people's profiles there is nothing to edit — only they can change their own picture. You can pick a picture
+  right when you accept the invitation. If you skipped both name and picture then, a small notice offers to finish them
+  after you first unlock; "Not now" hides it for good.
 
 Names follow one rule everywhere: the **real name** if the person gave one, otherwise their **username**.
 

@@ -63,10 +63,10 @@
   purge. Completing or failing a job additionally needs the **current lease**: a job leased to someone else
   answers `409 not_lease_holder`, as heartbeat and decline already do; completing a job that is already done
   stays a no-op success ([background-tasks](../../../crosscutting/background-tasks.md)).
-- **A6 — a member with no key in a deleting group stays without one.** Grant delivery is a job (A5), so a
-  member added just before the deletion — or one re-keying after an account key rotation
-  ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)) — stays *awaiting access* until
-  a restore. The grace window's promise is that nothing changes, and a delivered grant is a change.
+- **A6 — a member whose key is behind in a deleting group stays behind.** Grant delivery is a job (A5), so a
+  member a rotation skipped — or one re-keying after an account key rotation
+  ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)) — stays *waiting for the current key*
+  until a restore. The grace window's promise is that nothing changes, and a delivered grant is a change.
 - **A7 — the space switcher still lists a suspended tenant.** `my-tenants` carries each tenant's status; a
   suspended one comes with **no grant and no icon** and is shown offline and not enterable
   ([switch-spaces](uc.spaces.switch-spaces.md)). A `403 tenant_suspended` arriving mid-session for a tenant

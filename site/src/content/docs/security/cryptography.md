@@ -40,12 +40,12 @@ keys after they are opened, so there veyq holds against a passive operator only
 
 | Primitive | Used for |
 |---|---|
-| **X-Wing** (X25519 + ML-KEM-768) | Wrapping a key to a public key: scope grants to a member's identity, an uploader's key to a Memory's drop key, the device-linking envelope to the new device's single-use transport key |
-| **HKDF-SHA256** | Turning a KEM shared secret into a wrap key; deriving sub-keys from a parent key (for example the slug-token key, the admission-tag key, the share write token, and a field's own key, `veyq/v1/field/<purpose>` with a fresh salt per write) |
+| **X-Wing** (X25519 + ML-KEM-768) | Wrapping a key to a public key: scope grants to a member's identity or to a member invite's invite key, an uploader's key to a Memory's drop key, the device-linking envelope to the new device's single-use transport key |
+| **HKDF-SHA256** | Turning a KEM shared secret into a wrap key; deriving sub-keys from a parent key (for example the slug-token key, an invite key's two halves from its seed, the share write token, and a field's own key, `veyq/v1/field/<purpose>` with a fresh salt per write) |
 | **AES-256-GCM** | All symmetric encryption: content frames, sealed metadata, key wraps |
-| **Argon2id** | Deriving an unlock key from a password (with the Secret Key or a device factor), and the login auth key |
-| **Ed25519** | Login challenge signatures, the identity signing key that signs every grant, the Secret-Key proof key |
-| **HMAC-SHA256** | Keyed tokens the server stores but cannot reverse: per-parent name tokens, the admission tag |
+| **Argon2id** | Deriving an unlock key from a password (with the Secret Key or a device factor), the login auth key, and the key that seals a member invite's link from its code or password |
+| **Ed25519** | Login challenge signatures, the identity signing key that signs every grant and every invite key an owner mints, the Secret-Key proof key, an invite key's proof at accept and its signature on the join record |
+| **HMAC-SHA256** | Keyed tokens the server stores but cannot reverse: per-parent name tokens |
 | **SHA-256** | The safety number (a digest of a member's full identity public key, shown as 6 × 5 digits), and the stored verifiers of share passwords and write tokens |
 
 ## The hybrid KEM is X-Wing
@@ -102,8 +102,8 @@ never share a key.
 **The server never chooses a cost parameter** (ADR 0017 rule 5). A wrap carries its profile so that a later
 profile stays readable, but a client derives only with the profile it would write itself and refuses any other
 before deriving. A served profile accepted as sent would let a server make every unlock run near-forever. The
-vectors pin the production profile for the recovery key and the auth key, so a client shipping different
-parameters fails conformance.
+vectors pin the production profile for the recovery key, the auth key and a member invite's link key, so a client
+shipping different parameters fails conformance.
 
 ## Chunked AEAD for content
 

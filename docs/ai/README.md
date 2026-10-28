@@ -287,7 +287,7 @@ A refined CR nails **decisions, not keystrokes**:
   server's copies of it as well as the keys onto its row: cr-account-erasure's second angle searched for account ids and
   missed the address a tenant row and its old invites had copied, which its admin-web implementer found on the tenant
   list. A refine that lets the operator give someone a role in a space names who hands them its key: ADR 0101 let the
-  Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 6),
+  Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 3),
   so the implementation had to narrow the invite to members. And a refine that reuses an operation ("as a removal
   does") lists that operation's refusals beside its own decision: the same ADR's "the Server Owner's door does not
   refuse" met the moderator removal's last-holder refusal only in the implementation. The reverse holds too: a refusal
@@ -308,6 +308,19 @@ A refined CR nails **decisions, not keystrokes**:
   settled it (another link's guests were reachable that way before the CR). Before designing keys for a field,
   name the weakest attacker the new layer stops and what that attacker reads anyway, and put the cheap variant
   with its residual beside the expensive one.
+- **A CR that removes a defence, or builds only the first half of its successor, lists per attacker what the old
+  one stopped and what stops it in between.** cr-invite-is-a-placeholder-member removed the admission tag (ADR 0111
+  decision 5) while the join record that replaces it is written but read by nothing until a later CR; the refine
+  priced the gap against the operator only, and its docs phase found that on an honest server a stolen owner
+  password without the vault could again get an account of its own the tenant key, because the server stored the
+  new invite's owner signature unchecked — closed in the same CR by a check at mint. The rows are the operator, a
+  stolen session, and a member.
+- **A value the client must sign or state is one it can read.** The same CR had the owner sign the invite's expiry
+  and the server check it against its own lifetime, which is operator-configured, so the client could not know it
+  until the implementer added `MyTenant.memberInviteTtlSeconds`. A refine that makes a client state a value the
+  server checks against its configuration names the read that serves it — and a new seal or statement purpose is
+  checked against `seal.ts`'s tables, where no purpose may sit in two (the CR's `join-record` became the field
+  purpose `member-join-record`).
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
   `core/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't

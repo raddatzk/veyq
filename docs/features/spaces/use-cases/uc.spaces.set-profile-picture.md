@@ -30,14 +30,14 @@
 
 - **A1 — remove the picture:** `DELETE /api/account/profile/avatar` (idempotent `204`) clears the blob and bumps the
   revision; everyone falls back to the letter.
-- **A2 — at join, as the tenant owner:** the owner holds `K_tenant` at accept, so the picker beside the name fields
-  seals name and picture together and sends `sealedAvatar` with the accept request (stored with `avatarRevision` 1).
-- **A3 — at join, as a member:** no `K_tenant` yet, so no picture is offered; after the first unlock with the key a
-  one-time "finish your profile" notice (and Settings) offers it - shown when neither a name nor a picture is set, until
-  "Not now" or its link dismisses it for that user on that browser (a flag, never an image). Nothing unsealed is cached
-  meanwhile.
+- **A2 — at join:** the tenant owner holds `K_tenant` at accept, and so does a member, who opened the invite's grant
+  ([uc.spaces.add-member](uc.spaces.add-member.md)); the picker beside the name fields seals name and picture together
+  and sends `sealedAvatar` with the accept request (stored with `avatarRevision` 1).
+- **A3 — skipped at join:** both are optional; once the device holds the tenant key and neither a name nor a picture
+  is set, a one-time "finish your profile" notice (and Settings) offers them, until "Not now" or its link dismisses it
+  for that user on that browser (a flag, never an image). Nothing unsealed is cached meanwhile.
 - **E1 — the browser cannot decode the file:** rejected in the picker with a message; nothing is stored.
-- **E2 — no grant yet:** the control is disabled with a hint, as the name fields are
+- **E2 — the tenant key does not open here** (behind or refused): the control is disabled with a hint, as the name fields are
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) E2).
 - **E3 — the blob does not open** (wrong key, corrupt, another member's blob on this row, a pad of another length such as the earlier 8 KiB one): the letter shows; never a
   throw and never a broken image.

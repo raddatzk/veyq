@@ -84,8 +84,8 @@ never anything you keep in your space.
 - **Decisions:** [ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md) (per-tenant SMTP as
   runtime settings), [ADR 0049](../../../decisions/0049-email-delivery-boundary.md) (what a mail carries),
   [ADR 0050](../../../decisions/0050-operator-config-secret-encryption.md) (the password sealed at rest),
-  [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) (the invite link is an admission token,
-  not a key).
+  [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (the mailed invite link carries the
+  invite key only sealed under a code the owner passes on outside mail).
 - Operator view (docs site): [Running your own instance](../../../../site/src/content/docs/run/index.md)
 - Run area of the docs site: [Storage and email](../../../../site/src/content/docs/run/storage-and-email.md), [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
 - End-user view (docs site): [Email for your space](../../../../site/src/content/docs/space-owners/email.mdx)

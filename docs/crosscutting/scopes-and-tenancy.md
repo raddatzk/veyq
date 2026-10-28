@@ -2,7 +2,7 @@
 
 > The structural layer: **where content lives and who may access it.** It defines the scope kinds, the
 > organizational structures (tenant / group / personal), how access is granted *cryptographically*
-> (scope keys, grants, shares), how a new member is onboarded (admit, then deliver), and the unified
+> (scope keys, grants, shares), how a new member is onboarded (an invite they grant themselves from), and the unified
 > navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
 > [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`src/packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
@@ -175,21 +175,30 @@ an operator-held key, so a stolen DB dump leaks nothing) is a **separate** defen
 is *not* operator-blindness (the server must still decrypt to send mail), and it must be decided
 crosscutting over **all** server-visible emails (including `veyq_user.email`), not per field.
 
-## Onboarding a new member — admit, then deliver
+## Onboarding a new member — an invite they grant themselves from
 
-A new member has **no identity keypair yet**, so the scope key cannot be wrapped to them in advance, and no
-invite link ever carries a key. Two moments, one human decision
-([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)):
+A new member has **no identity keypair yet**, so the owner wraps the scope key to a placeholder instead: the invite
+([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 3,
+[ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 1–3):
 
-1. **Admit.** An owner mints the invite from an unlocked vault, and it carries an **admission tag** that only a
-   holder of the scope's current epoch key can compute. The invitee registers and becomes a member **without a
-   grant**.
-2. **Deliver.** The next key-holder who is online checks the tag and wraps the scope key to the member's
-   identity key. The member's client opens that grant only if its granter's signature verifies
-   ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
+1. **Invite.** From an unlocked vault, an owner's client mints an **invite key**, signs it with the owner's identity,
+   wraps the tenant's current epoch to it, and seals the key's seed with the owner's fingerprint into the mailed
+   link, under a **code** (or password) the owner passes on outside veyq. Every rotation of the tenant re-grants each
+   open invite or declares it pending.
+2. **Accept.** The invitee opens the link with the code, checks the invite key and the owner's signature against the
+   fingerprint in the seal, opens the grant, and wraps the epoch to its **own** new identity. It is a member with the
+   key at once, and writes an owner-rooted **join record** into its tenant profile.
 
-This is the only way confidentiality is lowered to a new person, and an owner's **session** alone cannot start
-it: a password without the vault has no epoch key to tag with.
+A group member already has an identity, so the group owner wraps the group's epoch to it directly. A member whose
+grant is behind — a rotation skipped them, or their invite was declared pending — is brought current by the next
+key-holder online ([ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 5); its client opens that grant only if
+its granter's signature verifies ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
+
+An owner's **session** alone cannot start this: the server mints an invite only when its key carries the caller's
+owner signature under the identity key it stores, which needs the unlocked vault. What no wrap checks yet is that a
+membership came through an invite: the join record is written, not read, so a membership the operator writes into
+the database is wrapped to by a key-holder that never pinned it, as a first use ([security-model](security-model.md)).
 
 ## Revocation & rotation
 

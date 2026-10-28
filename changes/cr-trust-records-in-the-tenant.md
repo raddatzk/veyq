@@ -16,7 +16,7 @@ invariants:
 
 [ADR 0111](../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decisions 12–17 (the parts `changes/cr-secure-the-account.md` did not build) and inbox #560's compare half and #561's
-second half. After the two CRs before it, every newcomer writes a join record (`cr-invite-is-a-placeholder-member`) and
+second half. After the two steps before it, every newcomer writes a join record (ADR 0111 decisions 1–5, built 2026-10-28) and
 every rotation is a doubly signed key-chain step whose head each account pins (`cr-secure-the-account`), but the anchor
 is still the pin taken on first use, and *verified* is still a private mark in the verifier's pin store. This CR:
 
@@ -48,8 +48,11 @@ a sibling carries *"once `cr-…` lands"* and is re-read against the merged tree
   :48-52); vectors `fingerprint` (`v1.json:956-962`). UI `core/people/MySafetyNumber.vue`, `PersonSafetyNumber.vue`,
   `SafetyDigits.vue`, mounted from `PersonProfile.vue:120-121`; copy `safety.*` (`i18n/index.ts:1489-1530`, DE :3422).
 - **The tenant profile** is one row per member and tenant (`veyq_tenant_profile`, baseline :349-363), written only by
-  its member; once `cr-invite-is-a-placeholder-member` lands it carries `sealed_join_record`, served on `ScopeMember`.
-  Fields are sealed under the tenant name key bound to `{tenantId, userId}` (`memberName.ts:11-25`).
+  its member, and `sealed_join_record`, written once at an invite's accept and served on `ScopeMember.sealedJoinRecord`
+  in the tenant scope (null for the tenant's first owner). Name and picture are sealed under `K_tenant` bound to
+  `{tenantId, userId}` (`memberName.ts:11-25`); the join record under the tenant epoch its invite's grant carried, as
+  the field `member-join-record` bound to the same pair (`openJoinRecord`, `src/packages/crypto/src/invite.ts`), so a
+  reader opens it with that epoch's key from its chain.
 - **Identity is per account, not per tenant** (`veyq_user.identity_public_key`; ADR 0023 covers name and avatar only), so
   a person in two tenants has one chain and one join record per tenant.
 - **Owners are the server's word**: `ScopeMember.role` on the tenant scope (`scopes.openapi.yaml:1595`).
@@ -73,11 +76,12 @@ of 2026-10-27 was to decide rather than block)*; the rest follows the ADR.
      counter, ADR 0111 decision 16).
    - **No join record — owners:** a person the server lists as an owner of the tenant and who has no join record is a
      **root** and trusted on first use (the pin), as ADR 0111 decision 15 trusts an unknown person. A newcomer pinned
-     their inviting owner from the link (`cr-invite-is-a-placeholder-member` decision 8), so for them the root is
-     anchored by the link.
-   - **No join record — anyone else: an anomaly** *(decides ADR 0111 § What stays open, item 1)*. Once
-     `cr-invite-is-a-placeholder-member` lands every member joins with one, and there is no release, so a non-owner
-     membership without one can only be one the server made. Not wrapped to, declared pending in a rotation, shown as
+     their inviting owner from the link (ADR 0111 decision 1: the owner's fingerprint inside the link's seal, checked
+     by `checkInvite` before the accept), so for them the root is anchored by the link.
+   - **No join record — anyone else: an anomaly** *(decides ADR 0111 § What stays open, the membership the server
+     made)*. Since 2026-10-28 every member joins with one, and there is no release, so a non-owner membership without
+     one can only be one the server made — which today every wrap still reaches as a first use, since nothing reads
+     the record yet. Not wrapped to, declared pending in a rotation, shown as
      an anomaly — never a block on anyone's write. Alternatives: trust it on first use (keeps the operator's door open
      for exactly the case the join record exists to close); treat owners the same (would make every root owner an
      anomaly to everyone they did not invite).
@@ -135,7 +139,7 @@ of 2026-10-27 was to decide rather than block)*; the rest follows the ADR.
 | The safety number and its QR | crypto, web | `git grep -n "fingerprintDigits\|safetyCodePayload\|parseSafetyCode\|compareScan\|veyqid:" -- src/packages/crypto/src src/web/src` |
 | The vectors | `v1.json` | `grep -n '"fingerprint"\|"identity_pin"' contracts/crypto/vectors/v1.json` |
 | The profile and badge UI and its copy | web | `git grep -n "MemberTrustBadge\|PersonSafetyNumber\|MySafetyNumber\|safety\.\(state\|badge\|changed\)" -- src/web/src` |
-| The join record as written by the invite CR | contracts, web | `git grep -n "sealedJoinRecord\|join-record" -- contracts src` (exists once `cr-invite-is-a-placeholder-member` landed) |
+| The join record as written at accept | contracts, crypto, web | `git grep -n "sealedJoinRecord\|join-record" -- contracts src` |
 | The anchor function as written by the rotation CR | web | `git grep -n "anomaly\|keyChainHead\|getKeyChain" -- src/web/src` (exists once `cr-secure-the-account` landed) |
 | The rotation request it extends | contracts, guard | `grep -n "RotateAccountKeysRequest:" contracts/api/account.openapi.yaml; grep -n "REQUEST_PROPS" scripts/validate_rotation_shape.py` |
 | Tests asserting a personal verified mark (test trees too) | web, e2e | `grep -rln "markVerified\|pinVerified\|stateVerified" src/web/src tests/e2e` |

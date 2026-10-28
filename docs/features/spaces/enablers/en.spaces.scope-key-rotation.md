@@ -21,7 +21,7 @@
   self-served by its single owner.
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the
   **grant-distribution primitive** generalized to re-grant existing members ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)),
-  **grant-delivery** with a *stale-epoch* trigger ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
+  **grant-delivery** for a membership behind the epoch ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
   the **content-key hierarchy** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)). **No new crypto
   primitive** — the epoch chain composes the existing `symWrap` / `asymWrap`.
 - **Preconditions:** A group with ≥1 remaining owner online who holds its current grant, to perform the rotation
@@ -49,14 +49,16 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
    behind the scope's epoch, or absent, is refused `409 stale_epoch` with nothing stored, and an owner who rotated
    their account keys is refused `403 rotation_excluded` while a live rotation job of the scope carries their
    exclusion ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
-2. It carries each remaining membership's **admission tag** forward — verified under `E_n`, re-tagged under
-   `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6); for a tenant scope its
-   open member invites too. A tag that fails is **dropped** on purpose and its member is not re-granted. The server
-   refuses a rotation that leaves any open admission neither re-tagged nor dropped (`409 admissions_incomplete`),
-   because one it forgot could never be delivered to again. It then **re-grants**
-   `E_{n+1}`, signed by the rotator, to the remaining members it can reach (`asymWrap` to each identity); the
-   **grant-delivery** reconciler finishes the rest — its trigger widened from *grant-less* to *grant-less or
-   stale-epoch*, first-online-wins, idempotent ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
+2. It **re-grants** `E_{n+1}`, signed by the rotator, to the remaining members it can reach (`asymWrap` to each
+   identity) — a pending consent proposal included, which holds the key from its add on. For a **tenant** scope it
+   also carries every **open member invite** ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2): it reads
+   them from `listOpenInvites`, re-grants the new epoch to each invite whose owner signature verifies under the
+   signer key and whose signer passes its pin check, and declares the rest **pending**. The server refuses a
+   rotation that leaves an open invite neither re-granted nor declared (`409 rotation_incomplete`) — one it forgot
+   would hand its newcomer a key the members already left — and ignores an id that names no open invite. The
+   **grant-delivery** reconciler finishes the rest: every membership behind the epoch (a member the re-grant
+   skipped, a newcomer who joined through a pending invite), first-online-wins, idempotent
+   ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
 3. New content (names, `slug_token`s, `K_node`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
 4. The same device re-keys every existing node of the scope under `E_{n+1}`, top-down: a fresh key per node, every
    field sealed under the old one re-sealed, each `K_blob` re-wrapped, nothing re-encrypted in the store
@@ -104,19 +106,19 @@ sequenceDiagram
   commits the epoch in one transaction, so a failed rotation leaves the member in place and no job is needed; the
   bare member delete is refused for anyone but a pending consent proposal (`409 removal_requires_rotation`).
 - **E2 — a remaining member's grant can't be re-wrapped:** that member's grant stays stale (they hold `E_n`
-  while the scope is at `E_{n+1}`) → they fall to *awaiting access*: their client does not open the scope, so it
+  while the scope is at `E_{n+1}`) → they fall to *waiting for the current key*: their client does not open the scope, so it
   writes nothing under `E_n`, and the server refuses a node create tagged `n` (`409 stale_epoch`, ADR 0024
   Decision 6). **Two cases that must not be confused,
   because only one self-heals.**
   - **A corrupt or unreadable pubkey** — the grant-delivery **stale-epoch trigger** (cr-0093) treats
-    `grantedEpoch < currentEpoch` like a grant-less member and queues a delivery, so the next online key-holder
+    `grantedEpoch < currentEpoch` as behind and queues a delivery, so the next online key-holder
     re-wraps `E_current` and records `grantedEpoch = currentEpoch`. No manual intervention needed.
   - **A *changed* identity key (a rotation, or a substitution — indistinguishable on-wire)** — the reconciler
     **must not** auto-re-grant, and does not: every wrap-to-foreign-identity site is TOFU-gated
     ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md),
     [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)), so the worker
     **declines** the job and the re-grant loop **skips** that member while the rotation itself proceeds. They
-    stay *awaiting access* until a human accepts the new key in the changed-key review. That is the intended
+    stay *waiting for the current key* until a human accepts the new key in the changed-key review. That is the intended
     behaviour and the reason an attacker cannot rotate their way back into a scope
     ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)); it is also why an accept must clear
     the declining worker's exclusion, or the re-admission it authorises is never delivered.
@@ -135,8 +137,8 @@ sequenceDiagram
   per remaining member ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); the re-key that follows costs
   symmetric re-seals per node and medium in the database, and no store object is read or written
   ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Cost).
-- **Operator-blind.** The server stores only the opaque epoch-chain links, the per-member grants and admission
-  tags, a per-membership granted-epoch marker, a per-node epoch index and the re-key's rewritten ciphertext — no key,
+- **Operator-blind.** The server stores only the opaque epoch-chain links, the per-member and per-invite grants,
+  a per-membership granted-epoch marker, a per-node epoch index and the re-key's rewritten ciphertext — no key,
   no plaintext. The epoch
   index is operational metadata the operator could infer from timing anyway.
 - **Honest limit.** Already-read + pre-rotation content is not retractable; rotation protects **future** content.

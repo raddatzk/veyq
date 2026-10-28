@@ -63,7 +63,7 @@ in this refine was read here or by a delegated read that cited it. A claim held 
 ```mermaid
 flowchart LR
   R["any member re-keys<br/>(0111 D11, built)"] --> A["cr-secure-the-account<br/>(D6–D10, D16 counter)"]
-  B["cr-invite-is-a-placeholder-member<br/>(D1–D5)"] --> A
+  B["invite is a placeholder member<br/>(0111 D1–D5, built)"] --> A
   A --> C["cr-trust-records-in-the-tenant<br/>(D12–D15, D13, D16 rest, D17)"]
   B --> C
   C --> D["cr-join-records-for-existing-members<br/>(D18, stub)"]
@@ -73,13 +73,14 @@ flowchart LR
   shared epoch. Under the owner-only re-key it replaced, every write into an existing node would then have answered
   `409 node_rekey_pending` until an owner was online — goal 3 broken for everyone, by every rotation. Its
   `rotation_excluded` refusal (`RekeyAccess.check`) stays for this CR to remove with the exclusion machinery.
-- **After `cr-invite-is-a-placeholder-member` (planned).** A rotation of the tenant scope must carry every open invite:
-  today it re-tags their admissions (`commitRotation` reads `listMemberInvites`, `scopes.ts:652-654`; the server
-  refuses `AdmissionsIncomplete`, `RotationPolicy.kt:118-120`), and `listMemberInvites` answers only an owner
-  (`TenantHandler.kt:526`). So a plain member securing their account could not rotate the tenant. That CR removes the
-  admission tags and makes open invites placeholder members every tenant member reads and wraps to. Building a
-  member-readable invite-admission read here instead would be a stopgap the next CR deletes. *(Assistant decision
-  2026-10-27, for owner review — the brief suggested this CR first.)*
+- **After the invite as a placeholder member (ADR 0111 decisions 1–5, built 2026-10-28).** A rotation of the tenant
+  scope must carry every open invite, and before that build it re-tagged their admissions from `listMemberInvites`,
+  which answers only an owner, so a plain member securing their account could not have rotated the tenant. Now every
+  member reads the open invites' keys (`listOpenInvites`, `GET /api/scopes/{id}/open-invites`, no email), and a tenant
+  `rotateScope` carries `inviteGrants` (re-granted to the invite key) and `pendingInviteIds`, which the server requires
+  to be exactly the open invites (`409 rotation_incomplete`, `RotationPolicy.kt`). `commitRotation`'s
+  `carryOpenInvites` (`src/web/src/features/spaces/scopes.ts`) re-grants an invite whose owner signature verifies and
+  whose signer passes `checkAndPin`; this CR's anchor function takes that pin check's place.
 - **Before `cr-trust-records-in-the-tenant`.** Until that CR, the anchor of decision 15 is this account's **pinned
   head** (decision 9 below): ADR 0111 decision 15 already trusts a person without a join record on first use. That CR
   makes the join record the anchor, adds verifications and the closing list of decision 13 (which needs verification
@@ -257,8 +258,8 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      fetches a chain only when a head moved)*.
 3. **Self-grants of every scope, in the publish.**
    - `selfGrants`: one per scope the account holds a grant on — PERSONAL, TENANT and GROUP, across every tenant, a group
-     invitation the account has not yet answered included (its grant is wrapped at add by
-     `cr-invite-is-a-placeholder-member`, until it lands: E5 as today). Each grants the scope's **current** epoch key
+     invitation the account has not yet answered included (a consent proposal holds a grant from the add on, ADR 0111
+     decision 4, built 2026-10-28). Each grants the scope's **current** epoch key
      `E_n` to the new identity and is signed by it.
    - **The client opens those grants with the old identity before the publish**, from the plan (decision 5), not from
      `listMyScopes`.
@@ -318,16 +319,19 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    - Every grant a client sends names its recipient key: `recipientIdentityDigest`, the `sha256` of the recipient bundle
      the grant statement already signs. The existing writers gain it — `CreatePersonalScopeRequest`, `CreateGroupRequest`,
      `ScopeGrantEntry` (`rotateScope`), `CompleteRequest` (grant delivery), the tenant birth in
-     `AcceptInviteRequest`/`RegisterAndAcceptRequest` — and the publish's self-grants. The writers
-     `cr-invite-is-a-placeholder-member` adds carry it from their birth (until it lands: they do not exist).
+     `AcceptInviteRequest`/`RegisterAndAcceptRequest` — and the publish's self-grants. The four writers ADR 0111
+     decisions 1–5 added (2026-10-28) already carry it and the server already checks it (`409
+     recipient_key_not_current`): the member invite's grant, the accept's self-grant, a tenant rotation's invite
+     re-grant (`inviteGrants`) and a group add's grant.
    - The server compares it, under the recipient's account lock or the scope's row lock as each writer already holds,
      with `sha256` of the stored current identity (of the invite key, for an invite placeholder), as the moderation
      writers do; a mismatch is **`409 recipient_key_not_current`**, nothing written. A concurrent rotation therefore
      cannot be outrun by a stale directory read wrapping to the old identity.
    - Concurrent rotations keep ADR 0024 Decision 4's `current + 1` rule (`409 stale_epoch`).
-   - The publish's self-grant is one more grant writer: `EXPECTED_WRITERS` gains it beside the five of today and those
-     `cr-invite-is-a-placeholder-member` adds (`scripts/validate_grant_writer_arity.py:48-54`), and each writer owes a
-     leg in `GrantWriterSnapshotSliceTest`.
+   - The publish's self-grant is one more grant writer: `EXPECTED_WRITERS` gains it beside the nine of today
+     (`scripts/validate_grant_writer_arity.py:48-58`; the four ADR 0111 decisions 1–5 added are
+     `TenantStore.mintMemberInvite`, `TenantStore.joinAsMember`, `TenantStore.carryInvites` and
+     `ScopesStore.addMember`), and each writer owes a leg in `GrantWriterSnapshotSliceTest`.
 7. **The new Secret Key and the password (#559; kept).**
    - A fresh 32-byte `SK'`. `PASSWORD` = `kekPasswordSecret(SK', password')`, `RECOVERY` = `kekRecovery(SK', salt)`,
      fresh salts, both over `MK'`. The publish carries `secretKeyProofPublicKey` (from `SK'`) and
@@ -382,8 +386,9 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      step's server-observed time.
 10. **An omission is declared, and anyone who anchors the member grants them (ADR 0111 decision 9).**
     - `rotateScope` gains `pendingUserIds`. The server requires `grants ∪ pendingUserIds ∪ {removed}` to cover every
-      membership of the scope (and every open invite, once `cr-invite-is-a-placeholder-member` lands) and refuses
-      otherwise with **`409 rotation_incomplete`**, nothing written. A member left behind is therefore always a declared
+      membership of the scope (beside the open invites `inviteGrants ∪ pendingInviteIds` already cover, built
+      2026-10-28) and refuses otherwise with **`409 rotation_incomplete`** (the code the invite completeness already
+      answers), nothing written. A member left behind is therefore always a declared
       one: its grant behind the current epoch **is** the stored pending marker, with no column of its own.
       `ScopeMember` serves `pending` (granted epoch behind the current one), shown as "waiting for someone who can
       confirm their key".
@@ -431,7 +436,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
 
 - **ADR 0111 decisions 12–15's display and 13, 14, 16's personal-verified part, 17** →
   `changes/cr-trust-records-in-the-tenant.md` (join record as anchor, signed verifications, the closing list, the head
-  in the compare). Decisions 1–5 → `changes/cr-invite-is-a-placeholder-member.md`. Decision 11 is
+  in the compare). Decisions 1–5 are built (2026-10-28). Decision 11 is
   built (2026-10-27). Decision 18 → `changes/cr-join-records-for-existing-members.md`.
 - **A password holder acting after the publish** without the Secret Key: a session is all `rotateScope` asks, so they
   could commit an epoch of their own on a scope they own; that denies, it discloses nothing new (ADR 0060 Decision 2).
@@ -462,7 +467,7 @@ Every locator was run at refine (on `8cd444bbc`).
 | The publish's transaction and the exclusion machinery | `RotationHandler.kt`, `RotationStore.kt`, `TasksStore.kt`, `ScopesStore.kt`, `RekeyAccess.kt` | `git grep -n "applyRotation\|originateScopeRotationExcluding\|isRotationExcluded\|memberCountsByScopeFor\|rotation_excluded\|ROTATION_ORIGINATOR" -- src/backend/core/src` |
 | Every grant writer, its request schema, its guard | `ScopesStore.kt`, `TasksStore.kt`, `TenantStore.kt`, contracts, guard | `grep -n "EXPECTED_WRITERS" -A8 scripts/validate_grant_writer_arity.py; grep -n "wrappedGrant\|grantSignature" contracts/api/*.yaml` |
 | The key-named precedent | `ModerationHandler.kt` | `grep -n "identityChanged" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/moderation/ModerationHandler.kt` |
-| `rotateScope`'s gate and completeness | `ScopesHandler.kt`, `RotationPolicy.kt` | `grep -n "isScopeOwner\|fun rotateScope" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/ScopesHandler.kt; grep -n "AdmissionsIncomplete\|fun plan" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt` |
+| `rotateScope`'s gate and completeness | `ScopesHandler.kt`, `RotationPolicy.kt` | `grep -n "isScopeOwner\|fun rotateScope" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/ScopesHandler.kt; grep -n "Incomplete\|fun plan" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt` |
 | The proof key's column, its writer, every reader of another user's key | backend, contracts | `git grep -n "secretKeyProofPublicKey =" -- src/backend/core/src/main; grep -n "identityPublicKey:" contracts/api/*.yaml` |
 | Open email changes to void | `EmailChangeHandler.kt` and store | `grep -rn "fun spend\|fun findByTokenHash\|class .*EmailChange.*Entity" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/account/email/` |
 | The state derivation | `CompromiseRotationPolicy.kt`, `TasksStore.compromiseRotations` | `git grep -n "fun state\|fun compromiseRotations\|STALLED\|claimableByAnOwner" -- src/backend/core/src/main` |

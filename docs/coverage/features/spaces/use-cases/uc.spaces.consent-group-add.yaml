@@ -1,9 +1,10 @@
 useCase: uc.spaces.consent-group-add
 feature: spaces
 title: Consent before being added to a group
-# cr-0094 delivered the optional consent opt-in (ADR 0014 §5): consent-first (K_SC gated BEFORE the wrap —
-# grant-delivery skips soft pendingConsent memberships), an account-global toggle, a silent-drop decline, and
-# owner-only pending visibility. cr-0096 (ADR 0027) replaces the informed-consent name mechanism: instead of a
+# cr-0094 delivered the optional consent opt-in (ADR 0014 §5): an account-global toggle, a silent-drop decline, and
+# owner-only pending visibility. Its consent-first key gate (grant delivery skipped a soft membership) is gone since
+# ADR 0111 decision 4: the proposal holds the group's grant from the add on, consent gates membership, and a decline
+# or rescind queues the group's rotation. cr-0096 (ADR 0027) replaces the informed-consent name mechanism: instead of a
 # one-off owner name-seal, the owner hands the invitee the group's DERIVED name-key K_name (from the name's epoch
 # key) so the invitee opens the SAME canonical encryptedName the members read — a modified owner cannot show a
 # divergent name. Backend slice tests + a web name-key unit test + the http unauth boundary; the crypto happy-path
@@ -14,32 +15,35 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.accountConsentToggleRoundTrips, ConsentGroupAddSliceTest.consentOffIsUnchangedDirectAdd] }
   - id: soft-membership-gates-key
-    text: With consent on, a GroupOwner's add records a SOFT (pendingConsent) grant-less membership; grant-delivery SKIPS soft memberships, so K_SC is never wrapped to a pending invitee (consent-first, never wrap-then-soft). The gate holds on the ROTATION path too — a scope-key rotation never (re-)grants a pendingConsent row (cr-0095). A consent-on target added without a wrapped name-key is rejected (consent_required).
+    # The id predates ADR 0111, when the soft membership held no key; the criterion now pins that it holds one.
+    text: With consent on, a GroupOwner's add records a SOFT (pendingConsent) membership holding the grant the owner's client wrapped with the add, its granter the proposing owner — a proposal at the current epoch is no grant-delivery target. A rotation of the group re-grants a pendingConsent proposal like any member, so an accept never opens onto a key the group already left. A consent-on target added without a wrapped name-key is rejected (consent_required).
     coverage:
-      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsSoftRowAndGrantDeliverySkipsIt, ConsentGroupAddSliceTest.consentRequiredWithoutSealIs400, ConsentGroupAddSliceTest.rotationNeverGrantsAPendingProposal] }
+      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsASoftRowHoldingTheGrant, ConsentGroupAddSliceTest.consentRequiredWithoutSealIs400, ConsentGroupAddSliceTest.aRotationReGrantsAPendingProposal] }
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/GroupMembersPanel.test.ts] }
   - id: derived-name-key
     text: The owner's device derives the group's name-key K_name = HKDF(E_e, "group-name-key") from the name's content-epoch key and wraps IT (not a name copy) to the invitee's identity (asymWrap under the distinct `group-name-key` AAD context). The invitee unwraps K_name and opens the scope's CANONICAL encryptedName — the SAME ciphertext the members read — so a modified owner cannot privately show a divergent name (ADR 0027). Domain-separated from `scope-grant` (a name-key wrap can never open as a key-grant); K_name leaks the name and nothing else (HKDF one-way — not E_e, not K_SC). The invitee never receives K_SC and no plaintext name reaches the server.
     coverage:
-      backend: { integration: [ConsentGroupAddSliceTest.acceptFlipsToDeliverableAndClearsTheInvitation] }
+      backend: { integration: [ConsentGroupAddSliceTest.acceptClearsTheInvitationAndKeepsTheGrant] }
       web: { unit: [src/features/spaces/inviteName.test.ts] }
   - id: accept-delivers
-    text: Accept clears pendingConsent → the proposal becomes a normal grant-less membership → ordinary grant-delivery wraps K_SC (awaiting access → Active), identical to direct-add from there. Re-accept is an idempotent no-op.
+    # The id predates ADR 0111, when accepting triggered a delivery; consenting now moves no key.
+    text: Accept clears pendingConsent → the proposal becomes a normal membership keeping the grant it already held, so the group opens at once and nothing is delivered; consenting changes nothing about keys. Re-accept is an idempotent no-op.
     coverage:
-      backend: { integration: [ConsentGroupAddSliceTest.acceptFlipsToDeliverableAndClearsTheInvitation] }
-      web: { e2e: [src/features/spaces/consentReAdd.e2e.test.ts] }
+      backend: { integration: [ConsentGroupAddSliceTest.acceptClearsTheInvitationAndKeepsTheGrant] }
+      web: { e2e: [src/features/spaces/consentReAdd.e2e.test.ts, src/features/spaces/memberInvite.e2e.test.ts] }
   - id: decline-silent-drop
-    text: Decline deletes the soft membership with no trace (no "declined" state) and no rotation; nothing was ever wrapped. A re-invite later is allowed (a fresh proposal). Decline with no open proposal is still a silent 204 (no enumeration); accept with none is 404.
+    text: Decline deletes the soft membership with no trace (no "declined" state) and, because the proposal held the group's key, queues the group's rotation in the same transaction — as an owner's rescind of a proposal does; an accepted proposal, or a decline that deleted nothing, queues none. A re-invite later is allowed (a fresh proposal). Decline with no open proposal is still a silent 204 (no enumeration); accept with none is 404.
     coverage:
-      backend: { integration: [ConsentGroupAddSliceTest.declineDropsTheSoftRowWithNoTraceAndNoRotation, ConsentGroupAddSliceTest.acceptWithNoProposalIs404] }
-      web: { e2e: [src/features/spaces/consentReAdd.e2e.test.ts] }
+      backend: { integration: [ConsentGroupAddSliceTest.declineDropsTheSoftRowAndQueuesTheGroupsRotation, ConsentGroupAddSliceTest.acceptWithNoProposalIs404, GroupAddGrantSliceTest.aDeclinedGroupInvitationQueuesTheGroupsRotation, GroupAddGrantSliceTest.anOwnersRescindOfAProposalQueuesTheGroupsRotation] }
+      web: { unit: [src/features/spaces/members.test.ts], e2e: [src/features/spaces/consentReAdd.e2e.test.ts] }
   - id: owner-only-pending
     text: A pendingConsent invitee is visible in the group's member directory as "awaiting consent" to group OWNERS only; ordinary key-holders in the group do not see them until they accept.
     coverage:
       backend: { integration: [ConsentGroupAddSliceTest.pendingProposalIsOwnerVisibleOnly] }
   - id: operator-blind-consent
-    text: The server stores only a membership row + one opaque wrapped name-key + relays pubkeys and the already-stored encryptedName ciphertext to the invitee — never K_SC, never a name-key it can use, never the plaintext name; authenticity stays Plain (the fingerprint/TOFU seam is unchanged).
+    text: The server stores only a membership row with its opaque grant + one opaque wrapped name-key + relays pubkeys and the already-stored encryptedName ciphertext to the invitee — never K_SC, never a name-key it can use, never the plaintext name; both wraps go to the key the owner's pin check passed (ADR 0028).
     coverage:
-      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsSoftRowAndGrantDeliverySkipsIt] }
+      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsASoftRowHoldingTheGrant] }
       web: { unit: [src/features/spaces/inviteName.test.ts] }
   - id: invitee-attention-badge
     text: The invitee's open proposals surface as an appears-on-demand top-bar attention badge (cr-invitations-topbar-badge) — hidden at zero, showing the count and routing to the invitations view, self-clearing as accept/decline drops the row, fail-quiet on a fetch error. The count derives client-side from the existing listMyGroupInvitations (the blind server already holds the pendingConsent rows) — no new endpoint, no server-visible signal, and no read/unread state.

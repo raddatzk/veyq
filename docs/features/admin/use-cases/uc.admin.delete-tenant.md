@@ -36,7 +36,7 @@
   taken offline, and is reactivated as a suspended one is. A deletion's record over content is lifted with it.
 - **A2 — A tenant with no owner** (an owner's account erased at the Server Owner's door): admin-web lists it as
   ownerless with the two ways on, an owner invite or this deletion. The owner invite goes to one of the tenant's
-  members, who accepts it and becomes its owner: the operator can admit nobody into the tenant's key (ADR 0020 move 6).
+  members, who accepts it and becomes its owner: the operator can give nobody the tenant's key, which only a member's client wraps (ADR 0020).
 - **A4 — A last owner erasing their account** deletes their tenant along (uc.account.erase-account A3): the same
   deletion, which the Server Owner can stop.
 - **A3 — Restored from a backup:** the ledger re-applies the deletion before the instance serves — once the erasure

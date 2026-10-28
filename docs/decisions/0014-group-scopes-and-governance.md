@@ -49,9 +49,10 @@ and which is confidential even from the tenant owner.**
    [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md), the content keys of [ADR 0012](0012-content-key-hierarchy.md).
 
 2. **Key distribution = one grant per member.** A member holds the group iff a membership row carries `K_SC`
-   `asymWrap`'d to *their* identity public key. Adding a member is exactly: admit them with an admission tag only
-   a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6), then produce that grant
-   and `POST` it. The server never holds `K_SC`.
+   `asymWrap`'d to *their* identity public key. Adding a member is exactly: the adding owner's client wraps the
+   group's current epoch to the target's key and `POST`s that grant with the add
+   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 4, built 2026-10-28). The server never holds `K_SC`.
 
 3. **The name is sealed under `K_SC`.** Only members decrypt it. The server — and anyone with server/DB access,
    including a self-hosting tenant owner — sees an **unnamed** group: opaque `scopeId`, `kind`, members. This is
@@ -79,23 +80,23 @@ and which is confidential even from the tenant owner.**
      identity pubkeys are tenant-visible, [ADR 0023](0023-per-tenant-member-identity.md); the consent flag is the
      one honest low-sensitivity exception). The owner-gate is convenience, not confidentiality — code and contract
      must not present it as the latter.
-   - **Default = direct add.** The owner picks the member → the owner's client tags the admission and the server
-     records a grant-less GROUP membership carrying it → grant-delivery
-     ([ADR 0021](0021-operator-blind-background-tasks.md)) verifies the tag and wraps `K_SC` to them,
-     first-online-wins ([ADR 0020](0020-grant-distribution-invite-wrap.md)). They simply find themselves in the
-     group.
-   - **Optional consent (a per-user "ask before adding me" toggle) is consent-first, never wrap-then-soft.** A
-     non-auto-join member is *proposed*, held as a **soft, grant-less** membership; grant-delivery **skips** soft
-     memberships, so **`K_SC` never reaches someone who hasn't accepted** (deleting an already-delivered wrap
-     would not un-give the key — so we gate *before* the wrap, not clean up after). To let them decide informed,
-     the owner's device hands the invitee the group's **derived name-key `K_name`** (wrapped to their identity,
-     `asymWrap(inviteePub, K_name, "group-name-key")`) so the invitee opens the scope's **canonical** sealed name —
-     the same ciphertext the members read — and **cannot** be shown a divergent, owner-typed name. This replaces the
-     original **one-off name-seal** (an unverifiable owner-supplied name a modified owner client could make diverge);
-     the derivation, the forward-secrecy, and the rejected alternatives are settled in
-     [ADR 0027](0027-group-invite-name-shared-key.md). The invitee sees the (group-consistent) name + who added them;
-     **Accept** flips the membership eligible → a key-holder wraps `K_SC` (the usual "awaiting access" window);
-     **Decline** drops the soft membership (nothing was ever wrapped).
+   - **Default = direct add.** The owner picks the member → the owner's client wraps the group's current epoch to
+     the target's key after the pin check, and the server records the GROUP membership holding that grant, refusing
+     one at a stale epoch or naming another key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 3). They
+     simply find themselves in the group.
+   - **Optional consent (a per-user "ask before adding me" toggle) makes the add a proposal.** A non-auto-join
+     member is *proposed*, held as a **soft** membership that **holds the grant** from the add on, exactly as a direct
+     add does; the server serves the group to the invitee only after **Accept**, and consenting changes nothing about
+     keys. Because the target's key could open the grant from the add on, a **Decline** — or the owner rescinding the
+     proposal — queues the group's rotation, as a removal does (ADR 0111 decision 4; this replaced the original
+     consent-first gate, under which nothing was wrapped before Accept and the invitee then waited for a key-holder).
+     To let them decide informed, the owner's device hands the invitee the group's **derived name-key `K_name`**
+     (wrapped to their identity, `asymWrap(inviteePub, K_name, "group-name-key")`) so the invitee opens the scope's
+     **canonical** sealed name — the same ciphertext the members read — and **cannot** be shown a divergent,
+     owner-typed name. This replaces the original **one-off name-seal** (an unverifiable owner-supplied name a
+     modified owner client could make diverge); the derivation, the forward-secrecy, and the rejected alternatives
+     are settled in [ADR 0027](0027-group-invite-name-shared-key.md). The invitee sees the (group-consistent) name +
+     who added them.
    - **Threat:** a malicious operator could return a public key it controls (MITM) and read the group.
      **Defense:** the **safety-number / fingerprint** of that identity. The verification stance is settled in
      [ADR 0028](0028-identity-authenticity-tofu-verification.md): **TOFU-pin on first use**, a **change** is a UI
@@ -145,9 +146,9 @@ and which is confidential even from the tenant owner.**
 - **Confidential even from the tenant owner.** The strongest practical privacy statement veyq makes: a group's
   *content and name* are sealed; only its *existence + membership* are visible to whoever runs the server, and
   the product surfaces neither to the tenant owner.
-- **No new crypto, no new operator trust.** Member grants are the same hybrid KEM, and admission the same tag
-  as the tenant's ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6); the only new server state is the
-  GROUP scope row's sealed name + the per-member grants and admission tags + the pending-deletion lifecycle.
+- **No new crypto, no new operator trust.** Member grants are the same hybrid KEM as the tenant's
+  ([ADR 0020](0020-grant-distribution-invite-wrap.md)); the only new server state is the GROUP scope row's sealed name
+  + the per-member grants + the pending-deletion lifecycle.
 - **Sliced delivery.** **G1** — create + open + browse a group (solo owner; this ADR's substrate,
   [en.spaces.group-scope](../features/spaces/enablers/en.spaces.group-scope.md)). **G2** — add a member
   (username search + KEM grant + the fingerprint stance). **G3** — member management, grace-period delete +

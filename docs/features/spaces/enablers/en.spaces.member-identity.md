@@ -52,11 +52,17 @@ member's own group rows) and splits it by sensitivity:
 1. In the tenant-join flow the member picks a **username** (required, plaintext, on device) **and optionally a
    first/last name** → the server checks the username is free **in this tenant** (`UNIQUE(tenant_id, username)`);
    a clash is `409 username_taken`.
-2. Once the member **holds `K_tenant`** (immediately for an owner's cold-birth or any accept that seals the grant
-   on-device; after grant-delivery for a grant-less member — [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
-   the client **seals** `firstName` + `lastName` under `K_tenant` and stores the opaque blob on the profile row —
-   **at the join itself** when the key is already present (submitted with the accept), otherwise later from the
-   profile. Both entry points seal identically; the name stays editable in the profile.
+2. Every joiner **holds `K_tenant`** at accept — an owner from the cold birth, a member from the invite's grant
+   ([uc.spaces.add-member](../use-cases/uc.spaces.add-member.md)) — so the client **seals** `firstName` +
+   `lastName` under `K_tenant` and stores the opaque blob on the profile row **at the join itself** (submitted with
+   the accept), or later from the profile. Both entry points seal identically; the name stays editable in the
+   profile.
+   - A member's join also writes the profile's **join record** — identity and Secret-Key proof public keys and the
+     owner-signed invite, signed by the invite key and the new identity, sealed under the tenant epoch key the
+     invite's grant carried (field `member-join-record`, bound to tenant and member). It is written only at accept,
+     never by a profile update, served to co-members on the tenant listing (`ScopeMember.sealedJoinRecord`), and
+     null for the tenant's first owner, the trust root. Nothing reads it to decide anything yet
+     ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 3).
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
    **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`.
 
@@ -64,9 +70,9 @@ member's own group rows) and splits it by sensitivity:
 
 - **E1 — username taken in the tenant:** `409 username_taken`; the member picks another. Uniqueness is
   per-tenant, so the same handle may be free in a different tenant.
-- **E2 — name before the grant:** a grant-less "awaiting access" member has no `K_tenant` yet, so cannot seal a
-  name — the join's optional name field is **skipped** (username only), and the directory shows just `@username`
-  (+ owner-only email) until their grant lands and they seal it from the profile.
+- **E2 — name skipped, or no key on this device:** the name is optional at join; a member who skipped it, or whose
+  tenant key does not open on this device (*waiting for the current key*), shows as just `@username` (+ owner-only
+  email) until they seal a name from the profile with the key.
 - **E3 — username change:** re-checked for uniqueness in the tenant; re-slugs the member's `~username` path (old
   bookmarks may miss — [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 

@@ -65,7 +65,9 @@ Sealed client-side, never readable by the server:
   bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
   type (photo, video or PDF) live there, so the operator learns neither;
 - bucket and uploader names, a share's note and private name, and every identity pin: whom it pins, the key's
-  fingerprint, its state and when it was first seen, each in an entry sealed under the Master Key.
+  fingerprint, its state and when it was first seen, each in an entry sealed under the Master Key;
+- a member's **join record** (the keys they joined with and the owner-signed invite they came through), sealed under
+  the tenant key.
 
 Each text or icon field (a name, a node's or a medium's metadata, a share's note and label, a member's name and
 picture) seals under a key of its own, derived per write. Inside its ciphertext the server stores the 16-byte random
@@ -77,6 +79,10 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
 ### Identity and membership
 
 - **Scope and membership:** who belongs to which tenant and group, and in which role.
+- **Per open member invite:** the invited address, its expiry, the invite's public key, the inviting owner's
+  signature over it and that owner's identity key, and the tenant key wrapped to the invite key; the key, the
+  signature and the grant are cleared once the invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; the
+  link's sealed part passes through it only while it is mailed.
 - **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
   tenant member can enumerate these (concession 4 below).
 - Whether a member **has a profile picture** and how often it changed (`avatar_revision`); the picture itself is a

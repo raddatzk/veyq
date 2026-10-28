@@ -209,7 +209,7 @@ environment-variable form is the key in upper case with `.` and `-` turned into 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `veyq.tenant.invite.ttl` | `P7D` | How long a tenant owner's invitation is valid |
+| `veyq.tenant.invite.ttl` | `P7D` | How long an invitation is valid, a space's first owner's and a member's alike; a member's invitation carries its expiry signed by the inviting owner, so a change applies to invitations sent after it |
 | `veyq.recovery.token.ttl` | `PT1H` | How long a password-recovery link is valid |
 | `veyq.email-confirmation.token.ttl` | `PT24H` | How long an address-confirmation link is valid |
 | `veyq.pairing.channel.ttl` | `PT10M` | How long a device-linking code is valid |

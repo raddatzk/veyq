@@ -59,7 +59,7 @@ sequenceDiagram
   blob, a node update) → mark `done`; the originator observes it through that path. Otherwise an optional sealed
   `sealedResult`. No plaintext result store.
 - **Origination.** The server may originate only **structural, non-sensitive** jobs it already understands
-  (grant-less membership → `grant-delivery`), and event jobs it witnessed but cannot complete (a co-shared member
+  (a membership whose grant is behind the scope's epoch → `grant-delivery`), and event jobs it witnessed but cannot complete (a co-shared member
   cut or an account rotation → `scope-rotation`); a client's enqueue of either tag is refused. **Content-processing jobs are client/agent-originated**, so the
   server never picks a content-semantic type.
 
