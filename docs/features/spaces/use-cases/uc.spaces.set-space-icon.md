@@ -164,8 +164,8 @@ sequenceDiagram
 - **`iconEpoch` is forward-compatibility, not live mechanism.** It is bumped **only** by an icon-set; a plain
   rotation leaves it alone and readers peel down to it — the model
   [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md) established for `nameEpoch`. On a
-  **tenant** it is `0` in practice today, because a tenant does not rotate on routine removal: removal is
-  ACL-revoke, and the explicit owner-triggered *"re-key this space"* is **unbuilt**
+  **tenant** it stays behind every rotation that sets no icon, and a tenant rotates rarely: removal is ACL-revoke,
+  and only an explicit *"re-key this space"* or a secured account rotates it
   ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) — not ADR 0024, which owns the
   chain but not the tenant's policy). Carrying the index anyway is the posture
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md) §3 already takes for the dedup key: omit it and the

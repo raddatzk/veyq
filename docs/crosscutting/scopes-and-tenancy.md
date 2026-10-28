@@ -178,6 +178,7 @@ an owner of the tenant's root scope. The mechanics behind a row — what a grant
 | Invite one of a tenant's members to own it | the **Server Owner** ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) |
 | Invite a person into a tenant (by email); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
 | Remove a member from the tenant | a tenant owner, by the removal cascade only; never the last owner |
+| Give the tenant a new lock (*"re-key this space"*), alone or after a removal | a tenant owner, from an unlocked vault ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 2) |
 | Make a tenant member an owner, or demote one | a tenant owner; never the last owner |
 | Set the tenant's terms, mail settings and per-link storage limit; see members' email | a tenant owner |
 | Create a group or one's own personal scope | any member of the tenant (a group also needs its capability) |

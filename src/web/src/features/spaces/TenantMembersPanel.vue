@@ -18,6 +18,7 @@ import {
   listMemberInvites,
   listScopeMembers,
   reissueMemberInvite,
+  rekeyTenant,
   removeTenantMember,
   revokeMemberInvite,
   setTenantMemberRole,
@@ -29,7 +30,8 @@ import {
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
+import { activeSpace, activeEpochKeys, refreshActiveScope } from '../../app/activeSpace'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { copyEpochKeys, zeroEpochKeys } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
 import { unsealNameUnderEpochs, type MemberName } from '../account/profile/profile'
@@ -45,7 +47,7 @@ import type { CompromiseRotation } from '../../api/generated/scopes'
 
 const { t } = useI18n()
 const toast = useToast()
-const { ask, askWithOption } = useConfirm()
+const { ask, askWithOptions } = useConfirm()
 
 // Locally-decrypted real names (first+last) keyed by userId — the sealed blob opened with K_tenant on-device.
 const names = ref<Record<string, MemberName | null>>({})
@@ -197,26 +199,73 @@ async function reissue(invite: PendingMemberInvite) {
 // Remove a member from the tenant (uc.spaces.remove-tenant-member, cr-0091) — owner-only, behind the confirmation
 // dialog. The server runs the whole cascade; here we just fire it and refresh the directory (the ex-member drops
 // out). Not offered on OWNER rows (owners are managed via co-ownership, not removed from the roster here). The
-// dialog's opt-in (ADR 0075 point 5), unchecked by default, also turns off every link of the space in the same act.
+// dialog's two opt-ins, unchecked by default: turn off every link of the space in the same act (ADR 0075 point 5), and
+// give the space a new lock after it (ADR 0025 § 2). LOAD-BEARING ORDER: the removal first, the rotation only once it
+// landed — so the rotation's member set is one the member is no longer in, and never wraps to them.
 async function remove(member: ScopeMember) {
-  const answer = await askWithOption({
+  const answer = await askWithOptions({
     header: t('members.removeConfirmTitle'),
     message: t('members.removeConfirm'),
     acceptLabel: t('members.remove'),
     acceptIcon: 'user-minus',
-    option: { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
+    options: [
+      { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
+      { label: t('spaceLock.removeOption'), hint: t('spaceLock.removeOptionHint') },
+    ],
   })
   if (!answer) return
+  const [revokeLinks, alsoLock] = answer.options
   actionError.value = ''
   reissuedTo.value = ''
   try {
-    await removeTenantMember(activeSpace.tenantId!, member.userId, answer.option)
+    await removeTenantMember(activeSpace.tenantId!, member.userId, revokeLinks)
     toast.success(t('members.removed'))
-    await reload()
   } catch (e) {
     on401(e)
     if (!isUnauthorized(e)) actionError.value = t('members.actionFailed')
+    return
   }
+  if (alsoLock) await giveNewLock(member.userId)
+  await reload()
+}
+
+// Give the space a new lock (ADR 0025 § 2) — owner-only, from the standalone action or after a removal. The rotation is
+// the one every rotation is (`rekeyTenant` → `commitRotation`): the next epoch minted here, every member this device
+// anchors re-granted, the rest declared pending. Then, as after a group removal, the nodes are re-keyed on this device
+// right away (ADR 0109); one that stops leaves the space re-keying — the hint below says so — and any member's worker
+// resumes it. `excluding` is the member a removal just took out. Answers whether the new epoch landed.
+const lockBusy = ref(false)
+async function giveNewLock(excluding?: string): Promise<boolean> {
+  const scopeId = activeSpace.scopeId
+  if (!scopeId) return false
+  lockBusy.value = true
+  try {
+    try {
+      await rekeyTenant(scopeId, excluding)
+    } catch (e) {
+      on401(e)
+      if (!isUnauthorized(e)) actionError.value = excluding ? t('spaceLock.removedNotRekeyed') : t('spaceLock.failed')
+      return false
+    }
+    const { done } = await rekeyScope(scopeId).catch(() => ({ done: false }))
+    if (activeSpace.scopeId === scopeId) await refreshActiveScope()
+    if (done) toast.success(t('spaceLock.done'))
+    return true
+  } finally {
+    lockBusy.value = false
+  }
+}
+
+async function newLock() {
+  const accepted = await ask({
+    header: t('spaceLock.confirmTitle'),
+    message: t('spaceLock.confirm'),
+    acceptLabel: t('spaceLock.action'),
+    acceptIcon: 'lock',
+  })
+  if (!accepted) return
+  actionError.value = ''
+  if (await giveNewLock()) await reload()
 }
 
 // Make a member an owner, or an owner a member again (ADR 0101 decision 9) — owner-only, mirroring GroupMembersPanel's
@@ -497,6 +546,26 @@ async function revoke(invite: PendingMemberInvite) {
       </div>
     </section>
 
+    <!-- A new lock for the whole space, nobody removed (ADR 0025 § 2) — owner-only, for the compromise case. Laid out
+         as the links section above: one owner action that acts on the whole space. -->
+    <section v-if="isOwner && !loading" class="settings-form space-lock">
+      <div class="settings-section-header">
+        <div>
+          <h2>{{ t('spaceLock.title') }}</h2>
+          <p>{{ t('spaceLock.sub') }}</p>
+        </div>
+        <VeyqButton
+          :label="t('spaceLock.action')"
+          icon="lock"
+          variant="danger"
+          appearance="outlined"
+          size="small"
+          :loading="lockBusy"
+          @click="newLock"
+        />
+      </div>
+    </section>
+
     <InviteMemberDialog
       v-if="activeSpace.tenantId"
       v-model:visible="inviteOpen"
@@ -524,6 +593,13 @@ async function revoke(invite: PendingMemberInvite) {
   .member-row .management-actions {
     grid-column: 1 / -1;
   }
+}
+
+/* A whole-space action beside a long explanation keeps its label on one line: the shared header lets the button shrink,
+   which wrapped "Neues Schloss einbauen" over three lines and clipped it at 1280 px. */
+.space-links .settings-section-header > button,
+.space-lock .settings-section-header > button {
+  flex-shrink: 0;
 }
 
 .reissue-link {

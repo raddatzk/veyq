@@ -144,4 +144,17 @@ describe('ConfirmDialog', () => {
     settleConfirm(false)
     await next
   })
+
+  it('renders one box per opt-in and answers each by its place', async () => {
+    const wrapper = mountDialog()
+    const options = [{ label: 'Also turn off every link' }, { label: 'Also give this space a new lock', hint: 'From now on.' }]
+    const answer = useConfirm().askWithOptions({ ...REQUEST, options })
+    await flushPromises()
+    const boxes = wrapper.findAll('input.opt')
+    expect(boxes).toHaveLength(2)
+    expect(wrapper.text()).toContain('From now on.')
+    await boxes[1]!.setValue(true)
+    await accept(wrapper)!.trigger('click')
+    await expect(answer).resolves.toEqual({ options: [false, true] })
+  })
 })

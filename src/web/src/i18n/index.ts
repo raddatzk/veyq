@@ -170,6 +170,20 @@ const en = {
     revokedAll: 'No link was on. | One link turned off. | {count} links turned off.',
     revokeAllFailed: 'The links could not be turned off. Please try again.',
   },
+  // ADR 0025 § 2: a tenant owner's "re-key this space" — a new lock for the whole space, nobody removed, or after a removal
+  spaceLock: {
+    title: 'New lock',
+    sub: 'If a member’s device was lost, or someone who left may have kept a copy of this space’s key, give the space a new lock. What is added from now on is closed to the old key. What was already seen stays seen.',
+    action: 'Give it a new lock',
+    confirmTitle: 'Give this space a new lock?',
+    confirm:
+      'Every member and every open invitation gets the new key from this device. Whoever holds only the old key, a removed member or a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
+    done: 'This space has its new lock.',
+    failed: 'The new lock could not be put in. Nothing was changed. Please try again.',
+    removeOption: 'Also give this space a new lock',
+    removeOptionHint: 'The removal already shuts them out of the app. A new lock also keeps a copy of the key they may have kept from opening what is added from now on.',
+    removedNotRekeyed: 'The member was removed, but the new lock could not be put in. Try again with “Give it a new lock” below.',
+  },
   spaceIcon: {
     change: 'Change icon',
     add: 'Add icon',
@@ -2161,6 +2175,19 @@ const de: typeof en = {
       'Alle öffentlichen Links in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten, was sie hinzugefügt haben.',
     revokedAll: 'Es war kein Link aktiv. | Ein Link abgeschaltet. | {count} Links abgeschaltet.',
     revokeAllFailed: 'Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen.',
+  },
+  spaceLock: {
+    title: 'Neues Schloss',
+    sub: 'Ist das Gerät eines Mitglieds verloren gegangen, oder könnte jemand, der den Bereich verlassen hat, eine Kopie seines Schlüssels behalten haben, gib dem Bereich ein neues Schloss. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
+    action: 'Neues Schloss einbauen',
+    confirmTitle: 'Diesem Bereich ein neues Schloss geben?',
+    confirm:
+      'Jedes Mitglied und jede offene Einladung bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, ein entferntes Mitglied oder ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
+    done: 'Dieser Bereich hat sein neues Schloss.',
+    failed: 'Das neue Schloss konnte nicht eingebaut werden. Es wurde nichts geändert. Bitte versuch es erneut.',
+    removeOption: 'Auch ein neues Schloss einbauen',
+    removeOptionHint: 'Die Entfernung sperrt die Person in der App schon aus. Mit einem neuen Schloss öffnet auch eine Kopie des Schlüssels, die sie behalten haben könnte, nicht, was ab jetzt dazukommt.',
+    removedNotRekeyed: 'Das Mitglied wurde entfernt, aber das neue Schloss konnte nicht eingebaut werden. Versuch es unten mit „Neues Schloss einbauen“ noch einmal.',
   },
   spaceIcon: {
     change: 'Icon ändern',

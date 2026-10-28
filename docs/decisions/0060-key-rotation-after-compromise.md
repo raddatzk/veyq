@@ -129,7 +129,8 @@ The mechanism is [keys-grants-and-trust § Securing the account](../crosscutting
 
 **5. Every shared scope rotates, the tenant included — and this is not a new policy.**
 [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 already reserves an **explicit "re-key this space"** for
-exactly the compromise case. Rotation is its first caller; nothing about routine removal changes. The wraps (one per
+exactly the compromise case. Account rotation is one caller, a tenant owner's own action the other; nothing about
+routine removal changes. The wraps (one per
 member per scope) land on the rotator's devices, and the far larger node re-key is spread across every member's
 (ADR 0111 § Consequences). Personal scopes rotate too, self-served (one member, who is the owner): on a removal there
 is nobody to rotate away from, on a compromise the old identity is exactly that somebody.
