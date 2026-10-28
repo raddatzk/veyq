@@ -179,7 +179,7 @@ async function onboardUser2(): Promise<void> {
   const code = generateInviteCode()
   const mine = (await orThrow('listMyTenants', new ScopesApi(new ScopesConfiguration(onTenant)).listMyTenants())).find((t) => t.tenantId === tenantId)
   // The owner was born above and never secured the account: its chain is the genesis step, and the link carries its head
-  // (cr-trust-anchors-survive-rotation decision 1) as the web client's `myChainHead` would serve it.
+  // (ADR 0111 decision 19) as the web client's `myChainHead` would serve it.
   const ownerHead = keyChainHead(keyChainGenesisStatement(ownerId, {
     identityPublicKey: serializeIdentityPublic(built.identity.pub),
     secretKeyProofPublicKey: fromB64std(built.material.secretKeyProofPublicKey),

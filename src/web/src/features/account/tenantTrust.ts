@@ -92,7 +92,7 @@ function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs
  *    key, the invite key's and the newcomer's over the record), names another member the server lists as an OWNER as its
  *    signer, and that signer's key in it is anchored in this tenant in turn ({@link anchorChainKey} with this view);
  *    `unanchored` otherwise. A cycle of signers anchors nobody.
- *  - **a record a retired key signed** (cr-trust-anchors-survive-rotation decision 10): when the key the record names is
+ *  - **a record a retired key signed** (ADR 0111 decision 21): when the key the record names is
  *    not the signer's served current one — a retired key of their chain, at or after their join — it counts only through
  *    the signer's endorsement: the member's `joinEndorsement` must verify under the signer's served current key, over
  *    the sealed record as stored, and that key must be anchored in this tenant ({@link anchorIdentity} with this view).
@@ -156,7 +156,7 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
     return { kind: 'joined', identityPublicKey: record.identityPublicKey, secretKeyProofPublicKey: record.secretKeyProofPublicKey }
   }
   /** Whether [m]'s join endorsement verifies under [signer]'s served current key, over [m]'s sealed record as stored,
-   *  that key anchored in this tenant (decision 10). False — never a throw — for anything malformed. */
+   *  that key anchored in this tenant (ADR 0111 decision 21). False — never a throw — for anything malformed. */
   async function endorsedBySigner(m: ScopeMember, signer: ScopeMember): Promise<boolean> {
     if (!m.joinEndorsement || !m.sealedJoinRecord) return false
     let signKey: Uint8Array

@@ -12,7 +12,7 @@
 //     password the owner chose (`mode` 2). The server mails the link and never sees the code, so the operator, who can
 //     guess offline, faces a 50-bit code behind Argon2id at the production profile.
 //   - **The invite keeps its owner's grant as its anchor**: the owner's own grant of the tenant key at the anchor epoch
-//     (`E_a`), beside whatever grant a later rotation carried the invite with (cr-trust-anchors-survive-rotation).
+//     (`E_a`), beside whatever grant a later rotation carried the invite with (ADR 0111 decision 19).
 //   - **The invitee checks before it trusts** (`checkInvite`): the bundle it derives from the seed must be the one the
 //     server serves; the owner's served chain must pass through the head inside the seal and end at the served owner
 //     key, which signed the invite key and the anchor; and the tenant key must be the anchor's `E_a` or peel down to it
@@ -281,7 +281,7 @@ export type CheckedInvite = {
 
 /**
  * The invitee's checks, in the order an operator would have to beat them (ADR 0111 decision 1,
- * cr-trust-anchors-survive-rotation decision 4). Returns the checked invite; throws {@link InviteCheckFailed} naming the
+ * ADR 0111 decision 19). Returns the checked invite; throws {@link InviteCheckFailed} naming the
  * first check that failed:
  *   - `key_mismatch`: the key the seed derives is not the served invite key (the operator cannot choose the seed);
  *   - `signer_mismatch`: the served signer is not the account the seal names;
@@ -526,7 +526,7 @@ export function decodeJoinRecord(b: Uint8Array): JoinRecord {
   }
 }
 
-// ── An owner's endorsement of a join record (cr-trust-anchors-survive-rotation decision 9) ────────────────────────
+// ── An owner's endorsement of a join record (ADR 0111 decision 21) ────────────────────────
 
 /** What an endorsement covers: the record's address, the owner who rooted it, and the member's SEALED join record
  *  exactly as stored — the bytes the server serves as `sealedJoinRecord`. */

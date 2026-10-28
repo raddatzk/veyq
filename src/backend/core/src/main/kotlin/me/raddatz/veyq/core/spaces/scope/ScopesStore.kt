@@ -97,7 +97,7 @@ data class ScopeMemberRow(
     val pendingConsent: Boolean = false,
     /** The member's join record in a TENANT scope (ADR 0111 decisions 3 and 12), sealed; null elsewhere. */
     val sealedJoinRecord: String? = null,
-    /** The inviting owner's endorsement of that record (cr-trust-anchors-survive-rotation decision 12); null elsewhere. */
+    /** The inviting owner's endorsement of that record (ADR 0111 decision 21); null elsewhere. */
     val joinEndorsement: String? = null,
     /** The head of the member's key chain (ADR 0111 decision 7). */
     val keyChainHead: String,

@@ -376,7 +376,7 @@ class OperatorBlindProbeTest {
             "listRotationScopeStates",
         )
         reason(
-            "securing the account re-signs what the caller rooted (cr-trust-anchors-survive-rotation decisions 6 and 12): " +
+            "securing the account re-signs what the caller rooted (ADR 0111 decisions 20 and 21): " +
                 "addresses the caller's own account and lists, across every tenant, only the open invites the caller " +
                 "signed and the join records of members the caller invited. A staged invite the caller did not sign, " +
                 "that is not open, or that does not exist, and a staged profile the caller did not root or that does not " +

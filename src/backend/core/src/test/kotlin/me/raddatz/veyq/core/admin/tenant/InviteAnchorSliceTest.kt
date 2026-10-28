@@ -27,8 +27,8 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * An invite carries its owner's anchor, and an accept states the signer key it checked (cr-trust-anchors-survive-rotation
- * Phase 2, decisions 2, 3, 7 and 11): the anchor is written at mint and moves only with a rotation its signer commits;
+ * An invite carries its owner's anchor, and an accept states the signer key it checked (ADR 0111
+ * decisions 19, 20 and 21): the anchor is written at mint and moves only with a rotation its signer commits;
  * the preview serves the signer's chain, the anchor and the epoch links between the anchor and the carried grant; an
  * accept naming another signer key than the stored one is `409 invite_changed`, one naming none `400 invalid_request`;
  * the accept records who rooted the join; and the directory serves the join record's endorsement. Every refusal is
@@ -39,7 +39,7 @@ class InviteAnchorSliceTest {
 
     @Inject lateinit var store: TenantStore
 
-    // --- the anchor (decision 2) ---
+    // --- the anchor (ADR 0111 decision 19) ---
 
     @Test
     fun anInviteIsMintedWithTheOwnersGrantAsItsAnchor() {
@@ -91,7 +91,7 @@ class InviteAnchorSliceTest {
         assertEquals(List(3) { null }, anchorOf(key.inviteId))
     }
 
-    // --- the preview (decision 3) ---
+    // --- the preview (ADR 0111 decision 19) ---
 
     @Test
     fun thePreviewServesTheSignersChainTheAnchorAndTheLinksBetween() {
@@ -127,7 +127,7 @@ class InviteAnchorSliceTest {
             .body("invite.epochLinks[1].wrappedPrev", equalTo(PREV_2))
     }
 
-    // --- the accept (decisions 7 and 11) ---
+    // --- the accept (ADR 0111 decisions 20 and 21) ---
 
     @Test
     fun anAcceptNamingAnotherSignerKeyIsRefusedAsInviteChanged() {
@@ -216,7 +216,7 @@ class InviteAnchorSliceTest {
         assertEquals(TestGrants.JOIN_RECORD, tx { profileOf(returning, tenantId).sealedJoinRecord })
     }
 
-    // --- the directory serves the endorsement (decision 11) ---
+    // --- the directory serves the endorsement (ADR 0111 decision 21) ---
 
     @Test
     fun theTenantDirectoryServesTheJoinEndorsement() {

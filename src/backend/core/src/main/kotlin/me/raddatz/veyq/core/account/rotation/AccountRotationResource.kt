@@ -137,7 +137,7 @@ class AccountRotationResource(
         ).build()
 
     override fun putRotationStageInvites(stageId: UUID, rotationStageInvites: RotationStageInvites): Response {
-        // A declared invite carries neither signature (cr-trust-anchors-survive-rotation decision 6, as corrected): one
+        // A declared invite carries neither signature (ADR 0111 decision 20): one
         // without the other is neither a re-signature nor a declaration.
         if (rotationStageInvites.invites.any { (it.inviteKeySignature == null) != (it.anchorGrantSignature == null) }) {
             return httpError(Failures.invalidRequest)

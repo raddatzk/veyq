@@ -7,7 +7,7 @@ vi.mock('../../api/client', () => ({ tenantsApi: vi.fn(), scopesApi: vi.fn() }))
 vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 vi.mock('./grantTrust', () => ({ me: vi.fn() }))
-// The owner's head (decision 1) is `myChainHead`'s — its walk of the served chain is tenantTrust's own suite.
+// The owner's head (ADR 0111 decision 19) is `myChainHead`'s — its walk of the served chain is tenantTrust's own suite.
 vi.mock('../account/tenantTrust', () => ({ myChainHead: vi.fn(), tenantViewOfScope: vi.fn() }))
 // The link's KEK is real Argon2id at a light cost — input-sensitive, which "another code does not open it" depends on
 // (a constant stub would open with any code). Production cost is the conformance vectors' job (`#invite_link`).

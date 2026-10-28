@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.crypto
 
 /**
- * The server's rebuild of the `join-endorsement` statement (cr-trust-anchors-survive-rotation decision 9; `seal.ts`
+ * The server's rebuild of the `join-endorsement` statement (ADR 0111 decision 21; `seal.ts`
  * `STATEMENT_PURPOSES['join-endorsement']`, `invite.ts` `joinEndorsementStatement`): an inviting owner's identity
  * signature over a join record they rooted —
  * `lp(utf8("join-endorsement")) || lp(utf8(tenantId)) || lp(utf8(userId)) || lp(utf8(signerUserId)) ||

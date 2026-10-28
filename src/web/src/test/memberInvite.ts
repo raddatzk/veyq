@@ -132,7 +132,7 @@ export function foreignGranter(userId = '0a000000-0000-4000-8000-0000000000f9'):
 }
 
 /**
- * [f]'s invite after its owner secured their account (cr-trust-anchors-survive-rotation decision 6): their chain has one
+ * [f]'s invite after its owner secured their account (ADR 0111 decision 20): their chain has one
  * more step to a new key, which re-signed the invite key and the anchor grant — and the carried grant too where it is the
  * anchor. The link still carries the head from before: the invite was minted then.
  */

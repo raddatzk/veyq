@@ -2337,7 +2337,7 @@ components:
           type: string
           description: >
             The member's identity public bundle as the directory serves it — the key the moderator's client wraps the
-            statement's `K_facts` to, **unchecked** (cr-trust-anchors-survive-rotation decision 16): the moderation
+            statement's `K_facts` to, **unchecked** (ADR 0111 § What stays open): the moderation
             surface holds no Master Key and so no pin store (ADR 0099 § 6), and the member may share no tenant with the
             moderator, so there is no join record and no pinned head to anchor this key by — any check would be a first
             use the operator serves. An active operator that substitutes it reads the statement's facts (and can re-wrap

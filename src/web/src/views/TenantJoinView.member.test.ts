@@ -214,7 +214,7 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId }, fromB64std(body.sealedJoinRecord!))
     expect(invite.joinRecordVerifies({ tenantId: f.tenantId, userId }, record)).toBe(true)
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_PUB))
-    // The owner key the record names, as the accept states it (decision 7).
+    // The owner key the record names, as the accept states it (ADR 0111 decision 20).
     expect(body.signerIdentityDigest).toBe(recipientIdentityDigest(bundleOf(f.owner)))
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
   })
@@ -274,7 +274,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
   it('signs in and accepts with a join whose record names the proof key the typed Secret Key derives', async () => {
     const w = await mountAt()
     await signIn(w)
-    // The inviting owner is judged by the chain the invite served, walked from the link's head (decision 5).
+    // The inviting owner is judged by the chain the invite served, walked from the link's head (ADR 0111 decision 19).
     expect(anchorServedChain).toHaveBeenCalledWith(
       f.ownerId,
       { userId: f.ownerId, head: headOf(f.ownerChain), steps: f.served.signerKeyChain },
@@ -338,7 +338,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
     serve(f.served, true)
   }
 
-  it('a foreign granter this account never met is NOT pinned here — the epoch link vouches for the grant (decision 5)', async () => {
+  it('a foreign granter this account never met is NOT pinned here — the epoch link vouches for the grant (ADR 0111 decision 19)', async () => {
     rewrappedBy(foreignGranter(ROTATOR))
     const w = await mountAt()
     await signIn(w)

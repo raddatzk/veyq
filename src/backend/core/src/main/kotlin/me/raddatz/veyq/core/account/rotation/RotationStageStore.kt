@@ -9,13 +9,13 @@ import java.util.UUID
 /** One staged self-grant as the store reads and writes it. */
 data class StagedSelfGrantRow(val scopeId: String, val epoch: Int, val wrappedGrant: String, val grantSignature: String)
 
-/** One staged invite as the store reads and writes it (cr-trust-anchors-survive-rotation decision 6): re-signed at
+/** One staged invite as the store reads and writes it (ADR 0111 decision 20): re-signed at
  *  [anchorEpoch], or declared — both signatures null. */
 data class StagedInviteRow(val inviteId: String, val anchorEpoch: Int, val inviteKeySignature: String?, val anchorGrantSignature: String?) {
     val declared: Boolean get() = inviteKeySignature == null
 }
 
-/** One staged join-record entry (decision 12): the record's digest it was staged against, and its endorsement or null
+/** One staged join-record entry (ADR 0111 decision 21): the record's digest it was staged against, and its endorsement or null
  *  (declared). */
 data class StagedEndorsementRow(val tenantId: String, val userId: String, val recordDigest: String, val endorsement: String?)
 

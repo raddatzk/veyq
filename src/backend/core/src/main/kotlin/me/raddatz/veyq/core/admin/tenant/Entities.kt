@@ -194,7 +194,7 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "granter_identity_public_key")
     var granterIdentityPublicKey: String? = null
 
-    /** The invite's anchor (cr-trust-anchors-survive-rotation decision 2): the inviting owner's own grant of the tenant
+    /** The invite's anchor (ADR 0111 decision 19): the inviting owner's own grant of the tenant
      *  key at [anchorEpoch], wrapped to the invite key, with the owner's `grant` signature over it — what the invitee
      *  checks every carried grant against. Written at mint (equal to the grant), moved only by a tenant rotation the
      *  signer commits (`TenantStore.carryInvites`), re-signed by the signer's securing, and dropped with the key. */

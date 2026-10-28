@@ -120,7 +120,7 @@ export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
 
 /** A MEMBER accept's join, as the wire carries it: the self-grant, the invite key's proof, the sealed join record, and
  *  the digest of the inviting owner's key the record names — the key this client checked, which the server compares
- *  with the invite's stored signer key (`409 invite_changed`, cr-trust-anchors-survive-rotation decision 7). */
+ *  with the invite's stored signer key (`409 invite_changed`, ADR 0111 decision 20). */
 export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string; signerIdentityDigest: string }
 
 /** The code (or password) does not open the link's sealed part — mistyped, or another invite's link. */
@@ -166,8 +166,8 @@ export function inviteLinkMode(sealedPart: string): invite.InviteLinkMode | null
 }
 
 /**
- * Open and check a member invite before anything is sent (ADR 0111 decision 1, cr-trust-anchors-survive-rotation decision
- * 4): open the link's sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then
+ * Open and check a member invite before anything is sent (ADR 0111 decisions 1 and
+ * 19): open the link's sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then
  * {@link invite.checkInvite} — the key the seed derives is the served one, the owner's served chain passes through the
  * head inside the seal and ends at the served owner key, which signed the invite key and the anchor grant, and the tenant
  * key is the anchor's or peels down to it through the tenant's epoch links ({@link invite.InviteCheckFailed} naming the
@@ -245,7 +245,7 @@ function checkMemberInvite(tenantId: string, served: ServedMemberInvite, payload
 
 /**
  * Whether a signed-in account may accept an opened member invite against its pin store (ADR 0028 Decision 2,
- * cr-trust-anchors-survive-rotation decision 5). The account is not yet a co-member, so the server serves it nobody's
+ * ADR 0111 decision 19). The account is not yet a co-member, so the server serves it nobody's
  * key chain through `getKeyChain`:
  * - **the inviting owner** is judged by the chain the invite served, which {@link openMemberInvite} walked from the head
  *   inside the link to the served key ({@link anchorServedChain}): a pinned head must lie on it and carry the pinned key,
@@ -269,7 +269,7 @@ export async function memberInviteAnchored(opened: OpenedMemberInvite): Promise<
 }
 
 /**
- * Send a member accept built from [opened] (cr-trust-anchors-survive-rotation decision 7). When the server answers `409
+ * Send a member accept built from [opened] (ADR 0111 decision 20). When the server answers `409
  * invite_changed` — the inviting owner secured their account between this client's check and the accept, so the join
  * record would name a key their securing retired — the preview is read again through [reread], the checks run again with
  * the link's facts [opened] kept (no code is asked for again), [anchored] judges the re-checked invite where the account
@@ -319,7 +319,7 @@ export type Newcomer = {
  * its own identity and signed by it; the invite key's proof over (invite, account, identity) that the server checks;
  * and the join record — identity and Secret-Key proof key, the owner-signed invite it came through — signed by the
  * invite key and by the new identity, sealed under the tenant key as the field `member-join-record`; and the digest of the
- * owner key the record names — the one the checks walked to (decision 7).
+ * owner key the record names — the one the checks walked to (ADR 0111 decision 20).
  */
 export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer): MemberJoin {
   const { tenantId, served, inviteKey, epochKey, grantedEpoch, signer } = opened

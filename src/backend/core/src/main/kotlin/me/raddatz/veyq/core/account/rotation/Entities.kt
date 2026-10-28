@@ -64,7 +64,7 @@ class RotationStageGrantEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<RotationStageGrantEntity, String>
 }
 
-/** One staged re-signed invite (cr-trust-anchors-survive-rotation decision 6): the stage identity's `invite-key` and
+/** One staged re-signed invite (ADR 0111 decision 20): the stage identity's `invite-key` and
  *  anchor `grant` signatures over the invite at [anchorEpoch], verified at upload — or both null, a declared invite the
  *  publish ends. Upserted by `(stage, invite)`. */
 @Entity
@@ -93,7 +93,7 @@ class RotationStageInviteEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<RotationStageInviteEntity, String>
 }
 
-/** One staged join-record endorsement (decision 12): the stage identity's signature over the member's sealed record,
+/** One staged join-record endorsement (ADR 0111 decision 21): the stage identity's signature over the member's sealed record,
  *  verified at upload — or null, a declared record — and the SHA-256 of the record it was staged against ([recordDigest],
  *  base64), which the publish compares with the record it finds. Upserted by `(stage, tenant, member)`. */
 @Entity

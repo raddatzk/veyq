@@ -77,7 +77,7 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
   })
 })
 
-// ── A member invite, the invitee's half (ADR 0111 decisions 1 and 3, cr-trust-anchors-survive-rotation decision 4) ──
+// ── A member invite, the invitee's half (ADR 0111 decisions 1 and 3, ADR 0111 decision 19) ──
 // Each check has a crafted negative that fails EXACTLY that check — the rest of the invite stays genuine, so a check
 // that was dropped would let it through (the bite) — and the genuine invite is the control on the same path. Every
 // reason of `checkInvite` is the crypto package's own suite (`inviteCheck.test.ts`); here each is reached through what
@@ -245,7 +245,7 @@ describe('openMemberInvite — the checks before anything is sent', () => {
   })
 })
 
-describe('acceptCheckedInvite — one silent re-check on 409 invite_changed (decision 7)', () => {
+describe('acceptCheckedInvite — one silent re-check on 409 invite_changed (ADR 0111 decision 20)', () => {
   /** The digest the join of [opened] states, as `send` saw it. */
   const digestOf = (opened: OpenedMemberInvite) => b64std(v1.sha256Digest(opened.signer.identityPublicKey))
 

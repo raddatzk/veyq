@@ -113,7 +113,7 @@ object TestGrants {
     /** A MEMBER accept's join fields as JSON members (no braces): a self-grant at [epoch] addressed to
      *  [identityPublicKeyB64], the invite key's proof for [userId], a stand-in join record, and the digest of the signer
      *  key the record names ([signerIdentityDigest]; by default the invite's stored signer key, read at call time —
-     *  what an honest client checked, cr-trust-anchors-survive-rotation decision 7). */
+     *  what an honest client checked, ADR 0111 decision 20). */
     fun memberJoinJson(
         key: TestInviteKey, inviteId: String, userId: String, identityPublicKeyB64: String, epoch: Int = 0,
         signerIdentityDigest: String = storedSignerDigest(inviteId),

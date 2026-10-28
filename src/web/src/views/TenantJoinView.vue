@@ -7,7 +7,7 @@
 // the invite and checks it — the owner's chain from the head inside the seal, the owner's anchor grant — before anything
 // is sent, grants itself the tenant key the invite holds and writes its join record — it is in the space at once. When the
 // owner secured their account between the check and the accept (`409 invite_changed`), the invite is checked again and
-// accepted once more without asking for the code (cr-trust-anchors-survive-rotation decision 7). No key leaves the device.
+// accepted once more without asking for the code (ADR 0111 decision 20). No key leaves the device.
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

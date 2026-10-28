@@ -371,7 +371,7 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     key, so a redeem with the token alone is refused.
  *   - `join-record` (ADR 0111 decisions 3 and 12): what the invite key AND the new identity both sign — who joined
  *     (account, identity digest, Secret-Key proof public key) through which owner-signed invite.
- *   - `join-endorsement` (cr-trust-anchors-survive-rotation decision 9): what an inviting owner's identity signs over a
+ *   - `join-endorsement` (ADR 0111 decision 21): what an inviting owner's identity signs over a
  *     join record they rooted — the tenant, the member, the owner and SHA-256 of the member's SEALED join record as
  *     stored, so it endorses that one record and the server can check it without opening anything. An owner's securing
  *     endorses every record its outgoing key rooted with the new key, so a record a retired key signed counts only

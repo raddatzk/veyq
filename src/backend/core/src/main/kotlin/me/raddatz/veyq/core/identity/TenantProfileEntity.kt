@@ -47,12 +47,12 @@ class TenantProfileEntity : PanacheEntityBase {
     @Column(name = "sealed_join_record")
     var sealedJoinRecord: String? = null
 
-    /** Who rooted this join (cr-trust-anchors-survive-rotation decision 11): the signer of the invite it was accepted
+    /** Who rooted this join (ADR 0111 decision 21): the signer of the invite it was accepted
      *  through, written with [sealedJoinRecord]; null for the tenant's first owner. */
     @Column(name = "join_signer_user_id", columnDefinition = "uuid")
     var joinSignerUserId: String? = null
 
-    /** That owner's endorsement of [sealedJoinRecord] (decision 12), written by their securing; null until then, for a
+    /** That owner's endorsement of [sealedJoinRecord] (ADR 0111 decision 21), written by their securing; null until then, for a
      *  record it declared, and whenever a new record replaces the one it endorsed. */
     @Column(name = "join_endorsement")
     var joinEndorsement: String? = null

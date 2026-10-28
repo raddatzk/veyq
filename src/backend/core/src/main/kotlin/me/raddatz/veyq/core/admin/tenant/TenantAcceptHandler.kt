@@ -51,7 +51,7 @@ data class OwnerBirth(val grant: SignedGrant, val recipientIdentityDigest: Strin
  * What a MEMBER accept brings (ADR 0111 decision 3): the grant the newcomer gave itself from its invite's grant — at
  * [epoch], naming the key it is wrapped to — the invite key's proof that its holder redeems it for this account and
  * key, the join record sealed under the tenant key, and the digest of the inviting owner's key the record names
- * ([signerIdentityDigest], cr-trust-anchors-survive-rotation decision 7). All or nothing, like [OwnerBirth].
+ * ([signerIdentityDigest], ADR 0111 decision 20). All or nothing, like [OwnerBirth].
  */
 data class MemberJoin(
     val selfGrant: SignedGrant,
@@ -77,7 +77,7 @@ data class MemberJoin(
 private enum class JoinRefusal { MISSING, PROOF_INVALID, INVITE_CHANGED, RECIPIENT_KEY_NOT_CURRENT, STALE_EPOCH }
 
 /** A MEMBER accept named another signer key than the invite's stored one: its owner secured their account since the
- *  client checked it (cr-trust-anchors-survive-rotation decision 7). The client re-reads the preview and accepts again. */
+ *  client checked it (ADR 0111 decision 20). The client re-reads the preview and accepts again. */
 private val inviteChanged: HttpFailure = httpFailure("invite_changed", FailureStatus.CONFLICT)
 
 sealed interface PreviewOutcome {
@@ -94,9 +94,9 @@ sealed interface PreviewOutcome {
         val invite: TenantInviteEntity?,
         /** The key-chain heads of the invite's signer and granter (ADR 0111 decision 7), by user id. */
         val heads: Map<String, String> = emptyMap(),
-        /** The invite signer's whole key chain, genesis first (cr-trust-anchors-survive-rotation decision 3). */
+        /** The invite signer's whole key chain, genesis first (ADR 0111 decision 19). */
         val signerChain: List<KeyChainLink> = emptyList(),
-        /** The tenant scope's epoch links for every epoch in `(anchorEpoch, grantedEpoch]`, ascending (decision 3). */
+        /** The tenant scope's epoch links for every epoch in `(anchorEpoch, grantedEpoch]`, ascending (ADR 0111 decision 19). */
         val epochLinks: List<Pair<Int, String>> = emptyList(),
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
@@ -247,7 +247,7 @@ class TenantAcceptHandler(
                 null -> Unit
             }
             val j = join!!
-            // Who rooted this join (decision 11): read before the spend, which drops the invite's signer.
+            // Who rooted this join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
             val signer = invite.signerUserId!!
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
             // If already a member, spending the invite is all there is (their tenant profile already exists — the
@@ -323,7 +323,7 @@ class TenantAcceptHandler(
                 null -> Unit
             }
         }
-        // Who rooted a member's join (decision 11): read before the spend, which drops the invite's signer.
+        // Who rooted a member's join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
         val signer = invite.signerUserId
         if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
@@ -368,8 +368,8 @@ class TenantAcceptHandler(
      * What a MEMBER join must hold before anything is written (ADR 0111 decision 3), read under the tenant scope's lock:
      * all its parts; the invite key's proof that this account and identity redeem it, verified under the invite key the
      * server stores (the operator could mint its own invite, but an honest server refuses a redeem by token alone); the
-     * invite's signer key as stored now, named by the digest the client checked (cr-trust-anchors-survive-rotation
-     * decision 7: an owner who secured their account since would otherwise root a record naming a retired key, with no
+     * invite's signer key as stored now, named by the digest the client checked (ADR 0111
+     * decision 20: an owner who secured their account since would otherwise root a record naming a retired key, with no
      * endorsement behind it); a self-grant addressed to [identityPublicKey], the account's key; and an epoch no later
      * than the tenant's [current] one — an earlier one is a pending invite's, and leaves the membership behind for the
      * grant delivery.

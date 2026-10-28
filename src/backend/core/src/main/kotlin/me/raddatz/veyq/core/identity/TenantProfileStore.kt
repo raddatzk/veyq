@@ -13,11 +13,11 @@ data class ProfileView(
     val userId: String, val username: String, val sealedName: String?, val avatarRevision: Int,
     /** The member's sealed join record (ADR 0111 decisions 3 and 12), null for the tenant's first owner. */
     val sealedJoinRecord: String? = null,
-    /** The inviting owner's endorsement of that record (cr-trust-anchors-survive-rotation decision 12), or null. */
+    /** The inviting owner's endorsement of that record (ADR 0111 decision 21), or null. */
     val joinEndorsement: String? = null,
 )
 
-/** A join record an owner rooted (cr-trust-anchors-survive-rotation decisions 11-12): the member, the sealed record as
+/** A join record an owner rooted (ADR 0111 decision 21): the member, the sealed record as
  *  stored, and the endorsement it carries now. */
 data class RootedJoinRecord(val tenantId: String, val userId: String, val sealedJoinRecord: String, val joinEndorsement: String?)
 
@@ -49,7 +49,7 @@ class TenantProfileStore {
      * every joiner holds at accept (the owner's cold birth, a member's self-grant, ADR 0111 decision 3) — the optional
      * name and picture (ADR 0084 decision 7: stored with revision 1, so a directory read at once shows it) and a
      * member's join record (null for the tenant's first owner), with [joinSignerUserId] — the invite's signer, who rooted
-     * it (cr-trust-anchors-survive-rotation decision 11).
+     * it (ADR 0111 decision 21).
      */
     @Transactional
     fun create(
@@ -73,7 +73,7 @@ class TenantProfileStore {
 
     /** A returning member's new join record (ADR 0111 decision 3): their profile outlived a removal, and the invite
      *  that brought them back is a new join — rooted by its signer [joinSignerUserId], and endorsed by nobody yet: an
-     *  endorsement covers the record it was made over, never this one (cr-trust-anchors-survive-rotation decisions 11-12).
+     *  endorsement covers the record it was made over, never this one (ADR 0111 decision 21).
      *  The only writer of the record besides [create]; the profile op never is. */
     @Transactional
     fun setJoinRecord(userId: String, tenantId: String, sealedJoinRecord: String, joinSignerUserId: String) {
@@ -83,7 +83,7 @@ class TenantProfileStore {
         )
     }
 
-    /** Every join record [signerUserId] rooted, in **every** tenant (decision 12) — [tenantIds], when given, narrows them
+    /** Every join record [signerUserId] rooted, in **every** tenant (ADR 0111 decision 21) — [tenantIds], when given, narrows them
      *  to those tenants — by tenant, then member. */
     fun rootedBy(signerUserId: String, tenantIds: Collection<String>? = null): List<RootedJoinRecord> {
         val rows = if (tenantIds == null) {
@@ -104,7 +104,7 @@ class TenantProfileStore {
         ).setParameter("signer", signerUserId).resultList.toSet()
 
     /** Write [signerUserId]'s endorsement of [userId]'s join record in [tenantId] — or clear it, for a declared record
-     *  ([endorsement] null) — in the publish's transaction, under the tenant scope's lock (decision 12). */
+     *  ([endorsement] null) — in the publish's transaction, under the tenant scope's lock (ADR 0111 decision 21). */
     fun setJoinEndorsement(tenantId: String, userId: String, signerUserId: String, endorsement: String?) {
         if (endorsement == null) {
             TenantProfileEntity.update(

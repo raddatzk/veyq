@@ -2,8 +2,8 @@
 // Read from the account rotation's plan (decision 5), which serves every scope the account holds a membership on in every
 // tenant, Host-independently: which spaces cannot get their new lock yet and why. Under ADR 0111 no space waits for an
 // owner, so nothing here asks who owns what (the former sole-owner warning went with the mechanism it described); and the
-// account's open invitations survive its securing, re-signed by the new key (cr-trust-anchors-survive-rotation decision
-// 6), so nothing here warns about them either.
+// account's open invitations survive its securing, re-signed by the new key (ADR 0111 decision
+// 20), so nothing here warns about them either.
 import type { RotationPlanScope } from '../../../api/generated/account'
 import { readRotationPlan } from './finishRotation'
 import { unreadableOnThisDevice } from './rotateKeys'

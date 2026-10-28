@@ -2,7 +2,7 @@
 // The owner's client mints an invite key from a fresh seed, signs its public half with the owner's identity, wraps the
 // tenant scope's current epoch key to it, and seals the seed — with the head of the owner's key chain and the owner's
 // account — into the link's secret part under a generated code (or a password the owner chose). The grant it wraps is
-// the invite's anchor (cr-trust-anchors-survive-rotation decision 2): whatever a later rotation re-wraps, the invitee
+// the invite's anchor (ADR 0111 decision 19): whatever a later rotation re-wraps, the invitee
 // checks it against this one. The server receives the public key, the
 // signature, the grant and the sealed part, mails the link and forgets the sealed part; the seed and the code never
 // reach it. The owner passes the code on outside veyq: the operator mails the link, so a link alone must not open.
@@ -41,7 +41,7 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
     throw new Error('invite secret is not a code or a password')
   }
   const ttl = await inviteTtlSeconds(tenantId)
-  // The head the link carries (decision 1): this account's chain as served, walked to the identity this vault holds —
+  // The head the link carries (ADR 0111 decision 19): this account's chain as served, walked to the identity this vault holds —
   // a chain that withholds this account's newest step is refused rather than sealed into a link.
   const { head } = await myChainHead()
   const opened = await openScopeById(tenantId) // the tenant scope's id IS the tenant id

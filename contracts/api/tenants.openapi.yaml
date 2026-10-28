@@ -2210,8 +2210,8 @@ paths:
         whether that email already has an account — so the client picks the sign-in vs. register path — and, for
         a MEMBER invite, the invite key, its owner's signature and key chain, the owner's anchor grant, the grant the
         invite carries now and the epoch links between the two (`invite`), which the invitee's client checks against
-        the link's sealed part before it trusts any of it (ADR 0111 decision 1, cr-trust-anchors-survive-rotation
-        decision 4). Serving the owner's chain here hands the holder of the token public keys and signatures, as
+        the link's sealed part before it trusts any of it (ADR 0111 decisions 1
+        and 19). Serving the owner's chain here hands the holder of the token public keys and signatures, as
         `getKeyChain` serves them to a co-member.
         Public: gated only by possession of the bootstrap secret (the URL-fragment token), which is matched
         by hash and never echoed back. A replayed superseded/consumed/expired secret is 410.
@@ -3598,7 +3598,7 @@ components:
       type: object
       description: >
         A member invite as its invitee reads it. Every byte is the server's word until the invitee's client checked it
-        (`checkInvite`, cr-trust-anchors-survive-rotation decision 4): the invite key must be the one the link's seed
+        (`checkInvite`, ADR 0111 decision 19): the invite key must be the one the link's seed
         derives; the signer's chain must pass through the head inside the link's seal and end at the served signer key,
         which must have signed the invite key and the anchor; and the tenant key the grant carries must be the anchor's
         or one the epoch links peel down to it.
@@ -3619,7 +3619,7 @@ components:
           type: string
           description: >
             The inviting owner's `invite-key` signature over it, by the key `signerIdentityPublicKey` names — the one at
-            mint, or the one an owner's securing re-signed it with (decision 6).
+            mint, or the one an owner's securing re-signed it with (ADR 0111 decision 20).
           contentEncoding: base64
           maxLength: 128
           example: c2lnbmF0dXJl
@@ -3836,7 +3836,7 @@ components:
           type: [string, "null"]
           description: >
             **Required for a MEMBER invite.** SHA-256 of the inviting owner's identity bundle the join record names —
-            the signer key the newcomer's client checked (cr-trust-anchors-survive-rotation decision 7). The server
+            the signer key the newcomer's client checked (ADR 0111 decision 20). The server
             compares it with the invite's stored signer key under the tenant scope's lock and refuses another (`409
             invite_changed`): the owner secured their account between the client's check and this accept, so the
             record would name a key their securing retired, with no endorsement behind it. The client re-reads the
@@ -4135,7 +4135,7 @@ components:
           type: [string, "null"]
           description: >
             **Required for a MEMBER invite.** SHA-256 of the inviting owner's identity bundle the join record names —
-            the signer key the newcomer's client checked (cr-trust-anchors-survive-rotation decision 7). The server
+            the signer key the newcomer's client checked (ADR 0111 decision 20). The server
             compares it with the invite's stored signer key under the tenant scope's lock and refuses another (`409
             invite_changed`): the owner secured their account between the client's check and this accept, so the
             record would name a key their securing retired, with no endorsement behind it. The client re-reads the

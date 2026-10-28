@@ -66,7 +66,7 @@ sealed interface RotationOutcome {
     /** The stage is missing, expired or declares another identity, its digest is not the request's, a membership that
      *  carries a grant is neither staged at its scope's current epoch nor declared unreadable (decision 3), an open invite
      *  the caller signed is not staged at its anchor epoch, or a join record the caller rooted is not staged over the
-     *  record stored now (cr-trust-anchors-survive-rotation decisions 6 and 12). */
+     *  record stored now (ADR 0111 decisions 20 and 21). */
     data object PlanChanged : RotationOutcome, HttpFailure by Failures.rotationPlanChanged
 
     /** The pin store or the device register moved since the client read it — the whole rotation rolled back. The client
@@ -91,7 +91,7 @@ sealed interface StageGrantsOutcome {
     data object SelfGrantInvalid : StageGrantsOutcome, HttpFailure by httpFailure("self_grant_invalid", UNPROCESSABLE)
 }
 
-/** Outcome of staging a chunk of re-signed (or declared) invites (cr-trust-anchors-survive-rotation decision 6). Every
+/** Outcome of staging a chunk of re-signed (or declared) invites (ADR 0111 decision 20). Every
  *  refusal wrote nothing of the chunk. */
 sealed interface StageInvitesOutcome {
     data object Staged : StageInvitesOutcome
@@ -106,7 +106,7 @@ sealed interface StageInvitesOutcome {
     data object InviteResignInvalid : StageInvitesOutcome, HttpFailure by httpFailure("invite_resign_invalid", UNPROCESSABLE)
 }
 
-/** Outcome of staging a chunk of join-record endorsements (or declarations) (decision 12). Every refusal wrote nothing. */
+/** Outcome of staging a chunk of join-record endorsements (or declarations) (ADR 0111 decision 21). Every refusal wrote nothing. */
 sealed interface StageEndorsementsOutcome {
     data object Staged : StageEndorsementsOutcome
 
@@ -231,12 +231,12 @@ class RotationHandler(
         }.sortedBy { it.scopeId }
     }
 
-    /** Every open member invite [userId] signed, in **every** tenant (cr-trust-anchors-survive-rotation decision 6) —
+    /** Every open member invite [userId] signed, in **every** tenant (ADR 0111 decision 20) —
      *  what their securing re-signs or declares. Host-independent; only invites the caller signed. */
     fun planInvites(userId: String): List<SignedOpenInvite> =
         QuarkusTransaction.requiringNew().call { tenants.openInvitesSignedBy(userId) }
 
-    /** Every join record [userId] rooted, in **every** tenant (decision 12) — what their securing endorses or declares. */
+    /** Every join record [userId] rooted, in **every** tenant (ADR 0111 decision 21) — what their securing endorses or declares. */
     fun planJoinRecords(userId: String): List<RootedJoinRecord> =
         QuarkusTransaction.requiringNew().call { profiles.rootedBy(userId) }
 
@@ -280,8 +280,8 @@ class RotationHandler(
         }
 
     /**
-     * Stage one chunk of re-signed or declared invites into [userId]'s open stage [stageId] (cr-trust-anchors-survive-
-     * rotation decision 6, as corrected): every entry names an open member invite the caller signed, at the anchor epoch
+     * Stage one chunk of re-signed or declared invites into [userId]'s open stage [stageId] (ADR 0111
+     * decision 20): every entry names an open member invite the caller signed, at the anchor epoch
      * it holds now (else `409 rotation_plan_changed`, declared or not); a re-signed one carries the stage identity's
      * `invite-key` signature over the invite as stored and its `grant` signature over the stored anchor (kind `TENANT`,
      * the anchor epoch, the invite as recipient), both verified here (else `422 invite_resign_invalid`) — a consistency
@@ -314,7 +314,7 @@ class RotationHandler(
         }
 
     /**
-     * Stage one chunk of join-record endorsements or declarations into [userId]'s open stage [stageId] (decision 12):
+     * Stage one chunk of join-record endorsements or declarations into [userId]'s open stage [stageId] (ADR 0111 decision 21):
      * every entry names a profile whose join the caller rooted and that holds a join record (else `409
      * rotation_plan_changed`); a non-null endorsement is the stage identity's `join-endorsement` signature over the
      * record as stored, verified here (else `422 join_endorsement_invalid`). Each entry keeps the digest of the record it
@@ -467,7 +467,7 @@ class RotationHandler(
      * grant for a scope the account no longer holds is not written (writing it would make a membership). An unreadable
      * scope keeps its grant and gets no pending row. Returns the re-granted scope ids, ascending.
      *
-     * **What the account rooted, under the same pass** (cr-trust-anchors-survive-rotation decisions 6 and 12). The tenant
+     * **What the account rooted, under the same pass** (ADR 0111 decisions 20 and 21). The tenant
      * scopes in which the account signed a live invite or rooted a join record join the locked set — the account may
      * have left such a tenant, so its own grants alone do not name them — and are read again under the locks. Every
      * writer of what is checked holds that tenant scope's lock: a mint and a reissue, a rotation that moves an anchor,

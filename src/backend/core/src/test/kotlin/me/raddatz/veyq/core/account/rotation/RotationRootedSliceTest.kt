@@ -36,8 +36,8 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * An owner's securing re-signs what it rooted (cr-trust-anchors-survive-rotation Phase 2, decisions 6 and 12, with the
- * coordinator's correction that a staged invite may be declared): the two plan reads, the two stage writes and the
+ * An owner's securing re-signs what it rooted (ADR 0111 decisions 20 and 21, a staged invite
+ * declared or re-signed): the two plan reads, the two stage writes and the
  * publish's completeness over the caller's open invites and the join records it rooted — every one staged, or the whole
  * publish refused `409 rotation_plan_changed`, nothing written. A re-signed invite gets the new identity's signatures and
  * key, a declared one ends, an endorsement lands on the profile and is served. Every refusal is anchored on its status

@@ -707,8 +707,8 @@ export async function anchorChainKey(
 }
 
 /**
- * The inviting owner of a member invite, judged by the key chain the invite serves beside it (cr-trust-anchors-survive-
- * rotation decision 5) — the accept's one anchor check, where the account is not yet a co-member and the server serves it
+ * The inviting owner of a member invite, judged by the key chain the invite serves beside it (ADR 0111
+ * decision 19) — the accept's one anchor check, where the account is not yet a co-member and the server serves it
  * no chain through `getKeyChain`. The caller passes the chain as `checkInvite` (`@veyq/crypto/invite`) walked it: from the head inside
  * the link to the served owner key, so `chain.head` is that walk's end and `served` its key. Here the pin decides, as
  * {@link readChain} reads it: a pinned head must lie on the chain and carry the pinned key (else `anomaly`), and a first

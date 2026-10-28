@@ -610,7 +610,7 @@ private fun MemberInviteRequest.toInput() = MemberInviteInput(
 )
 
 /** A MEMBER accept's parts, or null when any is missing (the handler answers it as a missing grant — a MEMBER accept
- *  without `signerIdentityDigest` among them, cr-trust-anchors-survive-rotation decision 7). */
+ *  without `signerIdentityDigest` among them, ADR 0111 decision 20). */
 private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String?, signerIdentityDigest: String?): MemberJoin? =
     MemberJoin.of(
         this?.wrappedGrant, this?.grantSignature, this?.epoch, this?.recipientIdentityDigest, inviteProof, sealedJoinRecord,
@@ -618,8 +618,8 @@ private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String
     )
 
 /** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check): its key,
- *  signer chain, anchor, carried grant and the epoch links between the two (cr-trust-anchors-survive-rotation
- *  decision 3). */
+ *  signer chain, anchor, carried grant and the epoch links between the two (ADR 0111
+ *  decision 19). */
 private fun TenantInviteEntity.served(
     heads: Map<String, String>, signerChain: List<KeyChainLink>, epochLinks: List<Pair<Int, String>>,
 ): ServedMemberInvite? = ServedMemberInvite(

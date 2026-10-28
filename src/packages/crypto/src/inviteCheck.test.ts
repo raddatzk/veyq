@@ -1,4 +1,4 @@
-// The invitee's checks (ADR 0111 decision 1, cr-trust-anchors-survive-rotation decision 4): `checkInvite` against a
+// The invitee's checks (ADR 0111 decisions 1 and 19): `checkInvite` against a
 // served invite the test builds from the vectors' owner (`#invite_key.owner`, whose chain's step 0 is `#invite_link`'s
 // signer head). Each refusal reason has its negatives — each passes every check before its own, so it fails exactly that
 // one — beside a positive control on the same predicate. The two probes the CR measured on main are here as regressions:

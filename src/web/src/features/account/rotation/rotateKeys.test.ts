@@ -355,7 +355,7 @@ function fakeServer(opts: ServerOpts = {}) {
     return { stageId: stage.id, expiresAt: new Date(Date.now() + 3_600_000) }
   })
 
-  // What this account rooted (cr-trust-anchors-survive-rotation decisions 6 and 12), as phase 2's server serves, stages
+  // What this account rooted (ADR 0111 decisions 20 and 21), as phase 2's server serves, stages
   // and applies it: each re-signature and endorsement verified at upload under the stage's identity, over what it stores.
   const invites = opts.invites ?? []
   const records = opts.records ?? []
@@ -1228,11 +1228,11 @@ describe('securing the account loses no space (inbox #556)', () => {
   }, 60_000)
 })
 
-// cr-trust-anchors-survive-rotation decisions 6 and 12: what this account rooted survives its securing, re-signed by the
+// ADR 0111 decisions 20 and 21: what this account rooted survives its securing, re-signed by the
 // NEW identity through the stage — and what the server lists that the outgoing key never signed is declared, never vouched
 // for. The fake server verifies every upload under the stage's identity over what it stores, and the publish requires
 // every open invite and every rooted record staged.
-describe('securing the account re-signs what it rooted (decisions 6 and 12)', () => {
+describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 and 21)', () => {
   /** An open invite into [scope] at its current epoch, its invite key signed by [signer] and its anchor by [anchorSigner]. */
   function planInvite(scope: Scope, signer: v1.Identity, anchorSigner: v1.Identity = signer): RotationPlanInvite {
     const inviteKey = invite.inviteKeyFromSeed(invite.generateInviteSeed())

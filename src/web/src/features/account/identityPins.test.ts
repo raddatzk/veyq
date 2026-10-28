@@ -204,7 +204,7 @@ describe('anchorIdentity — first use and match (ADR 0028 Decision 2)', () => {
     expect(srv.writeIdentityPins).not.toHaveBeenCalled()
   })
 
-  it('the inviting owner, by the chain an invite serves: a first use pins the walked head at its REAL index, no chain fetched (decision 5)', async () => {
+  it('the inviting owner, by the chain an invite serves: a first use pins the walked head at its REAL index, no chain fetched (ADR 0111 decision 19)', async () => {
     const srv = fakeServer()
     const secured = step(genesis(U1, A), B)
     expect(await anchorServedChain(U1, served(secured), servedIdentity(secured))).toBe('firstUse')

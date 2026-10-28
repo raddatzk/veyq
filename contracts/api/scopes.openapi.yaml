@@ -1374,7 +1374,7 @@ components:
 
     ScopeEpochLink:
       # `title` names the type a spec that $refs this schema from another file generates (tenants' ServedMemberInvite):
-      # without it both generators inline it under a name of their own (cr-trust-anchors-survive-rotation).
+      # without it both generators inline it under a name of their own (ADR 0111 decision 19).
       title: ScopeEpochLink
       type: object
       required: [epoch, wrappedPrev]
@@ -1523,7 +1523,7 @@ components:
             TENANT only: the open member invites this rotation re-grants the new epoch. With `pendingInviteIds`, exactly
             the tenant's open invites — else `409 rotation_incomplete`. Omitted = none. Each replaces the grant the
             invite carries; where the rotator is the invite's signer it also becomes the invite's anchor (the owner's
-            own grant its invitee checks every carried grant against, cr-trust-anchors-survive-rotation decision 2),
+            own grant its invitee checks every carried grant against, ADR 0111 decision 19),
             and any other rotator leaves the anchor where it was.
           items: { $ref: "#/components/schemas/InviteGrantEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
@@ -1806,7 +1806,7 @@ components:
           type: [string, "null"]
           description: >
             TENANT scope only: the inviting owner's endorsement of this member's join record
-            (cr-trust-anchors-survive-rotation decisions 9-12) — their identity signature over the `join-endorsement`
+            (ADR 0111 decision 21) — their identity signature over the `join-endorsement`
             statement (tenant, member, owner, SHA-256 of `sealedJoinRecord` exactly as served; the `join_endorsement`
             crypto vector), written when the owner secures their account and signed by the key that securing installs.
             A reader counts a join record signed by a key the owner has since retired only with an endorsement that
@@ -1856,8 +1856,8 @@ components:
           description: >
             The head of the inviting owner's key chain now (ADR 0111 decision 7). The rotator re-grants the invite only
             if the chain from the head it pinned for the owner verifies to this head and the signer key is the one at
-            it. An owner's securing re-signs their open invites with the key it installs (cr-trust-anchors-survive-rotation
-            decision 6), so the invites outlive it.
+            it. An owner's securing re-signs their open invites with the key it installs (ADR 0111
+            decision 20), so the invites outlive it.
           contentEncoding: base64
           maxLength: 64
           example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDE=
@@ -2145,7 +2145,7 @@ components:
 
     KeyChainStep:
       # `title` names the type a spec that $refs this schema from another file generates (tenants' ServedMemberInvite):
-      # without it both generators inline it under a name of their own (cr-trust-anchors-survive-rotation).
+      # without it both generators inline it under a name of their own (ADR 0111 decision 19).
       title: KeyChainStep
       type: object
       description: >

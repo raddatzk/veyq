@@ -87,7 +87,7 @@ function rotated(p: Person, next: ChainKeys = chainKeys()): Person {
 type Endorsement = { signerUserId: string; by: v1.Identity; overAnotherSealing?: boolean }
 
 /** `p` as the tenant's directory lists them: their newest key and head, a role, the join record they wrote, and the
- *  endorsement of it the record's signer wrote (cr-trust-anchors-survive-rotation decision 9). */
+ *  endorsement of it the record's signer wrote (ADR 0111 decision 21). */
 function row(
   p: Person, role: ScopeMemberRoleEnum, record?: invite.JoinRecord, o: { pendingConsent?: boolean; endorsed?: Endorsement } = {},
 ): ScopeMember {
@@ -271,7 +271,7 @@ describe('the join record anchors a person in the tenant (ADR 0111 decisions 12,
     expect((await (await loadTenantView(T, open)).standing(JOINER)).kind).toBe('joined')
   })
 
-  // #571 (cr-trust-anchors-survive-rotation decision 10): a record its owner signed with a key they have since retired.
+  // #571 (ADR 0111 decision 21): a record its owner signed with a key they have since retired.
   /** JOINER's record through OWNER, signed while OWNER held their first key; OWNER has since secured their account. */
   function retiredKeyRecord() {
     const before = born(OWNER)

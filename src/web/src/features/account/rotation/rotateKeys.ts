@@ -15,7 +15,7 @@
 // (`finishRotation`, from this tab right away and from every device's worker after), which is what closes the old
 // identity out of what comes next. No private key of the old identity is kept anywhere.
 //
-// **What the account rooted survives it, re-signed** (cr-trust-anchors-survive-rotation decisions 6 and 12): the same
+// **What the account rooted survives it, re-signed** (ADR 0111 decisions 20 and 21): the same
 // stage holds, from the NEW identity, a re-signature of every open member invite this account signed and an endorsement
 // of every join record it rooted — so the invites keep working, the members they brought in keep counting, and the
 // retired key roots nothing afterwards. What the server lists that the outgoing key never signed is declared, never
@@ -61,7 +61,7 @@ const ARGON = v1.ARGON
 const MAX_PUBLISH_ATTEMPTS = 5
 
 /** At most this many self-grants go up in one `putRotationStageGrants` (the contract's `maxItems`: 256 × 8,501 bytes at
- *  every field cap ≈ 2.2 MB, a fifth of the request limit — decision 3) — and as many re-signed invites or join-record
+ *  every field cap ≈ 2.2 MB, a fifth of the request limit — ADR 0111 decision 6) — and as many re-signed invites or join-record
  *  endorsements in one `putRotationStageInvites` / `putRotationStageJoinEndorsements` (their own `maxItems`). */
 export const STAGE_CHUNK = 256
 
@@ -495,8 +495,8 @@ class SelfGrantStage {
 type RootedPlan = { invites: RotationPlanInvite[]; records: RotationPlanJoinRecord[] }
 
 /**
- * What this account rooted, re-signed by the NEW identity into the rotation's stage (cr-trust-anchors-survive-rotation
- * decisions 6 and 12) — the plan is the server's word, so nothing is vouched for that the OUTGOING key did not sign:
+ * What this account rooted, re-signed by the NEW identity into the rotation's stage (ADR 0111
+ * decisions 20 and 21) — the plan is the server's word, so nothing is vouched for that the OUTGOING key did not sign:
  *  - an **open invite** is re-signed — its `invite-key` statement and its anchor grant's `grant` statement — only when
  *    both its current signatures verify under the outgoing identity; any other is declared (both `null`), and the
  *    publish ends it rather than leave it signed by a retired key;

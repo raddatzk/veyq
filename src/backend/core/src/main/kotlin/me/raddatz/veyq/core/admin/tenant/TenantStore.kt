@@ -85,7 +85,7 @@ data class OpenInviteRow(
 /** One open invite a tenant rotation re-grants: the new epoch's key wrapped to the invite key, signed by the rotator. */
 data class InviteRegrant(val inviteId: String, val grant: SignedGrant)
 
-/** An open member invite its signer's securing re-signs (cr-trust-anchors-survive-rotation decision 6): what its two
+/** An open member invite its signer's securing re-signs (ADR 0111 decision 20): what its two
  *  signatures cover, and the two signatures the signer's current key made. */
 data class SignedOpenInvite(
     val tenantId: String,
@@ -281,7 +281,7 @@ class TenantStore(
             grantSignature = key.grant.signature
             granterUserId = key.signerUserId
             granterIdentityPublicKey = key.signerIdentityPublicKey
-            // The owner's own grant is the invite's anchor (cr-trust-anchors-survive-rotation decision 2).
+            // The owner's own grant is the invite's anchor (ADR 0111 decision 19).
             anchorWrappedGrant = key.grant.wrappedGrant
             anchorEpoch = key.epoch
             anchorGrantSignature = key.grant.signature
@@ -317,18 +317,18 @@ class TenantStore(
     fun keyChainHeads(userIds: Collection<String>): Map<String, String> = keyChain.heads(userIds)
 
     /** [userId]'s whole key chain, genesis first (null for an unknown account) — the invite signer's, which the
-     *  invitee's preview serves (cr-trust-anchors-survive-rotation decision 3). */
+     *  invitee's preview serves (ADR 0111 decision 19). */
     fun keyChainOf(userId: String): List<KeyChainLink>? = keyChain.chainOf(userId)
 
     /** The tenant scope's epoch-chain links (ADR 0024) for every epoch in `(above, upTo]`, ascending — what peels a
-     *  carried grant's key down to an invite's anchor (decision 3). */
+     *  carried grant's key down to an invite's anchor (ADR 0111 decision 19). */
     fun epochLinks(tenantId: String, above: Int, upTo: Int): List<Pair<Int, String>> =
         ScopeEpochEntity.find("scopeId = ?1 and epoch > ?2 and epoch <= ?3 order by epoch", tenantId, above, upTo).list()
             .map { it.epoch to it.wrappedPrev }
 
     /**
      * The open MEMBER invites (ACTIVE, unexpired) [signerUserId] signed, in **every** tenant — what their securing
-     * re-signs (cr-trust-anchors-survive-rotation decision 6), the plan's list and the publish's completeness alike.
+     * re-signs (ADR 0111 decision 20), the plan's list and the publish's completeness alike.
      * [tenantIds], when given, narrows them to those tenants. An invite missing a part (none is written so) is left out.
      */
     fun openInvitesSignedBy(signerUserId: String, tenantIds: Collection<String>? = null): List<SignedOpenInvite> {
@@ -363,7 +363,7 @@ class TenantStore(
         ).setParameter("signer", signerUserId).setParameter("active", TenantInviteEntity.ACTIVE).resultList.toSet()
 
     /**
-     * Write an open invite's re-signature by its signer's securing (decision 6), in the publish's transaction under the
+     * Write an open invite's re-signature by its signer's securing (ADR 0111 decision 20), in the publish's transaction under the
      * tenant scope's lock: the `invite-key` signature and the anchor's `grant` signature, both by [identityPublicKey]
      * (the identity the publish installs), which becomes the invite's signer key — and, where the grant the invite
      * carries is its anchor (the same epoch, the signer its granter), that grant's signature and granter key too: the
@@ -380,7 +380,7 @@ class TenantStore(
         )
     }
 
-    /** End the open invites [inviteIds] a securing declared (decision 6, as corrected): revoked as a revoke ends one, its
+    /** End the open invites [inviteIds] a securing declared (ADR 0111 decision 20): revoked as a revoke ends one, its
      *  key, grant and anchor dropped in the same statement — so nothing keeps a retired key's signature. */
     fun endInvites(inviteIds: Collection<String>) {
         if (inviteIds.isEmpty()) return
@@ -428,8 +428,8 @@ class TenantStore(
      * again. An invite spent or revoked meanwhile is left as it is: it has no key left to wrap to, and the completeness
      * check already ran on the list the rotator was shown. A declared-pending invite keeps the grant it holds.
      *
-     * A rotator who is the invite's signer, under the key the invite names, writes its anchor too (cr-trust-anchors-
-     * survive-rotation decision 2): the owner's own grant is what the invitee checks every carried grant against.
+     * A rotator who is the invite's signer, under the key the invite names, writes its anchor too (ADR 0111
+     * decision 19): the owner's own grant is what the invitee checks every carried grant against.
      */
     @Transactional
     fun carryInvites(regrants: List<InviteRegrant>, newEpoch: Int, rotatorId: String) {
@@ -437,7 +437,7 @@ class TenantStore(
         val carried = "wrappedGrant = ?1, grantedEpoch = ?2, grantSignature = ?3, granterUserId = ?4, granterIdentityPublicKey = ?5"
         regrants.forEach { r ->
             // The invite's own signer, under the key the invite names, re-grants it with the owner's own grant: the anchor
-            // moves with it (cr-trust-anchors-survive-rotation decision 2). Any other rotator leaves the anchor where it was.
+            // moves with it (ADR 0111 decision 19). Any other rotator leaves the anchor where it was.
             val anchored = TenantInviteEntity.update(
                 "$carried, anchorWrappedGrant = ?1, anchorEpoch = ?2, anchorGrantSignature = ?3 " +
                     "where id = ?6 and status = ?7 and signerUserId = ?4 and signerIdentityPublicKey = ?5",

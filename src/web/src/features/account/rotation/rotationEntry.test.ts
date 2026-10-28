@@ -1,6 +1,6 @@
 // uc.account.rotate-keys (web) — the ceremony's entry facts (cr-secure-the-account): the spaces that cannot get their new
 // lock yet come from the PLAN (every tenant) and from the stage's own dry run on this device. No open invitation is read:
-// they survive the securing, re-signed (cr-trust-anchors-survive-rotation decision 8).
+// they survive the securing, re-signed (ADR 0111 decision 20).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./finishRotation', () => ({ readRotationPlan: vi.fn() }))
