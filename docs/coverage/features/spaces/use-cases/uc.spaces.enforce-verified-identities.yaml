@@ -43,6 +43,16 @@ acceptanceCriteria:
     text: When the subject's key chain moves to a new head, every verification of the old head stops counting - "Verified" drops and returns only through a new compare, while the profile shows "New identity, signed by their previous key". When the verifier secures their account, their verifications are re-signed by the new key; a statement signed by a retired key counts nowhere. A key the chain does not reach reads as an anomaly in the member lists and on the profile, verified or not, with no compare and no accept.
     coverage:
       web: { unit: [src/features/account/tenantTrust.test.ts, src/features/account/rotation/rotateKeys.test.ts, src/core/people/PersonSafetyNumber.test.ts, src/features/spaces/MemberTrustBadge.test.ts] }
+  - id: who-is-who-per-tenant
+    # Main flow 5 (inbox #562). Each negative in peopleOverview.test.ts has its control on the same predicate; the anomaly
+    # rule is held twice (the read builds an anomaly's entry without a count, the page shows "verified by" only beside
+    # "Verified"), and each layer's test is bitten with the other held off.
+    text: Settings > Shared space > Who's who lists every other member of the active tenant but pending proposals - anomalies first, then by name - each with one state, "Can't confirm this key" with its note, "Verified" or "Not verified", and "New" while this account first saw them under 14 days ago, "Verified by {names}." (the caller as "you"), "New identity, signed by their previous key, on {date}." while that rotation is under 14 days old, and the replacement note. A verification counts only for a member this device anchors, at their current head - an anomaly never reads as verified, a verification of a head the subject rotated away from does not count - and a member whose check failed for a request shows no state. Every row the caller has not verified opens the profile's compare. A pin store this device refuses is said with the way to start it over; a tenant it cannot open is said. Nothing new reaches the server - the reads are the member list's and the profile's, and a key chain is read for a rotation's date only past a genesis head.
+    coverage:
+      web: { unit: [src/features/account/peopleOverview.test.ts, src/features/spaces/PeopleOverviewPanel.test.ts, src/views/SettingsHubView.test.ts] }
+      backend:
+        integration:
+          - VerificationSliceTest.aMembersVerificationIsReadByEveryMemberOfTheTenantTheWriterIncluded
   - id: verifications-leave-with-the-member
     text: A member's removal from the tenant deletes every verification row there naming them, as verifier or as subject; an erased account and a deleted tenant leave no row.
     coverage:

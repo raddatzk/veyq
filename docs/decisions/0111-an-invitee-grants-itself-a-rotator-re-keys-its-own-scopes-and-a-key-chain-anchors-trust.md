@@ -347,8 +347,8 @@ Facts the design rests on, read in the code:
   when** — what a sealed pin store kept from it. A removed member, holding the tenant key the tenant does not rotate on
   removal, could read these records with the operator's help — writing a forged one does not help them, because each
   is signed by its verifier and counts only under an anchored member's current key.
-- **An overview "people I share with"** — per tenant: anchored, verified by whom, rotated — is cheap: it is the
-  member list plus these records.
+- **An overview "who's who"** — per tenant: anchored, verified by whom, rotated — is the member list plus these
+  records, with no read of its own (Settings → Who's who, `src/web/src/features/account/peopleOverview.ts`).
 - **The rotator's device carries the rotation's grants**: one epoch, one chain link and one wrap per member, for every
   scope the rotator is in, the tenant included. That is the `O(N)` re-grant ADR 0060 Decision 5 accepts on a compromise,
   moved from the completing owner to the rotator — and for the tenant it is the burst

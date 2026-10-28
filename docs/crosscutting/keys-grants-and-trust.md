@@ -405,7 +405,8 @@ so the gate never fires for one, and it never blocks anybody's write.
   deletes every row naming them.
 - **Display only, per tenant.** A member reads *New* (first pinned less than 14 days ago), *Not verified*, *Verified by
   …* (the members whose verification counts), *New identity, signed by their previous key, on {date}* after a rotation,
-  and the anomaly, *Can't confirm this key* (`tenantBadges`, `MemberTrustBadge.vue`). Nothing here blocks anyone; requiring
+  and the anomaly, *Can't confirm this key* (`tenantBadges`, `MemberTrustBadge.vue`); Settings → **Who's who** shows all
+  of it for every member at once (`loadPeopleOverview`, from the same reads). Nothing here blocks anyone; requiring
   *verified* is not built ([uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md)).
 
 ### The device's counter

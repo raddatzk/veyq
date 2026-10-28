@@ -10,6 +10,7 @@ vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn(), listMyTenan
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
+vi.mock('../features/spaces/PeopleOverviewPanel.vue', () => ({ default: { template: '<div class="stub-people" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
 vi.mock('../features/tenant/TenantMailSettingsPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 vi.mock('../features/tenant/TenantStoragePanel.vue', () => ({ default: { template: '<div class="stub-storage" />' } }))
@@ -183,6 +184,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     activeSpace.kind = ScopeKind.Tenant
     const asMember = navText(await mountHub())
     expect(asMember).toContain(t('terms.navTitle')) // terms are member-readable
+    expect(asMember).toContain(t('whoIsWho.navTitle')) // who's who is every member's: no role changes what it shows
     expect(asMember).not.toContain(t('mail.navTitle'))
     expect(asMember).not.toContain(t('storage.navTitle'))
 
@@ -245,6 +247,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     const nav = navText(await mountHub())
     expect(nav).toContain(t('settings.personal'))
     expect(nav).not.toContain(t('members.title'))
+    expect(nav).not.toContain(t('whoIsWho.navTitle'))
   })
 })
 
@@ -281,6 +284,7 @@ describe('SettingsHubView — split view index vs detail', () => {
   // entry finished (the V1 heavy stage at 999 members, 2026-10-23). It waits for the entry, then mounts with the tenant open.
   it.each([
     ['tenant-members', '.stub-members'],
+    ['tenant-people', '.stub-people'],
     ['terms', '.stub-terms'],
     ['mail', '.stub-mail'],
     ['storage', '.stub-storage'],
