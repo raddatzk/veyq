@@ -13,25 +13,41 @@ import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useUploadQueue, type UploadFile } from './uploadQueue'
 import { selectOptimisticUploads, optimisticTileId } from './optimisticUpload'
 
-/** The view-model of one optimistic tile — everything the grid + [OptimisticTile] need to render it. */
+/**
+ * The view-model of one optimistic tile — everything the grid + [OptimisticTile] need to render it.
+ *
+ * **What places a tile and what only the tile draws are kept apart** (inbox #640). Every field but `upload` is the
+ * grid's input or the preview, and changes only when a tile appears, gets its probe's answer or leaves. The stage and
+ * the progress change on every chunk, so they stay on the queue's own reactive item, `upload`, and are read where they
+ * are drawn: a chunk re-renders its one tile, never the gallery's tile list or the justified layout over every tile.
+ */
 export type OptimisticTileVM = {
   /** The id it carries in the justified-layout input (namespaced so it can't collide with a real media id). */
   layoutId: string
   fileId: string
-  /** The media id the upload settled to (cr-0102 delete-own targets it); undefined until `done`. */
-  mediaId?: string
   name: string
   url: string | null
   aspectRatio: number
-  status: UploadFile['status']
-  /** The code a `failed` upload stopped on (e.g. `quota_exceeded`); undefined otherwise. */
-  error?: string
-  progress: number
   isVideo: boolean
   /** The grid sort key — the same one `sealMetadata` will seal for this file (EXIF date, else the file's).
    *  Present from the first frame: the file-date half needs no decode, and the EXIF half refines it in the
    *  probe pass below, before any byte is uploaded. Undefined only for a file carrying neither. */
   capturedAt?: number
+  /** The queue's item, live: its `status`, its `progress`, the code a `failed` one stopped on (`error`, e.g.
+   *  `quota_exceeded`) and the media id it settled to (`mediaId`, which cr-0102's delete-own targets). Read only where
+   *  it is drawn or acted on — never into what lays the grid out. */
+  upload: Readonly<Pick<UploadFile, 'status' | 'progress' | 'error' | 'mediaId'>>
+}
+
+/** Whether two tile lists place and show the same tiles: the same items, each with the same layout fields and preview. */
+function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((x, i) => {
+      const y = b[i]
+      return x.upload === y.upload && x.url === y.url && x.aspectRatio === y.aspectRatio && x.capturedAt === y.capturedAt
+    })
+  )
 }
 
 /**
@@ -49,24 +65,25 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
   const previews = reactive(new Map<string, Preview>())
 
   const optimisticFiles = computed(() => selectOptimisticUploads(batches.value, key.value, listedMediaIds.value))
-  const optimisticTiles = computed<OptimisticTileVM[]>(() =>
-    optimisticFiles.value.map((f) => {
+  // The same tiles are the same value (inbox #640): `optimisticFiles` re-runs on each stage change, since it reads
+  // `status` to drop a cancelled or reconciled file, and a re-run that changed no tile hands back the list the grid
+  // already laid out — a computed whose value is unchanged triggers no reader.
+  const optimisticTiles = computed<OptimisticTileVM[]>((previous) => {
+    const next = optimisticFiles.value.map((f): OptimisticTileVM => {
       const p = previews.get(f.id)
       return {
         layoutId: optimisticTileId(f.id),
         fileId: f.id,
-        mediaId: f.mediaId,
         name: f.name,
         url: p?.url ?? null,
         aspectRatio: p?.aspectRatio ?? galleryDisplayAspectRatio(undefined, undefined),
-        status: f.status,
-        error: f.error,
-        progress: f.progress,
         isVideo: f.mediaType.startsWith('video/'),
         capturedAt: p?.capturedAt,
+        upload: f,
       }
-    }),
-  )
+    })
+    return previous && sameTiles(previous, next) ? previous : next
+  })
 
   // Own the preview lifecycle: mint a local preview + probe the aspect ratio (and, for a video, a poster) as each
   // file appears; revoke + prune when it drops (cancelled / reconciled). A donated url is skipped — the caller's

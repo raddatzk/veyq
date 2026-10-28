@@ -141,7 +141,7 @@ function enqueueBatch(picked: File[]) {
 const deletingIds = ref<Set<string>>(new Set())
 const deleteError = ref(false)
 async function onDeleteUpload(fileId: string) {
-  const mediaId = optimisticTiles.value.find((x) => x.fileId === fileId)?.mediaId
+  const mediaId = optimisticTiles.value.find((x) => x.fileId === fileId)?.upload.mediaId
   const s = session.value
   deleteError.value = false
   if (!mediaId || !s) {
