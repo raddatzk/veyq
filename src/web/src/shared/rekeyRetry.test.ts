@@ -124,4 +124,28 @@ describe('writeAtNodeEpoch', () => {
     expect(rereads).toEqual([false])
     expect((err as Error).message).toBe('slug_taken')
   })
+
+  it('a member\'s stale_epoch runs the pull before the re-read - the device may hold the scope behind the re-key (inbox #670)', async () => {
+    const steps: string[] = []
+    const pull = vi.fn(async () => { steps.push('pull'); return false }) // its answer does not matter: the re-read decides
+    await expect(writeAtNodeEpoch(async (reread) => {
+      steps.push(reread ? 'reread' : 'write')
+      if (!reread) throw refusal('stale_epoch')
+      return 'written'
+    }, { delaysMs: NO_WAIT, pull })).resolves.toBe('written')
+    expect(steps).toEqual(['write', 'pull', 'reread'])
+  })
+
+  it('the pull runs once per write: a stale_epoch after a pending that already pulled re-reads without pulling again', async () => {
+    const pull = vi.fn(async () => true)
+    const rereads: boolean[] = []
+    await writeAtNodeEpoch(async (reread) => {
+      rereads.push(reread)
+      if (rereads.length === 1) throw refusal('node_rekey_pending')
+      if (rereads.length === 2) throw refusal('stale_epoch')
+      return 'written'
+    }, { delaysMs: NO_WAIT, pull })
+    expect(pull).toHaveBeenCalledOnce()
+    expect(rereads).toEqual([false, true, true])
+  })
 })
