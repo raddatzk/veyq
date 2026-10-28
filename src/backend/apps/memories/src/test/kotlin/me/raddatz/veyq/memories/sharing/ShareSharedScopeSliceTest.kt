@@ -108,7 +108,7 @@ class ShareSharedScopeSliceTest {
         // the owner removes the member from the group — a removal-rotation, the one way a keyed member leaves
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON}}],""" +
+                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
                     """${TestGrants.openInvitesJson(group)},"removesUserId":"$member"}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
@@ -724,7 +724,7 @@ class ShareSharedScopeSliceTest {
             val outcome = whileUncommitted(
                 change = {
                     val decision = scopes.rotate(
-                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE))),
+                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
                         emptyList(), emptySet(), removes = member,
                     )
                     assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
@@ -827,8 +827,8 @@ class ShareSharedScopeSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":${TestGrants.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
-                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON}}],""" +
-                    TestGrants.openInvitesJson(group) +
+                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                    TestGrants.openInvitesJson(group) + "," + TestGrants.othersPendingJson(group, owner, member) +
                     (member?.let { ""","removesUserId":"$it"""" } ?: "") +
                     (revokeLinks?.let { ""","revokeLinks":$it""" } ?: "") + "}",
             )

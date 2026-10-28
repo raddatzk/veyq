@@ -102,67 +102,67 @@ acceptanceCriteria:
       backend:
         integration: [CredentialResetRaceSliceTest.aDeviceWrapDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aChangeOrRotationDecidesAgainstWhatTheCleanupItWaitedForWrote]
   - id: self-served-scopes-rekeyed
-    text: Every scope the holder is the sole member of (the personal scope) is advanced to a new epoch, chain-linked to its predecessor and granted to the NEW identity, so the old identity reads no post-rotation content there.
+    # Rewritten by cr-secure-the-account phase 2 to the built backend (ADR 0111 decisions 6-10); phase 6 aligns the use case.
+    text: >
+      The publish grants every scope the holder holds a grant on — sole or shared, in every tenant — its current epoch
+      to the NEW identity, signed by it, in the same transaction; the account then mints each scope's next epoch itself,
+      from any of its devices, through a pending re-key row that lets a non-owner commit exactly that one epoch — so the
+      old identity reads nothing added after it.
     coverage:
-      backend: { integration: [RotationSliceTest.aSoleMemberScopeIsLeftForTheCallerAndQueuesNothing] }
+      backend:
+        integration:
+          - RotationSliceTest.everyScopeIsRegrantedToTheNewIdentityInThePublish
+          - RotationSliceTest.aScopeInAnotherTenantIsRegrantedToo
+          - RotationSliceTest.aMemberWithAWaitingRowCommitsTheNextEpoch
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: shared-scopes-queued-not-self-served
-    # The negative owes a control, and here it is the same job: the co-member's claim SUCCEEDS on the very job
-    # the rotator is refused. Without it the assertion passes equally against a rotation nobody can complete.
+    # Rewritten by cr-secure-the-account phase 2 to the built backend (ADR 0111 decisions 6-10); phase 6 aligns the use case.
     text: >
-      Every shared scope gets a SCOPE_ROTATION job that ANOTHER OWNER completes; the rotator may never drive their own
-      re-grant — not by claiming it (on a job already queued when the rotation ran, or a leased one whose lease
-      lapses, from both of which they are excluded), and not by committing the rotation directly with a client of
-      their own: rotateScope refuses them while a live job carries their exclusion (403 rotation_excluded), and
-      afterwards while their own grant is behind (409 stale_epoch), until a human re-admits them. Without this an
-      attacker holding the old identity would mint the new epoch, wrap it to their own new identity and exclude the
-      legitimate holder.
+      Nobody else is waited on, and the old identity can mint nothing: a key-chain step is accepted only when signed by
+      the stored identity AND the stored Secret-Key proof key over the stored head (a device thief holds the identity,
+      never the Secret Key); a grant to a key that is not its recipient's current one is refused (409
+      recipient_key_not_current); and a non-owner commits only through its pending re-key row — never with a removal
+      (403 not_scope_owner), and not once someone else's commit met the row (409 stale_epoch).
     coverage:
       backend:
         unit:
-          - RotationPolicyTest.refusesACallerAnAccountRotationExcluded
           - RotationPolicyTest.refusesACallerWhoseGrantIsBehindTheScope
           - RotationPolicyTest.refusesACallerWhoHoldsNoGrant
+          - RotationPolicyTest.aRowSomeoneElsesCommitMovedPastIsStale
         integration:
-          - RotationSliceTest.theRotatorCannotClaimTheirOwnRotationButACoMemberCan
-          - RotationSliceTest.aScopeThatAlreadyHadALiveRotationStillExcludesTheRotator
-          - RotationSliceTest.anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth
-          - RotationSliceTest.theRotatorCannotCommitWhileTheirExclusionIsLive
-          - RotationSliceTest.afterTheCoveringRotationTheRotatorIsBehindUntilReAdmitted
+          - RotationSliceTest.aStepNotSignedByTheStoredIdentityIsRefused
+          - RotationSliceTest.aStepNotSignedByTheStoredProofKeyIsRefused
+          - RotationSliceTest.aStepWithAStalePredecessorIsRefused
+          - RotationSliceTest.theGateRefusesWithoutTheRowOrWithARemoval
+          - RotationSliceTest.afterSomeoneElsesCommitTheRowAnswersStaleEpoch
+          - RecipientKeySliceTest.aRotationGrantToTheRetiredIdentityIsRefused
   - id: queued-rotation-state-readable
+    # Rewritten by cr-secure-the-account phase 2 to the built backend (ADR 0111 decisions 6-10); phase 6 aligns the use case.
     text: >
-      §9/E3/E4: the rotator reads, at any time, the server's state of every rotation their rotation queued —
-      waiting, stalled (no owner may complete it), secured (their own grant is behind, or the covering job is done)
-      or failed (it dead-lettered, also when still LEASED with no attempts left) — derived from the newest job
-      carrying their exclusion, never synthesised once by the client; secured is never shown while the old identity
-      can hold the current epoch. From failed, and only from failed, they can queue it again, still excluded: that
-      re-arms rotateScope's refusal (409 rotation_not_failed otherwise, 404 rotation_not_found on a scope their
-      rotation never queued). The security panel reads it on every visit and offers the re-queue on failed only.
+      §9: the holder reads, at any time, the server's state of every scope its latest publish re-granted, derived from
+      its pending re-key rows — blocked (with the reason) while the tenant is suspended or the scope is being deleted,
+      waiting while the scope's epoch is still the one it had, rekeying while a node lags, secured otherwise. No job
+      backs it, so there is no stalled or failed.
     coverage:
       backend:
-        # The rule order is the safety property, so the pure derivation is in the PIT scope (inbox #279).
         unit:
-          - CompromiseRotationPolicyTest.aGrantBehindTheScopeIsSecuredWhateverTheJobSays
-          - CompromiseRotationPolicyTest.aGrantAtTheCurrentEpochIsNeverSecuredByTheGrantRule
-          - CompromiseRotationPolicyTest.aLeasedJobIsDeadOnlyWhenEveryConditionHolds
-          - CompromiseRotationPolicyTest.anOwnerSeesFailedOverStalledAndNothingForStatesThatNeedNobody
-        integration: [RotationSliceTest.theRotatorReadsEachQueuedRotationsStateFromTheServer, RotationSliceTest.fromFailedTheRotatorRequeuesAndTheExclusionIsBack]
+          - RotationScopeStatesTest.theEpochItHadAtTheRotationIsWaiting
+          - RotationScopeStatesTest.aBlockedScopeIsBlockedWhateverElseHolds
+          - RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags
+        integration: [RotationSliceTest.theStatesFollowTheRows, RotationSliceTest.afterSomeoneElsesCommitTheRowAnswersStaleEpoch]
       web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: outside-until-readmitted
     text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state — the self-served scopes by the client's own outcome, the queued ones by the server's re-readable state (queued-rotation-state-readable).
     coverage:
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: accept-clears-the-decline
-    # The seam ADR 0028 (2) promised and nothing implemented. Its own trap is that the two mechanisms share a
-    # table, so the backend test asserts BOTH halves in one run: the delivery unblocks, the rotation exclusion
-    # does not — which holds by the shape of the query (a scope-rotation job has no delivery target for a
-    # membership id to resolve to) rather than by a special case in it.
-    text: Accepting a changed key clears the declining worker's per-job exclusion, so ADR 0028 (2)'s "the wrap then proceeds" actually holds — and clears only the caller's own declines, only on grant-delivery jobs, only for that contact, so it can never free the exclusion that keeps a rotator off their own rotation.
+    # Rewritten by cr-secure-the-account phase 2 to the built backend (ADR 0111 decisions 6-10); phase 6 aligns the use case.
+    text: >
+      The publish clears every decline of a grant-delivery job whose target is the account, whoever declined it, so a
+      worker that could not anchor the old key tries the new one the key chain now reaches; a decline about anyone else
+      stays.
     coverage:
-      backend:
-        integration:
-          - TasksSliceTest.acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain
-          - TasksSliceTest.clearingDeclinesNeverFreesARotationExclusion
+      backend: { integration: [RotationSliceTest.thePublishClearsDeclinesTargetingTheRotator] }
       web: { unit: [src/features/account/identityPins.test.ts] }
   - id: grants-outlive-their-granters-rotation
     # Inbox #233. The reads served the granter's CURRENT key, so after this account rotated every grant it had signed
@@ -211,12 +211,14 @@ acceptanceCriteria:
       backend: { integration: [RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone] }
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: secured-only-once-rekeyed
+    # Rewritten by cr-secure-the-account phase 2 to the built backend (ADR 0111 decisions 6-10); phase 6 aligns the use case.
     text: >
-      The rotator's state of a queued rotation reads rekeying, never secured, while a node of the scope still carries a
-      key from before — by the grant rule and by the done rule alike — and an owner's row needs nobody for it, since a
-      worker resumes it.
+      A re-granted scope reads rekeying, never secured, while a node of it still carries a key from before its new
+      epoch.
     coverage:
-      backend: { unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying] }
+      backend:
+        unit: [RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags]
+        integration: [RotationSliceTest.theStatesFollowTheRows]
 # Backend built by cr-account-key-rotation-after-compromise: POST /api/account/rotation (RotationResource →
 # RotationHandler → RotationStore, one transaction), the member-count split on MembershipStore, the
 # rotator-excluding origination on TasksStore, and POST /api/tasks/declines/clear. Web: the Security section of

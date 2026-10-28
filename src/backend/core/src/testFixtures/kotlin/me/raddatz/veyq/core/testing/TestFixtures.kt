@@ -38,8 +38,11 @@ object TestFixtures {
      * seeded with it (`TestGrants.memberInviteJson`).
      */
     val IDENTITY_PUBLIC_KEY: String = Base64.getEncoder().encodeToString(
-        lp(ByteArray(1216) { 7 }) + lp(java.util.HexFormat.of().parseHex("51bfae7fa92c515512cd3ad442760e41612e59dfec3913f670b721c04255b068")),
+        lp(ByteArray(1216) { 7 }) + lp(java.util.HexFormat.of().parseHex(IDENTITY_SIGN_PUBLIC_HEX)),
     )
+
+    /** The Ed25519 public half of [IDENTITY_SIGN_SEED], hex — the `grant_signature` vector's `sign_public`. */
+    const val IDENTITY_SIGN_PUBLIC_HEX = "51bfae7fa92c515512cd3ad442760e41612e59dfec3913f670b721c04255b068"
 
     /** The Ed25519 private seed behind [IDENTITY_PUBLIC_KEY]'s signing half. */
     val IDENTITY_SIGN_SEED: ByteArray = ByteArray(32) { 0x7e }

@@ -67,7 +67,7 @@ class TasksSliceTest {
         // target membership (the first wrap to a foreign identity) and marks the job done.
         val wrap = "d3JhcC10by1mb3JlaWdu" // "wrap-to-foreign"
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$wrap","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"$wrap","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
 
@@ -106,7 +106,7 @@ class TasksSliceTest {
             .then().statusCode(400).body("code", equalTo("invalid_request"))
         assertEquals(OLD_GRANT, grantOf(targetMembership), "a refused completion writes nothing")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcA==","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcA==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
         val (granter, signature) = QuarkusTransaction.requiringNew().call {
@@ -142,7 +142,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(1, grantedEpochOf(targetMembership), "grant-delivery must record the delivered (current) epoch")
@@ -163,7 +163,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
         assertEquals(OLD_GRANT, grantOf(targetMembership), "a grant sealed at a stale epoch is never written")
@@ -172,7 +172,7 @@ class TasksSliceTest {
 
         assertEquals(jobId, claimGrantDelivery(worker), "the same job is claimable again")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
         assertEquals("d3JhcC1FMg==", grantOf(targetMembership), "the current-epoch grant is written")
         assertEquals(2, grantedEpochOf(targetMembership), "at exactly the epoch the worker stated")
@@ -192,7 +192,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker) // reconcile-on-claim originates a delivery for the stale member
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(stale)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(2, grantedEpochOf(staleMembership), "the stale member is re-granted at the current epoch")
@@ -261,7 +261,7 @@ class TasksSliceTest {
 
     @Test
     fun declineReleasesJobToOtherWorkersButNeverBackToTheDecliner() {
-        // cr-0098 / ADR 0028: a worker that refuses a job (a conflicting identity pin) releases it back to
+        // cr-0098 / ADR 0028: a worker that refuses a job (a key it cannot anchor, ADR 0111 decision 9) releases it back to
         // PENDING — still claimable by OTHER workers — but is itself never re-offered it (per KEY-HOLDER, not a
         // global veto; the exclusion is keyed on the account, so the decliner's other devices stay out too).
         // The declined attempt is rolled back, so a legitimate decline never dead-letters the job.
@@ -276,7 +276,7 @@ class TasksSliceTest {
         claim(workerA, tag).then().statusCode(200).body("jobId", equalTo(jobId)).body("attempts", equalTo(1))
         // A declines → back to pending, attempt rolled back to 0 (not a failed attempt).
         given().header("Authorization", bearer(workerA)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
+            .body("""{"reason":"identity_unanchored"}""")
             .`when`().post("/api/tasks/$jobId/decline")
             .then().statusCode(200).body("status", equalTo("pending")).body("attempts", equalTo(0))
 
@@ -284,60 +284,6 @@ class TasksSliceTest {
         claim(workerA, tag).then().statusCode(204)
         // B has no conflicting decline → the job is still delivered to B (attempts freshly 1).
         claim(workerB, tag).then().statusCode(200).body("jobId", equalTo(jobId)).body("attempts", equalTo(1))
-    }
-
-    @Test
-    fun acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain() {
-        // ADR 0028 (2) promised that on accept "the wrap then proceeds", and nothing made it true: no code
-        // deleted a decline row, so the accept authorised a wrap that never happened (ADR 0060 Decision 7).
-        // This is the failure mode that strands a rotated account — its re-admission is exactly a delivery to a
-        // contact somebody already declined.
-        val scopeId = seedTenant()
-        val worker = seedUser()
-        seedGrantedMembership(worker, scopeId, "worker-grant")
-        val target = seedUser()
-        seedBehindMembership(target, scopeId)
-
-        val jobId = claimGrantDelivery(worker)
-        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$jobId/decline").then().statusCode(200)
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
-
-        // The control the positive needs: clearing for a DIFFERENT contact must change nothing. Without it, a
-        // clear that simply dropped every row of the caller's would pass the happy path identically.
-        clearDeclines(worker, seedUser()).then().statusCode(200).body("cleared", equalTo(0))
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
-
-        clearDeclines(worker, target).then().statusCode(200).body("cleared", equalTo(1))
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(jobId))
-    }
-
-    @Test
-    fun clearingDeclinesNeverFreesARotationExclusion() {
-        // The two mechanisms share a table, so the accept path could trivially have unblocked the rotation
-        // exclusion that keeps a rotator off their own re-grant (ADR 0060 Decision 4) — the takeover's finishing
-        // move, handed over by a cleanup. It cannot, because a scope-rotation job has no delivery target for a
-        // membership id to resolve to; this asserts that in the one run where both rows belong to one worker.
-        val scopeId = seedTenant()
-        val rotator = seedUser()
-        seedGrantedMembership(rotator, scopeId, "rotator-grant")
-        val target = seedUser()
-        seedBehindMembership(target, scopeId)
-
-        val rotationJob = seedJob(scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.PENDING, attempts = 0, resourceRef = scopeId)
-        seedDecline(rotationJob, rotator, "rotation_originator")
-
-        val deliveryJob = claimGrantDelivery(rotator)
-        given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$deliveryJob/decline").then().statusCode(200)
-
-        clearDeclines(rotator, target).then().statusCode(200).body("cleared", equalTo(1))
-
-        // The delivery is unblocked; the rotation exclusion is not.
-        claim(rotator, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(deliveryJob))
-        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
     }
 
     @Test
@@ -514,7 +460,7 @@ class TasksSliceTest {
         // The attacker completes it (they hold the lease and a grant in A) — the job is marked done, but the
         // cross-scope write is refused: the victim's membership in B keeps the grant it held.
         given().header("Authorization", bearer(attacker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0,${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(OLD_GRANT, grantOf(victimMembership), "a cross-scope resourceRef must not receive a grant")
@@ -548,18 +494,6 @@ class TasksSliceTest {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["$tag"]}""")
             .`when`().post("/api/tasks/claim")
-
-    private fun clearDeclines(userId: String, targetUserId: String) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"targetUserId":"$targetUserId"}""")
-            .`when`().post("/api/tasks/declines/clear")
-
-    private fun seedDecline(jobId: String, workerId: String, reason: String) = QuarkusTransaction.requiringNew().run {
-        JobDeclineEntity().apply {
-            id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId
-            this.reason = reason
-        }.persist()
-    }
 
     private fun claimGrantDelivery(userId: String): String =
         claim(userId, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).extract().path("jobId")

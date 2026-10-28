@@ -149,7 +149,7 @@ class GroupAddGrantSliceTest {
         val groupId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
         return World(tenantId, owner, groupId)
     }
@@ -162,7 +162,7 @@ class GroupAddGrantSliceTest {
     /** The owner rotates the group to `E_1`, re-granting only itself. */
     private fun rotate(g: World) =
         given().header("Authorization", bearer(g.owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"${g.owner}","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON}}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"${g.owner}","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(g.owner)}"}]}""")
             .`when`().post("/api/scopes/${g.groupId}/epochs")
 
     private fun membership(userId: String, scopeId: String): MembershipEntity? = QuarkusTransaction.requiringNew().call {

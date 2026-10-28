@@ -64,9 +64,10 @@ class ScopeCreateRaceSliceTest {
         raceRounds { round ->
             val userId = member(domain)
             val grant = SignedGrant(personalGrant, TestGrants.SIGNATURE)
+            val digest = TestGrants.digestOf(userId)
             val second = whileUncommitted(
                 change = { assertEquals(true, store.createPersonal(TestIds.uuid(), userId, tenantId, grant), "round $round") },
-                overlapping = { handler.createPersonal(userId, tenantId, TestIds.uuid(), grant) },
+                overlapping = { handler.createPersonal(userId, tenantId, TestIds.uuid(), grant, digest) },
             )
             assertEquals(CreatePersonalOutcome.AlreadyExists, second, "round $round")
             assertEquals(1L, personalScopesOf(userId, tenantId), "round $round: one personal scope per member and tenant")
@@ -118,10 +119,10 @@ class ScopeCreateRaceSliceTest {
     }
 
     private fun personalBody(scopeId: String) =
-        """{"scopeId":"$scopeId","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON}}"""
+        """{"scopeId":"$scopeId","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}"""
 
     private fun groupBody(scopeId: String) =
-        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}"""
+        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}"""
 
     private fun createPersonal(userId: String, domain: String, body: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)

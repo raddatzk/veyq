@@ -379,7 +379,7 @@ class InvitePlaceholderSliceTest {
         digestOf: (TestInviteKey) -> String = { TestGrants.digest(it.bundle) },
     ) = given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
         .body(
-            """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON}}],""" +
+            """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
                 """"inviteGrants":[${inviteGrants.joinToString(",") {
                     """{"inviteId":"${it.inviteId}","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${digestOf(it)}"}"""
                 }}],""" +

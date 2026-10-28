@@ -41,9 +41,10 @@ class VeyqUser : PanacheEntityBase {
     lateinit var authPublicKey: String
 
     /** The account's Secret-Key proof key (ADR 0060 Decision 2): an Ed25519 PUBLIC key the client derives from the
-     *  Secret Key alone, registered at birth and never changed by rotation, change-password or recovery — none of
-     *  them rotates the Secret Key. Each of those flows must carry a signature under it (`SecretKeyProof`). Null
-     *  only for an account born before it existed, and such an account can do none of the three. */
+     *  Secret Key alone, registered at birth and replaced only when the account is secured (cr-secure-the-account
+     *  decision 7: the publish registers the new one under a signature of this one, and the key chain keeps both).
+     *  Change-password, recovery and change-email leave it as it is. Each of those flows must carry a signature under
+     *  it (`SecretKeyProof`). Null only for an account born before it existed, and such an account can do none of them. */
     @Column(name = "secret_key_proof_public_key")
     var secretKeyProofPublicKey: String? = null
 

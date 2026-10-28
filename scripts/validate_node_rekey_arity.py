@@ -68,6 +68,8 @@ EXCLUSIONS = {
     "TenantProfileEntity.sealed_name": "a member's real name under K_tenant (a scope epoch key)",
     "TenantProfileEntity.sealed_join_record": "a member's join record under K_tenant (a scope epoch key), ADR 0111",
     "TenantInviteEntity.wrapped_grant": "a tenant epoch key sealed to an open invite's key, written by the rotation (ADR 0111)",
+    "RotationStageGrantEntity.wrapped_grant": "a scope's epoch key sealed to the identity a securing of the account will "
+                                              "publish, staged until its publish applies it (cr-secure-the-account)",
     "TenantProfileEntity.sealed_avatar": "a member's picture under K_tenant",
     "JobEntity.sealed_body": "a task's body sealed to its worker",
     "JobEntity.sealed_result": "a task's result sealed to its originator",

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -74,6 +75,9 @@ data class OpenInviteRow(
     val signerUserId: String,
     val signerIdentityPublicKey: String,
     val expiresAt: Instant,
+    /** The head of the signer's key chain now (ADR 0111 decision 7) — a rotator re-grants the invite only if it reaches
+     *  the signer key from the head it pinned. */
+    val signerKeyChainHead: String,
 )
 
 /** One open invite a tenant rotation re-grants: the new epoch's key wrapped to the invite key, signed by the rotator. */
@@ -114,6 +118,7 @@ data class MailSettingsRow(
  */
 @ApplicationScoped
 class TenantStore(
+    private val keyChain: KeyChainStore,
     private val membership: MembershipStore,
     private val hosts: TenantHostResolver,
     private val ledger: ErasureLedger,
@@ -170,6 +175,7 @@ class TenantStore(
      */
     @Transactional
     fun activate(tenantId: String, userId: String, grant: SignedGrant) {
+        // The grant's recipient key was checked by the accept, against the key this reads (ADR 0111 decision 10).
         // The TENANT root scope is born with the owner membership; keyed id == tenantId (cr-0026).
         ScopeEntity().apply {
             id = tenantId
@@ -267,17 +273,26 @@ class TenantStore(
 
     /** The tenant's open MEMBER invites with their keys — what every member reads to carry them through a rotation
      *  (`listOpenInvites`). An open invite always holds its key; one that does not is skipped. */
-    fun openInviteKeys(tenantId: String): List<OpenInviteRow> =
-        openMemberInvites(tenantId).mapNotNull {
+    fun openInviteKeys(tenantId: String): List<OpenInviteRow> {
+        val invites = openMemberInvites(tenantId)
+        val heads = keyChain.heads(invites.mapNotNull { it.signerUserId })
+        return invites.mapNotNull {
+            val signer = it.signerUserId ?: return@mapNotNull null
             OpenInviteRow(
                 it.id,
                 it.invitePublicKey ?: return@mapNotNull null,
                 it.inviteKeySignature ?: return@mapNotNull null,
-                it.signerUserId ?: return@mapNotNull null,
+                signer,
                 it.signerIdentityPublicKey ?: return@mapNotNull null,
                 it.expiresAt,
+                heads[signer] ?: return@mapNotNull null,
             )
         }
+    }
+
+    /** The key-chain heads of [userIds] that exist (ADR 0111 decision 7) — what the invitee's preview serves beside the
+     *  signer and the granter of its invite. */
+    fun keyChainHeads(userIds: Collection<String>): Map<String, String> = keyChain.heads(userIds)
 
     /** The tenant's open MEMBER invites (ACTIVE + unexpired) — the one predicate both lists and a tenant rotation's
      *  completeness check use, so a rotator is required to carry exactly the invites it was shown (ADR 0111 decision

@@ -6,7 +6,7 @@ public bundle as it was when the grant was written (`granterIdentityPublicKey`);
 
   - *pairing* — every function of a backend `*Store.kt` that assigns `granterUserId` (an entity property or a JPQL
     `set` clause) assigns `granterIdentityPublicKey` in the same function body;
-  - *arity* — the writers are exactly the nine named in `EXPECTED_WRITERS`, each with one site. A tenth writer turns
+  - *arity* — the writers are exactly the ten named in `EXPECTED_WRITERS`, each with one site. An eleventh writer turns
     this red even when it records the copy, because it also owes a leg in `GrantWriterSnapshotSliceTest`, the test
     that proves each writer's copy is the granter's key at the moment of the write. Name it here when the leg exists.
 
@@ -55,6 +55,7 @@ EXPECTED_WRITERS = {
     "TenantStore.joinAsMember": 1,  # a member invite's accept, sign-in and register alike (the newcomer's self-grant)
     "TenantStore.carryInvites": 1,  # a tenant rotation's re-grant of each open invite it carries (the rotator)
     "ScopesStore.addMember": 1,  # a group add, direct or a consent proposal (the adding owner, ADR 0111 decision 4)
+    "RotationStore.applySelfGrant": 1,  # a secured account's staged self-grant, applied by its publish (cr-secure-the-account)
 }
 
 

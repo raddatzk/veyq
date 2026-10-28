@@ -134,7 +134,7 @@ class RemovalRaceSliceTest {
     /** The real removal-rotation of [member] out of [group], to epoch 1 — the one way a keyed member leaves. */
     private fun removeFromGroup(owner: String, group: String, member: String, round: Int) {
         val decision = scopes.rotate(
-            group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, GRANT)), emptyList(), emptySet(), removes = member,
+            group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, GRANT, TestGrants.digestOf(owner))), emptyList(), emptySet(), removes = member,
         )
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
     }

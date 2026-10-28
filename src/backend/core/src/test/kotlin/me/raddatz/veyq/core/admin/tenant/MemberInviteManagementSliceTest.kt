@@ -336,7 +336,7 @@ class MemberInviteManagementSliceTest {
     }
 
     private fun rotateTenant(tenantId: String, owner: String, inviteGrants: List<InviteGrant> = emptyList()) = scopes.rotate(
-        tenantId, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE))),
+        tenantId, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
         inviteGrants, emptySet(),
     )
 

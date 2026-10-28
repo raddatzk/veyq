@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test
 class RotationPolicyTest {
 
     private fun member(id: String, owner: Boolean = false) = RotationMember(id, if (owner) "OWNER" else "MEMBER")
-    private fun grant(id: String) = RotationGrant(id, SignedGrant("g-$id", "s-$id"))
+    private fun grant(id: String) = RotationGrant(id, SignedGrant("g-$id", "s-$id"), "d-$id")
     private fun inviteGrant(id: String) = InviteGrant(id, SignedGrant("g-$id", "s-$id"), "d-$id")
 
     private fun plan(
@@ -23,13 +23,16 @@ class RotationPolicyTest {
         statedEpoch: Int = currentEpoch + 1,
         members: List<RotationMember> = listOf(member("a")),
         open: Set<String> = emptySet(),
-        grants: List<RotationGrant> = emptyList(),
+        removes: String? = null,
+        grants: List<RotationGrant> = members.filter { it.userId != removes }.map { grant(it.userId) },
         inviteGrants: List<InviteGrant> = emptyList(),
         pending: Set<String> = emptySet(),
-        removes: String? = null,
-        callerExcluded: Boolean = false,
         callerGrantedEpoch: Int? = currentEpoch,
-    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, inviteGrants, pending, removes, callerExcluded, callerGrantedEpoch)
+        pendingUsers: Set<String> = emptySet(),
+        callerRegrantEpoch: Int? = null,
+    ) = RotationPolicy.plan(
+        currentEpoch, statedEpoch, members, open, grants, inviteGrants, pending, pendingUsers, removes, callerGrantedEpoch, callerRegrantEpoch,
+    )
 
     private fun committed(d: RotationDecision): RotationPlan = (d as RotationDecision.Commit).plan
 
@@ -182,17 +185,49 @@ class RotationPolicyTest {
         assertSame(RotationDecision.Stale, plan(currentEpoch = 3, statedEpoch = 3, members = group, grants = listOf(grant("bob")), removes = "bob"))
     }
 
-    // --- the caller: excluded, or behind (ADR 0060 Decision 4, #206) ------------------------------------------
+    // --- no member is left behind silently (ADR 0111 decision 9) ------------------------------------------
 
     @Test
-    fun refusesACallerAnAccountRotationExcluded() {
-        assertSame(RotationDecision.Excluded, plan(currentEpoch = 2, grants = listOf(grant("a")), callerExcluded = true))
+    fun refusesARotationThatLeavesAMemberOutSilently() {
+        // The bite: two members, one granted, the other neither granted nor declared — a member nobody will ever deliver to.
+        val d = plan(members = listOf(member("owner"), member("bob")), grants = listOf(grant("owner")))
+        assertSame(RotationDecision.Incomplete, d)
     }
 
     @Test
-    fun anExcludedCallerIsExcludedWhateverEpochTheyState() {
-        // The exclusion is about who may rotate, not about which epoch: it answers before staleness.
-        assertSame(RotationDecision.Excluded, plan(currentEpoch = 2, statedEpoch = 2, callerExcluded = true))
+    fun aMemberDeclaredPendingCountsAsCarried() {
+        // The control on the same predicate: declared, it commits and writes only the grant it has.
+        val p = committed(plan(members = listOf(member("owner"), member("bob")), grants = listOf(grant("owner")), pendingUsers = setOf("bob")))
+        assertEquals(listOf(grant("owner")), p.grants)
+    }
+
+    @Test
+    fun aPendingIdThatNamesNoMemberDoesNotStandInForOne() {
+        val d = plan(members = listOf(member("owner"), member("bob")), grants = listOf(grant("owner")), pendingUsers = setOf("ghost"))
+        assertSame(RotationDecision.Incomplete, d)
+    }
+
+    @Test
+    fun theRemovedMemberNeedsNeitherAGrantNorADeclaration() {
+        assertEquals("bob", committed(plan(members = group, grants = listOf(grant("owner")), removes = "bob")).removes)
+    }
+
+    @Test
+    fun staleIsDecidedBeforeMemberCompleteness() {
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 5, statedEpoch = 5, members = listOf(member("a"), member("b")), grants = listOf(grant("a"))))
+    }
+
+    // --- the caller: behind, or let in by a pending re-key row (#206, ADR 0111 decision 8) -------------------
+
+    @Test
+    fun aCallerLetInByAWaitingRowCommitsTheNextEpoch() {
+        assertEquals(3, committed(plan(currentEpoch = 2, callerRegrantEpoch = 2)).newEpoch)
+    }
+
+    @Test
+    fun aRowSomeoneElsesCommitMovedPastIsStale() {
+        // The row named epoch 2; the scope is at 3 now, so the row's purpose is met — whatever epoch the caller states.
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 3, statedEpoch = 4, callerRegrantEpoch = 2))
     }
 
     @Test

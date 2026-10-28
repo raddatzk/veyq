@@ -57,7 +57,7 @@ acceptanceCriteria:
     text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any member holding it, every member's scope row reading the re-key unfinished; a queued rotation completes only once no node lags, and reads secured only then.
     coverage:
       backend:
-        unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying]
+        unit: [RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags]
         integration:
           - RekeyCoreSliceTest.aCommitMissingAStagedPartWritesNothing
           - RekeyCoreSliceTest.aStagedChildThatMovedSinceIsStale

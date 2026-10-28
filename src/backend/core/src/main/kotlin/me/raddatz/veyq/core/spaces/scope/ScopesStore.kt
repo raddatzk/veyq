@@ -1,9 +1,10 @@
 package me.raddatz.veyq.core.spaces.scope
 
+import me.raddatz.veyq.core.account.rotation.RotationRegrantEntity
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.sharing.SharingStore
-import me.raddatz.veyq.core.tasks.CompromiseRotationPolicy
 import me.raddatz.veyq.core.tasks.CompromiseRotationState
 import me.raddatz.veyq.core.tasks.TasksStore
 import me.raddatz.veyq.core.scope.MembershipEraser
@@ -96,6 +97,10 @@ data class ScopeMemberRow(
     val pendingConsent: Boolean = false,
     /** The member's join record in a TENANT scope (ADR 0111 decisions 3 and 12), sealed; null elsewhere. */
     val sealedJoinRecord: String? = null,
+    /** The head of the member's key chain (ADR 0111 decision 7). */
+    val keyChainHead: String,
+    /** The member's grant is behind the scope's current epoch: a rotation declared them pending (ADR 0111 decision 9). */
+    val pending: Boolean,
 )
 
 /** The result of resolving a per-tenant username to a group-add candidate (cr-0094) — records nothing. */
@@ -104,6 +109,8 @@ data class ResolvedCandidateRow(
     val username: String,
     val identityPublicKey: String,
     val requiresConsent: Boolean,
+    /** The head of the candidate's key chain (ADR 0111 decision 7). */
+    val keyChainHead: String,
 )
 
 /** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the wrapped
@@ -128,6 +135,7 @@ class ScopesStore(
     private val tenants: TenantStore,
     private val shares: SharingStore,
     private val tasks: TasksStore,
+    private val keyChain: KeyChainStore,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge). What goes with one member's access
     // to one scope, owned by the package whose rows they are (today item favorites, ADR 0068).
     @All private val membershipErasers: MutableList<MembershipEraser>,
@@ -260,15 +268,13 @@ class ScopesStore(
     }
 
     /**
-     * For the scopes among [memberships] the caller **owns**, what a compromise rotation queued there needs from an
-     * owner (uc.spaces.complete-queued-rotation E2/E8): `FAILED` if any rotator's failed, else `STALLED`, else nothing.
-     * A plain member's row never carries it — only owners can promote a co-owner or re-queue. One query over the
-     * caller's owned scopes finds the exclusions; the state is derived only for those.
+     * For the scopes among [memberships] the caller **owns**, what a rotation queued there (a removal cascade's, ADR 0025)
+     * needs from an owner (uc.spaces.complete-queued-rotation E2/E8): `FAILED` or `STALLED`, else nothing. A plain
+     * member's row never carries it — only owners can promote a co-owner or re-queue.
      */
     private fun stuckCompromiseRotations(memberships: List<MembershipEntity>): Map<String, CompromiseRotationState> {
         val owned = memberships.filter { it.role == MembershipEntity.OWNER && it.wrappedGrant != null }.map { it.scopeId }
-        return tasks.compromiseRotations(owned).groupBy({ it.scopeId }, { it.state })
-            .mapNotNull { (scopeId, states) -> CompromiseRotationPolicy.ownerView(states)?.let { scopeId to it } }.toMap()
+        return tasks.queuedRotations(owned)
     }
 
     /** The granter of a membership's grant — id, signature, and the identity public key the grant row recorded when
@@ -405,7 +411,8 @@ class ScopesStore(
     fun rotate(
         scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
         grants: List<RotationGrant>, inviteGrants: List<InviteGrant> = emptyList(), pendingInviteIds: Set<String> = emptySet(),
-        removes: String? = null, revokeLinks: Boolean = false,
+        removes: String? = null, revokeLinks: Boolean = false, pendingUserIds: Set<String> = emptySet(),
+        regranted: Boolean = false,
     ): RotationDecision {
         val scope = ScopeEntity.lockRow(scopeId)!!
         val all = MembershipEntity.find("scopeId", scope.id).list()
@@ -417,11 +424,19 @@ class ScopesStore(
         val caller = all.firstOrNull { it.userId == granterId }
         val decision = RotationPolicy.plan(
             scope.currentEpoch, epoch, all.map { RotationMember(it.userId, it.role) },
-            invites.keys, grants, inviteGrants, pendingInviteIds, removes,
-            callerExcluded = tasks.isRotationExcluded(scopeId, granterId),
+            invites.keys, grants, inviteGrants, pendingInviteIds, pendingUserIds, removes,
             callerGrantedEpoch = caller?.wrappedGrant?.let { caller.grantedEpoch },
+            // A non-owner is here only on a pending re-key row (the handler's gate); the row's epoch is read under this
+            // lock, so a commit by someone else in between answers stale rather than letting a second epoch through.
+            callerRegrantEpoch = if (regranted) regrantEpoch(granterId, scopeId) ?: -1 else null,
         )
         val plan = (decision as? RotationDecision.Commit)?.plan ?: return decision
+        // Every re-grant names the key it is wrapped to (ADR 0111 decision 10): the member's current identity, read under
+        // this lock — the one an account's publish takes for every scope it holds — or nothing is stored. A grant to an
+        // identity its account retired is exactly what a stale directory read would wrap to.
+        if (plan.grants.any { g -> !InviteAcceptProof.digestMatches(identityKeyOf(g.userId), g.recipientIdentityDigest) }) {
+            return RotationDecision.RecipientKeyNotCurrent
+        }
         // A removal-rotation deletes the membership in this same transaction (ADR 0024 Decision 4): if anything below
         // fails, the member is still in place — a removal never ends without its rotation. An entity delete, not a
         // bulk one, so the loops below never re-persist the row it took. The transaction starts HERE, not in the
@@ -459,6 +474,10 @@ class ScopesStore(
         tasks.markRotated(scopeId, granterId, plan.newEpoch)
         return decision
     }
+
+    /** The epoch [userId]'s pending re-key row on [scopeId] names (ADR 0111 decision 8), or null when it has none. */
+    fun regrantEpoch(userId: String, scopeId: String): Int? =
+        RotationRegrantEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult()?.epochAtRotation
 
     /** Take the scope row's lock for the caller's transaction — what a tenant removal's cut holds before it deletes,
      *  so its rotation origination serialises with every other one of the scope (lock order scope → membership →
@@ -620,12 +639,14 @@ class ScopesStore(
     /** The directory row for one member of a scope (the add response). `email` is included; the handler nulls it. */
     fun scopeMemberRow(scopeId: String, userId: String): ScopeMemberRow? {
         val tenantId = ScopeEntity.findById(scopeId)?.tenantId ?: return null
+        val scope = ScopeEntity.findById(scopeId) ?: return null
         val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult() ?: return null
         val u = VeyqUser.findById(userId) ?: return null
         val p = profiles.byUserInTenant(tenantId)[userId]
         return ScopeMemberRow(
             userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role, u.identityPublicKey,
             m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId },
+            keyChainHead = keyChain.headOf(userId) ?: return null, pending = m.grantedEpoch < scope.currentEpoch,
         )
     }
 
@@ -638,18 +659,25 @@ class ScopesStore(
      *  the sealed join record. The email is included on every row here; the handler nulls it for non-owner callers
      *  (ADR 0023). */
     fun listMembers(scopeId: String): List<ScopeMemberRow> {
-        val tenantId = ScopeEntity.findById(scopeId)?.tenantId ?: return emptyList()
+        val scope = ScopeEntity.findById(scopeId) ?: return emptyList()
+        val tenantId = scope.tenantId
         val profileByUser = profiles.byUserInTenant(tenantId)
-        return MembershipEntity.find("scopeId", scopeId).list().mapNotNull { m ->
+        val memberships = MembershipEntity.find("scopeId", scopeId).list()
+        val heads = keyChain.heads(memberships.map { it.userId })
+        return memberships.mapNotNull { m ->
             VeyqUser.findById(m.userId)?.let { u ->
                 val p = profileByUser[m.userId]
                 ScopeMemberRow(
                     m.userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role,
                     u.identityPublicKey, m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId },
+                    keyChainHead = heads[m.userId] ?: return@let null, pending = m.grantedEpoch < scope.currentEpoch,
                 )
             }
         }
     }
+
+    /** The head of [userId]'s key chain (ADR 0111 decision 7), or null for an unknown account. */
+    fun keyChainHeadOf(userId: String): String? = keyChain.headOf(userId)
 
     /**
      * Every tenant the caller holds an **accepted** membership in (one row per tenant, name+domain joined) — the

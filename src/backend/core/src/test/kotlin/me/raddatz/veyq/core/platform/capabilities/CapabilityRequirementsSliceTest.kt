@@ -241,7 +241,7 @@ class CapabilityRequirementsSliceTest {
         val tenantId = seedTenant(owner = owner)
         val domain = "t-$tenantId.example.com"
         val groupId = given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${me.raddatz.veyq.core.TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${me.raddatz.veyq.core.membership.TestGrants.SIGNATURE_JSON}}""")
+            .body("""{"scopeId":"${me.raddatz.veyq.core.TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${me.raddatz.veyq.core.membership.TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${me.raddatz.veyq.core.membership.TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201).extract().path<String>("scopeId")
         val partner = seedUser(requireGroupAddConsent = false)
         QuarkusTransaction.requiringNew().run {
