@@ -107,7 +107,7 @@ acceptanceCriteria:
       plain member's (403 not_scope_owner); a rotation that fails says nothing was changed and re-keys nothing.
     coverage:
       backend: { integration: [GroupRekeySliceTest.anOwnerReKeysTheGroupWithNobodyRemovedGrantingWhomItAnchorsAndDeclaringTheRest, GroupRekeySliceTest.aPlainMemberCannotReKeyTheGroupAndACoOwnerCan] }
-      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/features/spaces/members.test.ts] }
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/features/spaces/members.test.ts], e2e: [src/features/spaces/groupRekey.e2e.test.ts] }
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `remove-rotates-forward` in
