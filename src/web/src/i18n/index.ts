@@ -113,6 +113,9 @@ const en = {
     invitePasswordNote: 'Tell them this password yourself, not by email.',
     email: 'Email address',
     inviteSubmit: 'Send invite',
+    // inbox #566: the send's progress line - the owner's device seals first, then the server stores it and mails the link
+    inviteSecuring: 'Securing the invitation on this device…',
+    inviteSending: 'Sending the invitation by email…',
     inviteSent: 'Invite sent.',
     inviteFailed: 'Could not send the invite. Please try again.',
     alreadyMember: 'That email is already a member of this space.',
@@ -2105,6 +2108,8 @@ const de: typeof en = {
     invitePasswordNote: 'Sag der Person dieses Passwort selbst, nicht per E-Mail.',
     email: 'E-Mail-Adresse',
     inviteSubmit: 'Einladung senden',
+    inviteSecuring: 'Einladung wird auf diesem Gerät gesichert…',
+    inviteSending: 'Einladung wird per E-Mail versendet…',
     inviteSent: 'Einladung gesendet.',
     inviteFailed: 'Einladung konnte nicht gesendet werden. Bitte erneut versuchen.',
     alreadyMember: 'Diese E-Mail ist bereits Mitglied dieses Bereichs.',

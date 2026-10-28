@@ -8,7 +8,7 @@ import { openScope } from '../../spaces/scopes'
 import { ScopeKind } from '../../../api/generated/scopes'
 import type { MemberProfile } from '../../../api/generated/account'
 import type { MemberNameAddress } from './memberName'
-import type { EpochKeys } from '../../spaces/epochs'
+import { zeroEpochKeys, type EpochKeys } from '../../spaces/epochs'
 
 export type { MemberProfile } from '../../../api/generated/account'
 export { sealName, unsealName, unsealNameUnderEpochs, type MemberName } from './memberName'
@@ -40,15 +40,6 @@ export function clearMyAvatar(): Promise<void> {
   return withRefresh(() => accountProfileApi().clearMyAvatar())
 }
 
-/**
- * Open the **active tenant's** scope key `K_tenant` on-device (the caller's tenant grant), independent of which
- * space is currently active — the profile panel + directory need it to seal/unseal names even from Personal.
- * The caller owns the returned key transiently and must not mutate it; null if not a granted tenant member.
- */
-export async function openTenantKey(): Promise<Uint8Array | null> {
-  return (await openScope(ScopeKind.Tenant))?.key ?? null
-}
-
 /** The caller's own account id, from their own key material — the one read that hands it over. */
 export async function myUserId(): Promise<string> {
   return (await withRefresh(() => accountApi().getAccountKeyMaterial())).userId
@@ -67,13 +58,27 @@ export interface OwnNameKey {
 /**
  * The tenant's keys plus the address the caller's **own** name is sealed at — (the tenant scope, the caller's user id)
  * (ADR 0072). The user id comes from the caller's own key material, the one read that hands it over; null when
- * the caller holds no tenant grant yet.
+ * the caller holds no tenant grant yet. The caller owns the keys and zeroes them with {@link zeroOwnNameKey} once it is
+ * done (inbox #574): after one read, or when the editor that seals with them goes away. When the key-material read
+ * fails, the tenant scope it opened beside it is zeroed here, since no caller ever sees it.
  */
 export async function openOwnNameKey(): Promise<OwnNameKey | null> {
-  const [tenant, material] = await Promise.all([
+  const [tenant, material] = await Promise.allSettled([
     openScope(ScopeKind.Tenant),
     withRefresh(() => accountApi().getAccountKeyMaterial()),
   ])
-  if (!tenant) return null
-  return { key: tenant.key, epochs: tenant.epochs, tenantId: tenant.tenantId, address: { scopeId: tenant.scopeId, userId: material.userId } }
+  if (material.status === 'rejected') {
+    if (tenant.status === 'fulfilled' && tenant.value) zeroEpochKeys(tenant.value.epochs)
+    throw material.reason
+  }
+  if (tenant.status === 'rejected') throw tenant.reason
+  if (!tenant.value) return null
+  const t = tenant.value
+  return { key: t.key, epochs: t.epochs, tenantId: t.tenantId, address: { scopeId: t.scopeId, userId: material.value.userId } }
+}
+
+/** Zero what {@link openOwnNameKey} opened: every tenant epoch key, the write key among them. */
+export function zeroOwnNameKey(own: OwnNameKey): void {
+  zeroEpochKeys(own.epochs)
+  own.key.fill(0)
 }

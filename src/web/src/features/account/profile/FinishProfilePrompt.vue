@@ -3,14 +3,14 @@
 // the name and the picture at join (both optional); once this device holds the tenant key and neither is set, a small
 // dismissible notice points at Settings > Your profile. Shown once: "Not now" and following the link both store the
 // dismissal per user (`finishProfileDismissed`), and a profile that already has a name or a picture shows nothing. Reads
-// the profile and the key once per document; stores no image.
+// the profile and the key once per document, zeroes the key after that read; stores no image.
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
-import { getMyProfile, openOwnNameKey, unsealNameUnderEpochs } from './profile'
+import { getMyProfile, openOwnNameKey, unsealNameUnderEpochs, zeroOwnNameKey } from './profile'
 import { finishProfileDismissed } from './finishProfileDismissed'
 
 const { t } = useI18n()
@@ -20,8 +20,11 @@ let checked = false
 
 async function check() {
   checked = true
+  // The tenant keys are opened for this one read and zeroed once they are in (inbox #574) — also when the profile
+  // read fails first, which would otherwise drop keys still on their way.
+  const opening = openOwnNameKey()
   try {
-    const [profile, own] = await Promise.all([getMyProfile(), openOwnNameKey()])
+    const [profile, own] = await Promise.all([getMyProfile(), opening])
     if (!own) return // no tenant key yet: nothing could be sealed, so nothing to ask for
     // A name saved before a tenant rotation opens under its older epoch: the profile is complete, nothing to ask for.
     const name = unsealNameUnderEpochs(own.epochs, own.address, profile.sealedName)?.name
@@ -29,6 +32,8 @@ async function check() {
     show.value = !hasName && profile.avatarRevision === 0
   } catch {
     // best-effort: a prompt that cannot be decided is not shown
+  } finally {
+    void opening.then((own) => own && zeroOwnNameKey(own), () => undefined)
   }
 }
 

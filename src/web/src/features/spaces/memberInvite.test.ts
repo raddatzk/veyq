@@ -10,12 +10,20 @@ vi.mock('./grantTrust', () => ({ me: vi.fn() }))
 // The link's KEK is real Argon2id at a light cost — input-sensitive, which "another code does not open it" depends on
 // (a constant stub would open with any code). Production cost is the conformance vectors' job (`#invite_link`).
 const LIGHT = { t: 1, m: 64, p: 1, dkLen: 32 }
+// Every KEK derived, in order — to look at after its owner was meant to zero it.
+const derived = vi.hoisted(() => [] as Uint8Array[])
 vi.mock('@veyq/crypto/argonWorker', async () => {
   const real = await vi.importActual<typeof import('@veyq/crypto/v1')>('@veyq/crypto/v1')
-  return { inviteLinkKekAsync: async (secret: Uint8Array, salt: Uint8Array) => real.kekInviteLink(secret, salt, LIGHT) }
+  return {
+    inviteLinkKekAsync: async (secret: Uint8Array, salt: Uint8Array) => {
+      const kek = real.kekInviteLink(secret, salt, LIGHT)
+      derived.push(kek)
+      return kek
+    },
+  }
 })
 
-import { inviteMember, reissueMemberInvite } from './members'
+import { inviteMember, prepareInviteCode, reissueMemberInvite } from './members'
 import { tenantsApi } from '../../api/client'
 import { listMyTenants, openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
@@ -194,5 +202,72 @@ describe('reissue and a stale epoch', () => {
     fakeApi(tenantsApi, { inviteTenantMember: send })
     await expect(inviteMember(T, 'b@x.z', { mode: 'code', code: CODE })).rejects.toBeTruthy()
     expect(send).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a code prepared ahead (inbox #566): its link key derived while the owner types', () => {
+  const zeroed = (k: Uint8Array) => k.every((b) => b === 0)
+
+  it('seals under that derivation — the send derives nothing more, the link opens with its code — and zeroes the KEK after', async () => {
+    const before = derived.length
+    const p = prepareInviteCode()
+    expect(derived).toHaveLength(before + 1) // started at once, before any address
+    const req = await posted(p)
+    expect(derived).toHaveLength(before + 1) // the send derived nothing more
+    expect(() => openLink(req, p.code)).not.toThrow()
+    expect(zeroed(derived[before])).toBe(true)
+  })
+
+  it('is used once: the stale-epoch rebuild derives anew, and both links open with the code', async () => {
+    const before = derived.length
+    const p = prepareInviteCode()
+    const send = vi.fn<TenantsApi['inviteTenantMember']>().mockRejectedValueOnce(httpError(409, 'stale_epoch')).mockResolvedValueOnce(STATE)
+    fakeApi(tenantsApi, { inviteTenantMember: send })
+    await inviteMember(T, 'b@x.z', p)
+    expect(derived).toHaveLength(before + 2)
+    expect(derived.slice(before).every(zeroed)).toBe(true)
+    const [first, second] = send.mock.calls.map((c) => c[0].memberInviteRequest)
+    expect(() => openLink(first, p.code)).not.toThrow()
+    expect(() => openLink(second, p.code)).not.toThrow()
+  })
+
+  it('a derivation never taken is zeroed by discard, and can no longer be taken', async () => {
+    const before = derived.length
+    const p = prepareInviteCode()
+    p.ahead.discard()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(zeroed(derived[before])).toBe(true)
+    expect(p.ahead.take()).toBeNull()
+  })
+
+  it('control: discard after take leaves the KEK to the sealing that took it', async () => {
+    const p = prepareInviteCode()
+    const t = p.ahead.take()!
+    p.ahead.discard()
+    expect(zeroed(await t.kek)).toBe(false)
+  })
+
+  it('names its phases as they begin: securing before the tenant key is opened, sending before the POST', async () => {
+    const seen: string[] = []
+    vi.mocked(openScopeById).mockImplementationOnce(async () => {
+      seen.push('open')
+      const key = TENANT_KEY.slice()
+      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: EPOCH, keys: new Map([[EPOCH, key]]) } })
+    })
+    const send = vi.fn<TenantsApi['inviteTenantMember']>().mockImplementation(async () => {
+      seen.push('post')
+      return STATE
+    })
+    fakeApi(tenantsApi, { inviteTenantMember: send })
+    await inviteMember(T, 'b@x.z', prepareInviteCode(), (phase) => seen.push(phase))
+    expect(seen).toEqual(['securing', 'open', 'sending', 'post'])
+  })
+
+  it('a build that fails before sealing leaves the derivation untaken, for the dialog to discard', async () => {
+    vi.mocked(openScopeById).mockResolvedValueOnce(null)
+    const p = prepareInviteCode()
+    fakeApi(tenantsApi, { inviteTenantMember: vi.fn<TenantsApi['inviteTenantMember']>() })
+    await expect(inviteMember(T, 'b@x.z', p)).rejects.toThrow()
+    expect(p.ahead.take()).not.toBeNull()
   })
 })

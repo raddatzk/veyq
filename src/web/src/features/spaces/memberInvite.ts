@@ -15,8 +15,46 @@ import { writeKey, zeroEpochKeys } from './epochs'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import type { MemberInviteRequest } from '../../api/generated/tenants'
 
-/** What opens the link: a code minted here (shown once, passed on by the owner), or a password the owner chose. */
-export type InviteSecret = { mode: 'code'; code: string } | { mode: 'password'; password: string }
+/** What opens the link: a code minted here (shown once, passed on by the owner), or a password the owner chose. A code may
+ *  carry its link key's derivation already under way ({@link prepareInviteCode}). */
+export type InviteSecret = { mode: 'code'; code: string; ahead?: LinkKekAhead } | { mode: 'password'; password: string }
+
+/**
+ * A link KEK whose Argon2id derivation is already running (inbox #566). At the production profile it is the one slow step of
+ * building an invite — about a second, in the Argon2 worker — so the invite dialog mints its code and starts this as it
+ * opens, while the owner types the address. Single-use: {@link sealMemberInvite} `take`s it and zeroes the KEK after
+ * sealing; a second build (the stale-epoch retry) finds it taken and derives anew. One never taken is zeroed by `discard`.
+ */
+export interface LinkKekAhead {
+  take(): { salt: Uint8Array; kek: Promise<Uint8Array> } | null
+  discard(): void
+}
+
+/** A fresh code with its link KEK's derivation started now ({@link LinkKekAhead}) — the code it derives from is this one. */
+export function prepareInviteCode(): { mode: 'code'; code: string; ahead: LinkKekAhead } {
+  const code = invite.generateInviteCode()
+  const secretBytes = invite.inviteLinkSecret('code', code)!
+  const salt = v1.randomBytes(16)
+  const kek = inviteLinkKekAsync(secretBytes, salt).finally(() => secretBytes.fill(0))
+  kek.catch(() => undefined) // a derivation nobody takes must not surface as an unhandled rejection
+  let settled = false
+  return {
+    mode: 'code',
+    code,
+    ahead: {
+      take() {
+        if (settled) return null
+        settled = true
+        return { salt, kek }
+      },
+      discard() {
+        if (settled) return
+        settled = true
+        void kek.then((k) => k.fill(0), () => undefined)
+      },
+    },
+  }
+}
 
 /** The invite lifetime the server takes when the switcher's row does not carry it (`veyq.tenant.invite.ttl`'s default). */
 export const DEFAULT_INVITE_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -64,16 +102,18 @@ export type InviteEpoch = { epoch: number; key: Uint8Array }
 /**
  * The invite itself, from what {@link buildMemberInvite} gathered — the owner as [signer], the tenant's current key as
  * [tenant], the instance's invite lifetime [ttlSeconds] — so a caller without a vault (the dev seeder) builds the very
- * same request. Wipes the seed, the KEK, the secret's bytes and the invite's private key; the caller's keys stay its own.
+ * same request. Wipes the seed, the KEK (a derivation started ahead included), the secret's bytes and the invite's private
+ * key; the caller's keys stay its own.
  */
 export async function sealMemberInvite(
   tenantId: string, email: string, secret: InviteSecret, signer: InviteSigner, tenant: InviteEpoch, ttlSeconds: number,
 ): Promise<MemberInviteRequest> {
   const secretBytes = invite.inviteLinkSecret(secret.mode, secret.mode === 'code' ? secret.code : secret.password)
   if (!secretBytes) throw new Error('invite secret is not a code or a password')
+  const ahead = secret.mode === 'code' ? (secret.ahead?.take() ?? null) : null
   const seed = invite.generateInviteSeed()
   const inviteKey = invite.inviteKeyFromSeed(seed)
-  const salt = v1.randomBytes(16)
+  const salt = ahead?.salt ?? v1.randomBytes(16)
   let kek: Uint8Array | null = null
   try {
     const inviteId = crypto.randomUUID()
@@ -86,7 +126,7 @@ export async function sealMemberInvite(
       tenant.key, { scopeId: tenantId, kind: 'TENANT', epoch },
       { userId: inviteId, identityPublicKeyB64: invitePublicKeyB64 }, signer.signPrivateKey,
     )
-    kek = await inviteLinkKekAsync(secretBytes, salt)
+    kek = await (ahead?.kek ?? inviteLinkKekAsync(secretBytes, salt))
     const sealed = invite.sealInviteLink({ tenantId, inviteId }, secret.mode, kek, salt, {
       seed, signerFingerprintHash: v1.fingerprintHash(signer.pub), signerUserId: signer.userId,
     })
@@ -108,6 +148,8 @@ export async function sealMemberInvite(
     inviteKey.priv.kemSeed.fill(0)
     inviteKey.priv.sign.fill(0)
     kek?.fill(0)
+    // A derivation taken but never awaited (a step before it threw) is zeroed once it lands.
+    if (!kek && ahead) void ahead.kek.then((k) => k.fill(0), () => undefined)
     secretBytes.fill(0)
   }
 }

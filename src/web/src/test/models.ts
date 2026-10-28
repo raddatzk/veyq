@@ -15,6 +15,8 @@ import type { MediaItem } from '../features/memories/media'
 import type { TreeNode } from '../core/node/tree'
 import type { NodeKind } from '../core/node/kind'
 import type { EpochKeys } from '../features/spaces/epochs'
+import type { OwnNameKey } from '../features/account/profile/profile'
+import type { MemberNameAddress } from '../features/account/profile/memberName'
 import { memberAccess, memberTreeSource, type GuestAccess, type MemberAccess, type TreeSource } from '../core/access'
 import type { ShareRole } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
@@ -157,6 +159,13 @@ export const openedScope = (o: Partial<OpenedScope> = {}): OpenedScope => {
     scopeId: 'scope-1', tenantId: 'tenant-1', kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) },
     nameEpoch: 0, deletedAt: null, purgeAfter: null, ...o,
   }
+}
+
+/** What `openOwnNameKey` hands over, at epoch 0 under a fresh COPY of [key] per call: its caller zeroes it (inbox #574), so the
+ *  test's own key must never be the one handed out. */
+export const ownNameKey = (key: Uint8Array, address: MemberNameAddress): OwnNameKey => {
+  const k = key.slice()
+  return { key: k, epochs: { current: 0, keys: new Map([[0, k]]) }, tenantId: address.scopeId, address }
 }
 
 export const scopeSummary = (o: Partial<ScopeSummary> = {}): ScopeSummary => ({
