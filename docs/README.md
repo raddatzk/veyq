@@ -34,7 +34,7 @@ docs/
 | **Enabler** `en.*` | *What **feature-scoped** foundation makes use-cases possible?* | mechanism / how-it's-built (one feature) | **yes** | yes, when the page explains the model (`en.account.key-model`) |
 | **Crosscutting** `cc.*` / `crosscutting/` | *A **cross-feature** concern or model?* | mechanism/model/convention spanning features | **yes** | yes (`security-model.md`) |
 | **ADR** `decisions/` | *Why did we **decide** it this way?* | one settled choice **+ its rejected alternatives** | **no** — referenced via `adrs:` | a Run or Security page only — an operator or a researcher weighs the trade-off itself; the model the page states speaks for the topic's current-picture doc where one exists |
-| **Architecture** `architecture/` | *How is the **whole system** built, right now?* | synthesized overview that **indexes** the rest | no (a map, kept current) | no |
+| **Architecture** `architecture/` | *How is the **whole system** built, right now?* | synthesized overview that **indexes** the rest | no (a map, kept current) | a Security page only, for the whole-system view |
 
 ## The rules per kind
 
@@ -78,8 +78,9 @@ docs/
   <date>` sections. Keep the full current reasoning + rejected alternatives in the body (git holds *text*
   history, not the current substance). Whole-ADR replacement is the separate `Status: Superseded by NNNN`.
 - **A topic's current model lives in one doc of state, never in its ADRs.** Every topic of the
-  [ADR index](decisions/README.md#topics) has exactly one *current-picture* doc — a crosscutting doc, an enabler or
-  a page under [`apps/`](apps/README.md) — that holds what is true now, whole, so no reader assembles it from the
+  [ADR index](decisions/README.md#topics) has exactly one *current-picture* doc — a crosscutting doc, an enabler, a
+  feature's `_index.md` or a page under [`apps/`](apps/README.md); for testing, the published stage map ADR 0091
+  decision 8 makes canonical — that holds what is true now, whole, so no reader assembles it from the
   ADRs. Each ADR of the topic names it in its header, `- Model: <link>`; a topic with none yet says so in the
   index until one is written.
 - **A decision that changes part of an earlier ADR** edits the topic's current-picture doc — while the change is
@@ -109,7 +110,7 @@ docs/
 2. A use-case phrase **"extends ADR X" / "resolves ADR X's deferred question"** → a *decision* being made in a
    UC. It belongs in ADR X (the header itself is the tell).
 3. **The same model narrated in ≥2 docs** → duplication. It lives **once**, in the topic's current-picture doc
-   (enabler / cc / `apps/` page — never an ADR, which keeps only enough of it to justify the choice); everywhere
+   (enabler / cc / feature `_index` / `apps/` page — never an ADR, which keeps only enough of it to justify the choice); everywhere
    else **links**.
 4. An **enabler or cc doc that *decides*** something with rejected alternatives → that is an ADR; reference it.
 5. A **dated addendum inside an ADR** (`Amended: …`, `## Decision — addendum 2026-…`), or a **Status line that
