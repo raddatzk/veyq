@@ -613,11 +613,12 @@ export const grantStatement = (g: GrantStatementInput): Extract<StatementContext
   wrappedGrantDigest: sha256(g.wrappedGrant),
 })
 
-/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record, a
- *  key-chain step (signed by the identity it retires) and a verification of another member (./verification.ts). */
+/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record, an owner's
+ *  endorsement of one, a key-chain step (signed by the identity it retires) and a verification of another member
+ *  (./verification.ts). */
 export type IdentityStatement = Extract<
   StatementContext,
-  { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' | 'key-chain-step' | 'verification' }
+  { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' | 'join-endorsement' | 'key-chain-step' | 'verification' }
 >
 
 /** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`) — an account's or an invite
