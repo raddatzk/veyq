@@ -1,7 +1,10 @@
 # ADR 0005 — Account unlock: one Master Key, many wraps; device trust, re-lock & method precedence
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-25
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
+- Replaced in part: § 16's cross-device onboarding by ADR 0059 (built)
 
 ## Context
 
@@ -53,9 +56,8 @@ Key, ideally passwordless on trusted devices); **reload ≠ session end**.
    timeout** and **(b) session end** (tab/app close). **Reload ≠ session end.** (Periodic trusted-device
    expiry was considered and **dropped**.)
 
-7. **Method precedence is client-side; the server never picks.** The client offers the wraps it can open
-   **locally**; if more than one, the default order is **device key → device + password → password +
-   Secret Key**. **User preference overrides and is remembered per device**; the **password + Secret Key
+7. **Method choice is client-side; the server never picks.** The client offers the wraps it can open
+   **locally** — at most one convenience wrap per device (§9) and the floor — and the **password + Secret Key
    floor is always reachable** ("unlock another way").
 
 ## Consequences
@@ -85,8 +87,8 @@ level"** the user picks themselves, after the first floor unlock, from an **orde
 set — the *security of my own device is the user's call*, the *server is not*.
 
 8. **Three ordered levels; the user chooses one per device.**
-   - **L0 — Secret Key each time** (no convenience wrap; the bare floor). The default state of a fresh
-     device.
+   - **L0 — Secret Key each time** (no convenience wrap; the bare floor). Not a level a user picks (§14, §19):
+     only a fresh device's first unlock and the emergency fallback.
    - **L1 — Only password** — the **DEVICE** wrap (`KEK = Argon2id(device-bound factor + password)`).
      Type the password each sign-in; the Secret Key goes back in the kit.
      ([uc.account.trust-device](../features/account/use-cases/uc.account.trust-device.md))
@@ -94,11 +96,8 @@ set — the *security of my own device is the user's call*, the *server is not*.
      the client opens straight to its content, gated only by whatever locks the device itself.
      ([uc.account.remember-this-device](../features/account/use-cases/uc.account.remember-this-device.md))
 
-   A fourth level sat between L1 and L2 while a secure-element gate existed to hold the device key: the key
-   was stored, but released only after a live user-verification gesture. **A passkey (WebAuthn + PRF) is not
-   that level** — its PRF output *is* the KEK, derived per use rather than gating a stored key, so it is a
-   different mechanism and would be its own level and its own use-case (§16). Until one is built, the scale
-   is these three.
+   **A passkey (WebAuthn + PRF) would be a level of its own** — its PRF output *is* the KEK, derived per use
+   rather than gating a stored key (§16). Until one is built, the scale is these three.
 
 9. **Mutually exclusive per device — narrows §4's "combinable" for UX clarity.** A device carries **one**
    convenience wrap at a time (plus the always-present floor). Switching level **removes** the old
@@ -106,11 +105,10 @@ set — the *security of my own device is the user's call*, the *server is not*.
    multiple wraps; the *level* abstraction deliberately exposes one, so the user has a single clear
    "how does this device unlock" answer.)
 
-10. **No default — the user must choose.** After the first floor unlock the client **asks** which level to
-    apply, with **nothing pre-selected**; until the user chooses, the device stays at **L0** (the floor).
-    This refines §7: rather than silently applying a precedence order, the convenience level is an
-    **explicit, informed per-device choice**. The **floor stays always reachable** at every level
-    (automatic fallback when a KEK source or persisted session is unusable).
+10. **The level is the user's choice, made at the first sign-in; the floor stays reachable.** The choice is the
+    "remember me" toggle (§18): nothing silently applies the passwordless level, which is an opt-in (§13). The
+    **floor stays always reachable** at every level (automatic fallback when a KEK source or persisted session
+    is unusable).
 
 11. **The passwordless level (L2) requires a persisted session.** Without the password the client cannot
     mint a fresh session (the password signs the login challenge, ADR 0003), so the **refresh token** is
@@ -136,7 +134,7 @@ set — the *security of my own device is the user's call*, the *server is not*.
 14. **L0 is not a routine, selectable level; it stays the floor (bootstrap + emergency fallback).** Asking
     for the Secret Key on *every* unlock is the wrong friction for a memory-sharing app (not a secrets
     vault). The Secret-Key floor (§3) remains, but only as (a) the **first-unlock / bootstrap** on a device
-    (typed **once per device**, until cross-device onboarding lands) and (b) the **always-reachable
+    (typed **once per device**, unless the device is linked by a grant, [ADR 0059](0059-device-linking.md)) and (b) the **always-reachable
     emergency fallback** when a convenience method's KEK source is lost — operator-blindness means **no
     operator-side reset**, so removing it would mean permanent lockout. §8/§10's chooser therefore **does
     not offer "Secret Key each time"** as a standing option.
@@ -149,10 +147,10 @@ set — the *security of my own device is the user's call*, the *server is not*.
     re-authenticate each launch (no persisted session/vault). This is a presentation of the same wraps
     (§9: one convenience wrap per device). L2's opt-in + warning (§13) is exactly the toggle's trade-off.
 
-16. **Passkey auth and QR cross-device onboarding are deferred to their own use-cases/ADRs.** Passkey is a
-    new WebAuthn **auth** path beyond ADR 0003's Model B (plus PRF for the unlock KEK, §4); QR onboarding is
-    the cross-device bootstrap already noted below in *Related / future*. Neither is part of the
-    session-persistence increment (the cookie + remember-me on the existing password path).
+16. **Passkey auth is its own use-case and ADR; a second device is linked, not onboarded here.** A passkey is a
+    new WebAuthn **auth** path beyond ADR 0003's Model B (plus PRF for the unlock KEK, §4), and neither is built.
+    A new device is brought in by an existing unlocked one over a channel the blind server only relays —
+    [ADR 0059](0059-device-linking.md), which carries the key *and* the session.
 
 ## Decision — one combined login/unlock screen, auto-enrol; web's single "remember me" toggle
 
@@ -221,11 +219,7 @@ in-memory-only session that dies on the first reload).
 
 ## Related / future
 
-- **Cross-device onboarding (QR / push):** a new device is onboarded by an existing **unlocked** device
-  over an **E2E channel the blind server only relays** — the QR/push carry the new device's *public* key
-  (no secrets), the existing device encrypts the Master Key / a fresh wrap to it. Its own use-case + ADR;
-  must carry the **E2E unlock-transfer**, **QR-login phishing** and **non-enumerability** (ADR 0003)
-  constraints.
+- **Cross-device onboarding** is device linking, [ADR 0059](0059-device-linking.md) (§16).
 - **Device unlock levels** (§8–13 above) — the user-facing flow that picks one is
   [uc.account.remember-this-device](../features/account/use-cases/uc.account.remember-this-device.md); the
   per-level mechanics are [uc.account.unlock](../features/account/use-cases/uc.account.unlock.md) (L0) and

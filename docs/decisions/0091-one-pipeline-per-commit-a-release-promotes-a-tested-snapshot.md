@@ -1,7 +1,9 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the API fuzzing of decision 9 with its job `api-fuzz` (run locally only); the rest is not (§ Consequences)
+- Status: Accepted
+- Built: partly (not built: decision 3's lanes L2 and L3, decision 5's promotion and attestations, decision 6, decision 7)
 - Date: 2026-10-16
+- Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
 ## Context
 
@@ -22,25 +24,14 @@ tests prove one per mechanism *takes effect* — but by that guard's own docstri
 **parameters** (no test sends an out-of-range one), nothing reads a **response** against its schema, and nothing
 looks for a **5xx** on malformed input (decision 9).
 
-What a run costs, measured on 2026-10-16 on the development Mac (14 cores, under a load of 20–55 from neighbour
-sessions, so high rather than low):
+Three structural costs sat on top of what a run took:
 
-| Stage | Measured | How |
-|---|---|---|
-| The 58 `validate_*` guards | 998 s; **`validate_guard_gaps.py` alone 901 s**, the other 57 together 97 s | each timed in sequence |
-| Backend tests (`:core`, `:apps:memories`, root) | 1544 tests, 7.5 min of test time (`OperatorBlindProbeTest` 44 s) | the JUnit reports of that morning |
-| `run_web_e2e.py`, 26 suites, a fresh boot each | 9.2 min | its run directory of 2026-10-15 |
-| `run_web_e2e.py --upgrade` | 3.5 min | its run directory of 2026-10-15 |
-| The app image (`runtime-jvm`) | 2.5–4.6 min | `docker buildx history` |
-
-Three structural costs sit on top of those numbers:
-
-- **`validate_guard_gaps.py` is 90 % of the trust-chain.** It tests the guards, not the product: 79 forgeries
-  against 22 guards, each a fresh copy of the tree and a subprocess, one after the other.
-- **The backend and both frontends are checked twice per push.** `ci.yml` runs them, and `container.yml`'s `test`
-  runs them again — and `build` waits for that second run before it starts.
-- **A release builds again.** It publishes bytes no test saw; ADR 0090 gates them by testing `build-<sha>` inside the
-  dispatch, which is the right bytes at the latest possible moment.
+- **`validate_guard_gaps.py` was 90 % of the trust-chain's time.** It tests the guards, not the product: each forgery a
+  fresh copy of the tree and a subprocess.
+- **The backend and both frontends were checked twice per push**, by two workflows, and the image build waited for the
+  second copy.
+- **A release built again.** It published bytes no test saw; ADR 0090 gated them by testing the staging images inside
+  the dispatch — the right bytes at the latest possible moment.
 
 ## Decision
 
@@ -62,17 +53,18 @@ Three structural costs sit on top of those numbers:
 
    The jobs that are no stage carry a budget too, so that no job runs on GitHub's 360-minute default: reading the
    version 5 min; the dispatch publish 15; the jar-level upgrade proof 15, the API end-to-end run's; a path-filter job
-   5; CodeQL's analysis 30; the site's check 10 and its deploy 5. Every value outside the measured stages above is an
-   estimate (mutation: ADR 0045 puts an incremental run at 1–3 min and a cold one at minutes), and the first CI run
-   replaces it. `scripts/validate_pipeline_shape.py` holds that every job of every workflow has a budget; this table
-   is where the values live.
+   5; CodeQL's analysis 30; the site's check 10 and its deploy 5. A value no run has measured is an estimate until the
+   first CI run replaces it. `scripts/validate_pipeline_shape.py` holds that every job of every workflow has a budget;
+   this table is where the values live, and the one stage map
+   ([How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)) is where each stage's workflow
+   job, trigger and measured time are.
 
-2. **One pipeline per commit, and nothing waits that need not.** `ci.yml` and `container.yml` become one workflow.
+2. **One pipeline per commit, and nothing waits that need not.** One workflow, `ci.yml`, the name a reader looks for.
    The guards, the surface checks, the races, the API end-to-end run, the API fuzzing **and the image build start
-   together**; the build does not wait for the tests, because nothing is published until every stage is green. The stack lanes need
-   the build. `container.yml`'s second copy of the surface checks goes; admin-web's check and the chart check, which
-   only it ran, move into the surface checks. `trust-chain.yml` stays separate and unfiltered, because a docs-only
-   commit is validated there and nowhere else.
+   together**; the build does not wait for the tests, because nothing is published until every stage is green — the
+   publish needs every other job of the file. The stack lanes need the build. The surface checks run once. The guard
+   gaps are not in it (decision 4), and `trust-chain.yml` stays separate and unfiltered, because a docs-only commit is
+   validated there and nowhere else.
 
 3. **Three stack lanes, one scenario suite.** The scenarios are split into a **write half** (put content into an
    instance) and a **read half** (open every item and assert it), with one record between them — the shape the
@@ -80,7 +72,7 @@ Three structural costs sit on top of those numbers:
    Every lane drives the operator's own tool, `veyqctl` ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)), against the candidate's release assets served as a
    local source — so what is tested is what a Server Owner runs:
    - **L1 feature** — `veyqctl install` of the candidate, fresh: write, then read; plus the feature scenarios that
-     need no predecessor. Sharded since 2026-10-26 (decision 1), one leg per domain of the suite, each a fresh install
+     need no predecessor. Sharded (decision 1), one leg per domain of the suite, each a fresh install
      of its own ([ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md) decision 7); which languages and which
      waits it keeps is [ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md) decision 9.
    - **L2 upgrade in place** — `veyqctl install` of the previous release, write; `veyqctl upgrade` to the candidate
@@ -111,7 +103,7 @@ Three structural costs sit on top of those numbers:
    and the git ref `v<major>.<minor>`; then the **immutable GitHub Release** is created from the asset set
    ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3). Nothing is rebuilt.
    - **The asset set is the candidate's, too.** The pipeline produces it from the commit and the tested digests
-     (`scripts/release_assets.py`, `cr-veyqctl`) before the lanes run, and the lanes install exactly it. A snapshot
+     (`scripts/release_assets.py`) before the lanes run, and the lanes install exactly it. A snapshot
      gets no GitHub Release (ADR 0096 §3); the promotion produces the set again from the same commit and digests, and
      refuses when its hash differs from the one the attestations name — so the published files are the ones tested.
    - **In CI the candidate is pulled by digest and given a local name** before `veyqctl install --unsigned-local`, the
@@ -163,7 +155,7 @@ Three structural costs sit on top of those numbers:
      with every package pinned by version and wheel hash (`tests/fuzz/requirements.txt`, installed with
      `--require-hashes`, written by `tests/fuzz/lock.py`). Schemathesis needs Python ≥ 3.11 and the host scripts run on
      3.9, so the image carries what they cannot. Not the official `schemathesis/schemathesis` image: it also installs
-     TraceCov, a proprietary, binary-only coverage plugin, and loads it on every run (owner, 2026-10-18); veyq's hooks
+     TraceCov, a proprietary, binary-only coverage plugin, and loads it on every run; veyq's hooks
      refuse to load if it is ever imported.
    - **The spec files are read as they are**, one invocation per listener: the operations marked
      `x-veyq-channel: admin` against the admin listener, the rest against the public one. Nothing is bundled.
@@ -175,11 +167,11 @@ Three structural costs sit on top of those numbers:
      malformed query or header parameter or body is refused with the contract's `400 invalid_request`; a malformed
      path segment with `400` or `404` — a path id that is no UUID matches no route and answers `404`, as
      `IdBoundarySliceTest` holds; a body past the instance's request limit, malformed or not, with the `413
-     request_too_large` every operation with a body declares (inbox #508). An operation that takes a credential (a parameter or request-body property marked
+     request_too_large` every operation with a body declares. An operation that takes a credential (a parameter or request-body property marked
      `x-veyq-visibility: token`) may refuse any of it with its declared `401` or `403`: every request the run sends
-     carries a credential it cannot forge, and authentication runs before shape (owner, 2026-10-18). Every answer is a status the operation declares, its body matches the declared
+     carries a credential it cannot forge, and authentication runs before shape. Every answer is a status the operation declares, its body matches the declared
      schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx.
-   - **Second slice (2026-10-19, inbox #495): positive writes, stateful sequences, a second identity.**
+   - **Positive writes, stateful sequences, a second identity.**
      - *What a positive run may change:* what the run's own identities own below the tenant — their account's sealed
        data, their scopes and what is in them, their links. The server checks such a write for shape, ids,
        membership, revisions and epochs, never for what its ciphertext says, so schema-valid random ciphertext is
@@ -201,8 +193,8 @@ Three structural costs sit on top of those numbers:
        are. A rule the server holds beyond these is the contract's to state, not the run's: in the schema where a
        schema can say it (`dependentRequired`, `not`, and `if`/`then`/`else` under `dependentSchemas` — never at a
        schema's top, where it turns a sibling-annotated `$ref` to the schema into `Any`; so placed, both generators ignore
-       them, measured on openapi-generator 7.23.0, and Schemathesis reads them), else as a semantic status with a code of
-       its own (`422`), never the shape's `400` (inbox #507).
+       them, and Schemathesis reads them), else as a semantic status with a code of
+       its own (`422`), never the shape's `400`.
      - *The second identity:* a member of the same tenant, of none of the owner's scopes. Every positive request the
        owner made in its scope and the server accepted is sent again as that peer and must be answered exactly as a
        scope that does not exist is — the same `404` and `code` (membership is the first guard, ADR 0042); where it
@@ -218,69 +210,22 @@ Three structural costs sit on top of those numbers:
 
 ## Consequences
 
-- **The critical path per push**, estimated (no CI run exists): today `test` → `build` → (ADR 0090's `e2e`), 35–50
-  min; with decisions 2 and 4, `max(surface checks ≈ 15, build ≈ 8 + lanes ≈ 12)`, **20–25 min**. A release is a
-  promotion: minutes. The first CI run's numbers replace both.
-- **ADR 0057 is edited in place**: §1 (a green push publishes a snapshot; a snapshot is immutable; a release is a
-  promotion; the image carries no `-SNAPSHOT`), §2 (unchanged in substance: one ref, created by the promotion), §7
-  (decision 7). **ADR 0090** follows: its Decision 2 (the gate is the push, the release verifies), 7 (no tiers; the
-  lanes of decision 3) and its rejected "testing the published snapshot".
-- **Work, in this order**, each its own CR: the pipeline (decision 2, the guard-gap filter and its parallel cases);
-  `cr-stack-e2e` (L1, built 2026-10-16: `ci.yml`'s `stack` job, per architecture after the build — a dispatch pulls the
-  staged images by the digests the build hands over, a push or a pull request builds them in the job until a push
-  publishes the snapshot); promotion and attestations (decision 5); L2 (inbox #453); the archive and
-  L3 (decision 6); the API fuzzing (decision 9, built 2026-10-19: `ci.yml`'s `api-fuzz`, measured locally at
-  159 s for a whole run - the image check, the boot, the seed and the four invocations - on 2026-10-19; the second slice, the
-  same day, 343-438 s for its six). None is provable in CI before the
-  repository has a remote.
-- **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
-  hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
-- **The guard gaps run in CI on their own trigger** (2026-10-16, `cr-one-pipeline-per-commit` phase 4):
-  `trust-chain.yml`'s glob skips `validate_guard_gaps.py`, and its `guard-gaps` job runs it in full when a push or pull
-  request changes what the local skip hashes (a `dorny/paths-filter` job beside it), on a dispatch, and nightly on
-  `main`. `scripts/validate_pipeline_shape.py` holds the filter to `validate_guard_gaps.py`'s `SKIP_INPUTS`, the
-  schedule, and every glob's exclusion of it. The cost of the filter is the local skip's: a forgery's anchor renamed
-  outside those inputs shows at the next nightly run, not on the push that renamed it. Whether the filter fires on a
-  real push is a fact only the first CI run shows.
-- **The guard-gap cases run in parallel** (2026-10-16, `cr-one-pipeline-per-commit` phase 1): a pool of
-  `min(cpu_count, 6)` workers, `VEYQ_GUARD_GAPS_WORKERS=1` the sequential run. Measured on the same Mac with a
-  neighbour's Docker-heavy session running: the full run **167 s at 6 workers** (load average 13 → 30) against
-  334 s at 1 (24 → 13) — inside its 10-minute budget; about 2×, not 6×, because the tree copies are bound by the
-  file system and its watchers, not by the CPU. The 901 s of § Context was the sequential run under a load of 20–55.
-- **The one workflow is `ci.yml`** (2026-10-16, `cr-one-pipeline-per-commit` phase 2; the owner chose the name a
-  reader looks for over keeping `container.yml`'s). `container.yml` is folded in and deleted: its version job, image
-  build matrix, disabled upgrade proof and dispatch publish live in `ci.yml` beside the guards, the surface checks
-  (admin-web's check in `frontend`, the chart check its own `chart` job), the races and the API end-to-end run; its
-  triggers' `paths-ignore` and its two concurrency groups carried over. `build` needs only `version`; `publish` needs
-  every other job of the file with `success` (the disabled upgrade proof's `skipped` tolerated, as before), and
-  `validate_release_identity.py` holds that list to the file. Two consequences of the build no longer waiting: on a
-  dispatch the per-arch `build-<sha>-<arch>` staging tags are pushed before the tests finish — unsigned, carrying no
-  release name, named only by `publish` — and the npm deprecation gate (`validate_npm_installs_gated.py`) now covers
-  the images' `npm ci` by the publish needing the gate, not the build. The signer's identity moved with the file:
-  [Verify a release](../../site/src/content/docs/run/verify-a-release.md) pins `.github/workflows/ci.yml`; no image
-  had ever been published under the old one. The pipeline's `guards` job runs the glob minus `validate_guard_gaps.py`,
-  which is `trust-chain.yml`'s `guard-gaps` job.
-- **Every job runs on its budget** (2026-10-16, `cr-one-pipeline-per-commit` phase 3): `timeout-minutes` on every
-  job of every workflow, the values of decision 1; `scripts/validate_pipeline_shape.py` reds a job, or a whole new
-  workflow, without one.
-- **The remote comes when the owner judges veyq ready to publish, and it will be public** (owner, 2026-10-16). Until
-  then every stage's only run is local, so the pipeline runs locally from the workflow file itself, by one command:
-  `python3 scripts/run_pipeline.py` (2026-10-16, `cr-one-pipeline-per-commit` phase 5). It reads `ci.yml` from the
-  commit, runs each job the host can run in its own clone, in parallel and under its budget, and names every job and
-  step it did not run; where a stage's work sits in an action only GitHub runs, `ci.yml` carries the host's stand-in
-  behind `runner.environment != 'github-hosted'` (the image build with the host's `docker build`, the host's Helm held
-  to the pinned version). The first public push is also the first CI run.
-  Measured locally (14-core arm64 Mac, four jobs at once, load average 10 → 18): guards 1.5 min, surface checks —
-  backend 8.1, frontend 5.0, chart 0.4 — the version 0.1, the races 9.5, every one green; the image build 4.6 (app,
-  uncached, on an earlier run). Under a heavier load (13 → 35) the races outran their 10-minute budget beside the
-  backend's Gradle run and took 7.0 alone: locally they share the machine with `./gradlew check`, in CI they have a
-  runner of their own. The API end-to-end run was left out of that run (it shares the developer's one compose stack),
-  and ran alone at the close (2026-10-16, `--job web-e2e`, the infra directory pinned to the main checkout's): green,
-  **13.8 min of its 15**, its 27 suites and three tool self-tests, under a load average of ~15–19 from other sessions
-  — a loaded figure (the direct run of § Context took 9.2), and a budget that is tight under such load. Its first run
-  under the pipeline, a commit earlier, was red in its backup self-test: a migration's seeded table made every restore
-  onto a fresh install refuse, which no backend check sees. The amd64 legs have not run. Local wall times say little
-  about a CI runner's; the estimate above, and whether 15 minutes is enough, stay until the first CI run replaces them.
+- **The critical path per push is estimated at 20–25 min** — `max(surface checks, build + lanes)` — against 35–50
+  for the build waiting on a second copy of the tests; a release is a promotion, minutes. No CI run has measured it.
+- **ADR 0057 § 1 and § 7 are replaced in part** (its header): a green push publishes an immutable snapshot, a release
+  is its promotion, the image carries no `-SNAPSHOT`, and lanes L2 and L3 succeed the jar-level upgrade proof.
+  **ADR 0090** follows: the gate is the push, the release verifies; no tiers, the lanes of decision 3. What is built
+  and what is not is [release-and-deployment](../crosscutting/release-and-deployment.md) § Decided, not built.
+- **The guard gaps run on their own trigger**: `trust-chain.yml`'s `guard-gaps` job runs them in full when a push or
+  pull request changes what the local skip hashes (`scripts/` and the trust-chain skill), on a dispatch, and nightly;
+  the cases run in parallel; a local run skips while those inputs are unchanged since its last green full run, and CI
+  never skips. `scripts/validate_pipeline_shape.py` holds the filter to the skip's inputs. The cost of the filter is
+  the skip's: a forgery's anchor renamed outside those inputs shows at the next nightly run, not on the push that
+  renamed it.
+- **The remote comes when the owner judges veyq ready to publish, and it will be public.** Until then every stage's
+  only run is local, by one command that reads `ci.yml` itself (`scripts/run_pipeline.py`) and names every job and
+  step it did not run; where a stage's work sits in an action only GitHub runs, `ci.yml` carries the host's stand-in.
+  Local wall times say little about a CI runner's, so every budget stays an estimate until the first CI run.
 - **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image set per
   commit.
 
@@ -288,18 +233,17 @@ Three structural costs sit on top of those numbers:
 
 - **A release that builds again** (the `-SNAPSHOT` stamp kept in the image). The release would be bytes no test saw.
 - **Testing only at the release.** A regression is found at the moment it costs most; the lanes run per push instead.
-- **Gherkin (playwright-bdd, cucumber-js) or Gauge.** All three are maintained (default branches touched on
-  2026-10-13/14, measured); none removes a layer here. The acceptance criteria already live in `docs/features` and
+- **Gherkin (playwright-bdd, cucumber-js) or Gauge.** All three are maintained; none removes a layer here. The acceptance criteria already live in `docs/features` and
   `docs/coverage`, and a `.feature` file would be their second wording — two copies, one of which drifts.
 - **Guard gaps on every push.** 90 % of the trust-chain's time spent proving that guards no commit touched still bite.
 - **Keeping `ci.yml` and `container.yml` apart.** The second copy of the surface checks is a quarter of an hour on the
   critical path and proves nothing the first did not.
-- **The API fuzzing inside the API end-to-end job.** That job took 13.8 of its 15 minutes in its last local run (§
-  Consequences); a second workload in it would push it over, and a fuzz finding would read as a wire-sweep red.
+- **The API fuzzing inside the API end-to-end job.** That job runs close to its budget; a second workload in it would
+  push it over, and a fuzz finding would read as a wire-sweep red.
 - **The API fuzzing on lane L1, or only in the pentests.** The candidate's production rate limits refuse a fuzzer's
   volume, and a pentest runs by hand (ADR 0100 decision 1): a contract defect would be found weeks after its commit.
   The pentests point the same harness at the candidate instead.
-- **Schemathesis as a Python library on the host.** It needs Python ≥ 3.11 (`requires_python` of 4.32.0) and the
+- **Schemathesis as a Python library on the host.** It needs Python ≥ 3.11 and the
   scripts run on 3.9; the image carries its own interpreter and its own hash-pinned packages, the host none.
 - **A random seed per run.** It finds more over time and makes a red that the next run cannot reproduce; a gate has
   to be deterministic. A seed is bumped by a commit when the owner wants a new sample.

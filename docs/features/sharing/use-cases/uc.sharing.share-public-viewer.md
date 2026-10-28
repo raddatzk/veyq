@@ -1,12 +1,12 @@
 # UC: Share a Memory as a public viewer link
 
 - **ID:** uc.sharing.share-public-viewer
-- **Primary actor:** **a curator** — the owner of a **personal-scope** Memory (holds its `K_node`).
+- **Primary actor:** **a curator** — any member of the scope that holds the Memory (personal, group or tenant).
+  A shared scope's governance is [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md).
 - **Secondary actor:** **an anonymous viewer** — no account, no identity keypair.
 - **Goal:** publish **one** of your own Memories as a **read-only, anonymous, revocable** link that anyone with the
   link can open — while the server stays operator-blind and the rest of your content stays private.
-- **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
-  (v1 restriction); the caller can open it (holds `K_node`).
+- **Preconditions:** an **authenticated, unlocked** curator who is a member of the Memory's scope and can open it.
 - **Share roots today:** a viewer link can be rooted at a **Memory**, a **chapter** or a **folder**
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 9 and 13); it shows that node and what lies below it, never what is beside or above
   it. This use-case walks the Memory case; the other roots take the same steps with that node's own key. What each
@@ -20,9 +20,8 @@
   the Memory subtree read-only for any anonymous visitor — until the curator revokes it or it expires. Operator-blind
   throughout: the server never sees `K_share`, `K_node`, any name, the viewer, or which media the viewer opens.
 
-This is the first sharing slice ([ADR 0029](../../../decisions/0029-public-viewer-share.md)): **public viewer
-only**. Contributor/uploader writes, password protection, and public-sharing of group/tenant Memories are later
-slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
+The record, the key path and the link's lifecycle are [en.sharing.public-link](../enablers/en.sharing.public-link.md)
+([ADR 0029](../../../decisions/0029-public-viewer-share.md)).
 
 ## Main flow
 
@@ -109,10 +108,11 @@ sequenceDiagram
   (operator = curator) the gap is **moot**; a foreign-operator-proof viewer needs the future trusted-web client.
 - **Revocation is soft (L1); already-read is not retractable.** Revoke/expiry stop *new* access (resolve + gated
   blobs `404`), but content a visitor already downloaded cannot be pulled back — a stated limitation.
-- **Scope rotation ≠ share revocation.** A share is independent of `K_SC`, so a scope key rotation does **not**
-  close it. In **cr-0100's v1 this could not arise** (personal scope has no member removal); group/tenant sharing —
-  where a member IS removed — is now [uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) (cr-0104),
-  which soft-revokes the removed member's shares as the honest-server revocation ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §6).
+- **Scope rotation ≠ share revocation.** A scope rotation does **not** close a link: the re-key re-wraps the root's
+  new key under the link's own key, so the link keeps working at the same address
+  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4). Switching it off or
+  renewing it closes it; a removal switches off the removed member's links
+  ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md)).
 
 ## User impact
 
@@ -123,6 +123,7 @@ account, and switch it off whenever you like.
 
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) (this share's resource + anonymous access
   path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_node` second-wrap keying),
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment key),

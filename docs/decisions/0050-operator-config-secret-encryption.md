@@ -1,7 +1,10 @@
 # ADR 0050 — Operator config secrets are encrypted at rest with a server-managed KEK
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-24
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
+- Replaced in part: the single global key fingerprint by ADR 0089 (built)
 
 ## Context
 
@@ -31,14 +34,12 @@ Key-Encryption-Key the server manages as a file.** Concretely:
   (not mail-specific): it seals *any* server-held config secret.
 - The secret is sealed with **AES-256-GCM via standard JCA** (no new dependency, no home-grown crypto); the DB
   stores only `ciphertext + a per-record random 12-byte nonce`. The server unseals on demand (at send time).
-- **Every sealed value carries the fingerprint of the key that sealed it, as a tripwire.** *(Edited when
-  [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) decision 4 was built;
-  this ADR first kept one server-global row.)* The fingerprint is
+- **Every sealed value carries the fingerprint of the key that sealed it, as a tripwire.** The fingerprint is
   `HKDF-SHA256(ikm=KEK, info="veyq/v1/config-secret-key-fingerprint")`, stored in the same row as the ciphertext
   and nonce it belongs to. A value is born with its fingerprint, so **nothing is adopted and a read writes
-  nothing**; a later **mismatch** means the loaded key is not the one that sealed *that* value. The single
-  global row was dropped because one fingerprint, advanced by every reseal, let re-entering one secret report OK
-  while another stayed sealed under the lost key. The instance-wide state is the worst of the values
+  nothing**; a later **mismatch** means the loaded key is not the one that sealed *that* value. It is per value
+  and not one server-global row because one fingerprint, advanced by every reseal, would let re-entering one secret
+  report OK while another stayed sealed under the lost key. The instance-wide state is the worst of the values
   (`ConfigSecretKeyGuard.readState`, over every holder of a sealed column). Storing it is safe, and for a specific
   reason rather than by assertion: a 256-bit full-entropy key is **not** brute-forceable from its hash — unlike a
   password, which would need a salt and a slow KDF — so "a DB dump yields no usable secret" still holds. The DB

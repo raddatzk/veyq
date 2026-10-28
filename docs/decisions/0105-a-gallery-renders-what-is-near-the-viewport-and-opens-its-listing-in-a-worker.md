@@ -1,10 +1,9 @@
 # ADR 0105 — A gallery renders what is near the viewport, and opens its listing off the main thread
 
-- Status: Accepted 2026-10-19 — decided by the owner (the keyboard model of decision 5, the targets below) and built
-  in the web client the same day. The volume harness read the targets at the V1 heavy stage (2026-10-24) and every one
-  held, at 1,000, 3,000 and 10,000 photos, desktop and 4× ([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md)
-  § Quality notes holds the reading).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-19
+- Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
 
 Provenance: **(M)** measured in the worktree `cr-gallery-virtualization` names — the command is in its grounding table;
 **(R)** remembered, measured by the CR before it binds.
@@ -75,7 +74,9 @@ The judge that applies them is `scripts/measure_volume.py judge` while the harne
 ## Consequences
 
 - The DOM size no longer grows with the Chapter, and the main thread no longer pays for crypto it does not show; the volume
-  harness measured both against § Targets at the V1 heavy stage, and both held (inbox #489).
+  harness measured both against § Targets at the V1 heavy stage, and every target held, at 1,000, 3,000 and 10,000
+  photos, desktop and 4× ([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) § Quality notes holds
+  the reading).
 - Every view over the list — the gallery, the trash, the contributors' view, a guest's share — goes through the same
   windowing and the same opened listing; a new view over media that renders every item, or opens a meta on the page,
   is a defect against this record.

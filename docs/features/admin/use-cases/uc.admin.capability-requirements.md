@@ -12,6 +12,7 @@
 - **Postconditions (success):** The level holds the value. The effective value is the strictest of both levels: a
   flag is set when either level sets it, a number of days is the smaller one. A tenant therefore tightens and never
   loosens. Every gate and every client follows it without a restart. Nothing a member stored is deleted.
+- **Enabler:** [en.platform.capability-register](../../platform/enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## The requirements built
 

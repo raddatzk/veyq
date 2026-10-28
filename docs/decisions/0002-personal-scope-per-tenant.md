@@ -1,7 +1,9 @@
 # ADR 0002 — Personal scopes are tenant-bound (one per member, per tenant)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-25
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 

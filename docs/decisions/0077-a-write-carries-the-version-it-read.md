@@ -1,9 +1,9 @@
 # ADR 0077 — A write that re-sends what its writer did not edit carries the revision it read
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the counter is a **revision**
-  (`metaRevision`, `placementRevision`, the `revision` mode), and its conflict is `stale_revision` (was
-  `stale_version`). The file name keeps the old word so its links hold.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-03
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
 
 ## Context
 
@@ -14,9 +14,9 @@ scope, and each holds several fields that different members, and different autom
   Memory's date, place and cover. The date and place editors, the cover editor, and two **self-heals** (the
   `auto` date range and the `auto` place medoid) all unseal the blob, change one field and re-seal the rest.
 - **A media's `wrappedMeta`** ([en.memory.media](../features/memory/enablers/en.memory.media.md)): the
-  capture-time correction, the resolved place name and the sniffed media type. The lightbox's date editor and
-  two **backfills** do the same read-modify-write. (*2026-10-09, inbox #397:* the media type left this tier for the
-  original's write-once blob meta, and its backfill with it; the place-name backfill remains.)
+  capture-time correction and the resolved place name. The lightbox's date editor and a **backfill** of the place
+  name do the same read-modify-write. (The sniffed media type is not in this tier: it is the original's write-once
+  blob meta.)
 
 Every one of those writers re-sends fields it did not edit, from whatever copy it holds. The tree is loaded at
 space entry and reloaded only after a create, rename or delete, and the self-heals run whenever a Memory opens or
@@ -51,7 +51,7 @@ one-element set over the stored one.
    - A **self-heal** re-runs its whole decision on the fresh blob, including *"a manual date is never
      overwritten"*, and writes nothing when that decision says so.
    - A **backfill** re-applies its one field, and writes nothing when the fresh blob already has it.
-   - The **cover editor** is the one exception (since inbox #411 the blob step and the meta are ONE request, `setNodeCover` /
+   - The **cover editor** is the one exception (the blob step and the meta are ONE request, `setNodeCover` /
      `removeNodeCover`, revision-checked together with a compare on the blob it replaces): once its save moves the node's
      single cover-blob slot
      (an upload, whose commit replaces the blob the meta being replaced named), its own cover wins on the retry —
@@ -89,7 +89,10 @@ one-element set over the stored one.
 - A blob that never opens now blocks edits to that one Memory or media instead of being silently replaced. That
   is a corrupted or substituted blob (the key opened, the blob did not); refusing is the honest answer, and an
   explicit "reset" is not built.
-- **Rejected: `If-Match` → `412`.** The repo's one ETag (`mediaRevision`) validates a read cache for a whole list;
+- The file name says *version*, the old word for the revision. The file name keeps the old word so its links hold.
+- **Rejected: `If-Match` → `412`.** The repo's ETags validate read caches — a node's record list
+  ([ADR 0033](0033-live-media-updates-revision-polling.md)), a scope's tree ([ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)),
+  a profile picture ([ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)), never a write;
   a per-item precondition header would be a second vocabulary beside the body `revision` the pins already use and
   the generated clients already type.
 - **Rejected: re-GET on conflict.** Neither entity has a single-item read — the node is listed with its whole

@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0063-database-driven-tenant-ingress.md
   - docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md
   - docs/features/admin/use-cases/uc.admin.tenant-storage-quota.md
+  - docs/crosscutting/cc.storage.object-lifecycle.md
   - docs/features/memory/enablers/en.memory.derivatives.md
 ---
 

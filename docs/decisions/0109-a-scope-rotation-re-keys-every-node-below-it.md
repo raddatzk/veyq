@@ -1,22 +1,20 @@
 # ADR 0109 — A scope rotation re-keys every node below it
 
-- Status: Accepted 2026-10-23 (owner); built 2026-10-23 (cr-scope-rotation-rekeys-nodes: contracts, backend, web).
-  [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11 (built 2026-10-27) changed who runs the re-key — any member where it may write, a drop box an
-  owner only — and kept it eager; point 7 and § Consequences state it. Its decisions 6–10 (built 2026-10-28) made an
-  account rotation's epochs the rotator's own, which point 7's last sentence states.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-23
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: point 7 by ADR 0111 (built)
 
 ## Context
 
-A rotation moves `K_SC` into a new epoch and touches nothing else: `commitRotation` (`src/web/src/features/spaces/scopes.ts`)
-mints the epoch, its chain link and the grants, and `ScopesStore.rotate` writes no node row
-(`grep -c "NodeEntity\|veyq_node\|wrappedContentKey" src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/ScopesStore.kt`
-→ 0, 2026-10-23). Until this decision, node keys were not re-keyed ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-Decision 4). So everything added after a rotation **inside a folder, Memory or chapter that existed before it** is
-sealed under a node key the excluded party already holds: a new child's key and name, a new medium's `K_blob` wrap,
-its meta and EXIF. Only a new scope-root entry is out of their reach. With a dump, the excluded party reads it.
+A rotation moved `K_SC` into a new epoch and touched nothing else: it minted the epoch, its chain link and the grants,
+and wrote no node row; node keys were not re-keyed
+([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 4). So everything added after a rotation **inside a folder, Memory or chapter that existed before it** was
+sealed under a node key the excluded party already held: a new child's key and name, a new medium's `K_blob` wrap,
+its meta and EXIF. Only a new scope-root entry was out of their reach. With a dump, the excluded party read it.
 
-That breaks the promise of every rotation, not only the one #518 was written from:
+That broke the promise of every rotation:
 
 - **Replacing one's keys after a compromise** ([ADR 0060](0060-key-rotation-after-compromise.md)) exists for exactly
   the old-key-plus-dump case, and its panel said a secured space opens only with the new keys.
@@ -24,9 +22,7 @@ That breaks the promise of every rotation, not only the one #518 was written fro
   post-rotation content*; it held for scope-root entries only.
 - **An explicit re-key of the tenant** ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2) the same.
 
-The owner's direction (2026-10-23): rotate every node key under the scope key with it.
-
-What a node's key covers, as built (`src/packages/crypto/src/seal.ts`): **keys** — each child's content key
+What a node's key covers (`src/packages/crypto/src/seal.ts`): **keys** — each child's content key
 (`content-key`), each `K_blob` of its media and attachments (`blob-key`: original, thumbnail, preview, cover, banner,
 a Depot file's content), its drop private key (`drop-private-key`); **content** — each child's name and slug token
 (`node-name`, the slug key `HKDF(K_parent, "veyq/v1/slug-token:" + parentSlot)`), its own meta (`node-meta`), its media's
@@ -37,8 +33,8 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
 ## Decision
 
 1. **Every rotation of `K_SC` re-keys every node of the scope** — the group removal's own rotation, a queued
-   rotation (an account's after a compromise, which its own devices commit, a tenant removal's of a co-shared group), an explicit re-key, and the
-   personal scope's self-served one. Live **and trashed** nodes: a restore must not bring back a key the excluded
+   rotation (a tenant removal's of a co-shared group), an account's own after it is secured (the personal scope's
+   included), and an explicit re-key. Live **and trashed** nodes: a restore must not bring back a key the excluded
    party holds. A rotation is **done** only once every node's key was minted at the scope's current epoch; until then
    its status is *re-keying* (for an account's rotation, one of [ADR 0060](0060-key-rotation-after-compromise.md)
    Decision 6's states), and the server derives it from the node rows it already holds.
@@ -62,7 +58,7 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
    what is added below its root. **A re-issue** — a fresh `K_share` — is what closes a link, and ADR 0075's
    `reissueRequired` already marks every link whose recovery copy predates the current epoch. The re-key therefore
    leaves recovery copies at their epoch, so that mark stays true. Links are not switched off or re-issued
-   automatically (owner 2026-10-23): either would break every guest's link to close a reach the owner can close link
+   automatically: either would break every guest's link to close a reach the owner can close link
    by link.
 5. **A drop key is replaced too.** A node carrying a drop keypair gets a new one: its private half sealed under
    `K_X'`, its public half re-sealed under each `WRITE_ONLY` share's `K_share` (`sealedDropPublicKey`), and every
@@ -79,29 +75,24 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
    Both are checked under the node's row lock, which the re-key's commit holds too. That is layer 1. Against an
    active operator serving a member the old wrap, the **device floor** of [ADR 0024](0024-scope-key-rotation.md)
    Decision 6 extends to node keys: a client seals nothing under a node key bound to an epoch below the highest it
-   has held for the scope. A create off the scope root states the current epoch; one below it is `409 stale_epoch`
-   (this narrows ADR 0080 Decision 6's *at or below*, whose reason — a server-chosen epoch that left names
-   unopenable — does not arise when the writer is told to re-read). A guest knows no scope epoch and states its
+   has held for the scope. A create off the scope root states the current epoch; one below it is `409 stale_epoch`,
+   and the writer re-reads. A guest knows no scope epoch and states its
    parent's: under a parent not re-keyed yet that create is the parent's `node_rekey_pending`, so the guest waits
    rather than re-reads in vain.
-7. **The client that commits the epoch runs the re-key; any member holding the current epoch finishes it**
-   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11: a re-key is not governance). The remover's device right after its removal; the scope-rotation
-   worker of the owner completing a queued rotation; the rotator's own device for the personal scope. A rotation
-   whose re-key is incomplete is unfinished work that **every member's** scope-rotation worker picks up in the
-   background — every member's scope row reads *re-keying* — for every trigger alike. A member's own write that meets
-   `node_rekey_pending` re-keys that write's path first (the node and its lagging ancestors, top-down) and retries at
-   once, in the client's one retry helper: for a member a write is delayed by its path's re-key, not refused. A re-key
-   re-seals what the server cannot check, so it is a write onto the node and runs only where the caller may write: a
-   drop box (a kind whose guests get identity folders, Depot's), a guest's identity folder and what lies below one —
-   where members place nothing — are re-keyed **by an owner only** (the listing marks them `ownerOnly`; a member's
-   operation on one is `403 not_scope_owner`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-   Decision 11), and a guest — holding no key above its root — and a member writing into such a node wait. A node
-   that only carries a drop key, a Memory or chapter with an uploader link, is any member's: point 5's replacement needs
-   only the node's old key, which opens the drop private key and through it each guest's `K_up`, and each link's
-   recovery copy, and a member already sets that drop key with a first link and trashes any guest's upload. A queued
-   job is `done` only once no node of the scope lags (the completion is refused before). The rotator of an account
-   rotation commits its scopes' next epochs itself ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 4) and,
-   as a member, may re-key their nodes like any other member.
+7. **The client that commits the epoch runs the re-key; any member holding the current epoch finishes it.** A
+   re-key changes neither membership nor content nor who holds a link, so it is not governance
+   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 11). A rotation whose re-key is incomplete is unfinished work that **every member's** background worker
+   picks up, for every trigger alike, and a member's own write that meets `node_rekey_pending` re-keys that write's
+   path first and retries, in the client's one retry helper: for a member a write is delayed by its path's re-key, not
+   refused. A re-key re-seals what the server cannot check, so it is a write onto the node and runs only where the
+   caller may write: a **drop box**, a guest's identity folder and what lies below one — where members place nothing
+   ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 11) — are re-keyed
+   **by an owner only**, and a guest, or a member writing into such a node, waits. A node that only carries a drop
+   key, a Memory or chapter with an uploader link, is any member's: point 5's replacement needs only the node's old
+   key and each link's recovery copy, and writes nothing a member could not already write there. A queued job is
+   `done` only once no node of the scope lags. Who runs what is
+   [keys-grants-and-trust § Re-keying the nodes](../crosscutting/keys-grants-and-trust.md#re-keying-the-nodes).
 8. **What the server stores and learns.** Rewritten ciphertext in rows it already holds, and each node's epoch moving
    to the current one, right after an epoch change it already sees. No key, no new correlation. Moderation hold copies
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)) are snapshots of
@@ -110,8 +101,9 @@ chunks are sealed under `K_blob` alone (`v1.ts` chunk frame), and each derivativ
 
 **Cost.** Per node one key, its own entry and its children's entries; per medium its blob wraps (three for a
 photo) and two field seals. All symmetric, all in the database, nothing in the store. A Chapter of 1,000 photos is
-about 5,000 seals, about 20 requests at the contracts' 256-item caps. It lands on the device that runs the rotation,
-for a group removal on the remover's (it was `O(members)`, it becomes `O(members + nodes + media)`).
+about 5,000 seals, about 20 requests at the contracts' 256-item caps. It lands first on the device that commits the
+rotation — for a group removal the remover's, `O(members + nodes + media)` instead of `O(members)` — and any member's
+device finishes it (point 7).
 
 ## Consequences
 
@@ -142,12 +134,12 @@ for a group removal on the remover's (it was `O(members)`, it becomes `O(members
   uniqueness would split across generations — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   rejected per-node chains, and re-wrapping fields is cheap enough to keep readers as they are.
 - **Re-key lazily, on the first write into a node.** No upfront cost, but every write path of every application, and
-  every guest, would re-key ancestors, and a guest cannot (it holds no key above its root). Still rejected by [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md): its
-  member-driven re-key stays eager, and only a member's own blocked write pulls its path forward, in one central place.
+  every guest, would re-key ancestors, and a guest cannot (it holds no key above its root). The member-driven re-key
+  stays eager; only a member's own blocked write pulls its path forward, in one central place.
 - **Re-key only on a compromise rotation.** It would leave ADR 0024's removal guarantee false.
-- **Switch every link off, or re-issue every link, with the rotation** (owner 2026-10-23): it breaks every guest; the
+- **Switch every link off, or re-issue every link, with the rotation**: it breaks every guest; the
   `reissueRequired` mark and the result screen leave the choice per link.
-- **The whole scope read-only during the re-key** (owner 2026-10-23): simpler on the server, but a large space stops
+- **The whole scope read-only during the re-key**: simpler on the server, but a large space stops
   taking writes for the whole run, and a crashed run keeps it stopped.
 
 ## Bite tests (each must fail if the rule is wrong)

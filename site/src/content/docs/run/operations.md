@@ -4,6 +4,7 @@ description: The health probe, what the logs hold and leave out, that there are 
 sources:
   - docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md
   - docs/features/admin/use-cases/uc.admin.configure-object-store.md
+  - docs/crosscutting/cc.storage.object-lifecycle.md
   - docs/crosscutting/cc.security.wire-assertion.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md

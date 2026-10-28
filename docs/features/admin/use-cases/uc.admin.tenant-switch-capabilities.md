@@ -10,6 +10,7 @@
   ACTIVE.
 - **Postconditions (success):** The tenant holds the set of entries it switched off. Every member's effective set and
   every gate acting in the tenant follow it without a restart. Nothing a member stored is deleted.
+- **Enabler:** [en.platform.capability-register](../../platform/enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

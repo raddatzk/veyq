@@ -1,7 +1,9 @@
 # ADR 0039 — Transient feedback via a floating Toast
 
-- Status: Accepted (amended 2026-10-23 by [ADR 0107](0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md): the channel stands; the layer draws it)
+- Status: Accepted
+- Built: yes
 - Date: 2026-07-13
+- Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
 
 ## Context
 
@@ -30,9 +32,10 @@ Adopt **one toast** as the client's single **transient-feedback channel**, and r
 transient feedback through it:
 
 - Mount **one** global toaster (`App.vue`), reached only through a thin **`useToast`** composable that fixes the app
-  conventions (severity, i18n summary/detail, default `life`). Since ADR 0107 the toaster is the UI layer's own
-  (`shared/ui/VeyqToaster.vue` on Reka's Toast, fed by `shared/ui/toast.ts`); it was the component library's toast
-  service until then, and no call site changed with the swap.
+  conventions (severity, i18n summary/detail, default `life`). The channel is this decision; what draws it is the UI
+  layer's ([ADR 0107](0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)): the toaster is
+  `shared/ui/VeyqToaster.vue` on Reka's Toast, fed by `shared/ui/toast.ts`, and a swap of what draws it changes no
+  call site.
 - **Success confirmations** (the `notice` refs) become **auto-dismissing toasts** — the inline
   `<Message severity="success">` + `notice` ref pattern is retired at those sites.
 - **Undo affordances** become **undo-toasts**: a toast carrying a "Rückgängig / Undo" action, its
@@ -51,11 +54,10 @@ undo (ephemeral) feedback, not error states pinned to a form.
 - **New paradigm cost.** Confirmation moves off the form and becomes ephemeral: a "saved" / "invited"
   acknowledgement is no longer pinned beside the control that produced it. Accepted as the price of one
   consistent feedback channel. (This is the main thing given up versus the status quo.)
-- **One global surface.** `ToastService` in `main.ts` + a single `<Toast />` in `App.vue`; `useToast` +
-  `useUndo` land in `shared/state/`, matching the cr-0155 (`useAsyncData`/`useAsyncAction`) primitive style.
+- **One global surface.** A single `<VeyqToaster />` in `App.vue`; `useToast` + `useUndo` live in `shared/state/`,
+  matching the `useAsyncData`/`useAsyncAction` primitive style.
 - **Rejected — inline-only + `useUndo` dedup.** Keep all feedback inline, extract only `useUndo` to dedupe the
   two bars. Most reuse-faithful and lowest-risk, but leaves the scattered `notice` refs and two rendering paths;
   rejected in favour of consolidating feedback into one channel.
 - **Rejected — undo-toasts only, notices stay inline.** A middle path (Toast gains a real consumer while
   form confirmations stay pinned). Rejected in favour of full consolidation for a single consistent paradigm.
-- Implemented by **cr-0157**.

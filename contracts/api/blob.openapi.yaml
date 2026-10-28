@@ -15,8 +15,8 @@ info:
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata (`chunkCount`,
     `byteSize`, the per-chunk size `manifest`) and the `K_blob` wrap; never a plaintext byte, a content key, or a
-    filename in clear. The caller holds a grant for the scope (enforced by code, ADR 0008). **No content dedup**
-    ([ADR 0013 §5](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
+    filename in clear. The caller holds a grant for the scope (enforced by code, ADR 0008). **No content dedup beyond one node**
+    ([ADR 0013 §5](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)).
 tags:
   - name: blob
     description: >

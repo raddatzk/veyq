@@ -2,6 +2,7 @@
 title: Backup and restore
 description: Capture an instance's three legs cold, check the capture, and restore it onto a fresh instance.
 sources:
+  - docs/crosscutting/release-and-deployment.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md

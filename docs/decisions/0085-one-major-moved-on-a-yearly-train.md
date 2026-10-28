@@ -1,7 +1,9 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
-- Status: Accepted; decision 1 is built (2026-10-15, inbox #436), the train and the client window are not (§ Consequences)
+- Status: Accepted
+- Built: partly (not built: decision 2's release order, decision 3's train, decision 5's client window)
 - Date: 2026-10-15
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 
@@ -10,8 +12,7 @@
 client is served by the backend it talks to ([ADR 0069](0069-backend-serves-the-web-app-shell.md)), and
 `admin-web` ships in the same release, so neither can drift from its server.
 
-Native clients change that. The direction the owner set on 2026-10-15 (native work itself stays parked until the
-web V1 stands) is one installable app per application, each able to talk to **several instances** at once. A store
+Native clients change that. The direction the owner set (native work itself stays parked until the web V1 stands) is one installable app per application, each able to talk to **several instances** at once. A store
 ships the app, and every operator upgrades on their own schedule. Under equality two things break: an app update
 locks its user out of every instance that has not upgraded yet, and one operator who upgrades late blocks users
 who also use other instances. The cost of drift lands on the people who cannot fix it.

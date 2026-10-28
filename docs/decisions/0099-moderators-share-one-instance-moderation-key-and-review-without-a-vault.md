@@ -1,22 +1,9 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
-- Status: Accepted 2026-10-17. **Built** (cr-moderators-and-the-moderation-key, 2026-10-17): who moderates and the key
-  — §§ 1–5 (the roster, epochs, grants, delivery, rotation, the `MODERATOR` role and the key proof, the step-down
-  rules), § 6's moderation surface as a shell (sign-in, accept, unlock without the vault, the empty queue), § 7's
-  address confirmation, and the instance events of the moderation log
-  ([uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
-  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md)). § 6's
-  queue, review and decisions are built too, with the Server Owner's steps on the admin channel
-  (cr-moderation-review-and-measures, 2026-10-18;
-  [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
-  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Not built: the
-  objection rule of § 5. § 7's new-case mail is built with the report
-  (cr-report-and-hold, 2026-10-17, [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md)). It changes
-  [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), whose parts touched
-  here (§§ 1–3, 6–7, 11–13) were not built then and are partly built since (ADR 0093's status names which), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
-  decisions 3, 5 and 6; both are edited in place (§ Consequences lists the edits). From [inbox](../inbox.md) #463
-  (owner 2026-10-17: build it; the three questions under § Decided with the owner answered as recommended).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-17
+- Model: [Moderation](../features/moderation/_index.md)
 
 ## Context
 
@@ -94,7 +81,7 @@ What exists to build on (measured in this worktree):
 
 - **Minting needs no vault.** admin-web draws `M_n`, seals it to every current moderator's identity public key,
   uploads the public half and the grants, and forgets it — the same class of work as the account birth it already
-  does at setup. It never opens a grant. **Epoch 1 is minted by first-run setup itself** (owner 2026-10-17): the setup
+  does at setup. It never opens a grant. **Epoch 1 is minted by first-run setup itself**: the setup
   client draws `M_1` and seals it to the identity born in that same setup, and the server stores it with the Server
   Owner's account in one transaction — so reporting is on from the first day, with the Server Owner as the first
   moderator, and no operation turns moderation on later. Later epochs are minted on the admin channel as below. An
@@ -110,7 +97,7 @@ What exists to build on (measured in this worktree):
   check it (a guest has no pins), and need not beyond what [ADR 0026](0026-client-trust-tiers.md) already says: the
   reporter's client is operator-served, and the operator is the moderation authority, so a substituted key gains an
   active operator only what the served code already could.
-- **A moderation grant is unsigned** (owner 2026-10-17), unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
+- **A moderation grant is unsigned**, unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
   decision 6): admin-web mints without a vault and so has no identity signing key. A server that substitutes a grant
   must also substitute the published bundle to read anything, which this section already grants an active operator,
   the moderation authority itself; the published-key comparison above is the check that matters.
@@ -200,35 +187,17 @@ What exists to build on (measured in this worktree):
   retention reader. src/web/: the moderation surface (accept, confirm the address, unlock, queue, decide, deliver, step
   down), the moderation mode bound to it. admin-web: roster, mint, rotate, the Server-Owner-only steps. `veyq-admin`:
   `moderator appoint|remove|list`, `moderation rotate`. Instance mail to more than one address.
-- **0093's costs move.** "admin-web's queue" becomes the moderation surface; admin-web keeps less of moderation than
-  0093 planned.
 - **Out of scope:** per-tenant moderators; a vote of several moderators on a measure; the passkey wrap until passkeys
   exist; moderator accounts with no tenant; any signal of a moderator's identity to the affected (statements name the
   host, not the person).
-
-**Edited in ADR 0093** (in place, per [the ADR rules](README.md)):
-
-- **§ 1**, the report share's last bullet: served against the key proof **and** the `MODERATOR` role (0099 § 2).
-- **§ 2**, first bullet: the moderation key is the instance moderation key's current epoch (0099), not the Server
-  Owner's identity key; third bullet: every moderator is notified (0099 § 7), not "the Server Owner".
-- **§ 3**, title and body: review and decisions in src/web/'s moderation surface for the moderator role, the viewer
-  holding only the moderation key; admin-web keeps roster, key, contact, the Server-Owner-only steps and the order
-  path; the "only flow where a Server Owner signs in on a tenant host" becomes the moderator's.
-- **§ 6**: which steps a moderator takes, which stay the Server Owner's (0099 § 6).
-- **§ 7**: the objection is reviewed by another moderator, with the single-moderator rule (0099 § 5).
-- **§ 11**: the instance events (0099 § 4); "shown per case in admin-web" becomes the moderation surface.
-- **§ 12**: the order path in both surfaces (0099 § 6). **§ 13**: the CSAM warning and the BKA export in the
-  moderation surface.
-- **Consequences**: the "single operator reviews their own measure" bullet goes; the cost list names the moderation
-  surface. **Rejected alternatives**: "Moderation actions in src/web/" is narrowed to Server-Owner operations, with a
-  pointer here.
-
-Also edited: [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decisions 3, 5 and 6
-(moderation notices to moderators; their address confirmed in the moderation surface);
-[ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule gains the moderator as a fifth audience, whose gate is
-not the Server-Owner gate and so stays in src/web/; the [security model](../crosscutting/security-model.md)'s T&S section;
-the Run docs' [moderation page](../../site/src/content/docs/run/moderation.md), which states the design as decided and
-not built.
+- **[ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule gains a fifth audience**, the moderator, whose
+  gate is not the Server-Owner gate and so stays in src/web/.
+- **The flows** are [uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
+  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md),
+  [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
+  [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md) and
+  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md); the Run docs'
+  [moderation page](../../site/src/content/docs/run/moderation.md) describes them for the Server Owner.
 
 ## Rejected alternatives
 
@@ -255,7 +224,7 @@ not built.
 
 ## Decided with the owner
 
-The owner answered each question as recommended (2026-10-17); the options stay as the record of what was weighed.
+Three questions, the options weighed, and the one taken.
 
 1. **May the Server Owner step down as a moderator?** (a) Never: the host moderates. (b) While at least one other
    accepted moderator holds the key: their grants go, the key rotates, and they can reappoint themselves. (c) Always.

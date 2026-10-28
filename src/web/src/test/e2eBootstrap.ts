@@ -208,9 +208,9 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
  * the OWNER, not the new member — the caller decides who acts next.
  *
  * **The link is read out of the mailbox, because that is the only channel it travels on.** The invite response
- * carries no token: a member invite is minted for the invited person (ADR 0055 §2). The dev-invite file is not an
- * alternative — a booted fast-jar never writes it (`TenantInviteMailer` early-returns in `LaunchMode.NORMAL` before
- * the append). The code travels the other way, from the owner's client to the invitee outside veyq — here, a
+ * carries no token: a member invite is minted for the invited person (ADR 0055 §2), and no log or file carries the
+ * link either (`TenantInviteMailer` never writes a token anywhere). The code travels the other way, from the owner's
+ * client to the invitee outside veyq — here, a
  * variable. So this helper onboards a member exactly the way a member is onboarded, which is the point: nothing here
  * is a test-only shortcut around the product's own routing.
  *

@@ -2,6 +2,7 @@
 title: Kubernetes
 description: What is specific to running veyq from its Helm chart.
 sources:
+  - docs/crosscutting/release-and-deployment.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md

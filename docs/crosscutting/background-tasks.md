@@ -47,7 +47,7 @@ sequenceDiagram
   Note right of S: crash before done → lease expires → lazy reclaim by another worker<br>(at-least-once#59; jobId-keyed idempotent completion#59; attempts>max → dead-letter)
 ```
 
-- **Claim / lease.** Atomic (`WHERE status='pending'`, MariaDB `SKIP LOCKED`). Every claim leases with a
+- **Claim / lease.** Atomic: a compare-and-set on `status` ([§ Persistence](#persistence)). Every claim leases with a
   **TTL**; expensive jobs **heartbeat** to keep it. Only the lease holder heartbeats, completes, fails or
   declines ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §6) — idempotency makes a *repeated*
   completion harmless, it does not make an *unclaimed* one legitimate. Each of those transitions, the completion
@@ -76,7 +76,7 @@ self-hosted makes it moot). Keyed-per-scope tags remain a seam for future low-fo
 ## Persistence
 
 The queue/claim/lease machinery is **bought, not built** — but the "buy" here is the **DB's own atomic
-primitive**, not a job framework. **Resolved (cr-0076):** the workers are *remote key-holders that pull over
+primitive**, not a job framework: the workers are *remote key-holders that pull over
 HTTP* (interactive clients + the later agent), so a server-side execution framework (JobRunr, db-scheduler)
 does **not** fit — those run jobs *on the server*, which is exactly what a blind veyq server cannot do (it
 holds no key). The claim is therefore a thin, portable **compare-and-set on `status`** (read a claimable

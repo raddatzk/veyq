@@ -1,7 +1,9 @@
 # ADR 0003 — Operator-blind password authentication (password-derived Ed25519 keypair + challenge-response)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-25
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 

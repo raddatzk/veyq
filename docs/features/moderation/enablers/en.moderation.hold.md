@@ -100,7 +100,13 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Extended by a moderator | the end the extension names: after the current end, at most six months from now, with a sealed reason | cr-moderation-review-and-measures |
 | An authority's order (its own case, no report) | six months after the block (removal), 60 days after receipt (preservation), the days named or else six months after receipt (information) — and that end is the hold's **floor** (`veyq_hold.floor_until`): `Holds.moveEnd` and `Holds.endNow` never end it sooner, so a lift or a decision leaves it to its floor and the case closes only then | cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`, `Holds`) |
 | A statement an authority deferred | six months past the deferral's end while it holds; six months after the sending once it went out | cr-authority-orders-and-art18-reports (`StatementDeferrals`) |
-| Child sexual abuse material | at the recorded handover to an authority (`HANDED_OVER` or `INFORMATION_GIVEN`), at the latest 90 days (`Holds.CHILD_SEXUAL_ABUSE`) after the report that took the hold or made the case one of this category — its `ceiling_until`: a measure or a statement moves the end at most to it, and a report that makes a decided case one of this category brings a later end back to it. A logged extension may pass it, the handover still ends it; an order's floor always wins (§ 184b(5) StGB: keeping it serves only the report). A hold that runs until the handover past 90 days is not built (ADR 0093 § Legal basis, Still open 1) | the moderation-retention follow-up of #462 (`Holds`, `ReportHandler`, `CaseDecisions.handoverIn`) |
+| Child sexual abuse material | at the recorded handover to an authority (`HANDED_OVER` or `INFORMATION_GIVEN`), at the latest 90 days (`Holds.CHILD_SEXUAL_ABUSE`) after the report that took the hold or made the case one of this category — its `ceiling_until`: a measure or a statement moves the end at most to it, and a report that makes a decided case one of this category brings a later end back to it. A logged extension may pass it, the handover still ends it; an order's floor always wins (§ 184b(5) StGB: keeping it serves only the report). A hold that runs until the handover past 90 days is not built (ADR 0093 § Legal basis, Still open 1; inbox #575) | the moderation-retention follow-up of #462 (`Holds`, `ReportHandler`, `CaseDecisions.handoverIn`) |
+
+**Extending a hold.** A moderator extends a case's hold with a concrete reason, logged as `HOLD_EXTENDED` with the new
+end: beside the sealed reason its **type is in the clear** — `AUTHORITY_REFERENCE`, `ART18_REPORT_IN_PROGRESS`,
+`OBJECTION`, `LAWYERS_LETTER`, `LAWSUIT` — metadata only. On a child-sexual-abuse case only the first two are accepted
+(`CSAM_EXTENSION_REASONS`), and any other is refused `409 extension_reason_not_allowed`; on every other case the type is
+optional. No extension ends a hold before an authority's floor.
 
 A hold's rows are copied as the database returns them, but a time column as the instant it is (ISO-8601, UTC,
 `HoldSnapshot.text`): a time column holds a UTC wall clock with no zone of its own, and the Art. 18 export read a guest's
@@ -118,6 +124,7 @@ end, since the skip asks for a pin whose end is still ahead.
   pinned objects too: `src/tools/instance_backup.py`'s `blob_index`),
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 - [uc.moderation.report](../use-cases/uc.moderation.report.md)
+- [cc.privacy.retention](../../../crosscutting/cc.privacy.retention.md) — the hold's ends beside every other period
 - [en.moderation.guest-write-record](en.moderation.guest-write-record.md) — the record rows a hold copies
 - Docs site: [Report something](../../../../site/src/content/docs/help/report-something.mdx),
   [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),

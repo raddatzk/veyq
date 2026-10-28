@@ -1,6 +1,7 @@
 # ADR 0047 — Inline video playback via a Service-Worker range shim
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-22
 
 ## Context

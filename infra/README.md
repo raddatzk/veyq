@@ -189,13 +189,16 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 
 ## Cutting a release
 
-For the maintainer; an operator starts at the [Run area](https://raddatzk.github.io/veyq/run/) of the docs site. **Nothing is published by a push**
+For the maintainer; an operator starts at the [Run area](https://raddatzk.github.io/veyq/run/) of the docs site. The
+release model itself — the version, snapshot and release, the assets, both targets, what is built and what is only
+decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutting/release-and-deployment.md); this
+section keeps the commands. **Nothing is published by a push**
 ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §1): a push to `main` or
 `release/**`, and every pull request, runs `.github/workflows/ci.yml` — the one pipeline per commit
 ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)) — as a **dry
-run**: every stage (the guards, the surface checks with the chart's `scripts/chart_meta_check.py` and
-`scripts/chart_upgrade_check.py`, the races, the API end-to-end run) and, beside them, the image builds (app, admin, tools), with no
-registry login and no push. A publish is started by hand, from `main` or `release/<major>.x`, runs the same stages,
+run**: every stage — listed once, in the stage map of
+[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and,
+beside them, the image builds (app, admin, tools), with no registry login and no push. A publish is started by hand, from `main` or `release/<major>.x`, runs the same stages,
 publishes only when every one is green, and is one of two kinds:
 
 ```sh
@@ -252,7 +255,7 @@ It talks to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8
 does, and `VEYQ_ADMIN_BASE` (the admin listener, default `http://127.0.0.1:8090`) for setup and tenant creation —
 which the public port 404s.
 
-It reads the owner invite's secret from `createTenant`'s own response, so it needs neither a mailbox nor the
-backend's dev-invite file for the owner; the second user's invite comes from Mailpit. The tenant's domain is a
+It reads the owner invite's secret from `createTenant`'s own response, so it needs no mailbox for the
+owner; the second user's invite comes from Mailpit. The tenant's domain is a
 `*.localhost` name, never an IP literal: the contract's hostname pattern refuses one, and no seeder writes to the
 database to get around it.

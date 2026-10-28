@@ -1,20 +1,9 @@
 # ADR 0004 — Session tokens: opaque, server-stored, rotating access + refresh in revocable families
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-25
-- Implementation: the **opaque two-token rotating scheme** (access + refresh, families, reuse
-  detection ⇒ family revocation) is **built** (`core/account/login/*`, `veyq_session_family` / `veyq_refresh_token` / `veyq_access_token`). The
-  **management half** — listing the account's families and revoking one remotely
-  ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **built**:
-  `SessionService.listActiveFamilies` / `revokeFamilyForUser` / `revokeOtherFamilies` behind `SessionResource`
-  (`GET /api/sessions`, `DELETE /api/sessions/{id}`, `POST /api/sessions/revoke-others`, contract
-  `auth.openapi.yaml`), covered by `SessionManagerSliceTest`; the web client is
-  `src/web/src/features/account/sessions/`. The **one-generation grace** below (refined 2026-09-21 from inbox
-  #123) is **built** in `SessionService.rotate`: a `SUPERSEDED` token exactly one generation behind `CURRENT`
-  re-mints under the orphan's own generation, any other distance revokes the family — pinned by
-  `LoginSliceTest` (the grace block, plus `replayedSupersededRefreshRevokesFamily` for distance two). The family
-  row lock that decides the distance is pinned by `LoginSliceTest.theOrphanAndTheCurrentTokenPresentedTogetherCannotForkTheChain`
-  and `SessionManagerSliceTest.aRefreshRacingARevokeCannotBringTheFamilyBack`.
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 
@@ -213,7 +202,7 @@ cookie (so a rotation never silently upgrades/downgrades the lifetime); logout c
 backstop remains the **server-side refresh TTL** + reuse detection — not the cookie lifetime, which a browser's
 session-restore ("continue where you left off") may extend across a restart anyway. `remember` stays in the
 contract as the superseded flag and is honoured (→ `PERSISTENT`) only when `sessionScope` is absent. Both lifetimes carry the **same opaque token** — no key material — so the server stays operator-blind.
-The web client (cr-0055) is fully cookie-based (it keeps no body refresh token); see ADR 0005 §22 for how the
+The web client is fully cookie-based (it keeps no body refresh token); see ADR 0005 §22 for how the
 **vault key** is persisted to match each lifetime.
 
 **Adoption is the only place besides login where a lifetime is *chosen*.** A device onboarded by a grant never

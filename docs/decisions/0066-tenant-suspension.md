@@ -1,7 +1,9 @@
 # ADR 0066 — Tenant suspension is an immediate, request-level lockout, not a routing toggle
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-07
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 

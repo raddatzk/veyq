@@ -1,7 +1,9 @@
 # ADR 0086 — One word per meaning: platform, application, app, capability, rights, revision, format
 
-- Status: Accepted; the word rules bind, and the renames they called for are built (§ Consequences)
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-15
+- Model: [Applications](../apps/README.md)
 
 ## Context
 
@@ -33,8 +35,8 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **veyq**, the **platform** (*Plattform*) | core: who, what, with whom (ADR 0079) | an application |
 | **application** (*Anwendung*) | a set of node kinds with its own data and screens on the platform: Memories, Depot | "plugin"; an installable client |
 | **app** (*App*) | an installable native client only. The web client is the **web client** | an application |
-| **capability** | an instance-wide, pre-auth switch (ADR 0032) | anything per viewer |
-| **rights** (*Rechte*) | what a view offers this viewer here, the client's projection of a permission: `memoryRights`, `folderRights`, `depotRights` | an instance switch |
+| **capability** | an entry of the register of what this server serves, which its operator switches off for the instance and a tenant owner for the tenant (ADR 0032, [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)) | anything per viewer |
+| **rights** (*Rechte*) | what a view offers this viewer here, the client's projection of a permission: `memoryRights`, `folderRights`, `depotRights` | a capability switch |
 | **version** | compatibility only: the major (ADR 0085), a crypto suite | a concurrency counter |
 | **revision** | a concurrency or change counter: `metaRevision` (was `metaVersion`), `mediaRevision`, a tree revision, the edition of a text that changes (the terms' `termsRevision`) | compatibility |
 | **format** | a sealed payload's schema, per node kind, readable forever (ADR 0079 decision 7) | the platform's major |
@@ -65,47 +67,34 @@ is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
   and the UI's *file* / *Datei* wherever it means a file rather than the application.
 - **Has nothing to move:** Depot claims no route segment (ADR 0015), so there is no slug.
 
-**The shape of the apps** (owner's direction, 2026-10-15; native work is parked until the web V1 stands): the
+**The shape of the apps** (native work is parked until the web V1 stands): the
 **veyq app** is core plus Depot, and each further application is its own app, reached from the others by deep
 link. Shares open in the browser with an "open in the app" banner. The decisions this needs (one sign-in shared
 across apps, how a link's key reaches an app safely) belong to the native client's own ADR, not to this one.
 
 ## Consequences
 
-- **The word rules bind now**, and this change updates where they are written: the root `CLAUDE.md` and
-  [`docs/apps/README.md`](../apps/README.md).
-- **Built (2026-10-15):** Files → Depot, as the Depot paragraph above sorts it.
-- **Built (2026-10-15, inbox #437):** `…Capabilities` → `…Rights`, web only: `folderRights`, `memoryRights`,
-  `depotRights`, `favoriteRights`, `coverRights`, `sourceRights`, their types, the `RightsTarget` they are asked
-  about, and the files that hold them (`rights.ts`). The instance switch keeps its name everywhere (`hasCapability`,
-  `useCapabilities`, the `CORE_*` ids, the catalog). Two other senses of the word stay too, because neither is a
-  per-viewer function: a **capability token** (a bearer secret such as a contributor's, `cc.security.wire-assertion`)
-  and the worker's capability tags above.
-- **Built (2026-10-16, inbox #437):** the node counters are revisions, on the wire, in the database and in the
-  clients: `metaRevision` (was `metaVersion`, on a node and on a media) and `placementRevision` (was
-  `placementVersion`, ADR 0080 Decision 3), the columns `meta_revision` / `placement_revision`, and the
-  `x-veyq-concurrency` mode `revision`. `placementVersion` was not named above; it is the same kind of counter on the
-  same row and in the same `updateNode` request, so it moved too. Pre-V1, so no major and no alias. No sealed byte
-  changed: the `node-name` and `content-key` seals bind the placement revision by position, never by name, and the
-  conformance vectors only renamed their key.
-- **Built (2026-10-16, inbox #452):** the rest of "version" that this table makes a revision. The conflict code
-  `stale_revision` (was `stale_version`, every revision-checked write, the pins, the register and a rotation); the
-  identity pins' and the device register's `revision` (was `version`: request, response, column, and the binding field
-  of the `identity-pins` / `device-register` seals); `avatarRevision` (was `avatarVersion`, ADR 0084, the avatar read's
-  ETag); and the terms, `termsRevision` / `acceptedRevision`, the accept's `revision` and `409 terms_revision_changed`
-  (were `termsVersion` / `acceptedVersion` / `version` / `terms_version_changed`, ADR 0035). The terms were the open
-  question, revision or edition: a revision, because the number has no compatibility meaning, moves on every change
-  of the text and guards the accept with a 409 exactly as `metaRevision` guards a meta write; "edition" would be a
-  second word for a meaning the table already names. A user reads it as *Fassung* in German copy. Pre-V1, so no major
-  and no alias; the columns moved in the core baseline with its pin line. No sealed byte changed: the two account
-  seals bind the revision by position, and their vectors only renamed the key (`context_bytes` unchanged). The vector's
-  sample plaintext `{"version":1,…}` stays: it is opaque test bytes, and changing it would move `blob`.
-  `validate_write_concurrency.py` now refuses a declared revision field named as a version.
+- **The word rules bind** wherever a word is written: docs, code, the wire and the wiki. The root `CLAUDE.md` and
+  [`docs/apps/README.md`](../apps/README.md) state them for the next reader.
+- **Depot**: what moved to `depot` and what stays `file` is the Depot paragraph above.
+- **Rights**: the per-view functions are `…Rights` (`folderRights`, `memoryRights`, `depotRights`, `favoriteRights`,
+  `coverRights`, `sourceRights`), in files named `rights.ts`. The capability switch keeps its name everywhere
+  (`hasCapability`, `useCapabilities`, the `CORE_*` ids, the catalog). Two other senses of the word stay, because
+  neither is a per-viewer function: a **capability token** (a bearer secret such as a contributor's,
+  `cc.security.wire-assertion`) and the worker's capability tags above.
+- **Revision**: every concurrency or change counter is a revision, on the wire, in the database and in the clients —
+  `metaRevision`, `placementRevision`, the conflict code `stale_revision`, the identity pins' and device register's
+  `revision`, `avatarRevision`, the terms' `termsRevision` / `acceptedRevision` and `409 terms_revision_changed`. The
+  terms' number is a revision, not an edition: it has no compatibility meaning, moves on every change of the text and
+  guards the accept with a 409 exactly as `metaRevision` guards a meta write, and "edition" would be a second word for a
+  meaning the table already names (a user reads it as *Fassung* in German copy). No sealed byte changed with the
+  rename: the seals bind a revision by position, never by name. `validate_write_concurrency.py` refuses a declared
+  revision field named as a version.
 - **Stays "version", because it is compatibility:** `/api/setup`'s `version: { major, build }` (ADR 0032), the
   release version (ADR 0057), an export's `appVersion` and its manifest's format `version`, the Emergency Kit's and a
   sealed payload's format version (`v`), and every spec's `info.version`.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
-  ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's switch.
+  ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's or tenant owner's switch.
 
 ## Alternatives considered
 

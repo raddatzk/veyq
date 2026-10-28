@@ -151,6 +151,7 @@ once, so the server never holds what opens the invitation.
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (grants and the invite)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md) (the shared space this adds members
   to), [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the profile the join record lives in),

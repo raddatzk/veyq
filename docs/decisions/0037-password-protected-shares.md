@@ -1,7 +1,9 @@
 # ADR 0037 — Password-protected public shares (operator-blind access-control gate)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-10
+- Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
 
 ## Context
 
@@ -62,7 +64,7 @@ password, nothing is readable" holds at the access-control layer.
   the Memory carries that key, so such a copy would hand this password to another link's holder with a dump.
 
 **All roles.** The gate sits in front of every guest endpoint, so it protects a READ greeting page, a
-READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in the shared `ShareCreateDialog`.
+READ_WRITE album, and a WRITE_ONLY drop-box alike.
 
 ## Operator-blindness & threat model — stated honestly
 
@@ -81,7 +83,7 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
   corollary in the [security model](../crosscutting/security-model.md)). For the realistic self-hosted / trusted
   case (operator = curator, or a trusted instance) the gate is fully effective. The stronger crypto-gate is a
   possible future upgrade for the malicious-operator case; it is deliberately not built here.
-- **Brute-force is honestly bounded — per share, on wrong attempts (cr-0165).** A link-holder (who has `pw_salt`
+- **Brute-force is honestly bounded — per share, on wrong attempts.** A link-holder (who has `pw_salt`
   from the locked resolve) can brute-force the password offline against nothing — they'd have to guess against the
   *server* (online), since the verifier isn't served. That online path is bounded by a **per-share limit on wrong
   attempts** ([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md)): each `share_password_incorrect`
@@ -103,15 +105,12 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
 
 ## Consequences
 
-- **Small, in-place, no fragment change.** A few nullable columns (`password_required`, `pw_salt`, `pw_verifier`,
-  `sealed_password`) + a token check on the guest endpoints. Set / change / remove / add-to-an-existing-share /
-  reveal all keep the same link — none of the crypto-gate's link-key machinery, recoverable second key, nested
-  wraps, or migration pain.
-- **Reuses the `contributorToken` shape.** A server-checked, share-scoped bearer credential is already how
-  contribution is gated (cr-0101); the password token is the same pattern, so it slots into `activeShare(...)`.
-- **`updateShare` grows a tri-state password patch** on top of cr-0119's optional `role` — the op now edits note +
-  name (full replace) + role (optional) + password (tri-state). All owner-gated, all leaving `K_share`/the link
-  intact.
+- **Small, in-place, no fragment change.** A few columns and a token check on the guest endpoints; set, change, remove
+  and reveal all keep the same link — none of the crypto gate's link-key machinery.
+- **The same shape as the contributor token** ([ADR 0030](0030-contributor-public-share.md)): a server-checked,
+  share-scoped bearer credential whose hash only is stored.
+- **`updateShare` carries a tri-state password patch** beside ADR 0036's note, label and role, all owner-gated and all
+  leaving `K_share` and the link intact.
 
 ## Alternatives considered
 
@@ -123,15 +122,4 @@ READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in t
 - **(C) Server stores the raw password / a fast hash.** The conventional shape. Rejected: the operator would see (or
   trivially crack) the password. The `Argon2id(pw)` token + `SHA-256` verifier keeps the raw password client-side.
 
-## Related
-
-- [ADR 0029](0029-public-viewer-share.md) (the share model + `K_share` fragment), [ADR 0030](0030-contributor-public-share.md)
-  (the `contributorToken` this reuses), [ADR 0036](0036-editable-share-note-recoverable-share-key.md) (the
-  owner-gated `updateShare` this extends + the member-recoverable `K_share` the reveal uses),
-  [ADR 0003](0003-operator-blind-password-auth.md) (the "raw password never reaches the server" stance),
-  [ADR 0026](0026-client-trust-tiers.md) (the client-integrity tiers that bound this gate).
-- Use-case: [uc.sharing.share-password](../features/sharing/use-cases/uc.sharing.share-password.md).
-- Cross-cutting: [security-model](../crosscutting/security-model.md) (the operational-metadata list gains
-  `password_required` + the verifier/salt; `sealed_password` is one more opaque ciphertext),
-  [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md) (the online brute-force bound).
-- Security area of the docs site: [Roadmap](../../site/src/content/docs/security/roadmap.md)
+What this holds against a malicious operator is on the docs site's [Roadmap](../../site/src/content/docs/security/roadmap.md).

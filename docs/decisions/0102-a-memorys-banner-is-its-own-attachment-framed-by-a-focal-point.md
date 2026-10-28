@@ -1,14 +1,9 @@
 # ADR 0102 — A Memory's banner is its own attachment, framed by a focal point
 
-- Status: Accepted 2026-10-19, built by `cr-memory-banner`. The product shape is the owner's (2026-10-18); the owner
-  answered the five open questions on 2026-10-19 — the word *Banner* (decision 1), the banner's own bytes, not a reference (decision 3),
-  the tab row sticks (§ Consequences), no length limit for a video, and a browser that cannot decode a frame of a video
-  offers no video banner (decision 4) — and the same day dropped the in-browser transcoder: a video banner plays its
-  original until the client worker queue (inbox #23) makes the small copy (decision 4). Also on 2026-10-19
-  (cr-cover-banner-upload-only-and-dedup) the owner made the banner an **upload only** - no gallery source, set
-  casually from the lightbox it overwrote another member's choice unnoticed - let an upload equal to a gallery medium
-  **share** that medium's stored object instead of copying it (decision 3), and dropped the description.
+- Status: Accepted
+- Built: partly (not built: decision 4's small playback copy, in decision 2's later slot)
 - Date: 2026-10-18
+- Model: [Application: Memories](../apps/memories.md)
 
 ## Context
 

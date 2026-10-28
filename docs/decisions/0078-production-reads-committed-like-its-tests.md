@@ -1,7 +1,9 @@
 # ADR 0078 — Production runs READ COMMITTED, the isolation its tests prove
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-03
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 ## Context
 

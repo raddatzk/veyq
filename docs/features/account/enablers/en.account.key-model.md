@@ -15,8 +15,9 @@
 - **Depends on:** the crypto strategy ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md))
   + the operator-blind auth/unlock split ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md),
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
-- **Out of scope (by design):** **scope, content & share keys** + the invite/onboarding key transfer live in
-  [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md); exact **byte formats** (suite layouts, the X-Wing
+- **Out of scope (by design):** what the account's keys open — **scope, content and share keys**, grants and the
+  invite, scope rotation, securing the account, the key chain and identity trust — is the topic's current picture,
+  [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md); exact **byte formats** (suite layouts, the X-Wing
   KEM's encodings, seal encodings) in the conformance-pinned suite
   ([`packages/crypto/src/v1.ts`](../../../../src/packages/crypto/src/v1.ts)) and its vectors
   ([`contracts/crypto/vectors/v1.json`](../../../../contracts/crypto/vectors/v1.json)), and what every seal binds is
@@ -24,8 +25,8 @@
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
-> companion: [docs site: Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx). This is the
-> **target model**; first-build scope is tracked via the inbox + change-requests.
+> companion: [docs site: Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx). Built as
+> stated, except the passkey method, marked **not built** where it appears.
 
 ## Principle: one Master Key, many wraps
 
@@ -136,27 +137,16 @@ and "someone else holds my device" is a reason people reset. The backend holds t
 
 ## Rotation after a compromise
 
-When key material has been handed to someone it should not have been — a phished device-link grant is the
-case that forces it ([ADR 0059](../../../decisions/0059-device-linking.md)), a leaked Secret Key the other — the
-Master Key, the identity keypair **and** the Secret Key are replaced **together** (*Secure your account*). There is
-one mode and no choice: the identity private key exists only wrapped under the Master Key, so an identity compromise
-implies a Master-Key compromise, and rotating the identity alone would re-wrap a new identity under the leaked Master
-Key; someone who holds the Secret Key and the password is otherwise indistinguishable from the member. The rotation
-is gated on the **current Secret Key** — a cold unlock (`PASSWORD` or `RECOVERY`), never a device wrap — because that
-is exactly the material a linked device never received, and an attacker who could rotate first would lock the holder
-out permanently. It issues a **new Emergency Kit**, saved and confirmed before anything is published; the `PASSWORD`
-and `RECOVERY` wraps are rewritten under the new Secret Key, so the old kit opens nothing.
-
-Each rotation is a step of the account's **key chain**: the new identity and the new Secret-Key proof key, signed by
-the old identity **and** the old proof key, hash-chained from an unsigned genesis written at the account's birth. It
-holds only public keys and signatures and is served to co-members, who accept the new key because the chain reaches
-it from the head they pinned ([en.account.identity-pinning](en.account.identity-pinning.md)).
-
-Rotation is **forward secrecy, not repair**: what was already read stays read. The full decision and its costs are
-[ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md), the key chain and the stage of self-grants
-[ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md);
-the flow is [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md); the scope-side re-key belongs to
-[en.spaces.scope-key-rotation](../../spaces/enablers/en.spaces.scope-key-rotation.md).
+When key material reached someone it should not have — a phished device-link grant
+([ADR 0059](../../../decisions/0059-device-linking.md)), a leaked Secret Key — *Secure your account* replaces the
+Master Key, the identity keypair **and** the Secret Key together, gated on a cold unlock (password + Secret Key, or
+the Secret Key alone through recovery), never a device wrap. It issues a **new Emergency Kit**, saved and confirmed
+before anything is published, and rewrites the `PASSWORD` and `RECOVERY` wraps under the new Secret Key, so the old
+kit opens nothing; every other wrap is deleted. The new identity is a step of the account's key chain, signed by the
+old identity and the old Secret-Key proof key. What it does to the account's spaces — the staged self-grants, the
+publish, each next epoch — is [keys, grants and trust § Securing the account](../../../crosscutting/keys-grants-and-trust.md#securing-the-account);
+the decision is [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md), the flow
+[uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md).
 
 ## Recovery — three independent paths, no escrow
 
@@ -173,8 +163,8 @@ scopes at once:
 
 Every path runs through the Secret Key or an already-enrolled device — there is **no** standalone code, so
 losing the Emergency Kit narrows recovery to path 1. After recovery the user sets a new password, which
-re-derives the auth keypair and re-registers its public key; the Emergency Kit stays valid, because the
-Secret Key is unchanged. The Master Key itself is unchanged, so
+re-derives the auth keypair and re-registers its public key; the Emergency Kit stays valid, because recovery keeps
+the Secret Key — only securing the account replaces it, with a new kit. The Master Key itself is unchanged, so
 content stays intact.
 
 **The one unrecoverable case (stated up front):** losing *every* path — no device, no Emergency Kit,
@@ -205,8 +195,9 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
 On registration the **device** generates the identity keypair, the **auth keypair** (derived from the
 password), and the Master Key, writes one wrap per chosen unlock method, and the user saves the
 **Emergency Kit** (the Secret Key). The server only ever receives ciphertext (`wrapped*`) and
-public keys — **never the password**. The **onboarding key transfer** that grants a new member access to
-an existing space (the temporary invite-wrap) is a scopes & tenancy concern, refined there.
+public keys — **never the password**. Birth also writes the unsigned genesis of the account's key chain, and joining
+a tenant grants the account the tenant's key from its invite
+([keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md#a-member-invite-is-a-placeholder-member)).
 
 ## Related
 
@@ -221,8 +212,9 @@ an existing space (the temporary invite-wrap) is a scopes & tenancy concern, ref
   [remember-this-device](../use-cases/uc.account.remember-this-device.md)
 - Downstream: [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on this root
-- Concepts: [security-model](../../../crosscutting/security-model.md) (the whole-system boundary),
-  [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md) (the scope/content keys this root extends)
+- Concepts: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the keys this root opens, rotation
+  and identity trust), [security-model](../../../crosscutting/security-model.md) (the whole-system boundary),
+  [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md) (scopes and membership)
 - Security area of the docs site: [Key hierarchy](../../../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../../../site/src/content/docs/security/protocols.mdx), [Roadmap](../../../../site/src/content/docs/security/roadmap.md)
 - End-user view (docs site): [Accept an invitation](../../../../site/src/content/docs/getting-started/accept-an-invitation.mdx)
 - End-user view (docs site): [Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx)

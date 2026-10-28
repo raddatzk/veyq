@@ -1,26 +1,9 @@
 # ADR 0035 — Space terms of service: owner-set tenant terms + a member acceptance gate (server-side), anonymous acceptance client-side
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the terms' change counter is a
-  **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
-  product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
-  provider identification), added 2026-10-16 from the legal research behind ADR 0093, belong to the moderation work
-  (inbox #462), and both are **built**, in one form with nothing required since the operating mode was retired
-  (ADR 0093 § 14 as revised 2026-10-21, built by cr-operating-mode-retires): decision 7 is set in admin-web and the
-  CLI, never warned about, and shown with the instance contact on the login and
-  share pages and in the signed-in shell ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  decision 6's section (cr-operator-section-of-the-terms, 2026-10-18) is `contracts/terms/operator-section.json`,
-  rendered by the backend into every terms read and at a public page of its own, in one form, with the gate on
-  the pair ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Its text is a
-  **draft until a qualified legal review** and says so on every rendering; decision 6 names the gaps against the law
-  that remain. Decision 8 (the instance privacy notice, GDPR
-  Art. 13, decided 2026-10-18 from the legal audit of that day by the owner rule that a legal duty wins) is **built**
-  (cr-instance-privacy-notice, 2026-10-19): `contracts/terms/privacy-notice.json`, rendered by the backend per tenant
-  host at `GET /api/operator/privacy-notice` and shown at `/privacy`, linked from every page's footer, the invite
-  acceptance, the report dialog and a guest's first write, with the recipients and a data-protection officer as
-  operator values ([uc.admin.privacy-notice](../features/admin/use-cases/uc.admin.privacy-notice.md)); the guest-write
-  record's Art. 13 passage moved there, and the operator section's revision 2 carries a pointer. Its text is a **draft
-  until a qualified legal review** too, and the questions only counsel answers are ADR 0093 Still open 6, 7 and 10.
+- Status: Accepted
+- Built: partly (not built: decision 5's pre-auth login-page surface of a space's terms)
 - Date: 2026-07-10
+- Model: [Moderation](../features/moderation/_index.md)
 
 ## Context
 
@@ -46,11 +29,9 @@ for every space on it, does not author them, and the Server-Owner surface (admin
 **The operator's duties are not the space's.** veyq assumes an instance is hosted by clubs and companies too, not
 only for a family ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
 § Context). Then the Server Owner is the provider and the controller, and the law asks *them* to state the notice
-path, the measures and how to object (DSA Art. 14, 16, 17), the policy on terrorist content (TCO Art. 7(1)), a
-point of contact for users and authorities (DSA Art. 11–12, TCO Art. 15), the information on the guest-write
-record (GDPR Art. 13 and 21(4)) and who they are (§ 5 DDG, § 18 MStV). A space owner can delete any clause of
-their terms, so their terms cannot carry a duty that is not theirs (research, not legal advice, 2026-10-16;
-ADR 0093 § Legal basis).
+path, the measures and how to object, the policy on terrorist content, a point of contact for users and authorities,
+the information on the guest-write record and who they are ([legal register](../crosscutting/legal-register.md) L2).
+A space owner can delete any clause of their terms, so their terms cannot carry a duty that is not theirs.
 
 **No tension with operator-blindness.** The terms are the space's **public policy** (served to everyone,
 including pre-auth on the login page), and acceptance is **operational metadata** (who accepted which
@@ -82,7 +63,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 
 3. **Anonymous share acceptance — client-side** (uc.sharing.share-accept). An accountless public-share visitor
    sees the tenant terms + revision and must accept (**hard gate + re-accept** on a revision change), but acceptance
-   is stored **client-side** (localStorage, keyed **per tenant**, holding the triples accepted — the revision with the
+   is stored **client-side** (localStorage, keyed **per tenant**, holding the pairs accepted — the revision with the
    operator section's revision, decision 6 — accepting on one share of a tenant clears the gate on every
    share of that tenant, since they are the *space's* terms, not the link's) — the server
    records **nothing** about the accountless visitor, preserving anonymity — and its logs name no visitor either: no
@@ -115,18 +96,16 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    arise — including one about a revision since superseded. Each time is the server's own clock at the acceptance,
    never client-supplied, written once per revision (re-accepting a recorded revision keeps its first time; accepting
    a newer revision adds a row and leaves the older ones untouched). No API serves the history, so a space owner
-   cannot read it either: the operator and support read it from the database. The rows go with their tenant
-   (`ON DELETE CASCADE`); the user reference is no foreign key, so a row can outlive the account a case names, and the
-   account erasure names the table: it deletes a member's rows, and keeps them under the opaque id only while a moderation case names the account,
-   to that case's log retention date ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
-   decision 6, `TermsEvidence`). (Inbox #318
-   dropped the time as unread on 2026-10-09; the owner restored it the same day as that evidence; #402 on
-   2026-10-10 turned the single latest row into the history — a coordinator decision on the owner's behalf, to be
-   reviewed.) The anonymous acceptance is client-only. **No
+   cannot read it either: the operator and support read it from the database. It is kept while the member and the
+   tenant are, and after the account's erasure only while a moderation case names the account, to that case's log
+   date — evidence outlives the person only as far as a dispute can reach
+   ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 6; the period and its
+   eraser are [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)). The anonymous acceptance is
+   client-only. **No
    user content, no new blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
 
 5. **Two acceptance tiers, one login surface still deferred.** The space owner sets/edits the terms (the
-   space's settings in the web client, every saved change a new revision). The **member** accept/re-accept gate is server-side (v1, cr-0114); the
+   space's settings in the web client, every saved change a new revision). The **member** accept/re-accept gate is server-side; the
    **accountless-share** accept/re-accept gate is client-side (§3, uc.sharing.share-accept). What stays deferred is
    only the **pre-auth login-page** surface of a *space's* terms (a Host-served public read — see §Consequences), a
    distinct mechanism from the share-keyed guest read above. The operator section (6) does not wait on it: it is
@@ -145,7 +124,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
      and the instance contact as the point of contact for users and authorities and the TCO contact point, with
      its languages;
    - **a pointer to the guest-write record's GDPR Art. 13 information**, which is the privacy notice's (decision 8,
-     with its right to object apart): one home for every Art. 13 passage (owner, Q27 of `cr-instance-privacy-notice`).
+     with its right to object apart): one home for every Art. 13 passage.
 
    It is shown wherever a space's terms are — the member gate, the share gate, the space's terms panel, and the login
    page once that surface exists — and served with them by the same endpoints, after the space's own text. DSA
@@ -154,10 +133,10 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    page and the signed-in shell. Its revision moves only with
    its text, that is with a veyq release; a bump reopens the gate like a space's revision, and a value changed in
    admin-web renders at once without reopening it. A space with no terms (revision 0) shows the operator section
-   without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
-   2026-10-16 research; the template's clause 9 then points to this section instead of regulating review itself.
+   without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the research's
+   drafts; the template's clause 9 then points to this section instead of regulating review itself.
 
-   **The section has one form on every instance** (ADR 0093 § 14, revised 2026-10-21; built). Every value it names — the instance contact, the provider
+   **The section has one form on every instance** (ADR 0093 § 14). Every value it names — the instance contact, the provider
    identification — shows when set and as "not stated by this operator" when empty, and the pointer to the guest-write
    record's information is always in it (ADR 0093 § 10: the record is kept wherever a guest may write). The section
    carries one revision, moved with its text, and the gate compares it: a moved revision **reopens the gate**, since
@@ -165,11 +144,11 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    where it applies (ADR 0093 § 10), like a changed value. A member's history keeps one row per accepted pair (space
    revision, section revision), and the gate asks whether the current pair has one; a guest's device keeps the last
    two pairs it accepted (the current revisions and the previous ones, for a rolled-back release), and its gate asks
-   the same question. A variant in the pair, as built from 2026-10-18, goes with the mode.
+   the same question.
 
-   **Gaps against the law, named rather than papered over** (the owner's rule of 2026-10-18: a legal duty wins over
-   what an ADR or the code says). Each is a correction owed before the first release, or a question for the qualified
-   review the whole text waits on:
+   **Gaps against the law, named rather than papered over** (a legal duty wins over what an ADR or the code says). The section's text is a **draft until a qualified legal review** and says so on every
+   rendering. Each gap is a correction owed before the first release, or a question for the qualified review the whole
+   text waits on:
    - **A space's own terms are not public before sign-in** (decision 5); whether DSA Art. 14(1) reaches them, as terms
      the provider's service runs under, is a question for the review.
 
@@ -203,29 +182,28 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    collection — the invite acceptance that births an account, the report dialog that takes a contact, a guest's
    first write — and each of those links to it, as do the login page, the share page and the signed-in app
    (the provider identification's footer, which the app shell gains). It is information, not consent: no gate, no
-   acceptance, and its revision moves only with its text. It is shown on every instance (owner, Q26 below), in one form, an empty value showing as "not stated by this
-   operator" and nothing warning (ADR 0093 § 14, revised 2026-10-21). Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
+   acceptance, and its revision moves only with its text. It is shown on every instance, in one form, an empty value showing as "not stated by this
+   operator" and nothing warning (ADR 0093 § 14). Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
    run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
-   controller and states the check as it runs.
+   controller and states the check as it runs. Its text is a **draft until a qualified legal review** too, and the
+   questions only counsel answers are ADR 0093 Still open 6, 7 and 10.
 
-   The owner's answers (2026-10-18, Q26–Q28 of `cr-instance-privacy-notice`): the notice is shown on **every
-   instance**, every passage being a fact of the software true on every instance (for a household the exemption only
+   The notice is shown on **every instance**, every passage being a fact of the software true on every instance (for a household the exemption only
    makes it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to
    object set apart as in decision 6 before, and the operator section keeps a pointer; the recipients are a **list** the
    Server Owner keeps — name, what they do, country — with suggested rows for what the instance knows (an external
    store's host, the instance mail relay's host) that publish nothing until saved, since fixed slots miss a backup host
    or a second relay. What they do is a **fixed kind** — hosting, object storage, mail relay, backups, other — which the
-   notice's own text names in each language, so the German and the English notice never mix languages (owner
-   2026-10-19); only *other* takes a short description of the operator's own (at most 120 characters), shown as typed
+   notice's own text names in each language, so the German and the English notice never mix languages; only *other* takes a short description of the operator's own (at most 120 characters), shown as typed
    and quoted on both pages, the one place the operator's language shows through, and visibly as theirs. The country is
    an **ISO 3166-1 alpha-2 code** picked from a list — the backend's JDK's (`Locale.getISOCountries()`), copied for the
    clients in `contracts/terms/recipient-countries.json` — and each page names it in its own language from the JDK's
    locale data ("Deutschland" on the German page, "Germany" on the English one), so a country typed in one language
-   never reaches the other's page (owner 2026-10-19); a code the backend does not know is refused. A suggested row comes
+   never reaches the other's page; a code the backend does not know is refused. A suggested row comes
    with its kind. A space's own mail relay is named generically, as the space owner's choice: who controls it is
    the joint-control question. A guest objecting to the record names the identity whose rows are erased by a **guest
    id** its own view shows to copy (Art. 21(1) with 12(2)), the share identity's random id; an objection erases the
-   rows so far and does not stop later writes from being recorded, and the notice says so (owner: keep it so).
+   rows so far and does not stop later writes from being recorded, and the notice says so.
 
 ## Consequences
 
@@ -250,12 +228,17 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 - **The operator section and the provider identification are new public surface** (6, 7): instance settings in
   admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
   rendered into the terms endpoints and served publicly. A Server Owner who leaves the identification empty is
-  neither warned nor refused; the section shows the gap (decision 6). Both are built; decision 6 names the gaps against
-  the law that remain.
+  neither warned nor refused; the section shows the gap (decision 6). The identification is shown with the instance
+  contact on the login and share pages and in the signed-in shell
+  ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md)); the section is rendered into
+  every terms read after the space's text, with the gate on the pair
+  ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Decision 6 names the gaps
+  against the law that remain.
 - **The privacy notice is a second fixed text** (8), with its own public route and endpoint, the recipients list and
   an optional data-protection officer as new instance values, and links from every place that collects. The space
   template's privacy clause stays the space owner's description of their space, never the operator's notice. The
-  guest-write record's Art. 13 passage is the notice's; the operator section (6) points to it.
+  guest-write record's Art. 13 passage is the notice's; the operator section (6) points to it. Where it is built:
+  [uc.admin.privacy-notice](../features/admin/use-cases/uc.admin.privacy-notice.md).
 
 ## Alternatives considered
 

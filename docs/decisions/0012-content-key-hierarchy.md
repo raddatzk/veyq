@@ -1,7 +1,10 @@
 # ADR 0012 — Content-key hierarchy: per-Memory keys, random and many-wrapped
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-28
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: decision 1 and the folder key by ADR 0080 (built)
 
 ## Context
 
@@ -89,8 +92,8 @@ holds `K_SC`, `K_node`, `K_blob`, or any name.
 - **Deferred to the implementation CR / vectors:** the exact wire formats (every seal purpose has one vector in
   `contracts/crypto/vectors/v1.json`, and every seal binds the object it belongs to —
   [ADR 0072](0072-a-seal-binds-its-object.md)) and the share-record shape. (A chapter carries its **own
-  recursive `K_node`**, not the parent's — see *Recursive `K_node`* below.) Group/recipient key-directory trust
-  is the active-operator gap already in the Security Model.
+  recursive `K_node`**, not the parent's — see *Recursive `K_node`* below.) Whose key a wrap to another member
+  trusts is [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s.
 - **Media dedup — decided in [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5: declined scope-wide.**
   `K_blob` stays **random** (so this ADR's wording holds) and the `dedup_token` vector stays unused: scope-wide dedup
   would leak the scope-internal blob-equality structure to the blind operator, and remains a possible *future* slice.

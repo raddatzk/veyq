@@ -60,8 +60,8 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 - **WRITE_ONLY share** → the note is the write-only drop-box's instruction ("please upload your pics here"), shown
   above the name field (there is no gallery to banner).
 - **Revoked / expired share** → `resolveShare` is `404` (non-enumerable); the note is gone with the share.
-- **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's creator edits,
-  and only while they are still a member of the share's scope — a creator who has left it gets a non-member's 404
+- **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's owner (its creator, or
+  the member who re-activated or renewed it) edits, and only while still a member of its scope — an owner who has left it gets a non-member's 404
   ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) A3).
 - **A co-member reconstructs the link** (group/tenant scope) → possible (they hold `K_SC`), but grants nothing
   new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
@@ -84,6 +84,7 @@ with the link.
 
 ## Related
 
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - **Feature:** [sharing](../_index.md)
 - **Use-cases:** [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the READ link the note
   greets), [uc.sharing.share-contributor](uc.sharing.share-contributor.md),

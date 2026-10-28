@@ -1,7 +1,9 @@
 # ADR 0044 — Field visibility is declared at the field, not inferred from its name
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-15
+- Model: [security-model](../crosscutting/security-model.md)
 
 ## Context
 

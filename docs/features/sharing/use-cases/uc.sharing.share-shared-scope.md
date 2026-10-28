@@ -4,30 +4,27 @@
 - **Primary actor:** **any member** of a group or tenant scope (holds the scope grant → the Memory's `K_node`).
 - **Secondary actor:** **an anonymous visitor** (viewer / contributor / uploader — the existing roles), and the
   **remaining members** of the scope (who inherit the governance below).
-- **Goal:** lift the v1 **personal-scope-only** restriction so a member can public-share a **group or tenant** Memory
-  with the same operator-blind link mechanism — while keeping shared-scope content honestly revocable when a member
-  leaves.
+- **Goal:** public-share a **group or tenant** Memory with the same operator-blind link as a personal one — while
+  keeping shared-scope content honestly revocable when a member leaves.
 - **Preconditions:** an **authenticated, unlocked** caller who is a **member of the target Memory's scope** (personal,
   group, or tenant) and can open it (holds `K_node`); the instance advertises the role's capability
   (`core.public-shares`, `.contribute` or `.drop-box`, [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
 - **Postconditions (success):** a share record exists (opaque, owned by its creator), and the link opens the Memory
   subtree per its role — until revoked, expired, **or auto-deactivated by the creator's removal from the scope**.
 
-This extends the sharing slices ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §6, this revision) from
-personal-scope to **any scope the caller belongs to**, across all three built roles
+A link lives in **any scope the caller belongs to**, in all three roles
 ([viewer](uc.sharing.share-public-viewer.md) / [contributor](uc.sharing.share-contributor.md) /
-[uploader](uc.sharing.share-uploader.md)). The crypto and the anonymous access path are **unchanged** — only the
-create-gate (scope) and a member-removal hook are new.
+[uploader](uc.sharing.share-uploader.md); [ADR 0029](../../../decisions/0029-public-viewer-share.md) §6). What a shared
+scope adds is governance: removal, re-activation, renew and delete below. The record, the keys and the lifecycle are
+[en.sharing.public-link](../enablers/en.sharing.public-link.md).
 
 ## Main flow
 
-1. **Create (any member).** A member opens a group/tenant Memory → **Share** → picks a role. The client mints
-   `K_share`, computes `symWrap(K_share, K_node)`, seals the name under a field key derived from `K_share`, and `POST`s the share record.
-   The create-gate is now **"a MEMORY in a scope the caller is a member of"** (not "personal-scope MEMORY the caller
-   owns") — `AND`-ed with the role's instance capability. **Any member may publish**, not only an owner: shared
-   content belongs to all members, and a member could already reach an outsider by other means.
-2. **Hand off / open / view.** Identical to the personal-scope flow — `K_share` rides the fragment, the anonymous
-   resolve + gated direct-from-store blob reads are unchanged; the server stays blind.
+1. **Create (any member).** A member opens a group/tenant Memory → **Share** → picks a role. The client mints the
+   link's key and stores the share record; the server checks that the caller is a member of the node's scope and that
+   the role's capability is on. **Any member may publish**, not only an owner: shared content belongs to all members,
+   and a member could already reach an outsider by other means.
+2. **Hand off / open / view.** As in a personal scope — the key rides the fragment, the server stays blind.
 3. **Follows new content automatically.** Between rotations `K_node` stays, so photos a member adds to the shared
    Memory seal under the key the link already opens. A scope rotation re-keys every node and **re-wraps each share's
    root key** under the share's unchanged `K_share`, opened from its recovery copy
@@ -120,7 +117,7 @@ create-gate (scope) and a member-removal hook are new.
 ## Quality notes
 
 - **Operator-blind, unchanged.** The share record is the same opaque shape (`shareId`, `symWrap(K_share, K_node)`,
-  `role`, sealed name, `nodeId`, `owner_account`, `enabled`, and a deleted link's `deleted_at`, to the second); a
+  `role`, sealed name, `nodeId`, `owner_account`, `enabled`; a deleted link keeps a flag, not its deletion time); a
   shared-scope share adds **no** new operator-visible signal. The server never sees `K_share`, `K_node`, names, or the visitor.
 - **Already-read is not retractable.** Deactivation stops *new* access; a removed member who kept both the link
   and the ciphertext they already fetched can replay *that* — and, because they kept `K_node`, could decrypt further
@@ -142,12 +139,13 @@ switch off at once, and any remaining member can renew or delete them.
 ## Related
 
 - Feature: [Sharing](../_index.md)
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - Roles extended: [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),
   [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) §6 (scope + removal governance), §7 (delete),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) (re-issue, never revive),
-  [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (`K_node` stable across rotation),
+  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) (a rotation re-keys the node and re-wraps each link under its own key),
   [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (tenant = ACL-revoke, group = rotation),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) (the `sharing.*` capability gate)
 - Cross-cutting: [Security Model](../../../crosscutting/security-model.md),

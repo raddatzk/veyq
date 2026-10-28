@@ -1,12 +1,14 @@
 # ADR 0007 — Membership is the (user, scope, role, grant) relation
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-06-26
+- Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
 ## Context
 
-Tenant activation (cr-0010, Slice B) creates the **first** membership and the **first** grant, so the
-membership model must be settled first. Open questions: how do we model the **management role** vs.
+Tenant activation creates the **first** membership and the **first** grant, so the membership model must be
+settled first. Open questions: how do we model the **management role** vs.
 **content access**? Is server-level membership n-m like tenants? How is a person **reached** when inviting
 (email vs. username)? Who may see a tenant's **owner email**? See the
 [Scopes & Tenancy](../crosscutting/scopes-and-tenancy.md) model and [ADR 0006](0006-cold-tenant-scope-birth.md).
@@ -23,8 +25,11 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   existing grant-holder is a pure role change (no key moves), and demoting one is too.
 - **Ownership cardinality — many owners, never zero.** At **every** level (Server, Tenant, Group) a scope may
   have **multiple owners** and **must keep at least one**: removing or demoting the **last** owner is rejected (a
-  "last-owner guard"). Orphaning is thus only possible when a sole owner *leaves* — handled by an automatic rule,
-  not an admin power ([ADR 0014](0014-group-scopes-and-governance.md)).
+  "last-owner guard"). A scope is orphaned only when its sole owner is taken out — removed from the tenant or
+  erased — and that is handled by a rule, not an operator power: a group passes to its oldest other member
+  ([ADR 0014](0014-group-scopes-and-governance.md)), and an ownerless tenant waits for the Server Owner to invite one
+  of its members to own it, a role that moves no key
+  ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9).
 - **The relation is a *shared* primitive, not a feature's.** `MembershipEntity`, the read-only membership /
   owner guards (`isScopeOwner` · `ownerCount` · `memberRole` · `holdsGrant`) and the one access gate every
   scope-addressed operation calls (`ScopeAccess`, [uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md))
@@ -32,9 +37,8 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   admin · tasks) depends on, rather than each feature re-querying the table or importing the entity from another
   feature's slice. Only the last-owner **policy** — the decision to *reject* a remove/demote and raise `LastOwner` —
   stays in the feature handler that owns the action. The gate reads a scope's `deletedAt` and a tenant's `status`,
-  so the scope and tenant rows are **query-only entities in `shared`** too (the same move, for the same reason);
-  `shared` never depends back on a feature, and no cycle forms. (The tell that this belonged in `shared`: the guard was reimplemented
-  verbatim across 5 stores + 2 slice cycles — audit P3a.)
+  so the scope and tenant rows are query-only entities of that kernel too; it never depends back on a feature, and
+  no cycle forms. A guard every feature re-implements drifts copy by copy, which is why it has one home.
 - **`tenantId` groups; belonging and every role check key on `scopeId`.** A membership row carries both `tenantId`
   (which tenant it belongs to) and `scopeId` (which scope it grants a role on). Because every scope birth mints its
   creator an `OWNER` row, a role check filtered by `tenantId` **alone** answers true for any member who owns *any*
@@ -43,8 +47,8 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   *accepted* membership on its root scope, and tenant-addressed operations ask the same gate on that scope. The
   `tenantId` column only **groups** a user's rows (the space list, the removal cascade) and never authorizes: a
   member removed from the tenant keeps rows on their own spaces for the grace window, and a proposed member holds
-  an unaccepted row, so a `tenantId`-only belonging check counted both. (cr-0163 fixed three copies of a
-  `tenantId`-only owner gate that were functionally a belonging check — a privilege escalation.)
+  an unaccepted row, so a `tenantId`-only belonging check counted both — and a `tenantId`-only *owner* gate is
+  functionally a belonging check, a privilege escalation.
 - **Per scope kind:**
   - **Server role** is a single global column per user (`veyq_user.server_role`, `SERVER_OWNER` / `MEMBER`) — a user
     belongs to exactly one server. **Multiple `SERVER_OWNER`s are allowed** (subject to the guard above); a flow
@@ -53,12 +57,14 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   - **Tenant and Group memberships are n-m** (user × tenant / user × group-within-tenant), each with a
     role + a grant to that scope's key. Group roles are **OWNER / MEMBER** only — no `ADMIN`
     ([ADR 0014](0014-group-scopes-and-governance.md)).
-  - **Personal** scope is self-held — no membership row beyond the member's own grant.
-- **The first tenant membership (the owner's) is born at activation** (cold `TENANT`-scope birth, cr-0010);
-  members extend the same relation later via the invite-wrap.
+  - **Personal** scope holds one membership, the member's own: role `OWNER` with its self-grant, and nobody else is
+    ever added.
+- **The first tenant membership (the owner's) is born at activation** (cold `TENANT`-scope birth,
+  [ADR 0006](0006-cold-tenant-scope-birth.md)); members join the same relation later through an invite.
+  How a grant is written and checked is [keys, grants and trust](../crosscutting/keys-grants-and-trust.md#grants-who-wraps-a-scope-key-to-whom).
 - **Reaching a person:** **email** is used only for an **outsider** with no account (the tenant-owner
   invite); an **existing user** is reached by **username** — a **per-tenant, unique-within-tenant** handle on the
-  membership ([ADR 0023](0023-per-tenant-member-identity.md)), fully in-app. This keeps person lookup
+  member's tenant profile ([ADR 0023](0023-per-tenant-member-identity.md)), fully in-app. This keeps person lookup
   non-enumerable (bounded to the tenant's own members).
 - **Owner-email visibility is a role rule, not crypto:** it is server-visible operational metadata,
   returned only to roles that need it (a `SERVER_OWNER`, or the tenant's own `OWNER`) and omitted for ordinary
@@ -67,13 +73,6 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
 
 ## Consequences
 
-- **cr-0010 introduces the membership table + the owner's grant.** Member/group invites (by username,
-  invite-wrap) are a later use-case that extends the same relation.
-- **The entity + guard are shared, not admin-hosted (P3a).** Relocating `MembershipEntity` + the guard queries
-  from the admin tenant slice to the membership kernel package (`core/membership/`) turns 8 cross-slice imports of the admin slice into a
-  legal `features → shared` dependency, and collapses the 5 verbatim `isMember` copies + the twin owner-count
-  guard (spaces + admin) onto one shared primitive; the last-owner *policy* stays per-handler. Realised by a
-  follow-up change-request (P3a).
 - **Consistent with [ADR 0006](0006-cold-tenant-scope-birth.md):** forced reassignment grants a role only;
   a key-preserving handoff still needs a grant from an existing key-holder.
 - **Server role stays a single column** for now; promoting/minting additional `SERVER_OWNER`s is deferred.

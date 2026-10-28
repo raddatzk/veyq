@@ -1,7 +1,9 @@
 # ADR 0021 — Operator-blind background tasks (pull-based job mechanism, equal worker pool)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-04
+- Model: [background-tasks](../crosscutting/background-tasks.md)
 
 ## Context
 
@@ -49,13 +51,13 @@ result**.
    does **not** hide the type from a *correlating* operator (see consequences) — keyed-per-scope tags
    (`PRF(K_SC-derived, type)`) are a documented **seam** for future low-footprint, ambiguous-processing types,
    where correlation would not already reveal the kind.
-6. **Lease = at-least-once + idempotent.** An atomic claim (`WHERE status='pending'`, MariaDB `SKIP LOCKED`) sets
+6. **Lease = at-least-once + idempotent.** An atomic claim — a compare-and-set on the job's `status` — sets
    an opaque `leaseHolder` + `leaseExpiry`. The job carries a **TTL**; long jobs **heartbeat** to extend it. The TTL
    is `veyq.tasks.lease.ttl`, **2 min** by default, and a worker renews it every **30 s** while it works (the web's
    `LEASE_RENEW_MS`), so a hidden tab whose timers the browser throttles to one a minute still keeps it. A Server
    Owner who sets the lease below about **60 s** defeats the renewal: such a tab loses a job it is still working on.
-   A worker that stops — a tab closed, reloaded or navigated away — frees its job only when the lease runs out. By
-   owner decision (2026-10-24) there is **no release endpoint** called on `pagehide`, and a holder does **not take
+   A worker that stops — a tab closed, reloaded or navigated away — frees its job only when the lease runs out. There
+   is **no release endpoint** called on `pagehide`, and a holder does **not take
    over its own** still-valid lease: the same user's next page claims the job like any other worker, after the
    expiry. A crashed worker's lease **expires → lazy reclaim** (the claim query treats `leased ∧ expiry<now` as
    free).
@@ -74,7 +76,7 @@ result**.
 8. **Origination.** The server may originate only **structural, non-sensitive** jobs it already fully understands
    (a **stale-epoch** membership → a `grant-delivery` job — a member a scope-key rotation skipped,
    [ADR 0024](0024-scope-key-rotation.md), or a newcomer whose invite a rotation declared pending; every membership is
-   born with a grant since [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   born with a grant, [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decisions 1–5), and an **event** it witnessed
    but cannot complete itself (a co-shared member cut → a `scope-rotation` job; an account rotation queues none, its
    rotator mints its scopes' epochs itself, [ADR 0060](0060-key-rotation-after-compromise.md) Decision 4).
@@ -87,9 +89,11 @@ result**.
    it validates the core loop
    end-to-end. Transcode + face-recognition/ML are the **informing** heavy consumers that shaped the
    lease/tags/result but are built later (floor, not ceiling).
-10. **Persistence: buy, don't build.** The boring queue/claim/lease machinery uses a maintained JVM/DB job library
-    or MariaDB `SKIP LOCKED` directly (evaluated at CR time — JobRunr / db-scheduler / thin SKIP-LOCKED); only the
-    **blind layer** (envelope, key-eligibility, sealed body/result, tag registry) is veyq-specific. That blind
+10. **Persistence: buy, don't build.** What is bought is the database's own atomic primitive, not a job framework: the
+    queue/claim/lease machinery is a thin compare-and-set on `status`, the same on the H2 test database and MariaDB. A server-side job framework
+    (JobRunr, db-scheduler) does not fit: it runs jobs *on the server*, and the workers here are remote key-holders
+    that pull over HTTP, because a blind server holds no key. MariaDB's `SKIP LOCKED` stays available as a throughput
+    optimisation if contention ever warrants it, never needed for correctness. Only the **blind layer** (envelope, key-eligibility, sealed body/result, tag registry) is veyq-specific. That blind
     layer stays a thin, decoupled module so it *could* later be extracted as an OSS spec — but not now.
 
 ## Consequences

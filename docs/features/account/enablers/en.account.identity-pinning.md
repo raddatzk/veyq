@@ -12,6 +12,10 @@
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2,
   [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decisions 7, 12, 15, 16).
+- **The model** this check sits in — the key chain, the join record, verifications and what a member sees, the
+  grants it guards — is the topic's current picture,
+  [keys, grants and trust § Trust](../../../crosscutting/keys-grants-and-trust.md#trust-who-is-who). This enabler keeps
+  the pin store, the check's states and their sync.
 - **Serves (use-cases):** [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the
   passive half — pin on first sight, follow the chain, surface an anomaly),
   [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md) (the
@@ -201,6 +205,7 @@ revision reads the new store with no action; one whose mark sat above it is offe
 
 ## Related
 
+- Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md)
 - Decisions: [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) (the authenticity
   model this realizes), [en.account.key-model](en.account.key-model.md) (the Master Key that seals the store +
   identity rotation, which produces a legitimate key change), [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)

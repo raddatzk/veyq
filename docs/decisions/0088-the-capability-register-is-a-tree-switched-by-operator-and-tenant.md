@@ -1,15 +1,9 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
-- Status: Accepted 2026-10-15; the instance level and the tenant level are built, share switches reaching existing
-  links included (inbox #442, #439 step 2), and so are four requirements (#439 step 3) and the three external
-  services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
-  [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
-  [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
-  was revised 2026-10-21 (no operating mode, so no preset) and that revision is **built** (cr-operating-mode-retires,
-  2026-10-21): the catalog's `modes`, the generated `CapabilityPresets`, the write that set them with the mode and the
-  one entry that carried a preset, `core.public-shares.guest-write-record`, are gone, its stored switch rows deleted by
-  migration.
+- Status: Accepted
+- Built: partly (not built: decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, § The register's entries the catalog does not hold)
 - Date: 2026-10-15
+- Model: [Applications](../apps/README.md)
 
 ## Context
 
@@ -22,8 +16,8 @@ have changed since then.
   or the journal arrive in minors, and the client has to see whether *this* server serves them. The minor cannot
   answer that: it counts commits ([ADR 0057](0057-release-identity-and-deployment-recipe.md) §1) and must not be
   pre-auth anyway.
-- **A tenant owner has policy too.** ADR 0079 decision 8 rejected per-tenant activation of an application, with
-  clutter as the problem it would solve, which "created on demand" already solves. The reason now is a different
+- **A tenant owner has policy too.** ADR 0079 rejected per-tenant activation of an application, with clutter as the
+  problem it would solve, which "created on demand" already solves. The reason now is a different
   one: a tenant owner who does not want Depot, or public links, or password-less devices in their tenant.
 - **There are now applications.** A flat list cannot say that switching public links off in core also switches
   them off in every application.
@@ -54,66 +48,69 @@ instance and tenant layers.
    defeats the reason it was switched off. A device switch withholds its wraps (`DEVICE` for `remember-device`,
    `DEVICE_KEY` for `passwordless`) from the key material the server hands out, the way the `RECOVERY` wrap is
    already withheld. It never deletes them, so switching back on restores every remembered device, and the
-   `PASSWORD` wrap is always served, so nobody is locked out (owner, 2026-10-15). A feature switch refuses only
-   what is **new**. An **application switch** (`memories`, `depot`, `expenses`, the application's own node of the tree)
-   is the one feature switch that reaches what exists: it makes the application read-only, every write refused and
-   every read, download and removal kept ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
-   decision 8, owner 2026-10-23); its children (`memories.places`) are off with it, by the AND along the path, and its
-   one-segment id is the only one a root may be (`core` is no entry). Its members see a banner, and its links keep
-   serving what exists (owner 2026-10-24).
+   `PASSWORD` wrap is always served, so nobody is locked out. A feature switch refuses only what is **new**.
+   An **application switch** (`memories`, `depot`, `expenses`, the application's own node of the tree) is the one
+   feature switch that reaches what exists: it makes the application **read-only**, every write of it refused — a node
+   of its kinds created, renamed, moved, copied or imported, its records and blobs written, a link rooted on one of its
+   nodes created or given a write role, a guest's write through any link — and every read and download kept, through
+   the links that exist too, so nobody's data is trapped. Taking something out is never refused: a delete to the trash
+   and its restore (a restored node is read-only like the rest), an erasure, a moderation measure, a member's own marks
+   on its items ([ADR 0068](0068-favorites-two-confidentiality-levels.md)) and a rotation's re-key, which is the
+   security of what exists. Its children (`memories.places`) are off with it, by the AND along the path, and its
+   one-segment id is the only one a root may be (`core` is no entry). Every member of the tenant sees a banner saying
+   so, so there is time to save what is in it.
    What exists stays readable, so there is no "activated but empty" state machine, and the gate sits on the
-   application's writes, never on its reads. **Left off, it is the one switch that erases** (owner 2026-10-25, inbox
-   #539, ADR 0079 decision 8): after a window, an instance-wide configuration property of the Server Owner
-   (`veyq.application.off.retention`, default `P30D`), the application's content in the tenant is erased on a day
-   every member is told. Switched on before that day, nothing is lost. The window is no requirement (decision 8): a
-   tenant owner sets no value for it, and a tenant only narrows by switching the application off, never by shortening
-   what the instance allows (decision 2). An instance switch gives every tenant its own day. Only the application's
-   own entry erases; a child entry (`memories.places`) erases nothing. Built
-   ([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md),
-   ADR 0079 decision 8).
+   application's writes, never on its reads. **Left off, it is the one switch that erases**: after a window, an
+   instance-wide configuration property of the Server Owner (`veyq.application.off.retention`, default `P30D`), the
+   application's content in the tenant is erased on a day every member is told — by the banner and, where the instance
+   has mail, by a notice at switch-off and a reminder before the day. Switched on before that day, nothing is lost;
+   switched on after it, the erasure completes and spares only what was made after the switch-on as a node of its own.
+   The day a member was told is never moved earlier, and a switch is never refused. The window is no requirement
+   (decision 8): a tenant owner sets no value for it, and a tenant only narrows by switching the application off, never
+   by shortening what the instance allows (decision 2). An instance switch gives every tenant its own day, and a tenant
+   already off keeps its earlier one. Only the application's own entry erases; a child entry (`memories.places`) erases
+   nothing.
 6. **Server visibility is accepted where a switch needs it.** Journal, GPX and a face index get a node kind or a
    blob role the server sees. The operator then learns *that* a Memory has a track, never where. This is the same
    kind of metadata as `CHAPTER`.
 7. **External services are entries.** When one is switched off, the CSP the backend serves
    ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) leaves its origin out, so the browser blocks it, and the
-   manifest hides it from native clients. The services' URLs become operator configuration instead of build
-   variables (they were `VITE_VEYQ_MAP_*` until #439 step 4).
+   manifest hides it from native clients. The services' URLs are operator configuration, not build variables.
 8. **Requirements are values on a node, and the strictest wins.** A tenant can tighten and never loosen. On the
    wire `[{ id }]` grows to `[{ id, …values }]`, the extension ADR 0032 already left room for.
 9. **Presence ids retire.** Once every major in the client window serves an id, the client stops checking it, and
    the server may stop advertising it at the next train. That is a removal under ADR 0085.
 10. **The catalog is cut once more before V1, then frozen.** Its append-only rule protects released clients, and
     there are none yet. From V1 on it holds strictly.
-11. **Device linking and remembering a device are two independent switches** (owner, 2026-10-15). Linking answers
+11. **Device linking and remembering a device are two independent switches.** Linking answers
     *how a key reaches a device*: from another unlocked device instead of password and Secret Key. Remembering
     answers *whether the key may stay there*. Every combination is coherent:
     - With `passwordless` off, a linked device gets a session but no stored key, because the only wrap it can
       enrol is a `DEVICE_KEY` (ADR 0059 §10). `useGrantReceiver.ts` already hides "stay signed in" then.
-    - With linking off, a tenant rules out the one mechanism that turns a single human confirmation into the
+    - With linking off, an instance rules out the one mechanism that turns a single human confirmation into the
       Master Key, where a phished grant is an identity takeover (ADR 0059).
-    - Handing the key from one of the user's own native apps to another on the same device (inbox #438) is not
+    - Handing the key from one of the user's own native apps to another on the same device is not
       linking: it needs no network and no confirmation. Each app enrols its own wrap, and that wrap is governed by
       `remember-device`.
-12. **Where each level switches** (owner, 2026-10-15).
+12. **Where each level switches.**
     - **A tenant owner** switches in the tenant settings in `src/web/`, beside terms and mail. The tenant owner is an
       ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`.
     - **An entry a client offers before sign-in is the Server Owner's alone** (`*`, never `+`): `remember-device`,
       `passwordless` and `device-linking`. The sign-in screen offers "stay signed in" and "sign in with code" from the
       pre-auth manifest, which carries the instance level only (decision 3), so a tenant's switch there would be a
       button that fails after the click. The key material is the account's, not a tenant's, and the pairing channel
-      carries no tenant either. A tenant that wants these off asks the Server Owner (cr-tenant-capability-switches,
-      2026-10-16).
+      carries no tenant either. A tenant that wants these off asks the Server Owner.
     - **The Server Owner** switches in `admin-web` and its CLI, through the Admin API. The state lives in the
       database and takes effect without a restart. It is not a configuration property: the
       `veyq.capabilities.disabled` list retires, and with it any question of what an unknown id in it means.
-    - **Configuration as code** (switches declared in compose or Helm values) is a later topic (inbox #444).
+    - **Configuration as code** (switches declared in compose or Helm values) is a later topic.
 13. **The register describes itself.** Every switchable entry carries, in English and German, *what it is for* and
     *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and
     the API serves it. `admin-web`, the CLI and `src/web/`'s tenant settings render it from there, and none of them
     keeps its own copy.
-14. **No operating mode reaches the register** (owner, 2026-10-17, retired 2026-10-21;
-    [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). From
-    2026-10-17 a mode, *private* or *club, organisation or company*, was a preset: choosing *private* set
+14. **No operating mode reaches the register**
+    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). A mode,
+    *private* or *club, organisation or company*, was once a preset: choosing *private* set
     `core.public-shares.guest-write-record` off, after which the switch moved on its own. That left two sources of
     truth for one state and let a private instance serve guest writes without their record, the case the record exists
     for and the one an operator-blind Server Owner cannot see. So that entry is gone (the record is kept wherever a
@@ -138,7 +135,7 @@ core/
     *+  drop-box                   → share role WRITE_ONLY
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
-  ○   kept-shares (#435), search, live-collab, notifications   [later]
+  ○   kept-shares, search, live-collab, notifications   [later]
 *+ memories                        → off = read-only: every write of its kinds and operations (built)
   *+  chapters                     → node kind CHAPTER
   *+  journal             [planned]→ a server-visible kind or blob role
@@ -150,7 +147,7 @@ core/
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
 *+ depot                           → off = read-only: node kinds FILE / DEPOT_DROPBOX, blob role FILE_CONTENT (built)
   *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
-*+ expenses/   [refined, ADR 0108] → node kind EXPENSES_POT;  *+ public-shares/… inherit
+*+ expenses                        → off = read-only: node kind EXPENSES_POT (built, ADR 0108); *+ public-shares/… inherit
   *+  exchange-rates               → external (exchange-rate provider), no opt-in; CSP connect-src
 *+ inventory/  [concept]           → its node kinds; *+ public-shares/… inherit; *+ reminders-push inherits core.push
 ```
@@ -186,102 +183,35 @@ both off a place still works, named by hand. The user's own consent to the two
 
 ## Consequences
 
-- **Built today** is the catalog (`contracts/platform/capabilities.json`), never a list here. The server computes the
-  AND along the path (`CapabilityRegistry`, every prefix that is an entry, an application's one-segment id included);
-  each client reads one leaf.
-- **An application switch is built** (decision 5, measured: `ApplicationSwitch`): `memories` and `depot` are entries of
-  their own, and every application must have one (`validate_capabilities.py`). Off, core refuses a write of a node by
-  its kind (`NodeKindRules.applicationOf`: create, update, cover, a link created, reactivated, re-issued or turned
-  `READ_WRITE`, an upload's start), each application's write handlers by name, and `ApplicationSwitchSweepTest` derives
-  every write operation of every application and holds each to refused or exempt with its reason. The web reads it as
-  `MemberAccess.applicationsOff` through the registry's `applicationOf`, and the host shows one banner per application
-  off. A guest's page is not told; its write is refused by the server.
-- **The instance-wide switch is built** (decision 12, measured: `InstanceResource.listInstanceCapabilities` /
-  `setInstanceCapability`, `StoredCapabilitySwitches`, `src/admin-web/src/cli/commands.ts`). The Server Owner switches an
-  entry in admin-web's Server → Capabilities panel or with `veyq-admin capabilities list | off <id> | on <id>`,
-  through the Admin API (`GET /api/instance/capabilities`, `PUT /api/instance/capabilities/{capabilityId}`). The state
-  is one row per switched-off entry in `veyq_capability_switch`, read through an in-process cache that the write
-  invalidates after commit, so it acts without a restart on the one replica the chart runs. The words both surfaces
-  show are the catalog's (decision 13), generated into the backend (`CapabilityIds`, `CapabilityTexts`) and served,
-  never copied by a client.
-- **A device switch withholds its wraps** (decision 5, measured: `KeyMaterialHandler.forUser`):
-  `GET /api/account/key-material` leaves out every `DEVICE` wrap while `core.remember-device` is effectively off and
-  every `DEVICE_KEY` wrap while `core.remember-device.passwordless` is, and deletes neither. The web client keeps the
-  device's local key, asks for the password and the Secret Key with a line saying why, and does not re-enrol the
-  device to the other tier, so switching back on restores it. Without `DEVICE_KEY` that is the Secret Key too, not
-  the password alone: a device holds one convenience wrap ([ADR 0005](0005-unlock-methods-and-device-trust.md) §9).
-- **A share switch reaches existing links** (decision 5, measured: `ShareGuestGate.activeShare`): while
-  `core.public-shares`, `.contribute` or `.drop-box` is effectively off, every guest endpoint in core and in both
-  applications answers a link of that role exactly as an unknown link, a `404` with the same body, before the
-  password is asked, so a guest learns nothing of the instance's policy and web's unavailable page needs no new state.
-  The one predicate every guest path already passed is where it sits, so no application handles it. Nothing is
-  written onto the link, so switching back on serves it again. Presigned URLs already handed out run to their TTL, as
-  after a revoke. Changing a READ link into a READ_WRITE one (`updateShare`) is refused like creating one.
-- **The tenant level is built** (decisions 2, 3 and 12, measured: `TenantCapabilitySwitchHandler`,
-  `StoredTenantCapabilitySwitches`, `src/web/src/features/tenant/TenantCapabilitiesPanel.vue`). The catalog's `levels` names
-  who may switch an entry (`instance`, and `tenant` for `core.public-shares` with its two children and
-  `core.group-space`), generated into `CapabilityIds.TENANT_SWITCHABLE`. A tenant owner switches in the web client's
-  tenant settings (`GET /api/tenants/{tenantId}/capability-switches`, `PUT …/{capabilityId}`), one row per entry in
-  `veyq_tenant_capability_switch`, read through a per-tenant cache that a write invalidates after commit. Every member
-  reads the effective set after sign-in (`GET /api/tenants/{tenantId}/capabilities`), and the web client soft-gates on
-  it from its first scope entry on. `CapabilityRegistry.isActive(id, tenantId)` takes the tenant at every gate: the
-  share gates and the guest gate ask the share's scope's tenant, group creation the request's, node creation the
-  scope's; the key material and pairing ask none (the instance-only entries above). The Server Owner's console marks
-  the entries a tenant may narrow further (`tenantSwitchable`).
-- **Four requirements are built** (decision 8, measured: `CapabilityRequirements`, generated from the catalog's
-  `requirements`; `LinkRequirements`; `SessionService.pastPasswordMaxDays`): `core.public-shares` `linkPassword` and
-  `linkMaxDays`, `core.group-space` `addConsent`, `core.remember-device` `passwordMaxDays` (instance only, as its entry).
-  Each is set at its entry's levels (`PUT|DELETE …/requirements/{requirement}`, the console, `veyq-admin capabilities
-  require`, the tenant settings), stored per level in `veyq_capability_requirement` and
-  `veyq_tenant_capability_requirement`, and in effect at the strictest of both. Both deliveries carry the values on their
-  entry, `[{ id, …values }]`. They act at once (decision 5), and that took two decisions the table above did not hold:
-  a link's lifetime counts from when it was made, never from now, because a moving window would refuse a link today and
-  serve it later, so an edit fixes a younger link and an older one is renewed; and `addConsent` leaves members already
-  added alone, a direct add whose key is still on its way included, because the server holds no sealed name key to turn
-  it into a request and removing it would delete a membership. What the gates read is what the server already held: that
-  a link has a password verifier, its dates, a session family's start. Not built: the verified-identities requirement
-  and `offline-cache` (above).
-- **A member's share list says why a link serves no guest** (decisions 5 and 8, inbox #457, measured:
-  `ShareGuestGate.guestStops`, `ShareSummary.guestStops`, `src/web/src/core/sharing/ShareGuestStops.vue`). The guest gate's
-  one predicate now returns its reasons, and `activeShare` is that list being empty: revoked, expired, a space paused or
-  being deleted, each switch along the role's path at each level (`CapabilityRegistry.offSwitches`, whose emptiness is
-  `isActive`), each requirement missed (`LinkRequirements.missed`, whose first is the refusal a write meets). The share
-  list serves the same list on every row, as codes the client words in its own languages, so the list cannot call a link
-  on that a guest gets as unknown. Only a member who may list the link reads it; a guest's `404` is unchanged, byte for
-  byte. Memories', the folder's and the drop box's panel draw it with one component. A missed requirement is fixed on
-  the same link, address and key kept (owner, 2026-10-16): its owner gives it the password or the end date from the row,
-  and the edit is judged as it leaves the link, so a write toward a requirement is never refused by it; a link older
-  than the lifetime is renewed as a new link, and the row says that it gets a new address. A switch names who can switch
-  it back on. The client names the three share entries itself, since a member's set carries no catalog words; an entry
-  it does not know is named plainly.
-- **The external services are entries** (decision 7, measured: `ExternalServicesHandler`, `ExternalServiceOrigins`,
-  `AppShellRoutes.cspNow`): `memories.map` and `memories.places` (`*+`) and `core.breached-password` (`*`, because the
-  join and recover screens check before sign-in, decision 12), joined later by `expenses.exchange-rates` (`*+`,
-  [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8: a `{date}` template; a link
-  guest reads it from its Pot read). Source `external-service`: an entry is active only while
-  the Server Owner configured its address (`veyq_external_service`, seeded with OSM tiles, Nominatim and the HIBP range
-  API, and Frankfurter's ECB rates since; admin-web's **External services**, `veyq-admin services`). Both deliveries carry the address as `serviceUrl`
-  (and the tiles' `serviceAttribution`), the web reads only that, and the served CSP names an origin only while its
-  entry is active at the instance level: the origins are a snapshot recomputed after each write, because the header is
-  written on the event loop, so a tenant's own switch acts through its set and not through the policy. `memories` is
-  the first application root of the tree. **A place works with both off** (inbox #458, measured:
-  `MemoryLocationEditor`, `useMemoryLocation.openLocationEditor`): without `memories.map` the location editor opens
-  with no map and no consent dialog, takes a typed name and keeps the position the photos' GPS gives (`auto`, the
-  medoid), a pin set earlier, or none — a place that is a name only, which the sealed `location` always allowed
-  (`derived` is optional in the v1 shape, so no new version) and which every map skips. Without the map the editor
-  asks no geocoder even where `memories.places` is on, because the one consent the geocoder rides on is asked only
-  with the map (ADR 0018); `memories.places` alone still names a photo in the lightbox for a member who consented
-  earlier. Not built: admin-web's own policy, a static `<meta>`, which keeps the default HIBP origin.
-- **Not built:** configuration as code (#444). The off states are driven in a real browser by lane L1's
-  `capability-off-states.spec.ts` (#447, cr-stack-e2e phase 5); a share list's row of a stopped link is not.
-- **The two enforcement gaps of the flat ids are closed.** The server gated `core.group-space` only at group creation
-  although the catalog names five use-cases - decided a doc fault, since a feature switch refuses only what is new
-  (decision 5), so group creation is the one gate. Depot let a member create a drop box while uploader links were off,
-  and the drop box's Share button read the READ leaf - now creating one needs `core.public-shares.drop-box`, and its
-  share needs the same leaf, not the READ one.
-- **`download-originals` waits for a measurement** (owner, 2026-10-15). If guests stream video from the
-  `ORIGINAL` ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video
-  playback for guests until a video preview tier exists. This must be measured before the entry is built.
+- **It replaces [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and
+  [ADR 0032](0032-capability-discovery-version-gating.md) § 2, § 4 and § 5**; ADR 0032 § 3 keeps capability ≠
+  permission, narrowed per tenant. How the register is built — the catalog, the AND, both deliveries, each kind of
+  switch, the requirements, the external services and an application's erasure window — is
+  [en.platform.capability-register](../features/platform/enablers/en.platform.capability-register.md). The catalog
+  (`contracts/platform/capabilities.json`) is what is built, never a list here.
+- **A switched-off link answers like an unknown one.** Every guest endpoint answers a link of a switched-off role
+  exactly as an unknown link, a `404` with the same body, before the password is asked, so a guest learns nothing of
+  the instance's policy, and the one predicate every guest path already passes is where it sits, so no application
+  handles it. Nothing is written onto the link, so switching back on serves it again. A guest's page is likewise not
+  told that an application is off; its write is refused by the server.
+- **A requirement acting on what exists took two more decisions.** A link's lifetime counts from when it was made,
+  never from now: a moving window would refuse a link today and serve it later, so an edit fixes a younger link and an
+  older one is renewed as a new link, with a new address. `addConsent` leaves members already added alone, a direct add
+  whose key is still on its way included: the server holds no sealed name key to turn it into a request, and removing
+  it would delete a membership. A missed requirement is fixed on the same link, address and key kept, and an edit is
+  judged as it leaves the link, so a write toward a requirement is never refused by it.
+- **A member sees why a link serves no guest.** The guest gate's one predicate returns its reasons, and the share list
+  serves the same list on every row, so the list cannot call a link on that a guest gets as unknown; a guest's `404` is
+  unchanged.
+- **A feature switch has one gate.** `core.group-space` is gated at group creation only, although the catalog names
+  five use-cases: a feature switch refuses only what is new (decision 5). Creating a Depot drop box needs
+  `core.public-shares.drop-box`, and so does its share.
+- **The served CSP is the instance level's.** The header is written on the event loop, so its origins are a snapshot
+  recomputed after each write, and a tenant's own switch of an external service acts through its set, not through the
+  policy.
+- **`download-originals` waits for a measurement.** If guests stream video from the `ORIGINAL`
+  ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video playback for guests
+  until a video preview tier exists. This must be measured before the entry is built.
 - **Cost:** every switch doubles the states a feature must be tested in, and inheritance multiplies that. Decision
   4 is the brake.
 

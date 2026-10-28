@@ -9,6 +9,7 @@ sources:
   - docs/decisions/0072-a-seal-binds-its-object.md
   - docs/decisions/0068-favorites-two-confidentiality-levels.md
   - docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md
+  - docs/features/sharing/enablers/en.sharing.public-link.md
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
 ---
 

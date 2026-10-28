@@ -62,6 +62,7 @@ ordinary event still fits without changing any setting.
 
 ## Related
 
+- Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)
 - **Feature:** [sharing](../_index.md)
 - **Use-cases:** [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md) (the links this bounds),

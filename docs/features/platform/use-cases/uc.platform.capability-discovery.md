@@ -10,6 +10,7 @@
 - **Postconditions (success):** The client holds the instance's `version` + active `capabilities` set for this
   session and gates its entry points on them. On an incompatible `major` the client is in a blocking state and
   has **not** attempted login.
+- **Enabler:** [en.platform.capability-register](../enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

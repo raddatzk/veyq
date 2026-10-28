@@ -1,7 +1,9 @@
 # ADR 0075 — A link a departed member could copy is re-issued, never revived
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-01
+- Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
 
 ## Context
 
@@ -46,13 +48,11 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
    by its owner (as revoke); a **disabled** one by any member, who becomes the new share's owner (as re-activation
    adopts). A share the caller may not re-issue is the same non-enumerable `404` as an unknown one.
    **A share is re-issued at most once.** The old share is spent by a checked compare-and-set
-   ([developer-styleguide §12](../crosscutting/developer-styleguide.md)): the transaction's first write sets its
-   deletion where none is set yet, and the row count decides. Of two concurrent re-issues exactly one mints a link;
-   the other — like a later re-issue of a share already re-issued or deleted — is `409 share_deleted`, nothing
-   written, and the client re-reads the list, where the one new link is. Two links minted from one would leave the
-   curator handing out one while the other stayed live and unknown. The conflict is a member's answer: a non-member
-   gets the `404`, so a tombstone stays as non-enumerable as an unknown id. The old row is read only after the
-   spend, under the row lock that write holds, so the role the new share takes is the one the tombstone replaced.
+   ([developer-styleguide §12](../crosscutting/developer-styleguide.md)); of two concurrent re-issues exactly one mints
+   a link, the other — like a re-issue of a share already re-issued or deleted — is `409 share_deleted`, nothing
+   written. Two links minted from one would leave the curator handing out one while the other stayed live and
+   unknown. The conflict is a member's answer: a non-member gets the `404`, so a tombstone stays as non-enumerable as
+   an unknown id.
 2. **What a re-issue keeps.** The client opens the old share through its recovery copy and re-seals under the new
    `K_share`: the **note, private label, expiry and password** carry over (the password with a fresh salt), and
    the curator may change any of them except the role. A WRITE_ONLY link keeps the Memory's **existing drop key**
@@ -83,9 +83,8 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 
    A share with **no** recovery copy is judged by the first two tests alone: no other member could have rebuilt its
    link. The server computes the predicate once per share for both readers — the refusal and the manage list's
-   `reissueRequired` flag — so the panel's mark and the refusal cannot disagree; the client no longer compares
-   epochs itself. The panel offers a re-issue where it is set, and its hint names both causes: *made before someone
-   left this space or replaced their keys*. This supersedes ADR 0029 §6's "any remaining member may re-activate it".
+   `reissueRequired` flag — so the panel's mark and the refusal cannot disagree. The panel offers a re-issue where it
+   is set, and its hint names both causes: *made before someone left this space or replaced their keys*.
 5. **Turning off every link of a scope sticks.** Every bulk switch-off goes through one store body: it sets
    `enabled = false` on every enabled share of the scope **and** the per-row mark `reissue_only` on **every** share
    of it, and each comes back only by re-issue (a re-issue mints a new row, so the mark never travels). A switch-off

@@ -73,7 +73,7 @@ The values themselves are never copied here — read them at their definition si
 `core/identity/ServerRoles.kt` (#2) · `core/membership/MembershipEntity.kt` (#5) ·
 `core/sharing/Entities.kt` (#6). Guards #3–#5 all live in the one query-only leaf
 `core/membership/MembershipStore.kt` ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); #6/#7
-are private to `core/sharing/SharingHandler.kt`.
+are core sharing's own (`ShareAccessPolicy`, `ShareGuestGate`).
 
 > This table lists **dimensions**, not operations — deliberately. It changes only when the security model does,
 > which is exactly when someone edits this doc. A table of *operations* would churn with every endpoint; see
@@ -129,7 +129,10 @@ have given — and unlike a table they cannot go stale.
 
 ## Known limits (honest — what this doc deliberately does not do)
 
-- **No per-operation matrix.** The authoritative operation set is `contracts/api/*.openapi.yaml` (every operation
+- **No per-operation matrix.** Which role holds which power at each level is a governance statement, kept once in
+  [scopes-and-tenancy § Who may do what](scopes-and-tenancy.md#who-may-do-what) and for links in
+  [en.sharing.public-link § Gates](../features/sharing/enablers/en.sharing.public-link.md#gates--who-may-do-what);
+  this doc maps how each is gated, not which endpoint does what. The authoritative operation set is `contracts/api/*.openapi.yaml` (every operation
   carries a unique `operationId`); the authoritative gate is the annotation plus the handler's guard. A
   **hand-kept** matrix drifts — the sibling concern records the precedent
   ([cc.security.rate-limit](cc.security.rate-limit.md): cr-0044 deleted a phantom row). A **generated** matrix
@@ -182,7 +185,7 @@ product judgement, recorded in the ADRs — not something a test asserts.
 ## Related
 
 - Concept: [security-model](security-model.md) (threat model; why a role never confers readability),
-  [scopes-and-tenancy](scopes-and-tenancy.md) (what a scope *is* — this doc gates it),
+  [scopes-and-tenancy](scopes-and-tenancy.md) (what a scope *is* and who may do what in it — this doc gates it),
   [cc.security.rate-limit](cc.security.rate-limit.md) (the bound axis: how *often* a gate may be attempted)
 - Decisions: [ADR 0007](../decisions/0007-membership-role-grant-relation.md) (the relation, role-vs-grant, the
   `scopeId` keying rule), [ADR 0008](../decisions/0008-centralized-http-auth.md) (the two layers, default-deny,
@@ -196,4 +199,4 @@ product judgement, recorded in the ADRs — not something a test asserts.
   [ADR 0031](../decisions/0031-uploader-public-share.md) (the three share roles)
 - Code: `src/backend/core/…/core/membership/MembershipStore.kt` (guards #3–#5),
   `src/backend/core/…/core/identity/ServerRoles.kt` (#2), `src/backend/core/…/core/auth/` (the authentication front door),
-  `src/backend/core/…/core/sharing/SharingHandler.kt` (#6/#7)
+  `src/backend/core/…/core/sharing/ShareAccessPolicy.kt` and `ShareGuestGate.kt` (#6/#7)

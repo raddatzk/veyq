@@ -4,6 +4,7 @@ description: Every key veyq uses, layer by layer — how it is made, what wraps 
 sources:
   - docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md
   - docs/crosscutting/security-model.md
+  - docs/crosscutting/keys-grants-and-trust.md
   - docs/features/account/enablers/en.account.key-model.md
   - docs/decisions/0012-content-key-hierarchy.md
   - docs/decisions/0024-scope-key-rotation.md

@@ -1,7 +1,9 @@
 # ADR 0070 — A session ends with a new document, not a store reset
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-23
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 

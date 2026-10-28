@@ -36,18 +36,21 @@
 - **`veyq_bucket`** (a row per materialized bucket):
 
   ```
-  id, node_id,
+  id, scope_id, node_id,
   owner_key,                 -- "user:{userId}" | "share:{shareIdentityId}"
   parent_bucket_id?,         -- null = primary; else exactly ONE level under a primary
-  sealed_name? + suite_id,   -- AEAD under K_node; primary's derived name is sealed too; sub-buckets carry their own
-  is_primary
+  sealed_name?,              -- under a field key derived from K_node; a WRITE_ONLY guest's primary under its K_up
+  is_primary, created_at,
+  name_editor_user_id? | name_editor_identity_id?   -- who last wrote sealed_name (ADR 0093 § 8)
   -- One primary per (node_id, owner_key) -- content-blind (owner_key is not ciphertext); held by the node
   -- row's lock, not an index (the schema carries only a plain ix_bucket_node_owner). See "Lifecycle" below.
   -- Sub-bucket names are NOT unique either way (ciphertext, the server can't compare them).
   ```
 - **`veyq_media` gains:** **`bucket_id`** (nullable FK, **`ON DELETE SET NULL`**, `null` = the owner's primary) and
   **`created_by`** (the `owner_key`, copied onto the medium **on attach** — denormalized so grouping and
-  move-authorization never depend on the bucket row).
+  move-authorization never depend on the bucket row). Its older `share_identity_id` stamp
+  ([ADR 0030](../../../decisions/0030-contributor-public-share.md)) stays beside it, redundant with `created_by` for a
+  guest's media; it also keeps a link's usage sum off a table scan (`ix_media_share_identity`).
 
 ## Lifecycle
 
@@ -55,8 +58,10 @@
   `(node_id, owner_key)` on the uploader's **first upload** (or first sub-bucket). An uploader with no media has
   **no row** and does not appear. Its name is **derived** (member = the per-tenant username; contributor = the
   identity's sealed name) and **sealed** like any bucket name, so the grouping view is uniform + operator-blind; the
-  primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: the find-or-create runs under
-  the node row's lock, so two concurrent first uploads share one
+  primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: every find-or-create of a primary
+  (`MediaStore.ensurePrimaryBucket` — an attach, a sub-bucket create, a move and a sub-bucket delete all go through it)
+  takes the node row's lock first and reads under it, so a second resolve of a missing primary waits for the first
+  and finds it, and two concurrent first uploads land in one primary
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) §4).
 - **Sub-buckets.** **One level** under a primary (the parent must be a primary), **owner inherited** from the
   parent, a **sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
@@ -66,6 +71,9 @@
 - **Move.** Media move (bulk) **within a single owner-root** — the target bucket must share the source media's
   `owner_key`; there is **no cross-owner move**. Any member may do it, even re-bucketing a contributor's media
   within that contributor's root (see authz below).
+
+- **Not built:** uploading straight into a chosen sub-bucket (an upload lands in its uploader's primary and a move
+  files it; the complete call carries no target bucket), a camera/source filter and a capture-time-shift tool.
 
 ## Ownership & operator-blindness
 

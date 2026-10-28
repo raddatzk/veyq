@@ -1,7 +1,9 @@
 # ADR 0042 — HTTP failure projection: one shared envelope, self-describing failure variants
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-14
+- Model: [developer-styleguide](../crosscutting/developer-styleguide.md)
 
 ## Context
 
@@ -11,7 +13,7 @@ variants to an HTTP response with a `when(outcome)` ladder **and constructs the 
 duplications result (audit finding **P3b**, [inbox #72](../inbox.md)):
 
 1. **Envelope construction is copy-pasted in 4 idioms across 17 sites.** The generated wire contract
-   `ErrorResponse{code}` (required `code`, optional `message`; identical in all 9 specs, guarded by
+   `ErrorResponse{code}` (required `code`, optional `message`; single-sourced in `_common`,
    [ADR 0038](0038-contracts-shared-components-bundling.md))
    is built via: an overloaded `private fun error(status, code)` (5 resources), named per-code helpers
    (`forbidden`/`notFound`/`conflict`, 2 resources), fully-inline `Response.status(…).entity(ErrorResponse(code=…))`
@@ -92,7 +94,7 @@ suspension either: while either holds, the token answers exactly as a revoked or
 The projection refactor was deliberately **behaviour-preserving** and only made the drift *visible*;
 the ordering fix also carries the enforcement guard below.
 
-**`not_scope_member` was a misnomer**, retired by cr-0162. The sites named it gated on `holdsGrant`, not on
+**`not_scope_member` was a misnomer**, and is retired. The sites named it gated on `holdsGrant`, not on
 membership, so a member whose grant was still pending (ADR 0020) was told they were "not a member". With the
 boundary guard first, the residual 403 means precisely "accepted member, but not yet a key-holder" →
 **`not_key_holder`** — never an unaccepted proposal, which the boundary already answered with 404.
@@ -104,13 +106,12 @@ boundary guard first, the residual 403 means precisely "accepted member, but not
   failure's stable identity, and colocating it is exactly what makes the projection single-sourced and
   drift-proof. Generated request/response **models** still stay at the resource boundary (styleguide §2); only
   the stable error `code` string travels with the failure.
-- **Sealed Outcomes, exhaustiveness, and handler tests are untouched by the projection refactor** — cr-0161 kept
-  the status + code of every existing case, including the drifted 403s, which cr-0162 then corrected. The
-  regression guard is the existing resource/HTTP-level status + code tests.
+- **Sealed Outcomes, exhaustiveness, and handler tests are untouched by the projection**: it keeps the status +
+  code of every case, and the regression guard is the resource/HTTP-level status + code tests.
 - **Enforcement guard (permanent), envelope:** `ErrorResponse(` is constructed in **exactly one** `core/http/`
   file; no `…Resource` builds an error envelope directly and no per-resource
-  `error`/`forbidden`/`notFound`/`conflict` envelope helper remains. Promoted from cr-0161's one-shot proof grep
-  to a CI check (per [changes/README.md](../../changes/README.md)).
+  `error`/`forbidden`/`notFound`/`conflict` envelope helper remains — a CI check (per
+  [changes/README.md](../../changes/README.md)).
 - **Enforcement guard (permanent), ordering:** `OperatorBlindProbeTest` fires every scope-, tenant-, share- and
   job-addressed operation as a **non-member** against both a real id and an invented one and asserts the two
   answers are identical in status and `code`; it fires the same operations as an unaccepted proposal (the same
@@ -119,7 +120,7 @@ boundary guard first, the residual 403 means precisely "accepted member, but not
   is not greppable, whereas the test fails on any future operation that probes before it gates. Its operation
   set is **derived from the contract** (the generated API interfaces), not listed: every operation is either
   probed or named on a reasoned exclusion list, so an operation nobody classified is red on the day it lands.
-- **Styleguide §13** gains a short pointer ("HTTP failure projection → `core/http/`; membership-gated absence
+- **Styleguide §12** carries a short pointer ("HTTP failure projection → `core/http/`; membership-gated absence
   → 404").
 - **Rejected — full collapse to `Either<Failure, Success>` (the finding's literal form).** Delete the sealed
   Outcomes; a failure is just `Failure(code, httpStatus)`. Maximal LOC reduction, but discards compile-time

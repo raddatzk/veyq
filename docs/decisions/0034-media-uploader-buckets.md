@@ -1,127 +1,81 @@
 # ADR 0034 — Media uploader buckets: an `owner_key`-keyed bucket table (operator-blind)
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-09
+- Model: [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md)
 
 ## Context
 
-**Buckets** are a per-uploader container *within a single Memory* holding the media that uploader contributed —
-an **attribution axis** ("who contributed this?"), **orthogonal to Chapters** (the owner's curation axis). Each
-uploader gets one automatic **primary bucket** (name = their display name) plus optional user-created, one-level
-**sub-buckets**; the whole thing surfaces as a Memory tab ("Contributions" / "Beiträge"). The bucket owner is a
-**member** *or* an **anonymous share identity**, so the axis groups **internal members and public contributors**
-alike.
-
-The **data hook already exists**: [ADR 0030](0030-contributor-public-share.md) captured each contributed medium's
-uploader as an opaque `share_identity_id` + a sealed display name, and **deferred the buckets UI** to a
-later slice. This ADR decides that slice — widened from contributors to **every** uploader.
-
-The refine (with the user) settled the shape: a **real bucket table** keyed by a single opaque **`owner_key`** —
-not a minimal "derive from a per-media stamp" model — because that is symmetric across members and contributors
-and carries **sub-buckets** without a second data model. V1 is the **finishing package**: the **full data layer +
-backend** and the **"Beiträge" tab** as the full **organizer** — per-uploader grouping **and** sub-bucket
-management (create/rename/delete folders, move media in). The product direction, refined with the user, is the
-full organizer, not read-only grouping.
+**Buckets** are a per-uploader container *within one Memory* holding the media that uploader contributed — an
+**attribution axis** ("who contributed this?"), orthogonal to Chapters (the owner's curation axis). Each uploader gets
+one automatic **primary bucket** (its name is the uploader's) plus optional one-level **sub-buckets**; it surfaces as a
+Memory tab ("Contributions" / "Beiträge"). The uploader is a **member** *or* an **anonymous share identity**, so the
+axis groups members and public contributors alike. [ADR 0030](0030-contributor-public-share.md) already stamped each
+contributed medium with an opaque identity and a sealed name. The product direction is the full organizer —
+grouping **and** sub-bucket management — not read-only grouping.
 
 ## Decision
 
-Adopt an **`owner_key`-keyed bucket table**, operator-blind, built on the key hierarchy. The data model lives in [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md);
-the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buckets.md).
+Adopt an **`owner_key`-keyed bucket table**, operator-blind. The table, the lifecycle and the gates as built are the
+model, [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md); the experience is
+[uc.memory.buckets](../features/memory/use-cases/uc.memory.buckets.md).
 
-1. **A bucket = a per-uploader container within one Memory** — the **attribution axis**, **orthogonal to
-   Chapters**, a filter/organization view over the same media (**not** a node, permalink, or
-   Memory/Chapter/Folder). Internal noun **"bucket"** (a sanctioned third noun, distinct from the Memory/Chapter
-   product language); user-facing surface = the **"Beiträge" tab**.
+1. **A bucket is a per-uploader container within one Memory** — the attribution axis, a filter and organization view
+   over the same media, **not** a node, a permalink or a Memory/Chapter/Folder. "Bucket" is an internal noun; users
+   see the "Beiträge" tab.
 
-2. **A real `veyq_bucket` table, not a derived group-by.** A row per materialized bucket:
-   `id, node_id, owner_key, parent_bucket_id? (null = primary), sealed_name? + suite_id, is_primary`, with
-   **one primary per `(node_id, owner_key)`** — an invariant the schema does **not** currently carry (below).
-   `veyq_media` gains **`bucket_id`** (nullable FK,
-   `ON DELETE SET NULL`, `null` = the owner's primary) and **`created_by`** (the `owner_key`, copied onto the
-   medium on attach — denormalized so grouping/move-authz never joins the bucket). Full field list:
-   [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md).
+2. **A real bucket table, not a derived group-by.** A row per materialized bucket, with one primary per
+   `(node, owner_key)`; each medium carries its bucket (null = its owner's primary) and its uploader's `owner_key`,
+   copied on attach so grouping and move checks never join the bucket.
 
-3. **One opaque `owner_key` string** identifies the uploader: `user:{userId}` (member) /
-   `share:{shareIdentityId}` (contributor, **reusing the cr-0101 identity** as the grouping key). It is
-   **operator-visible** (like membership + the existing `share_identity_id`), lets the server **scope grouping
-   and moves** by that one opaque key without knowing identity semantics (it is **not** the authz gate — see §6),
-   and **collapses** the fragile pre-E2EE two-column `uploader_user_id`/`share_identity_id` XOR into one field. The shipped `media.share_identity_id`
-   (cr-0101) is **left untouched** — mildly redundant with `created_by` for contributors, cleaned when the
-   sharing surface is next worked, **not** in this CR.
+3. **One opaque `owner_key`** identifies the uploader: `user:{userId}` for a member, `share:{shareIdentityId}` for a
+   guest (reusing ADR 0030's identity as the grouping key). It is operator-visible, like membership and the identity
+   stamp, so the server can scope grouping and moves by one opaque key without knowing identity semantics; it is
+   **not** the authorization gate (point 6).
 
-4. **Virtual-until-upload primary; names sealed under a field key derived from `K_node`.** A primary bucket materializes **lazily** (a
-   find-or-create on `(node, owner_key)` on the first upload / first sub-bucket); uploaders with no media have no
-   row. Its **derived** name (member = username, contributor = the identity's sealed name) is itself **sealed
-   the same way** so the view is uniform + operator-blind, and it is **not renameable**. Sub-bucket names are
-   **sealed** user text; because they are ciphertext there is **no server-side name uniqueness** — the
-   only uniqueness this model wants is the content-blind **one primary per `(node, owner_key)`**.
+4. **Virtual-until-upload primary; sealed names.** A primary materializes lazily on its uploader's first upload or
+   first sub-bucket, so an uploader with no media has no row. Its derived name is sealed like any bucket name (the
+   view is uniform and blind) and cannot be renamed. Sub-bucket names are sealed user text, so the server enforces
+   **no name uniqueness**; the only uniqueness is the content-blind one primary per `(node, owner_key)`, held by the
+   **node row's lock**, not by a unique key: under the lock a second first upload lands in the winner's primary, where
+   with a key the loser's whole attach — a guest's or a member's upload — would fail and roll back.
 
-   **The node row's lock holds it.** Every find-or-create of a primary (`MediaStore.ensurePrimaryBucket`, which an
-   attach, a sub-bucket create, a move and a sub-bucket delete all go through) takes the node row's lock first and
-   reads under it, so a second resolve of a missing primary waits for the first and then finds it (developer-styleguide
-   §12, the parent's row lock). Read without it, two first uploads of one uploader each created a primary.
-   **Not a unique key** (a marker column set only when `is_primary`, under a plain `UNIQUE`): with a key the loser's
-   whole attach fails and the guest's or member's upload rolls back, where under the lock it lands in the winner's
-   primary. A key would also guard a future insert that bypasses the one function; none exists.
+5. **One-level nesting.** A sub-bucket sits directly under a primary and inherits its owner; no deeper nesting, no
+   reparenting.
 
-5. **One-level nesting.** Sub-buckets sit **one level** under a primary (the parent must be a primary), **owner
-   inherited** from the parent. No arbitrary depth, **no reparenting**.
+6. **Reparent-on-delete + member-gated sub-bucket authorization** (both deliberate reversals of the pre-E2EE code).
+   Deleting a sub-bucket moves its media back to the owner's primary — media are **never lost**; primaries are not
+   deletable. Creating, renaming and deleting a sub-bucket and moving media are gated to **scope membership**: any
+   member may curate any owner's sub-buckets, never a primary, and a move stays within one owner. The gate is
+   membership, not `owner_key == caller`, so a curator can tidy a contributor's uploads; no reader may infer an
+   owner-only guarantee.
 
-6. **Reparent-on-delete + member-gated sub-bucket authz (both deliberate reversals of the pre-E2EE code).**
-   Deleting a sub-bucket sets its media **`bucket_id = null`** (they fall back to the owner's primary — media are
-   **never lost**, reversing the pre-E2EE hard-delete); **primaries are not deletable**. Create / rename / delete
-   a **sub-bucket** and **move media** are **server-gated to scope membership** — **any member** may curate **any
-   owner-root's** sub-buckets (its own *or* a contributor's), **never a primary**, and a move stays **within one
-   owner-root** (never across owners). **Delete-media** and **edit capture time** stay **any key-holder**
-   (unchanged from the media data layer). *(cr-0123 relaxed the authz from the original owner-only gate —
-   `owner_key == caller` — to member, so a curator can tidy a contributor's uploads; a reader must not infer the
-   stronger owner-only guarantee, which the code does not give.)*
-
-7. **V1 scope = full data layer + backend + the "Beiträge" organizer.** Build the table + `owner_key` +
-   `bucket_id`/`created_by` + the lazy primary + the sub-bucket **endpoints** (list, create, rename, delete-with-
-   reparent, move) + sub-bucket authz (owner-gated at cr-0113, **member-gated since cr-0123** — §6); and the web **"Beiträge" tab** as the full **organizer** — a hierarchy
-   picker (your primary + sub-buckets), create/rename/delete sub-buckets, move media between your own buckets, a
-   **virtual own-primary** that materializes on first use — **always available**. **Deferred:** uploading directly
-   into a *selected* sub-bucket (an upload lands in the uploader's primary and a move files it; the complete call
-   carries no target bucket, so building it adds one, with the bucket's lock `moveMedia` takes), a **camera/source filter** + a **capture-time-shift** tool (the EXIF metadata isn't
-   surfaced in the fresh client), and group/tenant **self-identification** in the organizer UI — now a pure UI
-   nicety, not an authz need: cr-0123 relaxed the server gate to **member**, so there is no own-bucket gate to
-   self-identify against.
+7. **The organizer is always available** in the Memory: your primary and sub-buckets, create, rename and delete
+   sub-buckets, move media between your own buckets.
 
 ## Consequences
 
-- **Operator-visible surface, all opaque:** `owner_key`s, the **bucket structure** (node, parentage,
-  `is_primary`, per-bucket counts), and `bucket_id`/`created_by` on media — coarse operational metadata,
-  consistent with membership + the cr-0101 contributor stamp; recorded in the
-  [security-model](../crosscutting/security-model.md). **Sealed names and all content stay blind.** A personal
-  space **with no share** is wholly confidential — its only `owner_key` is the account owner's.
-- **ADR 0030's forward-compat is spent as intended.** Contributor grouping falls out of `share:{shareIdentityId}`
-  with **no migration** on the sharing half; the sealed contributor name becomes the primary's sealed name.
-- **We diverge deliberately from how buckets worked before E2EE.** Cascade-delete → **reparent-to-primary**; no
-  bucket ownership → **`owner_key`-structured, member-gated sub-bucket authz** (cr-0123); cleartext names + server-side uniqueness → **sealed names +
-  primary-only uniqueness**. These are behavior/blindness changes, not just crypto.
-- **One redundant column, deliberately.** `media.share_identity_id` (cr-0101) overlaps `created_by` for
-  contributors; kept to avoid churning the shipped sharing feature in this CR, flagged for cleanup when sharing is
-  next touched.
-- **Migration adds** the `veyq_bucket` table + `media.bucket_id` + `media.created_by`; existing media backfill to
-  `created_by = user:{owner}` (or their `share:{id}`) and `bucket_id = null` (→ their primary, lazy). That list-time
-  backfill was deleted before V1 (inbox #264): every medium since is born with both, and V1 carries no older rows.
+- **Operator-visible surface, all opaque:** `owner_key`s, the bucket structure (node, parentage, `is_primary`, counts)
+  and each medium's bucket and uploader key — coarse metadata consistent with membership and ADR 0030's stamp,
+  recorded in the [security model](../crosscutting/security-model.md). Sealed names and all content stay blind. A
+  personal space with no share is wholly confidential: its only `owner_key` is the account owner's.
+- **ADR 0030's forward-compatibility is spent as intended:** contributor grouping falls out of
+  `share:{shareIdentityId}` with no migration, and the contributor's sealed name becomes its primary's.
+- **One redundant column, deliberately:** a medium's ADR 0030 identity stamp overlaps its `owner_key` for guests; it
+  stays rather than churn the sharing side.
 
 ## Alternatives considered
 
-- **Derived primary buckets, no table** (a per-media `created_by_user_id` grouped at read time — the first-cut
-  V1). **Rejected in refine:** it is **asymmetric** (contributors already have a materialized identity row,
-  members would be a bare group-by), and it does **not** carry sub-buckets without introducing the table later
-  anyway. A single `owner_key` + one table is the symmetric, sound foundation.
-- **The pre-E2EE two-column `uploader_user_id`/`share_identity_id` XOR.** Rejected — the XOR was enforced only in
-  app code at many call sites; **one opaque `owner_key`** is cleaner and authorization-friendly.
-- **Materialize every primary eagerly.** Rejected — **virtual-until-upload** (lazy find-or-create) avoids empty
-  rows + create/delete lifecycle churn; a primary appears exactly when its uploader has media.
-- **Cascade-delete a bucket's media** (the pre-E2EE code). Rejected — **reparent-to-primary** never loses media;
-  destructive delete belongs to the explicit media delete/trash path (cr-0110/0111), not to tidying a folder.
-- **Cleartext names + server-side name uniqueness** (the pre-E2EE code). Rejected — breaks operator-blindness;
-  names are **sealed**, sub-bucket names carry **no** uniqueness (ciphertext), only the content-blind
-  primary uniqueness remains.
-- **Fully-sealed `created_by`** (hide attribution from the operator). Rejected — inconsistent with the already-
-  visible `share_identity_id`, and it would force client-side-only grouping/authz. `owner_key` is operator-
-  visible coarse metadata; the stricter variant stays a future escalation path.
+- **Derived primary buckets, no table** (a per-media uploader id grouped at read time). Rejected: asymmetric
+  (contributors already have a materialized identity, members would be a bare group-by), and it cannot carry
+  sub-buckets without adding the table later anyway.
+- **The pre-E2EE two-column `uploader_user_id` / `share_identity_id` XOR.** Rejected — the XOR was enforced only in
+  application code at many call sites; one opaque `owner_key` is cleaner.
+- **Materialize every primary eagerly.** Rejected — lazy find-or-create avoids empty rows and their lifecycle churn.
+- **Cascade-delete a bucket's media** (the pre-E2EE code). Rejected — reparent-to-primary never loses media;
+  destructive delete belongs to the explicit media delete path, not to tidying a folder.
+- **Cleartext names + server-side name uniqueness** (the pre-E2EE code). Rejected — breaks operator-blindness.
+- **A unique key for the one primary.** Rejected (point 4): the loser's attach would fail instead of landing.
+- **A fully sealed `owner_key`** (hide attribution from the operator). Rejected — inconsistent with the already-visible
+  identity stamp, and it would force client-side-only grouping and authorization; it stays a possible escalation.

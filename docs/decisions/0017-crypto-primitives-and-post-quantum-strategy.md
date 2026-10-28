@@ -1,7 +1,9 @@
 # ADR 0017 — Cryptographic primitives & post-quantum strategy
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-01
+- Model: [security-model](../crosscutting/security-model.md)
 
 ## Context
 
@@ -18,7 +20,7 @@ strategy; they do not choose it.
 
 1. **Standard, well-reviewed primitives only — no home-grown crypto.** Symmetric content encryption is an
    AES-256-GCM-class AEAD (already quantum-resistant at 256-bit). Each primitive of the suite has one
-   implementation, `@noble` (owner 2026-10-26), so the conformance vectors pin the code that runs, and no second
+   implementation, `@noble`, so the conformance vectors pin the code that runs, and no second
    implementation's agreement has to be proven in every browser. A key the browser keeps only for itself is the one
    exception, because only WebCrypto makes it non-extractable: the device-local seals of
    [ADR 0005](0005-unlock-methods-and-device-trust.md) never reach the wire, and the same browser unwraps what it

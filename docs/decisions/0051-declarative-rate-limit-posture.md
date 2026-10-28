@@ -1,7 +1,9 @@
 # ADR 0051 — Declarative rate-limit posture per endpoint
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-07-27
+- Model: [cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md)
 
 ## Context
 

@@ -78,11 +78,10 @@ seals its name under a field key derived from the folder's key instead of from `
   the opaque `wrappedMeta`): one named location on the same `wrappedMeta` (medoid position + typed/reverse-geocoded name),
   and the places map — every located Memory in the current folder's subtree, the whole space at its root;
   reverse-only, veyq-blind geocoding (ADR 0016)
-- [uc.memory.cover](use-cases/uc.memory.cover.md) — **built (web; backend for the uploaded cover)** (cr-0072,
-  cr-0073, cr-0109): a deliberately chosen, cropped cover (a `source` — one of the Memory's photos or an uploaded
-  image — plus a crop, on the same `wrappedMeta`), shown on the browse card, the detail header and the map pin
-  — one decrypt per Memory per scope, shared by all three (the sidebar's Favorites entry showed it too until core took the
-  Favorites section over, inbox #409; a cover for any node is inbox #411)
+- [uc.memory.cover](use-cases/uc.memory.cover.md) — **built**: a deliberately chosen, cropped cover — an uploaded image
+  plus a crop, named by the same `wrappedMeta` (an upload equal to a gallery photo shares that photo's stored PREVIEW) —
+  shown on the browse card, the detail header and the map pin, one decrypt per Memory per scope, shared by all three.
+  A cover is core's for any node that opts in ([uc.platform.node-cover](../platform/use-cases/uc.platform.node-cover.md))
 - [uc.memory.banner](use-cases/uc.memory.banner.md) — **built**
   ([ADR 0102](../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): one image
   or video above the Memory's menu bar, independent of the cover — uploaded in its own dialog (a file equal to a gallery

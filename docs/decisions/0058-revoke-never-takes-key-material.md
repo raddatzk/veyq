@@ -1,7 +1,9 @@
 # ADR 0058 — A revoke never takes key material; removing a device's wrap is a named escalation
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-08-12
+- Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
 ## Context
 

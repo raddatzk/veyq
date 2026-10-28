@@ -16,6 +16,7 @@
   entries (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it. Left off for the window, its
   content is erased on a day its members are told
   ([uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md)).
+- **Enabler:** [en.platform.capability-register](../enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

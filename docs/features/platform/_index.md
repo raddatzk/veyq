@@ -1,25 +1,26 @@
 # Feature: Platform
 
-The **cross-feature substrate** that keeps a self-hosted instance and its drifting clients honest with each
-other. Not an end-user feature in itself — it is the negotiation + discovery layer every other feature rides on:
-what this instance can do, what version it speaks, and which optional features the operator left on.
+The **cross-feature substrate** every application stands on, as far as it is a feature of its own: what this instance
+serves and which version it speaks, the capability register its operator and tenant owners switch, and the node
+features core owns for every kind (a cover, export and import, a copy). The platform as a whole — what core owns, what
+an application owns and how the two meet — is [Applications](../../apps/README.md).
 
-- **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (the manifest is pre-auth,
-  identity-free, and the same for everyone — operator-blind-safe). Every client surface reads the same
-  manifest; what each surface actually has is [`docs/coverage/`](../../coverage/README.md).
-- **Decisions:** [ADR 0032](../../decisions/0032-capability-discovery-version-gating.md) (capability discovery +
-  the `major` version gate — the lean core: `/api/setup` advertises `version` + a `capabilities` manifest, clients
-  hard-gate on `major` and soft-gate features on capability presence, operators disable a capability instance-wide
-  and the server enforces it).
+- **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (the pre-auth manifest is identity-free and
+  the same for everyone — operator-blind-safe). What each client surface has is [`docs/coverage/`](../../coverage/README.md).
+- **Decisions:** [ADR 0032](../../decisions/0032-capability-discovery-version-gating.md) (capability discovery, the
+  `major` gate, capability ≠ permission, advertised and enforced),
+  [ADR 0088](../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) (the register as
+  a tree, switched by the operator and a tenant owner; an application switched off is read-only, decision 5),
+  [ADR 0079](../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (veyq is a platform; what core
+  and an application each own).
 
 ## Use-cases
 
-- [uc.platform.capability-discovery](use-cases/uc.platform.capability-discovery.md) — **built (web)** (cr-0103:
-  a client discovers the instance's `version` + active `capabilities` from the pre-auth `/api/setup`,
+- [uc.platform.capability-discovery](use-cases/uc.platform.capability-discovery.md) — **built (web)** (a client
+  discovers the instance's `version` + active `capabilities` from the pre-auth `/api/setup`,
   **hard-gates** on a `major` mismatch (forced "update app / update server"), **soft-gates** each feature on its
   capability's presence (graceful hide, never a crash), and an operator can **turn a capability off instance-wide**
-  — omitted from the manifest **and** rejected at its endpoint. First consumer: the **sharing** roles
-  (`core.public-shares` and its two children).
+  — omitted from the manifest **and** rejected at its endpoint; after sign-in it reads the tenant's effective set.
   [ADR 0032](../../decisions/0032-capability-discovery-version-gating.md))
 - [uc.platform.node-cover](use-cases/uc.platform.node-cover.md) — **built (web, backend, contracts)** (inbox #411: any node
   of a kind that opts in — a folder, a drop box, a Memory — carries a **cover**, an image its owner uploads as the node's own
@@ -41,6 +42,10 @@ what this instance can do, what version it speaks, and which optional features t
 
 ## Enablers
 
+- [en.platform.capability-register](enablers/en.platform.capability-register.md) — **built** (ADR 0032, ADR 0088: the
+  catalog of ids as a tree, the AND along the path and across the instance and tenant levels, the pre-auth and the
+  tenant delivery, what each kind of switch does to what is new and what exists, requirements, external services, and
+  an application's switch with its erasure window.)
 - [en.platform.field-editor](enablers/en.platform.field-editor.md) — **built** (ADR 0093 § 8: the server stores the
   last editor of every sealed field group — name, meta, note, icon — as an opaque `user:{id}` / `share:{identityId}`,
   from the authenticated caller, served to no client; a guest's take-back erases only a placeholder its own identity
@@ -50,20 +55,8 @@ what this instance can do, what version it speaks, and which optional features t
   and picture — seals under `K_field`, derived per write from the key it belongs under, so one key opens one revision
   of one field: what a report will hand over.)
 
-## Precedent already in the fresh state
+## Deferred
 
-The pre-auth `GET /api/setup` already advertises `suites: ["v1"]` (crypto-suite negotiation); the background-tasks
-layer already matches worker **capability tags** (`CapabilityTags`,
-[ADR 0021](../../decisions/0021-operator-blind-background-tasks.md)). This feature adds the **generic
-client-facing** layer (a versioned capability manifest + the hard gate) above those. (An earlier `directTransport`
-advisory on `/api/setup` was **removed** when a byte-path store became a hard requirement, cr-0105 / ADR 0013.)
-
-## Deferred (later slices, each its own dependency)
-
-- **Deprecation lifecycle** — `state: active | deprecated`, `sunsetAt` / `supersededBy`, the sunset window +
-  non-dismissable warning, and the *remove-X-add-Y* replacement pattern (immutable ids).
-- **"New feature" notices + per-user acks** — surfacing a freshly-introduced capability, dismissed per user.
-- **Audience filtering** — `ALL_USERS` vs `SERVER_OWNER` capability visibility.
-- **Unify `suites`** into the single `capabilities` manifest.
-- **Client device self-capabilities** (NPU / WebCodecs / …) — a separate direction (client → self), not
-  server-advertised.
+The deprecation lifecycle, "new feature" notices, audience filtering, folding `suites` into the manifest and client
+device self-capabilities: [en.platform.capability-register § Decided, not built](enablers/en.platform.capability-register.md#decided-not-built)
+and [ADR 0032](../../decisions/0032-capability-discovery-version-gating.md) Consequences.

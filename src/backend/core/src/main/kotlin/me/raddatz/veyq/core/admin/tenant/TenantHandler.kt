@@ -476,7 +476,7 @@ class TenantHandler(
 
     /**
      * The Server Owner invites a **member** of an ACTIVE tenant to own it (ADR 0101 decision 9) — the way out of an
-     * ownerless tenant. Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 6), so an
+     * ownerless tenant. Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 3), so an
      * owner from outside would wait for a key no member could vouch for. Committed then sent, as setup's invite is.
      */
     fun inviteOwner(tenantId: String, email: String): OwnerInviteOutcome = commitThenSend {

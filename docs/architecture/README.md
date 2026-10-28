@@ -173,19 +173,26 @@ conformance vectors).
 
 ```mermaid
 ---
-title: Self-hosted node (central infrastructure always optional)
+title: One self-hosted instance (central infrastructure always optional)
 ---
 flowchart TB
   C["Client<br>web (Vue)"]
-  subgraph N["One self-hosted node"]
-    B["Backend (Quarkus/Kotlin)"]
+  O["Server Owner<br>(host loopback / SSH tunnel)"]
+  subgraph N["One instance — Compose recipe or Helm chart"]
+    E["Edge<br>Traefik (Compose) / Gateway API (Kubernetes)"]
+    B["app (Quarkus/Kotlin)<br>public listener + admin listener"]
+    A["admin (admin-web + CLI)"]
     DB[("MariaDB")]
-    S[("S3-compatible store<br>(e.g. Garage)")]
+    S[("S3-compatible store<br>(bundled Garage optional)")]
     NB["Flyway owns the schema; blob bytes<br>never transit the backend (ADR 0013)"]
   end
   CI(["Central infra<br>(optional — discovery, relays)"])
 
-  C -->|"per-tenant by Host (domain → tenant)"| B
+  C -->|"per-tenant by Host (domain → tenant)"| E
+  E --> B
+  C -->|"presigned PUT/GET"| S
+  O --> A
+  A -->|"admin channel"| B
   B --> DB
   B -->|"presign"| S
   B -.->|"optional only"| CI
@@ -197,20 +204,17 @@ flowchart TB
 - **Self-hostable by default; central infrastructure always optional.** The common deployment is one node,
   usually one tenant, self-administered — the Server Owner *is* the Tenant Owner
   ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md)).
-- **S3-compatible, vendor-neutral store** — the backend signs via the AWS S3 SDK, never a vendor-locked client;
-  the bundled dev store is a generic OSS S3 (Garage). Ops detail: [infra/README](../../infra/README.md)
+- **Two deployment targets, one answer each.** The Compose recipe (managed on the host by `veyqctl`) and the Helm
+  chart run the same services; the edge routes tenant domains the backend projects from its database, and the
+  Server-Owner API is answered only on the admin listener the `admin` container reaches. How a release is named,
+  published and installed on both, and what of it is built, is
+  [release-and-deployment](../crosscutting/release-and-deployment.md); no image carries the recipe — a release's
+  recipe is its assets ([ADR 0057](../decisions/0057-release-identity-and-deployment-recipe.md) §3).
+- **S3-compatible, vendor-neutral store** — the backend signs via the AWS S3 SDK, never a vendor-locked client
   ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md)).
 - **Host-based tenant routing** — the active tenant resolves from the request Host (port stripped)
   ([scopes & tenancy](../crosscutting/scopes-and-tenancy.md),
   [uc.admin.setup-server](../features/admin/use-cases/uc.admin.setup-server.md)).
-- **A release is named by the tree, and carries its own deployment recipe** — the version comes from the tree (the
-  major in a `VERSION` file, the minor a commit count) rather than from a registry count, nothing is published
-  by a push, a release onto an existing tag fails instead of replacing it, the Helm chart ships beside the two
-  images as the release's third signed artifact, and the
-  production compose file travels *inside* the signed image so it cannot drift from the bits it describes
-  ([ADR 0057](../decisions/0057-release-identity-and-deployment-recipe.md)). This is what gives
-  [ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6's rollback a target it can
-  name.
 
 ## 8. Cross-cutting Concepts
 
@@ -251,9 +255,9 @@ flowchart TB
 
 ## 9. Architecture Decisions
 
-The decisions that shape the views above, by theme. **This is a reader's path in, not the full set** —
-[decisions/](../decisions/) is the only complete list, and stating its size here would only be one more number
-to keep true.
+The decisions that shape the views above, by theme. **This is a reader's path in, not the full set** — the
+[topic index](../decisions/README.md#topics) is the only complete list, each topic with its current-picture doc,
+and stating its size here would only be one more number to keep true.
 
 | Theme | ADRs |
 |---|---|

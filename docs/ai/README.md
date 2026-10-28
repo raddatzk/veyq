@@ -17,10 +17,11 @@ invariants in [CLAUDE.md](../../CLAUDE.md) override everything here.
 
 **The owner reviews in conversation, before the work — not by reading `docs/`.** So: describe what a refinement
 or a CR is *actually about*, in two sentences, and let them stop it. That exchange is the review loop, and it is
-the only check that can ask **"do we need this at all?"** — no validator can. The prose-to-product ratio is
-currently healthy (~12k lines of docs against ~50k of source), and it is worth knowing what that cost: it was
-last corrected by **deleting** ~2.6k lines in one pass, not by writing carefully. Prose grows by default; only
-that question shrinks it.
+the only check that can ask **"do we need this at all?"** — no validator can. The prose-to-product ratio is the
+number to watch: `docs/` holds ~38k lines against ~156k of source outside the tests (`git ls-files`, `*.md` against
+`*.kt`/`*.ts`/`*.vue`/`*.py`), and nearly half of that prose is ADRs (~18k lines) — where a model narrated in a
+record instead of its current-picture doc keeps growing. The ratio was last corrected by **deleting** ~2.6k lines
+in one pass, not by writing carefully. Prose grows by default; only that question shrinks it.
 
 Five rules follow:
 
@@ -416,15 +417,10 @@ this section only points at it (rule 2) — assembling this picture by hand each
   skips locally while no guard changed (`--force` runs it). The whole pipeline runs locally by one command,
   `python3 scripts/run_pipeline.py`, read from `ci.yml` itself; until the repository has a remote, that run is the
   only run (its docstring says what it cannot reproduce).
-- **What runs where.** [`trust-chain.yml`](../../.github/workflows/trust-chain.yml) — deliberately unfiltered
-  and buildless, the guard glob minus `validate_guard_gaps.py`; a docs-only change is validated **there and
-  nowhere else**, because [`ci.yml`](../../.github/workflows/ci.yml) — the one pipeline per commit, whose
-  `guards` job runs the same glob — `paths-ignore`s `docs/**`. `validate_guard_gaps.py` is `trust-chain.yml`'s
-  second job: when a push or pull request changes `scripts/` or the trust-chain skill, and nightly in full
-  ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 4).
-  [`mutation.yml`](../../.github/workflows/mutation.yml) /
-  [`mutation-backend.yml`](../../.github/workflows/mutation-backend.yml) are path-gated onto their scope files.
-  Every job runs on its budget, ADR 0091 decision 1.
+- **What runs where** — every stage, its workflow job, trigger and budget — is the one stage map,
+  [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md) § Where and when each stage runs;
+  it is not restated here. What it means for a doc change: `ci.yml` ignores `docs/**`, so a docs-only change is
+  validated by `trust-chain.yml` alone.
 - **What green proves — and where it stops.** A reference **resolves**; not that what it points at carries
   weight. Those limits are **executable, not prose**:
   [`validate_guard_gaps.py`](../../scripts/validate_guard_gaps.py) injects each documented gap into a

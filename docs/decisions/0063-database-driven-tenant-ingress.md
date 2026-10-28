@@ -1,7 +1,9 @@
 # ADR 0063 — Tenant↔domain routing is generated from the database, not hand-edited
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-09-07
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 

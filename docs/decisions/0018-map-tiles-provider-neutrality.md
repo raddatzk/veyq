@@ -1,8 +1,9 @@
 # ADR 0018 — Map tiles: raster via Leaflet, third-party-only, coupled with geocoding (OSM reference)
 
-- Status: Accepted; amended 2026-10-16 by [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
-  (inbox #458): on a server whose map is switched off, a place is named by hand without a map.
+- Status: Accepted
+- Built: yes
 - Date: 2026-07-02
+- Model: [Applications](../apps/README.md)
 
 ## Context
 
@@ -52,7 +53,8 @@ opt-in.**
   [ADR 0016](0016-geocoding-provider-neutrality.md): **off** ⇒ no map ⇒ **no location feature at all** in that
   space (no pin, no name); **on** ⇒ tiles **and** geocoding (the basemap loads and reverse-geocoding is
   available; a name may still be typed manually on the map). There is no tiles-on/geocoding-off middle stage.
-  *Amended 2026-10-16 (ADR 0088, inbox #458):* where the **server** serves no map (`memories.map` off), there is
+  Where the **server** serves no map (`memories.map` off,
+  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)), there is
   nothing to consent to and the place is set **without a map**: a typed name, the position from the photos' GPS or
   none (a place that is a name only, which no map pins). No geocoder is asked there either — tiles still gate
   geocoding in the place editor. A member who declines the consent on a server that does serve a map still gets no
@@ -74,7 +76,5 @@ opt-in.**
   [security-model](../crosscutting/security-model.md).
 - **Limitation (honest).** With tiles enabled, the tile server learns the viewport tiles + client IP — a
   *consented, non-veyq* boundary, distinct from the operator-blind invariant.
-
-> The **personal-space** two-stage toggle (off / tiles+geocoding) lands with the set-location slice of
-> `uc.memory.place` (cr-0069) and is reused by the later tenant map. The **group** consent mechanics live in
-> ADR 0016.
+- **One toggle for every map.** The personal-space two-stage toggle (off / tiles+geocoding) serves the
+  set-location editor and the tenant map alike; the group consent mechanics are ADR 0016's.

@@ -1,12 +1,9 @@
 # ADR 0097 — An instance looks for new releases by default and mails its Server Owner
 
-- Status: Accepted 2026-10-16; built: decisions 1–6 for release notices to the Server Owner (`core/admin/instance/`,
-  `core/mail/`, admin-web's Server → Release and Server → Mail). The GitHub source reads each candidate major's
-  `manifest.json` release asset, which exists once `veyqctl`'s publish uploads it; until then a new major on GitHub
-  is a failed check, a mirror is not. Moderation notices are built too: the new-case mail to the moderators and the
-  instance contact and a reporter's receipt (cr-report-and-hold), and the statements of reasons, an objection's
-  notices and a reporter's decision (cr-statement-of-reasons-and-objection), with the code confirmations they wait on.
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-16
+- Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
 
@@ -22,9 +19,8 @@ yearly train (1 May), and an **unscheduled** one only when a security fix cannot
 store-shipped client speaks the current major and the two before it (decision 5), so a planned major starts a clock
 — two years until the running major leaves that window — while an unscheduled one means "now".
 
-Mail exists only per tenant: [ADR 0048](0048-provider-neutral-smtp-mail-transport.md) §4 deliberately has **no
-server-level mail settings and no instance-wide secret**, so each tenant sends from its own identity. There is no
-channel by which the instance can reach its Server Owner. The Server Owner's account has an email address, entered
+Mail was per tenant only: [ADR 0048](0048-provider-neutral-smtp-mail-transport.md) § 4 gives tenant mail no
+server-level default, so each tenant sends from its own identity, and nothing let the instance reach its Server Owner. The Server Owner's account has an email address, entered
 at first-run setup ([uc.admin.setup-server](../features/admin/use-cases/uc.admin.setup-server.md), main flow 2).
 
 ## Decision
@@ -49,30 +45,15 @@ release list can at worst produce a false notice. admin-web shows, and the mail 
 The release manifest (ADR 0096 decision 3) marks an unscheduled major; the window end follows ADR 0085 decision 5
 from the release dates the check already reads.
 
-**3. The instance gets its own mail settings, for the Server Owner, the moderators, moderation's statements and erasures only.** A narrow exception to
-ADR 0048 §4: admin-web holds one instance-level SMTP configuration (the same fields as a tenant's), its password
-sealed under the config-secret key exactly as a tenant's is ([ADR 0050](0050-operator-config-secret-encryption.md)).
-It sends **only** instance notices, and **only** to the Server Owner's account address and — for moderation notices
-alone — to the account address of each accepted moderator and the instance contact's notification address
-([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7,
-[ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 2 and 11) — and,
-for a reporter, the receipt of their report (ADR 0093 § 2, DSA Art. 16(4); owner decision Q6 of cr-report-and-hold,
-2026-10-17): the reporter's client sends the address once in the clear beside the sealed copy, the server mails the
-receipt from memory and stores only the sealed copy (sealed apart from the report, it goes six months after the
-decision was told, ADR 0093 § 11), bounded per address — and, **for moderation statements**
-(ADR 0093 § 7; owner decision Q11 of cr-statement-of-reasons-and-objection, 2026-10-17), to the affected and to
-reporters: each affected member's account address gets the statement of reasons after a measure and the answer to
-their objection, and a reporter who left a contact gets the decision on their report, the address sent once in the
-clear by the deciding moderator's client (which opened the sealed copy) and mailed from memory as the receipt is — and,
-**for an erasure** ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decisions 2
-and 10), to the address of an account being erased and to every member of a tenant the Server Owner deletes — and,
-for an **application left switched off** ([uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md),
-[ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8), the notice at switch-off and the
-reminder seven days before the day to every member of the tenant (`pendingConsent = false`), whether the tenant owner
-or the Server Owner switched it off. The
-duty is the host's, so the host's channel: a tenant's mail would speak in the tenant's name for the host's decision.
-It is never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
-still holds.
+**3. The instance gets its own mail settings, for the host's own duties only.** A narrow exception to ADR 0048 §4:
+admin-web holds one instance-level SMTP configuration (the same fields as a tenant's), its password sealed under the
+config-secret key exactly as a tenant's is ([ADR 0050](0050-operator-config-secret-encryption.md)). It sends **only**
+instance notices — a duty the host has, not a tenant — and each kind's recipients are decided by the ADR that owns
+the duty, never widened here; [cc.mail](../crosscutting/cc.mail.md) § Which mails exist lists them.
+
+The duty is the host's, so the host's channel: a tenant's mail would speak in the tenant's name for the host's
+decision. It is never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own
+identity — still holds. A new kind or recipient is a decision of the ADR that owns its duty.
 
 **4. Each notice is mailed once, and a dated one carries its date as a calendar entry.** When the check first finds a
 row of decision 2, and instance mail is configured, the Server Owner gets one mail: what was found, the link to the
@@ -92,25 +73,29 @@ type it into src/web/'s moderation surface (ADR 0099 § 7); moderation notices r
 confirmed, and a changed address asks again. **The instance contact's notification address too** (ADR 0093 § 11):
 saving it sends the code through instance mail — only once the Server Owner's own address is confirmed, which admin-web
 says until then — and the Server Owner types it into admin-web's Server → Operator; moderation notices reach it only
-once confirmed, and a changed address asks again (owner 2026-10-17).
+once confirmed, and a changed address asks again.
 
 **6. The channel is built for instance notices, and carries release notices and moderation notices.** Nothing in
 decisions 3–5 is specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is
 one decision away — but each needs its own, because each is a new thing the instance watches. Moderation notices —
 a new case — are the second kind, decided by ADR 0099 § 7, and the first that reaches anyone but the Server Owner;
-an erasure's notice (decision 3, ADR 0101) is the other.
+an erasure's notice (ADR 0101) is the other.
 **Rotation due** is the third, to the Server Owner alone: after a moderator steps down or rotates their identity, reports
 keep sealing to an epoch that moderator held until the Server Owner mints the next one in admin-web, which shows the same
-warning (owner 2026-10-17, ADR 0099 § 4); it is mailed once per epoch. The first tenant owner's invite is
-not an instance notice and stays ADR 0048 §5's copy-link (inbox #465).
+warning (ADR 0099 § 4); it is mailed once per epoch. The first tenant owner's invite is
+not an instance notice and stays ADR 0048 § 5's copy-link: instance mail is optional, and the bootstrap must work
+without it.
 
 ## Consequences
 
 - **The instance makes an outbound call by default.** It is the first one to a service the Server Owner did not
   configure. *Self-hostable by default* holds because it can be switched off and pointed at a mirror, and nothing
-  depends on it; the owner chose default-on over opt-in (2026-10-16) so that forgotten instances hear of fixes.
-- **A second server-held mail secret.** ADR 0048's "no instance-wide secret" becomes "no instance-wide secret for
-  tenant mail"; ADR 0048 §4 is edited in place to say so.
+  depends on it; the owner chose default-on over opt-in so that forgotten instances hear of fixes.
+- **The GitHub source needs a published manifest.** It reads each candidate major's `manifest.json` release asset,
+  which exists once `veyqctl`'s publish uploads it ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md));
+  until then a new major on GitHub is a failed check, a mirror is not.
+- **A second server-held mail secret**, the instance's own; tenant mail still has no instance-wide one
+  (ADR 0048 § 4).
 - **The window reminders count only once a store-shipped client exists.** The web client and admin-web always match
   their server (ADR 0085), and the window itself is not built yet (ADR 0085 § Consequences). Until then the
   planned-major notice is the one that matters, and its date says when the window *would* close.
