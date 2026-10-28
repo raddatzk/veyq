@@ -32,8 +32,8 @@ sealed interface RekeyOutcome {
 
 /**
  * A scope's re-key after a rotation (ADR 0109, uc.spaces.rekey-after-rotation): list, a node's parts, stage, commit.
- * Every operation asks [RekeyAccess] first — any member holding the current grant, not excluded by a live rotation job,
- * and an owner for a node only an owner re-keys ([OwnerOnlyRekey]).
+ * Every operation asks [RekeyAccess] first — any member holding the current grant, and an owner for a node only an
+ * owner re-keys ([OwnerOnlyRekey]). A live rotation job of the scope does not stop a re-key.
  * An application stages its own fields through [stagePart] under the same re-key id and commits through core's commit,
  * where its [NodeRekeyParticipant] swaps them in.
  */
