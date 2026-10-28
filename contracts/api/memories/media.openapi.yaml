@@ -17,8 +17,8 @@ info:
     (`chunkCount`, `byteSize`, the per-chunk size `manifest`), the `K_blob` wrap, and the media→node link; never
     a plaintext byte, a content key, or a filename in clear. Guards (enforced by code, ADR 0008): the caller
     holds a grant for the scope; a media target must be a **MEMORY** or **CHAPTER** (a FOLDER owns no `K_node`);
-    declare-then-verify on `complete` enforces the byte budget against the stored objects. **No content dedup**
-    ([ADR 0013 §5](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
+    declare-then-verify on `complete` enforces the byte budget against the stored objects. **No content dedup beyond one node**
+    ([ADR 0013 §5](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)).
 tags:
   - name: media
     description: >

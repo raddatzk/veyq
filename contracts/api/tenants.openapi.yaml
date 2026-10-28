@@ -1108,7 +1108,7 @@ paths:
         ADR 0101 decision 9: a tenant whose last owner's account was erased at the Server Owner's door has no owner. The
         Server Owner mints an OWNER invite, as setup does, to the address of one of the tenant's **members**; accepting it
         makes that member an OWNER (`acceptTenantInvite`), so nobody is made to answer for a space without being asked.
-        Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 6), so an owner the invite
+        Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 3), so an owner the invite
         brought in from outside would wait for a key no member could vouch for. A newer owner invite supersedes an older
         one; the tenant's member invites are untouched. The link is mailed through the instance mail where it is set up,
         and returned for the Server Owner to hand over otherwise. `409 tenant_not_active` unless the tenant is ACTIVE;

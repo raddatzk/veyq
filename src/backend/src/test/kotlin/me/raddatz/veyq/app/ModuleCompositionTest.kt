@@ -99,7 +99,7 @@ class ModuleCompositionTest {
 
     @Inject lateinit var quota: StorageQuota
 
-    /** Every seam of ADR 0079 Consequences through which core reaches application code, with what ArC collected. */
+    /** Every seam through which core reaches application code (docs/apps/README.md § The seams core asks), with what ArC collected. */
     private fun seams(): Map<Class<*>, List<Any>> = mapOf(
         ScopeEraser::class.java to scopeErasers,
         NodeSubtreeEraser::class.java to subtreeErasers,
