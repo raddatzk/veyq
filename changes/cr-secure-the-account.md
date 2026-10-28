@@ -54,7 +54,7 @@ rotation would lock the rotator out of every shared space.
 
 ## Context & constraints
 
-Re-refined 2026-10-27 against `main` at `8cd444bbc` (ADR 0111 accepted that day, nothing of it built). No code changed
+Re-grounded 2026-10-28 on `23da80658` (§ What the code does today: the grant writers, the TOFU sites, the key readers, the requeue path; Decision 2's head list; the rest line drift only). Re-refined 2026-10-27 against `main` at `8cd444bbc` (ADR 0111 accepted that day, nothing of it built). No code changed
 between `5b845ec5c`, where the former refine measured its pointers, and `8cd444bbc`
 (`git diff --stat 5b845ec5c HEAD -- src contracts scripts` → empty), so its measured pointers stand; each pointer new
 in this refine was read here or by a delegated read that cited it. A claim held from memory is marked *(remembered)*.
@@ -145,34 +145,47 @@ the publish. So the publish self-grants every scope, not only the sole ones.
   `veyq_membership.granter_identity_public_key` (`MembershipEntity.kt:102`), served as `granterIdentityPublicKey`.
   No key chain, step or head exists anywhere (`grep -rniE 'keyChain|key_chain' src/web/src src/packages
   src/backend/core/src contracts` finds only the unrelated `contentKeyChain`).
-- **Grants name their recipient by user id only.** The five writers of `scripts/validate_grant_writer_arity.py:48-54`
-  — `ScopesStore.createPersonal` (:150), `createGroup` (:180), `rotate` (:409), `TasksStore.complete` (:228),
-  `TenantStore.activate` (:152) — take `wrappedGrant` + `grantSignature` and no recipient key; the key is only inside
-  the signed statement as `sha256(recipientIdentityPublicKey)` (`grantStatement`, `v1.ts:597-605`), which the server
-  never reads. **Precedent for decision 10:** the moderation grants already name the key and the server compares it
-  with the account's current one (`ModerationHandler.kt:128, 185, 275`, `ModerationFailures.identityChanged`).
+- **Grants name their recipient key on four writers of nine** (re-grounded 2026-10-28 on `23da80658`). The nine of
+  `scripts/validate_grant_writer_arity.py:48-58`: `ScopesStore.createPersonal`, `createGroup`, `rotate`, `addMember`;
+  `TasksStore.complete`; `TenantStore.activate`, `mintMemberInvite`, `joinAsMember`, `carryInvites` — each with a leg in
+  `GrantWriterSnapshotSliceTest` (`core/membership/`). `addMember`, `mintMemberInvite`, `joinAsMember` and
+  `carryInvites` carry `recipientIdentityDigest` and are checked through `InviteAcceptProof.digestMatches` (`409
+  recipient_key_not_current`); `createPersonal`, `createGroup`, `rotate`'s member grants, `TasksStore.complete` and
+  `TenantStore.activate` do not — on those the key is only inside the signed statement. Request schemas without it:
+  `CreatePersonalScopeRequest`, `CreateGroupRequest`, `ScopeGrantEntry`, the owner birth's `grant` in
+  `AcceptInviteRequest`/`RegisterAndAcceptRequest`, `CompleteRequest`. **Precedent for decision 10:** the moderation
+  grants already name the key and the server compares it with the account's current one (`ModerationHandler.kt`,
+  `ModerationFailures.identityChanged`).
 - **`rotateScope` is owner-only** (`ScopesHandler.kt:551`, `isScopeOwner`), and `SCOPE_ROTATION` jobs are claimable by
   owners only (`TasksHandler.kt:52`, `TasksStore.ownedScopeIds` :120). `RotationPolicy.plan` drops grants to
   non-members silently and does **not** refuse a rotation that leaves a member out (`RotationPolicy.kt:117-122`).
 - **`SCOPE_ROTATION` jobs have a second origin that stays:** a tenant member's removal queues the rotation of each
   co-shared group (`TenantHandler.kt:688`, `originateScopeRotation`). Only the account rotation's origination
   (`originateScopeRotationExcluding`) and its exclusion go.
-- **The TOFU gate is one function at five sites.** `checkAndPin(userId, keyB64)` (`identityPins.ts:415-426`) returns
+- **The TOFU gate is one function at eight sites.** `checkAndPin(userId, keyB64)` (`identityPins.ts:415-426`) returns
   `firstUse | match | changed`; a pin is `{userId, fingerprint, state: pinned|verified, firstSeenAt}`, padded to
-  `ENTRY_BYTES = 192` (`identityPins.ts:53`, `:187-195`), one per contact per **account** (not per tenant). Its sites:
-  - recipient side — `grantTrust.ts:83` (`granter_key_changed`, after the signature verified at :75-82);
-  - rotation re-grant — `scopes.ts:648` (a `changed` member is skipped with `continue`; nothing declares it);
-  - grant delivery — `grantDeliveryWorker.ts:88`, declining `identity_changed` at :96-98;
-  - group add's name key — `scopes.ts:409-410` (`IdentityChangedError`);
-  - moderation — `unlockModeration.ts:101`.
+  `ENTRY_BYTES = 192` (`identityPins.ts:53`), one per contact per **account** (not per tenant). Its sites (re-grounded
+  2026-10-28):
+  - recipient side — `grantTrust.ts:44` (`pinSerially`), used at :83 (`granter_key_changed`);
+  - group add's name key — `scopes.ts:413` (`wrapGroupNameKeyForInvitee`);
+  - open-invite carry — `scopes.ts:627` (`inviteVouched`, from `carryOpenInvites` :598): the invite's signer;
+  - rotation re-grant — `scopes.ts:680` in `commitRotation` (a `changed` member is skipped with `continue`);
+  - group add's grant — `members.ts:115` (`addGroupMember`, `IdentityChangedError`);
+  - grant delivery — `grantDeliveryWorker.ts:71`, declining `identity_changed` at :79-81;
+  - moderation — `unlockModeration.ts:101`;
+  - invite accept — `TenantJoinView.vue:282` (a foreign granter) and :283 (the invite's signer,
+    `tenant.join.inviteUncheckable`).
   The human override is `acceptChangedKey` (`acceptChangedKey.ts:21-28`: one scope-rotation worker pass, then
   `acceptKeyChange`, `identityPins.ts:446-456`, then `clearDeclinesForAcceptedKey`, `tasks.openapi.yaml:417`), reached
   from `ChangedKeyReviewDialog.vue` at `PersonSafetyNumber.vue:196, 227`, `TenantMembersPanel.vue:402-403, 523`,
   `GroupMembersPanel.vue:152-157, 182-194, 524-525, 655`.
-- **Where a client reads another user's key:** `ScopeMember.identityPublicKey` (`scopes.openapi.yaml:1545, 1601`,
-  `listScopeMembers`), `ResolvedGroupCandidate.identityPublicKey` (:1657, 1674), `GrantDeliveryTarget.identityPublicKey`
-  (`tasks.openapi.yaml:580-594`), the moderation schemas, and the per-grant snapshot `granterIdentityPublicKey`
-  (`ScopeSummary` :1850, `MyTenant` :1516).
+- **Where a client reads another user's key:** `ScopeMember.identityPublicKey` (`listScopeMembers`),
+  `ResolvedGroupCandidate.identityPublicKey`, `OpenInvite.signerIdentityPublicKey` (`listOpenInvites`),
+  `ServedMemberInvite.signerIdentityPublicKey` and `.granterIdentityPublicKey` (`tenants.openapi.yaml`, read by
+  `TenantJoinView.vue`), `GrantDeliveryTarget.identityPublicKey` (`tasks.openapi.yaml`), the moderation schemas, and
+  the per-grant snapshot `granterIdentityPublicKey` (`ScopeSummary`, `MyTenant`). A member's Secret-Key proof public
+  key reaches co-members (never the operator) inside the sealed join record (`ScopeMember.sealedJoinRecord`, the
+  `join-record` statement); the chain's step 0 is what this CR anchors it by.
 - **The epoch chain is checked by opening it.** `deriveEpochKeys` (`epochs.ts:40-50`) opens each `wrappedPrev`
   downward from the grant key; a grant key that does not open its link throws. ADR 0111 decision 8's "its chain link
   opens under the `E_n` it holds" is that open.
@@ -269,9 +282,11 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      to the person and to users who share a tenant with them (a membership on the same tenant root scope); anyone else
      gets the `404` an unknown user gets (ADR 0042). The server already knows every rotation, so this read adds nothing
      to what the operator learns.
-   - **`keyChainHead` rides every read that serves another user's key**: `ScopeMember`, `ResolvedGroupCandidate`,
-     `GrantDeliveryTarget` *(assistant, for owner review: so a client compares heads without fetching chains, and
-     fetches a chain only when a head moved)*.
+   - **`keyChainHead` rides every read that serves another user's key to a check**: `ScopeMember`,
+     `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite` (`signerKeyChainHead`) and `ServedMemberInvite`
+     (`signerKeyChainHead`, `granterKeyChainHead`) *(assistant, for owner review: so a client compares heads without
+     fetching chains, and fetches a chain only when a head moved)*. The per-grant snapshot `granterIdentityPublicKey`
+     gets none: it may be a retired key, and the recipient checks it against the granter's chain (decision 9).
 3. **Self-grants of every scope, staged before the publish and applied in it** (Phase 0: one request cannot carry
    them — no cap bounds an account's memberships, and any co-member can add it to groups; decided 2026-10-28 by the
    coordinator under the owner's delegation, ADR 0111 decision 6 states it).
@@ -321,8 +336,11 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      `grant_signature`, `granter_identity_public_key` = the new key) and its pending row (decision 4); the stage is
      deleted in the same transaction. That replaces the shared-only origination loop (`RotationHandler.kt:203-205`);
      scope → membership order holds (`ScopeEntity.kt:104-116`). `originateScopeRotationExcluding`, `exclude` and
-     `isRotationExcluded` lose their last caller and go, with `rotation_excluded` (`RekeyAccess.kt`, `ScopesStore.kt`)
-     and the requeue path (`RotationSliceTest.kt`).
+     `isRotationExcluded` lose their last callers and go, with `rotation_excluded` (`RekeyAccess.kt`, `ScopesHandler`'s
+     `RotationExcluded`, `RotationPolicy`'s `callerExcluded`, `ScopesStore.kt`). The requeue path's second caller goes
+     too: `TasksStore.requeueFailedRotations` re-originates through `originateScopeRotationExcluding`, reached from
+     `RotationHandler.requeue` (an account rotation's stalled job — no job any more, so it goes) and
+     `ScopesHandler.requeueScopeRotation` (a removal cascade's job — stays, re-originating without an exclusion).
    - **A grant this device cannot open is left out, and declared** (kept). If `verifyOwnGrant` or the epoch floor
      refuses a scope's grant (`GrantRefused`, `AwaitingCurrentKey`, a grant behind the current epoch, `scopes.ts:288-289`),
      the client names it in `unreadableScopeIds`; the server keeps its grant untouched and writes no pending row. The
@@ -412,9 +430,11 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
        pin moves to the new head, `verified` drops (ADR 0111 decision 15: *verified* returns only through a new compare);
      - `anomaly` — anything else, a served head older than the pinned one included (rollback, ADR 0028 Decision 7's
        class).
-   - **At the five sites** (§ Context): the recipient accepts a grant whose granter key is `match` or `advanced`, and
+   - **At the eight sites** (§ Context): the recipient accepts a grant whose granter key is `match` or `advanced`, and
      refuses `anomaly` as `granter_key_unanchored` (replacing `granter_key_changed`); a rotation, a delivery, a group
-     add and the moderation unlock wrap only to `match`/`advanced`/`firstUse`.
+     add, an open-invite carry (the invite's signer) and the moderation unlock wrap only to
+     `match`/`advanced`/`firstUse`; the invite accept checks the signer against the link's fingerprint as today and
+     pins it with the served head, and a foreign granter through the same function.
    - **A grant signed by a retired key of the pinned chain** (the per-grant snapshot, ADR 0028 Decision 6's reason for
      keeping it) is accepted only at an epoch at or below this device's epoch floor for that scope *(assistant, for
      owner review)*: such grants exist from before the rotation; a new epoch from a retired key is what a thief with
@@ -504,7 +524,7 @@ Every locator was run at refine (on `8cd444bbc`).
 | What | Where | Locator |
 |---|---|---|
 | The request, result, states, plan | `contracts/api/account.openapi.yaml` | `grep -n "RotateAccountKeysRequest:\|RotateAccountKeysResult:\|RotationScopeState:\|operationId: rotateAccountKeys\|operationId: listRotationScopeStates" contracts/api/account.openapi.yaml` |
-| Contract prose that says the Secret Key survives | same | `grep -n "Secret Key is unchanged\|survives the rotation\|no \`authPublicKey\`" contracts/api/account.openapi.yaml` |
+| Contract prose that says the Secret Key survives | same | `grep -n "Secret Key is unchanged\|survives the rotation\|no \`authPublicKey\`\|Kit survives\|kit survives\|Emergency Kit stays" contracts/api/account.openapi.yaml` (also wrapped across lines: :616, :1703, :1733) |
 | The shape guard | `scripts/validate_rotation_shape.py` | `grep -n "REQUEST_PROPS\|RotatedWrap" scripts/validate_rotation_shape.py` |
 | Builders of the request, readers of the result | backend tests, web | `git grep -ln "rotateAccountKeysRequest\|RotateAccountKeysRequest\|soleMemberScopeIds" -- . ':!**/generated/**'` |
 | Statements: rotation proof, grant, the purposes table | `v1.ts`, `seal.ts`, `SecretKeyProof.kt`, `v1.json` | `git grep -n "rotationProofStatement\|rotationStatement\|export const grantStatement\|STATEMENT_PURPOSES\|\"grant_signature\"\|\"secret_key_proof\"" -- src/packages/crypto/src src/backend/core/src contracts/crypto` |
