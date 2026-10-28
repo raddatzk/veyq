@@ -14,11 +14,26 @@
 // identity reads every scope, whatever happens to this tab. Then the account mints each scope's next epoch itself
 // (`finishRotation`, from this tab right away and from every device's worker after), which is what closes the old
 // identity out of what comes next. No private key of the old identity is kept anywhere.
+//
+// **What the account rooted survives it, re-signed** (cr-trust-anchors-survive-rotation decisions 6 and 12): the same
+// stage holds, from the NEW identity, a re-signature of every open member invite this account signed and an endorsement
+// of every join record it rooted — so the invites keep working, the members they brought in keep counting, and the
+// retired key roots nothing afterwards. What the server lists that the outgoing key never signed is declared, never
+// vouched for.
 import * as v1 from '@veyq/crypto/v1'
+import * as invite from '@veyq/crypto/invite'
 import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountApi, accountRotationApi, loginApi } from '../../../api/client'
-import type { RotationPlanScope, RotationScopeState, StagedSelfGrant } from '../../../api/generated/account'
+import type {
+  RotationPlanInvite,
+  RotationPlanJoinRecord,
+  RotationPlanScope,
+  RotationScopeState,
+  StagedInviteResign,
+  StagedJoinEndorsement,
+  StagedSelfGrant,
+} from '../../../api/generated/account'
 import { account } from '../../../app/account'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { clearVault, identityPrivate, masterKey, setUnlocked } from '../../../app/vault'
@@ -26,7 +41,8 @@ import { registry } from '../../../core/applications/registry'
 import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
 import { decodeHttpError, HttpStatus, isCodedError, isHttpStatus } from '../../../shared/httpError'
 import { me } from '../../spaces/grantTrust'
-import { recipientIdentityDigest, sealGrant } from '../../spaces/grant'
+import { grantSignatureVerifies, recipientIdentityDigest, sealGrant, signGrant } from '../../spaces/grant'
+import { openUnderHeldEpochs, zeroEpochKeys, type EpochKeys } from '../../spaces/epochs'
 import { isUnreadableGrant, openPlanGrantKey, planOpener } from '../../spaces/scopes'
 import { collectMyVerifications, resignVerifications, type CarriedVerification } from '../tenantTrust'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
@@ -45,7 +61,8 @@ const ARGON = v1.ARGON
 const MAX_PUBLISH_ATTEMPTS = 5
 
 /** At most this many self-grants go up in one `putRotationStageGrants` (the contract's `maxItems`: 256 × 8,501 bytes at
- *  every field cap ≈ 2.2 MB, a fifth of the request limit — decision 3). */
+ *  every field cap ≈ 2.2 MB, a fifth of the request limit — decision 3) — and as many re-signed invites or join-record
+ *  endorsements in one `putRotationStageInvites` / `putRotationStageJoinEndorsements` (their own `maxItems`). */
 export const STAGE_CHUNK = 256
 
 /** Why a rotation refused before it wrote anything. Each maps to one of uc.account.rotate-keys' exception flows. */
@@ -218,8 +235,10 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     const attestationSignature = b64std(v1.authSign(currentAuth.privateKey, nextAuth.publicKey))
 
     const stage = new SelfGrantStage(self.userId, identity, identityPublicKeyB64)
+    const rooted = new RootedStage(self, identity)
     const plan = await readRotationPlan()
     await stage.stageAll(plan)
+    await stageRooted(stage, rooted, plan)
     // The outgoing key's verifications, per tenant (ADR 0111 decision 13): read NOW, while the old identity is still the
     // account's, so a statement a thief signs with it after the publish is never among them; re-signed by the new
     // identity once the publish committed. A tenant this device cannot open carries none.
@@ -285,7 +304,10 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
         const retry = attempt < MAX_PUBLISH_ATTEMPTS
         if (retry && (await isCodedError(e, HttpStatus.conflict, 'stale_revision'))) continue
         if (retry && (await isCodedError(e, HttpStatus.conflict, 'rotation_plan_changed'))) {
-          await stage.restage(await readRotationPlan())
+          const now = await readRotationPlan()
+          const rootedNow = await rooted.read()
+          await stage.restage(now, rooted.moved(stage.id, rootedNow))
+          await stageRooted(stage, rooted, now, rootedNow)
           continue
         }
         // By status alone: a proxy in front answers its own limit with a bare 413 and no veyq body, and the remedy
@@ -388,12 +410,17 @@ class SelfGrantStage {
 
   /**
    * After `409 rotation_plan_changed`: only what moved goes up again — a scope not staged (a membership that arrived),
-   * one whose epoch moved on (a rotation since), one declared unreadable before (re-judged). When nothing moved, the
-   * stage itself is what the server no longer has (expired, or replaced by another tab's open), and so is a stage
-   * that answers `404 rotation_stage_not_found`: then a fresh stage is opened and everything staged into it.
+   * one whose epoch moved on (a rotation since), one declared unreadable before (re-judged). When nothing moved — here
+   * nor among the invites and join records ([rootedMoved], {@link RootedStage.moved}) — the stage itself is what the
+   * server no longer has (expired, or replaced by another tab's open), and so is a stage that answers `404
+   * rotation_stage_not_found`: then a fresh stage is opened and everything staged into it.
    */
-  async restage(plan: RotationPlanScope[]): Promise<void> {
+  async restage(plan: RotationPlanScope[], rootedMoved = false): Promise<void> {
     const delta = plan.filter((row) => this.staged.get(row.scopeId)?.epoch !== row.currentEpoch)
+    if (!delta.length && rootedMoved) {
+      this.plan = plan
+      return
+    }
     if (!delta.length) return this.stageAll(plan)
     this.plan = plan
     try {
@@ -460,6 +487,172 @@ class SelfGrantStage {
       }
     } finally {
       key.fill(0)
+    }
+  }
+}
+
+/** The two lists the server serves of what this account rooted: its open invites and the join records it signed. */
+type RootedPlan = { invites: RotationPlanInvite[]; records: RotationPlanJoinRecord[] }
+
+/**
+ * What this account rooted, re-signed by the NEW identity into the rotation's stage (cr-trust-anchors-survive-rotation
+ * decisions 6 and 12) — the plan is the server's word, so nothing is vouched for that the OUTGOING key did not sign:
+ *  - an **open invite** is re-signed — its `invite-key` statement and its anchor grant's `grant` statement — only when
+ *    both its current signatures verify under the outgoing identity; any other is declared (both `null`), and the
+ *    publish ends it rather than leave it signed by a retired key;
+ *  - a **join record** it rooted is endorsed only when it opens under the tenant's epoch keys (the plan opener),
+ *    verifies, names this account as its signer, and either names the outgoing key or carries an endorsement that
+ *    verifies under it; any other — one this device cannot open, one a retired key signed without endorsement — is
+ *    declared (`endorsement: null`).
+ * Each list mirrors what the server's stage holds (by a mark of the plan entry it was judged from), so a re-read after
+ * `409 rotation_plan_changed` puts up only what moved; a stage the self-grants re-opened starts both over.
+ */
+class RootedStage {
+  private stageId = ''
+  private readonly invites = new Map<string, string>()
+  private readonly records = new Map<string, string>()
+
+  constructor(
+    private readonly self: { userId: string; pub: v1.Identity['pub'] },
+    private readonly next: v1.Identity,
+  ) {}
+
+  /** Both lists as the server serves them now. */
+  async read(): Promise<RootedPlan> {
+    const invites = await withRefresh(() => accountRotationApi().getRotationPlanInvites())
+    const records = await withRefresh(() => accountRotationApi().getRotationPlanJoinRecords())
+    return { invites, records }
+  }
+
+  /** Whether [now] holds an entry the stage [stageId] does not hold as judged — something to stage again. */
+  moved(stageId: string, now: RootedPlan): boolean {
+    if (stageId !== this.stageId) return true
+    return now.invites.some((i) => this.invites.get(i.inviteId) !== inviteMark(i))
+      || now.records.some((r) => this.records.get(recordKey(r)) !== recordMark(r))
+  }
+
+  /** Stage every entry of [now] the stage [stageId] does not hold as judged, in chunks of {@link STAGE_CHUNK}. */
+  async put(stageId: string, plan: RotationPlanScope[], now: RootedPlan): Promise<void> {
+    if (stageId !== this.stageId) {
+      this.stageId = stageId
+      this.invites.clear()
+      this.records.clear()
+    }
+    const invites = now.invites.filter((i) => this.invites.get(i.inviteId) !== inviteMark(i))
+    for (let i = 0; i < invites.length; i += STAGE_CHUNK) {
+      const chunk = invites.slice(i, i + STAGE_CHUNK)
+      const staged = chunk.map((inv) => this.resignOrDeclare(inv))
+      await withRefresh(() => accountRotationApi().putRotationStageInvites({ stageId, rotationStageInvites: { invites: staged } }))
+      for (const inv of chunk) this.invites.set(inv.inviteId, inviteMark(inv))
+    }
+    const records = now.records.filter((r) => this.records.get(recordKey(r)) !== recordMark(r))
+    if (!records.length) return
+    const staged = await this.endorseOrDeclare(records, plan)
+    for (let i = 0; i < staged.length; i += STAGE_CHUNK) {
+      const chunk = staged.slice(i, i + STAGE_CHUNK)
+      await withRefresh(() =>
+        accountRotationApi().putRotationStageJoinEndorsements({ stageId, rotationStageJoinEndorsements: { endorsements: chunk } }),
+      )
+      for (let j = i; j < i + chunk.length; j++) this.records.set(recordKey(records[j]), recordMark(records[j]))
+    }
+  }
+
+  /** The invite re-signed by the NEW identity, when both its current signatures are the outgoing identity's; else
+   *  declared. Never a throw: every byte here is the server's. */
+  private resignOrDeclare(i: RotationPlanInvite): StagedInviteResign {
+    const declared: StagedInviteResign = { inviteId: i.inviteId, anchorEpoch: i.anchorEpoch, inviteKeySignature: null, anchorGrantSignature: null }
+    const scope = { scopeId: i.tenantId, kind: 'TENANT', epoch: i.anchorEpoch } as const
+    const to = { userId: i.inviteId, identityPublicKeyB64: i.invitePublicKey }
+    let signed: invite.InviteKeyInput
+    try {
+      signed = { tenantId: i.tenantId, inviteId: i.inviteId, invitePublicKey: fromB64std(i.invitePublicKey), expiresAt: Math.floor(i.expiresAt.getTime() / 1000) }
+      const mine =
+        invite.inviteKeySignatureVerifies(this.self.pub.sign, signed, fromB64std(i.inviteKeySignature)) &&
+        grantSignatureVerifies(this.self.pub.sign, scope, to, i.anchorWrappedGrant, i.anchorGrantSignature)
+      if (!mine) return declared
+    } catch {
+      return declared
+    }
+    return {
+      inviteId: i.inviteId,
+      anchorEpoch: i.anchorEpoch,
+      inviteKeySignature: b64std(invite.signInviteKey(this.next.priv.sign, signed)),
+      anchorGrantSignature: signGrant(this.next.priv.sign, scope, to, i.anchorWrappedGrant),
+    }
+  }
+
+  /** Each record endorsed by the NEW identity or declared, in [records]' order — every tenant opened once through the
+   *  plan's row of its tenant scope, its keys zeroed after. */
+  private async endorseOrDeclare(records: RotationPlanJoinRecord[], plan: RotationPlanScope[]): Promise<StagedJoinEndorsement[]> {
+    const out = new Map<string, StagedJoinEndorsement>()
+    for (const tenantId of new Set(records.map((r) => r.tenantId))) {
+      const row = plan.find((r) => r.kind === 'TENANT' && r.scopeId === tenantId)
+      const opened = row ? await planOpener(row, async () => row)(tenantId).catch(() => null) : null
+      try {
+        for (const r of records.filter((x) => x.tenantId === tenantId)) {
+          out.set(recordKey(r), { tenantId, userId: r.userId, endorsement: opened ? this.endorsement(r, opened.epochs) : null })
+        }
+      } finally {
+        if (opened) zeroEpochKeys(opened.epochs)
+      }
+    }
+    return records.map((r) => out.get(recordKey(r))!)
+  }
+
+  /** The NEW identity's endorsement of [r], or null to declare it. */
+  private endorsement(r: RotationPlanJoinRecord, epochs: EpochKeys): string | null {
+    const address = { tenantId: r.tenantId, userId: r.userId }
+    let sealed: Uint8Array
+    try {
+      sealed = fromB64std(r.sealedJoinRecord)
+    } catch {
+      return null
+    }
+    const record = openUnderHeldEpochs(epochs, (key) => invite.openJoinRecord(key, address, sealed))?.value
+    if (!record || !invite.joinRecordVerifies(address, record) || record.signerUserId !== this.self.userId) return null
+    const statement = { ...address, signerUserId: this.self.userId, sealedJoinRecord: sealed }
+    const namesOutgoing = sameBytes(record.signerIdentityPublicKey, v1.serializeIdentityPublic(this.self.pub))
+    if (!namesOutgoing && !endorsedUnder(this.self.pub.sign, statement, r.joinEndorsement)) return null
+    return b64std(invite.signJoinEndorsement(this.next.priv.sign, statement))
+  }
+}
+
+/** What an invite entry was judged from: a change to any of it is a new judgment. */
+const inviteMark = (i: RotationPlanInvite) =>
+  [i.tenantId, i.invitePublicKey, i.expiresAt.getTime(), i.inviteKeySignature, i.anchorEpoch, i.anchorWrappedGrant, i.anchorGrantSignature].join('|')
+const recordKey = (r: RotationPlanJoinRecord) => `${r.tenantId}:${r.userId}`
+const recordMark = (r: RotationPlanJoinRecord) => `${r.sealedJoinRecord}|${r.joinEndorsement ?? ''}`
+
+/** Whether [endorsement] (base64, the server's) verifies under [signPublicKey] over [statement]. Never a throw. */
+function endorsedUnder(signPublicKey: Uint8Array, statement: invite.JoinEndorsementInput, endorsement: string | null | undefined): boolean {
+  if (!endorsement) return false
+  try {
+    return invite.joinEndorsementVerifies(signPublicKey, statement, fromB64std(endorsement))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stage what this account rooted ({@link RootedStage}) into [stage]'s current stage. A stage the server no longer holds
+ * (`404 rotation_stage_not_found`) is opened afresh with every self-grant, and both lists go up whole; a list that
+ * changed under a chunk (`409 rotation_plan_changed`: an invite consumed, a record written, nothing of the chunk kept)
+ * is read again and its delta staged — each bounded by {@link MAX_PUBLISH_ATTEMPTS}. [now] is a read the caller holds.
+ */
+async function stageRooted(stage: SelfGrantStage, rooted: RootedStage, plan: RotationPlanScope[], now?: RootedPlan): Promise<void> {
+  let read = now
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await rooted.put(stage.id, plan, read ?? (await rooted.read()))
+    } catch (e) {
+      const retry = attempt < MAX_PUBLISH_ATTEMPTS
+      read = undefined
+      if (retry && (await isCodedError(e, HttpStatus.notFound, 'rotation_stage_not_found'))) {
+        await stage.stageAll(plan)
+        continue
+      }
+      if (retry && (await isCodedError(e, HttpStatus.conflict, 'rotation_plan_changed'))) continue
+      throw e
     }
   }
 }

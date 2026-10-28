@@ -10,6 +10,10 @@ import type {
   MasterKeyWrap,
   RotateAccountKeysRequest,
   RotationBlockedReason,
+  RotationPlanInvite,
+  RotationPlanJoinRecord,
+  StagedInviteResign,
+  StagedJoinEndorsement,
   StagedSelfGrant,
 } from '../../../api/generated/account'
 import { emptyPinStore, fakePinServer, identityKey, pinIdOf, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
@@ -18,6 +22,7 @@ import type { TasksApi } from '../../../api/generated/tasks'
 import type { LoginApi } from '../../../api/generated/auth'
 import type { MemberVerification, TenantsApi } from '../../../api/generated/tenants'
 import * as verification from '@veyq/crypto/verification'
+import * as invite from '@veyq/crypto/invite'
 
 // The APIs and the vault are mocked; the scope layer, the trust layer and **the crypto are real** — the wraps, the identity
 // mint, the self-grants, the key-chain step and the KEK derivations all run for real (the last at a light Argon cost, see
@@ -263,6 +268,10 @@ type ServerOpts = {
   abandonAfterPublish?: boolean
   /** Runs before each publish is judged — a membership arriving, a scope rotating, a stage expiring. */
   beforePublish?: (n: number) => void
+  /** The open member invites the server says this account signed (`getRotationPlanInvites`) — the server's word. */
+  invites?: RotationPlanInvite[]
+  /** The join records the server says this account rooted (`getRotationPlanJoinRecords`). */
+  records?: RotationPlanJoinRecord[]
 }
 
 function fakeServer(opts: ServerOpts = {}) {
@@ -336,11 +345,67 @@ function fakeServer(opts: ServerOpts = {}) {
     })
   })
 
-  let stage: { id: string; bundle: string; rows: Map<string, StagedSelfGrant> } | null = null
+  let stage: {
+    id: string; bundle: string; rows: Map<string, StagedSelfGrant>
+    invites: Map<string, StagedInviteResign>; endorsements: Map<string, StagedJoinEndorsement>
+  } | null = null
   const openRotationStage = vi.fn<AccountRotationApi['openRotationStage']>(async ({ openRotationStageRequest }) => {
     online()
-    stage = { id: crypto.randomUUID(), bundle: openRotationStageRequest.identityPublicKey, rows: new Map() }
+    stage = { id: crypto.randomUUID(), bundle: openRotationStageRequest.identityPublicKey, rows: new Map(), invites: new Map(), endorsements: new Map() }
     return { stageId: stage.id, expiresAt: new Date(Date.now() + 3_600_000) }
+  })
+
+  // What this account rooted (cr-trust-anchors-survive-rotation decisions 6 and 12), as phase 2's server serves, stages
+  // and applies it: each re-signature and endorsement verified at upload under the stage's identity, over what it stores.
+  const invites = opts.invites ?? []
+  const records = opts.records ?? []
+  const endedInvites: string[] = []
+  const recordKeyOf = (r: { tenantId: string; userId: string }) => `${r.tenantId}:${r.userId}`
+  const getRotationPlanInvites = vi.fn<AccountRotationApi['getRotationPlanInvites']>(async () => {
+    online()
+    return invites.map((i) => ({ ...i }))
+  })
+  const getRotationPlanJoinRecords = vi.fn<AccountRotationApi['getRotationPlanJoinRecords']>(async () => {
+    online()
+    return records.map((r) => ({ ...r }))
+  })
+  const putRotationStageInvites = vi.fn<AccountRotationApi['putRotationStageInvites']>(async ({ stageId, rotationStageInvites }) => {
+    online()
+    if (!stage || stage.id !== stageId) throw httpError(404, 'rotation_stage_not_found')
+    const chunk = rotationStageInvites.invites
+    if (chunk.length < 1 || chunk.length > STAGE_CHUNK) throw httpError(400)
+    const sign = v1.deserializeIdentityPublic(fromB64std(stage.bundle)).sign
+    for (const st of chunk) {
+      const stored = invites.find((i) => i.inviteId === st.inviteId)
+      if (!stored || stored.anchorEpoch !== st.anchorEpoch) throw httpError(409, 'rotation_plan_changed')
+      if ((st.inviteKeySignature == null) !== (st.anchorGrantSignature == null)) throw httpError(400)
+      if (st.inviteKeySignature == null) continue
+      const signed = { tenantId: stored.tenantId, inviteId: stored.inviteId, invitePublicKey: fromB64std(stored.invitePublicKey), expiresAt: stored.expiresAt.getTime() / 1000 }
+      const scope = { scopeId: stored.tenantId, kind: 'TENANT', epoch: stored.anchorEpoch } as const
+      const to = { userId: stored.inviteId, identityPublicKeyB64: stored.invitePublicKey }
+      if (
+        !invite.inviteKeySignatureVerifies(sign, signed, fromB64std(st.inviteKeySignature)) ||
+        !grantSignatureVerifies(sign, scope, to, stored.anchorWrappedGrant, st.anchorGrantSignature!)
+      ) {
+        throw httpError(422, 'invite_resign_invalid')
+      }
+    }
+    for (const st of chunk) stage.invites.set(st.inviteId, st)
+  })
+  const putRotationStageJoinEndorsements = vi.fn<AccountRotationApi['putRotationStageJoinEndorsements']>(async ({ stageId, rotationStageJoinEndorsements }) => {
+    online()
+    if (!stage || stage.id !== stageId) throw httpError(404, 'rotation_stage_not_found')
+    const chunk = rotationStageJoinEndorsements.endorsements
+    if (chunk.length < 1 || chunk.length > STAGE_CHUNK) throw httpError(400)
+    const sign = v1.deserializeIdentityPublic(fromB64std(stage.bundle)).sign
+    for (const st of chunk) {
+      const stored = records.find((r) => recordKeyOf(r) === recordKeyOf(st))
+      if (!stored) throw httpError(409, 'rotation_plan_changed')
+      if (st.endorsement == null) continue
+      const statement = { tenantId: st.tenantId, userId: st.userId, signerUserId: ME, sealedJoinRecord: fromB64std(stored.sealedJoinRecord) }
+      if (!invite.joinEndorsementVerifies(sign, statement, fromB64std(st.endorsement))) throw httpError(422, 'join_endorsement_invalid')
+    }
+    for (const st of chunk) stage.endorsements.set(recordKeyOf(st), st)
   })
   const putRotationStageGrants = vi.fn<AccountRotationApi['putRotationStageGrants']>(async ({ stageId, rotationStageGrants }) => {
     online()
@@ -399,6 +464,9 @@ function fakeServer(opts: ServerOpts = {}) {
       if (unreadable.has(s.id)) continue
       if (stage.rows.get(s.id)?.epoch !== s.currentEpoch) throw planChanged()
     }
+    // What this account rooted: every open invite it signed staged at its anchor epoch, every record it rooted staged.
+    for (const i of invites) if (stage.invites.get(i.inviteId)?.anchorEpoch !== i.anchorEpoch) throw planChanged()
+    for (const r of records) if (!stage.endorsements.has(recordKeyOf(r))) throw planChanged()
     if (req.identityPins.revision !== pins.revision || req.deviceRegister.revision !== register.revision) throw httpError(409, 'stale_revision')
     // Apply, in one transaction.
     pinServer.land(req.identityPins)
@@ -425,6 +493,17 @@ function fakeServer(opts: ServerOpts = {}) {
       regrant.set(s.id, s.currentEpoch)
       regrantedScopeIds.push(s.id)
     }
+    for (const st of stage.invites.values()) {
+      const at = invites.findIndex((i) => i.inviteId === st.inviteId)
+      if (at < 0) continue
+      if (st.inviteKeySignature == null) {
+        endedInvites.push(st.inviteId)
+        invites.splice(at, 1)
+      } else {
+        Object.assign(invites[at], { inviteKeySignature: st.inviteKeySignature, anchorGrantSignature: st.anchorGrantSignature })
+      }
+    }
+    for (const r of records) r.joinEndorsement = stage.endorsements.get(recordKeyOf(r))?.endorsement ?? null
     applied.push({ stageId: stage.id, rows: new Map(stage.rows), recoveryWrap: req.recoveryWrap })
     stage = null
     if (opts.abandonAfterPublish) offline = true
@@ -444,7 +523,10 @@ function fakeServer(opts: ServerOpts = {}) {
       return { scopeId, state: s.currentEpoch === at ? ('waiting' as const) : ('secured' as const) }
     })
   })
-  fakeApi(accountRotationApi, { getAccountRotationPlan, openRotationStage, putRotationStageGrants, rotateAccountKeys, listRotationScopeStates })
+  fakeApi(accountRotationApi, {
+    getAccountRotationPlan, openRotationStage, putRotationStageGrants, rotateAccountKeys, listRotationScopeStates,
+    getRotationPlanInvites, getRotationPlanJoinRecords, putRotationStageInvites, putRotationStageJoinEndorsements,
+  })
 
   const summary = (s: Scope): ScopeSummary => {
     const g = s.members.get(ME)!.grant
@@ -512,6 +594,7 @@ function fakeServer(opts: ServerOpts = {}) {
     scopes, acct, pins, register, publishes, applied, regrant,
     getAccountKeyMaterial, getAccountRotationPlan, openRotationStage, putRotationStageGrants, rotateAccountKeys, rotateScope,
     listRotationScopeStates, putIdentityPins, putDeviceRegister,
+    invites, records, endedInvites, putRotationStageInvites, putRotationStageJoinEndorsements,
     get stage() {
       return stage
     },
@@ -1142,6 +1225,185 @@ describe('securing the account loses no space (inbox #556)', () => {
     expect(sizes).toEqual([256, 44])
     expect(srv.applied[0].rows.size).toBe(300)
     expect(srv.rotateScope).not.toHaveBeenCalled() // blocked: no next epoch now, and none is asked for
+  }, 60_000)
+})
+
+// cr-trust-anchors-survive-rotation decisions 6 and 12: what this account rooted survives its securing, re-signed by the
+// NEW identity through the stage — and what the server lists that the outgoing key never signed is declared, never vouched
+// for. The fake server verifies every upload under the stage's identity over what it stores, and the publish requires
+// every open invite and every rooted record staged.
+describe('securing the account re-signs what it rooted (decisions 6 and 12)', () => {
+  /** An open invite into [scope] at its current epoch, its invite key signed by [signer] and its anchor by [anchorSigner]. */
+  function planInvite(scope: Scope, signer: v1.Identity, anchorSigner: v1.Identity = signer): RotationPlanInvite {
+    const inviteKey = invite.inviteKeyFromSeed(invite.generateInviteSeed())
+    const inviteId = crypto.randomUUID()
+    const invitePublicKey = v1.serializeIdentityPublic(inviteKey.pub)
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600
+    const anchor = sealGrant(
+      scope.keys[scope.currentEpoch], { scopeId: scope.id, kind: 'TENANT', epoch: scope.currentEpoch },
+      { userId: inviteId, identityPublicKeyB64: b64std(invitePublicKey) }, anchorSigner.priv.sign,
+    )
+    return {
+      tenantId: scope.id, inviteId, invitePublicKey: b64std(invitePublicKey), expiresAt: new Date(expiresAt * 1000),
+      inviteKeySignature: b64std(invite.signInviteKey(signer.priv.sign, { tenantId: scope.id, inviteId, invitePublicKey, expiresAt })),
+      anchorWrappedGrant: anchor.wrappedGrant, anchorEpoch: scope.currentEpoch, anchorGrantSignature: anchor.grantSignature,
+    }
+  }
+  /** [joinerId]'s join record in [scope] through an invite [signerUserId] signed with [signer], sealed under the scope's
+   *  current key as the server stores it — with an endorsement by [endorsedBy] when given. */
+  function rootedRecord(
+    scope: Scope, joinerId: string, signer: v1.Identity, o: { signerUserId?: string; endorsedBy?: v1.Identity; key?: Uint8Array } = {},
+  ): RotationPlanJoinRecord {
+    const inviteKey = invite.inviteKeyFromSeed(invite.generateInviteSeed())
+    const joiner = v1.generateIdentity()
+    const inviteId = crypto.randomUUID()
+    const invitePublicKey = v1.serializeIdentityPublic(inviteKey.pub)
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600
+    const address = { tenantId: scope.id, userId: joinerId }
+    const record = invite.signJoinRecord(address, {
+      identityPublicKey: v1.serializeIdentityPublic(joiner.pub),
+      secretKeyProofPublicKey: v1.deriveSecretKeyProofKeypair(v1.randomBytes(32)).publicKey,
+      inviteId, invitePublicKey,
+      inviteKeySignature: invite.signInviteKey(signer.priv.sign, { tenantId: scope.id, inviteId, invitePublicKey, expiresAt }),
+      inviteExpiresAt: expiresAt, signerUserId: o.signerUserId ?? ME, signerIdentityPublicKey: v1.serializeIdentityPublic(signer.pub),
+    }, inviteKey.priv.sign, joiner.priv.sign)
+    const sealed = invite.sealJoinRecord(o.key ?? scope.keys[scope.currentEpoch], address, record)
+    const joinEndorsement = o.endorsedBy
+      ? b64std(invite.signJoinEndorsement(o.endorsedBy.priv.sign, { ...address, signerUserId: ME, sealedJoinRecord: sealed }))
+      : null
+    return { ...address, sealedJoinRecord: b64std(sealed), joinEndorsement }
+  }
+  const tenantOf = (srv: ReturnType<typeof fakeServer>) => srv.scopes.get(SCOPE_TENANT)!
+  const stagedInvites = (srv: ReturnType<typeof fakeServer>) =>
+    srv.putRotationStageInvites.mock.calls.flatMap((c) => c[0].rotationStageInvites.invites)
+  const stagedEndorsements = (srv: ReturnType<typeof fakeServer>) =>
+    srv.putRotationStageJoinEndorsements.mock.calls.flatMap((c) => c[0].rotationStageJoinEndorsements.endorsements)
+  /** [r]'s endorsement as the publish wrote it, verified under the identity the vault now holds. */
+  const endorsedByPublished = (r: RotationPlanJoinRecord) =>
+    !!r.joinEndorsement && invite.joinEndorsementVerifies(
+      vaultPub().sign, { tenantId: r.tenantId, userId: r.userId, signerUserId: ME, sealedJoinRecord: fromB64std(r.sealedJoinRecord) },
+      fromB64std(r.joinEndorsement),
+    )
+
+  it('an open invite this account signed is re-signed by the NEW identity — the invite key and the anchor — and survives', async () => {
+    const scopes = ordinaryScopes()
+    const mine = planInvite(scopes[1], OLD_ID)
+    const srv = fakeServer({ scopes, invites: [{ ...mine }] })
+    await rotate()
+    const [st] = stagedInvites(srv)
+    expect(st.inviteId).toBe(mine.inviteId)
+    expect(srv.endedInvites).toEqual([])
+    const now = srv.invites[0]
+    const signed = { tenantId: SCOPE_TENANT, inviteId: mine.inviteId, invitePublicKey: fromB64std(mine.invitePublicKey), expiresAt: mine.expiresAt.getTime() / 1000 }
+    const scope = { scopeId: SCOPE_TENANT, kind: 'TENANT', epoch: mine.anchorEpoch } as const
+    const to = { userId: mine.inviteId, identityPublicKeyB64: mine.invitePublicKey }
+    expect(invite.inviteKeySignatureVerifies(vaultPub().sign, signed, fromB64std(now.inviteKeySignature))).toBe(true)
+    expect(grantSignatureVerifies(vaultPub().sign, scope, to, mine.anchorWrappedGrant, now.anchorGrantSignature)).toBe(true)
+    // …and no longer under the retired key.
+    expect(invite.inviteKeySignatureVerifies(OLD_ID.pub.sign, signed, fromB64std(now.inviteKeySignature))).toBe(false)
+  })
+
+  it('a plan invite whose current signatures are not the outgoing key\'s is DECLARED, never re-signed — and the publish ends it', async () => {
+    const scopes = ordinaryScopes()
+    const operator = v1.generateIdentity()
+    const foreignKey = planInvite(scopes[1], operator, OLD_ID) // its invite key signed by another key
+    const foreignAnchor = planInvite(scopes[1], OLD_ID, operator) // its anchor signed by another key
+    const mine = planInvite(scopes[1], OLD_ID) // control
+    const srv = fakeServer({ scopes, invites: [{ ...foreignKey }, { ...foreignAnchor }, { ...mine }] })
+    await rotate()
+    const byId = new Map(stagedInvites(srv).map((st) => [st.inviteId, st]))
+    for (const id of [foreignKey.inviteId, foreignAnchor.inviteId]) {
+      expect(byId.get(id)).toEqual({ inviteId: id, anchorEpoch: 0, inviteKeySignature: null, anchorGrantSignature: null })
+    }
+    expect(byId.get(mine.inviteId)!.inviteKeySignature).not.toBeNull()
+    expect(srv.endedInvites.sort()).toEqual([foreignKey.inviteId, foreignAnchor.inviteId].sort())
+    expect(srv.invites.map((i) => i.inviteId)).toEqual([mine.inviteId])
+  })
+
+  it('a join record naming the outgoing key is endorsed by the NEW identity, over the sealed record as stored', async () => {
+    const scopes = ordinaryScopes()
+    const record = rootedRecord(scopes[1], U1, OLD_ID)
+    const srv = fakeServer({ scopes, records: [{ ...record }] })
+    await rotate()
+    expect(stagedEndorsements(srv)).toHaveLength(1)
+    expect(endorsedByPublished(srv.records[0])).toBe(true)
+  })
+
+  it('a record a RETIRED key signed is declared without an endorsement, and endorsed again with one by the outgoing key', async () => {
+    const scopes = ordinaryScopes()
+    const retired = v1.generateIdentity() // a key this account held before its last securing
+    const bare = rootedRecord(scopes[1], U1, retired)
+    const endorsed = rootedRecord(scopes[1], U2, retired, { endorsedBy: OLD_ID })
+    const byRetired = rootedRecord(scopes[1], U3, retired, { endorsedBy: retired }) // the thief's own endorsement
+    const srv = fakeServer({ scopes, records: [{ ...bare }, { ...endorsed }, { ...byRetired }] })
+    await rotate()
+    const staged = new Map(stagedEndorsements(srv).map((e) => [e.userId, e.endorsement]))
+    expect(staged.get(U1)).toBeNull()
+    expect(staged.get(U3)).toBeNull()
+    expect(staged.get(U2)).not.toBeNull()
+    const after = new Map(srv.records.map((r) => [r.userId, r]))
+    expect(after.get(U1)!.joinEndorsement).toBeNull()
+    expect(after.get(U3)!.joinEndorsement).toBeNull()
+    expect(endorsedByPublished(after.get(U2)!)).toBe(true)
+  })
+
+  it('a record this device cannot open, or one naming another signer, is declared (control: the account\'s own opens)', async () => {
+    const scopes = ordinaryScopes()
+    const unopenable = rootedRecord(scopes[1], U1, OLD_ID, { key: v1.randomBytes(32) })
+    const otherSigner = rootedRecord(scopes[1], U2, OLD_ID, { signerUserId: B })
+    const control = rootedRecord(scopes[1], U3, OLD_ID)
+    const srv = fakeServer({ scopes, records: [{ ...unopenable }, { ...otherSigner }, { ...control }] })
+    await rotate()
+    const staged = new Map(stagedEndorsements(srv).map((e) => [e.userId, e.endorsement]))
+    expect(staged.get(U1)).toBeNull()
+    expect(staged.get(U2)).toBeNull()
+    expect(staged.get(U3)).not.toBeNull()
+  })
+
+  it('409 rotation_plan_changed: an invite minted and a record written between stage and publish are staged ALONE, same stage', async () => {
+    const scopes = ordinaryScopes()
+    const first = planInvite(scopes[1], OLD_ID)
+    const srv = fakeServer({
+      scopes,
+      invites: [{ ...first }],
+      beforePublish: (n) => {
+        if (n !== 1) return
+        srv.invites.push(planInvite(tenantOf(srv), OLD_ID))
+        srv.records.push(rootedRecord(tenantOf(srv), U1, OLD_ID))
+      },
+    })
+    await rotate()
+    expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(2)
+    expect(srv.openRotationStage).toHaveBeenCalledTimes(1)
+    const puts = srv.putRotationStageInvites.mock.calls.map((c) => c[0].rotationStageInvites.invites.map((i) => i.inviteId))
+    expect(puts).toEqual([[first.inviteId], [srv.invites[1].inviteId]])
+    expect(srv.putRotationStageGrants).toHaveBeenCalledTimes(1) // the self-grants did not move: none went up again
+    expect(endorsedByPublished(srv.records[0])).toBe(true)
+  })
+
+  it('a stage the server no longer holds takes the invites and records whole again, into the fresh stage', async () => {
+    const scopes = ordinaryScopes()
+    const mine = planInvite(scopes[1], OLD_ID)
+    const srv = fakeServer({
+      scopes, invites: [{ ...mine }], records: [rootedRecord(scopes[1], U1, OLD_ID)],
+      beforePublish: (n) => {
+        if (n === 1) srv.expireStage()
+      },
+    })
+    await rotate()
+    expect(srv.openRotationStage).toHaveBeenCalledTimes(2)
+    expect(srv.putRotationStageInvites).toHaveBeenCalledTimes(2)
+    expect(srv.putRotationStageJoinEndorsements).toHaveBeenCalledTimes(2)
+    expect(srv.putRotationStageInvites.mock.calls[1][0].stageId).toBe(srv.publishes[1].stageId)
+  })
+
+  it('more than 256 open invites go up in chunks', async () => {
+    const scopes = ordinaryScopes()
+    const many = Array.from({ length: 300 }, () => planInvite(scopes[1], OLD_ID))
+    const srv = fakeServer({ scopes, invites: many })
+    await rotate()
+    expect(srv.putRotationStageInvites.mock.calls.map((c) => c[0].rotationStageInvites.invites.length)).toEqual([256, 44])
+    expect(srv.endedInvites).toEqual([])
   }, 60_000)
 })
 
