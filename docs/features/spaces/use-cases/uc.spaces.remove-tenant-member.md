@@ -11,9 +11,9 @@
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)). The target is a current tenant member and
   **not the last tenant OWNER**.
 - **Postconditions (success):** The target's **tenant-scope + shared-group** memberships are deleted (instant 403 on
-  shared content). Groups they **solely owned** are **transferred** to the oldest remaining member, else
-  **grace-tombstoned**. The target's **own** scopes (their personal scope + any group they were the *only* member
-  of) are **grace-tombstoned but still readable by them** until the scheduled purge erases them. The tenant scope
+  shared content). Groups they were the **only accepted owner** of are **transferred** to the oldest remaining accepted
+  member, else **grace-tombstoned**; either way their open consent proposals have expired. The target's **own** scopes
+  (their personal scope + any group with no other *accepted* member) are **grace-tombstoned but still readable by them** until the scheduled purge erases them. The tenant scope
   is **not** rotated ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) — ACL-revoke). Every
   scope the removal cut has **counted it**, so a public link on it that the removed member could have rebuilt — any
   link minted before the removal that carries a recovery copy, a co-member's included — can no longer be
@@ -30,15 +30,19 @@
 3. **Immediate cut from shared spaces.** Delete the target's **TENANT-scope** membership and every **GROUP**
    membership where the group is **shared** (has other members). The target gets an instant 403 on all of it (ADR 0025 —
    the tenant content key is **not** rotated; ACL revocation is the layer).
-4. **Orphan rule — groups the target *solely* owned** (they were OWNER, no other owner remains,
-   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6):
-   - **Other members remain** → the **oldest remaining member** (earliest `createdAt`) is auto-promoted to OWNER; the
-     group carries on under new ownership (a **server rule**, not a tenant-owner power — the owner never gains access).
-     "Solely" is decided under the lock of every scope the target is in, so a co-owner who steps down while the
-     removal runs is counted, and the group is handed on instead of being left without an owner.
-   - **No member remains** (a solo group) → handled by step 5 (it's the target's own).
+4. **Orphan rule — groups the target *solely* owned** (they were OWNER, no other accepted owner remains,
+   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6). Only **accepted** rows count: a consent
+   proposal is no member and is never handed a group, however old. The group's **open proposals expire** (deleted) —
+   the owner who made them is leaving:
+   - **Other accepted members remain** → the **oldest remaining accepted member** (earliest `createdAt`) is
+     auto-promoted to OWNER; the group carries on under new ownership (a **server rule**, not a tenant-owner power —
+     the owner never gains access). Its queued rotation (A4) takes away the key the departed owner and the expired
+     proposals held. "Solely" is decided under the lock of every scope the target is in, so a co-owner who steps down
+     while the removal runs is counted, and the group is handed on instead of being left without an owner.
+   - **No accepted member remains** (a solo group, perhaps with open proposals) → handled by step 5 (it's the
+     target's own); its proposals are deleted, and nothing rotates — nobody is left to hold a key.
 5. **The target's *own* scopes — grace-tombstone, keep read access.** The target's **personal scope** and any
-   **group they were the sole member of** are **soft-deleted** (the cr-0090 grace + read-only + scheduled purge) —
+   **group with no other accepted member** are **soft-deleted** (the cr-0090 grace + read-only + scheduled purge) —
    but the target **keeps their grant** on them. So the removed member can still sign in to the tenant and
    **read + download** their own memories (read-only) for the grace window; then the scheduled purge erases them.
    *Their own stuff isn't taken the moment they leave; shared stuff is.* Read-only means exactly that: no write,
@@ -74,6 +78,11 @@
   tenant space at any time, from the members panel, behind a confirmation that says they come back only as renewed
   links; the result names how many went off. The same switch-off as A5, marked the same way; a non-owner is refused
   (`403 not_scope_owner`).
+- **A7 — the target is only *proposed* to a group.** Their open consent proposal goes as a decline's does
+  ([uc.spaces.consent-group-add](uc.spaces.consent-group-add.md)): the row is deleted and, since it held the key, the
+  group's rotation is queued; no removal is counted on the group (a proposal was served nothing of it,
+  [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4), and the group keeps
+  its own owner — it is never tombstoned or handed on for a proposal.
 - **E1 — already-downloaded content:** the target keeps whatever they saved locally — **not retractable** by any
   design. Removal (and the grace purge) erase the **server** copy, not what already left it.
 
@@ -88,7 +97,7 @@
   solo group) get a **read-only grace window** — they can look through + export them before they're gone. Only
   **shared** content is cut instantly.
 - **Orphan rule = a rule, not a power.** The tenant owner never gains access to a group's content; ownership
-  auto-transfers to the **oldest** remaining member (deterministic, no owner choice) or the group winds down
+  auto-transfers to the **oldest** remaining accepted member (deterministic, no owner choice) or the group winds down
   ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6).
 - **Scope-generic reuse.** Soft-delete/grace/purge (`ScopeEntity.deletedAt`, `ScopePurge`, cr-0090) apply to the
   personal scope and solo groups unchanged — the only twist is **keeping the target's membership** so they retain

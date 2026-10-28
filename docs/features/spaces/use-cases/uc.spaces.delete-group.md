@@ -77,12 +77,10 @@
   group again only after a restore ([scope-access](uc.spaces.scope-access.md) A6). The window promises that
   nothing changes; it cannot also promise a key that was not yet delivered.
 
-> **Sibling — the orphan rule (deferred).** [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6
-> also defines an **automatic** path: when a user is **removed from the tenant** and **solely** owns a group,
-> ownership auto-transfers to the **oldest remaining member**, else the group is **grace-tombstoned** (the same
-> soft-delete as here). Its trigger is **tenant member-removal**, which is future work
-> ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)) — the orphan rule lands **with** it, not
-> in this owner-initiated slice.
+> **Sibling — the orphan rule.** [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6 also defines an
+> **automatic** path: a group whose only accepted owner is **removed from the tenant** passes to its oldest accepted
+> member, else it is **grace-tombstoned** (the same soft-delete as here) —
+> [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) step 4.
 
 ## Quality notes
 
@@ -110,8 +108,8 @@ it is erased from the server for good.
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) (the group being deleted)
 - Decisions: [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (§6 lifecycle: soft-delete + grace,
-  orphan rule), [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (why the orphan half waits
-  for tenant removal), [ADR 0008](../../../decisions/0008-centralized-http-auth.md) (owner-gating)
+  orphan rule), [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (the tenant removal the
+  orphan rule rides with), [ADR 0008](../../../decisions/0008-centralized-http-auth.md) (owner-gating)
 - Sibling use-cases: [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (roster — the other owner
   power), [uc.spaces.add-group-member](uc.spaces.add-group-member.md), [uc.spaces.scope-access](uc.spaces.scope-access.md)
   (what "read-only" means for every operation, and what non-members are told)

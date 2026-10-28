@@ -71,10 +71,9 @@
   any design (the stated limit). Removal protects **future** content only.
 
 > **Sibling — group lifecycle (G3b):** deleting a group (soft-delete + 30-day grace + restore, then a scheduled
-> hard-purge) is [uc.spaces.delete-group](uc.spaces.delete-group.md). The **orphan rule** (when a sole owner leaves
-> the tenant, ownership auto-transfers to the **oldest remaining member**, else grace-tombstone,
-> [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6) rides with **tenant** member-removal
-> ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)), which is future work.
+> hard-purge) is [uc.spaces.delete-group](uc.spaces.delete-group.md). The **orphan rule** (a group whose only accepted
+> owner leaves the tenant, [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6) rides with **tenant**
+> member-removal: [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) step 4.
 
 ## Quality notes
 

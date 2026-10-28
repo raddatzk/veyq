@@ -28,8 +28,9 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   "last-owner guard"). An owner is an **accepted** member: an unaccepted consent proposal is never made one, and no
   owner count includes it — counted, it let the last accepted owner step down, and a decline then left the group with
   none (inbox #597). A scope is orphaned only when its sole owner is taken out — removed from the tenant or
-  erased — and that is handled by a rule, not an operator power: a group passes to its oldest other member
-  ([ADR 0014](0014-group-scopes-and-governance.md)), and an ownerless tenant waits for the Server Owner to invite one
+  erased — and that is handled by a rule, not an operator power: a group passes to its oldest other accepted member,
+  its open proposals expiring, or is tombstoned when no accepted member is left
+  ([ADR 0014](0014-group-scopes-and-governance.md) §6), and an ownerless tenant waits for the Server Owner to invite one
   of its members to own it, a role that moves no key
   ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9).
 - **The relation is a *shared* primitive, not a feature's.** `MembershipEntity`, the read-only membership /
