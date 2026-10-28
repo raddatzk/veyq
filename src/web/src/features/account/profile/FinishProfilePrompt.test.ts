@@ -15,6 +15,7 @@ import FinishProfilePrompt from './FinishProfilePrompt.vue'
 import { getMyProfile, openOwnNameKey, sealName } from './profile'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
+import { epochsOf } from '../../spaces/epochsTestUtil'
 
 const K = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000aa', userId: '5c09e000-0000-4000-8000-0000000000ab' }
@@ -35,7 +36,7 @@ beforeEach(() => {
   activeSpace.status = 'ready'
   activeSpace.tenantId = 'tenant-1'
   vi.mocked(getMyProfile).mockResolvedValue(memberProfile())
-  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, address: ADDRESS })
+  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, epochs: epochsOf(K), tenantId: ADDRESS.scopeId, address: ADDRESS })
 })
 
 describe('FinishProfilePrompt', () => {

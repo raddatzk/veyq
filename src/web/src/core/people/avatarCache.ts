@@ -1,7 +1,9 @@
 // The members' profile pictures as the interface draws them (ADR 0084 decision 5, uc.spaces.set-profile-picture): one
 // per-user entry `{ revision, objectUrl }`. The directory carries only the small `avatarRevision` integer; the picture is
 // fetched (`getMemberAvatar`) ONLY when that revision is non-zero and differs from the revision this cache already holds,
-// revalidated with `If-None-Match`, opened under `K_tenant` on the device and held as ONE object URL per user.
+// revalidated with `If-None-Match`, opened on the device under the tenant epoch it was sealed under (every held epoch key is
+// tried, newest first - the profile row records no epoch, `memberAvatar.ts` § `openAvatarUnderEpochs`) and held as ONE
+// object URL per user.
 //
 // The rules this module keeps, each pinned by `avatarCache.test.ts`:
 // - revision 0 = no picture: no request, and a held entry is dropped (revoked);
@@ -17,15 +19,17 @@ import type { MemberAvatar } from '../../api/generated/tenants'
 import { withRefresh } from '../../app/sessionRefresh'
 import { HttpStatus, httpStatus } from '../../shared/httpError'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
-import { openAvatar } from '../../features/account/profile/memberAvatar'
+import { openAvatarUnderEpochs } from '../../features/account/profile/memberAvatar'
+import type { EpochKeys } from '../../features/spaces/epochs'
 import { sniffImage } from '../blob/sniff'
 
-/** Where the pictures of one tenant are sealed: its scope (the seal address) and its id (the read path), plus `K_tenant`. */
+/** Where the pictures of one tenant are sealed: its scope (the seal address) and its id (the read path), plus the tenant's
+ *  epoch keys. */
 export interface AvatarSource {
   tenantId: string
   scopeId: string
-  /** `K_tenant`; null when this device holds no tenant grant - then no picture is read at all (the letter shows). */
-  key: Uint8Array | null
+  /** Every tenant epoch key held; null when this device holds no tenant grant - then no picture is read at all (the letter shows). */
+  epochs: EpochKeys | null
 }
 
 /** What the directory tells about one member: only the integer. */
@@ -83,7 +87,7 @@ function forget(userId: string): void {
   settled.delete(userId)
 }
 
-async function fetchOne(source: AvatarSource, key: Uint8Array, userId: string, revision: number, gen: number): Promise<void> {
+async function fetchOne(source: AvatarSource, epochs: EpochKeys, userId: string, revision: number, gen: number): Promise<void> {
   const known = settled.get(userId)
   const alive = () => gen === generation && (settled.get(userId) ?? 0) <= revision
   try {
@@ -98,7 +102,7 @@ async function fetchOne(source: AvatarSource, key: Uint8Array, userId: string, r
       freeSlot()
     }
     if (!alive()) return
-    const bytes = openAvatar(key, { scopeId: source.scopeId, userId }, sealed.sealedAvatar)
+    const bytes = openAvatarUnderEpochs(epochs, { scopeId: source.scopeId, userId }, sealed.sealedAvatar)?.bytes ?? null
     const type = bytes ? sniffImage(bytes.subarray(0, 32)) : undefined
     if (bytes && type) urls.set(userId, new Blob([bytes as BlobPart], { type }))
     else urls.drop(userId)
@@ -119,10 +123,10 @@ async function fetchOne(source: AvatarSource, key: Uint8Array, userId: string, r
 /**
  * Bring the cache in line with the directory: for each row with `avatarRevision` > 0 that differs from the held revision, one
  * fetch; for each row at 0 that still holds an entry, drop it. Resolves when the fetches settle - never rejects.
- * `key` is read only here; the caller may zero it after the returned promise settles.
+ * `epochs` is read only here; the caller may zero it after the returned promise settles.
  */
 export async function syncAvatars(source: AvatarSource, rows: readonly AvatarRow[]): Promise<void> {
-  const key = source.key
+  const epochs = source.epochs
   const gen = generation
   const work: Promise<void>[] = []
   for (const { userId, avatarRevision } of rows) {
@@ -130,11 +134,11 @@ export async function syncAvatars(source: AvatarSource, rows: readonly AvatarRow
       if (settled.has(userId) || urls.get(userId)) forget(userId)
       continue
     }
-    if (!key || settled.get(userId) === avatarRevision) continue
+    if (!epochs || settled.get(userId) === avatarRevision) continue
     const id = `${userId}:${avatarRevision}`
     let run = inflight.get(id)
     if (!run) {
-      run = fetchOne(source, key, userId, avatarRevision, gen).finally(() => {
+      run = fetchOne(source, epochs, userId, avatarRevision, gen).finally(() => {
         if (inflight.get(id) === run) inflight.delete(id)
       })
       inflight.set(id, run)

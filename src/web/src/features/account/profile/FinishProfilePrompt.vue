@@ -10,7 +10,7 @@ import { useRouter } from 'vue-router'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
-import { getMyProfile, openOwnNameKey, unsealName } from './profile'
+import { getMyProfile, openOwnNameKey, unsealNameUnderEpochs } from './profile'
 import { finishProfileDismissed } from './finishProfileDismissed'
 
 const { t } = useI18n()
@@ -23,7 +23,8 @@ async function check() {
   try {
     const [profile, own] = await Promise.all([getMyProfile(), openOwnNameKey()])
     if (!own) return // no tenant key yet: nothing could be sealed, so nothing to ask for
-    const name = unsealName(own.key, own.address, profile.sealedName)
+    // A name saved before a tenant rotation opens under its older epoch: the profile is complete, nothing to ask for.
+    const name = unsealNameUnderEpochs(own.epochs, own.address, profile.sealedName)?.name
     const hasName = Boolean(name && `${name.firstName}${name.lastName}`.trim())
     show.value = !hasName && profile.avatarRevision === 0
   } catch {

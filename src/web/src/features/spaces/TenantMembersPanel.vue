@@ -29,9 +29,10 @@ import {
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeScopeKey } from '../../app/activeSpace'
+import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
+import { copyEpochKeys, zeroEpochKeys } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
-import { unsealName, type MemberName } from '../account/profile/profile'
+import { unsealNameUnderEpochs, type MemberName } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
 import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
@@ -83,17 +84,19 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     const rows = await listScopeMembers(activeSpace.scopeId)
     // A member who set no name has no sealed name → null (the row shows only the @username).
     // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
-    // server that moves one member's sealed name onto another's row shows no name there, not the wrong one.
-    const kTenant = activeScopeKey()
+    // server that moves one member's sealed name onto another's row shows no name there, not the wrong one. A name opens
+    // under the tenant epoch its member saved it under, tried across every held epoch key: one saved before a rotation
+    // still reads (the row records no epoch).
+    const epochs = activeEpochKeys()
     const scopeId = activeSpace.scopeId
-    names.value = kTenant
-      ? Object.fromEntries(rows.map((m) => [m.userId, unsealName(kTenant, { scopeId, userId: m.userId }, m.sealedName)]))
+    names.value = epochs
+      ? Object.fromEntries(rows.map((m) => [m.userId, unsealNameUnderEpochs(epochs, { scopeId, userId: m.userId }, m.sealedName)?.name ?? null]))
       : {}
     // The members' pictures follow the roster (ADR 0084): the version integers it carries decide what is fetched. Not awaited -
-    // the rows draw their letters at once; the key copy is zeroed when the fetches settle.
-    if (kTenant) {
-      const copy = kTenant.slice()
-      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, key: copy }, rows).finally(() => copy.fill(0))
+    // the rows draw their letters at once; the keys' copy is zeroed when the fetches settle.
+    if (epochs) {
+      const copy = copyEpochKeys(epochs)
+      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, epochs: copy }, rows).finally(() => zeroEpochKeys(copy))
     }
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'

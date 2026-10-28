@@ -4,7 +4,7 @@
 // fields and the picture choice (kept, replaced or removed) as a draft; the host's Save seals the name (`sealedName`) and
 // writes the picture (`savePicture`). `K_tenant` stays in a closure, never in reactivity.
 import { computed, reactive, ref } from 'vue'
-import { getMyProfile, openOwnNameKey, sealName, unsealName, sealAvatar, setMyAvatar, clearMyAvatar, type MemberProfile } from './profile'
+import { getMyProfile, openOwnNameKey, sealName, unsealNameUnderEpochs, sealAvatar, setMyAvatar, clearMyAvatar, type MemberProfile } from './profile'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { avatarUrlOf, loadTenantPeople, refreshPeopleDirectory } from '../../../core/people/directory'
 
@@ -40,7 +40,8 @@ export function useNameAndPicture() {
     meId.value = ownKey?.address.userId ?? ''
     serverHasPicture.value = p.avatarRevision > 0
     if (ownKey) {
-      const name = unsealName(ownKey.key, ownKey.address, p.sealedName)
+      // Under the epoch it was saved under (any held one): a name saved before a tenant rotation still fills the fields.
+      const name = unsealNameUnderEpochs(ownKey.epochs, ownKey.address, p.sealedName)?.name
       firstName.value = name?.firstName ?? ''
       lastName.value = name?.lastName ?? ''
       // Warm the directory so the member's own picture is in the cache (it fetches only a version it has not seen).
