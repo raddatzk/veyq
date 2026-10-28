@@ -83,7 +83,7 @@ import { listScopeMembers } from '../../spaces/members'
 import { rekeyScope } from '../../../core/node/rekey/rekeyScope'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { grantSignatureVerifies, signGrant, tagAdmission } from '../../spaces/grant'
+import { grantSignatureVerifies, signGrant } from '../../spaces/grant'
 import { raiseMarks, readMarks } from '../trustMarks'
 
 // This file runs in the node environment (fake-indexeddb), where src/test/setup.ts registers no application. The REAL
@@ -106,7 +106,7 @@ const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
 const ME = '0e000000-0000-4000-8000-0000000000e9'
 /** A whole scope member; a test passes the identity it is about. */
 const member = (o: Partial<ScopeMember> & Pick<ScopeMember, 'userId' | 'identityPublicKey'>): ScopeMember => ({
-  username: o.userId, avatarRevision: 0, role: 'OWNER', hasGrant: true, ...o,
+  username: o.userId, avatarRevision: 0, role: 'OWNER', ...o,
 })
 const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028
@@ -424,9 +424,7 @@ describe('what a rotation leaves behind', () => {
   it('re-keys a sole-member scope to the new identity and reports it secured', async () => {
     const e0 = v1.randomBytes(32)
     const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
-    // The caller's own membership carries the admission it self-tagged at birth — a rotation carries it forward.
-    const own = tagAdmission(e0, { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' }, 0, ME)
-    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored', ...own })])
+    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored' })])
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
@@ -452,8 +450,9 @@ describe('what a rotation leaves behind', () => {
     const next = { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' as const, epoch: 1 }
     expect(grantSignatureVerifies(newPub.sign, next, to, grants[0].wrappedGrant, grants[0].grantSignature)).toBe(true)
     expect(grantSignatureVerifies(OLD_ID.pub.sign, next, to, grants[0].wrappedGrant, grants[0].grantSignature)).toBe(false)
-    // …and its own admission is carried into the new epoch.
-    expect(srv.rotateScope.mock.calls[0][0].rotateScopeRequest.admissions.map((a: { admissionId: string }) => a.admissionId)).toEqual([own.admissionId])
+    // A PERSONAL scope carries no member invites: nothing is granted or declared beyond the caller itself.
+    expect(srv.rotateScope.mock.calls[0][0].rotateScopeRequest.inviteGrants ?? []).toEqual([])
+    expect(srv.rotateScope.mock.calls[0][0].rotateScopeRequest.pendingInviteIds ?? []).toEqual([])
     // It states the epoch it creates — the old grant's 0, plus one — and links that new epoch back to E_0, so the
     // new identity still reads everything already written.
     const request = srv.rotateScope.mock.calls[0][0].rotateScopeRequest
@@ -468,8 +467,7 @@ describe('what a rotation leaves behind', () => {
   it('then re-keys every node of the scope it secured, under the new identity, and reports one left unfinished (ADR 0109)', async () => {
     const e0 = v1.randomBytes(32)
     fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
-    const own = tagAdmission(e0, { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' }, 0, ME)
-    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored', ...own })])
+    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored' })])
     vi.mocked(rekeyScope).mockResolvedValueOnce({ done: false, committed: 3 })
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)

@@ -3,13 +3,14 @@
 // the ciphertext grant reaches the server. The active tenant is resolved server-side from the Host.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { scopesApi, tenantsApi } from '../../api/client'
+import { scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
 import { slugify } from '../../shared/naming'
 import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
-import { admissionVerifies, grantContext, sealGrant, tagAdmission, type GrantScope, type SignedGrant } from './grant'
+import { grantContext, recipientIdentityDigest, sealGrant, type GrantScope, type SignedGrant } from './grant'
+import * as invite from '@veyq/crypto/invite'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
 import { checkAndPin, IdentityChangedError } from '../account/identityPins'
 import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
@@ -17,7 +18,7 @@ import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameW
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { rememberGroupName } from './groupNamesSeen'
 import { ScopeKind, type CompromiseRotation, type ScopeSummary, type ScopeSummaryRoleEnum, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
-import type { PendingMemberInvite } from '../../api/generated/tenants'
+import type { OpenInvite, InviteGrantEntry } from '../../api/generated/scopes'
 
 /** The seal context of a scope grant (ADR 0072), re-exported — its home is {@link ./grant}, shared with the
  *  grant-delivery worker (cr-0076) + rotation re-grants (cr-0089). */
@@ -130,10 +131,8 @@ export async function createGroup(name: string): Promise<string> {
     const encryptedName = sealGroupName(nameKey, scopeId, 0, name)
     const self = await me(priv)
     const grant = sealGrant(scopeKey, { scopeId, kind: ScopeKind.Group, epoch: 0 }, recipientOf(self), priv.sign)
-    // The creator self-tags its own membership under E_0 (ADR 0020 move 6), so the first rotation has a tag to carry.
-    const admission = tagAdmission(scopeKey, { scopeId, kind: ScopeKind.Group }, 0, self.userId)
     const created = await withRefresh(() =>
-      scopesApi().createGroup({ createGroupRequest: { scopeId, encryptedName, ...grant, ...admission } }),
+      scopesApi().createGroup({ createGroupRequest: { scopeId, encryptedName, ...grant } }),
     )
     return created.scopeId
   } finally {
@@ -236,7 +235,7 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * grant is bound to (this row's scope, its granted epoch) (ADR 0072): a grant the server moved here from another
  * scope's row — or from another epoch — is refused, never opened as this scope's key. And it is opened only once
  * its granter's signature verifies (ADR 0028 Decision 6, {@link verifyOwnGrant}): the key inside a refused grant is
- * never used — {@link GrantRefused} is thrown before the unwrap, and the scope reads as awaiting access.
+ * never used — {@link GrantRefused} is thrown before the unwrap, and the scope does not open.
  *
  * A grant that opened raises this device's epoch floor for the scope to the grant's epoch (ADR 0024 Decision 6):
  * the epoch is authentic because the grant is bound to it and signed, so the device now knows it exists.
@@ -261,9 +260,10 @@ class AwaitingCurrentKey extends Error {
   }
 }
 
-/** `open` with a refused grant — or one a rotation left behind — read as no grant: the scope is awaiting access,
- *  not an error (ADR 0028 Decision 6, ADR 0024 Decision 6). */
-async function orAwaitingAccess<T>(open: () => Promise<T | null>): Promise<T | null> {
+/** `open` with a refused grant — or one a rotation left behind — read as no open scope: it waits for the current key,
+ *  not an error (ADR 0028 Decision 6, ADR 0024 Decision 6). A new member never waits here: every membership is born
+ *  with a grant (ADR 0111). */
+async function orUnopened<T>(open: () => Promise<T | null>): Promise<T | null> {
   try {
     return await open()
   } catch (e) {
@@ -317,7 +317,7 @@ export async function openScope(kind: ScopeKind): Promise<OpenedScope | null> {
   if (!priv) return null
   try {
     const scope = (await listMyScopes()).find((s) => s.kind === kind)
-    return scope ? await orAwaitingAccess(async () => toOpenedScope(scope, priv, await me(priv))) : null
+    return scope ? await orUnopened(async () => toOpenedScope(scope, priv, await me(priv))) : null
   } finally {
     zero(priv)
   }
@@ -337,7 +337,7 @@ async function openById(scopeId: string, staleGrant: 'refuse' | 'open'): Promise
   if (!priv) return null
   try {
     const scope = (await listMyScopes()).find((s) => s.id === scopeId)
-    return scope ? await orAwaitingAccess(async () => toOpenedScope(scope, priv, await me(priv), staleGrant)) : null
+    return scope ? await orUnopened(async () => toOpenedScope(scope, priv, await me(priv), staleGrant)) : null
   } finally {
     zero(priv)
   }
@@ -384,7 +384,7 @@ export async function openGroupByToken(token: string): Promise<OpenedScope | nul
       if (matches.length === 1) scope = matches[0]
     }
     const found = scope
-    return found ? await orAwaitingAccess(() => toOpenedScope(found, priv, self)) : null
+    return found ? await orUnopened(() => toOpenedScope(found, priv, self)) : null
   } finally {
     zero(priv)
   }
@@ -458,6 +458,12 @@ export function isStaleEpoch(e: unknown): Promise<boolean> {
   return isCodedError(e, HttpStatus.conflict, 'stale_epoch')
 }
 
+/** Whether a failed rotation is worth one rebuild: built on a superseded epoch, or on a list of open invites a
+ *  concurrent invite changed (`409 rotation_incomplete`, ADR 0111 decision 2). */
+async function isRebuildable(e: unknown): Promise<boolean> {
+  return (await isStaleEpoch(e)) || isCodedError(e, HttpStatus.conflict, 'rotation_incomplete')
+}
+
 /**
  * Set or replace a space's icon (uc.spaces.set-space-icon) — operator-blind: bake+encode is the caller's, here we
  * seal the encoded bytes under `K_icon` derived from the caller's **write key** (the highest epoch they hold) and
@@ -495,7 +501,7 @@ export async function clearSpaceIcon(scopeId: string): Promise<void> {
 /**
  * Open a tenant's icon for the switcher (uc.spaces.set-space-icon, en.spaces.tenant-scope) — unwrap the caller's
  * **own** grant on that tenant transiently, derive `K_icon`, and open + unpad the `sealedIcon` → the encoded image
- * bytes, or **null** (no icon set, grant-less while awaiting-access, or it won't open → the caller renders the
+ * bytes, or **null** (no icon set, or it won't open → the caller renders the
  * initial). Zeroes the scope key + `K_icon` + the identity copy in `finally` (the {@link listMyGroups} posture).
  *
  * A tenant does not routinely re-key, so `iconEpoch == the grant's epoch == 0` (ADR 0025) and `K_icon` derives
@@ -582,23 +588,59 @@ export type RotationGrant = { userId: string } & SignedGrant
  *  vault does not hold yet ({@link commitRotation}'s `rotator`). */
 export type Rotator = { userId: string; identityPublicKeyB64: string; signPrivateKey: Uint8Array }
 
-/** One admission the rotation carries: re-tagged under the new epoch, or dropped because its old tag failed. */
-type CarriedAdmission = { admissionId: string; admissionTag: string }
+/**
+ * Carry a tenant's open member invites into a new epoch (ADR 0111 decision 2): an invite is a placeholder member, so it
+ * is re-granted like one — wrapped to its invite key, with the invite's id as the grant's recipient — once the owner's
+ * signature over its key verifies under the signer's served key and that key passes the pin check (first use pins it,
+ * a changed key does not pass). Any other is **declared pending**: it keeps the grant it holds, and its newcomer joins
+ * behind and is brought current by the grant delivery. The server refuses a rotation that names neither for an open one.
+ */
+async function carryOpenInvites(
+  scopeId: string, newKey: Uint8Array, next: GrantScope, signPrivateKey: Uint8Array,
+): Promise<{ inviteGrants: InviteGrantEntry[]; pendingInviteIds: string[] }> {
+  const inviteGrants: InviteGrantEntry[] = []
+  const pendingInviteIds: string[] = []
+  // Sequential, as the member re-grants: the pin store's version-guarded writes must not race each other.
+  for (const open of await withRefresh(() => scopesApi().listOpenInvites({ scopeId }))) {
+    if (await inviteVouched(scopeId, open)) {
+      const to = { userId: open.inviteId, identityPublicKeyB64: open.invitePublicKey }
+      inviteGrants.push({ inviteId: open.inviteId, ...sealGrant(newKey, next, to, signPrivateKey), recipientIdentityDigest: recipientIdentityDigest(open.invitePublicKey) })
+    } else {
+      pendingInviteIds.push(open.inviteId)
+    }
+  }
+  return { inviteGrants, pendingInviteIds }
+}
+
+/** Whether an open invite's key is the one its owner signed, under a signer key this device anchors (the pin check —
+ *  `cr-secure-the-account`'s anchor function takes its place once it lands). False — never a throw — for anything
+ *  malformed: every byte here came from the server. */
+async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolean> {
+  try {
+    const signer = v1.deserializeIdentityPublic(fromB64std(open.signerIdentityPublicKey))
+    const signed = invite.inviteKeySignatureVerifies(
+      signer.sign,
+      { tenantId, inviteId: open.inviteId, invitePublicKey: fromB64std(open.invitePublicKey), expiresAt: Math.floor(open.expiresAt.getTime() / 1000) },
+      fromB64std(open.inviteKeySignature),
+    )
+    // Only a signature that verified may pin its signer's key (as for a grant's granter, ADR 0028 Decision 6).
+    return signed && (await checkAndPin(open.signerUserId, open.signerIdentityPublicKey)) !== 'changed'
+  } catch {
+    return false
+  }
+}
 
 /**
  * Commit a scope-key rotation (ADR 0024 §4) — the one path every rotation takes. Open the caller's own grant
- * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`E_n` sealed under `E_{n+1}`), carry every admission forward,
- * re-grant the members, and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's
+ * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`E_n` sealed under `E_{n+1}`), re-grant the members — and, for a
+ * TENANT, carry every open member invite ({@link carryOpenInvites}) — and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's
  * epoch, so the server takes the commit only as the scope's current epoch + 1: a rotation that lost a race or rode a
  * lagging grant is `409 stale_epoch` with nothing stored, and would otherwise link the new epoch to a key that is not
- * its predecessor. On that answer the whole attempt runs **once** more from a re-opened grant.
+ * its predecessor. On that answer — or on `409 rotation_incomplete`, an invite minted meanwhile — the whole attempt runs
+ * **once** more from a re-opened grant.
  *
- * **Admissions (ADR 0020 move 6).** Every admission among `carry` — and, for a TENANT scope, every open member
- * invite — is verified under `E_n` first. One that verifies is re-tagged under `E_{n+1}` with the same id; one that
- * fails is dropped, and its member is **not** re-granted (it surfaces as not admitted in the directory). Only a
- * member whose admission verified, who is not a pending consent proposal and whose key passes the TOFU gate is
- * re-granted — the rotator itself excepted, which re-grants itself unconditionally (a grant to oneself needs no
- * admission). The server refuses a rotation that leaves an open admission neither re-tagged nor dropped.
+ * Every member whose key passes the TOFU gate is re-granted — a pending consent proposal too, which holds a grant from
+ * its proposal on (ADR 0111 decision 4) — and the rotator itself unconditionally, to the identity it holds.
  *
  * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
  * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
@@ -619,52 +661,38 @@ export async function commitRotation(
     const newKey = v1.randomBytes(32)
     const who = rotator ?? (await vaultRotator())
     try {
-      // The epoch this rotation creates binds the link, every grant and every tag (ADR 0072) — the one the server checks.
+      // The epoch this rotation creates binds the link and every grant (ADR 0072) — the one the server checks.
       const epoch = opened.epochs.current + 1
       const oldKey = writeKey(opened.epochs)
       const wrappedPrev = b64std(v1.seal(epochLinkContext(scopeId, epoch), newKey, oldKey))
-      const scope = { scopeId, kind: opened.kind }
-      const next: GrantScope = { ...scope, epoch }
-      const admissions: CarriedAdmission[] = []
-      const droppedAdmissions: string[] = []
-      /** Verify an admission under E_n and carry it — re-tagged, or dropped. Whether it verified. */
-      const carryAdmission = (targetUserId: string, a: ScopeMember | PendingMemberInvite): boolean => {
-        if (a.admissionId == null) return false
-        const verified = admissionVerifies(oldKey, opened.epochs.current, scope, targetUserId, a)
-        if (verified) admissions.push({ admissionId: a.admissionId, admissionTag: tagAdmission(newKey, scope, epoch, targetUserId, a.admissionId).admissionTag })
-        else droppedAdmissions.push(a.admissionId)
-        return verified
-      }
+      const next: GrantScope = { scopeId, kind: opened.kind, epoch }
       const grants: RotationGrant[] = []
       // Sequential so the pin store's version-guarded writes don't race each other.
       for (const m of carry) {
-        const admitted = carryAdmission(m.userId, m)
         if (m.userId === who.userId) {
           // Our own re-grant targets the identity we hold, never the directory's copy of it.
           grants.push({ userId: m.userId, ...sealGrant(newKey, next, { userId: m.userId, identityPublicKeyB64: who.identityPublicKeyB64 }, who.signPrivateKey) })
           continue
         }
-        // Never re-grant a member whose admission did not verify (ADR 0020 move 6), nor a soft consent proposal
-        // (cr-0095): it is grant-gated until the invitee accepts. And never to a CHANGED identity key (cr-0098,
-        // ADR 0028): that member stays awaiting access, a visible anomaly, until a human accepts the change. The
-        // rotation itself still proceeds — forward secrecy against the removed member cannot hinge on them.
-        if (!admitted || m.pendingConsent) continue
+        // Never to a CHANGED identity key (cr-0098, ADR 0028): that member stays behind, a visible anomaly, until a
+        // human accepts the change and the grant delivery brings them current. The rotation itself still proceeds —
+        // forward secrecy against the removed member cannot hinge on them.
         if ((await checkAndPin(m.userId, m.identityPublicKey)) === 'changed') continue
         grants.push({ userId: m.userId, ...sealGrant(newKey, next, { userId: m.userId, identityPublicKeyB64: m.identityPublicKey }, who.signPrivateKey) })
       }
-      // A tenant's open member invites are admissions too: their tag becomes the membership's at accept.
-      if (opened.kind === ScopeKind.Tenant) {
-        for (const invite of await withRefresh(() => tenantsApi().listMemberInvites({ tenantId: scopeId }))) carryAdmission('', invite)
-      }
+      // A tenant's open member invites are placeholder members (ADR 0111 decision 2): each is re-granted or declared.
+      const invites = opened.kind === ScopeKind.Tenant
+        ? await carryOpenInvites(scopeId, newKey, next, who.signPrivateKey)
+        : { inviteGrants: [], pendingInviteIds: [] }
       const rotated = await withRefresh(() =>
-        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions, removesUserId: removes, revokeLinks: revokeLinks || undefined } }),
+        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined } }),
       )
       // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
       // server took as the next one; a server that later serves the older grant meets the floor.
       await raiseEpochFloor(scopeId, epoch)
       return rotated.epoch
     } catch (e) {
-      if (attempt === 0 && (await isStaleEpoch(e))) continue // superseded — re-open + rebuild once, fresh key
+      if (attempt === 0 && (await isRebuildable(e))) continue // superseded — re-open + rebuild once, fresh key
       throw e
     } finally {
       newKey.fill(0)
@@ -683,24 +711,6 @@ async function vaultRotator(): Promise<Rotator> {
     return { userId: self.userId, identityPublicKeyB64: self.pubB64, signPrivateKey: priv.sign.slice() }
   } finally {
     zero(priv)
-  }
-}
-
-/**
- * Tag an admission to `scopeId` under the caller's **current** epoch key — the owner's key-holder act that a group
- * add and a tenant invite carry (ADR 0020 move 6). `targetUserId` is the added member's account for a group, `null`
- * for a tenant invite (the invitee has none yet). Throws when the scope cannot be opened — the vault is locked, or a
- * session holds no grant — which is exactly the case an admission must not be possible in.
- */
-export async function admissionFor(
-  scopeId: string, targetUserId: string | null,
-): Promise<{ admissionId: string; admissionEpoch: number; admissionTag: string }> {
-  const opened = await openScopeById(scopeId)
-  if (!opened) throw new Error('cannot open the scope to admit — the vault is locked or no grant is held')
-  try {
-    return tagAdmission(writeKey(opened.epochs), { scopeId, kind: opened.kind }, opened.epochs.current, targetUserId)
-  } finally {
-    zeroEpochKeys(opened.epochs)
   }
 }
 

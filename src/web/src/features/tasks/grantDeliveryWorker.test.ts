@@ -10,7 +10,7 @@ vi.mock('../account/identityPins', () => ({ checkAndPin: vi.fn() }))
 // call, like the real vault, because the worker zeroes what it is handed.
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 
-import { runGrantDeliveryWorker, wrapScopeKeyToMember, ADMISSION_UNVERIFIED } from './grantDeliveryWorker'
+import { runGrantDeliveryWorker, wrapScopeKeyToMember } from './grantDeliveryWorker'
 import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
@@ -18,11 +18,11 @@ import type { ClaimedJob, TasksApi } from '../../api/generated/tasks'
 import { checkAndPin } from '../account/identityPins'
 import { TrustStateRefused } from '../account/trustMarks'
 import { identityPrivate } from '../../app/vault'
-import { grantSignatureVerifies, tagAdmission } from '../spaces/grant'
+import { grantSignatureVerifies } from '../spaces/grant'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
-// A real *foreign* identity: the pending member the worker delivers to. Its public bundle is what the server
+// A real *foreign* identity: the member whose grant is behind, the one the worker delivers to. Its public bundle is what the server
 // hands the worker in the claim; only the member holds the matching private, so the wrap must open with it.
 const target = v1.generateIdentity()
 const targetPubB64 = b64std(v1.serializeIdentityPublic(target.pub))
@@ -34,13 +34,10 @@ const S1 = '5c09e000-0000-4000-8000-0000000000a1'
 const openAsTarget = (wrap: string, epoch: number) =>
   v1.openAs({ purpose: 'scope-grant', scopeId: S1, epoch }, v1.hybridSecret(target.priv), fromB64std(wrap))
 
-/** The target's admission, tagged by a genuine key-holder of `key` at `epoch` (a group add: bound to the target). */
-const admitted = (key: Uint8Array, epoch: number) => tagAdmission(key, { scopeId: S1, kind: 'GROUP' }, epoch, TARGET)
-
-/** A claimed grant-delivery job for the target, carrying `admission` (or none). */
-const job = (admission: Partial<ReturnType<typeof admitted>> = {}): ClaimedJob => ({
+/** A claimed grant-delivery job for the target (a member a rotation left behind; ADR 0111 left the pin check as its only gate). */
+const job = (): ClaimedJob => ({
   jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
-  grantDelivery: { targetUserId: TARGET, targetMembershipId: 'm1', identityPublicKey: targetPubB64, ...admission },
+  grantDelivery: { targetUserId: TARGET, targetMembershipId: 'm1', identityPublicKey: targetPubB64 },
 })
 
 function mockTasks(
@@ -73,7 +70,7 @@ beforeEach(() => {
 describe('runGrantDeliveryWorker', () => {
   it('claims for the opened scope, wraps K_SC to the foreign identity, signs it and completes; the wrap opens back to K_SC', async () => {
     const K_SC = v1.randomBytes(32)
-    const { claimTask, completeTask } = oneJob(job(admitted(K_SC, 2)))
+    const { claimTask, completeTask } = oneJob(job())
 
     const delivered = await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 2 })
 
@@ -98,79 +95,19 @@ describe('runGrantDeliveryWorker', () => {
     expect(grantSignatureVerifies(target.pub.sign, scope, to, sealedResult, grantSignature)).toBe(false)
   })
 
-  // --- the admission gate (ADR 0020 move 6) ---
-
-  it('declines admission_unverified — and wraps nothing — for a target whose tag is garbage', async () => {
-    // The #159 door: an owner session without the vault minted an invite carrying any bytes. The worker must not
-    // wrap K_SC to the member it admits.
-    const K_SC = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job({ ...admitted(K_SC, 0), admissionTag: b64std(v1.randomBytes(32)) }))
-
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
-    expect(completeTask).not.toHaveBeenCalled()
-    expect(declineTask).toHaveBeenCalledTimes(1)
-    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
-    expect(ADMISSION_UNVERIFIED).toBe('admission_unverified')
-    expect(checkAndPin).not.toHaveBeenCalled() // an unadmitted target's key is never pinned either
-  })
-
-  it('control: the same target with a genuine tag is delivered', async () => {
-    const K_SC = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(1)
-    expect(declineTask).not.toHaveBeenCalled()
-    expect(completeTask).toHaveBeenCalledTimes(1)
-  })
-
-  it('declines a tag made at epoch n when the worker holds n+1 — a pre-rotation tag does not admit', async () => {
-    const E3 = v1.randomBytes(32)
-    const E4 = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job(admitted(E3, 3)))
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E4, epoch: 4 })).toBe(0)
-    expect(completeTask).not.toHaveBeenCalled()
-    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
-  })
-
-  it('pauses (neither wraps nor declines) when the admission is AHEAD of its key — n+1 reaching a worker still at n', async () => {
-    // A rotation landed and re-tagged the admission at n+1 while this tab still holds n. That is a fact about the
-    // worker, not the target: a decline would exclude this key-holder from the job for good, even once it holds n+1.
-    const E3 = v1.randomBytes(32)
-    const E4 = v1.randomBytes(32)
-    const claimTask = vi.fn<TasksApi['claimTask']>()
-      .mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(job(admitted(E4, 4))).mockResolvedValueOnce(null)
-    const completeTask = vi.fn<TasksApi['completeTask']>()
-    const declineTask = vi.fn<TasksApi['declineTask']>()
-    mockTasks(claimTask, completeTask, vi.fn<TasksApi['failTask']>(), declineTask)
-
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E3, epoch: 3 })).toBe(0)
-    expect(declineTask).not.toHaveBeenCalled()
-    expect(completeTask).not.toHaveBeenCalled()
-    expect(claimTask).toHaveBeenCalledTimes(1) // stops draining: every further job meets the same behind key
-    expect(checkAndPin).not.toHaveBeenCalled()
-  })
-
-  it('control: a tag made at n+1 reaching the worker at n+1 is delivered', async () => {
-    const E4 = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job(admitted(E4, 4)))
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E4, epoch: 4 })).toBe(1)
-    expect(declineTask).not.toHaveBeenCalled()
-    expect(completeTask.mock.calls[0][0].completeRequest?.epoch).toBe(4)
-  })
-
   // The poll hands the worker the ACTIVE SPACE's write key, and leaving or re-entering the space zeroes that array in
-  // place while a run is still in flight (found live 2026-10-16: an accepted member's job declined admission_unverified,
-  // which excludes this key-holder from it for good). The run must not see that: it neither declines a genuine
-  // admission nor seals an all-zero key to the member.
+  // place while a run is still in flight (found live 2026-10-16). The run must not see that: it never seals an all-zero
+  // key to the member.
   it.each([
     ['while the claim is in flight', 'claim'],
-    ['between the admission check and the seal', 'pin'],
+    ['between the pin check and the seal', 'pin'],
   ] as const)('keeps its own key when the caller zeroes the one it handed over %s', async (_when, at) => {
     const K_SC = v1.randomBytes(32)
     const held = K_SC.slice() // the active space's array — the one the caller zeroes
-    const { claimTask, completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+    const { claimTask, completeTask, declineTask } = oneJob(job())
     if (at === 'claim') {
       claimTask.mockReset()
-      claimTask.mockImplementationOnce(async () => (held.fill(0), job(admitted(K_SC, 0)))).mockResolvedValueOnce(null)
+      claimTask.mockImplementationOnce(async () => (held.fill(0), job())).mockResolvedValueOnce(null)
     } else {
       vi.mocked(checkAndPin).mockImplementationOnce(async () => (held.fill(0), 'firstUse'))
     }
@@ -181,21 +118,15 @@ describe('runGrantDeliveryWorker', () => {
     expect(Array.from(openAsTarget(sealedResult, 0))).toEqual(Array.from(K_SC))
   })
 
-  it('declines a target that carries no admission at all', async () => {
-    const { completeTask, declineTask } = oneJob(job())
-    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(0)
-    expect(completeTask).not.toHaveBeenCalled()
-    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
-  })
-
-  it('a tenant admission binds no account: a genuine tenant-invite tag admits whoever redeemed it', async () => {
-    // The tenant invitee had no account when the owner tagged the invite — the tag cannot name one (ADR 0020
-    // § Consequences, the named residual), so the worker verifies it with the target left unbound.
+  it('delivers a TENANT scope\'s key the same way, signed as a TENANT grant (ADR 0028 Decision 6)', async () => {
     const K_T = v1.randomBytes(32)
-    const invite = tagAdmission(K_T, { scopeId: S1, kind: 'TENANT' }, 0, null)
-    const { completeTask } = oneJob(job(invite))
+    const { completeTask } = oneJob(job())
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'TENANT', key: K_T, epoch: 0 })).toBe(1)
-    expect(completeTask).toHaveBeenCalledTimes(1)
+    const { sealedResult, grantSignature } = completeTask.mock.calls[0][0].completeRequest ?? {}
+    const to = { userId: TARGET, identityPublicKeyB64: targetPubB64 }
+    expect(grantSignatureVerifies(worker.pub.sign, { scopeId: S1, kind: 'TENANT', epoch: 0 }, to, sealedResult as string, grantSignature as string)).toBe(true)
+    // Control: the same grant read as a GROUP grant does not verify — the kind is what was signed.
+    expect(grantSignatureVerifies(worker.pub.sign, { scopeId: S1, kind: 'GROUP', epoch: 0 }, to, sealedResult as string, grantSignature as string)).toBe(false)
   })
 
   it('declines the job (does not wrap) when the target identity key CHANGED — TOFU block (cr-0098)', async () => {
@@ -203,7 +134,7 @@ describe('runGrantDeliveryWorker', () => {
     // possibly-substituted key. It declines the job (release to others + never re-offer to this worker) and moves on.
     vi.mocked(checkAndPin).mockResolvedValue('changed')
     const K_SC = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+    const { completeTask, declineTask } = oneJob(job())
 
     const delivered = await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })
 
@@ -219,7 +150,7 @@ describe('runGrantDeliveryWorker', () => {
     // for good — would be the wrong answer; nothing may be wrapped either, since no key can be judged.
     vi.mocked(checkAndPin).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
     const K_SC = v1.randomBytes(32)
-    const { completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+    const { completeTask, declineTask } = oneJob(job())
 
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
     expect(completeTask).not.toHaveBeenCalled()
@@ -229,7 +160,7 @@ describe('runGrantDeliveryWorker', () => {
   it('any other pin-store failure still propagates as itself — the pause is for the refusal only', async () => {
     vi.mocked(checkAndPin).mockRejectedValue(new Error('network down'))
     const K_SC = v1.randomBytes(32)
-    oneJob(job(admitted(K_SC, 0)))
+    oneJob(job())
     await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toThrow('network down')
   })
 
@@ -264,7 +195,7 @@ describe('runGrantDeliveryWorker', () => {
 
   it('stops draining on a 409 stale_epoch — the server released the job for a key-holder at the current epoch', async () => {
     const K_SC = v1.randomBytes(32)
-    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job(admitted(K_SC, 0)))
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job())
     const stale = httpError(409, 'stale_epoch')
     const completeTask = vi.fn<TasksApi['completeTask']>().mockRejectedValue(stale)
     mockTasks(claimTask, completeTask)
@@ -276,7 +207,7 @@ describe('runGrantDeliveryWorker', () => {
 
   it('a non-stale completion failure still propagates', async () => {
     const K_SC = v1.randomBytes(32)
-    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job(admitted(K_SC, 0)))
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job())
     const forbidden = httpError(409, 'not_lease_holder')
     mockTasks(claimTask, vi.fn<TasksApi['completeTask']>().mockRejectedValue(forbidden))
     await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toBe(forbidden)

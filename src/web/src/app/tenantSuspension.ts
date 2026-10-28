@@ -5,8 +5,8 @@
 //  - another tenant (reached by id from this domain): leave that space for this domain's own home and refresh the
 //    tenant list, which then shows the suspended one offline.
 // The two are told apart by asking this domain's public setup route: it answers unless the domain itself is
-// suspended. The `awaiting access` marker is a different reason entirely (en.spaces.tenant-scope E1 vs E1a) and is
-// not touched here.
+// suspended. The *waiting for the current key* marker (`activeSpace.tenantUnavailable`) is a different reason entirely
+// (en.spaces.tenant-scope E1 vs E1a) and is not touched here.
 import { reactive } from 'vue'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { HttpStatus, isCodedError } from '../shared/httpError'

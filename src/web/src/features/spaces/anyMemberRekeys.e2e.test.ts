@@ -18,7 +18,7 @@ import { beforeAll, describe, it, expect, vi } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { birthInstance, become, mkActor, onboardMember } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
-import { addGroupMember, listScopeMembers } from './members'
+import { addGroupMember, listScopeMembers, resolveGroupMember } from './members'
 import { createGroup, listMyScopes, openScopeById, rotateGroupForRemoval } from './scopes'
 import { createFolder, listTree, nodeContentKey } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
@@ -30,7 +30,6 @@ import { openShareRoot } from '../../core/sharing/shareTree'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { createShareNodeAsGuest, guestTreeContext } from '../../core/sharing/guestTree'
 import { registry } from '../../core/applications/registry'
-import { runGrantDeliveryWorker } from '../tasks/grantDeliveryWorker'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { createMemory } from '../memories/memoryNodes'
 import { listMedia } from '../memories/media'
@@ -80,10 +79,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     const C = await onboardMember(tenant.tenantId, mkActor('c'), salt)
     await become(A)
     const gG = await createGroup(GROUP_NAME)
-    await addGroupMember(gG, B.username, B.userId!)
-    await addGroupMember(gG, C.username, C.userId!)
+    // A group add carries the grant (ADR 0111 decision 4): B and C hold the group's key from the add on.
+    for (const who of [B, C]) {
+      const candidate = await resolveGroupMember(gG, who.username)
+      await addGroupMember(gG, who.username, candidate.userId, candidate.identityPublicKey)
+    }
     const openedA = (await openScopeById(gG))!
-    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedA.key, epoch: openedA.epochs.current })
     const folderId = await createFolder(gG, openedA.epochs, FOLDER_NAME)
     const memory = await createMemory(gG, openedA.epochs, MEMORY_NAME)
     const folderKey = nodeContentKey(gG, openedA.epochs, await listTree(gG, openedA.epochs), folderId)!

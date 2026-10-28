@@ -9,7 +9,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { checkAndPin } from '../account/identityPins'
 import { grantSignatureVerifies, type GrantScope } from './grant'
 
-/** Why a grant was not opened. The key inside is never used; the scope reads as awaiting access. */
+/** Why a grant was not opened. The key inside is never used; the scope does not open (it waits for a current grant). */
 export type GrantRefusal = 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_changed'
 
 export class GrantRefused extends Error {

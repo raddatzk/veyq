@@ -12,9 +12,6 @@ import { useMemberDirectory } from './useMemberDirectory'
 import { trustStates } from '../account/identityPins'
 import { TrustStateRefused } from '../account/trustMarks'
 import type { ScopeMember } from './members'
-import { tagAdmission } from './grant'
-import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
 
 function harness<T>(factory: () => T) {
   const wrapper = mount(
@@ -30,7 +27,7 @@ function harness<T>(factory: () => T) {
 }
 
 const member = (userId: string): ScopeMember =>
-  ({ userId, username: userId, role: 'MEMBER', hasGrant: true, identityPublicKey: `pk-${userId}`, sealedName: '' }) as ScopeMember
+  ({ userId, username: userId, role: 'MEMBER', avatarRevision: 0, identityPublicKey: `pk-${userId}`, sealedName: '' })
 
 beforeEach(() => {
   push.mockClear()
@@ -96,39 +93,5 @@ describe('useMemberDirectory', () => {
     owner = true
     await api.reload()
     expect(api.isOwner.value).toBe(true)
-  })
-})
-
-describe('useMemberDirectory — admission (ADR 0020 move 6)', () => {
-  // The directory surfaces what the grant-delivery worker declines as `admission_unverified`: a pending member whose
-  // admission does not verify under this scope's current epoch key, beside the changed-key badge.
-  const S = '5c09e000-0000-4000-8000-0000000000d1'
-  const U = 'a0000000-0000-4000-8000-0000000000d2'
-  const V = 'b0000000-0000-4000-8000-0000000000d3'
-  const W = 'c0000000-0000-4000-8000-0000000000d4'
-  const key = v1.randomBytes(32)
-  const pending = (userId: string, admission: object): ScopeMember => ({ ...member(userId), hasGrant: false, ...admission }) as ScopeMember
-
-  it('flags a pending member whose tag does not verify, and only that one', async () => {
-    const good = pending(U, tagAdmission(key, { scopeId: S, kind: 'GROUP' }, 1, U))
-    const forged = pending(V, { ...tagAdmission(key, { scopeId: S, kind: 'GROUP' }, 1, V), admissionTag: b64std(v1.randomBytes(32)) })
-    const release = vi.fn()
-    const { api } = harness(() =>
-      useMemberDirectory(
-        async () => ({ rows: [member(W), good, forged], isOwner: true }),
-        async () => ({ scopeId: S, kind: 'GROUP' as const, key, epoch: 1, release }),
-      ),
-    )
-    await flushPromises()
-    expect(api.unadmitted.value).toEqual({ [V]: true })
-    expect(release).toHaveBeenCalledTimes(1) // a key opened for this read is zeroed after it
-  })
-
-  it('flags nothing when the key cannot be had — never a broken directory', async () => {
-    const forged = pending(V, { admissionId: null })
-    const { api } = harness(() => useMemberDirectory(async () => ({ rows: [forged], isOwner: true }), async () => null))
-    await flushPromises()
-    expect(api.unadmitted.value).toEqual({})
-    expect(api.loadError.value).toBe('')
   })
 })

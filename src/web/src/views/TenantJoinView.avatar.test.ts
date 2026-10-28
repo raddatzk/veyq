@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The optional profile picture at join (ADR 0084 decision 7, uc.spaces.set-profile-picture A2/A3). The OWNER holds `K_tenant` at
 // accept (cold birth), so the picture is sealed there - under that born key, at (tenant scope, the new member) - and sent as
-// `sealedAvatar` next to `sealedName`. A MEMBER invite holds no key: the picker is not offered and nothing is sealed or sent.
+// `sealedAvatar` next to `sealedName`. A MEMBER seals its own under the invite's tenant key (TenantJoinView.member.test.ts).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -89,7 +89,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(registerAndAccept).mockResolvedValue({ tenantId: TENANT_ID, status: TenantStatus.Active, userId: 'user-1' })
   vi.mocked(bornTenantScope).mockReturnValue({
-    birth: { grant: 'AQ==', grantSignature: 'AQ==', admissionId: 'admission-1', admissionEpoch: 0, admissionTag: 'AQ==' },
+    birth: { grant: 'AQ==', grantSignature: 'AQ==' },
     scopeRootKey: BORN_KEY,
   })
   vi.mocked(buildAccount).mockResolvedValue({
@@ -123,13 +123,6 @@ describe('TenantJoinView - the profile picture at join', () => {
     expect(vi.mocked(registerAndAccept).mock.calls[0][6]).toBeUndefined()
   })
 
-  it('MEMBER: the picker is not offered and nothing is sealed or sent (no K_tenant at join)', async () => {
-    const { pickerOffered } = await registerThrough(InviteRole.Member, true)
-    expect(pickerOffered).toBe(false)
-    expect(sealAvatar).not.toHaveBeenCalled()
-    expect(bornTenantScope).not.toHaveBeenCalled()
-    const args = vi.mocked(registerAndAccept).mock.calls[0]
-    expect(args[6]).toBeUndefined()
-    expect(args[5]).toBeUndefined() // and no sealed name either
-  })
+  // A MEMBER now holds K_tenant at join too (ADR 0111 decision 3): its picture and name are sealed under the invite's
+  // tenant key — TenantJoinView.member.test.ts, which drives the code step this file's fixed fragment has no part for.
 })

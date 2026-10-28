@@ -7,8 +7,8 @@
 //   VEYQ_USERNAME, VEYQ_PASSWORD, VEYQ_EMAIL, VEYQ_TENANT, VEYQ_TENANT_DOMAIN, and the optional
 //   VEYQ_FIRST_NAME / VEYQ_LAST_NAME (the real name, sealed under K_tenant at accept — operator-blind).
 // This script creates the Server-Owner / tenant-owner veyq_user (with a personal scope), and — when the optional
-// VEYQ_USER2_* inputs are set — a SECOND user onboarded as a tenant MEMBER with its tenant grant delivered (a
-// ready 2-member tenant for multi-member dev). It writes the derived key material back:
+// VEYQ_USER2_* inputs are set — a SECOND user onboarded as a tenant MEMBER through a code invite, holding the tenant
+// key from its accept on (a ready 2-member tenant for multi-member dev). It writes the derived key material back:
 //   VEYQ_SECRET_KEY, VEYQ_WRAPPED_MASTERKEY (+ VEYQ_USER2_SECRET_KEY / VEYQ_USER2_WRAPPED_MASTERKEY)
 // Run it against a FRESH backend (Bootstrap DB + Garage → Run Backend first); a re-run needs a `down -v` wipe.
 //
@@ -24,10 +24,12 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { fromB64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
-import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
+import { generateInviteCode, parseInviteFragment } from '@veyq/crypto/invite'
+import { DEFAULT_INVITE_TTL_SECONDS, sealMemberInvite } from '../src/features/spaces/memberInvite'
+import { memberInviteFragment, memberJoinFrom } from '../src/test/memberJoin'
 import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, mailpitReachable, waitForMail } from '../src/test/mailpit'
 import { Configuration as TenantsConfiguration, TenantsApi } from '../src/api/generated/tenants'
-import { Configuration as TasksConfiguration, TasksApi, type ClaimedJob } from '../src/api/generated/tasks'
+import { Configuration as ScopesConfiguration, ScopesApi } from '../src/api/generated/scopes'
 import { describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
 import { awaitBackend, birthPersonalScope, birthServerOwner, birthTenant, ensureBundledStore, orThrow, signIn } from './instanceBirth.mts'
 
@@ -55,7 +57,6 @@ function writeEnv(fields: Record<string, string>): void {
 }
 
 // --- API calls: the generated clients, over the three channels apiTransport.mts configures ----------------------
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Run one step of the shared birth, or end the run with what it threw. Only for steps before 4a. */
 async function orFail<T>(step: Promise<T>): Promise<T> {
@@ -114,7 +115,7 @@ const token = await orFail(signIn(email, password))
 if (await orFail(ensureBundledStore(token))) console.log('store: bundled store chosen and checked')
 const onTenant = tenantChannel(domain, token)
 const tenantsApi = new TenantsApi(new TenantsConfiguration(onTenant))
-// Keep K_tenant (`tenantScopeKey`): the optional member below is admitted under it.
+// Keep K_tenant (`tenantScopeKey`): the optional member below is invited with a grant of it.
 const { tenantId, ownerId, tenantScopeKey, sealedName } = await orFail(birthTenant(token, built, { tenantName, domain, email, username, firstName, lastName }))
 console.log(`tenant: ${domain} created + accepted${sealedName ? ' + name sealed' : ''}`)
 const scopeId = await orFail(birthPersonalScope(token, domain, ownerId, built))
@@ -160,31 +161,42 @@ async function configureMail(): Promise<boolean> {
 }
 const mailReady = await configureMail()
 
-// 4c — optional SECOND user: a tenant MEMBER, fully granted so it is usable immediately (no "log the owner in
-// first" step). The owner mints a MEMBER invite; user2 cold-births + register-and-accepts grant-less; then — as
-// the online key-holder — we drain the grant-delivery job the backend originated (claim → wrap K_tenant to
-// user2's identity → complete), exactly what a key-holder's device does in the web client (cr-0076).
+// 4c — optional SECOND user: a tenant MEMBER, holding the tenant key from its accept on (ADR 0111 decision 3) — no
+// "log the owner in first" step and no grant delivery. The owner mints a MEMBER invite exactly as the web client's
+// `buildMemberInvite` does (`sealMemberInvite`: the invite key, the owner's signature over it, a grant of K_tenant to
+// it, the link's sealed part under a generated code) — from the key material this process holds, as it has no vault;
+// user2 cold-births, opens the mailed link with the code, checks it and grants itself K_tenant (`memberJoinFrom`:
+// the client's own `openMemberInvite` + `buildMemberJoin`), and register-and-accepts with that join.
 //
-// The invite token is read out of the MAILBOX: a member invite is minted for the invited person and never
+// The invite link is read out of the MAILBOX: a member invite is minted for the invited person and never
 // returned to the caller (ADR 0055 §2). Throws rather than `fail()`s — the caller downgrades any
 // failure here to a warning, because the owner above is already usable and already persisted.
 async function onboardUser2(): Promise<void> {
   if (!mailReady) throw new Error('no sendable mail settings — a MEMBER invite has no other channel (ADR 0055)')
   // A cursor, not a cleared mailbox: the e2e sweep reads the whole mailbox afterwards (cr-wire-assertion-history-and-mail).
   const cursor = await mailCursor(u2Email)
-  // The invite carries our admission tag under K_tenant (ADR 0020 move 6) — without it no worker delivers to user2.
-  const invite = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
-  await orThrow('inviteTenantMember', tenantsApi.inviteTenantMember({ tenantId, memberInviteRequest: { email: u2Email, ...invite } }))
-  const body = await waitForMail(u2Email, { after: cursor })
-  const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
-  if (!link) throw new Error(`no invite link in the mail to ${u2Email}`)
+  const code = generateInviteCode()
+  const mine = (await orThrow('listMyTenants', new ScopesApi(new ScopesConfiguration(onTenant)).listMyTenants())).find((t) => t.tenantId === tenantId)
+  const memberInviteRequest = await sealMemberInvite(
+    tenantId, u2Email, { mode: 'code', code },
+    { userId: ownerId, pub: built.identity.pub, signPrivateKey: built.identity.priv.sign },
+    { epoch: 0, key: tenantScopeKey }, mine?.memberInviteTtlSeconds ?? DEFAULT_INVITE_TTL_SECONDS,
+  )
+  await orThrow('inviteTenantMember', tenantsApi.inviteTenantMember({ tenantId, memberInviteRequest }))
+  const fragment = memberInviteFragment(await waitForMail(u2Email, { after: cursor }))
+  if (!fragment) throw new Error(`no member invite link in the mail to ${u2Email}`)
   const u2 = await buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
     secretKey: reusableSecretKey(env.VEYQ_USER2_SECRET_KEY, 'user2'),
   })
-  await orThrow('user2 accept/register', new TenantsApi(new TenantsConfiguration(publicChannel())).registerAndAcceptTenantInvite({
+  const publicTenants = new TenantsApi(new TenantsConfiguration(publicChannel()))
+  const { token } = parseInviteFragment(fragment)
+  const preview = await orThrow('user2 preview', publicTenants.previewTenantInvite({ acceptPreviewRequest: { bootstrapSecret: token } }))
+  const u2Id = crypto.randomUUID()
+  const join = await memberJoinFrom(preview, fragment, code, u2Id, u2)
+  await orThrow('user2 accept/register', publicTenants.registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
-      bootstrapSecret: link[1],
-      userId: crypto.randomUUID(),
+      bootstrapSecret: token,
+      userId: u2Id,
       username: u2Username,
       account: {
         suiteId: u2.material.suiteId,
@@ -194,30 +206,12 @@ async function onboardUser2(): Promise<void> {
         masterKeyWraps: u2.material.masterKeyWraps,
         secretKeyProofPublicKey: u2.material.secretKeyProofPublicKey,
       },
+      ...join,
     },
-  }))
-  // Deliver the tenant grant: claim the grant-delivery job the backend originated for the new grant-less
-  // membership (retry briefly in case origination lags), wrap K_tenant to user2's identity, complete.
-  const tasksApi = new TasksApi(new TasksConfiguration(onTenant))
-  let job: ClaimedJob | null | undefined = null
-  for (let i = 0; i < 5 && !job?.grantDelivery; i++) {
-    job = await orThrow('claimTask', tasksApi.claimTask({ claimRequest: { capabilityTags: ['02f271ff'], scopeId: tenantId } }))
-    if (!job?.grantDelivery) await sleep(400)
-  }
-  const target = job?.grantDelivery
-  if (!job || !target) throw new Error('grant-delivery job for user2 was not claimable')
-  // The same checks a key-holder's worker runs: the admission verifies under K_tenant, then a signed wrap.
-  if (!admissionVerifies(tenantScopeKey, 0, { scopeId: tenantId, kind: 'TENANT' }, target.targetUserId, target)) {
-    throw new Error('user2\'s admission does not verify under K_tenant — refusing to wrap to it')
-  }
-  const signed = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: target.targetUserId, identityPublicKeyB64: target.identityPublicKey }, built.identity.priv.sign)
-  await orThrow('grant-delivery complete', tasksApi.completeTask({
-    jobId: job.jobId,
-    completeRequest: { sealedResult: signed.wrappedGrant, epoch: 0, grantSignature: signed.grantSignature },
   }))
   u2SecretKey = u2.emergencyKit.secretKey
   u2WrappedKey = u2.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!.wrappedKey
-  console.log(`user2: ${u2Email} joined ${domain} as MEMBER (@${u2Username}) + tenant grant delivered`)
+  console.log(`user2: ${u2Email} joined ${domain} as MEMBER (@${u2Username}), holding the tenant key`)
 }
 if (u2Username && u2Email && u2Password) {
   try { await onboardUser2(); persist() } catch (e) {

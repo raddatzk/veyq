@@ -41,7 +41,6 @@ import {
 import { refusedDocuments } from './refusedDocuments'
 import { runGrantDeliveryWorker } from '../../tasks/grantDeliveryWorker'
 import { GRANT_DELIVERY } from '../../tasks/capabilityTags'
-import { tagAdmission } from '../../spaces/grant'
 import { raiseMarks } from '../trustMarks'
 import { accountDeviceRegisterApi, tasksApi } from '../../../api/client'
 import { identityPrivate, masterKey } from '../../../app/vault'
@@ -76,13 +75,12 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
     return { ...served.register }
   })
   fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...served.register }), putDeviceRegister })
-  // The worker's claim: one grant-delivery job to a genuinely admitted target, then drained.
+  // The worker's claim: one grant-delivery job to a target whose grant is behind, then drained.
   const K_SC = v1.randomBytes(32)
   const job: ClaimedJob = {
     jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
     grantDelivery: {
       targetUserId: TARGET_ID, targetMembershipId: 'm1', identityPublicKey: TARGET_PUB,
-      ...tagAdmission(K_SC, { scopeId: S1, kind: 'GROUP' }, 0, TARGET_ID),
     },
   }
   const completeTask = vi.fn<TasksApi['completeTask']>(async () => undefined)

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // uc.spaces.add-member (web, cr-0077) — the "Members" rubric of the tenant settings. Lists the active tenant's
-// members (name/email + role + granted/awaiting-access status) and, for the tenant OWNER, opens the invite-by-
-// email dialog. Markup + classes mirror the create-tenant admin panel (settings-section-header + veyq-list-row +
-// veyq-badge). Operator-blind: only operational metadata is shown — pubkeys/roles/grant-present, never a key.
-// Admission (invite) is owner-only (the backend 403s otherwise); the directory is any key-holder's.
+// members (name/email + role) and, for the tenant OWNER, opens the invite-by-email dialog. Markup + classes mirror the
+// create-tenant admin panel (settings-section-header + veyq-list-row + veyq-badge). Operator-blind: only operational
+// metadata is shown — pubkeys/roles, never a key. Every listed member holds the tenant's key from its join on (ADR 0111:
+// an invitee grants itself at accept). Inviting is owner-only (the backend 403s otherwise); the directory is any
+// key-holder's.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
-import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
@@ -27,8 +27,9 @@ import {
   type ScopeMember,
 } from './members'
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
+import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeScopeKey, activeWriteKey } from '../../app/activeSpace'
+import { activeSpace, activeScopeKey } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
 import { unsealName, type MemberName } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
@@ -69,17 +70,19 @@ const iconError = ref('')
 // A re-issue mails the fresh secret to the invitee and returns none (ADR 0055 §2) — so there is no link to show
 // and nothing for the owner to hand on. What stays is the confirmation of which address it went to.
 const reissuedTo = ref('')
+// The new invite's code, shown once beside the confirmation: the owner passes it on themselves (ADR 0111 decision 1).
+const reissuedCode = ref('')
 
 const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId !== null)
 
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The load body is Tenant-specific: fetch
 // the roster, decrypt each real name with K_tenant (operator-blind, on-device), then read the owner-only invite
 // list — and resolve ownership from the tenant role.
-const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
-    // A grant-less "awaiting access" member has no sealed name yet → null (the row shows only the @username).
+    // A member who set no name has no sealed name → null (the row shows only the @username).
     // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
     // server that moves one member's sealed name onto another's row shows no name there, not the wrong one.
     const kTenant = activeScopeKey()
@@ -96,7 +99,7 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'
     // The identity header: the tenant name (plaintext) + its icon opened on-device against our own grant (null when
-    // unset / grant-less / unopenable → the initial shows). Every member reads it, not just the owner.
+    // unset / unopenable → the initial shows). Every member reads it, not just the owner.
     tenantName.value = mine?.name ?? ''
     stuckRotation.value = mine?.compromiseRotation ?? null
     rekeying.value = owner && activeSpace.scopeId ? ((await scopeLifecycle(activeSpace.scopeId).catch(() => null))?.rekeying ?? false) : false
@@ -106,15 +109,9 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     // Only the owner may read the pending-invite list (the backend 403s any non-owner).
     pendingInvites.value = owner ? await listMemberInvites(activeSpace.tenantId) : []
     return { rows, isOwner: owner }
-  }, async () => {
-    // The active tenant's write key — the one its admissions are tagged under. Owned by the active space: no release.
-    const held = activeWriteKey()
-    return held && activeSpace.scopeId
-      ? { scopeId: activeSpace.scopeId, kind: ScopeKind.Tenant, key: held.key, epoch: held.epoch }
-      : null
   })
 
-/** The member's decrypted "First Last", or '' when not yet sealed (awaiting access) / unreadable. */
+/** The member's decrypted "First Last", or '' when none is sealed / unreadable. */
 function fullName(userId: string): string {
   const n = names.value[userId]
   return n ? `${n.firstName} ${n.lastName}`.trim() : ''
@@ -172,8 +169,12 @@ async function removeIcon() {
 async function reissue(invite: PendingMemberInvite) {
   actionError.value = ''
   reissuedTo.value = ''
+  reissuedCode.value = ''
   try {
-    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId)
+    // A re-issue is a new invite (ADR 0111): a new key, link and code — the old code opens nothing any more.
+    const code = generateInviteCode()
+    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, { mode: 'code', code })
+    reissuedCode.value = formatInviteCode(code)
     reissuedTo.value = invite.email
     toast.success(t('members.inviteSentTo', { email: invite.email }))
     await reload()
@@ -345,8 +346,8 @@ async function revoke(invite: PendingMemberInvite) {
         <TrustResetLink />
       </VeyqMessage>
 
-      <!-- A re-issue has no link to surface any more: the fresh secret went to the invitee (ADR 0055 §2). This
-           is the confirmation, dismissible, not a handoff. -->
+      <!-- A re-issue has no link to surface: the fresh link went to the invitee (ADR 0055 §2). What the owner passes on
+           is the new code, shown here once (ADR 0111 decision 1). Dismissible. -->
       <div v-if="reissuedTo" class="reissue-link">
         <div class="reissue-link-head">
           <p class="settings-muted">{{ t('members.inviteSentTo', { email: reissuedTo }) }}</p>
@@ -360,6 +361,8 @@ async function revoke(invite: PendingMemberInvite) {
             @click="reissuedTo = ''"
           />
         </div>
+        <p v-if="reissuedCode" class="settings-muted">{{ t('members.inviteCodeNote') }}</p>
+        <code v-if="reissuedCode" class="invite-code" data-testid="reissued-invite-code">{{ reissuedCode }}</code>
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
@@ -382,17 +385,11 @@ async function revoke(invite: PendingMemberInvite) {
                 <span v-if="member.email">{{ member.email }} · </span>{{ member.role }}
               </span>
               <div class="veyq-row-meta">
-                <span class="veyq-badge" :class="member.hasGrant ? 'success' : 'warning'">
-                  {{ member.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
-                </span>
+                <span class="veyq-badge success">{{ t('members.statusActive') }}</span>
                 <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
                      when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
                      verified contact. -->
                 <MemberTrustBadge :trust="trust[member.userId]" />
-                <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
-                <span v-if="unadmitted[member.userId]" class="veyq-badge changed">
-                  <VeyqIcon name="exclamation-triangle" />{{ t('members.badgeNotAdmitted') }}
-                </span>
               </div>
             </div>
             <div class="management-actions">
