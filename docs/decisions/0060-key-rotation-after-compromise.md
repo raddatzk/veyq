@@ -1,10 +1,10 @@
 # ADR 0060 — Key rotation after a compromise: one mode, a cold-credential gate, a signed step that keeps every space
 
-- Status: Accepted, and built — in the form [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 6–10 gave it: the Secret Key rotates too, a rotation is one step of the account's key chain signed by the
-  old identity and the old Secret-Key proof key, and the rotator keeps every space by re-granting itself and minting
-  each next epoch (Decisions 1, 2, 4, 6, 7). The product calls the operation **Secure your account**.
+- Status: Accepted
+- Built: yes
 - Date: 2026-08-15
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: Decision 1, Decision 2, Decision 4, Decision 5, Decision 6, Decision 7 by ADR 0111 (built)
 
 ## Context
 
@@ -20,8 +20,9 @@ it was itself exposed, and the other members must rotate every shared `K_SC` to 
 epoch chain and `POST /api/scopes/{scopeId}/epochs`, the grant-delivery *stale-epoch* reconcile, the TOFU pin check
 at every foreign-wrap surface and the worker's decline seam. So this is a trigger and a ceremony more than a
 mechanism — and the design questions it has to settle are about **who may do it** and **what it honestly buys**.
-The two mechanisms it later needed, a key chain and a stage of self-grants, are
-[ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)'s.
+The key chain and the stage of self-grants it rests on are
+[ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)'s
+(decisions 6 and 7). The product calls the operation **Secure your account**.
 
 Two facts from the key model decide most of what follows. The identity private key exists **only** wrapped
 under the Master Key ([en.account.key-model](../features/account/enablers/en.account.key-model.md)), and a
@@ -42,14 +43,11 @@ useless half. The Secret Key rotates with them because someone who holds it and 
 indistinguishable from the member, so a leaked Secret Key would have no remedy.
 
 So the request has one shape and **every field is mandatory**, because an optional field is a mode spelled by
-omission (`scripts/validate_rotation_shape.py` pins the set): the new identity public key, the new identity private key
-under the new Master Key, the `PASSWORD` and `RECOVERY` wraps rewritten under the **new** Secret Key, the new
-Secret-Key proof public key and a signature of it proving it is held, the Secret-Key proof (Decision 2), the auth
-public key with the current auth key's attestation over it (keeping the password derives the same key, so both are
-always sent), the key-chain step's two signatures, the stage of self-grants it applies and the scopes this device
-cannot open (Decision 4), and the **identity-pin store and the device register re-sealed under the new Master Key**.
-An account that has never written either document sends it empty. The two documents are not part of the proof's statement: a session holder without the Secret Key can
-already write both through their own endpoints, so binding them would defend no case.
+omission (`scripts/validate_rotation_shape.py` pins the set; the fields are
+[keys-grants-and-trust § Securing the account](../crosscutting/keys-grants-and-trust.md#securing-the-account)). It
+carries the **identity-pin store and the device register re-sealed under the new Master Key**, empty for an account
+that never wrote either. The two documents are not part of the proof's statement: a session holder without the Secret
+Key can already write both through their own endpoints, so binding them would defend no case.
 
 **2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The
 `PASSWORD` floor takes password + Secret Key; the `RECOVERY` wrap takes the Secret Key alone, released against
@@ -112,48 +110,40 @@ imply that rotating undoes a compromise; it ends it.
 
 **4. Access moves first, security after: the rotator re-grants itself and mints every next epoch, and an attacker
 cannot.** In its one transaction the publish appends the key-chain step and re-grants every scope the account holds a
-grant on — personal, tenant and group, across every tenant — at its **current** epoch to the new identity, signed by
-it. The grants are staged before the publish, verified at upload under the identity the stage declares, and applied
-only if the set equals the server's own ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+grant on — personal, tenant and group, across every tenant — at its **current** epoch to the new identity, from
+self-grants staged before it ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decision 6 holds the stage and why it exists). Then the account mints each scope's next epoch itself, from any of its
-unlocked devices, granting every member whose key its client anchors and declaring the rest pending (ADR 0111 decisions
-8–9); any member re-keys the nodes (ADR 0111 decision 11). No retired private key is kept, and no state after the
-publish can lose access: a lost answer, a closed tab, a failed next epoch or a space in another tenant leaves each space
-readable by the published identity, and the next device that unlocks finishes it. A scope this device cannot open (its
-grant's signature or the epoch floor refuses it) is declared and keeps its grant; it was already closed to the account.
+unlocked devices (ADR 0111 decisions 8–9), and any member re-keys the nodes (ADR 0111 decision 11). No retired private
+key is kept, and no state after the publish can lose access: a lost answer, a closed tab, a failed next epoch or a
+space in another tenant leaves each space readable by the published identity, and the next device that unlocks
+finishes it. A scope this device cannot open is declared and keeps its grant; it was already closed to the account.
 
-This record first refused the rotator its own re-grant: an attacker holding the old identity would mint the new epoch,
-wrap it to their **own** new identity and exclude the legitimate owner. The key-chain step answers that. It is signed by
-the old identity **and** the old Secret-Key proof key, so a device-link holder, who lacks the Secret Key, cannot publish
-(Decision 2); a contact accepts a new key only where the chain reaches it from the head it pinned
+The danger of a self-service re-grant is an attacker holding the old identity minting the new epoch for their **own**
+new key and excluding the legitimate owner. The key-chain step closes it: it is signed by the old identity **and** the
+old Secret-Key proof key, so a device-link holder, who lacks the Secret Key, cannot publish (Decision 2); a contact
+accepts a new key only where the chain reaches it from the head it pinned
 ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2); and the server takes no grant to a key that is
-not its recipient's current one (`409 recipient_key_not_current`, ADR 0111 decision 10), so a stale directory read
-cannot wrap to the old identity. A non-owner commits a scope's next epoch only with the pending row the publish left for
-it, at the scope's current epoch, and never with a removal (`403 not_scope_owner`); a commit by someone else in between
-meets the row, because it could not grant the old identity.
+not its recipient's current one (ADR 0111 decision 10), so a stale directory read cannot wrap to the old identity. A
+non-owner commits a scope's next epoch only with the pending row the publish left for it, and never with a removal.
+The mechanism is [keys-grants-and-trust § Securing the account](../crosscutting/keys-grants-and-trust.md#securing-the-account).
 
 **5. Every shared scope rotates, the tenant included — and this is not a new policy.**
 [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 already reserves an **explicit "re-key this space"** for
 exactly the compromise case. Rotation is its first caller; nothing about routine removal changes. The wraps (one per
 member per scope) land on the rotator's devices, and the far larger node re-key is spread across every member's
-(ADR 0111 § Consequences). Personal scopes
-rotate too, self-served (one member, who is the owner) — the *"personal scopes never rotate"* line in
-[en.spaces.scope-key-rotation](../features/spaces/enablers/en.spaces.scope-key-rotation.md) was written about
-removal, where there is nobody to rotate away from, and does not survive a compromise, where the old identity
-is exactly that somebody.
+(ADR 0111 § Consequences). Personal scopes rotate too, self-served (one member, who is the owner): on a removal there
+is nobody to rotate away from, on a compromise the old identity is exactly that somebody.
 
 **6. Each space's progress is stated, not hidden, and none waits for anyone else.** The rotator is never outside a
 scope. What follows the publish is each scope's next epoch and its node re-key, and the honest surface is a per-scope
-status, not a spinner. That status is the **server's**, derived from the pending rows the publish left, re-readable at
-any time and Host-independent, so a space in another tenant reads too: `blocked` (its tenant suspended, or the scope
-being deleted), `waiting` (its next epoch not committed yet), `rekeying` (a node lags) or `secured`. There is no job,
-so nothing stalls or fails: `waiting` ends with the next device of the account that unlocks.
+status, not a spinner: the **server's**, derived from the pending rows the publish left, re-readable at any time and
+Host-independent, so a space in another tenant reads too (`waiting`, `rekeying`, `secured` or `blocked`). There is no
+job, so nothing stalls or fails: `waiting` ends with the next device of the account that unlocks.
 
 **7. The publish clears the declines that target the rotator.** A delivery worker that cannot anchor a member's key
-declines the job (`identity_unanchored`) and is excluded from it, and no human accepts a key any more (ADR 0028
-Decision 2). So the publish deletes, in its transaction, the declines of every job whose target is the rotating
-account: a worker that could not anchor the old key tries the new one, which the chain reaches. Without it, a member a
-worker once declined would stay excluded from that worker after every rotation.
+declines the job and is excluded from it, and no human accepts a key (ADR 0028 Decision 2). Without clearing, a member
+a worker once declined would stay excluded from that worker after every rotation; cleared, a worker that could not
+anchor the old key tries the new one, which the chain reaches.
 
 ## Consequences
 
@@ -240,7 +230,7 @@ worker once declined would stay excluded from that worker after every rotation.
 
 - [uc.account.rotate-keys](../features/account/use-cases/uc.account.rotate-keys.md) — the flow this ADR governs
 - [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (the
-  key chain, the stage and the self-service re-grant this record is built in the form of),
+  key chain, the stage and the self-service re-grant),
   [ADR 0028](0028-identity-authenticity-tofu-verification.md) (the trust model a contact accepts the new key through;
   its Decision 5 is settled here), [ADR 0059](0059-device-linking.md) (the obligation), [ADR 0058](0058-revoke-never-takes-key-material.md)
   (why a revoke cannot substitute), [ADR 0025](0025-forward-secrecy-policy-per-scope.md) (the tenant re-key this

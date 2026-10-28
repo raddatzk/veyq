@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-09-23
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
 
 ## Context
 
@@ -10,7 +11,7 @@ Every AEAD seal in veyq authenticates a **purpose** and nothing else. `symWrap`/
 string and put `type ‖ "v1" ‖ context` into the AAD (`src/packages/crypto/src/v1.ts`, `wrapAad`); every call site
 passes a static literal such as `'node-name'`, `'content-key'`, `'blob-key'` or `'scope-grant'`. So two
 ciphertexts sealed for the same purpose under the same key are interchangeable, and the operator-blind server
-decides which one a client receives for which object. Measured 2026-09-23 against the whole `web/src` tree,
+decides which one a client receives for which object. Measured against the whole `web/src` tree,
 that yields three things:
 
 - **Swap between objects under one shared key.** Node names (under `K_SC`), `K_blob` wraps, derivative refs and
@@ -75,8 +76,9 @@ Decision 3): a move re-seals the moved node's own entry and key once, never its 
 
 **5. Binding makes an epoch or revision *authentic*; it does not make it *fresh*.** Which epoch's grant and which
 version of an object a client receives is still the server's choice. Refusing an older but authentic
-ciphertext needs a floor the client holds itself, which inbox #161 owns (the per-scope epoch floor and the pin
-store's rollback). The labels are bound now anyway, because they are part of the stored format and a floor
+ciphertext needs a floor the client holds itself: the per-scope epoch floor
+([ADR 0024](0024-scope-key-rotation.md) Decision 6) and the pin store's rollback mark
+([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7). The labels are bound now anyway, because they are part of the stored format and a floor
 compares against nothing trustworthy unless the label is authenticated.
 
 **6. The typed seal is the only entry point, and the vectors pin every purpose.** `@veyq/crypto` exports a

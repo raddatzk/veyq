@@ -76,7 +76,7 @@ result**.
 8. **Origination.** The server may originate only **structural, non-sensitive** jobs it already fully understands
    (a **stale-epoch** membership → a `grant-delivery` job — a member a scope-key rotation skipped,
    [ADR 0024](0024-scope-key-rotation.md), or a newcomer whose invite a rotation declared pending; every membership is
-   born with a grant since [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   born with a grant, [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decisions 1–5), and an **event** it witnessed
    but cannot complete itself (a co-shared member cut → a `scope-rotation` job; an account rotation queues none, its
    rotator mints its scopes' epochs itself, [ADR 0060](0060-key-rotation-after-compromise.md) Decision 4).

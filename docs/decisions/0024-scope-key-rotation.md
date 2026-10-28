@@ -1,10 +1,10 @@
 # ADR 0024 — Scope-key rotation: content-key epochs, rotate-forward on removal
 
-- Status: Accepted, and built. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, these parts built 2026-10-28) changes three things, each
-  stated in place: a rotation carries no admission tag but every open tenant invite, it declares every member it does
-  not grant, so re-grant delivery is for members who are behind, and an account rotation's scope rotations are the
-  rotator's own rather than queued to an owner.
+- Status: Accepted
+- Built: yes
 - Date: 2026-07-05
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: Decision 4, Decision 5, § Guarantee by ADR 0111 (built)
 
 ## Context
 
@@ -17,8 +17,8 @@ Two constraints shape the mechanism:
 
 - **A removed member keeps every key they ever held**, plus any ciphertext they already fetched. So no scheme can
   retract *already-seen* content — an accepted limit ([security-model](../crosscutting/security-model.md) revocation).
-- **`K_SC` is the navigation root** ([ADR 0012](0012-content-key-hierarchy.md)): node **names**, `slug_token`s and
-  the (deferred) `dedup_token` key off it. A naïve full rotation would therefore have to re-seal the whole tree —
+- **`K_SC` is the navigation root** ([ADR 0012](0012-content-key-hierarchy.md)): the scope-root entries' **names**
+  and `slug_token`s — and through them the whole tree — and the (deferred) `dedup_token` key off it. A naïve full rotation would therefore have to re-seal the whole tree —
   and to deny a removed member *existing* media it would have to change every `K_node` and **re-encrypt + re-upload
   every blob** (they hold the old `K_SC`, so the old `K_node`-wrap still opens for them). That is gigabytes re-keyed
   on every leave, for the narrow gain of protecting *existing-but-unopened* content against a **malicious operator**
@@ -40,13 +40,15 @@ members; new content seals under it. Nothing is re-encrypted.**
    [ADR 0020](0020-grant-distribution-invite-wrap.md)'s, only the plaintext is the latest epoch key, and the seal
    binds the scope and that epoch ([ADR 0072](0072-a-seal-binds-its-object.md)).
 
-2. **Content is tagged with the epoch it was sealed under.** Node **names**, `slug_token`s and each Memory's
-   `K_node`-wrap seal under the **current** epoch at creation time; every node carries a **server-visible epoch
-   index** (a small integer). A member reads a node of epoch `k` iff the highest epoch they hold ≥ `k` (they peel
-   down to `E_k`). The epoch index is not sensitive: the operator already sees membership changes + node
-   `createdAt`, so "which key generation" is inferable from timing — exposing it adds no semantic leak and saves an
-   unwrap on every access. Slug navigation stays correct because the client holds the whole chain and computes each
-   node's `slug_token` under **that node's** epoch.
+2. **Content is tagged with the epoch it was sealed under.** A **scope-root** node's entry — its name, its
+   `slug_token` and the wrap of its key — seals under the epoch key current when it is written; every node below
+   keeps its entry under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+   Decision 2). Every node carries a **server-visible epoch index** (a small integer): the epoch its key was minted
+   at ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md) point 6). A member reads a node of epoch `k`
+   iff the highest epoch they hold ≥ `k` (they peel down to `E_k`). The epoch index is not sensitive: the operator
+   already sees membership changes + node `createdAt`, so "which key generation" is inferable from timing — exposing
+   it adds no semantic leak and saves an unwrap on every access. Slug navigation stays correct because the client
+   holds the whole chain and computes each scope-root entry's `slug_token` under **that entry's** epoch.
 
 3. **Dedup keys off a STABLE, non-rotating sub-key — it does not rotate.** A rotating dedup key would give the same
    blob a different `dedup_token` per epoch, breaking cross-epoch dedup. So when dedup is built (it is **deferred
@@ -58,12 +60,10 @@ members; new content seals under it. Nothing is re-encrypted.**
 4. **Remove a member = rotate forward, in one act.** The removing owner's device:
    (a) mints `E_{n+1}`, posts the chain-link `symWrap(E_{n+1}, E_n)`;
    (b) re-grants `E_{n+1}` to the remaining members — the members it read **before** the removal, minus the one
-   it removes (`asymWrap` to each identity), declaring **pending** (`pendingUserIds`) a member whose key its client
-   cannot anchor (ADR 0028 Decision 2), and in a tenant scope re-grants each open member invite or declares it pending.
-   The server requires every membership but the removed one to be granted or declared, `409 rotation_incomplete`
-   otherwise, and takes no grant to a key that is not its recipient's current one (`409 recipient_key_not_current`)
-   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-   decisions 2, 9 and 10);
+   it removes — and declares **pending** every one whose key its client cannot anchor
+   ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2), in a tenant scope each open member invite
+   too; the server refuses a rotation that leaves anyone out silently
+   ([keys-grants-and-trust § Rotating a scope](../crosscutting/keys-grants-and-trust.md#rotating-a-scope));
    (c) names the removed member **in the same request**, and the server deletes that membership and commits the
    new epoch in one transaction (instant layer-1 access cut — a 403 on the scope).
    The removed member is excluded by the remover's own choice, never by a member list read afterwards: a server
@@ -84,15 +84,11 @@ members; new content seals under it. Nothing is re-encrypted.**
    before → reads pre-removal content, **never** post-removal content — against whom, § Guarantee states.
 
 5. **A member a rotation skipped is brought current by grant-delivery.** A rotation makes a skipped member's grant
-   **stale** (it wraps an old epoch), not absent; so does an invite a rotation declared pending, whose newcomer
-   grants itself the older epoch ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-   decision 2). The reconciler ([ADR 0021](0021-operator-blind-background-tasks.md)) picks every membership whose
-   grant's epoch is below the scope's current one — a consent proposal too, which holds a grant from its add on; any
-   online key-holder re-wraps the current epoch to it, **first-online-wins, idempotent**. No server-side wrapping
-   (operator stays blind). Every membership is born with a grant (ADR 0111 decisions 3–4, built 2026-10-28), so
-   there is no grant-less one to deliver to, and a member a rotation leaves behind is always one it declared pending
-   (ADR 0111 decision 9). The worker wraps only to a key its client anchors and declines the job otherwise
-   (`identity_unanchored`).
+   **stale** (it wraps an old epoch), not absent — the stale grant **is** the pending marker. The reconciler
+   ([ADR 0021](0021-operator-blind-background-tasks.md)) picks every membership whose grant's epoch is below the
+   scope's current one; any online key-holder re-wraps the current epoch to it, **first-online-wins, idempotent**,
+   and only to a key its client anchors. No server-side wrapping (operator stays blind). The mechanism is
+   [keys-grants-and-trust § Grant delivery](../crosscutting/keys-grants-and-trust.md#grant-delivery-brings-a-behind-member-current).
 
 6. **No client writes under an epoch it knows is stale.** A rotation only protects what is sealed *after* it, so
    the writer's epoch is the whole guarantee. Two sources of knowledge, each against its own operator:
@@ -105,7 +101,9 @@ members; new content seals under it. Nothing is re-encrypted.**
      is the device-local high-water mark of [ADR 0028](0028-identity-authenticity-tofu-verification.md)
      Decision 7. The epoch it compares is authentic because every grant binds its epoch
      ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 5: binding makes a label authentic, the floor makes
-     it fresh).
+     it fresh). A grant this device opened, or a rotation it made, raises the floor, and a grant below it — whatever
+     `currentEpoch` the server pairs it with — opens as the same *awaiting the current key* state as layer 1. There is
+     no read-only open: one closed state for both halves, so a rolled-back scope shows neither old nor new content.
 
 **Guarantee.** *Forward-confidential for post-rotation content* — against an honest operator and a database or
 store dump once every writer holds the new epoch, which Decision 6 makes the condition for writing, **and once the
@@ -128,10 +126,12 @@ does not cover, stated rather than hidden:
   worker may already have read the directory the event changed, so a later event gets a job of its own), and a
   job is `done` only once its lease holder committed an epoch while holding the lease — never on the worker's
   word alone.
-- **A membership the operator invents** — re-granted by a rotation after the anchor check, as a first use, since no
-  admission tag stops it any more ([ADR 0020](0020-grant-distribution-invite-wrap.md) § Consequences); a departing
-  member's help is not needed. Closing it needs each member's join record read as an anchor (ADR 0111 decisions 12,
-  15 and 18, not built).
+- **A member the operator presents as an owner.** A non-owner membership the operator invents has no join record an
+  owner signed and is never wrapped to ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2). But
+  who is an owner is the server's word, so a member the server lists as an owner roots keys of its choosing, and a
+  tenant's first owner is trusted on first use
+  ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  § What stays open).
 
 One object sits outside the guarantee by choice: item favorites seal under `E_0`
 ([ADR 0068](0068-favorites-two-confidentiality-levels.md)). Already-read and pre-rotation content is not
@@ -146,29 +146,16 @@ layer for everything future.
 - **Members carry a key-history**, realized as the chain (they hold one key, derive the rest); new server state is
   the per-scope **epoch counter**, the opaque **epoch-chain links**, a **granted-epoch** marker per membership, and
   a **epoch index** per node. All opaque/operational — no key, no plaintext.
-- **`K_SC` is no longer literally "one key."** [ADR 0012](0012-content-key-hierarchy.md) §1 + its rotation
-  paragraph are edited to say "the scope's current content-epoch key" and point here; the dedup keying split is
-  recorded there too.
-- **Grant-delivery gains a second trigger** (stale epoch), noted in [ADR 0020](0020-grant-distribution-invite-wrap.md)
-  / [ADR 0021](0021-operator-blind-background-tasks.md).
 - **Scope-generic mechanism; the *policy* is per scope type** ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)).
   This ADR is only the mechanism; *when* to apply it is decided there: **groups always rotate on removal** (its
   first consumer, G3, [uc.spaces.manage-group-members](../features/spaces/use-cases/uc.spaces.manage-group-members.md));
   the **tenant** (the primary, potentially large content home) revokes via ACL by default and rotates only on an
-  explicit re-key, because removal-rotation is inherently `O(N)` re-grants; **personal** scopes never rotate (one member).
+  explicit re-key, because removal-rotation is inherently `O(N)` re-grants; a **personal** scope (one member) never
+  rotates on a removal, only when its account is secured ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 5).
 - **Rejected — full re-encryption** (re-seal the tree + re-encrypt every blob): gigabytes re-keyed per leave for a
   gain (existing-unopened content vs a malicious operator) that is both narrow and outside veyq's defended threat
   model. **Rejected — a flat key-set** (hold every epoch key independently): `O(epochs)` wraps to onboard each new
   member; the backward chain makes onboarding one wrap. **Rejected — single-key rotation without epochs**: to keep
   existing content readable it must re-seal it under the new key — the same re-encryption cost.
-
-## What is still open
-
-Decision 4's single request and both halves of Decision 6 are built. The floor is one of the device's
-trust-state marks ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7): a grant this device
-opened, or a rotation it made, raises it, and a grant below it — whatever `currentEpoch` the server pairs it
-with — opens as the same *awaiting the current key* state as layer 1. No read-only open: one closed state for
-both halves (owner decision, 2026-09-28), so a rolled-back scope shows neither old nor new content. What the floor
-cannot see is the § Guarantee list above — above all the fork, a member who never learnt of the newer epoch.
 
 Explained for security researchers on the docs site: [Threat model](../../site/src/content/docs/security/threat-model.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Known limitations](../../site/src/content/docs/security/known-limitations.md).

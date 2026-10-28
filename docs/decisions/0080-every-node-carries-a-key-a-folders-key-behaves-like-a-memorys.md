@@ -1,7 +1,10 @@
 # ADR 0080 — Every node carries a key, and a folder's key behaves like a Memory's
 
 - Status: Accepted
+- Built: yes
 - Date: 2026-10-06
+- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Replaced in part: Decision 2, Decision 4 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
 
 ## Context
 
@@ -151,8 +154,7 @@ Memory, an expense and a file side by side).
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
     nodes); this rule is for nodes guests create, built with the first application that needs it (Depot). Since a
     re-key re-seals what lies under a node's key, it is a write onto the node: while any member re-keys a node after a
-    rotation ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-    decision 11), a drop box (its kind takes identity folders, which its application declares through
+    rotation ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md) point 7), a drop box (its kind takes identity folders, which its application declares through
     `WriteOnlyGuestKinds`), its guests' identity folders and what lies below one are re-keyed **by an owner only** —
     the server marks them `ownerOnly` in the re-key's listing and refuses a member `403 not_scope_owner`
     (`OwnerOnlyRekey`) — and their guests, and a member's write into one, wait for an owner. A Memory or chapter that

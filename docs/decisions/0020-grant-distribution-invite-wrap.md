@@ -1,11 +1,10 @@
 # ADR 0020 — Distributing a scope grant to another member (invite + wrap-to-foreign identity)
 
-- Status: Accepted, and built as stated below. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 1–5 (built 2026-10-28) replaced moves 3, 5 and 6 for new members: an invite is a placeholder member holding
-  a grant to an owner-signed invite key, the invitee grants itself and writes an owner-rooted join record, a group add
-  wraps directly, and the admission tag, the grant delivery to new members and *awaiting access* are gone. Those moves
-  are written below as built, and two alternatives rejected below are now taken.
+- Status: Accepted
+- Built: yes
 - Date: 2026-07-04
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: move 3, move 5, move 6 and two rejected alternatives of § Consequences by ADR 0111 (built)
 
 ## Context
 
@@ -51,58 +50,44 @@ key, wraps, or unwraps.** Concretely:
    [ADR 0024](0024-scope-key-rotation.md).)
 
 2. **A key directory — the one new read surface.** An authorized granter can list a scope's memberships
-   together with each member's **identity public key** (and, in the tenant scope, its sealed join record, ADR 0111
-   decision 3). The identity pubkey is operational metadata the server already stores; exposing it to a granter
-   who may wrap to it does not widen the operator's view (it never yields a key). This is a directory scoped to
-   *a scope's own members*, not a global user-search.
+   together with each member's **identity public key** (with its key-chain head and, in the tenant scope, its sealed
+   join record — ADR 0111 decisions 3 and 7). The identity pubkey is operational metadata the server already stores;
+   exposing it to a granter who may wrap to it does not widen the operator's view (it never yields a key). This is a
+   directory scoped to *a scope's own members*, not a global user-search.
 
-3. **One human action, and the newcomer holds the key from its accept on** (ADR 0111 decisions 1–4, built
-   2026-10-28). The newcomer has no identity until they join, so the owner wraps to a placeholder instead:
-   - **A tenant member invite is a placeholder member.** An OWNER's client mints an **invite key** from a seed, signs
-     it with the owner's identity, wraps the tenant's **current epoch** to it, and seals the seed with the owner's
-     fingerprint into the mailed link under a code (or password) the owner passes on outside veyq. The server stores
-     the invite's public key, the signature and the grant, as it stores a membership's.
-   - **The invitee grants itself.** It **cold-registers** (or signs in with its Secret Key), opens the link with the
-     code, checks the invite key and the owner's signature against the fingerprint in the seal, opens the grant, and
-     wraps the epoch to its **own** identity (move 1, the granter being the newcomer). It is a member with the key at
-     once; no key-holder needs to be online.
-   - **A group add wraps directly** — the target already has an account, so the group owner's client wraps the
-     group's current epoch to the target's directory key after the anchor check (ADR 0028 Decision 2), and the membership (a consent proposal
-     too) holds that grant from the add on.
-   - **Delivery stays only for a member who is behind.** A **`grant-delivery` job on the operator-blind
-     background-task mechanism** ([ADR 0021](0021-operator-blind-background-tasks.md)) — any key-holder's device,
-     first-online-wins, idempotent — brings current a membership whose grant is older than the scope's epoch: one a
-     rotation skipped ([ADR 0024](0024-scope-key-rotation.md)), or a newcomer whose invite a rotation declared
-     pending. Existing grants are untouched — this only **adds**.
+3. **One human action, and the newcomer holds the key from its accept on.** The newcomer has no identity until they
+   join, so the owner wraps to a placeholder instead
+   ([keys-grants-and-trust § Grants](../crosscutting/keys-grants-and-trust.md#grants-who-wraps-a-scope-key-to-whom)):
+   - **A tenant member invite is a placeholder member.** An owner's client grants the tenant's **current epoch** to an
+     invite key it signed, and seals what the newcomer needs into the mailed link under a code (or password) the owner
+     passes on outside veyq ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+     decisions 1–2).
+   - **The invitee grants itself** the epoch the invite held (move 1, the granter being the newcomer) and writes a join
+     record. It is a member with the key at once; no key-holder needs to be online (ADR 0111 decision 3).
+   - **A group add wraps directly** to the target's key after the anchor check, and the membership — a consent
+     proposal too — holds that grant from the add on (ADR 0111 decision 4).
+   - **Delivery stays only for a member who is behind** — one a rotation skipped ([ADR 0024](0024-scope-key-rotation.md)),
+     or a newcomer whose invite a rotation declared pending: a **`grant-delivery` job on the operator-blind
+     background-task mechanism** ([ADR 0021](0021-operator-blind-background-tasks.md)), any key-holder's device,
+     first-online-wins, idempotent. Existing grants are untouched — this only **adds**.
 
-4. **Authenticity: this flow wraps to the server-returned key; the trust decision is layered on by
-   [ADR 0028](0028-identity-authenticity-tofu-verification.md), not here.** A malicious operator could substitute
-   its own key and read future wraps; in the default **self-hosted** deployment the operator is the user, so the
-   gap is moot ([security-model](../crosscutting/security-model.md)). The grant-distribution *mechanism* is
-   unchanged by authenticity — the granter still `asymWrap`s to a directory pubkey — but **which** key it trusts is
-   now governed by **TOFU pinning + safety-number verification** (ADR 0028): a first-seen key is pinned at its
-   key-chain head and used, a key the chain reaches from the pinned head is accepted, one it does not reach is never
-   wrapped to (a rotation declares that member pending, a worker declines), and the **fingerprint / safety-number** (a near-free digest of the
-   pubkey) is compared out-of-band to elevate to *verified*. Key Transparency remains the end-state. This flow
-   inherits that model without reshaping.
+4. **Authenticity: this flow wraps to the server-returned key; which key it trusts is
+   [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s.** A malicious operator could substitute its own key
+   and read future wraps; in the default **self-hosted** deployment the operator is the user, so the gap is moot
+   ([security-model](../crosscutting/security-model.md)). The mechanism is unchanged by authenticity — the granter
+   still `asymWrap`s to a directory key — and a key ADR 0028's anchor check refuses is never wrapped to.
 
 5. **Who may invite is the owner; the key comes from the invite.** Minting a member invite stays **owner-only** in
    v1 — server policy, enforced by an honest operator. The key-holder half is cryptographic: only a client holding the
    tenant's current epoch key can grant the invite key, and only the owner's identity can sign it so that the
-   invitee's check passes. Every member reads the open invites' keys (`listOpenInvites`, never an email) so that any
-   member's rotation carries them: **every rotation of the tenant re-grants each open invite or declares it pending**,
-   and the server refuses one that leaves an invite out (`409 rotation_incomplete`). Group member-add follows the same
-   split ([ADR 0014](0014-group-scopes-and-governance.md) — the GroupOwner adds and wraps), over an *existing* tenant
-   member, so it needs no invite. Delegated *inviters* are deferred.
+   invitee's check passes. An open invite holds a grant like a member, so **every rotation of the tenant re-grants each
+   open invite or declares it pending**, and the server refuses one that leaves an invite out (ADR 0111 decision 2).
+   Group member-add follows the same split ([ADR 0014](0014-group-scopes-and-governance.md) — the GroupOwner adds and
+   wraps), over an *existing* tenant member, so it needs no invite. Delegated *inviters* are deferred.
 
-6. **The admission tag is gone** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-   decision 5, built 2026-10-28). It was an HMAC under a key derived from the scope's current epoch key, over the
-   scope, the epoch and an admission id, that every client checked before wrapping to anyone else: it stopped a
-   session without an unlocked vault, and the operator, from making a membership any honest device wraps to. It bound
-   no user and no key, so the operator could still redeem a genuine admission with a key of its own. Its place in the
-   invite is the owner-signed invite key (move 3); its place in the members' wraps is the owner-rooted join record
-   each newcomer writes, which no wrap reads yet (ADR 0111 decisions 12 and 15) — so today every wrap to another member
-   takes the anchor check against the wrapper's own pin only (§ Consequences).
+6. **The admission tag** is gone: [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 5 replaced it with the owner-signed invite key (move 3) and the owner-rooted join record a newcomer writes,
+   which every member's wrap reads as the anchor (ADR 0028 Decision 2).
 
 ## Consequences
 
@@ -116,18 +101,19 @@ key, wraps, or unwraps.** Concretely:
   member online. There is no *awaiting access* state for a new member. What remains is a member whose grant is
   **behind** — a rotation skipped them, or their invite was declared pending — until a key-holder delivers.
 - **The active-operator gap (cost, stated honestly).**
-  - **The operator can invent a member.** Without the tag, a membership row the server writes is wrapped to by a
-    rotation, a delivery or a group add whose key-holder never pinned that account — TOFU's first use. A departing
-    member's help is no longer needed for it. An honest server keeps the session half of the tag's job: it verifies
-    the invite key's owner signature under the caller's identity key before it mints, so an owner's session without
-    the vault — a phished password — mints no invite (`TenantHandler.signedByCaller`). Closing it needs the join record read as an anchor (ADR 0111 decisions
-    12 and 15, with decision 18 for members from before it).
+  - **The operator can invent a member only as an owner.** A membership row the server writes for a non-owner has
+    no join record an owner signed, so every member's client treats it as an anomaly and never wraps to it
+    (ADR 0028 Decision 2). Who is an owner is the server's word, so a member the server presents as an owner roots
+    keys of its choosing, and a tenant's first owner is trusted on first use
+    ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+    § What stays open). An honest server also refuses the session half: it verifies the invite key's owner signature
+    under the caller's identity key before it mints, so an owner's session without the vault — a phished password —
+    mints no invite.
   - **Redeeming a genuine invite with a key of its own** now needs the code: the operator mails the link and holds its
     sealed part, so it can guess the code offline, against 50 bits behind Argon2id (or the strength of a password the
     owner chose). The newcomer's view of its inviting owner is anchored by the fingerprint inside the seal.
 
-  The human checkpoint on a *changed* key is ADR 0028's (TOFU pinning + safety-number verification). The
-  first-online-wins fan-out of a delivery means one pinning key-holder's refusal is a per-key-holder signal, not a
+  Judging a *changed* key is ADR 0028's, and one key-holder's refusal of a delivery is a per-key-holder signal, not a
   global veto (ADR 0028 § Consequences). Key Transparency remains the end-state. Not hidden.
 - **Removal and rotation** are [ADR 0024](0024-scope-key-rotation.md)'s. This record only adds a grant; what a tenant
   rotation must carry forward besides its members is every open invite (move 5).
@@ -136,19 +122,12 @@ key, wraps, or unwraps.** Concretely:
 - **Rejected — invite carries the newcomer's pubkey so the owner wraps at invite time.** Impossible: a new
   person has no identity until they register, so there is nothing to wrap to at invite time. The two-phase
   handshake is not a choice, it is forced by cold-birth.
-- **Taken (was rejected) — the invite carries the wrapped key, so the newcomer self-serves.** Rejected here because
-  it makes the emailed link key-bearing: whoever intercepts it gains scope content, not just the ability to join.
+- **The invite carrying the wrapped key, and the owner signing the admission** — both rejected here first, because
+  they made the mailed link key-bearing and because a worker learnt who the owner is from the server — are taken by
   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decision 1 took it for two reasons: the link already admitted whoever redeemed it, and a key-holder's device then
-  wrapped to them with no further human decision, so it was in effect the key already; and the link is now **always
-  sealed** under a code or password the owner passes on outside veyq, which the operator — the one party that holds
-  every mailed link, mail being the only channel ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)) — never
-  sees. What it costs is a link that keeps its reach after a revoke (ADR 0111 § Consequences).
-- **Taken (was rejected) — the owner signs the admission with their identity key.** Rejected here because a worker
-  learns *who the owner is* from the server, so an operator could name an identity it generated as owner. ADR 0111
-  decision 3 took it in another form: the newcomer learns the owner's fingerprint from the link, inside its seal, not
-  from the server. The further point made here — a removed owner's old signatures stay valid without signed removals,
-  a membership protocol — stays open (ADR 0111 § What stays open).
+  decisions 1 and 3, whose § Alternatives rejected says why those reasons no longer decide. The further point made
+  here — a removed owner's old signatures stay valid without signed removals, a membership protocol — stays open
+  (ADR 0111 § What stays open).
 - **Rejected — hard-gate the grant behind manual fingerprint verification in v1.** Stronger than the
   security-model asks for today and heavy friction for a self-hosted family instance; deferred to the hardening
   slice, with the seam kept open (move 4).

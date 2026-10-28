@@ -1,23 +1,9 @@
 # ADR 0111 — An invitee grants itself, a rotator re-keys its own scopes, and a signed key chain anchors who is who
 
-- Status: Accepted 2026-10-27 (owner, the design as a whole, its four owner decisions under § Consequences included);
-  **decisions 1–5 are built** (2026-10-28: an invite is a placeholder member, the invitee grants itself and writes a
-  join record, a group add wraps directly, the admission tag and *awaiting access* are gone — ADR 0020 states it) and
-  **decision 11 is built** (2026-10-27: any member re-keys, a member's write pulls its path forward, a drop box stays
-  an owner's — ADR 0109 point 7 states it), **decisions 6–10 are built** (2026-10-28: securing the account replaces
-  identity, Master Key and Secret Key in one doubly signed key-chain step, applies the self-grants staged before it, the
-  account mints every next epoch itself, a grant names its recipient key on every writer, and an omission is declared —
-  [ADR 0060](0060-key-rotation-after-compromise.md) states it), and **decisions 12–17 are built** (2026-10-28: the join
-  record anchors a person per tenant, a verification is a signed statement every member of the tenant reads, a
-  rotation re-signs the outgoing key's verifications with the new one, the compare shows the key-chain head, a member
-  sees *new*, *not verified*, *verified by …* and the anomaly, the pin store is the device's counter only, and the
-  chain stays KT-ready —
-  [ADR 0028](0028-identity-authenticity-tofu-verification.md) and
-  [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) state it). **Not built:**
-  decision 18 (§ What stays open). [ADR 0020](0020-grant-distribution-invite-wrap.md),
-  [ADR 0024](0024-scope-key-rotation.md), ADR 0028, ADR 0060 and [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
-  each state in place the part of them this record replaced.
+- Status: Accepted
+- Built: partly (not built: decision 18)
 - Date: 2026-10-27
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
 
 ## Context
 
@@ -45,12 +31,12 @@ What today's model makes hard:
 - **After a rotation the rotator was outside every shared scope** until another key-holder accepted the new key
   (ADR 0060's human re-admission, replaced by decisions 6–10). An owner who rotated and then committed a scope's
   rotation was refused by every other member as `granter_key_changed` once that member had accepted the new key.
-- **Only an owner re-keys a node** (until decision 11, built 2026-10-27). The re-key endpoint refused anyone else (`RekeyAccess.check`, `not_scope_owner`),
-  and a scope's *re-keying* status is served to owners only (`ScopesStore.kt`, the `rekeying` field of a scope row).
-  A write into a node not yet re-keyed is `409 node_rekey_pending` (ADR 0109 point 6). So after any rotation a member
-  cannot write into an existing Memory until an owner has been online long enough — goal 3 broken.
+- **Only an owner re-keyed a node.** The re-key endpoint refused anyone else (`not_scope_owner`), and a scope's
+  *re-keying* status was served to owners only. A write into a node not yet re-keyed is `409 node_rekey_pending`
+  (ADR 0109 point 6). So after any rotation a member could not write into an existing Memory until an owner had been
+  online long enough — goal 3 broken.
 
-Facts the design rests on, read in the code on 2026-10-27:
+Facts the design rests on, read in the code:
 
 - Access knows only `READ` and `WRITE` as the kind of operation (`src/backend/core/.../membership/ScopeAccess.kt`).
   There is no read-only member role: every accepted member may write. Placing or renaming is refused only into a
@@ -58,11 +44,8 @@ Facts the design rests on, read in the code on 2026-10-27:
   Decision 11).
 - The Secret-Key proof public key appeared only in the registration requests (`AccountRegistration` in
   `contracts/api/tenants.openapi.yaml` and `contracts/api/setup.openapi.yaml`); no response served another user's.
-  (Since decision 7 was built, the key chain serves it to the readers that decision names.)
-- A grant names its recipient by user id only (`wrappedGrant`, `grantSignature`, `userId` in
-  `contracts/api/scopes.openapi.yaml`), so the server cannot tell which key a grant was wrapped to. (Since decisions
-  1–10 were built, every grant writer carries `recipientIdentityDigest`, the SHA-256 of the key it wraps to, and the
-  server refuses one that is not the recipient's current key, `409 recipient_key_not_current`.)
+- A grant named its recipient by user id only (`wrappedGrant`, `grantSignature`, `userId` in
+  `contracts/api/scopes.openapi.yaml`), so the server could not tell which key a grant was wrapped to.
 - `RotationStore.applyRotation` keeps no copy of the old identity's private material.
 - The server mails a member invite (`SmtpTenantInviteMailer`), so the operator knows every link it mails; the secret
   rides the URL fragment.
@@ -70,8 +53,6 @@ Facts the design rests on, read in the code on 2026-10-27:
 ## Decision
 
 ### Invitation: a placeholder member that the invitee replaces
-
-Decisions 1–5 are built (2026-10-28); the code they name is the state.
 
 1. **An invite is a placeholder member with an invite key the owner signed.** Creating an invite mints an **invite
    key** on the owner's client: an identity-shaped bundle derived from a 32-byte seed (`inviteKeyFromSeed`,
@@ -152,7 +133,7 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
      grant untouched); otherwise `409 rotation_plan_changed`, nothing is written, and the client re-stages the delta.
      From the commit on, every scope the account was in holds its current epoch for the new identity, so a lost answer,
      a closed tab, a failed next epoch or a space in another tenant strands nothing.
-   - *Why staged rather than carried in the publish, measured when it was built:* no cap bounds an account's
+   - *Why staged rather than carried in the publish:* no cap bounds an account's
      memberships, and any co-member can add an account to groups (a pending proposal holds a grant from the add on). A
      real self-grant is 1,845 bytes on the wire, and 477 fit beside a full pin store under the default
      10,485,760-byte request limit. A membership cap would be a limit another member can push someone into; smaller
@@ -183,11 +164,9 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
    anyone out **silently**: every omission is declared and stored as **pending** for that member. The server cannot
    judge an omission — the anchor is not server-side — so **any other member whose client anchors the omitted member's
    key grants them the new epoch**. A narrow grant delivery for pending members therefore stays; a rotator who omits
-   everyone delays access, it does not remove it. Built as: `rotateScope` names the omitted in `pendingUserIds`, and the
-   server refuses a rotation whose grants, pending members and removal do not cover every membership
-   (`409 rotation_incomplete`); a member's grant behind the current epoch **is** the stored pending marker. The delivery
-   worker declines a target it cannot anchor (`identity_unanchored`), and the publish clears the declines of every job
-   whose target is the rotating account, so a worker that could not anchor the old key tries the new one.
+   everyone delays access, it does not remove it. A member's grant behind the current epoch **is** the stored pending
+   marker, and the publish clears the delivery declines that target the rotating account, so a worker that could not
+   anchor the old key tries the new one ([keys-grants-and-trust § Rotating a scope](../crosscutting/keys-grants-and-trust.md#rotating-a-scope)).
 10. **The server refuses any grant to a key that is no longer the account's current identity.** Concurrent rotations
     keep ADR 0024 Decision 4's rule: the server takes only `current + 1`, the loser gets `409 stale_epoch` and rebuilds
     from the newest grant with a fresh key. Each rotator excludes by its own choice, so both exclusions survive, and
@@ -201,8 +180,8 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
       is its creator's decision. So **any member holding the current epoch may re-key a node**.
     - **It stays eager.** ADR 0109's reason for rejecting a purely lazy re-key still holds: every write path of every
       application would have to re-key ancestors, and a guest cannot, holding no key above its root. Any member's
-      client continues an unfinished re-key in the background, which also spreads across devices work that today
-      lands on one (inbox #553).
+      client continues an unfinished re-key in the background, which also spreads the work across devices instead of
+      landing it on one.
     - **A member's write pulls its path forward**, in one central place rather than in every write path: the client
       catches `409 node_rekey_pending`, re-keys that node and its lagging ancestors, and retries the write. For a member
       a write is delayed by the re-key, never refused.
@@ -210,7 +189,7 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
       for a guest it holds once the re-key has reached its node. Writing under the old key instead would let the old
       identity read it.
     - **Re-key where you may write.** A re-key re-seals names, meta and EXIF, and the server cannot check that the
-      plaintext stayed the same, so it is a write path onto the node. Every accepted member may write today (§ Context),
+      plaintext stayed the same, so it is a write path onto the node. Every accepted member may write (§ Context),
       so a member's re-key gains a member nothing — **except** in a drop box's per-guest-identity folders, where
       members place nothing (ADR 0080 Decision 11). **Those folders, and the drop box with its drop key, are re-keyed by
       an owner only**; their guests wait for an owner rather than for any member — the case where only guests write
@@ -368,8 +347,8 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   when** — what a sealed pin store kept from it. A removed member, holding the tenant key the tenant does not rotate on
   removal, could read these records with the operator's help — writing a forged one does not help them, because each
   is signed by its verifier and counts only under an anchored member's current key.
-- **An overview "people I share with"** — per tenant: anchored, verified by whom, rotated — is cheap now: it is the
-  member list plus these records. Today there is only the per-person profile and the per-space member lists.
+- **An overview "people I share with"** — per tenant: anchored, verified by whom, rotated — is cheap: it is the
+  member list plus these records.
 - **The rotator's device carries the rotation's grants**: one epoch, one chain link and one wrap per member, for every
   scope the rotator is in, the tenant included. That is the `O(N)` re-grant ADR 0060 Decision 5 accepts on a compromise,
   moved from the completing owner to the rotator — and for the tenant it is the burst
@@ -381,11 +360,8 @@ Decisions 1–5 are built (2026-10-28); the code they name is the state.
   directory; a pending marker per declared omission; and a grant that names the key it is wrapped to, without which
   decision 10 cannot be checked. The server learns that an invite exists and that an account rotated, as it does
   today, and from a verification's address who verified whom in a tenant, never what was confirmed.
-- **What it changes in the records it builds on**, each stated there in place: ADR 0020 moves 3, 5 and 6 (admission
-  and delivery); ADR 0024 Decision 4's admission tags, Decision 5's re-grant of new members and § Guarantee's queued
-  account rotation; ADR 0028 Decisions 2, 5 and 6 and the role of the pin; ADR 0060 Decision 2's Secret Key kept across a
-  rotation and Decisions 4, 6 and 7; ADR 0104's entry content; ADR 0109 point 7's owner-only re-key; ADR 0080 Decision 11
-  gains the owner-only re-key of a drop box. ADR 0109's rejection of a lazy re-key stands.
+- **What it replaced in the records it builds on** each of them names in its `Replaced in part` header line (ADR 0020,
+  0024, 0025, 0028, 0060, 0080, 0104, 0109); ADR 0109's rejection of a lazy re-key stands.
 - **The compare and its vectors changed** (decision 14): the safety number stays the identity's, a chain code of the
   head stands beside it, and the QR carries both; the head pins the proof public key with the identity.
 - **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** Every check here is a client's: against an active

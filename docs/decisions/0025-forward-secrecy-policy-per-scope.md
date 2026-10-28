@@ -1,7 +1,10 @@
 # ADR 0025 — Forward-secrecy policy per scope type (when to rotate `K_SC`)
 
 - Status: Accepted
+- Built: partly (not built: § 2's owner-triggered "re-key this space" action)
 - Date: 2026-07-05
+- Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: § 3 by ADR 0060 (built); § 2 by ADR 0111 (built)
 
 ## Context
 
@@ -47,23 +50,26 @@ vault") is an explicit, rare action. This is the established practice for per-us
    Small `N`, intentional and often sensitive sharing; the `O(N)` burst is small and rotation delivers
    post-removal forward-confidentiality, against a malicious operator as far as
    [ADR 0024](0024-scope-key-rotation.md) § Guarantee states — a rotation queued to another owner, as a
-   tenant removal that cuts a co-shared group is, holds against an honest operator only. **Unchanged.**
+   tenant removal that cuts a co-shared group is, holds against an honest operator only.
 
 2. **Tenant — ACL-revoke by default; no automatic content-key rotation on routine removal.** Removing a member
    **deletes the membership** (instant 403) and stops there. Content-key rotation is offered as an **explicit,
    owner-triggered "re-key this space"** action, reserved for the **compromise case** (a member's key leaked or
    device stolen), where the `O(N)` re-grant is justified and rare. Its caller is an account rotation
-   ([ADR 0060](0060-key-rotation-after-compromise.md)), which re-keys the tenant on the rotator's own device and
-   grants every member from there ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   ([ADR 0060](0060-key-rotation-after-compromise.md)): the securing account re-keys the tenant from its own device
+   and grants every member from there
+   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decision 8); only the node re-key is spread across members' devices, and a member it declares pending is brought
    current by grant-delivery ([ADR 0024](0024-scope-key-rotation.md) §5).
 
-3. **Personal — never** (a single member; nothing to rotate away from).
+3. **Personal — never on a removal** (a single member; nothing to rotate away from). It rotates when its account is
+   secured, self-served: there the old identity is exactly the somebody to rotate away from
+   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 5).
 
 ## Consequences
 
 - **Routine tenant removal is `O(1)` and scales to any `N`** — the common operation on the largest, primary scope
-  stays cheap. The `O(N)` cost is paid only on an explicit, rare re-key, and even then is amortized across devices.
+  stays cheap. The `O(N)` cost is paid only on an explicit, rare re-key, by the device that commits it.
 - **Forward-secrecy is scope-dependent by design:** strong (auto-rotate) for groups; ACL + explicit-rotate for the
   tenant. Both honor **operator-blind** (the operator alone can never read).
 - **Accepted residual (tenant), stated honestly.** An ex-tenant-member who hoarded `K_SC` plus already-fetched
@@ -72,10 +78,6 @@ vault") is an explicit, rare action. This is the established practice for per-us
   revocation, and the same one 1Password accepts. If this becomes unacceptable for some tenants, the **only**
   escalation that keeps auto-rotate-on-every-removal affordable at large `N` is a **key tree** (MLS/TreeKEM,
   `O(log N)` re-wraps) — a large, deferred architecture change, taken up only if tenants prove large **and** churny.
-- **Built to this policy (cr-0091).** Tenant member-removal is the ACL-revoke cascade (`rotateAfter = false`,
-  `TenantHandler`) — O(1), no rotation, as decided here. The rare explicit **re-key** rides the generic
-  `rotateScope` endpoint (live for groups); a dedicated tenant re-key flow is not separately wired. The group
-  path is already live.
 - **No rotation means no epoch signal for a public link.** A link a removed tenant member could copy cannot be
   "rotated away" (a rotation re-wraps it to the new node key, [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
   point 4), and the tenant's epoch does not move on a removal, so the scope instead
@@ -83,8 +85,6 @@ vault") is an explicit, rare action. This is the established practice for per-us
   re-issued, never re-activated, and the removal can turn every tenant link off in the same act
   ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) points 4–5). A counter, not a key event —
   the `O(1)` removal stands.
-- **Edits in place:** [ADR 0024](0024-scope-key-rotation.md)'s "scope-generic, group-first" consequence and the
-  [security-model](../crosscutting/security-model.md) revocation section point here for the per-scope policy.
 - **Rejected — apply the group policy uniformly (always-rotate the tenant):** puts an `O(N)` burst on *every*
   routine removal from the largest, primary scope, for a threat (operator + ex-member collusion) outside the default
   posture — the wrong default for the primary content home. **Rejected — `m-of-n` threshold as a cost reducer:**

@@ -89,8 +89,8 @@ Once every active-operator attack above reads *Cannot*, these remain, each decid
 Layer 2 rotates the scope's content key forward into a new epoch granted to the remaining members and re-keys every
 node under it ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)), which protects
 against a revoked party who cached ciphertext *and* a malicious operator feeding them new ciphertext. Whether
-layer 2 fires is a per-scope policy: groups rotate on every removal, the tenant only on an explicit re-key,
-personal scopes never
+layer 2 fires is a per-scope policy: groups rotate on every removal; the tenant and a personal scope never on a
+removal, only when a member secures their account
 ([security model § Revocation](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#revocation--two-layers),
 [ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)).
 A rotation does not revoke a share: the re-key re-wraps each link to its node's new key, so links are revoked or
