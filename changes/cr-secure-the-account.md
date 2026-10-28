@@ -1034,16 +1034,117 @@ identity check → the second control red); the finish grants a member who joine
 
 **Done when:** `npm run check` in `src/web/` is green.
 
+#### Phase 4 built (2026-10-28) — where it differs from the text above, and what phase 5 inherits
+
+Built with the crypto half of decision 7 that § Phase 5 listed (`SK'`, the wraps under it, the proof key and possession,
+the attestation, the chain step's two signatures) — `rotateKeys` cannot send the request without it — and with phase 3's
+open moderation item (item B below).
+
+- **The mechanism's API** (`features/account/rotation/rotateKeys.ts`, `finishRotation.ts`):
+  - `rotateKeys(password, secretKeyB64, next: {secretKeyB64, password?})` → `{outcome: 'published' | 'resumed', states,
+    unreadableScopeIds}`. **Deviation:** the new Secret Key is the caller's (`mintSecretKey()`), not minted inside — the
+    ceremony prints the kit from it before the publish, so the key the publish installs is always one somebody saved;
+    the mechanism never mints a Secret Key nobody saw. `next.password` absent keeps the password (and its auth key).
+  - Refusals before any write: `RotationRefused` (`credentialRejected`, `noFloorWrap`, `vaultLocked`,
+    `trustStateRefused`, `requestTooLarge`). A declared refusal of the publish (`400`, `401`, `403`, `413` → refused as
+    too large, `422`, `409 rotation_unavailable | stale_revision | rotation_plan_changed` past the bound) is rethrown as
+    it is: nothing was written (`errorFailed`). Any other publish failure re-reads the key material: the minted identity
+    under `MK'` → committed (the call completes as if answered); the old one under `MK` → rethrown as it is; neither, or
+    the re-read fails → `clearVault()` and `RotationOutcomeUnknown` (`errorUnknownOutcome`). After a known commit nothing
+    throws.
+  - `finishRotation()` → the states after the finish; `listRotationStates()`, `readRotationPlan()`, `STAGE_CHUNK` (256).
+- **The order inside `rotateKeys`:** the cold proof (`vaultStale` → `resumeCommitted`: `unlockMasterKey(password,
+  secretKey, {noteDevice: false})`, then the finish — nothing minted) → the account's OWN chain (`getKeyChain` of itself,
+  walked by `verifyKeyChain`; it must end at the vault's identity and the proven Secret Key's proof key, else nothing is
+  staged — the server rebuilds the same step and refuses any other) → mint (`MK'`, identity, the wraps under `SK'`, the
+  step and its two signatures) → the attestation (a login challenge for the instance salt, as change-password) → plan →
+  stage → publish loop (re-seal the two documents, re-sign the statement over the current stage and digest with both
+  proof keys) → **swap** → marks (`raiseMarks`, `carryMarks`), the best-effort re-seals (every plan scope), `finishRotation`.
+- **The stage** (`SelfGrantStage`): each plan row's grant opened with the vault's (old) identity through
+  `openPlanGrantKey` (`scopes.ts`: `verifyOwnGrant`, the epoch floor, a grant behind the current epoch refused); a refusal
+  (`isUnreadableGrant`) is declared, never dropped. It mirrors exactly the rows the server holds, so the digest is over
+  the union of every chunk. **The delta** after `409 rotation_plan_changed`: the rows whose staged epoch is not the
+  current one — a new scope, a moved epoch, or one declared unreadable before (re-judged); an empty delta means the stage
+  itself is gone (expired, or replaced by another tab's open) → a fresh stage with everything, as after a
+  `404 rotation_stage_not_found` on the delta.
+- **`commitRotation(scopeId, members, {removes?, revokeLinks?, open?})`** — the positional `rotator` went (the vault
+  holds the published identity before any epoch commits, so the rotator is always the vault's) and `open` is the
+  injected opener; `rotateGroupForRemoval` passes `removes`/`revokeLinks`. `planOpener(row, reread)` opens from the plan;
+  a rebuild after `409 stale_epoch` that finds the scope's epoch moved throws `EpochMovedOn`, which the finish counts as
+  the row met — so an owner's rebuild never commits a second epoch on top of someone else's.
+- **`finishRotation`:** one run per tab (a shared promise: the rotating tab and the worker never race each other into a
+  `stale_epoch`); per `waiting` row with a plan row and no `blocked`; members read then; `stale_epoch`/`EpochMovedOn`
+  finish the row, anything else leaves it `waiting`; `rekeyScope` best-effort after each commit (a scope of another
+  tenant opens through the active tenant's list, so its node re-key is its members', decision 11). The worker runs it
+  first, before `resumeRekeys`, and goes on whatever it answers; its `rotation_excluded` decline arm went with the code.
+- **`proveColdCredential`** answers `vaultStale` only when the floor opens to another Master Key AND that key opens the
+  served `wrappedIdentityPrivateKey`; `staleAsRejected` maps it back to `credentialRejected` for change-password,
+  change-email and `checkColdCredential`.
+- **`setUnlocked` zeroes the Master Key and identity it replaces** (`app/vault.ts`) — the swap zeroes the vault's copy of
+  the old identity, the rotation's own copies are zeroed in its `finally`. *Decision: in the vault, so every path that
+  replaces the vault gets it, not only the rotation.*
+- **The panel (phase 5's) changed only as far as the mechanism needs to be safe to call:** the new kit is minted on open
+  and saved through `EmergencyKitSave`, and the action stays disabled until it is ready (the invariant "the publish is
+  not sent before the new Emergency Kit was saved and confirmed" — a panel that published a key nobody saved would
+  strand the account); the state list is the server's (`listRotationStates`, the "re-keyed alone" list and the re-queue
+  went); `RotationOutcomeUnknown` → `errorUnknownOutcome`. i18n (EN + DE): `errorUnknownOutcome`, `status.waiting`,
+  `queuedHint.waiting` and `blocked.*` from § Copy; `status.blocked` ("Not now" / "Gerade nicht") is a placeholder for
+  phase 5; the keys that lost their reader went (`statusHint.secured|failed`, `status|queuedHint.stalled|failed`,
+  `requeue`, `requeueFailed`, `groupNameUnavailable`).
+- **Tests** (`rotateKeys.test.ts` rewritten on a stateful fake server — the plan, the stage with its upload check, the
+  publish with every check phase 2 built, the committed account, the states, `rotateScope` with the regrant-row gate,
+  completeness and the recipient key; the trust layer and the crypto real): the `describe('securing the account loses
+  no space (inbox #556)')` cases (ways 1–4, way 1's retry, a member who joined after the publish, someone else's commit,
+  an unreadable grant declared, the old identity's copies zeroed, the unknown outcomes and #553's controls restated with
+  the re-read, the declared refusals without one, the delta re-stage for an added and a moved scope, a lost stage, the
+  bound, 300 scopes in two chunks) and phase 5's crypto assertions (both wraps under `SK'` only, the proof key, both
+  proof signatures over the server-rebuilt statement, the step, the kept and the new password's auth key). Red first:
+  49 of 57 against the untouched `rotateKeys.ts` (its old request no longer builds a statement phase 1 accepts — the
+  reds the CR names under "Red today" predate phase 1). `scopeRotationWorker.test.ts` (the finish first, its failure
+  stops nothing), `KeyRotationPanel.test.ts`, `vault.test.ts`.
+- **Bites**, each snapshotted, broken, its named test red, restored and `cmp`-identical: a self-grant signed by the old
+  identity → "every self-grant is signed by the NEW identity" (and 39 more); an unreadable grant in neither list → "an
+  unreadable grant is declared"; `vaultStale` without its identity check → "refuses a floor that opens a DIFFERENT Master
+  Key which does not open the served identity"; the `members.length !== 1` refusal restored in the finish → "the finish
+  grants a member who joined after the publish" (and 6 more); the recovery under the old Secret Key → "the RECOVERY
+  wrap opens under kekRecovery of the NEW Secret Key"; the whole set re-staged → "a scope added between stage and
+  publish is re-staged ALONE" (and 2 more); the vault swapped after the finish → "way 1, lost answer" (and 5 more); the
+  panel enabled on a kit not saved → "the publish stays disabled until the new Emergency Kit is saved and confirmed".
+- **`scopeRotation.e2e.test.ts`:** its last leg is the CR's — B secures the account and the tab is gone the moment the
+  publish answered (every later request fails), a fresh sign-in with the new kit (the old one refused) finishes G's next
+  epoch from the worker's first pass, and E reads what B posts afterwards. Typechecks; not run (owner rule: live suites
+  once at V1's end).
+- **Item B — phase 3's moderation finding, closed:** `ModerationPendingDelivery.keyChainHead` (contract, required;
+  `ModerationHandler.pendingDeliveries` reads it through `KeyChainStore.heads`); `KeyChainStore.mayRead` admits a reader
+  when both accounts are accepted moderators (`ModeratorEntity.isModerator`), the same `404` otherwise;
+  `unlockModeration` anchors the recipient with `anchorIdentity(accountId, {identityPublicKey, keyChainHead})` — a
+  retired key served beside the newest head ends at another key and is declined, as before. Tests:
+  `ModerationKeyChainSliceTest` (the head on the delivery; two moderators read each other's chain though they share no
+  tenant, a pending appointee still not; a stranger reading a moderator and a moderator reading a non-moderator get the
+  unknown user's `404`), `unlockModeration.anchor.test.ts` (the real trust layer: a moderator never met is delivered to
+  through the served chain; a chain not served, and a retired key beside the newest head, are declined). Bites: no
+  moderator clause → the two-moderators case (and the delivery's head read) red; the clause asking only the caller → the
+  two-moderators case and the non-moderator control red; the holder's head served for the recipient's → the delivery
+  case red; the unlock anchoring without the served head → "delivers to a moderator this holder never met" red.
+  *Noticed, not changed:* `getModerationStatementRecipients`' keys are sealed to unanchored (`cases.ts`), though its
+  contract says "pin-check it before sealing" — the recipients are members the moderator may share no tenant with; a
+  question for `cr-trust-records-in-the-tenant` or its own row.
+- **Phase 5 inherits:** the API above; the states `waiting | rekeying | secured | blocked` (+ `reason`) and the errors
+  `RotationRefused` (five reasons), `RotationOutcomeUnknown`, anything else = nothing written; `outcome: 'resumed'` (the
+  kit printed for that attempt was never published — the one that opened is the account's); the entry screen from
+  `readRotationPlan()` in place of `soleOwnerSpaces.ts` (marked for removal) — its "unreadable on this device" list needs
+  `openPlanGrantKey` per row ahead of the publish, which the mechanism does not export as a dry run yet; "Also choose a new
+  password" → `next.password`; the steps and the kit copy around the minimal kit gate; the result's links; the copy
+  (`status.blocked` placeholder, every "cannot be replaced" text); a retry with the OLD kit after a committed publish reads
+  `credentialRejected` ("Nothing was changed") — true of that attempt, but the copy should point at the new kit.
+
 ### Phase 5: web, the ceremony
 
 Decisions 7 (client half), 11, 13, and § Copy.
 
-- The panel's steps; `SK'` and the wraps under it; the proof key, possession signature and attestation; the result's
-  link list; the entry screen from the plan, replacing `soleOwnerSpaces.ts`; the copy EN and DE.
-- `rotateKeys.test.ts`: `passwordWrap` opens with the password and the **new** Secret Key, not the old;
-  `recoveryWrap` under `kekRecovery(SK')`; `secretKeyProofPublicKey` is `deriveSecretKeyProofKeypair(SK')`'s; both
-  signatures verify over the server-rebuilt statement; keeping the password keeps `authPublicKey`. Bite: wrap the
-  recovery under the old Secret Key → the `kekRecovery(SK')` assertion red.
+- The panel's steps; the result's link list; the entry screen from the plan, replacing `soleOwnerSpaces.ts`; the copy EN
+  and DE. (`SK'` and the wraps under it, the proof key, possession signature and attestation are built — phase 4.)
+- `rotateKeys.test.ts`: built in phase 4 (the crypto assertions and their bite).
 - `KeyRotationPanel.test.ts`, beside #553's arms (`:232`): publish disabled until `EmergencyKitSave` is ready; password
   pre-selected; blocked list renders the plan's reasons; a `reissueRequired` link renders **Renew**, one without the flag
   does not; each error arm maps to its copy, `errorUnknownOutcome` included. Bite: enable on download alone → red.

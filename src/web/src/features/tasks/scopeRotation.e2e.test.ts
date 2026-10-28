@@ -12,7 +12,9 @@
 // Asserts the rotation genuinely happened on the live backend: epoch 0 → 1, a real chain-link at epoch 1, B
 // re-granted at epoch 1, C gone, and the job cleared. The pure ex-member lockout crypto (E_0 can't derive E_1)
 // is unit-tested in scopes.test.ts / epochs.test.ts; this proves the whole mechanism is wired live. Its last leg
-// (inbox #233) has B rotate their account keys and a co-owner E, whose grant B signed, complete the covering rotation.
+// (cr-secure-the-account, inbox #556) has B secure their account and abandon the ceremony right after the publish: a fresh
+// sign-in with the NEW Emergency Kit finishes it — B's own device commits G's next epoch — and E, a co-member whose
+// grant B's old key signed, reads what B posts afterwards with no review: B's new key is reached by B's key chain.
 //
 // The tenant domain is `veyq.localhost` — a valid dotted domain AND an RFC 6761 loopback name, so it serves as
 // both the tenant domain and the fetch Host with no manual Host juggling. Run against a FRESH instance:
@@ -21,9 +23,12 @@
 // Or let `python3 scripts/run_web_e2e.py` do all of that, which is what CI runs.
 import { beforeAll, describe, it, expect } from 'vitest'
 import { tasksApi } from '../../api/client'
-import { addGroupMember, listScopeMembers, removeTenantMember, resolveGroupMember, setMemberRole, SetMemberRoleRequestRoleEnum } from '../spaces/members'
-import { rotateKeys } from '../account/rotation/rotateKeys'
+import { addGroupMember, listScopeMembers, removeTenantMember, resolveGroupMember } from '../spaces/members'
+import { mintSecretKey, rotateKeys } from '../account/rotation/rotateKeys'
+import { listRotationStates } from '../account/rotation/finishRotation'
 import { login } from '../account/login/login'
+import { unlockMasterKey } from '../account/unlock/unlock'
+import { clearVault } from '../../app/vault'
 import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
 import { listTree } from '../../core/node/tree'
 import { createMemory } from '../memories/memoryNodes'
@@ -53,6 +58,23 @@ beforeAll(() => {
 async function addToGroup(scopeId: string, who: Actor): Promise<void> {
   const candidate = await resolveGroupMember(scopeId, who.username)
   await addGroupMember(scopeId, who.username, candidate.userId, candidate)
+}
+
+/** Every request after the publish's answer fails as a closed tab's would, until the returned restore: the ceremony is
+ *  abandoned right after the publish committed, before anything that follows it (the vault's re-seals, the finish). */
+function abandonAfterThePublish(): () => void {
+  const real = globalThis.fetch
+  let gone = false
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (gone) throw new TypeError('Failed to fetch')
+    const response = await real(input, init)
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if ((init?.method ?? 'GET').toUpperCase() === 'POST' && new URL(url).pathname === '/api/account/rotation') gone = true
+    return response
+  }) as typeof fetch
+  return () => {
+    globalThis.fetch = real
+  }
 }
 
 async function claimRotation() {
@@ -147,33 +169,45 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     expect(current!.epochs.current).toBe(2)
     await createMemory(gG, current!.epochs, 'Sealed under E_2')
 
-    // --- inbox #233: a grant outlives its granter's account rotation (ADR 0028 § What is still open) ---
-    // B adds E to G (the add carries E's grant) and makes E a co-owner, then rotates their account keys (ADR 0060). E's grant is
-    // signed by B's OLD identity, so E — the owner who must complete the covering rotation — can open G only while
-    // the server serves the key that signed it. Served B's new key, E's worker failed the job on every attempt
-    // (`cannot open scope to rotate`) and G stayed at the epoch B's old identity holds.
+    // --- cr-secure-the-account (inbox #556): securing the account loses no space, even abandoned after the publish ---
+    // B adds E to G (the add carries E's grant, signed by B's current key, which E pins through B's chain).
     await become(A)
     const E = await onboardMember(tenant.tenantId, mkActor('e'), salt)
     await become(B)
     await addToGroup(gG, E)
-    await setMemberRole(gG, E.userId!, SetMemberRoleRequestRoleEnum.Owner)
     await become(E)
     expect(await openScopeById(gG), 'E opens the grant B signed, pinning B\'s key').toBeTruthy()
 
+    // B secures the account; the tab is gone the moment the publish answered.
     await become(B)
-    await rotateKeys(B.password, B.built.emergencyKit.secretKey)
-
-    // The tenant's own rotation is A's to complete (E owns no tenant), so A drains it first and E's pass meets G alone.
-    await become(A)
-    await runScopeRotationWorker()
-
-    await become(E)
-    expect(await runScopeRotationWorker(), 'E completes the rotation B\'s account rotation queued for G').toBe(1)
-    const covered = (await listMyScopes()).find((s) => s.id === gG)
-    expect(covered?.currentEpoch, 'G advanced past the epoch B\'s old identity holds').toBe(3)
-    expect(covered?.grantedEpoch, 'E re-granted at the new epoch').toBe(3)
-    // B's new key reads `changed` to E, so the covering rotation skips B: re-admission waits for E's accept.
+    const newKit = mintSecretKey()
+    const restore = abandonAfterThePublish()
+    try {
+      await rotateKeys(B.password, B.built.emergencyKit.secretKey, { secretKeyB64: newKit })
+    } finally {
+      restore()
+    }
+    // A fresh sign-in: the old kit opens nothing any more, the new one opens the account and G reads `waiting`.
+    clearVault()
     await login(B.email, B.password)
-    expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'B is not re-granted by the covering rotation').toBe(2)
+    await expect(unlockMasterKey(B.password, B.built.emergencyKit.secretKey, { noteDevice: false }), 'the old kit is refused').rejects.toBeTruthy()
+    await unlockMasterKey(B.password, newKit, { noteDevice: false })
+    expect((await listRotationStates()).find((s) => s.scopeId === gG)?.state, 'G waits for its next epoch').toBe('waiting')
+    expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'the publish re-granted G\'s current epoch to the new identity').toBe(2)
+
+    // The worker's first pass finishes it: B's own device commits G's next epoch, granting E.
+    await runScopeRotationWorker()
+    const finished = (await listMyScopes()).find((s) => s.id === gG)
+    expect(finished?.currentEpoch, 'B committed G\'s next epoch itself').toBe(3)
+    expect(finished?.grantedEpoch, 'B holds it').toBe(3)
+    expect((await listRotationStates()).find((s) => s.scopeId === gG)?.state, 'G is no longer waiting').not.toBe('waiting')
+    const openedAfter = await openScopeById(gG)
+    await createMemory(gG, openedAfter!.epochs, 'Posted after securing')
+
+    // E reads it: B's new key signed E's grant, and E accepts it because B's chain reaches it from the head E pinned.
+    await become(E)
+    const openedE = await openScopeById(gG)
+    expect(openedE?.epochs.current, 'E holds the epoch B committed').toBe(3)
+    expect((await listTree(gG, openedE!.epochs)).some((n) => n.name === 'Posted after securing'), 'E reads what B posted').toBe(true)
   }, 360_000)
 })

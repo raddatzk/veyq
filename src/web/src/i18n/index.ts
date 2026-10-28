@@ -297,33 +297,31 @@ const en = {
     errorFailed: 'Your keys could not be replaced. Nothing was changed — please try again.',
     errorTooLarge:
       'Your keys could not be replaced, because the request is larger than this server accepts. Nothing was changed, and trying again won’t help. Ask the Server Owner to raise the server’s request limit.',
+    errorUnknownOutcome:
+      'We couldn’t confirm whether your account was secured. Unlock again with your new Emergency Kit. If it is refused, nothing was changed and your old kit still works.',
     doneNotRepair: 'Your keys are replaced. Below, each space shows whether its new lock is in.',
     status: {
       secured: 'New lock',
       rekeying: 'Fitting the new lock',
-      waiting: 'Waiting for another owner',
-      stalled: 'Nobody can do it',
-      failed: 'Old lock',
+      waiting: 'Not yet',
+      blocked: 'Not now',
     },
     statusHint: {
+      rekeying: 'The new lock is going in. Adding something here takes a moment longer until it’s done.',
+    },
+    queuedTitle: 'Your spaces',
+    queuedHint: {
+      waiting: 'The new lock goes in the next time one of your devices opens veyq. What is here stays yours.',
       secured: 'What is added here from now on is closed to the old key. Links made before stay open to it until you renew them.',
       rekeying: 'The new lock is going in. Adding something here takes a moment longer until it’s done.',
-      failed: 'This space still has its old lock. Try again.',
     },
-    queuedTitle: 'Shared spaces',
-    queuedHint: {
-      waiting: 'Another owner fits the new lock the next time they open veyq. Until then, the old key reads what is added here.',
-      stalled: 'No other owner is left who can fit the new lock. Make someone an owner here. Until then, the old key reads what is added here.',
-      secured: 'New lock in. Someone here still has to confirm it’s you.',
-      rekeying: 'The new lock is going in. Someone here still has to confirm it’s you.',
-      failed: 'Fitting the new lock kept failing, so the old key still reads what is added here. Start it again.',
+    blocked: {
+      tenant_suspended: 'It is paused. It gets its new lock once it is back.',
+      scope_deleting: 'It is being deleted.',
     },
-    groupNameUnavailable: 'Group (name unavailable until you’re re-admitted)',
     groupNameLastSeen: 'Name as this device last saw it — it may have changed.',
     personalSpace: 'Your personal space',
     scopeNameUnavailable: 'A space this device hasn’t opened (its name isn’t available here)',
-    requeue: 'Start again',
-    requeueFailed: 'That didn’t work. Please try again.',
     errorTrustState: 'This device can’t open your list of trusted keys or your device names. Nothing was changed. Start that list over first, under “Start a list over”.',
   },
   trustReset: {
@@ -2272,33 +2270,31 @@ const de: typeof en = {
     errorFailed: 'Deine Schlüssel konnten nicht ersetzt werden. Es wurde nichts geändert — bitte versuche es erneut.',
     errorTooLarge:
       'Deine Schlüssel konnten nicht ersetzt werden, weil die Anfrage größer ist, als dieser Server annimmt. Es wurde nichts geändert, und ein neuer Versuch hilft nicht. Bitte die Person, die den Server betreibt, die Grenze für Anfragen anzuheben.',
+    errorUnknownOutcome:
+      'Wir konnten nicht prüfen, ob dein Konto abgesichert wurde. Entsperre veyq noch einmal mit deinem neuen Notfall-Kit. Wird es abgelehnt, wurde nichts geändert, und dein altes Kit funktioniert weiter.',
     doneNotRepair: 'Deine Schlüssel sind ersetzt. Unten steht bei jedem Bereich, ob sein neues Schloss drin ist.',
     status: {
       secured: 'Neues Schloss',
       rekeying: 'Schloss wird eingebaut',
-      waiting: 'Wartet auf eine andere besitzende Person',
-      stalled: 'Niemand kann es tun',
-      failed: 'Altes Schloss',
+      waiting: 'Noch nicht',
+      blocked: 'Gerade nicht',
     },
     statusHint: {
+      rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen dauert hier etwas länger, bis das fertig ist.',
+    },
+    queuedTitle: 'Deine Bereiche',
+    queuedHint: {
+      waiting: 'Das neue Schloss wird eingebaut, sobald eines deiner Geräte veyq das nächste Mal öffnet. Was hier ist, bleibt deins.',
       secured: 'Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für ihn offen, bis du sie erneuerst.',
       rekeying: 'Das neue Schloss wird eingebaut. Hinzufügen dauert hier etwas länger, bis das fertig ist.',
-      failed: 'Dieser Bereich hat noch sein altes Schloss. Versuch es noch einmal.',
     },
-    queuedTitle: 'Geteilte Bereiche',
-    queuedHint: {
-      waiting: 'Eine andere besitzende Person baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin liest der alte Schlüssel, was hier dazukommt.',
-      stalled: 'Keine andere besitzende Person kann das neue Schloss einbauen. Mach hier jemanden zur besitzenden Person. Bis dahin liest der alte Schlüssel, was hier dazukommt.',
-      secured: 'Neues Schloss drin. Jemand hier muss noch bestätigen, dass du es bist.',
-      rekeying: 'Das neue Schloss wird eingebaut. Jemand hier muss noch bestätigen, dass du es bist.',
-      failed: 'Das Einbauen ist wiederholt gescheitert, deshalb liest der alte Schlüssel noch, was hier dazukommt. Stoß es neu an.',
+    blocked: {
+      tenant_suspended: 'Er ist pausiert. Er bekommt sein neues Schloss, sobald er zurück ist.',
+      scope_deleting: 'Er wird gerade gelöscht.',
     },
-    groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
     personalSpace: 'Dein persönlicher Bereich',
     scopeNameUnavailable: 'Ein Bereich, den dieses Gerät nicht geöffnet hat (sein Name ist hier nicht verfügbar)',
-    requeue: 'Neu anstoßen',
-    requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     errorTrustState: 'Dieses Gerät kann deine Liste vertrauter Schlüssel oder deine Gerätenamen nicht öffnen. Es wurde nichts geändert. Beginne die Liste zuerst neu, unter „Liste neu beginnen“.',
   },
   trustReset: {

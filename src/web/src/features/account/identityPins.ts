@@ -442,8 +442,9 @@ type AnchoredReading = Exclude<ChainReading, { anchor: 'anomaly' }>
 
 const ANOMALY: ChainReading = { anchor: 'anomaly' }
 
-/** One served step, decoded; throws on a field that is no base64 (the caller reads that as an anomaly). */
-function linkOf(step: KeyChain['steps'][number]): v1.KeyChainLink {
+/** One served step, decoded; throws on a field that is no base64 (the caller reads that as an anomaly). Exported for
+ *  the account's own rotation, which walks its own chain to name the step it appends (`rotation/rotateKeys.ts`). */
+export function linkOf(step: KeyChain['steps'][number]): v1.KeyChainLink {
   const opt = (b: string | null | undefined) => (b == null ? null : fromB64std(b))
   return {
     index: step.index,

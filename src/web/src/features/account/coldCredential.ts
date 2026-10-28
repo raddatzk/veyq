@@ -21,6 +21,11 @@ export type ColdCredentialRefusal =
   | 'noFloorWrap'
   /** The vault is locked, so there is no current Master Key to prove the offered credential against. */
   | 'vaultLocked'
+  /** The credential is right, but for a Master Key this vault does not hold: the floor opened to another key, and that
+   *  key opens the identity the server now serves — the account was secured since this vault opened (another device,
+   *  or this one whose answer was lost). Securing the account FINISHES from here and never mints again
+   *  (cr-secure-the-account decision 12); change-password and change-email read it as `credentialRejected`. */
+  | 'vaultStale'
 
 /** Thrown before any write. A caller that catches this has changed nothing, anywhere. */
 export class ColdCredentialRefused extends Error {
@@ -52,23 +57,41 @@ export class ColdCredentialRefused extends Error {
 export async function proveColdCredential(password: string, secretKeyB64: string): Promise<Uint8Array> {
   const held = masterKey()
   if (!held) throw new ColdCredentialRefused('vaultLocked')
-  let opened: Uint8Array
+  let floor: OpenedFloor
   try {
-    opened = await openFloor(password, secretKeyB64)
+    floor = await openFloor(password, secretKeyB64)
   } catch (e) {
     held.fill(0)
     throw e
   }
+  const opened = floor.masterKey
   // A wrong Secret Key with a right password (or the reverse) fails the AEAD in `openFloor`; this compares what the
   // wrap yielded against what this session is holding, so a *stale* proof — a floor rewritten under us — is
   // refused too rather than silently minting a credential from a Master Key that is no longer the account's.
   const matches = opened.length === held.length && opened.every((b, i) => b === held[i])
-  opened.fill(0)
   if (!matches) {
+    // Which refusal it is, is decided by the served identity alone: a floor whose Master Key also opens the identity the
+    // server serves is the account's current one (the account was secured meanwhile) — `vaultStale`; any other is
+    // `credentialRejected`, as before. Opening is all that is asked of it; nothing of it is kept.
+    const stale = opensIdentity(opened, floor.wrappedIdentityPrivateKey)
+    opened.fill(0)
     held.fill(0)
-    throw new ColdCredentialRefused('credentialRejected')
+    throw new ColdCredentialRefused(stale ? 'vaultStale' : 'credentialRejected')
   }
+  opened.fill(0)
   return held
+}
+
+/** Whether `mk` opens `wrappedIdentityPrivateKey` (base64, as the key material serves it) to an identity that decodes. */
+function opensIdentity(mk: Uint8Array, wrappedIdentityPrivateKey: string): boolean {
+  try {
+    const priv = v1.deserializeIdentityPrivate(v1.open({ purpose: 'identity-priv' }, mk, fromB64std(wrappedIdentityPrivateKey)))
+    priv.kemSeed.fill(0)
+    priv.sign.fill(0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -80,14 +103,27 @@ export async function proveColdCredential(password: string, secretKeyB64: string
  */
 export async function checkColdCredential(password: string, secretKeyB64: string): Promise<void> {
   if (masterKey()) {
-    ;(await proveColdCredential(password, secretKeyB64)).fill(0)
+    ;(await proveColdCredential(password, secretKeyB64).catch(staleAsRejected)).fill(0)
     return
   }
-  ;(await openFloor(password, secretKeyB64)).fill(0)
+  ;(await openFloor(password, secretKeyB64)).masterKey.fill(0)
 }
 
+/**
+ * The refusal as the credential flows that do not finish a rotation read it (change-password, change-email): a vault
+ * that is stale behind a secured account is the same "that password or Secret Key didn't match" to them as before the
+ * split — they never act on the newer key (cr-secure-the-account decision 12). Rethrows anything else unchanged.
+ */
+export function staleAsRejected(e: unknown): never {
+  if (e instanceof ColdCredentialRefused && e.reason === 'vaultStale') throw new ColdCredentialRefused('credentialRejected')
+  throw e
+}
+
+/** The stored floor, opened: the Master Key it holds and the wrapped identity served beside it in the same read. */
+type OpenedFloor = { masterKey: Uint8Array; wrappedIdentityPrivateKey: string }
+
 /** Open the stored `PASSWORD` floor with the offered password and Secret Key: the Master Key it holds, or a refusal. */
-async function openFloor(password: string, secretKeyB64: string): Promise<Uint8Array> {
+async function openFloor(password: string, secretKeyB64: string): Promise<OpenedFloor> {
   const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
   const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
   if (!floor?.kdfParams) throw new ColdCredentialRefused('noFloorWrap')
@@ -100,7 +136,8 @@ async function openFloor(password: string, secretKeyB64: string): Promise<Uint8A
     const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
     const kek = await unlockKekAsync(secretKey, password, salt, params)
     try {
-      return v1.open({ purpose: 'master-key' }, kek, fromB64std(floor.wrappedKey))
+      const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(floor.wrappedKey))
+      return { masterKey, wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey }
     } catch {
       throw new ColdCredentialRefused('credentialRejected')
     }

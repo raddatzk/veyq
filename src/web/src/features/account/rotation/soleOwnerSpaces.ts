@@ -1,3 +1,7 @@
+// **Phase 5 of cr-secure-the-account replaces this** with the entry screen from the rotation plan: under ADR 0111 no
+// space waits for an owner any more (the account mints every next epoch itself, `finishRotation`), so the warning below
+// describes the mechanism phase 4 removed. It feeds only the panel, and goes with it.
+//
 // The shared spaces where this account is the only owner (uc.account.rotate-keys E4, inbox #519): a rotation queues
 // their new lock for another owner (ADR 0060 Decision 4 — the rotating account is excluded from its own job), and there
 // is none, so they keep the old lock. The panel lists them before the button. Derived from what the client already

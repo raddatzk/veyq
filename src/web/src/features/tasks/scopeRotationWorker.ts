@@ -1,7 +1,8 @@
 // The web worker loop for the **second** consumer of the operator-blind task queue (ADR 0021) — scope-rotation
 // (cr-0092, ADR 0025; uc.spaces.complete-queued-rotation). When a tenant owner removes a member co-sharing a GROUP
-// the owner doesn't hold, or a member rotates their account keys after a compromise, the backend queues a
-// SCOPE_ROTATION job (it can't rotate — it holds no key there). The next online **owner** of the scope completes it
+// the owner doesn't hold, the backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there).
+// A secured account queues none: it finishes its own scopes first in every pass (`finishRotation`,
+// cr-secure-the-account decision 4). The next online **owner** of the scope completes it
 // on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing `commitRotation`, cr-0089), then
 // complete. The backend offers the job to owners only (the only members who may commit a rotation), so this worker
 // is never handed one it could not finish — except by a race it declines (below). Claimed **globally across every
@@ -18,6 +19,7 @@ import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { listScopeMembers } from '../spaces/members'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { SCOPE_ROTATION } from './capabilityTags'
+import { finishRotation } from '../account/rotation/finishRotation'
 import type { ClaimedJob } from '../../api/generated/tasks'
 
 /**
@@ -27,6 +29,11 @@ import type { ClaimedJob } from '../../api/generated/tasks'
  * failed back for the right worker rather than left leased; one whose rotation stays `stale_epoch` is declined.
  */
 export async function runScopeRotationWorker(): Promise<number> {
+  // cr-secure-the-account decision 4: an account that was secured mints the next epoch of every scope its rotation left
+  // waiting — from any of its devices that unlocks, one opened from the new Emergency Kit included — before anything
+  // else, so a closed tab, a lost answer or a scope in another tenant is finished on the next pass. Its failure is the
+  // next pass's: it never stops the queued jobs below.
+  await finishRotation().catch(() => undefined)
   // ADR 0109 point 7: a rotation is done only once every node of the scope is re-keyed. Any member holding the current
   // epoch finishes a re-key another device left unfinished (a closed tab, a crash) — the server derives `rekeying`
   // from the node rows, so there is nothing to claim: resume it first, then take the queued jobs.
@@ -73,8 +80,7 @@ export async function runScopeRotationWorker(): Promise<number> {
       // A refusal about THIS worker, never about the job: decline — released to the scope's other owners, no
       // attempt spent — rather than fail, which would burn the job's attempts on a worker that can never do it.
       //  - still stale after the rotation's own retry: this worker's grant lags the scope (ADR 0024 §4);
-      //  - not_scope_owner: demoted between claim and commit (the claim offers rotations to owners only);
-      //  - rotation_excluded: this account rotated its keys while holding the lease (ADR 0060 Decision 4).
+      //  - not_scope_owner: demoted between claim and commit (the claim offers rotations to owners only).
       // Not a refused OWN grant (`cannot open scope to rotate`): that fails, on purpose. A decline is permanent for
       // this job, so an owner whose grant opens again later could never take it; a job that fails out dead-letters,
       // reads `failed`, and is re-queued as a fresh job with no declines (uc.spaces.complete-queued-rotation E8).
@@ -137,7 +143,6 @@ async function completeOrUncommitted(jobId: string): Promise<boolean> {
 async function workerRefusal(e: unknown): Promise<string | null> {
   if (await isStaleEpoch(e)) return 'stale_epoch'
   if (await isCodedError(e, HttpStatus.forbidden, 'not_scope_owner')) return 'not_scope_owner'
-  if (await isCodedError(e, HttpStatus.forbidden, 'rotation_excluded')) return 'rotation_excluded'
   return null
 }
 

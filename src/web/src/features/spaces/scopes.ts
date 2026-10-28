@@ -19,6 +19,7 @@ import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { rememberGroupName } from './groupNamesSeen'
 import { ScopeKind, type CompromiseRotation, type ScopeSummary, type ScopeSummaryRoleEnum, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 import type { OpenInvite, InviteGrantEntry } from '../../api/generated/scopes'
+import type { RotationPlanScope } from '../../api/generated/account'
 
 /** The seal context of a scope grant (ADR 0072), re-exported — its home is {@link ./grant}, shared with the
  *  grant-delivery worker (cr-0076) + rotation re-grants (cr-0089). */
@@ -79,7 +80,7 @@ export async function requeueScopeRotation(scopeId: string): Promise<CompromiseR
 }
 
 /** Peel the scope's epoch chain from the caller's grant key down to E_0 (ADR 0024). No fetch when unrotated. */
-async function epochKeysFor(scope: ScopeSummary, grantKey: Uint8Array): Promise<EpochKeys> {
+async function epochKeysFor(scope: OwnGrantRow, grantKey: Uint8Array): Promise<EpochKeys> {
   const links = scope.grantedEpoch > 0 ? await listScopeEpochs(scope.id) : []
   return deriveEpochKeys(scope.id, grantKey, scope.grantedEpoch, links)
 }
@@ -247,7 +248,7 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * the epoch is authentic because the grant is bound to it and signed, so the device now knows it exists.
  */
 async function openOwnGrant(
-  scope: ScopeSummary, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
+  scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self)
   const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
@@ -292,7 +293,7 @@ async function orUnopened<T>(open: () => Promise<T | null>): Promise<T | null> {
  *  state an epoch this device knows already exists. Reads are refused with it (owner decision, 2026-09-28): one
  *  closed state for both halves, never a read-only open. */
 async function toOpenedScope(
-  scope: ScopeSummary, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
+  scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
   staleGrant: 'refuse' | 'open' = 'refuse',
 ): Promise<OpenedScope> {
   if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
@@ -302,14 +303,87 @@ async function toOpenedScope(
   let name: string | undefined
   if (scope.kind === ScopeKind.Group && scope.encryptedName) {
     try {
-      name = openGroupName(scope.id, epochs, scope.nameEpoch, scope.encryptedName)
+      name = openGroupName(scope.id, epochs, scope.nameEpoch ?? 0, scope.encryptedName)
     } catch {
       name = undefined // a name that won't open (E2) is non-fatal — the scope still opens, just unlabelled
     }
   }
   return {
-    scopeId: scope.id, tenantId: scope.tenantId, kind: scope.kind, key: writeKey(epochs), epochs, nameEpoch: scope.nameEpoch, name,
+    scopeId: scope.id, tenantId: scope.tenantId, kind: scope.kind, key: writeKey(epochs), epochs, nameEpoch: scope.nameEpoch ?? 0, name,
     deletedAt: scope.deletedAt ?? null, purgeAfter: scope.purgeAfter ?? null, role: scope.role,
+  }
+}
+
+/** What opening the caller's own grant reads of a scope row: a {@link ScopeSummary} of the active tenant's list, or a
+ *  row of the account rotation's plan (cr-secure-the-account decision 5), which serves the same grant fields for every
+ *  tenant but no name, no deletion dates and no role. */
+type OwnGrantRow = Pick<
+  ScopeSummary,
+  'id' | 'kind' | 'tenantId' | 'currentEpoch' | 'grantedEpoch' | 'wrappedGrant' | 'granterUserId' | 'grantSignature' | 'granterIdentityPublicKey'
+> & Partial<Pick<ScopeSummary, 'encryptedName' | 'nameEpoch' | 'deletedAt' | 'purgeAfter' | 'role'>>
+
+const rowOfPlan = (row: RotationPlanScope): OwnGrantRow => ({
+  id: row.scopeId, kind: row.kind, tenantId: row.tenantId, currentEpoch: row.currentEpoch, grantedEpoch: row.grantedEpoch,
+  wrappedGrant: row.wrappedGrant, granterUserId: row.granterUserId, grantSignature: row.grantSignature,
+  granterIdentityPublicKey: row.granterIdentityPublicKey,
+})
+
+/**
+ * The current epoch key of a scope the account rotation's plan lists (cr-secure-the-account decision 3), opened with the
+ * vault's identity exactly as {@link openScopeById} opens a row of the active tenant — the grant verified
+ * ({@link verifyOwnGrant}), never below this device's epoch floor, and refused when it lags the scope's current epoch —
+ * but from the plan, which serves every tenant's rows (Host-independent). The caller owns and zeroes the key.
+ * Throws a refusal {@link isUnreadableGrant} recognises when this device cannot open the grant: the rotation then
+ * declares the scope unreadable rather than leaving it out.
+ */
+export async function openPlanGrantKey(row: RotationPlanScope): Promise<Uint8Array> {
+  const priv = identityPrivate()
+  if (!priv) throw new Error('vault is locked — cannot open a grant')
+  try {
+    const scope = rowOfPlan(row)
+    if (scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
+    if (scope.grantedEpoch < (await epochFloor(scope.id))) throw new AwaitingCurrentKey(scope.id)
+    return await openOwnGrant(scope, priv, await me(priv))
+  } finally {
+    zero(priv)
+  }
+}
+
+/** Whether `e` is this device's refusal of the caller's own grant — a signature, a granter's key or the epoch floor
+ *  (ADR 0028 Decision 6, ADR 0024 Decision 6) — rather than a failure that says nothing about the grant. */
+export function isUnreadableGrant(e: unknown): boolean {
+  return e instanceof GrantRefused || e instanceof AwaitingCurrentKey
+}
+
+/**
+ * A {@link RotationOpener} over a row of the account rotation's plan — what finishing a secured account commits each
+ * scope's next epoch from (cr-secure-the-account decision 4): the self-grant the publish wrote, opened with the vault's
+ * (published) identity whatever tenant the scope lives in. The first open uses `row`; a rebuild after `409 stale_epoch`
+ * re-reads the plan through `reread`, and when the scope's epoch moved past `row`'s it throws {@link EpochMovedOn}:
+ * someone else's commit met the scope, which is what the rebuild must not answer with yet another epoch.
+ */
+export function planOpener(row: RotationPlanScope, reread: () => Promise<RotationPlanScope | undefined>): RotationOpener {
+  let first = true
+  return async (scopeId) => {
+    const now = first ? row : await reread()
+    first = false
+    if (!now || now.scopeId !== scopeId) return null
+    if (now.currentEpoch !== row.currentEpoch) throw new EpochMovedOn(scopeId)
+    const priv = identityPrivate()
+    if (!priv) return null
+    try {
+      return await toOpenedScope(rowOfPlan(now), priv, await me(priv), 'open')
+    } finally {
+      zero(priv)
+    }
+  }
+}
+
+/** A scope's epoch moved on between reading it and committing its next one — another member's commit. */
+export class EpochMovedOn extends Error {
+  constructor(readonly scopeId: string) {
+    super(`epoch_moved_on: ${scopeId}`)
+    this.name = 'EpochMovedOn'
   }
 }
 
@@ -582,7 +656,7 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
 export async function rotateGroupForRemoval(
   scopeId: string, pickedFrom: ScopeMember[], removedUserId: string, revokeLinks = false,
 ): Promise<number> {
-  return commitRotation(scopeId, pickedFrom, undefined, removedUserId, revokeLinks)
+  return commitRotation(scopeId, pickedFrom, { removes: removedUserId, revokeLinks })
 }
 
 /** One re-grant a rotation carries: the new epoch key wrapped to a member's identity, signed by the rotator, naming the
@@ -590,9 +664,23 @@ export async function rotateGroupForRemoval(
 export type RotationGrant = { userId: string; recipientIdentityDigest: string } & SignedGrant
 
 /** Who performs a rotation: the account, the identity bundle its own re-grant is sealed to, and the key that signs
- *  every re-grant. The vault's identity by default; an account key rotation passes its NEW identity, which the
- *  vault does not hold yet ({@link commitRotation}'s `rotator`). */
-export type Rotator = { userId: string; identityPublicKeyB64: string; signPrivateKey: Uint8Array }
+ *  every re-grant — always the vault's identity (an account rotation swaps the vault before it commits any epoch,
+ *  cr-secure-the-account decision 12). */
+type Rotator = { userId: string; identityPublicKeyB64: string; signPrivateKey: Uint8Array }
+
+/** Opens the scope a rotation is built on — the caller's own grant, at whatever epoch it lags (`E_n`). */
+export type RotationOpener = (scopeId: string) => Promise<OpenedScope | null>
+
+/** How {@link commitRotation} runs beyond the plain rotation. */
+export type CommitRotationOptions = {
+  /** A removal-rotation: the member with this id is dropped from the grants and removed in the same commit. */
+  removes?: string
+  /** Turn off every public link of the scope in the same commit (ADR 0075). */
+  revokeLinks?: boolean
+  /** Where the caller's own grant is opened from: the active tenant's scope list by default; the account rotation's
+   *  finish passes {@link planOpener}, which reads every tenant's rows (cr-secure-the-account decision 4). */
+  open?: RotationOpener
+}
 
 /**
  * Carry a tenant's open member invites into a new epoch (ADR 0111 decision 2): an invite is a placeholder member, so it
@@ -658,19 +746,24 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
  * hand them. Returns the new epoch; a second stale answer (our grant still lags) is thrown, see {@link isStaleEpoch}.
  *
  * With `removes` it is a removal-rotation ({@link rotateGroupForRemoval}): no row with that id is carried, and the
- * request names them so the server deletes their membership in the same commit.
+ * request names them so the server deletes their membership in the same commit. With `open`, the caller's grant comes
+ * from there instead of the active tenant's list — the account rotation's finish, whose scopes may live in any tenant.
+ *
+ * Every member the caller is handed is judged — however many there are (cr-secure-the-account decision 4: the finish of
+ * a secured account grants whoever is a member then, one who joined after the publish included).
  */
 export async function commitRotation(
-  scopeId: string, members: ScopeMember[], rotator?: Rotator, removes?: string, revokeLinks = false,
+  scopeId: string, members: ScopeMember[], opts: CommitRotationOptions = {},
 ): Promise<number> {
+  const { removes, revokeLinks = false, open = (id: string) => openById(id, 'open') } = opts
   const carry = removes === undefined ? members : members.filter((m) => m.userId !== removes)
   for (let attempt = 0; ; attempt++) {
     // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
     // refuses the epoch this rotation states unless it is the next one, which is the stale answer handled below.
-    const opened = await openById(scopeId, 'open')
+    const opened = await open(scopeId)
     if (!opened) throw new Error('cannot open scope to rotate')
     const newKey = v1.randomBytes(32)
-    const who = rotator ?? (await vaultRotator())
+    const who = await vaultRotator()
     try {
       // The epoch this rotation creates binds the link and every grant (ADR 0072) — the one the server checks.
       const epoch = opened.epochs.current + 1
@@ -713,7 +806,7 @@ export async function commitRotation(
     } finally {
       newKey.fill(0)
       zeroEpochKeys(opened.epochs)
-      if (!rotator) who.signPrivateKey.fill(0)
+      who.signPrivateKey.fill(0)
     }
   }
 }

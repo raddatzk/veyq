@@ -21,6 +21,12 @@
 // built panels are the design source. (It used to name DeviceTrustPanel, which stopped being a panel at all
 // when the device rubric was folded into the sessions row — a design-source pointer goes stale silently, since
 // nothing compiles it.)
+//
+// **Phase 5 of cr-secure-the-account takes this panel over** (the ceremony: the entry screen from the plan in place of
+// `soleOwnerSpaces`, "Also choose a new password", the steps, the result's links to renew, the copy EN + DE). What
+// phase 4 changed here is only what the mechanism needs to stay safe to call: the new Emergency Kit is minted, saved and
+// confirmed (`EmergencyKitSave`) before the button can publish — the publish installs that Secret Key — and every state
+// and error the mechanism answers renders (`errorUnknownOutcome` included).
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -29,7 +35,8 @@ import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import { account } from '../../../app/account'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
-import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
+import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused, type RotationResult } from './rotateKeys'
+import { listRotationStates } from './finishRotation'
 import { listMyScopes, listMyTenants } from '../../spaces/scopes'
 import { soleOwnerSpaces, type SoleOwnerSpace } from './soleOwnerSpaces'
 import { groupNameSeen } from '../../spaces/groupNamesSeen'
@@ -39,6 +46,7 @@ import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
 import TrustResetLink from '../trustReset/TrustResetLink.vue'
+import EmergencyKitSave from '../emergencyKit/EmergencyKitSave.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const { t } = useI18n()
@@ -50,30 +58,30 @@ const error = ref('')
 /** E8 — the rotation refused because this device refuses a trust document; the error then points at the reset. */
 const trustRefused = ref(false)
 const result = ref<RotationResult | null>(null)
+/** The Secret Key the rotation installs, minted when the panel opens and printed into the new Emergency Kit; the
+ *  publish waits until that kit is downloaded AND confirmed (decision 7) — it is the only copy the person will have. */
+const newSecretKey = ref(mintSecretKey())
+const kitReady = ref(false)
 
 /**
- * Every rotation this account's rotation queued, as the SERVER reads it (uc.account.rotate-keys §9, ADR 0060
- * Decision 6) — on every visit, and again right after a rotation, so `waiting` is the server's word from the first
- * render on, and a rotation that dead-lettered reads `failed` instead of a `waiting` nothing would ever update.
+ * Every scope of this account's last rotation, as the SERVER reads it (decision 8) — on every visit, and again right
+ * after a rotation, so `waiting` is the server's word from the first render on.
  */
 const queued = ref<RotationScopeState[]>([])
-/** A tenant root's plaintext name by scope id (scopeId == tenantId). A group's name is sealed under a key this
- *  account cannot open until it is re-admitted, so its row shows the name this page last opened, marked as
- *  possibly out of date ({@link groupNameSeen}, memory only), or a neutral label — never the raw id (inbox #280). */
+/** A tenant root's plaintext name by scope id (scopeId == tenantId). A group's name shows as this page last opened it,
+ *  marked as possibly out of date ({@link groupNameSeen}, memory only), or a neutral label — never the raw id
+ *  (inbox #280). */
 const tenantNames = ref<Record<string, string>>({})
-/** The kind of each scope the active tenant lists for this account, by scope id — so the result list (the scopes
- *  this device re-keyed alone, whose ids the rotation answers without a kind) can name the personal space as such
- *  (inbox #281). A sole-member scope of another tenant is not listed here and reads neutral. */
+/** The kind of each scope the active tenant lists for this account, by scope id — so the personal space is named as
+ *  such (inbox #281). A scope of another tenant is not listed here and reads neutral. */
 const scopeKinds = ref<Record<string, ScopeKind>>({})
-const requeueing = ref<string | null>(null)
 /** The shared spaces this account owns alone, named before the button (uc.account.rotate-keys E4); empty hides the
- *  line, and so does a read that fails. */
+ *  line, and so does a read that fails. (Phase 5 replaces it with the entry screen from the plan.) */
 const soleOwned = ref<SoleOwnerSpace[]>([])
-const requeueError = ref('')
 
 async function loadQueued() {
   try {
-    queued.value = await listQueuedRotations()
+    queued.value = await listRotationStates()
   } catch {
     /* the section stays empty; the rotation itself is unaffected */
   }
@@ -86,32 +94,16 @@ onMounted(async () => {
 
 /** The device-local labels both lists use instead of a raw scope id; a failed read leaves the neutral label. */
 async function loadLabels() {
-  const alone = result.value?.scopes.length ?? 0
-  if (!queued.value.length && !alone) return
+  if (!queued.value.length) return
   try {
     tenantNames.value = Object.fromEntries((await listMyTenants()).map((tn) => [tn.tenantId, tn.name]))
   } catch {
     /* neutral labels */
   }
-  if (!alone) return
   try {
     scopeKinds.value = Object.fromEntries((await listMyScopes()).map((s) => [s.id, s.kind]))
   } catch {
     /* neutral labels */
-  }
-}
-
-/** `failed` only: queue it again, this account still excluded; the row shows the state the server answers. */
-async function requeue(scopeId: string) {
-  requeueError.value = ''
-  requeueing.value = scopeId
-  try {
-    const now = await requeueQueuedRotation(scopeId)
-    queued.value = queued.value.map((q) => (q.scopeId === scopeId ? now : q))
-  } catch {
-    requeueError.value = t('rotation.requeueFailed')
-  } finally {
-    requeueing.value = null
   }
 }
 
@@ -121,37 +113,47 @@ async function requeue(scopeId: string) {
  * (E1). A device-opened or restored session upgrades in place by supplying it.
  */
 const coldUnlock = computed(() => unlockOrigin() === 'cold')
-const canSubmit = computed(() => password.value.length > 0 && secretKey.value.trim().length > 0)
+const canSubmit = computed(() => password.value.length > 0 && secretKey.value.trim().length > 0 && kitReady.value)
 
 const { run, pending: busy } = useAsyncAction(
   async () => {
-    const outcome = await rotateKeys(password.value, secretKey.value.trim())
+    const outcome = await rotateKeys(password.value, secretKey.value.trim(), { secretKeyB64: newSecretKey.value })
     // The secrets leave this component the moment they are spent — the screen stays mounted afterwards to
     // render the per-scope status, and there is no reason for it to still be holding them.
     password.value = ''
     secretKey.value = ''
+    newSecretKey.value = ''
     confirmOpen.value = false
     result.value = outcome
-    await loadQueued()
+    queued.value = outcome.states
+    await loadLabels()
   },
   {
     onError: (e) => {
       trustRefused.value = e instanceof RotationRefused && e.reason === 'trustStateRefused'
-      error.value =
-        e instanceof RotationRefused
-          ? e.reason === 'noFloorWrap'
-            ? t('rotation.errorNoFloor')
-            : e.reason === 'vaultLocked'
-              ? t('rotation.errorLocked')
-              : e.reason === 'trustStateRefused'
-                ? t('rotation.errorTrustState')
-                : e.reason === 'requestTooLarge'
-                  ? t('rotation.errorTooLarge')
-                  : t('rotation.errorCredential')
-          : t('rotation.errorFailed')
+      error.value = errorText(e)
     },
   },
 )
+
+/** The copy for a failed rotation. An unknown outcome is never "nothing was changed" (decision 12): the vault is
+ *  locked, and the person unlocks again with the new kit. */
+function errorText(e: unknown): string {
+  if (e instanceof RotationOutcomeUnknown) return t('rotation.errorUnknownOutcome')
+  if (!(e instanceof RotationRefused)) return t('rotation.errorFailed')
+  switch (e.reason) {
+    case 'noFloorWrap':
+      return t('rotation.errorNoFloor')
+    case 'vaultLocked':
+      return t('rotation.errorLocked')
+    case 'trustStateRefused':
+      return t('rotation.errorTrustState')
+    case 'requestTooLarge':
+      return t('rotation.errorTooLarge')
+    default:
+      return t('rotation.errorCredential')
+  }
+}
 
 async function confirm() {
   error.value = ''
@@ -237,6 +239,9 @@ async function confirm() {
           </div>
         </div>
 
+        <!-- The new Emergency Kit: the publish installs its Secret Key, so it is saved and confirmed first (decision 7). -->
+        <EmergencyKitSave v-if="newSecretKey" v-model="kitReady" :email="account.email" :secret-key="newSecretKey" />
+
         <VeyqMessage v-if="error" tone="error">
           {{ error }}
           <TrustResetLink v-if="trustRefused" />
@@ -255,53 +260,29 @@ async function confirm() {
         </div>
       </template>
 
-      <!-- Step 9: an honest per-scope status for what this device re-keyed alone (step 6). -->
+      <!-- Step 9: the rotation is published; how each space stands is the server's word, below. -->
       <template v-else>
         <VeyqMessage tone="info">{{ t('rotation.doneNotRepair') }}</VeyqMessage>
-        <ul class="rotation-results">
-          <li v-for="s in result.scopes" :key="s.scopeId" class="veyq-list-row" :data-alone-scope="s.scopeId">
-            <span v-if="tenantNames[s.scopeId]">{{ tenantNames[s.scopeId] }}</span>
-            <span v-else-if="scopeKinds[s.scopeId] === ScopeKind.Personal">{{ t('rotation.personalSpace') }}</span>
-            <span v-else-if="groupNameSeen(s.scopeId)">
-              {{ groupNameSeen(s.scopeId) }}
-              <small class="rotation-name-stale">{{ t('rotation.groupNameLastSeen') }}</small>
-            </span>
-            <span v-else class="rotation-name-stale">{{ t('rotation.scopeNameUnavailable') }}</span>
-            <span class="veyq-badge" :class="`is-${s.status}`">{{ t(`rotation.status.${s.status}`) }}</span>
-            <small>{{ t(`rotation.statusHint.${s.status}`) }}</small>
-          </li>
-        </ul>
       </template>
 
-      <!-- The shared spaces a rotation of this account queued, as the server reads them now — on every visit, not
-           only after the rotation that queued them. Until a row reads secured, the old key still reads what is new
-           in that space; the copy says so (forward secrecy, not repair). The re-queue is offered on failed only,
-           the one state it can move; stalled carries the promote-a-co-owner hint instead (E4). -->
+      <!-- Every space of this account's last rotation, as the server reads it now — on every visit, not only right after
+           the rotation. A `waiting` space gets its new lock the next time one of this account's devices opens veyq. -->
       <section v-if="queued.length" class="rotation-queued">
         <h3>{{ t('rotation.queuedTitle') }}</h3>
         <ul class="rotation-results">
           <li v-for="q in queued" :key="q.scopeId" class="veyq-list-row" :data-queued-scope="q.scopeId">
             <span v-if="tenantNames[q.scopeId]">{{ tenantNames[q.scopeId] }}</span>
+            <span v-else-if="scopeKinds[q.scopeId] === ScopeKind.Personal">{{ t('rotation.personalSpace') }}</span>
             <span v-else-if="groupNameSeen(q.scopeId)">
               {{ groupNameSeen(q.scopeId) }}
               <small class="rotation-name-stale">{{ t('rotation.groupNameLastSeen') }}</small>
             </span>
-            <span v-else class="rotation-name-stale">{{ t('rotation.groupNameUnavailable') }}</span>
+            <span v-else class="rotation-name-stale">{{ t('rotation.scopeNameUnavailable') }}</span>
             <span class="veyq-badge" :class="`is-${q.state}`">{{ t(`rotation.status.${q.state}`) }}</span>
-            <small>{{ t(`rotation.queuedHint.${q.state}`) }}</small>
-            <VeyqButton
-              v-if="q.state === 'failed'"
-              type="button"
-              :label="t('rotation.requeue')"
-              icon="replay"
-              size="small"
-              appearance="outlined"
-              :loading="requeueing === q.scopeId"
-              @click="requeue(q.scopeId)"
-            />
+            <small v-if="q.state === 'blocked'">{{ q.reason ? t(`rotation.blocked.${q.reason}`) : '' }}</small>
+            <small v-else>{{ t(`rotation.queuedHint.${q.state}`) }}</small>
           </li>
         </ul>
-        <VeyqMessage v-if="requeueError" tone="error">{{ requeueError }}</VeyqMessage>
       </section>
     </section>
 
@@ -381,7 +362,7 @@ async function confirm() {
   padding: 0;
 }
 /* A state's hint is a sentence: in the list row's `auto` column it squeezed the space's name under the badge. Name and
-   badge share the first line; the hint, and a re-queue, take the whole width below. */
+   badge share the first line; the hint takes the whole width below. */
 .rotation-results .veyq-list-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
