@@ -16,6 +16,9 @@ import me.raddatz.veyq.core.generated.model.InviteRole
 import me.raddatz.veyq.core.generated.model.InviteStatus
 import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
 import me.raddatz.veyq.core.generated.model.MemberAvatar
+import me.raddatz.veyq.core.generated.model.MemberVerification
+import me.raddatz.veyq.core.generated.model.PutVerificationRequest
+import me.raddatz.veyq.core.generated.model.VerificationPage
 import me.raddatz.veyq.core.generated.model.MemberInviteRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteState
 import me.raddatz.veyq.core.generated.model.PendingMemberInvite
@@ -92,6 +95,7 @@ class TenantsResource(
     private val mailSettingsHandler: TenantMailSettingsHandler,
     private val storageHandler: TenantStorageHandler,
     private val avatarHandler: TenantMemberAvatarHandler,
+    private val verificationHandler: TenantVerificationHandler,
     private val capabilitiesHandler: TenantCapabilitySwitchHandler,
     private val identity: SecurityIdentity,
 ) : TenantsApi {
@@ -256,6 +260,48 @@ class TenantsResource(
             is MemberAvatarOutcome.Found -> Response.ok(MemberAvatar(o.sealedAvatar))
                 .header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
             is MemberAvatarOutcome.NotModified -> Response.notModified().header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // The members' verifications of each other (ADR 0111 decisions 12-13): @Authenticated, membership-gated in the handler
+    // (a non-member: 404, ADR 0042). The verifier of a put is the caller, never a field of the request.
+    @Authenticated
+    override fun listVerifications(
+        tenantId: UUID,
+        subjectUserId: UUID?,
+        verifierUserId: UUID?,
+        after: String?,
+        limit: Int?,
+    ): Response =
+        when (
+            val o = verificationHandler.list(
+                identity.principal.name, tenantId.toString(), subjectUserId?.toString(), verifierUserId?.toString(),
+                TenantVerificationHandler.parseAfter(after), (limit ?: TenantVerificationHandler.PAGE_CAP).coerceIn(1, TenantVerificationHandler.PAGE_CAP),
+            )
+        ) {
+            is ListVerificationsOutcome.Listed -> Response.ok(
+                VerificationPage(
+                    o.page.rows.map {
+                        MemberVerification(
+                            UUID.fromString(it.verifierUserId), UUID.fromString(it.subjectUserId), it.epoch, it.sealedStatement,
+                            it.createdAt.utc(),
+                        )
+                    },
+                    o.page.more,
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    override fun putMyVerification(tenantId: UUID, subjectUserId: UUID, putVerificationRequest: PutVerificationRequest): Response =
+        when (
+            val o = verificationHandler.put(
+                identity.principal.name, tenantId.toString(), subjectUserId.toString(),
+                putVerificationRequest.epoch.validated(), putVerificationRequest.sealedStatement,
+            )
+        ) {
+            PutVerificationOutcome.Stored -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 

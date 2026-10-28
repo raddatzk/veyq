@@ -348,7 +348,8 @@ class ScopesStore(
      * which queues the rotation it cannot perform; a group owner's removal goes through [rotate] instead.
      *
      * Their per-member rows of this scope go with it, through every [MembershipEraser] (today their item favorites,
-     * ADR 0068) — as they do in a removal-rotation.
+     * ADR 0068, and on a TENANT scope every verification they gave or received there, ADR 0111 decision 12) — as they
+     * do in a removal-rotation.
      */
     @Transactional
     fun removeMembership(userId: String, scopeId: String) {
