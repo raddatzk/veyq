@@ -18,7 +18,7 @@ import {
   setMemberRole,
   removeGroupMember,
   removeTenantMember,
-  rekeyTenant,
+  rekeySpace,
   SetMemberRoleRequestRoleEnum,
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
@@ -191,7 +191,7 @@ describe('listScopeMembers', () => {
 
 // ADR 0025 § 2: the owner's "new lock" is the plain rotation every rotation is (commitRotation, scopes.test.ts), over the
 // directory read now; the member a removal just took out is the owner's own exclusion, never the server's word.
-describe('rekeyTenant (uc.spaces.remove-tenant-member A8-A9)', () => {
+describe('rekeySpace (uc.spaces.remove-tenant-member A8-A9)', () => {
   const row = (userId: string): ScopeMember => ({
     userId, username: userId, avatarRevision: 0, sealedName: null, role: 'MEMBER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false,
   })
@@ -200,7 +200,7 @@ describe('rekeyTenant (uc.spaces.remove-tenant-member A8-A9)', () => {
     stubApi(scopesApi, { listScopeMembers: [row('u-owner'), row('u-removed'), row('u-kept')] })
     vi.mocked(commitRotation).mockResolvedValue(4)
 
-    expect(await rekeyTenant('t1', 'u-removed')).toBe(4)
+    expect(await rekeySpace('t1', 'u-removed')).toBe(4)
 
     const [scopeId, members, opts] = vi.mocked(commitRotation).mock.calls[0]
     expect(scopeId).toBe('t1')
@@ -216,7 +216,7 @@ describe('rekeyTenant (uc.spaces.remove-tenant-member A8-A9)', () => {
     stubApi(scopesApi, { listScopeMembers: [row('u-owner'), row('u-kept')] })
     vi.mocked(commitRotation).mockResolvedValue(1)
 
-    await rekeyTenant('t1')
+    await rekeySpace('t1')
 
     expect(vi.mocked(commitRotation).mock.calls[0][1].map((m) => m.userId)).toEqual(['u-owner', 'u-kept'])
     expect(vi.mocked(commitRotation).mock.calls[0][2]?.excluding).toBeUndefined()

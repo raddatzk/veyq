@@ -183,6 +183,10 @@ const en = {
     removeOption: 'Also give this space a new lock',
     removeOptionHint: 'The removal already shuts them out of the app. A new lock also keeps a copy of the key they may have kept from opening what is added from now on.',
     removedNotRekeyed: 'The member was removed, but the new lock could not be put in. Try again with “Give it a new lock” below.',
+    // a group: removing a member already gives it a new lock, so only the lost device is left
+    subGroup: 'If a member’s device was lost, give the space a new lock. Removing a member already does this by itself. What is added from now on is closed to the old key. What was already seen stays seen.',
+    confirmGroup:
+      'Every member gets the new key from this device. Whoever holds only the old key, such as a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
   },
   spaceIcon: {
     change: 'Change icon',
@@ -2188,6 +2192,9 @@ const de: typeof en = {
     removeOption: 'Auch ein neues Schloss einbauen',
     removeOptionHint: 'Die Entfernung sperrt die Person in der App schon aus. Mit einem neuen Schloss öffnet auch eine Kopie des Schlüssels, die sie behalten haben könnte, nicht, was ab jetzt dazukommt.',
     removedNotRekeyed: 'Das Mitglied wurde entfernt, aber das neue Schloss konnte nicht eingebaut werden. Versuch es unten mit „Neues Schloss einbauen“ noch einmal.',
+    subGroup: 'Ist das Gerät eines Mitglieds verloren gegangen, gib dem Bereich ein neues Schloss. Das Entfernen eines Mitglieds baut von selbst eins ein. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
+    confirmGroup:
+      'Jedes Mitglied bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, etwa ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
   },
   spaceIcon: {
     change: 'Icon ändern',

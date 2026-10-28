@@ -13,7 +13,7 @@ import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
-import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
+import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, rekeySpace, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
 import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, revokeScopeShares } from './scopes'
 import { IdentityUnanchoredError } from '../account/identityPins'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
@@ -257,6 +257,42 @@ async function revokeAllLinks() {
     lifecycleError.value = code === 'not_scope_owner' ? t('members.notOwner') : t('spaceLinks.revokeAllFailed')
   } finally {
     revokingLinks.value = false
+  }
+}
+
+// Give the group a new lock with nobody removed (ADR 0025 § 1, uc.spaces.manage-group-members A6) — owner-only, behind
+// the confirmation dialog, for the compromise case: a member's device lost. A removal needs none, it already rotates.
+// The rotation is the one every rotation is (`rekeySpace` → `commitRotation`, as the tenant panel's): the next epoch
+// minted here, every member this device anchors re-granted, the rest declared pending. Then, as after a removal, the
+// nodes are re-keyed on this device right away (ADR 0109); one that stops leaves the group re-keying — the hint above
+// says so — and any member's worker resumes it.
+const lockBusy = ref(false)
+async function newLock() {
+  const accepted = await ask({
+    header: t('spaceLock.confirmTitle'),
+    message: t('spaceLock.confirmGroup'),
+    acceptLabel: t('spaceLock.action'),
+    acceptIcon: 'lock',
+  })
+  if (!accepted) return
+  lifecycleError.value = ''
+  lockBusy.value = true
+  try {
+    try {
+      await rekeySpace(props.scopeId)
+    } catch (e) {
+      on401(e)
+      if (isUnauthorized(e)) return
+      const { code } = await memberError(e)
+      lifecycleError.value = code === 'not_scope_owner' ? t('members.notOwner') : t('spaceLock.failed')
+      return
+    }
+    const { done } = await rekeyScope(props.scopeId).catch(() => ({ done: false }))
+    if (activeSpace.scopeId === props.scopeId) await refreshActiveScope()
+    if (done) toast.success(t('spaceLock.done'))
+    await reload()
+  } finally {
+    lockBusy.value = false
   }
 }
 
@@ -569,6 +605,27 @@ async function onRestore() {
             appearance="outlined"
             :loading="revokingLinks"
             @click="revokeAllLinks"
+          />
+        </div>
+      </section>
+
+      <!-- A new lock for the whole group, nobody removed (ADR 0025 § 1) — owner-only, for the compromise case, laid out as
+           the links section above; not while the group is being deleted (it is read-only then). -->
+      <section v-if="isOwner && !loading && loadError === '' && !isPending" class="settings-form space-lock">
+        <div class="settings-section-header">
+          <div>
+            <h2>{{ t('spaceLock.title') }}</h2>
+            <p class="settings-muted">{{ t('spaceLock.subGroup') }}</p>
+          </div>
+        </div>
+        <div class="danger-row">
+          <VeyqButton
+            :label="t('spaceLock.action')"
+            icon="lock"
+            variant="danger"
+            appearance="outlined"
+            :loading="lockBusy"
+            @click="newLock"
           />
         </div>
       </section>

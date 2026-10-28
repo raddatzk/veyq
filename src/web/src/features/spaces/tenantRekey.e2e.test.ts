@@ -1,5 +1,5 @@
 // ADR 0025 § 2 live (VEYQ_E2E=1): a tenant owner removes a member with "also give this space a new lock" ticked — the
-// removal first, then the plain rotation of the TENANT over the members that remain (`rekeyTenant`) and the node re-key,
+// removal first, then the plain rotation of the TENANT over the members that remain (`rekeySpace`) and the node re-key,
 // as `TenantMembersPanel` runs them — against a REAL backend + MariaDB + the bundled store, with REAL crypto. Four actors
 // on one instance, serialized (`become()` swaps the session and the vault):
 //   A = tenant owner; the remover and the rotator.
@@ -23,7 +23,7 @@ import { buildAccount } from '@veyq/crypto/accountBirth'
 import { generateInviteCode } from '@veyq/crypto/invite'
 import { registry } from '../../core/applications/registry'
 import { memoriesLifecycle } from '../memories/lifecycle'
-import { inviteMember, listScopeMembers, rekeyTenant, removeTenantMember } from './members'
+import { inviteMember, listScopeMembers, rekeySpace, removeTenantMember } from './members'
 import { listMyScopes, openScope } from './scopes'
 import { createFolder, listTree } from '../../core/node/tree'
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
@@ -83,7 +83,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a tenant owner gives the space a new loc
     expect((await tenantRow())?.currentEpoch, 'a removal alone rotates nothing').toBe(0)
 
     // --- ... and, the opt-in ticked, A's device gives the tenant its new lock: the rotation, then the node re-key ------
-    expect(await rekeyTenant(tenantScopeId, C.userId)).toBe(1)
+    expect(await rekeySpace(tenantScopeId, C.userId)).toBe(1)
     expect((await rekeyScope(tenantScopeId)).done, 'every node of the tenant re-keyed on A\'s device').toBe(true)
     const rowA = (await tenantRow())!
     expect([rowA.currentEpoch, rowA.grantedEpoch, rowA.rekeying]).toEqual([1, 1, false])

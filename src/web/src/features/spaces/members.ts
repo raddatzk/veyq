@@ -99,21 +99,23 @@ export function removeTenantMember(tenantId: string, userId: string, revokeLinks
 }
 
 /**
- * Give the tenant a new lock (ADR 0025 § 2, uc.spaces.remove-tenant-member A8-A9) — an owner's plain rotation of the
- * TENANT scope, for the compromise case: a member's device lost, or a removed member who may have kept the key. It is
+ * Give a shared space a new lock (ADR 0025 §§ 1-2; uc.spaces.remove-tenant-member A8-A9 for a TENANT,
+ * uc.spaces.manage-group-members A6 for a GROUP) — an owner's plain rotation of the scope with nobody removed in it, for
+ * the compromise case: a member's device lost, or (a tenant) a removed member who may have kept the key. It is
  * {@link commitRotation}, the one path every rotation takes: the next epoch minted on this device, every member whose
- * key it anchors re-granted, the rest and every open invite it cannot vouch for declared pending. Returns the new epoch.
- * The caller re-keys the nodes after it (ADR 0109).
+ * key it anchors re-granted, the rest and (a tenant) every open invite it cannot vouch for declared pending. Returns the
+ * new epoch. The caller re-keys the nodes after it (ADR 0109).
  *
  * The directory is read **now**, after any removal, so the request covers every membership the server holds (`409
- * rotation_incomplete` otherwise; the rotation's one rebuild reads it again). `excluding` — the member a removal just
- * took out — is dropped from it, and from the re-read, by the owner's own choice, however the server lists them: the
- * new epoch is never wrapped to them. A server that kept their
- * membership meets the rotation's cover check, and nothing commits. Never a `removesUserId`: a tenant member leaves only
- * by the removal cascade (`400 invalid_request` on a TENANT, inbox #595), which runs first.
+ * rotation_incomplete` otherwise; the rotation's one rebuild reads it again). `excluding` — the member a tenant removal
+ * just took out — is dropped from it, and from the re-read, by the owner's own choice, however the server lists them:
+ * the new epoch is never wrapped to them. A server that kept their membership meets the rotation's cover check, and
+ * nothing commits. Never a `removesUserId`: a tenant member leaves only by the removal cascade (`400 invalid_request` on
+ * a TENANT, inbox #595), which runs first, and a group member by the group's own removal-rotation
+ * ({@link ./scopes#rotateGroupForRemoval}), which needs no second rotation.
  */
-export async function rekeyTenant(tenantScopeId: string, excluding?: string): Promise<number> {
-  return commitRotation(tenantScopeId, await listScopeMembers(tenantScopeId), { excluding })
+export async function rekeySpace(scopeId: string, excluding?: string): Promise<number> {
+  return commitRotation(scopeId, await listScopeMembers(scopeId), { excluding })
 }
 
 /**

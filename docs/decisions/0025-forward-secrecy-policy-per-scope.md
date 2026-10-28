@@ -50,7 +50,11 @@ vault") is an explicit, rare action. This is the established practice for per-us
    Small `N`, intentional and often sensitive sharing; the `O(N)` burst is small and rotation delivers
    post-removal forward-confidentiality, against a malicious operator as far as
    [ADR 0024](0024-scope-key-rotation.md) § Guarantee states — a rotation queued to another owner, as a
-   tenant removal that cuts a co-shared group is, holds against an honest operator only.
+   tenant removal that cuts a co-shared group is, holds against an honest operator only. For the compromise case with
+   nobody to remove — a member's device lost — a group owner gives the group the same explicit **"re-key this space"**
+   as a tenant owner (§ 2): a plain rotation of the group from its members panel, over the members then present
+   ([uc.spaces.manage-group-members](../features/spaces/use-cases/uc.spaces.manage-group-members.md) A6). A removal
+   needs none, it already rotates.
 
 2. **Tenant — ACL-revoke by default; no automatic content-key rotation on routine removal.** Removing a member
    **deletes the membership** (instant 403) and stops there. Content-key rotation is an **explicit "re-key this
