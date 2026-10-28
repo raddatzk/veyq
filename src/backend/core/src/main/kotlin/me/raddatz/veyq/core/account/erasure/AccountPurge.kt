@@ -244,6 +244,7 @@ class AccountPurge(
             // live invite a rotation by this account re-granted, which names it like a membership's grant does.
             "veyq_tenant_invite.signer_user_id" to kept("superseded with its key dropped when the signer's account is erased"),
             "veyq_tenant_invite.granter_user_id" to kept("a live invite's grant names who wrapped it, for its signature"),
+            "veyq_tenant_profile.join_signer_user_id" to kept("another member's join names who invited them, its endorsement's signer"),
             // The moderation records the law keeps to their case's log retention date (ADR 0101 decision 7).
             "veyq_moderation_report.reporter_account" to kept("a report the person made, kept to its case's log retention"),
             "veyq_moderation_block.target_id" to kept("a measure on the account stays as the record it is"),

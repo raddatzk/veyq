@@ -97,6 +97,8 @@ data class ScopeMemberRow(
     val pendingConsent: Boolean = false,
     /** The member's join record in a TENANT scope (ADR 0111 decisions 3 and 12), sealed; null elsewhere. */
     val sealedJoinRecord: String? = null,
+    /** The inviting owner's endorsement of that record (cr-trust-anchors-survive-rotation decision 12); null elsewhere. */
+    val joinEndorsement: String? = null,
     /** The head of the member's key chain (ADR 0111 decision 7). */
     val keyChainHead: String,
     /** The member's grant is behind the scope's current epoch: a rotation declared them pending (ADR 0111 decision 9). */
@@ -668,7 +670,7 @@ class ScopesStore(
         val p = profiles.byUserInTenant(tenantId)[userId]
         return ScopeMemberRow(
             userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role, u.identityPublicKey,
-            m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId },
+            m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId }, p?.joinEndorsement.takeIf { scopeId == tenantId },
             keyChainHead = keyChain.headOf(userId) ?: return null, pending = m.grantedEpoch < scope.currentEpoch,
         )
     }
@@ -693,6 +695,7 @@ class ScopesStore(
                 ScopeMemberRow(
                     m.userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role,
                     u.identityPublicKey, m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId },
+                    p?.joinEndorsement.takeIf { scopeId == tenantId },
                     keyChainHead = heads[m.userId] ?: return@let null, pending = m.grantedEpoch < scope.currentEpoch,
                 )
             }

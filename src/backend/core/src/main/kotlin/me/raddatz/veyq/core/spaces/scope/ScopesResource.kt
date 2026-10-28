@@ -271,7 +271,7 @@ class ScopesResource(
         userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName, avatarRevision = row.avatarRevision,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
         keyChainHead = row.keyChainHead, pending = row.pending,
-        pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord,
+        pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord, joinEndorsement = row.joinEndorsement,
     )
 
     /** The active tenant's id — resolved by [RequestTenant] through the one canonical resolver, which

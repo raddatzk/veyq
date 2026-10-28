@@ -8,10 +8,13 @@ import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.account.deviceregister.PutResult as RegisterPut
 import me.raddatz.veyq.core.account.identitypins.PutResult as PinsPut
 import me.raddatz.veyq.core.account.pairing.PairingStore
+import me.raddatz.veyq.core.admin.tenant.SignedOpenInvite
+import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.Ed25519Verifier
 import me.raddatz.veyq.core.crypto.GrantSignature
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.crypto.JoinEndorsement
 import me.raddatz.veyq.core.crypto.KeyChainStatements
 import me.raddatz.veyq.core.crypto.RotationStageDigest
 import me.raddatz.veyq.core.crypto.SecretKeyProof
@@ -23,6 +26,8 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.RootedJoinRecord
+import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.ModerationHandler
@@ -58,8 +63,10 @@ sealed interface RotationOutcome {
      *  the stored head — a step signed by another identity, or over a stale predecessor (ADR 0111 decision 7). */
     data object KeyChainStepInvalid : RotationOutcome, HttpFailure by httpFailure("key_chain_step_invalid", UNPROCESSABLE)
 
-    /** The stage is missing, expired or declares another identity, its digest is not the request's, or a membership that
-     *  carries a grant is neither staged at its scope's current epoch nor declared unreadable (decision 3). */
+    /** The stage is missing, expired or declares another identity, its digest is not the request's, a membership that
+     *  carries a grant is neither staged at its scope's current epoch nor declared unreadable (decision 3), an open invite
+     *  the caller signed is not staged at its anchor epoch, or a join record the caller rooted is not staged over the
+     *  record stored now (cr-trust-anchors-survive-rotation decisions 6 and 12). */
     data object PlanChanged : RotationOutcome, HttpFailure by Failures.rotationPlanChanged
 
     /** The pin store or the device register moved since the client read it — the whole rotation rolled back. The client
@@ -83,6 +90,42 @@ sealed interface StageGrantsOutcome {
     /** A grant does not verify under the stage's identity, or names another identity. */
     data object SelfGrantInvalid : StageGrantsOutcome, HttpFailure by httpFailure("self_grant_invalid", UNPROCESSABLE)
 }
+
+/** Outcome of staging a chunk of re-signed (or declared) invites (cr-trust-anchors-survive-rotation decision 6). Every
+ *  refusal wrote nothing of the chunk. */
+sealed interface StageInvitesOutcome {
+    data object Staged : StageInvitesOutcome
+
+    /** No open stage of the caller has this id — unknown, expired, replaced or another account's. */
+    data object StageNotFound : StageInvitesOutcome, HttpFailure by httpFailure("rotation_stage_not_found", NOT_FOUND)
+
+    /** An invite the caller did not sign, that is not open, or whose anchor epoch moved. */
+    data object PlanChanged : StageInvitesOutcome, HttpFailure by Failures.rotationPlanChanged
+
+    /** A re-signature does not verify under the stage's identity over the statement the server rebuilt. */
+    data object InviteResignInvalid : StageInvitesOutcome, HttpFailure by httpFailure("invite_resign_invalid", UNPROCESSABLE)
+}
+
+/** Outcome of staging a chunk of join-record endorsements (or declarations) (decision 12). Every refusal wrote nothing. */
+sealed interface StageEndorsementsOutcome {
+    data object Staged : StageEndorsementsOutcome
+
+    /** No open stage of the caller has this id — unknown, expired, replaced or another account's. */
+    data object StageNotFound : StageEndorsementsOutcome, HttpFailure by httpFailure("rotation_stage_not_found", NOT_FOUND)
+
+    /** A profile whose join the caller did not root, or that holds no join record. */
+    data object PlanChanged : StageEndorsementsOutcome, HttpFailure by Failures.rotationPlanChanged
+
+    /** An endorsement does not verify under the stage's identity over the stored sealed record. */
+    data object JoinEndorsementInvalid : StageEndorsementsOutcome, HttpFailure by httpFailure("join_endorsement_invalid", UNPROCESSABLE)
+}
+
+/** One staged invite as a chunk carries it: re-signed, or declared (both signatures null — the resource refuses one
+ *  without the other). */
+data class StagedInviteInput(val inviteId: String, val anchorEpoch: Int, val inviteKeySignature: String?, val anchorGrantSignature: String?)
+
+/** One staged join-record entry as a chunk carries it: endorsed, or declared ([endorsement] null). */
+data class StagedEndorsementInput(val tenantId: String, val userId: String, val endorsement: String?)
 
 /** One staged self-grant as a chunk carries it. */
 data class StagedSelfGrantInput(
@@ -160,6 +203,8 @@ class RotationHandler(
     private val emailChanges: EmailChangeStore,
     private val accounts: AccountStore,
     private val moderation: ModerationHandler,
+    private val tenants: TenantStore,
+    private val profiles: TenantProfileStore,
     config: VeyqConfig,
 ) {
     private val stageTtl: Duration = config.account().rotation().stage().ttl()
@@ -185,6 +230,15 @@ class RotationHandler(
             )
         }.sortedBy { it.scopeId }
     }
+
+    /** Every open member invite [userId] signed, in **every** tenant (cr-trust-anchors-survive-rotation decision 6) —
+     *  what their securing re-signs or declares. Host-independent; only invites the caller signed. */
+    fun planInvites(userId: String): List<SignedOpenInvite> =
+        QuarkusTransaction.requiringNew().call { tenants.openInvitesSignedBy(userId) }
+
+    /** Every join record [userId] rooted, in **every** tenant (decision 12) — what their securing endorses or declares. */
+    fun planJoinRecords(userId: String): List<RootedJoinRecord> =
+        QuarkusTransaction.requiringNew().call { profiles.rootedBy(userId) }
 
     // --- the stage (decision 3) --------------------------------------------------------------------------------
 
@@ -223,6 +277,68 @@ class RotationHandler(
                 StagedSelfGrantRow(it.scopeId, it.epoch, it.wrappedGrant, it.grantSignature)
             })
             StageGrantsOutcome.Staged
+        }
+
+    /**
+     * Stage one chunk of re-signed or declared invites into [userId]'s open stage [stageId] (cr-trust-anchors-survive-
+     * rotation decision 6, as corrected): every entry names an open member invite the caller signed, at the anchor epoch
+     * it holds now (else `409 rotation_plan_changed`, declared or not); a re-signed one carries the stage identity's
+     * `invite-key` signature over the invite as stored and its `grant` signature over the stored anchor (kind `TENANT`,
+     * the anchor epoch, the invite as recipient), both verified here (else `422 invite_resign_invalid`) — a consistency
+     * check of the stage against the identity the publish registers, as a staged self-grant's. All checked before
+     * anything is written. A declared one is checked for nothing more: the publish ends it.
+     */
+    fun stageInvites(userId: String, stageId: String, entries: List<StagedInviteInput>): StageInvitesOutcome =
+        QuarkusTransaction.requiringNew().call {
+            accounts.lock(userId) ?: return@call StageInvitesOutcome.StageNotFound
+            val stage = stages.live(userId, stageId, Instant.now()) ?: return@call StageInvitesOutcome.StageNotFound
+            val open = tenants.openInvitesSignedBy(userId).associateBy { it.inviteId }
+            if (entries.any { open[it.inviteId]?.anchorEpoch != it.anchorEpoch }) return@call StageInvitesOutcome.PlanChanged
+            val identity = stage.identityPublicKey
+            val valid = entries.filter { it.inviteKeySignature != null }.all { e ->
+                val i = open.getValue(e.inviteId)
+                InviteAcceptProof.inviteKeyVerifies(
+                    identity, i.tenantId, i.inviteId, i.invitePublicKey, i.expiresAt.epochSecond, e.inviteKeySignature,
+                ) && GrantSignature.verify(
+                    identity,
+                    GrantSignature.statement(i.tenantId, ScopeEntity.TENANT, i.anchorEpoch.toLong(), i.inviteId, i.invitePublicKey, i.anchorWrappedGrant),
+                    e.anchorGrantSignature,
+                )
+            }
+            if (!valid) return@call StageInvitesOutcome.InviteResignInvalid
+            // An invite named twice in one chunk: the last one stands, as a later chunk's would.
+            stages.upsertInvites(stage.id, entries.associateBy { it.inviteId }.values.map {
+                StagedInviteRow(it.inviteId, it.anchorEpoch, it.inviteKeySignature, it.anchorGrantSignature)
+            })
+            StageInvitesOutcome.Staged
+        }
+
+    /**
+     * Stage one chunk of join-record endorsements or declarations into [userId]'s open stage [stageId] (decision 12):
+     * every entry names a profile whose join the caller rooted and that holds a join record (else `409
+     * rotation_plan_changed`); a non-null endorsement is the stage identity's `join-endorsement` signature over the
+     * record as stored, verified here (else `422 join_endorsement_invalid`). Each entry keeps the digest of the record it
+     * was staged against, so the publish refuses one a rejoin replaced since. All checked before anything is written.
+     */
+    fun stageEndorsements(userId: String, stageId: String, entries: List<StagedEndorsementInput>): StageEndorsementsOutcome =
+        QuarkusTransaction.requiringNew().call {
+            accounts.lock(userId) ?: return@call StageEndorsementsOutcome.StageNotFound
+            val stage = stages.live(userId, stageId, Instant.now()) ?: return@call StageEndorsementsOutcome.StageNotFound
+            val rooted = profiles.rootedBy(userId).associateBy { it.tenantId to it.userId }
+            if (entries.any { (it.tenantId to it.userId) !in rooted }) return@call StageEndorsementsOutcome.PlanChanged
+            val identity = stage.identityPublicKey
+            val valid = entries.filter { it.endorsement != null }.all { e ->
+                JoinEndorsement.verifies(
+                    identity, e.tenantId, e.userId, userId, rooted.getValue(e.tenantId to e.userId).sealedJoinRecord, e.endorsement,
+                )
+            }
+            if (!valid) return@call StageEndorsementsOutcome.JoinEndorsementInvalid
+            stages.upsertEndorsements(stage.id, entries.associateBy { it.tenantId to it.userId }.values.map {
+                StagedEndorsementRow(
+                    it.tenantId, it.userId, recordDigest(rooted.getValue(it.tenantId to it.userId).sealedJoinRecord), it.endorsement,
+                )
+            })
+            StageEndorsementsOutcome.Staged
         }
 
     // --- the publish -------------------------------------------------------------------------------------------
@@ -320,7 +436,9 @@ class RotationHandler(
         // A moderator's grants of the instance moderation key were sealed to the identity this replaces (ADR 0099 § 4).
         moderation.onIdentityRotated(userId)
 
-        val regranted = applyStage(userId, staged, r.unreadableScopeIds, r.identityPublicKey)
+        val regranted = applyStage(
+            userId, staged, r.unreadableScopeIds, r.identityPublicKey, stages.invites(stage.id), stages.endorsements(stage.id),
+        )
         stages.deleteFor(userId)
         keyChain.append(
             userId, chain.first(), index, r.identityPublicKey, r.secretKeyProofPublicKey, r.stepIdentitySignature,
@@ -348,18 +466,24 @@ class RotationHandler(
      * Every grant-carrying membership must be staged at its scope's **current** epoch or declared unreadable; a staged
      * grant for a scope the account no longer holds is not written (writing it would make a membership). An unreadable
      * scope keeps its grant and gets no pending row. Returns the re-granted scope ids, ascending.
+     *
+     * **What the account rooted, under the same pass** (cr-trust-anchors-survive-rotation decisions 6 and 12). The tenant
+     * scopes in which the account signed a live invite or rooted a join record join the locked set — the account may
+     * have left such a tenant, so its own grants alone do not name them — and are read again under the locks. Every
+     * writer of what is checked holds that tenant scope's lock: a mint and a reissue, a rotation that moves an anchor,
+     * and an accept, which writes a join record and spends an invite. So an accept that names the retired key either
+     * committed before (its record must be staged) or waits and meets the new signer key (`409 invite_changed`).
      */
     private fun applyStage(
         userId: String, staged: Map<String, StagedSelfGrantRow>, unreadable: Set<String>, identityPublicKey: String,
+        stagedInvites: Map<String, StagedInviteRow>, stagedEndorsements: Map<Pair<String, String>, StagedEndorsementRow>,
     ): List<String> {
-        val held = MembershipEntity.getEntityManager().createQuery(
-            "select m.scopeId from MembershipEntity m where m.userId = :user and m.wrappedGrant is not null", String::class.java,
-        ).setParameter("user", userId).resultList.toSortedSet()
-        val epochs = held.associateWith { ScopeEntity.lockRow(it)?.currentEpoch }
-        val heldNow = MembershipEntity.getEntityManager().createQuery(
-            "select m.scopeId from MembershipEntity m where m.userId = :user and m.wrappedGrant is not null", String::class.java,
-        ).setParameter("user", userId).resultList.toSortedSet()
+        val held = heldScopes(userId)
+        val rooted = rootedTenants(userId)
+        val epochs = (held + rooted).toSortedSet().associateWith { ScopeEntity.lockRow(it)?.currentEpoch }
+        val heldNow = heldScopes(userId)
         if (!held.containsAll(heldNow)) throw Refused(RotationOutcome.PlanChanged)
+        if (!rooted.containsAll(rootedTenants(userId))) throw Refused(RotationOutcome.PlanChanged)
 
         val toWrite = heldNow.filter { it !in unreadable }.associateWith { scopeId ->
             val grant = staged[scopeId] ?: throw Refused(RotationOutcome.PlanChanged)
@@ -368,8 +492,48 @@ class RotationHandler(
         }
         toWrite.forEach { (scopeId, grant) -> store.applySelfGrant(userId, scopeId, grant, identityPublicKey) }
         store.replaceRegrants(userId, toWrite.mapValues { it.value.epoch })
+        applyInvites(userId, rooted, stagedInvites, identityPublicKey)
+        applyEndorsements(userId, rooted, stagedEndorsements)
         return toWrite.keys.toList()
     }
+
+    /**
+     * Every open member invite the account signed (in [tenantIds], whose scopes this transaction has locked) must be
+     * staged at the anchor epoch it holds now — else the whole publish is refused (`409 rotation_plan_changed`). A
+     * re-signed one gets its two signatures and the published identity as its signer key; a declared one ends.
+     */
+    private fun applyInvites(userId: String, tenantIds: Set<String>, staged: Map<String, StagedInviteRow>, identityPublicKey: String) {
+        val open = tenants.openInvitesSignedBy(userId, tenantIds)
+        val entries = open.map { i ->
+            val entry = staged[i.inviteId] ?: throw Refused(RotationOutcome.PlanChanged)
+            if (entry.anchorEpoch != i.anchorEpoch) throw Refused(RotationOutcome.PlanChanged)
+            i to entry
+        }
+        entries.filter { !it.second.declared }.forEach { (i, e) ->
+            tenants.resignInvite(i, userId, identityPublicKey, e.inviteKeySignature!!, e.anchorGrantSignature!!)
+        }
+        tenants.endInvites(entries.filter { it.second.declared }.map { it.first.inviteId })
+    }
+
+    /** Every join record the account rooted (in [tenantIds], locked) must be staged over the record stored now — else the
+     *  whole publish is refused (`409 rotation_plan_changed`: an accept or a rejoin since staging). Each gets its staged
+     *  endorsement, or none (declared). */
+    private fun applyEndorsements(userId: String, tenantIds: Set<String>, staged: Map<Pair<String, String>, StagedEndorsementRow>) {
+        val records = profiles.rootedBy(userId, tenantIds).map { r ->
+            val entry = staged[r.tenantId to r.userId] ?: throw Refused(RotationOutcome.PlanChanged)
+            if (entry.recordDigest != recordDigest(r.sealedJoinRecord)) throw Refused(RotationOutcome.PlanChanged)
+            r to entry
+        }
+        records.forEach { (r, e) -> profiles.setJoinEndorsement(r.tenantId, r.userId, userId, e.endorsement) }
+    }
+
+    /** The scopes [userId] holds a grant on — every tenant. */
+    private fun heldScopes(userId: String): java.util.SortedSet<String> = MembershipEntity.getEntityManager().createQuery(
+        "select m.scopeId from MembershipEntity m where m.userId = :user and m.wrappedGrant is not null", String::class.java,
+    ).setParameter("user", userId).resultList.toSortedSet()
+
+    /** The tenants (= their tenant scopes' ids) in which [userId] signed a live invite or rooted a join record. */
+    private fun rootedTenants(userId: String): Set<String> = tenants.tenantsWithInvitesSignedBy(userId) + profiles.tenantsRootedBy(userId)
 
     // --- the states (decision 8) -------------------------------------------------------------------------------
 
@@ -429,6 +593,11 @@ class RotationHandler(
     } catch (e: IllegalArgumentException) {
         null
     }
+
+    /** The fingerprint of a sealed join record as stored (its base64 text), which a staged entry keeps: the publish
+     *  applies an endorsement only to the record it was staged against. */
+    private fun recordDigest(sealedJoinRecord: String): String =
+        Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(sealedJoinRecord.toByteArray(Charsets.UTF_8)))
 
     /** Thrown inside the publish's transaction to roll every write in it back; [rotate] answers its outcome. Never
      *  escapes this class. */

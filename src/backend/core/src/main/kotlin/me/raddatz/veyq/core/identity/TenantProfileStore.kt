@@ -13,7 +13,13 @@ data class ProfileView(
     val userId: String, val username: String, val sealedName: String?, val avatarRevision: Int,
     /** The member's sealed join record (ADR 0111 decisions 3 and 12), null for the tenant's first owner. */
     val sealedJoinRecord: String? = null,
+    /** The inviting owner's endorsement of that record (cr-trust-anchors-survive-rotation decision 12), or null. */
+    val joinEndorsement: String? = null,
 )
+
+/** A join record an owner rooted (cr-trust-anchors-survive-rotation decisions 11-12): the member, the sealed record as
+ *  stored, and the endorsement it carries now. */
+data class RootedJoinRecord(val tenantId: String, val userId: String, val sealedJoinRecord: String, val joinEndorsement: String?)
 
 /**
  * Persistence for the per-`(user, tenant)` identity profile (cr-0083, ADR 0023). Operator-blind: `username` is a
@@ -42,12 +48,13 @@ class TenantProfileStore {
      * Create the member's tenant profile at the join: the username, and what the joiner sealed under `K_tenant`, which
      * every joiner holds at accept (the owner's cold birth, a member's self-grant, ADR 0111 decision 3) — the optional
      * name and picture (ADR 0084 decision 7: stored with revision 1, so a directory read at once shows it) and a
-     * member's join record (null for the tenant's first owner).
+     * member's join record (null for the tenant's first owner), with [joinSignerUserId] — the invite's signer, who rooted
+     * it (cr-trust-anchors-survive-rotation decision 11).
      */
     @Transactional
     fun create(
         userId: String, tenantId: String, username: String, sealedName: String? = null, sealedAvatar: String? = null,
-        sealedJoinRecord: String? = null,
+        sealedJoinRecord: String? = null, joinSignerUserId: String? = null,
     ): String {
         val id = UUID.randomUUID().toString()
         TenantProfileEntity().apply {
@@ -59,15 +66,55 @@ class TenantProfileStore {
             this.sealedAvatar = sealedAvatar
             this.avatarRevision = if (sealedAvatar != null) 1 else 0
             this.sealedJoinRecord = sealedJoinRecord
+            this.joinSignerUserId = joinSignerUserId
         }.persist()
         return id
     }
 
     /** A returning member's new join record (ADR 0111 decision 3): their profile outlived a removal, and the invite
-     *  that brought them back is a new join. The only writer of the column besides [create]; the profile op never is. */
+     *  that brought them back is a new join — rooted by its signer [joinSignerUserId], and endorsed by nobody yet: an
+     *  endorsement covers the record it was made over, never this one (cr-trust-anchors-survive-rotation decisions 11-12).
+     *  The only writer of the record besides [create]; the profile op never is. */
     @Transactional
-    fun setJoinRecord(userId: String, tenantId: String, sealedJoinRecord: String) {
-        TenantProfileEntity.update("sealedJoinRecord = ?1 where userId = ?2 and tenantId = ?3", sealedJoinRecord, userId, tenantId)
+    fun setJoinRecord(userId: String, tenantId: String, sealedJoinRecord: String, joinSignerUserId: String) {
+        TenantProfileEntity.update(
+            "sealedJoinRecord = ?1, joinSignerUserId = ?2, joinEndorsement = null where userId = ?3 and tenantId = ?4",
+            sealedJoinRecord, joinSignerUserId, userId, tenantId,
+        )
+    }
+
+    /** Every join record [signerUserId] rooted, in **every** tenant (decision 12) — [tenantIds], when given, narrows them
+     *  to those tenants — by tenant, then member. */
+    fun rootedBy(signerUserId: String, tenantIds: Collection<String>? = null): List<RootedJoinRecord> {
+        val rows = if (tenantIds == null) {
+            TenantProfileEntity.find("joinSignerUserId = ?1 and sealedJoinRecord is not null", signerUserId).list()
+        } else {
+            if (tenantIds.isEmpty()) return emptyList()
+            TenantProfileEntity.find("joinSignerUserId = ?1 and sealedJoinRecord is not null and tenantId in ?2", signerUserId, tenantIds).list()
+        }
+        return rows.mapNotNull { RootedJoinRecord(it.tenantId, it.userId, it.sealedJoinRecord ?: return@mapNotNull null, it.joinEndorsement) }
+            .sortedWith(compareBy({ it.tenantId }, { it.userId }))
+    }
+
+    /** The tenants in which [signerUserId] rooted a join record — read before the publish takes their scopes' locks. */
+    fun tenantsRootedBy(signerUserId: String): Set<String> =
+        TenantProfileEntity.getEntityManager().createQuery(
+            "select distinct p.tenantId from TenantProfileEntity p where p.joinSignerUserId = :signer and p.sealedJoinRecord is not null",
+            String::class.java,
+        ).setParameter("signer", signerUserId).resultList.toSet()
+
+    /** Write [signerUserId]'s endorsement of [userId]'s join record in [tenantId] — or clear it, for a declared record
+     *  ([endorsement] null) — in the publish's transaction, under the tenant scope's lock (decision 12). */
+    fun setJoinEndorsement(tenantId: String, userId: String, signerUserId: String, endorsement: String?) {
+        if (endorsement == null) {
+            TenantProfileEntity.update(
+                "joinEndorsement = null where tenantId = ?1 and userId = ?2 and joinSignerUserId = ?3", tenantId, userId, signerUserId,
+            )
+        } else {
+            TenantProfileEntity.update(
+                "joinEndorsement = ?1 where tenantId = ?2 and userId = ?3 and joinSignerUserId = ?4", endorsement, tenantId, userId, signerUserId,
+            )
+        }
     }
 
     /** Update the caller's profile in a tenant — change the username and/or the sealed name (each optional). */
@@ -104,16 +151,18 @@ class TenantProfileStore {
         ) > 0
 
     /**
-     * The identity (username + sealed name + picture revision + sealed join record) for every member of a tenant, keyed
+     * The identity (username + sealed name + picture revision + sealed join record and its endorsement) for every member of a tenant, keyed
      * by userId — for the directory. A projection, so a picture's ~11 KB is never read into the directory (ADR 0084): the database
      * answers `0` for a null picture and the counter otherwise.
      */
     fun byUserInTenant(tenantId: String): Map<String, ProfileView> =
         TenantProfileEntity.getEntityManager().createQuery(
             "select p.userId, p.username, p.sealedName, " +
-                "case when p.sealedAvatar is null then 0 else p.avatarRevision end, p.sealedJoinRecord " +
+                "case when p.sealedAvatar is null then 0 else p.avatarRevision end, p.sealedJoinRecord, p.joinEndorsement " +
                 "from TenantProfileEntity p where p.tenantId = ?1",
             Array<Any?>::class.java,
         ).setParameter(1, tenantId).resultList
-            .associate { r -> r[0] as String to ProfileView(r[0] as String, r[1] as String, r[2] as String?, (r[3] as Number).toInt(), r[4] as String?) }
+            .associate { r ->
+                r[0] as String to ProfileView(r[0] as String, r[1] as String, r[2] as String?, (r[3] as Number).toInt(), r[4] as String?, r[5] as String?)
+            }
 }

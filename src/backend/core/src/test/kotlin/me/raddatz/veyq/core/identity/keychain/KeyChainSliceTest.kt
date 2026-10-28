@@ -145,7 +145,12 @@ class KeyChainSliceTest {
             .body("find { it.inviteId == '${key.inviteId}' }.signerKeyChainHead", equalTo(ownerHead))
         given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret"}""")
             .`when`().post("/api/tenants/accept/preview").then().statusCode(200)
-            .body("invite.signerKeyChainHead", equalTo(ownerHead))
+            // The preview serves the signer's whole chain (cr-trust-anchors-survive-rotation decision 3), not its head: an
+            // owner who never rotated has step 0, unsigned, installing the key they hold.
+            .body("invite.signerKeyChain.size()", equalTo(1))
+            .body("invite.signerKeyChain[0].index", equalTo(0))
+            .body("invite.signerKeyChain[0].identityPublicKey", equalTo(TestFixtures.IDENTITY_PUBLIC_KEY))
+            .body("invite.signerKeyChain[0].identitySignature", nullValue())
             .body("invite.granterKeyChainHead", equalTo(ownerHead))
     }
 
