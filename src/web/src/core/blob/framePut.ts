@@ -13,8 +13,12 @@ export const PUT_CONTENT_TYPE = 'application/octet-stream'
  * load of an empty body nobody reads and reports the PUT `net::ERR_ABORTED` although the store took the chunk: 1,163 of
  * 1,176 PUTs of a 50-photo upload in the V1 heavy stage. So it is read to its end; a failure to read an empty body says
  * nothing about the PUT, whose status is already known.
+ *
+ * The frame worker hands the frame as a `Blob`: in Chrome a `PUT` of a 256 KiB byte array cost its thread 6.2–6.7 ms,
+ * the same bytes as a `Blob` 0.85–0.89 ms, the `Blob`'s making included (400 PUTs, four in flight, in a worker, inbox
+ * #220). The page thread's fall-back sends the bytes as they are; it runs only where no Worker does.
  */
-export async function putFrame(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<number> {
+export async function putFrame(url: string, frame: Uint8Array | Blob, signal?: AbortSignal): Promise<number> {
   const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
   await res.arrayBuffer().catch(() => undefined)
   return res.status

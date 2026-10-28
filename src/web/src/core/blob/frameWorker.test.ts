@@ -74,7 +74,7 @@ async function answer(req: FrameRequest): Promise<FrameMessage> {
   try {
     if (req.op === 'seal-put') {
       const plaintext = req.chunk instanceof Uint8Array ? req.chunk : new Uint8Array(await req.chunk.arrayBuffer())
-      const frame = sealFrameOf(req.blobKey, req.index, req.total, plaintext)
+      const frame = new Blob([sealFrameOf(req.blobKey, req.index, req.total, plaintext) as BlobPart])
       try {
         return { id: req.id, ok: true, status: await putFrame(req.url, frame) } satisfies FrameResponse
       } catch (e) {
@@ -285,7 +285,8 @@ describe('the upload pump seals through the Worker', () => {
       const attempt = (attempts.get(index) ?? 0) + 1
       attempts.set(index, attempt)
       if (deny(index, attempt)) return new Response('', { status: 403 })
-      objects.set(index, new Uint8Array(init.body as Uint8Array))
+      // The Worker sends a Blob (framePut.ts), the page's fall-back the bytes.
+      objects.set(index, init.body instanceof Blob ? new Uint8Array(await init.body.arrayBuffer()) : new Uint8Array(init.body as Uint8Array))
       return new Response('', { status: 200 })
     }))
     return objects

@@ -23,7 +23,7 @@ const posted: Posted[] = []
 let seq = 0
 
 /** What the stubbed store saw: each PUT's URL, Content-Type, body and signal; `answer` decides its response. */
-type Put = { url: string; contentType: string | null; body: Uint8Array; signal: AbortSignal | undefined }
+type Put = { url: string; contentType: string | null; body: Uint8Array; blob: boolean; signal: AbortSignal | undefined }
 const puts: Put[] = []
 let answer: (put: Put) => Promise<Response> = async () => new Response('', { status: 200 })
 
@@ -70,7 +70,8 @@ const CASES: Record<FrameOp, () => Promise<void>> = {
     expect(message).toEqual({ id: seq, ok: true, status: 200 })
     expect(transfer).toEqual([])
     expect(puts).toHaveLength(1)
-    expect(puts[0]).toMatchObject({ url: 'https://store.test/b/1?X-Amz-Signature=s', contentType: PUT_CONTENT_TYPE })
+    // A Blob body: a byte-array body cost the sending thread about seven times as much (framePut.ts).
+    expect(puts[0]).toMatchObject({ url: 'https://store.test/b/1?X-Amz-Signature=s', contentType: PUT_CONTENT_TYPE, blob: true })
     expectSealedOf(puts[0].body, 1, 5, parts[1])
   },
   cancel: async () => {
@@ -100,10 +101,12 @@ beforeAll(async () => {
     postMessage: (message: FrameMessage, transfer: Transferable[] = []) => posted.push({ message, transfer }),
   })
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+    const blob = init.body instanceof Blob
     const put = {
       url,
       contentType: new Headers(init.headers).get('Content-Type'),
-      body: new Uint8Array(init.body as Uint8Array),
+      body: blob ? new Uint8Array(await (init.body as Blob).arrayBuffer()) : new Uint8Array(init.body as Uint8Array),
+      blob,
       signal: init.signal ?? undefined,
     }
     expect(init.method).toBe('PUT')

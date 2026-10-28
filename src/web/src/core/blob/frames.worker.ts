@@ -31,10 +31,11 @@ async function sealPut(req: Extract<FrameRequest, { op: 'seal-put' }>): Promise<
   const controller = new AbortController()
   puts.set(req.id, controller)
   try {
-    let frame: Uint8Array
+    let frame: Blob
     try {
       const plaintext = req.chunk instanceof Uint8Array ? req.chunk : new Uint8Array(await req.chunk.arrayBuffer())
-      frame = sealFrameOf(req.blobKey, req.index, req.total, plaintext)
+      // As a Blob: a byte-array body cost this thread about seven times as much per PUT (framePut.ts).
+      frame = new Blob([sealFrameOf(req.blobKey, req.index, req.total, plaintext) as BlobPart])
     } catch (e) {
       return failed(req.id, 'source', e)
     } finally {
