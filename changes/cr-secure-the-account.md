@@ -261,8 +261,11 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      old proof key would have nowhere to live once `veyq_user` is overwritten.
    - **A step `i ≥ 1`** names: the user id, `i`, the hash of step `i−1`, `sha256` of the old identity bundle and of the
      old proof public key, and the **new identity bundle and new proof public key in full** (a reader learns the new
-     keys from the chain, not from the directory). Domain `veyq/v1/key-chain/step`, encoded as the other typed
-     statements (`STATEMENT_PURPOSES`, `seal.ts:336-376`; new purpose `key-chain-step`).
+     keys from the chain, not from the directory). Encoded as the other typed statements (`STATEMENT_PURPOSES` in
+     `seal.ts`), whose label is their domain: purpose `key-chain-step`, and step 0 a purpose of its own,
+     `key-chain-genesis` (user id, birth bundle, birth proof key). *Built in phase 1 that way rather than as a
+     `veyq/v1/key-chain/step` string: no typed statement carries a `veyq/v1/…` label, and a genesis label of its own
+     keeps a genesis from ever reading as a step or a step as a genesis.*
    - **Signed twice:** by the old identity (`identitySign`, `v1.ts:609`, widened to the new purpose) and by the old
      proof key (`secretKeyProofSign`, `v1.ts:388`) over the same bytes.
    - **The head** is `sha256("veyq/v1/key-chain/head" ‖ statement)` of the newest step (of step 0 for an account that
@@ -314,9 +317,11 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    - **The publish names the stage**: `stageId` and `stagedGrantsDigest`, both bound into the rotation proof
      statement (decision 2). Under the account lock the server takes the stage (missing, expired, or declaring
      another bundle than the request publishes → `409 rotation_plan_changed`), recomputes the digest over the staged
-     rows (`rotationStageDigest`, `v1.ts` and Kotlin, vector `rotation_stage`: domain `veyq/v1/rotation-stage`, the
-     entries in ascending `scopeId` byte order, each `lp(scopeId) ‖ u32(epoch) ‖ sha256(wrappedGrant)`), and refuses a
-     different one with `409 rotation_plan_changed` before it checks the proof.
+     rows (`rotationStageDigest`, `v1.ts` and Kotlin, vector `rotation_stage`: `sha256(utf8("veyq/v1/rotation-stage")
+     ‖ …)` over the entries in ascending `scopeId` byte order, each `lp(utf8(scopeId)) ‖ lp(u64be(epoch)) ‖
+     lp(sha256(wrappedGrant))`), and refuses a different one with `409 rotation_plan_changed` before it checks the
+     proof. *Built in phase 1 in the identity-pin set digest's shape — every field length-prefixed, the epoch the u64
+     every statement encodes it as — where the refine wrote `lp(scopeId) ‖ u32(epoch) ‖ sha256(wrappedGrant)`.*
    - **The server's set.** Under each scope's row lock it recomputes the account's memberships that carry a grant. It
      requires every one to be **staged at the scope's current epoch** or named in `unreadableScopeIds`; otherwise
      **`409 rotation_plan_changed`**, nothing written (a membership arrived, or a scope rotated, in between). A staged
