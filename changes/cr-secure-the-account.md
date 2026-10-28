@@ -358,7 +358,10 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      account's rows.
    - **The commit gate.** `rotateScope` accepts a caller who is not an owner of the scope only while that caller has a
      `veyq_rotation_regrant` row for it whose `epoch_at_rotation` equals the current epoch, and only with no removal
-     (`removesUserId` absent). A removal stays an owner's act. Otherwise `403 not_scope_owner`, as today.
+     (`removesUserId` absent). A removal stays an owner's act. No row, or a removal, is `403 not_scope_owner`, as today;
+     a row the scope has moved past is `409 stale_epoch` (read under the scope's row lock, in `RotationPolicy`) — *built
+     so in phase 2: the bullet below and the gate's test control both answer `stale_epoch` there, which is what tells the
+     client that someone else's commit met the row; `403` would have read as "you may not".*
    - **`finishRotation()`** runs first in `runScopeRotationWorker`, before `resumeRekeys`, on start and every 45 s while
      unlocked (`scopeRotationPolling.ts:11-25`) — so every device of the account finishes, one opened from the new
      Emergency Kit included; `rotateKeys` calls it right after the publish. Per `waiting` row it opens the scope's grant
@@ -831,6 +834,74 @@ skip the void (email red); write the row outside the pass (rollback red); drop t
 
 **Done when:** `./gradlew check` is green, and the guards that read the backend (`validate_grant_writer_arity.py`, the
 two erasure-arity guards, `validate_migration_versions.py`, `validate_time_columns.py`) are green.
+
+#### Phase 2 built (2026-10-28) — where it differs from the text above, and what phases 3–5 inherit
+
+- **Tables** (`V202610280730__core_secure_the_account.sql`): each has a surrogate `id` and a unique key where the text
+  named a composite one (`(user_id, idx)`, `(user_id, scope_id)`, `(stage_id, scope_id)`, one stage per `user_id`), as
+  the other surrogate-keyed tables do. `veyq_key_chain_step` also stores each step's derived `head` (base64), so every
+  directory read serves a head without rebuilding the chain. `veyq_rotation_regrant` has **no `created_at`**: nothing
+  reads it (`EveryStoredTimeHasAReaderTest`, inbox #318). Every table cascades from `veyq_user`; the regrant row and the
+  staged grant also from `veyq_scope`.
+- **An account without a stored step reads as the genesis its row describes** (`KeyChainStore.chainOf`/`heads`). No
+  production account lacks step 0 (the one birth writer writes it); a test fixture's seeded account does, and a rotation
+  of such an account writes step 0 before its step 1. Exact, because a rotation is the only writer that changes the row's
+  keys and it always writes its steps.
+- **The publish's check order** (`RotationHandler.applyAll`), under the account lock: the stage (live, the caller's,
+  declaring exactly the published bundle, digest recomputed over the staged rows → else `409 rotation_plan_changed`);
+  the step's **identity half** under the stored identity (`422 key_chain_step_invalid`); its **proof half** under the
+  stored proof key (`403 secret_key_proof_failed`); the rotation proof under the stored proof key, then possession under
+  the new one (`403 secret_key_proof_failed`); the attestation under the stored auth key (`403 attestation_failed`).
+  The identity half goes first because the step is not sent but rebuilt: a stale predecessor fails every signature over
+  it, and only this order answers it `422` as decision 2 asks. An account with no proof key is `403` before the step.
+- **The set check, and why the locks suffice** (`applyStage`): the scopes the account holds a grant on are read, each
+  row is locked ascending, the memberships are read again, and a membership that appeared in between is
+  `409 rotation_plan_changed` too. Every writer of a grant to the account holds the lock of the scope it writes or of
+  that scope's tenant root (which the account is a member of), so it either committed before the re-read — and must be
+  staged — or waits and then meets the published key. The one writer that holds neither — the account's own accept into
+  a **new** tenant — now takes the account's lock first (`TenantAcceptHandler`, both roles), the order the publish
+  takes (account → scopes). A staged grant for a scope the account no longer holds is not written; a scope in
+  `unreadableScopeIds` keeps its grant and gets no row even if it was also staged.
+- **The stage**: open, chunk and publish all take the account lock. A chunk is checked whole before anything is
+  written — every scope held (`409`) first, then every grant's digest and signature (`422`); a scope named twice in one
+  chunk is upserted in order. `RotationStagePurge` runs every `veyq.account.rotation.stage.purge.every` (5m).
+- **The gate**: a non-owner with no row, or with a removal, is `403 not_scope_owner`; a row the scope moved past is
+  `409 stale_epoch` (decision 4's bullet, edited in place). The rows stay after the commit; the states derive from them.
+- **Decision 10 on the writers that lacked it**: the personal and group birth compare the caller's stored key under the
+  tenant root's lock (`409 recipient_key_not_current`); `rotateScope` every member grant under the scope lock; a
+  grant-delivery completion requires `recipientIdentityDigest` (`400` without) and a mismatch releases the lease
+  without spending an attempt, as `stale_epoch` does; the owner birth compares the caller's key (accept) or the
+  registered bundle (register). Completeness: every member is granted or in `pendingUserIds`, else
+  `409 rotation_incomplete` (the removed one excepted).
+- **The owner view, rebased** (`CompromiseRotationPolicy`, kept by name for the PIT manifest): judged on the scope's
+  newest `scope-rotation` job — done needs nobody, dead is `failed`, live with no owner who may claim it is `stalled`.
+  `requeueScopeRotation` re-originates without an exclusion. The account-rotation states are `RotationScopeStates`
+  (pure, unit-tested, not yet in the PIT scope).
+- **Removed**: `originateScopeRotationExcluding`, `exclude`, `isRotationExcluded`, `compromiseRotations`,
+  `requeueFailedRotations`' rotator path, `ROTATION_ORIGINATOR`, `clearDeclinesForTarget`, `TasksHandler.clearDeclines`,
+  `RekeyRight.Excluded`, `RotateOutcome.RotationExcluded`, `RotationDecision.Excluded`, `MembershipStore.memberCountsByScopeFor`.
+- **Coverage YAMLs** (`uc.account.rotate-keys`, `uc.spaces.complete-queued-rotation`, `uc.spaces.rekey-after-rotation`):
+  the criteria whose backend refs named removed tests were re-pointed, and the five whose behaviour is gone rewritten to
+  the built backend, each marked for phase 6 (which aligns the use cases themselves).
+- `validate_node_rekey_arity.py` excludes `RotationStageGrantEntity.wrapped_grant` (sealed to an identity, never to a
+  node key).
+- **Green at the end of phase 2** (`afb8571d7`): `./gradlew check` (2,540 tests, load 7.1 at start); every
+  `scripts/validate_*.py`; `validate_guard_gaps.py --force` (91 cases; two validators changed). The reproducing tests
+  were red first against the phase-1 tree with the new operations stubbed (38 of 39 `RotationSliceTest`, 7 of 7
+  `RecipientKeySliceTest`, 4 of 5 `KeyChainSliceTest`). Every check named above was bitten — 28 levers, each snapshotted,
+  broken, its named test red, restored and `cmp`-identical — plus the two changed guards. `src/web` stays red until
+  phases 3–5.
+
+**What phases 3–5 meet on the server** (exact codes): `POST /api/account/rotation/stage` → `201 {stageId, expiresAt}`;
+`PUT …/stage/{id}/grants` → `204`, or `404 rotation_stage_not_found`, `409 rotation_plan_changed` (a scope not held),
+`422 self_grant_invalid`, `400` past 256; the grant statement is signed by the **new** identity with the caller as
+recipient and the scope's own kind; `GET /api/account/rotation/plan` lists every grant-carrying membership in every
+tenant, ascending by `scopeId`. The publish's `stagedGrantsDigest` must be over exactly the rows the server holds
+staged — after a `409`, re-stage the delta into the same stage and recompute over the union. Its refusals are listed
+above; after it, `GET /api/account/rotation/scopes` reads `waiting` until the account commits each scope's next epoch
+(`rotateScope` with the self-grant to the **new** key, every other member granted or in `pendingUserIds`), where a
+`409 stale_epoch` means someone else's commit met the row. Every directory read now serves `keyChainHead` (and
+`ScopeMember.pending`); `GET /api/people/{id}/key-chain` serves the chain (step 0's `previousHead` and signatures null).
 
 ### Phase 3: web, the trust layer
 
