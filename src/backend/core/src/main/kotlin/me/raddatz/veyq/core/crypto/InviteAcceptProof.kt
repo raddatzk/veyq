@@ -44,6 +44,41 @@ object InviteAcceptProof {
         return Ed25519Verifier.verify(sign, stmt, sig)
     }
 
+    /**
+     * The owner's `invite-key` statement (`seal.ts` `STATEMENT_PURPOSES['invite-key']`, the `invite_key` vector):
+     * `lp(utf8("invite-key")) || lp(utf8(tenantId)) || lp(utf8(inviteId)) || lp(sha256(invite bundle)) ||
+     * lp(u64be(expiresAt in Unix seconds))`, or null for an id that is no canonical UUID, a bundle that is no base64 or
+     * a negative expiry.
+     */
+    fun inviteKeyStatement(tenantId: String, inviteId: String, invitePublicKeyB64: String, expiresAtSeconds: Long): ByteArray? {
+        if (!CANONICAL_UUID.matches(tenantId) || !CANONICAL_UUID.matches(inviteId) || expiresAtSeconds < 0) return null
+        val bundle = decode(invitePublicKeyB64) ?: return null
+        return listOf(
+            "invite-key".toByteArray(Charsets.UTF_8),
+            tenantId.toByteArray(Charsets.UTF_8),
+            inviteId.toByteArray(Charsets.UTF_8),
+            sha256(bundle),
+            ByteBuffer.allocate(8).putLong(expiresAtSeconds).array(),
+        ).fold(ByteArray(0)) { acc, f -> acc + lp(f) }
+    }
+
+    /**
+     * Whether [signatureB64] is the inviting owner's signature over the invite key, under the Ed25519 half of
+     * [signerIdentityPublicKeyB64] — the key the server holds for the caller. An honest server's check (the invitee's
+     * client checks it against the fingerprint in the link either way): it keeps a session without the owner's unlocked
+     * vault — a phished password — from minting an invite any client would carry or deliver to, the role the admission
+     * tag played. False for any malformed input.
+     */
+    fun inviteKeyVerifies(
+        signerIdentityPublicKeyB64: String?, tenantId: String, inviteId: String, invitePublicKeyB64: String,
+        expiresAtSeconds: Long, signatureB64: String?,
+    ): Boolean {
+        val sign = signerIdentityPublicKeyB64?.let(::decode)?.let(::signHalf) ?: return false
+        val stmt = inviteKeyStatement(tenantId, inviteId, invitePublicKeyB64, expiresAtSeconds) ?: return false
+        val sig = signatureB64?.let(::decode) ?: return false
+        return Ed25519Verifier.verify(sign, stmt, sig)
+    }
+
     /** Whether [digestB64] is SHA-256 of the DECODED bundle [identityPublicKeyB64] — the check a grant's
      *  `recipientIdentityDigest` meets against the key the server stores for its recipient. */
     fun digestMatches(identityPublicKeyB64: String?, digestB64: String?): Boolean {

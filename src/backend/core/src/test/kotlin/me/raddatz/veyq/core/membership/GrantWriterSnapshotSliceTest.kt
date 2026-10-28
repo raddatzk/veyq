@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -134,8 +135,10 @@ class GrantWriterSnapshotSliceTest {
     @Test
     fun aMemberInviteRecordsItsSignersKey(): Unit = TestMailbox(INVITE_SMTP_PORT).start().use { mail ->
         // The invite is a placeholder member (ADR 0111 decision 1): its grant to the invite key is the inviting owner's,
-        // with the key they hold at the mint — read by the write, never taken from the body.
-        val (owner, key) = granter()
+        // with the key they hold at the mint — read by the write, never taken from the body. The default seeded key, whose
+        // signing half the fixture signs the invite key with (the server checks that signature under it).
+        val owner = seedUser()
+        val key = TestFixtures.IDENTITY_PUBLIC_KEY
         val domain = "snap-invite-$owner.example.com"
         val tenantId = seedTenant(domain = domain, owner = owner)
         mail.receiveFor(tenants, tenantId, domain)

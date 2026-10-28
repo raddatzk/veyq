@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import org.junit.jupiter.api.Assertions.assertTrue
+import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
@@ -30,7 +32,7 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * A tenant member invite is a **placeholder member** (cr-invite-is-a-placeholder-member, ADR 0111 decisions 1-3): it
+ * A tenant member invite is a **placeholder member** (ADR 0111 decisions 1-3): it
  * holds the invite key the owner signed and a grant wrapped to it; every rotation of the tenant carries it; its
  * invitee grants itself at accept and writes a join record; an invite that ends — accepted, revoked, expired — holds
  * no key and no grant. Every refusal below is anchored on its status and code and owes a control on the same predicate
@@ -42,7 +44,7 @@ class InvitePlaceholderSliceTest {
 
     @Inject lateinit var store: TenantStore
 
-    // --- creating an invite (decisions 1, 4, 5) ---
+    // --- creating an invite (ADR 0111 decisions 1-2) ---
 
     @Test
     fun aMemberInviteStoresTheInviteKeyItsSignatureAndAGrant(): Unit = TestMailbox(MINT_SMTP_PORT).start().use { mail ->
@@ -54,9 +56,15 @@ class InvitePlaceholderSliceTest {
         val row = tx { TenantInviteEntity.findById(key.inviteId)!! }
         assertEquals(TenantInviteEntity.MEMBER to TenantInviteEntity.ACTIVE, row.role to row.status)
         assertEquals(
-            listOf(key.bundle, TestGrants.SIGNATURE, owner, IDENTITY_PUBLIC_KEY),
-            listOf(row.invitePublicKey, row.inviteKeySignature, row.signerUserId, row.signerIdentityPublicKey),
-            "the invite key, the owner's signature over it, and the owner with the key they hold now",
+            listOf(key.bundle, owner, IDENTITY_PUBLIC_KEY),
+            listOf(row.invitePublicKey, row.signerUserId, row.signerIdentityPublicKey),
+            "the invite key, and the owner with the key they hold now",
+        )
+        assertTrue(
+            InviteAcceptProof.inviteKeyVerifies(
+                row.signerIdentityPublicKey, tenantId, key.inviteId, key.bundle, row.expiresAt.epochSecond, row.inviteKeySignature,
+            ),
+            "the owner's signature over the invite key, as posted, verifying under that key and the stored expiry",
         )
         assertEquals(
             listOf<Any?>(TestGrants.WRAPPED, 0, TestGrants.SIGNATURE, owner, IDENTITY_PUBLIC_KEY),
@@ -114,7 +122,21 @@ class InvitePlaceholderSliceTest {
         invite(owner, tenantId, TestGrants.memberInviteJson(tenantId, "a@ph-expiry.example.com", key)).then().statusCode(201)
     }
 
-    // --- every rotation of the tenant carries every open invite (decision 6) ---
+    @Test
+    fun aMemberInviteNotSignedByTheCallerIsRefused(): Unit = TestMailbox(SIGNATURE_SMTP_PORT).start().use { mail ->
+        // A session without the owner's unlocked vault (a phished password) holds no identity key to sign the invite key
+        // with: the server checks the `invite-key` signature under the caller's stored key, so such an invite is never
+        // minted — the role the admission tag played on an honest server. Every other field is genuine.
+        val (tenantId, owner) = seedActiveTenant("ph-signature.example.com", mail)
+        val key = TestInviteKey()
+        val forged = TestGrants.memberInviteJson(tenantId, "a@ph-signature.example.com", key, signerSeed = ByteArray(32) { 0x11 })
+        invite(owner, tenantId, forged).then().statusCode(400).body("code", equalTo("invalid_request"))
+        assertNull(tx { TenantInviteEntity.findById(key.inviteId) }, "nothing minted")
+        // Control: the caller's own signature.
+        invite(owner, tenantId, TestGrants.memberInviteJson(tenantId, "a@ph-signature.example.com", key)).then().statusCode(201)
+    }
+
+    // --- every rotation of the tenant carries every open invite (ADR 0111 decision 2) ---
 
     @Test
     fun aRotationOfTheTenantMustCarryEveryOpenInvite() {
@@ -143,7 +165,7 @@ class InvitePlaceholderSliceTest {
         assertEquals(listOf<Any?>(TestGrants.WRAPPED, 0, signer), grantOf(b.inviteId))
     }
 
-    // --- every member reads the open invites, no email (decision 6) ---
+    // --- every member reads the open invites, no email (ADR 0111 decision 2) ---
 
     @Test
     fun listOpenInvitesServesEveryMemberAndNoEmail() {
@@ -174,7 +196,7 @@ class InvitePlaceholderSliceTest {
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }
 
-    // --- the invitee grants itself and writes its join record (decisions 3, 8, 9) ---
+    // --- the invitee grants itself and writes its join record (ADR 0111 decisions 3 and 12) ---
 
     @Test
     fun acceptingWritesAGrantedMembershipAndTheJoinRecordAndConsumesTheKey() {
@@ -260,7 +282,7 @@ class InvitePlaceholderSliceTest {
             .`when`().post("/api/tenants/accept").then().statusCode(200)
     }
 
-    // --- an invite that ends holds no key and no grant (decision 7) ---
+    // --- an invite that ends holds no key and no grant (ADR 0111 decision 2) ---
 
     @Test
     fun revokingOrExpiringAnInviteDropsItsKeyAndGrant() {
@@ -392,5 +414,6 @@ class InvitePlaceholderSliceTest {
         const val STALE_SMTP_PORT = 13952
         const val DIGEST_SMTP_PORT = 13953
         const val EXPIRY_SMTP_PORT = 13954
+        const val SIGNATURE_SMTP_PORT = 13955
     }
 }

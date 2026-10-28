@@ -22,6 +22,7 @@ import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.IDENTITY_PUBLIC_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -445,7 +446,7 @@ class ScopesSliceTest {
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.kind == 'PERSONAL' }.granterUserId", equalTo(owner))
             .body("find { it.kind == 'PERSONAL' }.grantSignature", equalTo(TestGrants.SIGNATURE))
-            .body("find { it.kind == 'PERSONAL' }.granterIdentityPublicKey", equalTo("aWRlbnRpdHktcHVibGljLWtleQ=="))
+            .body("find { it.kind == 'PERSONAL' }.granterIdentityPublicKey", equalTo(IDENTITY_PUBLIC_KEY))
             // A grant written before grants were signed (the seeded tenant root) carries none — the client refuses it.
             .body("find { it.kind == 'TENANT' }.granterUserId", nullValue())
             .body("find { it.kind == 'TENANT' }.grantSignature", nullValue())

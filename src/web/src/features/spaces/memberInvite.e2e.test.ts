@@ -1,4 +1,4 @@
-// Live e2e (VEYQ_E2E=1) for ADR 0111 decisions 1-4 (cr-invite-is-a-placeholder-member) — against a REAL backend +
+// Live e2e (VEYQ_E2E=1) for ADR 0111 decisions 1-4 — against a REAL backend +
 // MariaDB with REAL crypto, no mocks. A member invite is a placeholder member holding an owner-signed invite key and a
 // grant of the tenant's current epoch; the link's secret part is sealed under a code the owner passes on outside veyq.
 // What only this layer proves: that the server stores and serves the invite exactly as the owner's client built it, so

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A MEMBER invite at the accept page (ADR 0111 decisions 1 and 3; cr-invite-is-a-placeholder-member phase 4): the link's
+// A MEMBER invite at the accept page (ADR 0111 decisions 1 and 3): the link's
 // fragment is `#<token>.<sealed>`, so the view asks for the code the owner passed on, opens and CHECKS the invite with
 // the real `tenantInvite` functions before anything is sent, and the accept carries the newcomer's self-grant, the
 // invite key's proof and its join record — opened here with the real crypto. A wrong code is the invitee's to retype; an

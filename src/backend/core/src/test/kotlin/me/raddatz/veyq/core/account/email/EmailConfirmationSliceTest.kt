@@ -451,7 +451,7 @@ class EmailConfirmationSliceTest {
 
     private companion object {
         /** The identity bundle every account here holds — the fixture's, and the one a register births. */
-        const val IDENTITY = "aWRlbnRpdHktcHVibGljLWtleQ=="
+        val IDENTITY: String = me.raddatz.veyq.core.testing.TestFixtures.IDENTITY_PUBLIC_KEY
 
         /** `veyq.ratelimit.email-confirmation.per-account-max-requests`. */
         const val PER_ACCOUNT_MAX = 3

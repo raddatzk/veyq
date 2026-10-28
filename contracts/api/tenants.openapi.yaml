@@ -397,8 +397,9 @@ paths:
                 delivery: SENT
         "400":
           description: >
-            The request was malformed (missing/invalid email or invite material), or `expiresAt` is not the server's
-            invite lifetime from now (±1 minute) — `invalid_request`.
+            The request was malformed (missing/invalid email or invite material), `expiresAt` is not the server's
+            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
+            — a session without the owner's unlocked vault mints no invite — `invalid_request`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -540,8 +541,9 @@ paths:
                 delivery: SENT
         "400":
           description: >
-            The request was malformed, its `email` is not the reissued invite's, or `expiresAt` is not the server's
-            invite lifetime from now (±1 minute) — `invalid_request`.
+            The request was malformed, its `email` is not the reissued invite's, `expiresAt` is not the server's
+            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
+            — `invalid_request`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2703,8 +2705,9 @@ components:
           type: string
           description: >
             The inviting owner's Ed25519 identity signature over `encode(invite-key: tenantId, inviteId,
-            sha256(invitePublicKey), expiresAt in Unix seconds)`. The server stores it beside the owner's current
-            identity key and never verifies it; the invitee checks it against the fingerprint inside the link's seal.
+            sha256(invitePublicKey), expiresAt in Unix seconds)`. The server verifies it under the caller's stored
+            identity key before it mints (`400 invalid_request`) — so a session without the owner's unlocked vault mints
+            no invite — and stores it beside that key; the invitee checks it against the fingerprint inside the link's seal.
           contentEncoding: base64
           maxLength: 128
           example: c2lnbmF0dXJl

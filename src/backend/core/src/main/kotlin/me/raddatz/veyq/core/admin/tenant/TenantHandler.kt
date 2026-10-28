@@ -146,7 +146,8 @@ sealed interface MemberInviteOutcome {
     data object IdTaken : MemberInviteOutcome, HttpFailure by Failures.idTaken
     /** The grant's `recipientIdentityDigest` is not the invite key's. */
     data object RecipientKeyNotCurrent : MemberInviteOutcome, HttpFailure by Failures.recipientKeyNotCurrent
-    /** `expiresAt` is not the server's invite lifetime from now, within a minute. */
+    /** `expiresAt` is not the server's invite lifetime from now, within a minute; or the owner's signature over the
+     *  invite key does not verify under the caller's identity key. */
     data object BadExpiry : MemberInviteOutcome, HttpFailure by Failures.invalidRequest
 
     /** The tenant cannot send mail, and a member invite has no other channel (ADR 0055 §2) — nothing is minted. */
@@ -509,6 +510,7 @@ class TenantHandler(
         val existing = accounts.findByEmail(normalizedEmail)
         if (existing != null && store.belongsToTenant(existing.id, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.AlreadyMember)
         if (!expiryIsTheLifetime(input.expiresAt)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
+        if (!signedByCaller(callerId, tenantId, input)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
         if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {
             return@commitThenSend MintResult.Rejected(MemberInviteOutcome.RecipientKeyNotCurrent)
         }
@@ -558,6 +560,15 @@ class TenantHandler(
         store.revokeInvite(inviteId)
     }
 
+    /** Whether the invite key carries the caller's own `invite-key` signature, under the identity key the server holds for
+     *  them — so a session without the owner's unlocked vault mints no invite (an honest server's check, ADR 0111). An
+     *  expiry with a fraction of a second is no signed one. */
+    private fun signedByCaller(callerId: String, tenantId: String, input: MemberInviteInput): Boolean =
+        input.expiresAt.nano == 0 && InviteAcceptProof.inviteKeyVerifies(
+            VeyqUser.findById(callerId)?.identityPublicKey, tenantId, input.inviteId, input.invitePublicKey,
+            input.expiresAt.epochSecond, input.inviteKeySignature,
+        )
+
     /** The owner signed the expiry, so the server takes the client's — but only within a minute of its own lifetime. */
     private fun expiryIsTheLifetime(expiresAt: Instant): Boolean =
         Duration.between(Instant.now().plus(inviteTtl), expiresAt).abs() <= EXPIRY_TOLERANCE
@@ -603,7 +614,7 @@ class TenantHandler(
         // this lock, and the fresh invite's grant must be of the epoch that lock holds.
         store.lockTenantScope(tenantId)
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InviteNotFound)
-        if (normalizeEmail(input.email) != invite.ownerEmail || !expiryIsTheLifetime(input.expiresAt)) {
+        if (normalizeEmail(input.email) != invite.ownerEmail || !expiryIsTheLifetime(input.expiresAt) || !signedByCaller(callerId, tenantId, input)) {
             return@commitThenSend MintResult.Rejected(ReissueOutcome.InvalidRequest)
         }
         if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {

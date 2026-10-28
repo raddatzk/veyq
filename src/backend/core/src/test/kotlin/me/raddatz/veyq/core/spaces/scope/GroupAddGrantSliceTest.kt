@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * A group add carries the grant (cr-invite-is-a-placeholder-member, ADR 0111 decision 4): the group owner wraps the
+ * A group add carries the grant (ADR 0111 decision 4): the group owner wraps the
  * group's current epoch key to the target's identity key and the membership — direct or a consent proposal — holds it
  * from the add on, so nobody waits for a key-holder; a proposal the target declines held the key, so the group's
  * rotation is queued. Every refusal is anchored on its status and code beside a control that passes.

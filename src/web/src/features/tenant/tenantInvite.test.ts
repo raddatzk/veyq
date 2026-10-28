@@ -72,7 +72,7 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
   })
 })
 
-// ── A member invite, the invitee's half (ADR 0111 decisions 1 and 3; cr-invite-is-a-placeholder-member decision 8) ──
+// ── A member invite, the invitee's half (ADR 0111 decisions 1 and 3) ──
 // Each check has a crafted negative that fails EXACTLY that check — the rest of the invite stays genuine, so a check
 // that was dropped would let it through (the bite) — and the genuine invite is the control on the same path.
 

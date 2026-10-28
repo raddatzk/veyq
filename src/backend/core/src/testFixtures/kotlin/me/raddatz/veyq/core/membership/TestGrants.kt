@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.admin.tenant.MemberInviteKey
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.TestFixtures
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import java.nio.ByteBuffer
@@ -68,10 +69,25 @@ object TestGrants {
     /** A member invite request's fields as JSON members (no braces), for [email], keyed by [key], its grant of
      *  [epoch] (default: the tenant scope's current one, read now), expiring at the server's lifetime (7 days,
      *  `veyq.tenant.invite.ttl`). */
-    fun memberInviteJson(tenantId: String, email: String, key: TestInviteKey = TestInviteKey(), epoch: Int? = null): String =
-        """"email":"$email","inviteId":"${key.inviteId}","invitePublicKey":"${key.bundle}","inviteKeySignature":"$SIGNATURE",""" +
-            """"expiresAt":"${Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS)}","sealedLink":"$SEALED_LINK",""" +
+    fun memberInviteJson(
+        tenantId: String, email: String, key: TestInviteKey = TestInviteKey(), epoch: Int? = null,
+        signerSeed: ByteArray = TestFixtures.IDENTITY_SIGN_SEED,
+    ): String {
+        val expiresAt = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS)
+        return """"email":"$email","inviteId":"${key.inviteId}","invitePublicKey":"${key.bundle}",""" +
+            """"inviteKeySignature":"${inviteKeySignature(signerSeed, tenantId, key, expiresAt)}",""" +
+            """"expiresAt":"$expiresAt","sealedLink":"$SEALED_LINK",""" +
             """"epoch":${epoch ?: epochOf(tenantId)},"wrappedGrant":"$WRAPPED",$SIGNATURE_JSON,"recipientIdentityDigest":"${digest(key.bundle)}""""
+    }
+
+    /** The inviting owner's real `invite-key` signature by the Ed25519 [signerSeed] — the server checks it under the
+     *  caller's stored identity key ([TestFixtures.IDENTITY_PUBLIC_KEY] holds [TestFixtures.IDENTITY_SIGN_SEED]'s). */
+    fun inviteKeySignature(signerSeed: ByteArray, tenantId: String, key: TestInviteKey, expiresAt: Instant): String {
+        val stmt = InviteAcceptProof.inviteKeyStatement(tenantId, key.inviteId, key.bundle, expiresAt.epochSecond)!!
+        val priv = java.security.KeyFactory.getInstance("Ed25519")
+            .generatePrivate(java.security.spec.EdECPrivateKeySpec(java.security.spec.NamedParameterSpec.ED25519, signerSeed))
+        return Base64.getEncoder().encodeToString(Signature.getInstance("Ed25519").run { initSign(priv); update(stmt); sign() })
+    }
 
     /** A stand-in sealed link part (standard base64, as the request carries it). */
     const val SEALED_LINK = "c2VhbGVkLWxpbms+Pz8/"

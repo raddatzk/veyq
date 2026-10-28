@@ -1,5 +1,4 @@
-// uc.spaces.add-member, the owner's side of a member invite (ADR 0111 decisions 1-2; cr-invite-is-a-placeholder-member
-// phase 3): what `inviteMember` / `reissueMemberInvite` POST, opened the way only the invitee can open it — the link's
+// uc.spaces.add-member, the owner's side of a member invite (ADR 0111 decisions 1-2): what `inviteMember` / `reissueMemberInvite` POST, opened the way only the invitee can open it — the link's
 // sealed part with the code, the seed inside it to the invite key, that key to the grant. Every claim about the posted
 // bytes is checked with the real crypto; each negative has a control that passes on the same bytes.
 import { describe, it, expect, vi, beforeEach } from 'vitest'

@@ -2,7 +2,7 @@
 // they accept the second one (uc.spaces.consent-group-add) — against a REAL backend + MariaDB with REAL crypto.
 //
 // Since ADR 0111 decision 4 a proposal holds the group's grant from the add on: the target could open the key, so a
-// decline queues the group's rotation (the CR's decision 10), which the owner's worker completes, and the second
+// decline queues the group's rotation (ADR 0111 decision 4: the proposal held the group's key), which the owner's worker completes, and the second
 // proposal carries a grant of the NEW epoch. Accepting changes nothing about keys and queues nothing — the control on
 // the same worker call. First seen on a live walk (2026-10-16) as a re-added member declined by the old admission gate;
 // that gate is gone, and what this suite keeps is the decline → re-add → accept path end to end.

@@ -146,7 +146,7 @@ export function inviteLinkMode(sealedPart: string): invite.InviteLinkMode | null
 }
 
 /**
- * Open and check a member invite before anything is sent (ADR 0111 decision 1, the CR's decision 8): open the link's
+ * Open and check a member invite before anything is sent (ADR 0111 decisions 1 and 3): open the link's
  * sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then {@link invite.checkInvite}
  * — the key the seed derives must be the served one, the served signer must hash to the fingerprint inside the seal and
  * the owner's signature must verify under it ({@link invite.InviteCheckFailed} otherwise) — then verify the invite
