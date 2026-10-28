@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The safety number on a profile (uc.spaces.enforce-verified-identities main flow 0-3, A1, E1; ADR 0028 Decision 3;
-// cr-secure-the-account decision 9). The pin store's write door (`markVerified`) and its read (`personTrust` — the fold
+// ADR 0028 Decision 2). The pin store's write door (`markVerified`) and its read (`personTrust` — the fold
 // against the served key and head, and the chain's newest step) are mocked so each test can say exactly what was read and
 // written; the number and the QR codec are REAL (the vector-pinned `safetyNumber`, `safetyCode`), so a scanned code is
 // compared the way the app compares it. The fold itself, the chain walk and the store's one-write/merge behaviour are

@@ -369,7 +369,7 @@ paths:
 
         A decline lasts until the target's key chain advances: the publish of the target's account rotation deletes
         the declines of every job whose target it is, so a worker that could not anchor the old key tries the new one
-        (cr-secure-the-account decision 10). No human override clears one — an anomaly is never accepted by hand.
+        (ADR 0111 decision 9). No human override clears one — an anomaly is never accepted by hand.
       security:
         - bearerAuth: []
       parameters:

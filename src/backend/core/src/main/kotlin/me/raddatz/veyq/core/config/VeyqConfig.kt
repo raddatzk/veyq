@@ -387,7 +387,7 @@ interface VeyqConfig {
             fun purge(): Interval
         }
 
-        /** `veyq.account.rotation.*` — securing the account (cr-secure-the-account decision 3). */
+        /** `veyq.account.rotation.*` — securing the account (ADR 0111 decision 6). */
         interface Rotation {
             fun stage(): Stage
 

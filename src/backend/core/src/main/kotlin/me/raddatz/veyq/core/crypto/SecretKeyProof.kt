@@ -30,7 +30,7 @@ object SecretKeyProof {
     data class Wrap(val wrappedKey: String, val kdfParams: String)
 
     /**
-     * Securing the account (cr-secure-the-account decisions 2, 3, 7): the identity and auth key it replaces, and
+     * Securing the account (ADR 0111 decision 7, ADR 0111 decision 6, ADR 0060 Decision 2): the identity and auth key it replaces, and
      * everything it installs — the new identity bundle, the new identity private key under the new Master Key, both
      * rewritten cold wraps, the key-chain step [keyChainStepStatement] (as the server rebuilt it, bound by its SHA-256),
      * the auth key, the new Secret-Key proof public key, and the stage of self-grants it applies ([stageId], canonical

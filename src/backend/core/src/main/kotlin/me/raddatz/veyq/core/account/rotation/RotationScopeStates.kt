@@ -3,7 +3,7 @@ package me.raddatz.veyq.core.account.rotation
 /** Why a scope's next epoch cannot be committed now — a write the scope refuses everyone (uc.spaces.scope-access). */
 enum class RotationBlock { TENANT_SUSPENDED, SCOPE_DELETING }
 
-/** How far one scope a publish re-granted got (uc.account.rotate-keys §9, cr-secure-the-account decision 8). */
+/** How far one scope a publish re-granted got (uc.account.rotate-keys §9, ADR 0060 Decision 6). */
 enum class RegrantState { WAITING, REKEYING, SECURED, BLOCKED }
 
 /** The facts one scope's state is derived from — every one read from a row the server holds. */

@@ -502,7 +502,7 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
   })
 
   /**
-   * A rotateScope with the server's completeness check (cr-secure-the-account decision 10, `RotationPolicy`): every
+   * A rotateScope with the server's completeness check (ADR 0111 decision 9, `RotationPolicy`): every
    * membership is granted, declared pending or removed — else `409 rotation_incomplete`, nothing written.
    */
   function completeRotate(memberIds: string[]) {

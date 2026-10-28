@@ -139,7 +139,7 @@ describe('the stored format is the vectors\' (v1.json#identity_pin)', () => {
   })
 })
 
-describe('anchorIdentity — first use and match (cr-secure-the-account decision 9)', () => {
+describe('anchorIdentity — first use and match (ADR 0028 Decision 2)', () => {
   it('first use reads the chain and pins its head with the key at it; the same key and head again is a local match', async () => {
     const srv = fakeServer()
     const { served, chain } = born(U1, A)

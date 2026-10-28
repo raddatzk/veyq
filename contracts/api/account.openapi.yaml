@@ -729,7 +729,7 @@ paths:
       operationId: getAccountRotationPlan
       summary: Every scope a rotation of the caller's account must carry, across every tenant, with the caller's own grant.
       description: >
-        Host-independent (uc.account.rotate-keys, cr-secure-the-account decision 5): one entry per scope the caller
+        Host-independent (uc.account.rotate-keys, cr-secure-the-account): one entry per scope the caller
         holds a membership on, in **every** tenant — PERSONAL, TENANT and GROUP, a group proposal the caller has not
         answered yet included (it holds a grant from the add on, ADR 0111 decision 4). Each carries the scope's kind,
         tenant and current epoch, why its next epoch cannot be minted now (`blocked`), and the caller's own grant row —
@@ -817,7 +817,7 @@ paths:
           `stagedGrantsDigest` under the Secret Key's proof, recomputed over the staged rows.
       summary: Stage one chunk of self-grants into the caller's open stage.
       description: >
-        Upserts up to 256 self-grants into the stage, by `scopeId` (cr-secure-the-account decision 3): the client
+        Upserts up to 256 self-grants into the stage, by `scopeId` (ADR 0111 decision 6): the client
         stages every scope of the plan in chunks, and after a `409 rotation_plan_changed` re-stages only the delta. Each
         grant hands the scope's epoch key to the identity the stage declares: it is **verified here**, under that
         bundle — the `grant` statement (`grant_signature` crypto vector) with the scope's own kind, `epoch`, the caller
@@ -884,7 +884,7 @@ paths:
       description: >
         Host-independent. For every scope the caller's latest `rotateAccountKeys` re-granted (its pending re-key row)
         and the caller is still a member of, a state derived from rows the server already holds
-        (uc.account.rotate-keys §9, cr-secure-the-account decision 8) — first match wins: `blocked` (with `reason`)
+        (uc.account.rotate-keys §9, ADR 0060 Decision 6) — first match wins: `blocked` (with `reason`)
         while the scope's tenant is suspended (`tenant_suspended`) or the scope is being deleted (`scope_deleting`);
         `waiting` while the scope's current epoch is still the one it had at the rotation — its next epoch is the
         account's to mint, from any of its devices; `rekeying` while a live or trashed node of the scope lags the
@@ -1872,7 +1872,7 @@ components:
         What is deliberately absent, so the next reader does not add it back: no wrap `method` — see `RotatedWrap`; no
         list of wraps to delete — every non-cold wrap goes, always, because device-held key material cannot be
         rewritten from here; no self-grants — they are staged before the publish (`putRotationStageGrants`), because
-        no bound caps an account's memberships and one request cannot carry them all (cr-secure-the-account Phase 0),
+        no bound caps an account's memberships and one request cannot carry them all (cr-secure-the-account),
         and the publish names the stage by `stageId` and `stagedGrantsDigest`; no step index or predecessor — the
         server takes both from the account's stored chain.
 

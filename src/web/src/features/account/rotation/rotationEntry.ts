@@ -1,4 +1,4 @@
-// uc.account.rotate-keys (web) — what the ceremony's entry says before any field (cr-secure-the-account decision 11).
+// uc.account.rotate-keys (web) — what the ceremony's entry says before any field (cr-secure-the-account).
 // Read from the account rotation's plan (decision 5), which serves every scope the account holds a membership on in every
 // tenant, Host-independently: which spaces cannot get their new lock yet and why, and whether this account signed open
 // invitations its rotation ends (§ Order, `factInvites`). Under ADR 0111 no space waits for an owner, so nothing here

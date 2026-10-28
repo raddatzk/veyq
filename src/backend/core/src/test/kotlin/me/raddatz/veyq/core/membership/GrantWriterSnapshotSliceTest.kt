@@ -220,7 +220,7 @@ class GrantWriterSnapshotSliceTest {
 
     @Test
     fun aSecuredAccountsSelfGrantRecordsItsNewKey() {
-        // The publish's self-grant (cr-secure-the-account decision 3): the account is its own granter, and the key it
+        // The publish's self-grant (ADR 0111 decision 6): the account is its own granter, and the key it
         // records is the identity the publish installs — the one that signed the staged grant — never the retired one.
         val keys = TestAccountKeys()
         val owner = seedUser(identityPublicKey = keys.bundle, authPublicKey = keys.auth.publicKey, secretKeyProofPublicKey = keys.proof.publicKey)

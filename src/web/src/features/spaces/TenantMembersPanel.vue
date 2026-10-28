@@ -385,9 +385,9 @@ async function revoke(invite: PendingMemberInvite) {
               </span>
               <div class="veyq-row-meta">
                 <span class="veyq-badge success">{{ t('members.statusActive') }}</span>
-                <!-- Behind the tenant's epoch, declared pending by a rotation (cr-secure-the-account decision 10). -->
+                <!-- Behind the tenant's epoch, declared pending by a rotation (ADR 0111 decision 9). -->
                 <span v-if="member.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
-                <!-- Identity trust (cr-secure-the-account decision 9): "Verified" after a compare on the member's profile,
+                <!-- Identity trust (ADR 0028 Decision 2): "Verified" after a compare on the member's profile,
                      an anomaly when the served key does not follow from the pinned head. -->
                 <MemberTrustBadge :trust="trust[member.userId]" />
               </div>

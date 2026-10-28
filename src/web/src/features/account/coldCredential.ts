@@ -24,7 +24,7 @@ export type ColdCredentialRefusal =
   /** The credential is right, but for a Master Key this vault does not hold: the floor opened to another key, and that
    *  key opens the identity the server now serves — the account was secured since this vault opened (another device,
    *  or this one whose answer was lost). Securing the account FINISHES from here and never mints again
-   *  (cr-secure-the-account decision 12); change-password and change-email read it as `credentialRejected`. */
+   *  (uc.account.rotate-keys); change-password and change-email read it as `credentialRejected`. */
   | 'vaultStale'
 
 /** Thrown before any write. A caller that catches this has changed nothing, anywhere. */
@@ -112,7 +112,7 @@ export async function checkColdCredential(password: string, secretKeyB64: string
 /**
  * The refusal as the credential flows that do not finish a rotation read it (change-password, change-email): a vault
  * that is stale behind a secured account is the same "that password or Secret Key didn't match" to them as before the
- * split — they never act on the newer key (cr-secure-the-account decision 12). Rethrows anything else unchanged.
+ * split — they never act on the newer key (uc.account.rotate-keys). Rethrows anything else unchanged.
  */
 export function staleAsRejected(e: unknown): never {
   if (e instanceof ColdCredentialRefused && e.reason === 'vaultStale') throw new ColdCredentialRefused('credentialRejected')

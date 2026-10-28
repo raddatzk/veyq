@@ -24,7 +24,7 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * ADR 0111 decision 10 on every grant writer that lacked it (cr-secure-the-account decision 6): a grant names the key it
+ * ADR 0111 decision 10 on every grant writer that lacked it (cr-secure-the-account): a grant names the key it
  * is wrapped to (`recipientIdentityDigest`), and the server refuses one that is not the recipient's CURRENT identity
  * with `409 recipient_key_not_current`, nothing written — so no grant to an account's retired identity can be written,
  * whichever writer a stale client uses. Each case: the account's identity was replaced (its retired key is [RETIRED]),

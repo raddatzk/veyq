@@ -640,7 +640,7 @@ export function identityVerify(
   }
 }
 
-// ── Key chain (ADR 0111 decision 7, cr-secure-the-account decision 2) ──────────────────────────────────────
+// ── Key chain (ADR 0111 decision 7, cr-secure-the-account) ──────────────────────────────────────
 // An account's identities form one chain. Step 0 (`key-chain-genesis`) is the identity public bundle and the Secret-Key
 // proof public key the account was born with, unsigned. Each securing of the account appends a step (`key-chain-step`)
 // naming the head of the step before it, the SHA-256 of the two keys it retires and the two keys it installs in full,
@@ -797,7 +797,7 @@ function ed25519Verifies(publicKey: Uint8Array, message: Uint8Array, signature: 
   }
 }
 
-// ── Rotation stage (cr-secure-the-account decision 3) ───────────────────────────────────────────────────────
+// ── Rotation stage (ADR 0111 decision 6) ───────────────────────────────────────────────────────
 // Securing the account stages its self-grants before the publish, in chunks, and the publish names the stage by its
 // id and by this digest — bound into the rotation proof statement, so the Secret Key's proof covers exactly the staged
 // set and the server applies only what it recomputes from the staged rows. Same shape as the identity-pin set digest:

@@ -10,7 +10,7 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * An account's one open stage of self-grants (cr-secure-the-account decision 3): the identity bundle the rotation will
+ * An account's one open stage of self-grants (ADR 0111 decision 6): the identity bundle the rotation will
  * publish, and when the stage expires (server-observed, `veyq.account.rotation.stage.ttl` after it opened). Inert —
  * ciphertext and scope ids the server already holds as grant rows — until a Secret-Key-proved publish names it.
  * A second open replaces it; the publish deletes it; [RotationStagePurge] deletes an expired one; the account's erasure

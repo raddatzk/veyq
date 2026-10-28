@@ -10,7 +10,7 @@
 // at the head the directory served, in the same sealed write (`pinAtHead`). A key that moved under the compare
 // (`IdentityMovedError`) writes nothing and says so. A mismatch never writes.
 //
-// Their key chain (cr-secure-the-account decision 9) is read here: a key it reaches from the pinned head moves the pin
+// Their key chain (ADR 0028 Decision 2) is read here: a key it reaches from the pinned head moves the pin
 // (and drops a `verified`), and the date of its newest step, when that is a rotation, is said ("New identity, signed by
 // their previous key"); a key it does not reach is an ANOMALY, shown with its note and no accept — it returns only
 // through the chain.

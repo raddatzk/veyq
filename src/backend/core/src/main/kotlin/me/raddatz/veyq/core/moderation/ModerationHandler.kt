@@ -251,7 +251,7 @@ class ModerationHandler(
 
     /**
      * Every accepted moderator missing epochs [holderId] holds, with the identity to seal them to and the head of its key
-     * chain — what the holder anchors that identity by (cr-secure-the-account decision 9), as every directory read that
+     * chain — what the holder anchors that identity by (ADR 0028 Decision 2), as every directory read that
      * serves another user's key serves its head.
      */
     @Transactional

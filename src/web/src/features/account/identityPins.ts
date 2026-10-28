@@ -1,7 +1,7 @@
 // Identity pinning — the operator-blind, cross-device pin store and the one key check every wrap and every grant from
 // another account goes through (en.account.identity-pinning, ADR 0028, ADR 0104, ADR 0111 decisions 9, 15 and 16).
 //
-// **A pin is a contact's key-chain head** (cr-secure-the-account decision 9). A client pins the head of a contact's key
+// **A pin is a contact's key-chain head** (ADR 0028 Decision 2). A client pins the head of a contact's key
 // chain the first time it meets them (trust on first use) together with the fingerprint of the key at that head. A later
 // key is accepted only when the chain reaches it from that pinned head — every step signed by the identity AND the
 // Secret-Key proof key it retires — and the pin then moves to the new head; anything else is an **anomaly**: never wrapped
@@ -74,7 +74,7 @@ const MAX_ENTRIES = 25_000
 export type PinState = 'pinned' | 'verified'
 
 /** The trust a contact reads as, folding the pin against the key and head a directory serves for them now (the badge
- *  read). `anomaly` is a key the chain does not reach from the pinned head (cr-secure-the-account decision 9). */
+ *  read). `anomaly` is a key the chain does not reach from the pinned head (ADR 0028 Decision 2). */
 export type TrustState = 'verified' | 'pinned' | 'anomaly' | 'unpinned'
 
 /** One contact's badge read. */
@@ -111,7 +111,7 @@ interface Head {
 }
 
 /**
- * What a served key comes to against this account's pin (cr-secure-the-account decision 9):
+ * What a served key comes to against this account's pin (ADR 0028 Decision 2):
  * - `firstUse` — no pin: the chain was read, its head is the served one and its newest key the served key; the head is
  *   pinned (trust on first use, ADR 0111 decision 15's unknown person);
  * - `match` — the served head is the pinned head and the served key the key at it;
@@ -529,7 +529,7 @@ export interface ServedIdentity {
 
 /**
  * The one check before a wrap to another account's key, and before trusting a key another account signed with
- * (cr-secure-the-account decision 9; it replaces the fingerprint-only `checkAndPin`). Answers {@link Anchor}:
+ * (ADR 0028 Decision 2; it replaces the fingerprint-only `checkAndPin`). Answers {@link Anchor}:
  * `match` is local (no fetch); the chain is read only when the served head differs from the pinned one, or on first use;
  * `firstUse` and `advanced` move the pin. Never accepts a prefix the server supplies: the walk starts at the pinned head.
  *
@@ -571,7 +571,7 @@ export async function anchorIdentity(
 export type ChainKeyAnchor = { anchor: Anchor; retired: boolean }
 
 /**
- * {@link anchorIdentity} for a key served without a head (cr-secure-the-account decision 9: the per-grant snapshot gets
+ * {@link anchorIdentity} for a key served without a head (ADR 0028 Decision 2: the per-grant snapshot gets
  * none, it may be a retired key). The pinned key itself is `match` with no fetch. Any other key is looked up in the
  * contact's chain, walked from the pinned head as {@link anchorIdentity} walks it: the newest key is `firstUse` or
  * `advanced` (the pin moves as there), an earlier key of the chain is answered with `retired` — the caller decides what

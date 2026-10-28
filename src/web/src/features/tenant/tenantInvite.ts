@@ -223,8 +223,7 @@ export async function openMemberInvite(tenantId: string, served: ServedMemberInv
 }
 
 /**
- * Whether a signed-in account may accept an opened member invite against its pin store (cr-secure-the-account decision
- * 9). The account is not yet a co-member, so the server serves it nobody's key chain here:
+ * Whether a signed-in account may accept an opened member invite against its pin store (ADR 0028 Decision 2). The account is not yet a co-member, so the server serves it nobody's key chain here:
  * - **the inviting owner** — whose key the link's fingerprint already vouched for ({@link openMemberInvite}) — is pinned
  *   at the head the invite serves on first use, and judged by the chain from the pinned head when it is known;
  * - **a foreign granter** (a rotation re-wrapped the grant) the account already pinned is judged against its chain like

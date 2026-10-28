@@ -61,7 +61,7 @@ export type GrantRow = {
  * - **PERSONAL**: only a self-granted grant opens. The kind is signed, so a group's genuine grant served in the
  *   personal scope's row does not verify as `PERSONAL`, and a foreign-signed one is refused outright.
  * - **Shared**: the signature must verify under the granter's key the grant row carries (its per-grant snapshot), and
- *   the granter's key chain must reach that key from the head this account pinned (cr-secure-the-account decision 9,
+ *   the granter's key chain must reach that key from the head this account pinned (ADR 0028 Decision 2,
  *   `anchorChainKey`): the pinned key matches with no fetch; a first-seen chain is pinned and a chain that advanced
  *   moves the pin (only after the signature verified, so a forged grant pins nothing); anything else is refused as
  *   `granter_key_unanchored` — with no accept, the key returns only through the chain.

@@ -60,7 +60,7 @@ beforeEach(() => {
 /** A scope row as `listMyScopes` serves it, re-keying or not (every member's row carries the flag, ADR 0111 decision 11). */
 const row = (id: string, rekeying: boolean) => ({ id, rekeying }) as unknown as ScopeSummary
 
-describe('runScopeRotationWorker finishes a secured account first (cr-secure-the-account decision 4)', () => {
+describe('runScopeRotationWorker finishes a secured account first (ADR 0111 decision 8)', () => {
   it('runs the finish before it resumes any re-key or claims any job', async () => {
     const order: string[] = []
     vi.mocked(finishRotation).mockImplementation(async () => { order.push('finish'); return [] })

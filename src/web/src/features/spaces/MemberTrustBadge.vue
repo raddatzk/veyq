@@ -2,7 +2,7 @@
 // A member's identity-trust badge in the tenant's and groups' member lists (ADR 0028 Decision 3, uc.spaces.verify-identity
 // and uc.spaces.enforce-verified-identities): "Verified" for a contact whose key was compared on their profile and still
 // holds, and — until cr-trust-records-in-the-tenant — the one key state a list shows: an ANOMALY, a served key the
-// contact's key chain does not reach from the head this account pinned (cr-secure-the-account decision 9), with the note
+// contact's key chain does not reach from the head this account pinned (ADR 0028 Decision 2), with the note
 // that nothing is shared with it. A `pinned` (trust-on-first-use, or a key the chain reached) or unpinned contact shows
 // nothing: that is the ordinary state of every member. One component for both panels, so the two lists cannot drift
 // apart in what they say.

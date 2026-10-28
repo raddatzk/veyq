@@ -4,7 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
-// The moderation delivery against the REAL trust layer (cr-secure-the-account decision 9, the phase 3 finding taken into
+// The moderation delivery against the REAL trust layer (ADR 0028 Decision 2, the phase 3 finding taken into
 // phase 4): a holder anchors the moderator it delivers to by the head `ModerationPendingDelivery` now serves, through the
 // chain the server serves between two accepted moderators — who may share no tenant. The unit suite beside it
 // (`unlockModeration.test.ts`) mocks the anchor; this one runs `anchorIdentity` on a real pin store and real chains.

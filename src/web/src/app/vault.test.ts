@@ -1,4 +1,4 @@
-// The vault owns what it is handed: the key material it replaces is zeroed (cr-secure-the-account decision 12 — the
+// The vault owns what it is handed: the key material it replaces is zeroed (uc.account.rotate-keys — the
 // identity a secured account retired must not linger in the heap), and what it still holds is never touched.
 import { describe, it, expect, afterEach } from 'vitest'
 import { clearVault, identityPrivate, masterKey, setUnlocked } from './vault'

@@ -22,7 +22,7 @@ import type { LoginApi } from '../../../api/generated/auth'
 // the worker mock below), so these tests prove that what is posted actually opens with the credential offered and
 // verifies under the key the server holds, rather than that a stub was called.
 //
-// The fake server below is the backend as phase 2 built it (cr-secure-the-account § Phase 2 built), reduced to what the
+// The fake server below is the backend as phase 2 built it (cr-secure-the-account), reduced to what the
 // client meets: the plan, the stage (each self-grant verified at upload under the stage's identity), the publish (the
 // stage's digest, the chain step's two signatures, the rotation proof and the possession signature, the attestation, the
 // set check — every grant-carrying membership staged at its current epoch or declared), the committed account and the

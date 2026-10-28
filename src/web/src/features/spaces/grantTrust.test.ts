@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-// The recipient's half of the anchor gate (cr-secure-the-account decision 9), end to end on real keys: a grant from
+// The recipient's half of the anchor gate (ADR 0028 Decision 2), end to end on real keys: a grant from
 // another member opens only when that member's key chain reaches the key that signed it from the head this account
 // pinned — the pin store (`identityPins.ts`), the chain walk (`@veyq/crypto`'s `verifyKeyChain`) and this device's epoch
 // floor (`trustMarks.ts`) are all REAL here; only the server is faked: the pin store's endpoint, the key-chain read, and

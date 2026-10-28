@@ -359,7 +359,7 @@ class OperatorBlindProbeTest {
             "getAccountEmail", "confirmEmail", "getOwnAccountErasurePreview", "eraseOwnAccount",
         )
         reason(
-            "securing the account (cr-secure-the-account decisions 3, 5, 8): addresses the caller's own account and " +
+            "securing the account (ADR 0111 decision 6, uc.account.rotate-keys, ADR 0060 Decision 6): addresses the caller's own account and " +
                 "reaches every scope it holds a grant on, across every tenant — a suspended tenant's and a deleting " +
                 "group's included, on purpose: the publish re-grants each to the new identity so none is stranded, and " +
                 "the plan and the states report such a scope as `blocked` rather than hide it. A scope id in a staged " +
@@ -372,7 +372,7 @@ class OperatorBlindProbeTest {
             "person-addressed (ADR 0111 decision 7): names an account, not a space. Its gate is shared tenancy — a " +
                 "person who shares no tenant with the caller answers the unknown user's `404 not_found` (ADR 0042) — and " +
                 "a suspended tenant does not hide public keys a person's other tenants serve too; the key-chain read's " +
-                "own slice test pins it (cr-secure-the-account Phase 2).",
+                "own slice test pins it (cr-secure-the-account).",
             "getKeyChain",
         )
         reason(

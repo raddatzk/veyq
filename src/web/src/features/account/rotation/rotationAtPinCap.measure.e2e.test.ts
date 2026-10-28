@@ -118,7 +118,7 @@ describe.skipIf(!process.env.VEYQ_E2E || process.env.VEYQ_E2E_MEASURE !== '1')('
     expect(POINTS.every((p, i) => Number.isInteger(p) && p > 0 && p <= CAP && (i === 0 || p > POINTS[i - 1])), `points ${POINTS}`).toBe(true)
     const { owner } = await birthInstance('E2E Pin Cap')
     const userIds = Array.from({ length: CAP }, () => crypto.randomUUID())
-    // Each rotation installs a new Secret Key (cr-secure-the-account decision 7); the next one proves with it.
+    // Each rotation installs a new Secret Key (ADR 0060 Decision 2); the next one proves with it.
     let secretKey = owner.built.emergencyKit.secretKey
 
     for (const n of POINTS) {

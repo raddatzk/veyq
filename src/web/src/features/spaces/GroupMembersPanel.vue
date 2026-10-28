@@ -124,7 +124,7 @@ async function submit() {
     const candidate = await resolveGroupMember(props.scopeId, uname)
     if (candidate.requiresConsent) {
       // Wrap the group's name-key to the invitee so they open the canonical name — the group is listed to them once
-      // they accept. This wrap to the invitee's identity is anchor-gated (cr-secure-the-account decision 9): a key the
+      // they accept. This wrap to the invitee's identity is anchor-gated (ADR 0028 Decision 2): a key the
       // chain does not reach from the pinned head throws IdentityUnanchoredError below, nothing is sealed to it.
       const sealedNameKey = await wrapGroupNameKeyForInvitee(props.scopeId, candidate.userId, candidate)
       if (!sealedNameKey) throw new Error('cannot open the group to seal the invite name-key')
@@ -139,7 +139,7 @@ async function submit() {
     await refreshTrust()
   } catch (e) {
     if (e instanceof IdentityUnanchoredError) {
-      // The invitee's key does not follow from the one this account pinned for them (cr-secure-the-account decision 9):
+      // The invitee's key does not follow from the one this account pinned for them (ADR 0028 Decision 2):
       // said as such, with no accept — the key returns only through their chain (ADR 0111 decision 15).
       addError.value = t('trust.anomalyNote')
       return
@@ -470,9 +470,9 @@ async function onRestore() {
                 <span class="veyq-badge" :class="m.pendingConsent ? 'muted' : 'success'">
                   {{ m.pendingConsent ? t('members.statusPendingConsent') : t('members.statusActive') }}
                 </span>
-                <!-- Behind the group's epoch, declared pending by a rotation (cr-secure-the-account decision 10). -->
+                <!-- Behind the group's epoch, declared pending by a rotation (ADR 0111 decision 9). -->
                 <span v-if="m.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
-                <!-- Identity trust (cr-secure-the-account decision 9): "Verified" after a compare on the member's profile,
+                <!-- Identity trust (ADR 0028 Decision 2): "Verified" after a compare on the member's profile,
                      an anomaly when the served key does not follow from the pinned head. -->
                 <MemberTrustBadge :trust="trust[m.userId]" />
               </div>

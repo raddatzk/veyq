@@ -1,4 +1,4 @@
-// uc.account.rotate-keys (web), the half after the publish — cr-secure-the-account decision 4, ADR 0111 decision 8.
+// uc.account.rotate-keys (web), the half after the publish — cr-secure-the-account, ADR 0111 decision 8.
 //
 // The publish granted every scope the account holds a grant on, at its CURRENT epoch, to the new identity, and wrote a
 // pending re-key row per scope. From that moment nothing can be lost; what is left is to close the old identity out of

@@ -23,7 +23,7 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>) {
 
   const members = ref<ScopeMember[]>([])
   const isOwner = ref(false)
-  // Identity trust (ADR 0028 Decision 3, cr-secure-the-account decision 9): per-member trust from the sealed pin store -
+  // Identity trust (ADR 0028 Decision 3, ADR 0028 Decision 2): per-member trust from the sealed pin store -
   // `verified` (compared on the member's profile) and `anomaly` (a served key the chain does not reach from the pinned
   // head) are shown in the list. A key the chain reached is no state of its own: it moves the pin. No review, no accept.
   const trust = ref<Record<string, ContactTrust>>({})

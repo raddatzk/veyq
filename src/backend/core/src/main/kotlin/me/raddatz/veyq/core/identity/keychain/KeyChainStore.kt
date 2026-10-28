@@ -22,7 +22,7 @@ data class KeyChainLink(
 )
 
 /**
- * Persistence of an account's key chain (ADR 0111 decision 7, cr-secure-the-account decision 2) — its only writer.
+ * Persistence of an account's key chain (ADR 0111 decision 7, cr-secure-the-account) — its only writer.
  *
  * **Every account has step 0.** The one account-birth writer (`AccountStore.createAccount`) writes it in the birth's
  * transaction. An account row without a stored step — none in production; a test fixture's seeded account — reads as

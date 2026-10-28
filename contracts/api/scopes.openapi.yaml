@@ -567,7 +567,7 @@ paths:
 
         **Who may commit.** An owner of the scope; and a member who is not an owner only while their own account
         rotation left a pending re-key row for this scope at its current epoch, and only without `removesUserId` — a
-        removal stays an owner's act (ADR 0111 decision 8, cr-secure-the-account decision 4). Anyone else is
+        removal stays an owner's act (ADR 0111 decision 8, cr-secure-the-account). Anyone else is
         `403 not_scope_owner`.
 
         **Nobody is left out silently** (ADR 0111 decision 9). Every membership of the scope is either granted the new
@@ -683,7 +683,7 @@ paths:
         scope's current epoch — an **owner** originates it again (uc.spaces.complete-queued-rotation E8). Under the
         scope's row lock the rotation is originated again: it joins the scope's unclaimed rotation job or creates one,
         excluding nobody, so the caller's own worker can claim it at once. An account rotation queues no job any more
-        (it mints its scopes' next epochs itself, cr-secure-the-account decision 4), so nothing here excludes a
+        (it mints its scopes' next epochs itself, ADR 0111 decision 8), so nothing here excludes a
         rotator. Answers the row's new value (`null` or `stalled`). Membership is the first gate (ADR 0042), then
         ownership; any state other than `failed` is `409 rotation_not_failed`. Nothing is written on any refusal.
       security:
@@ -1096,7 +1096,7 @@ components:
         the job (promote a co-owner); `failed` — the job dead-lettered, so the scope's current epoch is still the one
         from before the removal (`requeueScopeRotation`). `failed` wins over `stalled` where several rotations apply.
         Derived from job, decline and membership rows; it never names who was removed. An account rotation queues no
-        job (cr-secure-the-account decision 4), so it never shows here.
+        job (ADR 0111 decision 8), so it never shows here.
       enum: [stalled, failed]
       example: failed
 

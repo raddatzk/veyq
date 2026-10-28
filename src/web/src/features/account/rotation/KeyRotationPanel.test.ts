@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// uc.account.rotate-keys (web), the ceremony — cr-secure-the-account decisions 7, 11, 13 and § Phase 5. The mechanism
+// uc.account.rotate-keys (web), the ceremony — ADR 0060 Decision 2 and § Phase 5. The mechanism
 // (`rotateKeys`, `finishRotation`) is its own suite; here the screen around it: the entry from the plan, the gate with
 // "Also choose a new password" pre-selected, the new Emergency Kit gating the publish (the REAL `EmergencyKitSave`, so
 // "ready" is its own downloaded AND confirmed), every error arm's copy, the per-space states, and the links to renew

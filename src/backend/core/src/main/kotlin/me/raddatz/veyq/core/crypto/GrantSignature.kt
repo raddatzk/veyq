@@ -6,7 +6,7 @@ package me.raddatz.veyq.core.crypto
  * lp(sha256(recipient bundle)) || lp(sha256(wrappedGrant))`, both byte strings DECODED from their wire base64.
  *
  * **The server checks a grant signature in exactly one place**: a staged self-grant of an account's rotation
- * (`putRotationStageGrants`, cr-secure-the-account decision 3), verified under the identity its stage declares. That is
+ * (`putRotationStageGrants`, ADR 0111 decision 6), verified under the identity its stage declares. That is
  * a consistency check of the stage against the identity the publish then registers under the Secret Key's proof — not
  * a trust judgment about a key, which stays every recipient's (ADR 0028 Decision 6). Every other grant the server stores
  * and relays unverified.

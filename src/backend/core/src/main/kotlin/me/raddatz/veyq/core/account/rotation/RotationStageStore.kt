@@ -10,7 +10,7 @@ import java.util.UUID
 data class StagedSelfGrantRow(val scopeId: String, val epoch: Int, val wrappedGrant: String, val grantSignature: String)
 
 /**
- * Persistence of an account's stage of self-grants (cr-secure-the-account decision 3). Every method runs in its
+ * Persistence of an account's stage of self-grants (ADR 0111 decision 6). Every method runs in its
  * caller's transaction, which holds the account's lock (`AccountStore.lock`): the stage is the account's, and its open,
  * its chunks and the publish that applies it serialize there, so no chunk lands between the publish's digest and its
  * delete.
@@ -67,7 +67,7 @@ class RotationStageStore {
 }
 
 /**
- * Scheduled sweep over abandoned stages (cr-secure-the-account decision 3) — the `PairingPurge` pattern. Hygiene, not
+ * Scheduled sweep over abandoned stages (ADR 0111 decision 6) — the `PairingPurge` pattern. Hygiene, not
  * the boundary: the publish and every chunk refuse an expired stage themselves ([RotationStageStore.live]).
  */
 @ApplicationScoped

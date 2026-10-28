@@ -2,7 +2,7 @@
 // (cr-0092, ADR 0025; uc.spaces.complete-queued-rotation). When a tenant owner removes a member co-sharing a GROUP
 // the owner doesn't hold, the backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there).
 // A secured account queues none: it finishes its own scopes first in every pass (`finishRotation`,
-// cr-secure-the-account decision 4). The next online **owner** of the scope completes it
+// ADR 0111 decision 8). The next online **owner** of the scope completes it
 // on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing `commitRotation`, cr-0089), then
 // complete. The backend offers the job to owners only (the only members who may commit a rotation), so this worker
 // is never handed one it could not finish — except by a race it declines (below). Claimed **globally across every
@@ -29,7 +29,7 @@ import type { ClaimedJob } from '../../api/generated/tasks'
  * failed back for the right worker rather than left leased; one whose rotation stays `stale_epoch` is declined.
  */
 export async function runScopeRotationWorker(): Promise<number> {
-  // cr-secure-the-account decision 4: an account that was secured mints the next epoch of every scope its rotation left
+  // ADR 0111 decision 8: an account that was secured mints the next epoch of every scope its rotation left
   // waiting — from any of its devices that unlocks, one opened from the new Emergency Kit included — before anything
   // else, so a closed tab, a lost answer or a scope in another tenant is finished on the next pass. Its failure is the
   // next pass's: it never stops the queued jobs below.

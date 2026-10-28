@@ -60,7 +60,7 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
       await failJob(job.jobId, 'not-grant-delivery')
       continue
     }
-    // The anchor gate (cr-secure-the-account decision 9): wrap only to a target key the chain reaches from the head this
+    // The anchor gate (ADR 0028 Decision 2): wrap only to a target key the chain reaches from the head this
     // account pinned (`match` / `advanced`), or to a first-seen one (`firstUse`, pinned now). An `anomaly` is never
     // sealed to: this worker is human-less, so it DECLINES the job (`identity_unanchored`: released to other key-holders,
     // never re-offered to this account) — another member whose client anchors the key delivers it (decision 10). A

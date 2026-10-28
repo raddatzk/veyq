@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The member lists' identity-trust badge (ADR 0028 Decision 3, cr-secure-the-account decision 9): verified, and the one
+// The member lists' identity-trust badge (ADR 0028 Decision 3, ADR 0028 Decision 2): verified, and the one
 // key state a list shows until cr-trust-records-in-the-tenant — an anomaly, with its note; the ordinary states (pinned —
 // a first use or a key the chain reached — unpinned, not read) show nothing.
 import { describe, it, expect } from 'vitest'

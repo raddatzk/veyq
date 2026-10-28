@@ -29,7 +29,7 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * The key chain's server half (ADR 0111 decision 7, cr-secure-the-account decision 2): step 0 written at birth, the
+ * The key chain's server half (ADR 0111 decision 7, cr-secure-the-account): step 0 written at birth, the
  * read and its gate, and the head every directory read serves beside another user's key.
  *
  * The gate is shared tenancy — a membership of each on one tenant root scope — and everyone else gets exactly the `404`

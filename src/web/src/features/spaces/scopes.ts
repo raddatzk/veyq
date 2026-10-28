@@ -315,7 +315,7 @@ async function toOpenedScope(
 }
 
 /** What opening the caller's own grant reads of a scope row: a {@link ScopeSummary} of the active tenant's list, or a
- *  row of the account rotation's plan (cr-secure-the-account decision 5), which serves the same grant fields for every
+ *  row of the account rotation's plan (uc.account.rotate-keys), which serves the same grant fields for every
  *  tenant but no name, no deletion dates and no role. */
 type OwnGrantRow = Pick<
   ScopeSummary,
@@ -329,7 +329,7 @@ const rowOfPlan = (row: RotationPlanScope): OwnGrantRow => ({
 })
 
 /**
- * The current epoch key of a scope the account rotation's plan lists (cr-secure-the-account decision 3), opened with the
+ * The current epoch key of a scope the account rotation's plan lists (ADR 0111 decision 6), opened with the
  * vault's identity exactly as {@link openScopeById} opens a row of the active tenant — the grant verified
  * ({@link verifyOwnGrant}), never below this device's epoch floor, and refused when it lags the scope's current epoch —
  * but from the plan, which serves every tenant's rows (Host-independent). The caller owns and zeroes the key.
@@ -357,7 +357,7 @@ export function isUnreadableGrant(e: unknown): boolean {
 
 /**
  * A {@link RotationOpener} over a row of the account rotation's plan — what finishing a secured account commits each
- * scope's next epoch from (cr-secure-the-account decision 4): the self-grant the publish wrote, opened with the vault's
+ * scope's next epoch from (ADR 0111 decision 8): the self-grant the publish wrote, opened with the vault's
  * (published) identity whatever tenant the scope lives in. The first open uses `row`; a rebuild after `409 stale_epoch`
  * re-reads the plan through `reread`, and when the scope's epoch moved past `row`'s it throws {@link EpochMovedOn}:
  * someone else's commit met the scope, which is what the rebuild must not answer with yet another epoch.
@@ -487,7 +487,7 @@ export async function wrapGroupNameKeyForInvitee(
   inviteeUserId: string,
   invitee: ServedIdentity,
 ): Promise<string | null> {
-  // The anchor gate (cr-secure-the-account decision 9): this is the invite's first wrap to the invitee's *foreign*
+  // The anchor gate (ADR 0028 Decision 2): this is the invite's first wrap to the invitee's *foreign*
   // identity — pinned on first sight, a key the chain reaches from the pinned head proceeds, an anomaly is never sealed
   // to: the caller catches IdentityUnanchoredError and says so, with no accept.
   if ((await anchorIdentity(inviteeUserId, invitee)) === 'anomaly') throw new IdentityUnanchoredError(inviteeUserId)
@@ -665,7 +665,7 @@ export type RotationGrant = { userId: string; recipientIdentityDigest: string } 
 
 /** Who performs a rotation: the account, the identity bundle its own re-grant is sealed to, and the key that signs
  *  every re-grant — always the vault's identity (an account rotation swaps the vault before it commits any epoch,
- *  cr-secure-the-account decision 12). */
+ *  uc.account.rotate-keys). */
 type Rotator = { userId: string; identityPublicKeyB64: string; signPrivateKey: Uint8Array }
 
 /** Opens the scope a rotation is built on — the caller's own grant, at whatever epoch it lags (`E_n`). */
@@ -678,7 +678,7 @@ export type CommitRotationOptions = {
   /** Turn off every public link of the scope in the same commit (ADR 0075). */
   revokeLinks?: boolean
   /** Where the caller's own grant is opened from: the active tenant's scope list by default; the account rotation's
-   *  finish passes {@link planOpener}, which reads every tenant's rows (cr-secure-the-account decision 4). */
+   *  finish passes {@link planOpener}, which reads every tenant's rows (ADR 0111 decision 8). */
   open?: RotationOpener
 }
 
@@ -739,7 +739,7 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
  * Every member whose key is anchored ({@link anchorIdentity}: `firstUse`, `match` or `advanced`) is re-granted — a
  * pending consent proposal too, which holds a grant from its proposal on (ADR 0111 decision 4) — and the rotator itself
  * unconditionally, to the identity it holds; every other member (an `anomaly`) is named in `pendingUserIds`, so the
- * request covers every membership but the removed one (cr-secure-the-account decision 10, `409 rotation_incomplete`).
+ * request covers every membership but the removed one (ADR 0111 decision 9, `409 rotation_incomplete`).
  *
  * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
  * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
@@ -749,7 +749,7 @@ async function inviteVouched(tenantId: string, open: OpenInvite): Promise<boolea
  * request names them so the server deletes their membership in the same commit. With `open`, the caller's grant comes
  * from there instead of the active tenant's list — the account rotation's finish, whose scopes may live in any tenant.
  *
- * Every member the caller is handed is judged — however many there are (cr-secure-the-account decision 4: the finish of
+ * Every member the caller is handed is judged — however many there are (ADR 0111 decision 8: the finish of
  * a secured account grants whoever is a member then, one who joined after the publish included).
  */
 export async function commitRotation(
@@ -781,7 +781,7 @@ export async function commitRotation(
       for (const m of carry) {
         // Our own re-grant targets the identity we hold, never the directory's copy of it.
         if (m.userId === who.userId) grantTo(m.userId, who.identityPublicKeyB64)
-        // Never to a key the chain does not reach from the pinned head (cr-secure-the-account decision 9): that member
+        // Never to a key the chain does not reach from the pinned head (ADR 0028 Decision 2): that member
         // is DECLARED pending (decision 10) — never skipped silently, the server refuses a rotation that names neither —
         // and any member whose client anchors their key brings them current through the grant delivery. The rotation
         // itself still proceeds: forward secrecy against the removed member cannot hinge on them.

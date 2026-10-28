@@ -82,7 +82,7 @@ object Failures {
      *  recipient's key and rewraps (ADR 0111: a grant names its recipient key from birth). */
     val recipientKeyNotCurrent: HttpFailure = httpFailure("recipient_key_not_current", CONFLICT)
 
-    /** Securing the account (cr-secure-the-account decision 3): the stage or the account's set of grant-carrying
+    /** Securing the account (ADR 0111 decision 6): the stage or the account's set of grant-carrying
      *  memberships is not what the request names → 409; nothing written. The client re-reads the plan, re-stages the
      *  delta (or opens a new stage) and resubmits. */
     val rotationPlanChanged: HttpFailure = httpFailure("rotation_plan_changed", CONFLICT)

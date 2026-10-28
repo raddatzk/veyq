@@ -126,9 +126,9 @@ const en = {
     awaitingCurrentKey: 'Waiting for the current key',
     compromiseRotation: {
       stalled:
-        'A member re-secured their account, and this space needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, their old key can still read what’s new here.',
+        'Someone left this space, and it needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, the person who left can still read what’s new here.',
       failed:
-        'A member re-secured their account, and fitting this space’s new lock kept failing — their old key can still read what’s new here. Start it again, and your device takes it on.',
+        'Someone left this space, and fitting its new lock kept failing — the person who left can still read what’s new here. Start it again, and your device takes it on.',
     },
     compromiseRotationMark: 'Needs a new lock',
     compromiseRotationRequeue: 'Start again',
@@ -2109,9 +2109,9 @@ const de: typeof en = {
     awaitingCurrentKey: 'Wartet auf den aktuellen Schlüssel',
     compromiseRotation: {
       stalled:
-        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Bereich braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
+        'Jemand hat diesen Bereich verlassen, und er braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann die Person, die gegangen ist, Neues hier noch lesen.',
       failed:
-        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Bereichs ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
+        'Jemand hat diesen Bereich verlassen, und das neue Schloss ließ sich wiederholt nicht einbauen — die Person, die gegangen ist, kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
     },
     compromiseRotationMark: 'Braucht ein neues Schloss',
     compromiseRotationRequeue: 'Neu anstoßen',

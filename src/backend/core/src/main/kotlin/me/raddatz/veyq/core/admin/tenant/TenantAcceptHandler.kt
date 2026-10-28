@@ -206,7 +206,7 @@ class TenantAcceptHandler(
 
         // The caller's account row, locked first (the order the publish of a rotation takes, account → scopes): the
         // self-grant below is checked against the identity it holds, and no rotation of this account can publish another
-        // between that check and this commit (cr-secure-the-account decision 6).
+        // between that check and this commit (ADR 0111 decision 10).
         val caller = accounts.lock(userId) ?: return AcceptOutcome.NotInvitedOwner
         if (caller.email != invite.ownerEmail) return AcceptOutcome.NotInvitedOwner
 

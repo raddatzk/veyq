@@ -10,7 +10,7 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * One step of an account's key chain (ADR 0111 decision 7, cr-secure-the-account decision 2): public keys and
+ * One step of an account's key chain (ADR 0111 decision 7, cr-secure-the-account): public keys and
  * signatures, nothing secret. Step 0 ([idx] 0) holds the identity bundle and Secret-Key proof public key the account
  * was born with and no signature; step `i ≥ 1` holds the keys one securing of the account installed and the two
  * signatures of the keys it retired. [head] is the head this step makes — derived (`KeyChainStatements.head`), kept so a

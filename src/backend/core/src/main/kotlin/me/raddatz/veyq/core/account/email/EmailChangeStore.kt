@@ -45,7 +45,7 @@ class EmailChangeStore {
     fun spend(id: String, now: Instant): Boolean = EmailChangeEntity.delete("id = ?1 and expiresAt > ?2", id, now) == 1L
 
     /**
-     * Void every open change of [userId]'s address (cr-secure-the-account decision 7): its proof was taken under the
+     * Void every open change of [userId]'s address (ADR 0060 Decision 2): its proof was taken under the
      * Secret-Key proof key and the auth key the account's securing just replaced, so its link must not install anything
      * after it. In the publish's transaction, under the account lock. A link opened later reads as a spent one.
      */

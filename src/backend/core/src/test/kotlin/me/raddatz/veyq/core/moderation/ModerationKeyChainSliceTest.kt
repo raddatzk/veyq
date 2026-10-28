@@ -21,7 +21,7 @@ import java.util.UUID
 
 /**
  * A moderation holder anchors the moderator it delivers the key to as every other wrap is anchored
- * (cr-secure-the-account decision 9): the pending delivery serves the recipient's key-chain head beside its key, and the
+ * (ADR 0028 Decision 2): the pending delivery serves the recipient's key-chain head beside its key, and the
  * chain read serves one accepted moderator's chain to another — the two may share no tenant, the roster is the
  * instance's. Everyone else still gets the `404` an unknown id gets (ADR 0042): a stranger, a moderator reading a
  * non-moderator, a pending appointee.

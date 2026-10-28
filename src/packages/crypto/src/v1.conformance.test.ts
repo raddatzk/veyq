@@ -668,7 +668,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       kdfParams: unhex(w.kdf_params),
     })
     const key = v1.deriveSecretKeyProofKeypair(unhex(p.key.secret_key))
-    // The rotation binds #key_chain's first step and #rotation_stage's stage (cr-secure-the-account decision 2).
+    // The rotation binds #key_chain's first step and #rotation_stage's stage (ADR 0111 decision 7).
     type ChainLink = { previous_head: string | null; identity_public_key: string; secret_key_proof_public_key: string }
     const keysOf = (l: ChainLink): v1.KeyChainKeys => ({
       identityPublicKey: unhex(l.identity_public_key),
@@ -1066,7 +1066,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(pt.length).toBe(p.entry_bytes)
       const text = new TextDecoder().decode(pt)
       const entry = JSON.parse(text)
-      // Single-letter keys, so an entry with its key-chain head stays inside entry_bytes (cr-secure-the-account decision 9).
+      // Single-letter keys, so an entry with its key-chain head stays inside entry_bytes (ADR 0028 Decision 2).
       expect(Object.keys(entry)).toEqual(['u', 'f', 'h', 's', 't'])
       expect(entry.u).toBe(p.pin_ids[0].userId)
       expect(hex(Uint8Array.from(Buffer.from(entry.f, 'base64')))).toBe(vectors.fingerprint.hash)

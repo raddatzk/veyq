@@ -101,7 +101,7 @@ describe('web message catalog — copy says what the code does (#248)', () => {
 
   for (const locale of SUPPORTED_LOCALES) {
     it(`${locale}: a credential change asks other devices for the password and the Secret Key, or to be added again`, () => {
-      // Securing the account replaces the Secret Key (cr-secure-the-account decision 7): its devices come back with the
+      // Securing the account replaces the Secret Key (ADR 0060 Decision 2): its devices come back with the
       // NEW Emergency Kit, which carries it — so that copy names the kit, never the old Secret Key.
       const credential: [string, string, RegExp][] = [
         ['rotation', 'factSignsOut', /new Emergency Kit|neuen Notfall-Kit/],

@@ -25,7 +25,7 @@ sealed interface KeyChainOutcome {
 }
 
 /**
- * The key-chain read (ADR 0111 decision 7, cr-secure-the-account decision 2): a person's whole chain, served to the
+ * The key-chain read (ADR 0111 decision 7, cr-secure-the-account): a person's whole chain, served to the
  * person and to users who share a tenant with them ([KeyChainStore.mayRead]). Anyone else gets exactly the answer an
  * unknown id gets, read in the same order (gate first), so the read enumerates nobody. Operator-blind: public keys and
  * signatures the server stores, and each step's server-observed time — it already knows every rotation.

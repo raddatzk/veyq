@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-// The grant delivery's anchor gate end to end (cr-secure-the-account decisions 9, 10): the REAL pin store and the REAL
+// The grant delivery's anchor gate end to end (ADR 0028 Decision 2, ADR 0111 decision 9): the REAL pin store and the REAL
 // chain walk decide whether the worker wraps to the key a claim serves; only the server is faked — the task endpoints,
 // the pin store's endpoint and the key-chain read. A target who secured their account is delivered to their new key
 // (the chain reaches it from the pinned head); a "new key" behind a step the retired Secret Key did not sign is declined

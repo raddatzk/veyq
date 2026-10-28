@@ -1,4 +1,4 @@
-// uc.account.rotate-keys (web) — the result screen's "Links to renew" (cr-secure-the-account decision 13). Securing the
+// uc.account.rotate-keys (web) — the result screen's "Links to renew" (cr-secure-the-account). Securing the
 // account closes the old identity out of what comes NEXT; a link made before still opens what it opened, because its key
 // is the link's own, not the account's. The server marks such a link `reissueRequired` once its scope's key moved (ADR
 // 0109 point 4, `ReissuePolicy`), so the list is the caller's own links (`listShares()` without `nodeId`, every tenant)

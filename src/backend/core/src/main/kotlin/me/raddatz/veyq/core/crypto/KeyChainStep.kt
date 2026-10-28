@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.crypto
 
 /**
- * The server half of an account's key chain (ADR 0111 decision 7, cr-secure-the-account decision 2).
+ * The server half of an account's key chain (ADR 0111 decision 7, cr-secure-the-account).
  *
  * Step 0 is the typed statement `key-chain-genesis` — `lp(utf8("key-chain-genesis")) || lp(utf8(userId)) ||
  * lp(identity bundle) || lp(Secret-Key proof public key)` — the keys the account was born with, unsigned. Each securing

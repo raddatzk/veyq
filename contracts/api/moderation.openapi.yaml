@@ -1526,7 +1526,7 @@ components:
           type: string
           description: >
             The recipient's identity public bundle as the directory serves it; the holder anchors it beside
-            `keyChainHead` before sealing (cr-secure-the-account decision 9).
+            `keyChainHead` before sealing (ADR 0028 Decision 2).
           contentEncoding: base64
           maxLength: 2048
           example: aWRlbnRpdHktcHVibGljLWtleQ==

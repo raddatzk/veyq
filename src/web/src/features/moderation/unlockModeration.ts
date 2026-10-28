@@ -91,7 +91,7 @@ function openGrants(epochs: ModerationEpochGrant[]): Map<number, Uint8Array> {
 /** Seal what each pending moderator misses to their identity, once it is anchored; any other is declined.
  *
  * A pending delivery serves the moderator's key beside its key-chain head (`ModerationPendingDelivery.keyChainHead`), so
- * it is judged as every wrap to another account is ({@link anchorIdentity}, cr-secure-the-account decision 9): the pinned
+ * it is judged as every wrap to another account is ({@link anchorIdentity}, ADR 0028 Decision 2): the pinned
  * head matches with no fetch; any other head must be one the chain reaches from the pinned head, ending at the served key
  * — a retired key never does — and a moderator this device never met is pinned at first use through their chain, which
  * the server serves between two accepted moderators even where they share no tenant. An anomaly, or a chain the server

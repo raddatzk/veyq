@@ -5,7 +5,7 @@ import java.time.Instant
 /**
  * What a rotation queued on a scope needs from its owners (uc.spaces.complete-queued-rotation): a tenant member's
  * removal queues one for each group the removed member shared (ADR 0025, `TenantHandler`'s cut). An account rotation
- * queues none any more — the account mints its scopes' next epochs itself (cr-secure-the-account decision 4) — so
+ * queues none any more — the account mints its scopes' next epochs itself (ADR 0111 decision 8) — so
  * nothing here names a rotator.
  */
 enum class CompromiseRotationState { STALLED, FAILED }

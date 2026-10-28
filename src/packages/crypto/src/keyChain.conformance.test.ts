@@ -1,4 +1,4 @@
-// The key chain and the rotation stage (ADR 0111 decision 7, cr-secure-the-account decisions 2-3), against
+// The key chain and the rotation stage (ADR 0111 decision 7, ADR 0111 decision 6), against
 // contracts/crypto/vectors/v1.json#key_chain and #rotation_stage — both written by an independent implementation.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -260,7 +260,7 @@ describe('key chain (#key_chain, ADR 0111 decision 7)', () => {
   })
 })
 
-describe('rotation stage digest (#rotation_stage, cr-secure-the-account decision 3)', () => {
+describe('rotation stage digest (#rotation_stage, ADR 0111 decision 6)', () => {
   const rs = vectors.rotation_stage
   type Entry = { scopeId: string; epoch: number; wrapped_grant: string }
   const entriesOf = (es: Entry[]): v1.RotationStageEntry[] =>

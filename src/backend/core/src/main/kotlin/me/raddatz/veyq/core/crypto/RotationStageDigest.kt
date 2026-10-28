@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.crypto
 
 /**
- * The digest an account rotation's publish binds its staged self-grants by (cr-secure-the-account decision 3):
+ * The digest an account rotation's publish binds its staged self-grants by (ADR 0111 decision 6):
  * `sha256(utf8("veyq/v1/rotation-stage") || lp(utf8(scopeId)) || lp(u64be(epoch)) || lp(sha256(wrappedGrant)) …)` over
  * the entries in ascending `scopeId` order (canonical lowercase UUIDs, so text order is byte order), one per scope,
  * `wrappedGrant` DECODED. The client binds it into the rotation proof statement; the server recomputes it over the rows

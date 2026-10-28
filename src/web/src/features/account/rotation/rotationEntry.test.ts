@@ -1,4 +1,4 @@
-// uc.account.rotate-keys (web) — the ceremony's entry facts (cr-secure-the-account decision 11, § Order `factInvites`):
+// uc.account.rotate-keys (web) — the ceremony's entry facts (cr-secure-the-account, § Order `factInvites`):
 // the spaces that cannot get their new lock yet come from the PLAN (every tenant) and from the stage's own dry run on
 // this device; the invitations line shows only when an open invite of a tenant the account is in was signed by it.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
