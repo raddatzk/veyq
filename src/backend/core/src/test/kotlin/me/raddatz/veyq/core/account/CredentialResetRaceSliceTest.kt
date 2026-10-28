@@ -11,8 +11,10 @@ import me.raddatz.veyq.core.account.password.PasswordChangeStore
 import me.raddatz.veyq.core.account.recovery.RecoveryStore
 import me.raddatz.veyq.core.account.rotation.RewrittenWrap
 import me.raddatz.veyq.core.account.rotation.RotationStore
+import me.raddatz.veyq.core.account.rotation.TestAccountKeys
+import me.raddatz.veyq.core.account.rotation.TestEd25519
+import me.raddatz.veyq.core.account.rotation.TestRotation
 import me.raddatz.veyq.core.crypto.SecretKeyProof
-import me.raddatz.veyq.core.crypto.TestProofKey
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
@@ -209,18 +211,20 @@ class CredentialResetRaceSliceTest {
             assertEquals(NEW_AUTH_PUB, authKeyOf(reset.id), "round $round: a change by a revoked session landed ($afterReset)")
             assertEquals(401, afterReset, "round $round: the change's session was ended by the reset it waited for")
 
-            // A rotation by a session the change revoked: serially a 401.
+            // A rotation by a session the change revoked: serially a 401. Its stage is ready before the race; only the
+            // publish overlaps the change.
             val rotated = seedAccount()
+            val publish = prepareRotation(rotated)
             val afterRotation = whileUncommitted(
                 change = cleanupOf(Cleanup.CHANGE, rotated),
-                overlapping = { rotate(rotated.otherToken) },
+                overlapping = { publish(rotated.otherToken) },
             )
             assertEquals(TestFixtures.IDENTITY_PUBLIC_KEY, identityOf(rotated.id), "round $round: a rotation by a revoked session landed ($afterRotation)")
             assertEquals(401, afterRotation, "round $round: the rotation's session was ended by the change it waited for")
         }
         // Control: the same change and the same rotation, raced against nothing, apply.
         assertEquals(204, changePassword(seedAccount().ownToken))
-        assertEquals(200, rotate(seedAccount().otherToken))
+        assertEquals(200, seedAccount().let { prepareRotation(it)(it.otherToken) })
     }
 
     @Test
@@ -265,7 +269,7 @@ class CredentialResetRaceSliceTest {
             check(
                 rotations.applyRotation(
                     account.id, NEW_IDENTITY_PUB, NEW_WRAPPED_IDENTITY,
-                    RewrittenWrap(NEW_PW_WRAP, KDF), RewrittenWrap(NEW_REC_WRAP, KDF),
+                    RewrittenWrap(NEW_PW_WRAP, KDF), RewrittenWrap(NEW_REC_WRAP, KDF), OLD_AUTH_PUB, NEW_PROOF_PUB,
                 ),
             ) { "rotation" }
             pairingStore.supersede(pairingStore.liveChannels(account.id).map { it.id })
@@ -293,7 +297,7 @@ class CredentialResetRaceSliceTest {
      *  against the account as seeded. */
     private fun changePassword(accessToken: String): Int {
         val wrap = SecretKeyProof.Wrap(CHANGED_PW_WRAP, KDF)
-        val proof = PROOF_KEY.sign(SecretKeyProof.passwordChangeStatement(OLD_AUTH_PUB, CHANGED_AUTH_PUB, wrap))
+        val proof = PROOF_KEY.signB64(SecretKeyProof.passwordChangeStatement(OLD_AUTH_PUB, CHANGED_AUTH_PUB, wrap))
         return given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
             .body(
                 """{"passwordWrap":{"wrappedKey":"$CHANGED_PW_WRAP","kdfParams":"$KDF"},"authPublicKey":"$CHANGED_AUTH_PUB",
@@ -302,24 +306,15 @@ class CredentialResetRaceSliceTest {
             .`when`().post("/api/account/password").then().extract().statusCode()
     }
 
-    /** A key rotation from the seeded identity, its proof valid against the account as seeded. */
-    private fun rotate(accessToken: String): Int {
-        val statement = SecretKeyProof.rotationStatement(
-            currentIdentityPublicKey = TestFixtures.IDENTITY_PUBLIC_KEY,
-            identityPublicKey = ROTATED_IDENTITY_PUB,
-            wrappedIdentityPrivateKey = NEW_WRAPPED_IDENTITY,
-            passwordWrap = SecretKeyProof.Wrap(NEW_PW_WRAP, KDF),
-            recoveryWrap = SecretKeyProof.Wrap(NEW_REC_WRAP, KDF),
-        )
-        return given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-            .body(
-                """{"identityPublicKey":"$ROTATED_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_WRAPPED_IDENTITY",
-                   "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
-                   "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
-                   "secretKeyProofSignature":"${PROOF_KEY.sign(statement)}",
-                   "identityPins":{"revision":0,"head":"$DOC","put":[],"remove":[],"replaceAll":true},"deviceRegister":{"blob":"$DOC","revision":0}}""",
-            )
-            .`when`().post("/api/account/rotation").then().extract().statusCode()
+    /** A key rotation from the seeded identity: its stage opened and filled now, its publish — every proof valid
+     *  against the account as seeded — sent by the function this answers, with the access token it is given. */
+    private fun prepareRotation(account: Account): (String) -> Int {
+        val rotation = TestRotation(account.id, CURRENT_KEYS, bearer = { "Bearer ${account.ownToken}" })
+        val stageId = rotation.openStageId()
+        val grants = rotation.plan().map { rotation.selfGrant(it) }
+        if (grants.isNotEmpty()) rotation.stage(stageId, grants).then().statusCode(204)
+        val publish = rotation.publish(stageId, grants)
+        return { token -> rotation.send(publish, token).then().extract().statusCode() }
     }
 
     private fun delegate(accessToken: String, handle: String): Int =
@@ -392,17 +387,24 @@ class CredentialResetRaceSliceTest {
         const val DEVICE_WRAP = "ZGV2aWNlLWtleS13cmFw"
         const val CHANGED_AUTH_PUB = "Y2hhbmdlZC1hdXRoLXB1YmxpYy1rZXk="
         const val CHANGED_PW_WRAP = "Y2hhbmdlZC1wYXNzd29yZC13cmFw"
-        const val ROTATED_IDENTITY_PUB = "cm90YXRlZC1pZGVudGl0eS1rZXk="
-        const val DOC = "ZG9jdW1lbnQ="
 
         /** The account's Secret-Key proof key: every seeded account registers it. */
-        val PROOF_KEY = TestProofKey()
+        val PROOF_KEY = TestEd25519.fresh()
 
         val RNG = SecureRandom()
 
         /** The password every seeded account signs in with — the one each reset and change replaces. */
         val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
         val OLD_AUTH_PUB: String = Base64.getEncoder().encodeToString(KEYPAIR.public.encoded.let { it.copyOfRange(it.size - 32, it.size) })
+
+        /** What a rotation signs with: the seeded identity (the fixture's), the proof key and the password's auth key. */
+        val CURRENT_KEYS = TestAccountKeys(
+            identity = TestEd25519.of(TestFixtures.IDENTITY_SIGN_SEED, java.util.HexFormat.of().parseHex(TestFixtures.IDENTITY_SIGN_PUBLIC_HEX)),
+            proof = PROOF_KEY,
+            auth = TestEd25519.of(KEYPAIR),
+        )
+
+        const val NEW_PROOF_PUB = "bmV3LXByb29mLXB1YmxpYy1rZXk="
 
         fun sign(nonceB64: String): String = Signature.getInstance("Ed25519").run {
             initSign(KEYPAIR.private)

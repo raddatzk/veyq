@@ -1,6 +1,6 @@
 package me.raddatz.veyq.core.spaces.scope
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -28,12 +28,12 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Slice tests for the consent opt-in for group-add (uc.spaces.consent-group-add, cr-0096, ADR 0027). The
- * gate is **consent-first, never wrap-then-soft**: a GroupOwner adding a consent-on member records a soft
- * `pendingConsent` membership that grant-delivery **skips** (so `K_SC` is gated **before** the wrap) carrying
- * the wrapped group name-key `K_name`; the invitee **accepts** (→ ordinary grant-delivery) or **declines**
- * (silent drop, no rotation). The invitation surfaces the wrapped name-key + the scope's canonical encryptedName
- * it opens. Operator-blind: only opaque ciphertext + a boolean + a flag are stored. Seeds use UUID-unique
+ * Slice tests for the consent opt-in for group-add (uc.spaces.consent-group-add, cr-0096, ADR 0027). A GroupOwner
+ * adding a consent-on member records a soft `pendingConsent` membership carrying the wrapped group name-key `K_name`
+ * and — since ADR 0111 decision 4 — the grant the owner wrapped to the target's key; the group is not listed to the
+ * target until they **accept** (keys unchanged) or **decline** (the row goes and the group's rotation is queued: the
+ * target held the key). The invitation surfaces the wrapped name-key + the scope's canonical encryptedName it opens.
+ * Operator-blind: only opaque ciphertext + a boolean + a flag are stored. Seeds use UUID-unique
  * domains/emails so the JVM-lived H2 mem DB (shared across test classes) can't bleed state.
  */
 @QuarkusTest
@@ -50,7 +50,7 @@ class ConsentGroupAddSliceTest {
     private val sealedNameKey = "c2VhbGVkLW5hbWUta2V5" // "sealed-name-key" — asymWrap(inviteePub, K_name, "group-name-key")
 
     @Test
-    fun consentOnAddRecordsSoftRowAndGrantDeliverySkipsIt() {
+    fun consentOnAddRecordsASoftRowHoldingTheGrant() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
@@ -65,19 +65,26 @@ class ConsentGroupAddSliceTest {
             .body("requiresConsent", equalTo(true))
             .body("identityPublicKey", notNullValue())
 
-        // The owner adds WITH the wrapped name-key → a soft, pending, grant-less proposal.
+        // The owner adds WITH the wrapped name-key → a soft, pending proposal that holds the owner's grant (ADR 0111
+        // decision 4): the key crosses at the add, the consent gates only whether the group is listed to them.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestGrants.groupAddJson(groupId, partner)}}""")
             .`when`().post("/api/scopes/$groupId/members")
             .then().statusCode(201)
             .body("role", equalTo("MEMBER"))
-            .body("hasGrant", equalTo(false))
             .body("pendingConsent", equalTo(true))
+            .body("hasGrant", equalTo(null))
+        QuarkusTransaction.requiringNew().run {
+            val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", partner, groupId).firstResult()!!
+            assertEquals(TestGrants.WRAPPED, m.wrappedGrant, "the proposal holds the owner's grant")
+            assertEquals(0, m.grantedEpoch)
+            assertEquals(owner, m.granterUserId, "the proposing owner is its granter")
+        }
 
-        // grant-delivery must NOT originate a job for the soft member — K_SC is gated before the wrap.
+        // Current, so nothing to deliver: a grant-delivery job is for a membership BEHIND the epoch only.
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }
-        assertEquals(0, created, "no grant-delivery job for a pendingConsent proposal")
+        assertEquals(0, created, "a proposal at the current epoch is no delivery target")
         assertEquals(0, deliveryJobsFor(partner, groupId), "no grant-delivery job targets the soft member")
     }
 
@@ -85,21 +92,21 @@ class ConsentGroupAddSliceTest {
     fun consentRequiredWithoutSealIs400() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        seedTenantMember(tenantIdOf(domain), "partner", consent = true)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
 
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner",${TestAdmission.json()}}""") // no sealedNameKey
+            .body("""{"username":"partner",${TestGrants.groupAddJson(groupId, partner)}}""") // no sealedNameKey
             .`when`().post("/api/scopes/$groupId/members")
             .then().statusCode(400).body("code", equalTo("consent_required"))
     }
 
     @Test
-    fun acceptFlipsToDeliverableAndClearsTheInvitation() {
+    fun acceptClearsTheInvitationAndKeepsTheGrant() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
-        addSoft(owner, domain, groupId)
+        addSoft(owner, domain, groupId, partner)
 
         // The invitee sees exactly one pending invitation carrying the wrapped name-key `K_name` + the scope's
         // canonical encryptedName it opens (cr-0096) + who added them.
@@ -112,15 +119,21 @@ class ConsentGroupAddSliceTest {
             .body("[0].encryptedName", equalTo(groupName))
             .body("[0].addedBy", equalTo("owner"))
 
-        // Accept → 204; the invitation is gone and grant-delivery now originates a job (grant-less, not pending).
+        // Accept → 204; the invitation is gone, and the membership is an ordinary one holding the grant the proposal
+        // already held — consenting changes nothing about keys (ADR 0111 decision 4), so nothing is delivered.
         given().header("Authorization", bearer(partner))
             .`when`().post("/api/scopes/$groupId/invitations/accept").then().statusCode(204)
         given().header("Authorization", bearer(partner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes/invitations").then().statusCode(200).body("size()", equalTo(0))
+        QuarkusTransaction.requiringNew().run {
+            val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", partner, groupId).firstResult()!!
+            assertEquals(false, m.pendingConsent)
+            assertEquals(TestGrants.WRAPPED, m.wrappedGrant, "the accept keeps the proposal's grant")
+            assertEquals(owner, m.granterUserId)
+        }
 
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }
-        assertEquals(1, created, "accept makes the member a delivery target")
-        assertEquals(1, deliveryJobsFor(partner, groupId), "a grant-delivery job now targets the accepted member")
+        assertEquals(0, created, "an accepted member at the current epoch is no delivery target")
 
         // Re-accept is an idempotent no-op 204 (the flag is already clear).
         given().header("Authorization", bearer(partner))
@@ -128,24 +141,26 @@ class ConsentGroupAddSliceTest {
     }
 
     @Test
-    fun declineDropsTheSoftRowWithNoTraceAndNoRotation() {
+    fun declineDropsTheSoftRowAndQueuesTheGroupsRotation() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
-        addSoft(owner, domain, groupId)
+        addSoft(owner, domain, groupId, partner)
 
         given().header("Authorization", bearer(partner))
             .`when`().post("/api/scopes/$groupId/invitations/decline").then().statusCode(204)
 
-        // The soft membership is gone (nothing was wrapped) and the scope did NOT rotate (epoch untouched).
+        // The soft membership is gone; it held the group's key, so the group's rotation is queued (ADR 0111 decision 4)
+        // — queued, not run: the epoch moves when a member's device completes it.
         QuarkusTransaction.requiringNew().run {
             assertEquals(0, MembershipEntity.count("userId = ?1 and scopeId = ?2", partner, groupId), "soft row deleted")
-            assertEquals(0, ScopeEntity.findById(groupId)!!.currentEpoch, "decline never rotates")
+            assertEquals(1, JobEntity.count("scopeId = ?1 and capabilityTag = ?2", groupId, CapabilityTags.SCOPE_ROTATION), "rotation queued")
+            assertEquals(0, ScopeEntity.findById(groupId)!!.currentEpoch, "the decline itself rotates nothing")
         }
         // Re-invite after a decline is allowed (no `declined` marker kept) — a fresh proposal succeeds.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestGrants.groupAddJson(groupId, partner)}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
     }
 
@@ -167,8 +182,8 @@ class ConsentGroupAddSliceTest {
     fun pendingProposalIsOwnerVisibleOnly() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        seedTenantMember(tenantIdOf(domain), "partner", consent = true)
-        addSoft(owner, domain, groupId)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
+        addSoft(owner, domain, groupId, partner)
         val grantedMember = seedGroupGrantHolder(tenantIdOf(domain), groupId, "member2")
 
         // The group owner sees the pending proposal in the directory.
@@ -185,33 +200,33 @@ class ConsentGroupAddSliceTest {
     }
 
     @Test
-    fun rotationNeverGrantsAPendingProposal() {
-        // Regression (cr-0095): the consent gate must hold on the ROTATION path too, not just grant-delivery. A
-        // scope-key rotation that lists a soft `pendingConsent` proposal in its `grants` (the honest client re-grants
-        // the whole owner-visible directory, which includes pending rows) must NOT wrap `K_SC` onto it — else an
-        // ordinary member-removal rotation silently delivers the key to someone who never accepted.
+    fun aRotationReGrantsAPendingProposal() {
+        // Inverted by ADR 0111 decision 4 (cr-0095 gated the key before the wrap; the proposal now holds the grant from
+        // the add on): a rotation that lists a soft `pendingConsent` proposal in its `grants` re-grants it like any
+        // member — a proposal a rotation skipped would accept into a key the group already left.
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
-        addSoft(owner, domain, groupId)
+        addSoft(owner, domain, groupId, partner)
 
         // The owner rotates and — as a full-directory re-grant would — lists both themselves and the pending partner.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
+            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
-        // The soft membership stayed grant-less + pending — `K_SC` was never wrapped to it by the rotation.
+        // The proposal now holds the new epoch, granted by the rotator, and is still pending.
         QuarkusTransaction.requiringNew().run {
             val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", partner, groupId).firstResult()!!
-            assertNull(m.wrappedGrant, "rotation must not wrap K_SC onto a pendingConsent proposal")
+            assertEquals(1, m.grantedEpoch, "the rotation re-granted the pendingConsent proposal")
+            assertEquals(owner, m.granterUserId)
             assertEquals(true, m.pendingConsent, "the proposal stays pending after an unrelated rotation")
         }
-        // And it is still gated for grant-delivery (skipped) — the owner re-granted themselves, so nobody is behind.
+        // Both re-granted, so nobody is behind.
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }
-        assertEquals(0, created, "a still-pending proposal is not a delivery target after a rotation")
-        assertEquals(0, deliveryJobsFor(partner, groupId), "no grant-delivery job targets the still-soft member")
+        assertEquals(0, created, "nobody is behind after a rotation that re-granted every member")
+        assertEquals(0, deliveryJobsFor(partner, groupId), "no grant-delivery job targets the re-granted proposal")
     }
 
     @Test
@@ -220,7 +235,7 @@ class ConsentGroupAddSliceTest {
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = false)
 
-        // Resolve reports consent not required; the add (no seal) is the ordinary grant-less direct-add.
+        // Resolve reports consent not required; the add (no seal) is the ordinary direct-add, with the owner's grant.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner"}""")
@@ -228,13 +243,21 @@ class ConsentGroupAddSliceTest {
             .then().statusCode(200).body("requiresConsent", equalTo(false))
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner",${TestAdmission.json()}}""")
+            .body("""{"username":"partner",${TestGrants.groupAddJson(groupId, partner)}}""")
             .`when`().post("/api/scopes/$groupId/members")
-            .then().statusCode(201).body("hasGrant", equalTo(false)).body("pendingConsent", equalTo(false))
+            .then().statusCode(201).body("pendingConsent", equalTo(false))
+        assertEquals(0, QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) },
+            "a direct-add member holds the current epoch: nothing to deliver")
 
+        // A rotation that declares them pending leaves them behind — the one case grant delivery still serves.
+        given().header("Authorization", bearer(owner))
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],"pendingUserIds":["$partner"]}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(201).body("epoch", equalTo(1))
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }
-        assertEquals(1, created, "a direct-add member is an ordinary delivery target")
-        assertEquals(1, deliveryJobsFor(partner, groupId), "direct-add originates a grant-delivery job")
+        assertEquals(1, created, "a member behind the epoch is a delivery target")
+        assertEquals(1, deliveryJobsFor(partner, groupId), "the behind member's delivery job")
     }
 
     @Test
@@ -259,7 +282,7 @@ class ConsentGroupAddSliceTest {
 
     @Test
     fun addGroupMemberUnauthenticatedIs401() {
-        given().contentType(ContentType.JSON).body("""{"username":"x","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
+        given().contentType(ContentType.JSON).body("""{"username":"x","sealedNameKey":"$sealedNameKey",${TestGrants.grantJson()}}""")
             .`when`().post("/api/scopes/${UUID.randomUUID()}/members")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -308,15 +331,15 @@ class ConsentGroupAddSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 
     /** The owner proposes the consent-on "partner" (a soft pending add). */
-    private fun addSoft(owner: String, domain: String, groupId: String) {
+    private fun addSoft(owner: String, domain: String, groupId: String, partner: String) {
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestGrants.groupAddJson(groupId, partner)}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
     }
 

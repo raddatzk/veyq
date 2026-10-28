@@ -541,9 +541,11 @@ paths:
         the scope's current epoch and every node of it, live **and** trashed — a trashed node is re-keyed too, so a
         restore never brings back a key the excluded party holds (ADR 0109 point 1). A node whose `epoch` is below
         `currentEpoch` still has its key from before the rotation. The rows carry what `listNodes` carries, plus
-        `trashed`. Only an owner of the scope who holds its current grant and is not excluded by a live rotation job
-        may read it — the one who may commit a re-key (CR decision 5); anyone else is `403`. Nothing here is new to
-        the server: it is the tree and the trash it already serves, unfiltered by `deleted_at`.
+        `trashed` and `ownerOnly`. Any member of the scope who holds its current grant may read it — the one who may
+        commit a re-key ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+        decision 11: a re-key is not governance); anyone else is `403`. A member is served every node, the ones only an
+        owner re-keys included (`ownerOnly`), so its re-key knows which lagging nodes are not its own to finish. Nothing
+        here is new to the server: it is the tree and the trash it already serves, unfiltered by `deleted_at`.
       security:
         - bearerAuth: []
       parameters:
@@ -560,11 +562,10 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
           description: >
-            The caller is a member but may not re-key the scope — not an owner (`not_scope_owner`), excluded by a live
-            rotation job (`rotation_excluded`), or its grant lags the current epoch (`grant_behind`) — or the tenant
-            is suspended.
+            The caller is a member but may not re-key the scope — its grant lags the current epoch (`grant_behind`) —
+            or the tenant is suspended.
           content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: grant_behind } }
         "404":
           description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
@@ -598,7 +599,9 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: As `listRekeyNodes`.
+          description: >
+            As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -616,7 +619,7 @@ paths:
         every staged value in at once. A value staged twice for the same row is replaced. Nothing staged is served or
         read before the commit, and a stage no commit took expires after a day. Each staged value is ciphertext the
         commit would carry anyway: the server learns nothing it would not learn from the commit. `fromEpoch` is the
-        node's epoch as the re-keyer read it; a node re-keyed since (another owner finished it) is `409 stale_epoch`.
+        node's epoch as the re-keyer read it; a node re-keyed since (another member finished it) is `409 stale_epoch`.
       security:
         - bearerAuth: []
       parameters:
@@ -640,7 +643,9 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: As `listRekeyNodes`.
+          description: >
+            As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -690,7 +695,7 @@ paths:
 
         **Order and refusals** (ADR 0109 point 6). Checked under the scope's and the node's row lock, which every
         write sealing under the node's key takes too: `nodeEpoch` is the node's epoch as the re-keyer read it — not
-        the stored one is `409 stale_epoch` (another owner re-keyed it); the parent — `parentEpoch`, with `parentId`
+        the stored one is `409 stale_epoch` (another member re-keyed it); the parent — `parentEpoch`, with `parentId`
         — below the scope's current epoch is `409 node_rekey_pending` (top-down: the parent first); `epoch` not the
         scope's current one is `409 stale_epoch`. The caller's rights are `listRekeyNodes`'s.
       security:
@@ -718,7 +723,9 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: As `listRekeyNodes`.
+          description: >
+            As `listRekeyNodes`, and `not_scope_owner` when the node is one only an owner re-keys (`RekeyNode.ownerOnly`:
+            a drop box, a guest's identity folder, or a node below one) and the caller is not an owner of the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
         "404":
@@ -1431,7 +1438,7 @@ components:
       description: >
         One node as `listNodes` serves it, live or trashed. `epoch` is the epoch its key was minted at (ADR 0109
         point 6); a node below the scope's current epoch still has its key from before the rotation.
-      required: [id, kind, encryptedName, slugToken, epoch, wrappedContentKey, metaRevision, placementRevision, trashed]
+      required: [id, kind, encryptedName, slugToken, epoch, wrappedContentKey, metaRevision, placementRevision, trashed, ownerOnly]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         parentId:
@@ -1446,6 +1453,18 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: The node is in the space's trash (it or an ancestor was soft-deleted). It is re-keyed like a live one.
+          example: false
+        ownerOnly:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Only an owner of the scope re-keys this node, one where members place nothing of their own: it is a drop box
+            (a kind whose write-only guests get identity folders, e.g. Depot's `DEPOT_DROPBOX`), a guest's identity folder
+            (`shareIdentityId`), or below one (ADR 0111 decision 11, ADR 0080 Decision 11). A drop key alone does not make
+            a node owner-only: a Memory or chapter carrying a `sealedDropPrivateKey` for its uploader link is any member's
+            to re-key. Any other member's re-key skips an owner-only node, and what lies below it waits until an owner
+            re-keyed it; its parts, stage and commit refuse that member `403 not_scope_owner`. Derived from the rows the
+            server serves here anyway.
           example: false
         epoch:
           x-veyq-visibility: structure

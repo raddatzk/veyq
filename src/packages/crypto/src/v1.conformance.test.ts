@@ -668,6 +668,35 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       kdfParams: unhex(w.kdf_params),
     })
     const key = v1.deriveSecretKeyProofKeypair(unhex(p.key.secret_key))
+    // The rotation binds #key_chain's first step and #rotation_stage's stage (ADR 0111 decision 7).
+    type ChainLink = { previous_head: string | null; identity_public_key: string; secret_key_proof_public_key: string }
+    const keysOf = (l: ChainLink): v1.KeyChainKeys => ({
+      identityPublicKey: unhex(l.identity_public_key),
+      secretKeyProofPublicKey: unhex(l.secret_key_proof_public_key),
+    })
+    const firstStep = () => {
+      const [genesis, step] = vectors.key_chain.links as ChainLink[]
+      return v1.keyChainStepStatement({
+        userId: vectors.key_chain.user_id,
+        index: 1,
+        previousHead: unhex(step.previous_head as string),
+        retired: keysOf(genesis),
+        installed: keysOf(step),
+      })
+    }
+    const rotationInput = (): Parameters<typeof v1.rotationProofStatement>[0] => ({
+      currentIdentityPublicKey: unhex(p.rotation.current_identity_public_key),
+      identityPublicKey: unhex(p.rotation.identity_public_key),
+      wrappedIdentityPrivateKey: unhex(p.rotation.wrapped_identity_private_key),
+      passwordWrap: wrap(p.rotation.password_wrap),
+      recoveryWrap: wrap(p.rotation.recovery_wrap),
+      keyChainStep: firstStep(),
+      currentAuthPublicKey: unhex(p.rotation.current_auth_public_key),
+      authPublicKey: unhex(p.rotation.auth_public_key),
+      secretKeyProofPublicKey: unhex(p.rotation.secret_key_proof_public_key),
+      stageId: p.rotation.stage_id,
+      stagedGrantsDigest: unhex(p.rotation.staged_grants_digest),
+    })
 
     it('derives the keypair from the Secret Key alone', () => {
       expect(hex(key.privateKey)).toBe(p.key.private_key)
@@ -682,13 +711,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const cases: [string, () => Uint8Array, { domain: string; statement: string; signature: string }][] = [
       [
         'rotation',
-        () => v1.rotationProofStatement({
-          currentIdentityPublicKey: unhex(p.rotation.current_identity_public_key),
-          identityPublicKey: unhex(p.rotation.identity_public_key),
-          wrappedIdentityPrivateKey: unhex(p.rotation.wrapped_identity_private_key),
-          passwordWrap: wrap(p.rotation.password_wrap),
-          recoveryWrap: wrap(p.rotation.recovery_wrap),
-        }),
+        () => v1.rotationProofStatement(rotationInput()),
         p.rotation,
       ],
       [
@@ -724,6 +747,63 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(hex(stmt)).toBe(v.statement)
       expect(hex(v1.secretKeyProofSign(key.privateKey, stmt))).toBe(v.signature)
       expect(v1.authVerify(key.publicKey, stmt, unhex(v.signature))).toBe(true)
+    })
+
+    it('the rotation binds the key-chain step, the stage, both auth keys and the new proof key it registers', () => {
+      const r = p.rotation
+      expect(r.key_chain_step_statement).toBe(vectors.key_chain.links[1].statement)
+      expect(hex(v1.encodeStatement(firstStep()))).toBe(r.key_chain_step_statement)
+      expect(r.stage_id).toBe(vectors.rotation_stage.stage_id)
+      expect(r.staged_grants_digest).toBe(vectors.rotation_stage.digest)
+      const fresh = v1.deriveSecretKeyProofKeypair(unhex(r.new_secret_key))
+      expect(hex(fresh.publicKey)).toBe(r.secret_key_proof_public_key)
+      // Possession: the NEW proof key signs the very statement the current one does.
+      const stmt = v1.rotationProofStatement(rotationInput())
+      expect(hex(v1.secretKeyProofSign(fresh.privateKey, stmt))).toBe(r.possession_signature)
+      expect(v1.authVerify(fresh.publicKey, stmt, unhex(r.possession_signature))).toBe(true)
+      expect(v1.authVerify(key.publicKey, stmt, unhex(r.possession_signature))).toBe(false)
+    })
+
+    it('every field of the rotation moves its statement', () => {
+      const base = rotationInput()
+      const want = hex(v1.rotationProofStatement(base))
+      const flip = (b: Uint8Array) => {
+        const out = b.slice()
+        out[0] ^= 1
+        return out
+      }
+      const variants: [string, Parameters<typeof v1.rotationProofStatement>[0]][] = [
+        ['currentIdentityPublicKey', { ...base, currentIdentityPublicKey: flip(base.currentIdentityPublicKey) }],
+        ['identityPublicKey', { ...base, identityPublicKey: flip(base.identityPublicKey) }],
+        ['wrappedIdentityPrivateKey', { ...base, wrappedIdentityPrivateKey: flip(base.wrappedIdentityPrivateKey) }],
+        ['passwordWrap', { ...base, passwordWrap: { ...base.passwordWrap, kdfParams: flip(base.passwordWrap.kdfParams) } }],
+        ['recoveryWrap', { ...base, recoveryWrap: { ...base.recoveryWrap, wrappedKey: flip(base.recoveryWrap.wrappedKey) } }],
+        ['keyChainStep', { ...base, keyChainStep: { ...base.keyChainStep, previousHead: flip(base.keyChainStep.previousHead) } }],
+        ['currentAuthPublicKey', { ...base, currentAuthPublicKey: flip(base.currentAuthPublicKey) }],
+        ['authPublicKey', { ...base, authPublicKey: flip(base.authPublicKey) }],
+        ['secretKeyProofPublicKey', { ...base, secretKeyProofPublicKey: flip(base.secretKeyProofPublicKey) }],
+        ['stageId', { ...base, stageId: otherValue(base.stageId) as string }],
+        ['stagedGrantsDigest', { ...base, stagedGrantsDigest: flip(base.stagedGrantsDigest) }],
+      ]
+      for (const [name, v] of variants) expect(hex(v1.rotationProofStatement(v)), name).not.toBe(want)
+    })
+
+    it('refuses a stage id that is not a canonical UUID and a stage digest that is not a SHA-256 digest', () => {
+      const base = rotationInput()
+      expect(() => v1.rotationProofStatement({ ...base, stageId: base.stageId.toUpperCase() })).toThrow(
+        new v1.SealContextInvalid('rotation stageId is not a canonical lowercase UUID'),
+      )
+      expect(() => v1.rotationProofStatement({ ...base, stageId: new String(base.stageId) as unknown as string })).toThrow(
+        new v1.SealContextInvalid('rotation stageId is not a canonical lowercase UUID'),
+      )
+      for (const digest of [base.stagedGrantsDigest.slice(0, 31), v1.concat(base.stagedGrantsDigest, Uint8Array.of(0))]) {
+        expect(() => v1.rotationProofStatement({ ...base, stagedGrantsDigest: digest })).toThrow(
+          new v1.SealContextInvalid('rotation stagedGrantsDigest is not a SHA-256 digest'),
+        )
+      }
+      expect(() => v1.rotationProofStatement({ ...base, stagedGrantsDigest: 'x'.repeat(32) as unknown as Uint8Array })).toThrow(
+        new v1.SealContextInvalid('rotation stagedGrantsDigest is not a SHA-256 digest'),
+      )
     })
 
     it('the four domains differ, so no statement answers for another flow', () => {
@@ -805,50 +885,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(a.domain).toBe(domain)
       expect(new TextDecoder().decode(build().slice(4, 4 + domain.length))).toBe(domain)
       expect(domain).not.toBe(vectors.auth_attestation.change_email.domain)
-    })
-  })
-
-  describe('admission tag (ADR 0020 move 6)', () => {
-    const a = vectors.admission_tag
-    type Case = { context: v1.Admission; statement: string; tag: string }
-    const cases: [string, Case][] = [
-      ['tenant invite (no account yet: userId absent)', a.tenant_invite],
-      ['group add (bound to the target account)', a.group_add],
-    ]
-    const epochKey = unhex(a.epoch_key)
-
-    it('derives its MAC key from the epoch key under its own info string', () => {
-      expect(hex(v1.hkdfSha256(epochKey, new Uint8Array(0), v1.utf8('veyq/v1/admission-tag'), 32))).toBe(a.tag_key)
-    })
-
-    it.each(cases)('%s: statement bytes and tag', (_name, c) => {
-      expect(hex(v1.encodeStatement({ purpose: 'admission-tag', ...c.context }))).toBe(c.statement)
-      expect(hex(v1.admissionTag(epochKey, c.context))).toBe(c.tag)
-      expect(v1.admissionTagVerifies(epochKey, c.context, unhex(c.tag))).toBe(true)
-    })
-
-    // Each bound value, moved one step, and the epoch KEY itself: every one must stop the tag from verifying — the
-    // epoch key is the one a worker at a later epoch holds, which is what makes a pre-rotation tag not admit.
-    it.each(cases)('%s: a tag answers for nothing else', (_name, c) => {
-      const tag = unhex(c.tag)
-      for (const field of ['scopeId', 'epoch', 'admissionId'] as const) {
-        const moved = { ...c.context, [field]: otherValue(c.context[field]) }
-        expect(v1.admissionTagVerifies(epochKey, moved, tag), field).toBe(false)
-      }
-      const otherUser = c.context.userId === null ? 'b0b00000-0000-4000-8000-000000000009' : null
-      expect(v1.admissionTagVerifies(epochKey, { ...c.context, userId: otherUser }, tag)).toBe(false)
-      expect(v1.admissionTagVerifies(unhex('5b'.repeat(32)), c.context, tag)).toBe(false)
-      expect(v1.admissionTagVerifies(epochKey, c.context, tag.slice(0, 31))).toBe(false)
-      // A longer "tag" whose first 32 bytes ARE the tag must not pass either — the length is part of the check.
-      expect(v1.admissionTagVerifies(epochKey, c.context, v1.concat(tag, Uint8Array.of(0)))).toBe(false)
-      const flipped = tag.slice()
-      flipped[31] ^= 1
-      expect(v1.admissionTagVerifies(epochKey, c.context, flipped)).toBe(false)
-    })
-
-    it('an absent userId is explicit: undefined is a forgotten field, not a tenant invite', () => {
-      const { userId: _u, ...rest } = a.tenant_invite.context as v1.Admission
-      expect(() => v1.admissionTag(epochKey, rest as v1.Admission)).toThrow(v1.SealContextInvalid)
     })
   })
 
@@ -1030,9 +1066,11 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(pt.length).toBe(p.entry_bytes)
       const text = new TextDecoder().decode(pt)
       const entry = JSON.parse(text)
-      expect(Object.keys(entry)).toEqual(['userId', 'fingerprint', 'state', 'firstSeenAt'])
-      expect(entry.userId).toBe(p.pin_ids[0].userId)
-      expect(hex(Uint8Array.from(Buffer.from(entry.fingerprint, 'base64')))).toBe(vectors.fingerprint.hash)
+      // Single-letter keys, so an entry with its key-chain head stays inside entry_bytes (ADR 0028 Decision 2).
+      expect(Object.keys(entry)).toEqual(['u', 'f', 'h', 'i', 't', 'r'])
+      expect(entry.u).toBe(p.pin_ids[0].userId)
+      expect(hex(Uint8Array.from(Buffer.from(entry.f, 'base64')))).toBe(vectors.fingerprint.hash)
+      expect(Buffer.from(entry.h, 'base64').length).toBe(32)
       expect(text.slice(text.lastIndexOf('}') + 1)).toMatch(/^ +$/)
       // set.two carries this very ciphertext, so the stored entry and the digest over it cannot drift apart unseen.
       expect(two.find((e) => e.pinId === v.context.pinId)?.entry).toBe(v.blob)
@@ -1177,7 +1215,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       }
     })
 
-    it('the statement\'s label domain-separates it from the admission tag and from every seal purpose', () => {
+    it('the statement\'s label domain-separates it from every seal purpose', () => {
       const stmt = v1.encodeStatement(v1.grantStatement(input(g.personal)))
       expect(new TextDecoder().decode(stmt.slice(4, 9))).toBe('grant')
       expect(Object.keys(vectors.seal.sym)).not.toContain('grant')

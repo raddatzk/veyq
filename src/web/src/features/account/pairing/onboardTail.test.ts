@@ -18,7 +18,7 @@ import { httpError } from '../../../test/httpError'
 import { fakeApi } from '../../../test/apiMock'
 import type { TokenApi } from '../../../api/generated/auth'
 import type { AccountApi, AccountKeyMaterial } from '../../../api/generated/account'
-import { fakePinServer, identityKey, sealPinStore } from '../../../test/pinStore'
+import { fakePinServer, identityKey, sealPinStore, SOME_HEAD } from '../../../test/pinStore'
 
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock('../trustDevice/trustDevice', () => ({
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { unlockWithGrantedMasterKey } from '../unlock/unlock'
 import { accountApi, tokenApi } from '../../../api/client'
-import { checkAndPin } from '../identityPins'
+import { anchorIdentity } from '../identityPins'
 import { channelKeys, mintPairingSecret, openGrant, sealGrant } from './pairing'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
@@ -389,14 +389,14 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
   it('linked by a device whose pin mark is 5, a v4 pin store on the first read is refused', async () => {
     const mk = await linkedBy(5)
     const write = servePins(mk, 4)
-    await expect(checkAndPin(CONTACT, CONTACT_KEY)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    await expect(anchorIdentity(CONTACT, { identityPublicKey: CONTACT_KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
     expect(write).not.toHaveBeenCalled()
   })
 
   it('control: served v5, the store is accepted', async () => {
     const mk = await linkedBy(5)
     const write = servePins(mk, 5)
-    expect(await checkAndPin(CONTACT, CONTACT_KEY)).toBe('firstUse')
+    expect(await anchorIdentity(CONTACT, { identityPublicKey: CONTACT_KEY, keyChainHead: SOME_HEAD }, { firstUse: 'served' })).toBe('firstUse')
     expect(write).toHaveBeenCalledTimes(1)
   })
 })

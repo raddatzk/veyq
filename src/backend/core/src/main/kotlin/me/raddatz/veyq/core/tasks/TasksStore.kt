@@ -1,8 +1,8 @@
 package me.raddatz.veyq.core.tasks
 
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.admission
 import me.raddatz.veyq.core.node.rekey.ScopeRekeying
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -17,13 +17,13 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds, and the
- *  membership's admission (ADR 0020 move 6), which the worker verifies under its own epoch key before it wraps. */
+/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds. */
 data class GrantDeliveryTargetView(
     val targetUserId: String,
     val targetMembershipId: String,
     val identityPublicKey: String,
-    val admission: Admission?,
+    /** The head of the target's key chain (ADR 0111 decision 7) — the worker anchors the key by it. */
+    val keyChainHead: String,
 )
 
 /** A leased job handed back to a worker (a plain view — never a managed entity, so no L1-cache surprises). */
@@ -60,6 +60,10 @@ sealed interface CompleteResult {
     /** A grant-delivery completion stated an epoch that is not the scope's current one (ADR 0072): nothing written,
      *  the lease released without spending an attempt, so the job re-runs at the current epoch. */
     object StaleEpoch : CompleteResult, HttpFailure by httpFailure("stale_epoch", CONFLICT)
+    /** A grant-delivery completion whose grant names a key that is not the target's current identity (ADR 0111
+     *  decision 10 — the target secured their account after the claim): nothing written, the lease released without
+     *  spending an attempt, as [StaleEpoch]. */
+    object RecipientKeyNotCurrent : CompleteResult, HttpFailure by Failures.recipientKeyNotCurrent
     /** A `scope-rotation` job whose holder committed no epoch of its scope while holding the lease (#207): nothing
      *  written, the lease kept. The worker's failure report then spends an attempt — the right outcome for a worker
      *  that did not rotate. */
@@ -69,14 +73,11 @@ sealed interface CompleteResult {
     object RekeyIncomplete : CompleteResult, HttpFailure by httpFailure("rekey_incomplete", CONFLICT)
 }
 
-/** One rotator's queued compromise rotation on one scope, and where it stands ([CompromiseRotationPolicy]). */
-data class CompromiseRotationRow(val scopeId: String, val rotatorId: String, val state: CompromiseRotationState)
-
-/** Outcome of queueing a dead-lettered compromise rotation again. */
+/** Outcome of queueing a dead-lettered rotation again. */
 sealed interface RequeueResult {
-    /** Queued again; the scope's rows after it. */
-    data class Requeued(val rows: List<CompromiseRotationRow>) : RequeueResult
-    /** No account rotation (of the named rotator, where one is named) ever queued a rotation on the scope. */
+    /** Queued again; the scope's owner view after it (null = nothing needs an owner). */
+    data class Requeued(val view: CompromiseRotationState?) : RequeueResult
+    /** No rotation was ever queued on the scope. */
     object NoRotation : RequeueResult
     /** There is one, but none of it is `FAILED` — nothing to queue again. */
     object NotFailed : RequeueResult
@@ -109,7 +110,7 @@ sealed interface DeclineResult {
  * scope + opaque tag and stores opaque ciphertext; it never holds a scope key.
  */
 @ApplicationScoped
-class TasksStore {
+class TasksStore(private val keyChain: KeyChainStore) {
 
     /** The scopes the caller can act on as a worker: those where they hold a grant (i.e. hold `K_SC`). */
     fun grantedScopeIds(userId: String): Set<String> =
@@ -154,9 +155,7 @@ class TasksStore {
         //
         // `?6` is the **userId**, so the exclusion is per KEY-HOLDER, not per device: a second browser of the
         // same account is excluded too. That is the correct reading of a decline (the refusal was a decision
-        // about an identity, not about a browser), and ADR 0060 Decision 4 now rests on it — the rotation
-        // exclusion is a decline row for the rotator, and a per-device exclusion would let them claim their own
-        // rotation from any other tab.
+        // about an identity, not about a browser).
         val candidates = eligible.flatMap { (tag, scopeIds) ->
             JobEntity.find(
                 "scopeId in ?1 and capabilityTag = ?2 and attempts < maxAttempts and " +
@@ -225,7 +224,9 @@ class TasksStore {
      * writer of one scope's jobs and memberships follows, so this cannot deadlock against a rotation.
      */
     @Transactional
-    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?): CompleteResult {
+    fun complete(
+        userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?, recipientIdentityDigest: String?,
+    ): CompleteResult {
         val job = JobEntity.findById(jobId) ?: return CompleteResult.NotFound
         if (job.status == JobEntity.DONE) return CompleteResult.Done // idempotent no-op
         if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
@@ -242,24 +243,27 @@ class TasksStore {
         val epoch = statedEpoch ?: return CompleteResult.MissingResult
         // The worker's signature over the grant it posts (ADR 0028 Decision 6) — stored, never verified here.
         val signature = grantSignature ?: return CompleteResult.MissingResult
+        // The key the grant is wrapped to (ADR 0111 decision 10) — compared below, under the scope lock.
+        val digest = recipientIdentityDigest ?: return CompleteResult.MissingResult
         // The grant is sealed bound to (scope, the epoch the worker states) (ADR 0072), so that is the epoch the
         // membership records — and it must be the scope's CURRENT one: a rotation that landed between claim and
         // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
         // released (the claim's attempt rolled back, like a decline) so the job re-runs at the current epoch.
         // The scope row is read under the lock a rotation takes (ScopesStore.rotate), so the two serialize.
         val current = ScopeEntity.lockRow(job.scopeId)?.currentEpoch ?: 0
-        if (epoch != current) {
-            JobEntity.update(
-                "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
-                    "where id = ?2 and leaseHolder = ?3 and status = ?4",
-                JobEntity.PENDING, jobId, userId, JobEntity.LEASED,
-            )
-            return CompleteResult.StaleEpoch
+        if (epoch != current) return release(jobId, userId, CompleteResult.StaleEpoch)
+        // A grant to a key that is not the target's current identity is refused the same way (ADR 0111 decision 10): a
+        // target that secured its account after the claim published a new key, and a grant to the retired one is exactly
+        // what the decision forbids. Read under the scope lock the publish also takes for every scope the target holds.
+        val targetKey = job.resourceRef?.let { MembershipEntity.findById(it) }?.let { VeyqUser.findById(it.userId) }?.identityPublicKey
+        if (targetKey != null && !InviteAcceptProof.digestMatches(targetKey, digest)) {
+            return release(jobId, userId, CompleteResult.RecipientKeyNotCurrent)
         }
         if (markDone(job, userId, sealedResult) != 1) return lostCompletion(job, userId)
-        // Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current — e.g. a
-        // rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is already
-        // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
+        // Deliver onto a membership that is BEHIND (grantedEpoch < current — a rotation skipped it, §E2, or it joined
+        // through an invite a rotation declared pending, ADR 0111 decision 2). Every membership is born with a grant,
+        // so there is no grant-less one to deliver to. Idempotent + first-online-wins: a no-op once the member is
+        // already at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
         // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
         // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
         // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
@@ -270,11 +274,22 @@ class TasksStore {
             MembershipEntity.update(
                 "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6, " +
                     "granterIdentityPublicKey = ?7 " +
-                    "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
+                    "where id = ?3 and scopeId = ?4 and wrappedGrant is not null and grantedEpoch < ?2",
                 grant, epoch, membershipId, job.scopeId, userId, signature, workerKey,
             )
         }
         return CompleteResult.Done
+    }
+
+    /** Release a grant-delivery lease without spending its attempt (the claim's increment rolled back, like a decline),
+     *  so the job re-runs — and answer [refusal]. */
+    private fun release(jobId: String, userId: String, refusal: CompleteResult): CompleteResult {
+        JobEntity.update(
+            "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
+                "where id = ?2 and leaseHolder = ?3 and status = ?4",
+            JobEntity.PENDING, jobId, userId, JobEntity.LEASED,
+        )
+        return refusal
     }
 
     /** The guarded `DONE`: only while the job is still leased to [userId], and for a rotation only once that holder
@@ -404,43 +419,6 @@ class TasksStore {
     }
 
     /**
-     * Originate a scope rotation the originator must **not** complete — key rotation after a compromise
-     * (ADR 0060 Decision 4, uc.account.rotate-keys §7) — and queue a dead-lettered one again
-     * ([requeueFailedRotations]).
-     *
-     * The exclusion rides on the **existing** decline mechanism rather than on a new column: a
-     * `(job, worker)` row is already exactly "this worker may not claim this job", and it is already what
-     * [claim]'s candidate query filters on. Written at origination instead of after a refusal, which is the
-     * only thing new here.
-     *
-     * **The decline is written on every live job of the scope**, `PENDING` and `LEASED`, whether or not this call
-     * created one. A scope that already carries an unclaimed rotation (a removal cut moments earlier) must exclude
-     * the rotator from *that* job, or the rotation this account triggered is completable by the very account it
-     * locks out; and a leased job whose lease expires would otherwise be reclaimable by the rotator, who may be an
-     * owner. The exclusion does not revoke a lease the rotator already holds — that lease is inert, because
-     * `rotateScope` refuses their commit and the completion needs one. The joined or fresh `PENDING` job is what
-     * guarantees a rotation whose directory read came after the identity changed. Returns whether a job was created.
-     *
-     * **Its bound, stated rather than engineered around:** the exclusion binds the scope's live jobs, in two places —
-     * here at the claim, and where the commit lands (`ScopesStore.rotate` asks [isRotationExcluded]). If they
-     * dead-letter it lapses on both, until the rotator or an owner of the scope queues the rotation again through
-     * this function; the window is visible to both as `FAILED` ([compromiseRotations]). A job a later removal
-     * originates after a dead-letter does not carry it either; once any rotation lands without the rotator, their
-     * behind grant still holds them at the commit.
-     */
-    @Transactional
-    fun originateScopeRotationExcluding(scopeId: String, excludedWorkerId: String, maxAttempts: Int): Boolean {
-        ScopeEntity.lockRow(scopeId)
-        val created = pendingRotationJob(scopeId) == null
-        if (created) createRotationJob(scopeId, maxAttempts)
-        JobEntity.find(
-            "scopeId = ?1 and capabilityTag = ?2 and status in ?3",
-            scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
-        ).list().forEach { exclude(it.id, excludedWorkerId) }
-        return created
-    }
-
-    /**
      * The scope's unclaimed rotation job, read under its row lock — never a `LEASED` one, live or expired. A leased
      * job's worker has already read its inputs (the directory comes right after the claim) and may already have
      * committed, so an event folded into it would be closed by a rotation that could not reflect it — and for an
@@ -467,29 +445,6 @@ class TasksStore {
         }.persist()
     }
 
-    private fun exclude(jobId: String, workerId: String) {
-        if (JobDeclineEntity.count("jobId = ?1 and workerId = ?2", jobId, workerId) > 0L) return
-        JobDeclineEntity().apply {
-            id = UUID.randomUUID().toString()
-            this.jobId = jobId
-            this.workerId = workerId
-            reason = ROTATION_ORIGINATOR
-        }.persist()
-    }
-
-    /**
-     * Whether a live (`PENDING`/`LEASED`) rotation job of [scopeId] carries [userId]'s rotation exclusion — the first
-     * fact `rotateScope` refuses on (ADR 0060 Decision 4). Only the `rotation_originator` reason counts: a worker's own
-     * `identity_changed`, `stale_epoch` or `not_scope_owner` decline is about one job, never about their authority.
-     * An exhausted job whose lease expired still reads `LEASED` until a claim sweeps it, and counts: that errs closed.
-     */
-    fun isRotationExcluded(scopeId: String, userId: String): Boolean =
-        JobDeclineEntity.count(
-            "workerId = ?1 and reason = ?2 and jobId in " +
-                "(select j.id from JobEntity j where j.scopeId = ?3 and j.capabilityTag = ?4 and j.status in ?5)",
-            userId, ROTATION_ORIGINATOR, scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
-        ) > 0L
-
     /**
      * Record that [committerId] committed [epoch] on [scopeId] (#207): every rotation job of the scope **leased to
      * them** — `LEASED` with them as holder, no expiry test, exactly what [complete] means by holder — gets the mark
@@ -503,135 +458,60 @@ class TasksStore {
             epoch, scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.LEASED, committerId,
         )
 
-    // --- the state of a queued compromise rotation (uc.account.rotate-keys §9, ADR 0060 Decision 6) ---------
+    // --- what a queued rotation needs from an owner (uc.spaces.complete-queued-rotation) ---------------------
 
     /**
-     * Every compromise rotation queued on [scopeIds] (all scopes when null) by [rotatorId] (every rotator when null),
-     * with its state. One row per (scope, rotator) where the rotator still holds a membership there: a scope they
-     * left, or a purged one, drops out. The covering job is the scope's **newest** job carrying the rotator's
-     * exclusion — an origination creates a job only when none is `PENDING`, so the newest live one is the one every
-     * later event joined. Reads job, decline, membership and scope rows the server already holds; derives in
-     * [CompromiseRotationPolicy].
+     * For each of [scopeIds] that ever had a rotation queued, what it needs from an owner ([CompromiseRotationPolicy]):
+     * judged on the scope's **newest** `scope-rotation` job — an origination creates a job only when none is `PENDING`, so
+     * the newest is the one every later event joined. Scopes needing nobody are absent. Reads job, decline and membership
+     * rows the server already holds; names nobody.
      */
-    fun compromiseRotations(scopeIds: Collection<String>? = null, rotatorId: String? = null): List<CompromiseRotationRow> {
-        if (scopeIds != null && scopeIds.isEmpty()) return emptyList()
-        val query = JobEntity.getEntityManager().createQuery(
-            "select d.workerId, j.id from JobDeclineEntity d, JobEntity j where d.jobId = j.id and d.reason = :reason " +
-                "and j.capabilityTag = :tag" + (if (scopeIds != null) " and j.scopeId in :scopes" else "") +
-                (if (rotatorId != null) " and d.workerId = :rotator" else ""),
-            Array<Any>::class.java,
-        ).setParameter("reason", ROTATION_ORIGINATOR).setParameter("tag", CapabilityTags.SCOPE_ROTATION)
-        scopeIds?.let { query.setParameter("scopes", it) }
-        rotatorId?.let { query.setParameter("rotator", it) }
-        val hits = query.resultList.map { it[0] as String to it[1] as String }
-        if (hits.isEmpty()) return emptyList()
-
-        val jobs = JobEntity.find("id in ?1", hits.map { it.second }.toSet()).list().associateBy { it.id }
-        val covering = hits.mapNotNull { (rotator, jobId) -> jobs[jobId]?.let { rotator to it } }
-            .groupBy({ (rotator, job) -> job.scopeId to rotator }, { it.second })
-            // `veyq_job.created_at` is DATETIME(3), so a dead-letter and the re-queue after it order by their
-            // millisecond (second-precision made them tie on MariaDB, and the id decided: a coin flip). Only two
-            // jobs created inside ONE millisecond still tie, and [NEWEST_COVERING] decides that without the id first.
-            .mapValues { (_, candidates) ->
-                candidates.maxWith(NEWEST_COVERING)
-            }
-        val scopes = covering.keys.map { it.first }.toSet()
-        val members = MembershipEntity.find("scopeId in ?1", scopes).list().groupBy { it.scopeId }
-        val epochs = ScopeEntity.find("id in ?1", scopes).list().associate { it.id to it.currentEpoch }
-        // ADR 0109 point 1: a rotation reads secured only once no node of the scope lags its epoch (derived, one range
-        // read per scope).
-        val lagging = epochs.filter { (scopeId, current) -> ScopeRekeying.lagsBelow(scopeId, current) }.keys
-        val decliners = JobDeclineEntity.find("jobId in ?1", covering.values.map { it.id }.toSet()).list()
-            .groupBy({ it.jobId }, { it.workerId })
+    fun queuedRotations(scopeIds: Collection<String>): Map<String, CompromiseRotationState> {
+        if (scopeIds.isEmpty()) return emptyMap()
+        val newest = JobEntity.find("scopeId in ?1 and capabilityTag = ?2", scopeIds.toSet(), CapabilityTags.SCOPE_ROTATION).list()
+            .groupBy { it.scopeId }.mapValues { (_, jobs) -> jobs.maxWith(NEWEST_COVERING) }
+        if (newest.isEmpty()) return emptyMap()
+        val owners = MembershipEntity.find("scopeId in ?1 and role = ?2 and wrappedGrant is not null", newest.keys, MembershipEntity.OWNER)
+            .list().groupBy({ it.scopeId }, { it.userId })
+        val declined = JobDeclineEntity.find("jobId in ?1", newest.values.map { it.id }.toSet()).list().groupBy({ it.jobId }, { it.workerId })
         val now = Instant.now()
-        return covering.mapNotNull { (key, job) ->
-            val (scopeId, rotator) = key
-            val rows = members[scopeId].orEmpty()
-            val own = rows.firstOrNull { it.userId == rotator } ?: return@mapNotNull null
-            val declined = decliners[job.id].orEmpty().toSet()
-            val facts = CompromiseRotationFacts(
-                rotatorGrantedEpoch = own.wrappedGrant?.let { own.grantedEpoch },
-                scopeCurrentEpoch = epochs[scopeId] ?: 0,
-                jobStatus = job.status, jobLeaseExpiresAt = job.leaseExpiresAt,
-                jobAttempts = job.attempts, jobMaxAttempts = job.maxAttempts,
-                claimableByAnOwner = rows.any {
-                    it.role == MembershipEntity.OWNER && it.wrappedGrant != null && it.userId !in declined
-                },
-                nodesLag = scopeId in lagging,
+        return newest.mapNotNull { (scopeId, job) ->
+            val facts = QueuedRotationFacts(
+                jobStatus = job.status, jobLeaseExpiresAt = job.leaseExpiresAt, jobAttempts = job.attempts, jobMaxAttempts = job.maxAttempts,
+                claimableByAnOwner = owners[scopeId].orEmpty().any { it !in declined[job.id].orEmpty() },
             )
-            CompromiseRotationRow(scopeId, rotator, CompromiseRotationPolicy.state(facts, now))
-        }.sortedWith(compareBy({ it.scopeId }, { it.rotatorId }))
+            CompromiseRotationPolicy.ownerView(facts, now)?.let { scopeId to it }
+        }.toMap()
     }
 
     /**
-     * Queue a dead-lettered compromise rotation of [scopeId] again — for [rotatorId] (the rotator themselves, D9), or
-     * for every rotator whose rotation there is `FAILED` (an owner of the scope, D10). Under the scope row's lock, so
-     * the state it gates on cannot move under it. Each failed rotator's rotation is originated excluding them again,
-     * which re-arms `rotateScope`'s first refusal; nothing is written unless something is `FAILED`. The caller is not
-     * excluded unless they are one of those rotators, so an owner's own worker can claim the job at once.
+     * Queue the dead-lettered rotation of [scopeId] again (uc.spaces.complete-queued-rotation E8): under the scope row's
+     * lock, so the view it gates on cannot move under it, and only from `FAILED` — nothing is written otherwise. It joins
+     * the scope's unclaimed job or creates one, excluding nobody, so the caller's own worker can claim it at once.
      */
     @Transactional
-    fun requeueFailedRotations(scopeId: String, rotatorId: String?, maxAttempts: Int): RequeueResult {
+    fun requeueFailedRotation(scopeId: String, maxAttempts: Int): RequeueResult {
         ScopeEntity.lockRow(scopeId)
-        val rows = compromiseRotations(listOf(scopeId), rotatorId)
-        if (rows.isEmpty()) return RequeueResult.NoRotation
-        val failed = rows.filter { it.state == CompromiseRotationState.FAILED }
-        if (failed.isEmpty()) return RequeueResult.NotFailed
-        failed.forEach { originateScopeRotationExcluding(scopeId, it.rotatorId, maxAttempts) }
-        return RequeueResult.Requeued(compromiseRotations(listOf(scopeId), rotatorId))
+        if (JobEntity.count("scopeId = ?1 and capabilityTag = ?2", scopeId, CapabilityTags.SCOPE_ROTATION) == 0L) return RequeueResult.NoRotation
+        if (queuedRotations(listOf(scopeId))[scopeId] != CompromiseRotationState.FAILED) return RequeueResult.NotFailed
+        originateScopeRotation(scopeId, maxAttempts)
+        return RequeueResult.Requeued(queuedRotations(listOf(scopeId))[scopeId])
     }
 
     /**
-     * Drop the caller's own declines against a contact whose changed identity key they just accepted
-     * (ADR 0028 (2), ADR 0060 Decision 7).
-     *
-     * Nothing expires a decline, which is right while a key conflict is unresolved and wrong the moment a human
-     * resolves it: without this, the accept authorises a wrap that nothing performs, and a rotated account is
-     * stranded outside every scope whose deliverer had already declined.
-     *
-     * **Narrow in three ways, each load-bearing.** Only the caller's own rows (`workerId = ?1`) — the accept was
-     * one human's decision on one client, and a blind server must not generalise it to a key-holder who has not
-     * looked. Only jobs targeting `targetUserId` — a decline about a different contact is not resolved by this
-     * accept. And only `grant-delivery` jobs, which is what keeps this away from the rotation exclusion above:
-     * a `scope-rotation` job's `resourceRef` is a **scopeId** and it has no delivery target at all, so no
-     * membership id can ever resolve to one. That invariant holds by the shape of this query rather than by a
-     * special case inside it — which is why the tag filter is written even though the membership-id join would
-     * already imply it.
+     * Delete every decline of a `grant-delivery` job whose target is [targetUserId] — whoever declined it (cr-secure-the-
+     * account decision 10). The account just secured itself: a worker that could not anchor its old key tries the new one,
+     * which the key chain now reaches. In the publish's transaction. Only `grant-delivery` jobs, whose `resourceRef` is a
+     * membership id; a `scope-rotation` job's is a scope id and names no target.
      */
-    @Transactional
-    fun clearDeclinesForTarget(workerId: String, targetUserId: String): Int {
-        val membershipIds = MembershipEntity.find("userId = ?1", targetUserId).list().map { it.id }
+    fun clearDeclinesTargeting(targetUserId: String): Int {
+        val membershipIds = MembershipEntity.find("userId", targetUserId).list().map { it.id }
         if (membershipIds.isEmpty()) return 0
         val jobIds = JobEntity.find(
             "capabilityTag = ?1 and resourceRef in ?2", CapabilityTags.GRANT_DELIVERY, membershipIds,
         ).list().map { it.id }
         if (jobIds.isEmpty()) return 0
-        return JobDeclineEntity.delete("workerId = ?1 and jobId in ?2", workerId, jobIds).toInt()
-    }
-
-    /**
-     * Drop every `admission_unverified` decline on the grant-delivery jobs of these memberships — called by a rotation
-     * for each membership whose admission it **re-tagged** (ADR 0020 move 6).
-     *
-     * Such a decline judged one admission under one key: it lasts as long as that admission, not as long as the job.
-     * A re-tag means the rotator verified the old tag under the old epoch and vouched for it under the new one, so a
-     * key-holder's earlier refusal — of that tag, or of a tag its own key could not yet check — no longer describes
-     * anything, and every worker judges again at its next claim. Loosening it is safe because the exclusion was never
-     * the security control: every claim re-runs the admission and the TOFU check, so a re-offer cannot lead to a wrap
-     * a fresh check refuses. What it protects is liveness — a worker never spinning on a job it will refuse again —
-     * which is why it is lifted only where the premise moved. **Narrow in two ways:** only this reason (a decline
-     * about the target's key is the pin's, lifted by [clearDeclinesForTarget] after a human looked), and only
-     * re-tagged memberships (a dropped admission is still unadmitted). A `scope-rotation` job is never matched: its
-     * `resourceRef` is a scope id. The server compares no tag; it only knows that the opaque admission moved.
-     */
-    @Transactional
-    fun liftAdmissionDeclines(membershipIds: Collection<String>): Int {
-        if (membershipIds.isEmpty()) return 0
-        val jobIds = JobEntity.find(
-            "capabilityTag = ?1 and resourceRef in ?2", CapabilityTags.GRANT_DELIVERY, membershipIds,
-        ).list().map { it.id }
-        if (jobIds.isEmpty()) return 0
-        return JobDeclineEntity.delete("reason = ?1 and jobId in ?2", ADMISSION_UNVERIFIED, jobIds).toInt()
+        return JobDeclineEntity.delete("jobId in ?1", jobIds).toInt()
     }
 
     // --- grant-delivery structural origination + dead-letter sweep -------------------------------------------
@@ -639,18 +519,18 @@ class TasksStore {
     /**
      * Ensure every **behind** membership in these scopes has a PENDING grant-delivery job (server-structural
      * origination — the server already understands "a role without the current key means deliver it"). A member is
-     * behind when they are grant-less (never delivered) OR **stale** (`grantedEpoch < the scope's currentEpoch` —
-     * e.g. a rotation re-wrap failed for them, §E2; cr-0093). Idempotent: skips memberships that already have a live
-     * (PENDING/LEASED) grant-delivery job. Runs on the pull path (reconcile-on-claim) and from a scheduled backstop.
+     * behind when their grant is older than the scope's epoch (`grantedEpoch < currentEpoch` — a rotation re-wrap
+     * failed or skipped them, §E2, cr-0093, or they joined through an invite a rotation declared pending, ADR 0111
+     * decision 2). A soft `pendingConsent` proposal holds a grant like any member and is brought current too.
+     * Idempotent: skips memberships that already have a live (PENDING/LEASED) grant-delivery job. Runs on the pull
+     * path (reconcile-on-claim) and from a scheduled backstop.
      */
     @Transactional
     fun reconcileGrantDelivery(scopeIds: Set<String>, maxAttempts: Int): Int {
         if (scopeIds.isEmpty()) return 0
         val epochByScope = ScopeEntity.find("id in ?1", scopeIds).list().associate { it.id to it.currentEpoch }
-        // A soft `pendingConsent` proposal (cr-0094) is grant-less but NEVER a delivery target: the consent gate is
-        // "no `K_SC` wrap before the invitee accepts", so it is skipped until Accept clears the flag.
         val pending = MembershipEntity.find("scopeId in ?1", scopeIds).list()
-            .filter { !it.pendingConsent && (it.wrappedGrant == null || it.grantedEpoch < (epochByScope[it.scopeId] ?: 0)) }
+            .filter { it.wrappedGrant != null && it.grantedEpoch < (epochByScope[it.scopeId] ?: 0) }
         var created = 0
         for (m in pending) {
             val live = JobEntity.count(
@@ -673,15 +553,12 @@ class TasksStore {
         return created
     }
 
-    /** The scheduled backstop: reconcile grant-delivery across every scope that has a **behind** membership — one
-     *  that is grant-less, or stale in a rotated scope (`grantedEpoch < currentEpoch`; cr-0093). `reconcileGrantDelivery`
-     *  then filters each scope down to its actually-behind members. */
+    /** The scheduled backstop: reconcile grant-delivery across every rotated scope — only there can a membership be
+     *  behind (`grantedEpoch < currentEpoch`; cr-0093). `reconcileGrantDelivery` then filters each scope down to its
+     *  actually-behind members. */
     @Transactional
-    fun reconcileAllGrantDelivery(maxAttempts: Int): Int {
-        val grantless = MembershipEntity.find("wrappedGrant is null").list().map { it.scopeId }.toSet()
-        val rotated = ScopeEntity.find("currentEpoch > 0").list().map { it.id }.toSet()
-        return reconcileGrantDelivery(grantless + rotated, maxAttempts)
-    }
+    fun reconcileAllGrantDelivery(maxAttempts: Int): Int =
+        reconcileGrantDelivery(ScopeEntity.find("currentEpoch > 0").list().map { it.id }.toSet(), maxAttempts)
 
     /** Lazily dead-letter expired-lease jobs of one tag, on that tag's own eligible scopes, that have exhausted their
      *  attempts (a crashed poison worker). */
@@ -693,27 +570,16 @@ class TasksStore {
         )
     }
 
-    /** Resolve a grant-delivery job's target: the pending member's userId + identity public key. */
+    /** Resolve a grant-delivery job's target: the behind member's userId + identity public key. */
     private fun resolveGrantTarget(membershipId: String?): GrantDeliveryTargetView? {
         val m = membershipId?.let { MembershipEntity.findById(it) } ?: return null
         val user = VeyqUser.findById(m.userId) ?: return null
-        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey, m.admission())
+        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey, keyChain.headOf(m.userId) ?: return null)
     }
 
     companion object {
-        /** The `reason` on a decline written at origination rather than after a refusal — greppable, and it is
-         *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. Only this reason
-         *  binds `rotateScope` ([isRotationExcluded]) and names a compromise rotation ([compromiseRotations]). */
-        const val ROTATION_ORIGINATOR = "rotation_originator"
-
-        /** The `reason` a grant-delivery worker declines with when the target's admission tag does not verify under
-         *  its key (the web's `ADMISSION_UNVERIFIED`). Client-written like any reason; the server reads it only to
-         *  know which declines a re-tag lifts ([liftAdmissionDeclines]) — a worker naming it otherwise only keeps
-         *  itself excluded. */
-        const val ADMISSION_UNVERIFIED = "admission_unverified"
-
         /**
-         * Which of several jobs covering one (scope, rotator) is the **newest**: the later `createdAt` (millisecond,
+         * Which of a scope's rotation jobs is the **newest**: the later `createdAt` (millisecond,
          * `veyq_job.created_at` is `DATETIME(3)`); on a tie — two jobs inside one millisecond — the live one
          * (`PENDING`/`LEASED`: every later event joined it), then a `FAILED` over a `DONE` (the safe reading: a
          * rotation is never shown `secured` on a tie it cannot decide), then the id, so no engine's row order

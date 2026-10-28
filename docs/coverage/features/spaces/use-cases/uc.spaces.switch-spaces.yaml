@@ -43,7 +43,7 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/app/activeSpace.test.ts, src/components/app/AppSidebar.test.ts] }
   - id: no-tenant-grant-fallback
-    text: A member holding no TENANT grant falls back to Personal as the effective token-less home (the tenant scope is open-only, never minted client-side), and the tenant entry is flagged unavailable.
+    text: A member whose TENANT grant does not open (behind the scope's epoch or refused) falls back to Personal as the effective token-less home (the tenant scope is open-only, never minted client-side), and the tenant entry is flagged as waiting for the current key.
     coverage:
       web: { unit: [src/features/spaces/scopes.test.ts, src/app/activeSpace.test.ts] }
   - id: operator-blind-listing
@@ -65,9 +65,9 @@ acceptanceCriteria:
     # plant a scope key of its own choosing. Every grant is signed by its granter's identity key; the one unwrap
     # path verifies before the key inside is used — PERSONAL only under the caller's own vault key (the kind is
     # signed, so a group's genuine grant cannot pose as it), a shared one under the granter's TOFU-pinned key. A
-    # refused grant reads as awaiting access.
+    # refused grant reads as waiting for the current key.
     # The served key is the one that signed: every grant writer records its granter's key at the write (inbox #233),
-    # one leg per writer, and scripts/validate_grant_writer_arity.py pins that the writers are those five.
+    # one leg per writer, and scripts/validate_grant_writer_arity.py pins that the writers are those nine.
     text: A grant opens only if its granter's signature verifies — the personal scope's only under the caller's own key.
     coverage:
       backend:
@@ -78,6 +78,10 @@ acceptanceCriteria:
           - GrantWriterSnapshotSliceTest.aTenantsColdBirthRecordsItsOwnersKey
           - GrantWriterSnapshotSliceTest.aRotationRecordsTheRotatorsKeyOnEveryGrantItWrites
           - GrantWriterSnapshotSliceTest.aGrantDeliveryRecordsTheWorkersKey
+          - GrantWriterSnapshotSliceTest.aMemberInviteRecordsItsSignersKey
+          - GrantWriterSnapshotSliceTest.anInviteAcceptRecordsTheNewcomersKey
+          - GrantWriterSnapshotSliceTest.aTenantRotationRecordsTheRotatorsKeyOnEveryInviteItReGrants
+          - GrantWriterSnapshotSliceTest.aGroupAddRecordsTheAddingOwnersKey
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/memories/sealBinding.test.ts]
 gaps:

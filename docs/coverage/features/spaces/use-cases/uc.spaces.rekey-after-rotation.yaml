@@ -2,16 +2,17 @@ useCase: uc.spaces.rekey-after-rotation
 feature: spaces
 title: Re-key a space's nodes after a rotation
 # Refined 2026-10-23 (inbox #518, ADR 0109), built the same day (cr-scope-rotation-rekeys-nodes). The property has
-# several triggers (a group removal, a queued rotation, an account's own personal scope), so it owns its criteria
+# several triggers (a group removal, a queued rotation, a secured account's own scopes), so it owns its criteria
 # rather than any one trigger's use-case. The web refs run the re-key through the real crypto (no mocked seal)
-# against an in-memory server; the backend refs prove the commit, the gates and the derived state on the real one.
+# against an in-memory server; the backend refs prove the commit, the gates and the derived state on the real one. The
+# any-member re-key (ADR 0111 decision 11) also runs live: anyMemberRekeys.e2e.test.ts in the web-e2e job.
 acceptanceCriteria:
   - id: every-node-rekeyed
     text: After a rotation every live and trashed node of the scope carries the new epoch, a fresh key, and every field that was sealed under its old key re-sealed under the new one; a medium added afterwards to a folder or Memory that existed before opens with no key from before the rotation.
     coverage:
       backend:
         integration:
-          - RekeyCoreSliceTest.theListingServesEveryNodeTrashedIncludedAndOnlyToAnOwnerWithTheCurrentGrant
+          - RekeyCoreSliceTest.theListingServesEveryNodeTrashedIncludedAndOnlyWithTheCurrentGrant
           - RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction
           - RekeyCoreSliceTest.aTrashedNodeIsRestoredOnlyOnceTheReKeyReachedIt
           - MediaNodeRekeySliceTest.theListingServesEveryKeySealedRowButAWriteOnlyGuestsInPages
@@ -35,7 +36,7 @@ acceptanceCriteria:
           - PotRekeySliceTest.aRekeyLandsWhileExpensesIsSwitchedOff
       web: { unit: [src/features/expenses/rekey.test.ts, src/features/expenses/domain/codec.test.ts, src/features/expenses/domain/heads.test.ts] }
   - id: writes-wait-per-node
-    text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a re-keyed node takes writes at once.
+    text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a guest's create under a parent not re-keyed yet, stating the parent's epoch as its own, is the parent's node_rekey_pending; a re-keyed node takes writes at once.
     coverage:
       backend:
         unit: [NodeEpochGateTest.theStatedEpochMustBeTheStoredOneAndTheStoredOneCurrent]
@@ -45,6 +46,7 @@ acceptanceCriteria:
           - ShareEpochGateCoreSliceTest.aReissueStatesItsNodesEpoch
           - ShareEpochGateCoreSliceTest.aReadWriteGuestsNameStatesTheRootsEpoch
           - ShareEpochGateCoreSliceTest.aWriteOnlyGuestsKeyStatesTheRootsEpoch
+          - ShareEpochGateCoreSliceTest.aGuestsCreateUnderAParentNotReKeyedYetWaitsForIt
           - MediaEpochGateSliceTest.aMembersCompletionStatesTheMemorysEpochPerItem
           - MediaEpochGateSliceTest.aMetaEditStatesItsMediumsNodeEpoch
           - MediaEpochGateSliceTest.aBucketsCreateAndRenameStateTheMemorysEpoch
@@ -52,16 +54,28 @@ acceptanceCriteria:
           - MediaEpochGateSliceTest.aGuestsCompletionStatesTheTargetsEpochForTheBatch
       web: { unit: [src/shared/rekeyRetry.test.ts, src/core/node/tree.epoch.wire.test.ts] }
   - id: resumable
-    text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any owner holding it; a queued rotation completes only once no node lags, and reads secured only then.
+    text: A re-key interrupted halfway leaves a tree that opens from the new epoch and is resumed by any member holding it, every member's scope row reading the re-key unfinished; a queued rotation completes only once no node lags, and reads secured only then.
     coverage:
       backend:
-        unit: [CompromiseRotationPolicyTest.aSecuredRotationWithANodeStillLaggingIsRekeying]
+        unit: [RotationScopeStatesTest.aMovedEpochIsSecuredOnceNoNodeLags]
         integration:
           - RekeyCoreSliceTest.aCommitMissingAStagedPartWritesNothing
           - RekeyCoreSliceTest.aStagedChildThatMovedSinceIsStale
           - RekeyCoreSliceTest.aQueuedRotationCompletesOnlyOnceItsReKeyIsDone
           - RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags
+          - RekeyCoreSliceTest.aMembersScopeRowReadsRekeyingWhileANodeLags
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/tasks/scopeRotationWorker.test.ts] }
+  - id: a-members-write-pulls-its-path
+    text: A member's write refused node_rekey_pending (or by its device floor) re-keys the written node and its lagging ancestors top-down on its own device and is retried at once, spending no wait; a guest's write never pulls and waits; a write into a node only an owner re-keys falls back to the waits with nothing committed; a stale_epoch after the pull is re-read once; a member's media and file uploads seal again under the node's key now.
+    coverage:
+      web:
+        unit:
+          - src/core/node/rekey/rekeyScope.test.ts
+          - src/shared/rekeyRetry.test.ts
+          - src/features/expenses/potSession.pull.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/core/node/tree.test.ts
+        e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts]
   - id: links-follow-and-stay-marked
     text: A link from before shows what is added after the re-key and stays marked reissueRequired; its re-issue's key does not open what the old recovery copy's key reaches.
     coverage:
@@ -70,6 +84,26 @@ acceptanceCriteria:
           - RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction
           - ShareEpochGateCoreSliceTest.theResolveServesTheRootsEpochForEveryUnlockedRoleAndItsTagMovesWithIt
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
+  - id: any-member-rekeys
+    text: Any member holding the scope's current epoch lists, stages and commits a node's re-key, an application's part included; a member whose grant lags is refused; two members re-keying one node leave one commit and the second is told the node moved; a drop box, a guest's identity folder and what lies below one are marked owner-only and refused to a member, and an owner re-keys each; a Memory or other node that only carries a drop key for its uploader link is any member's, drop key and guests' identity keys included.
+    coverage:
+      backend:
+        unit:
+          - OwnerOnlyRekeyTest.aDropKeyedNodeOfNoDropBoxKindIsAnyMembers
+          - OwnerOnlyRekeyTest.aDropBoxIsAnOwnersWithOrWithoutItsKey
+          - OwnerOnlyRekeyTest.anIdentityFolderAndWhatLiesBelowAreAnOwners
+        integration:
+          - RekeyCoreSliceTest.aMemberWithTheCurrentGrantReKeysANode
+          - RekeyCoreSliceTest.aMemberWithAGrantBehindIsRefused
+          - RekeyCoreSliceTest.aMemberReKeysADropKeyedNodeButIsRefusedAnIdentityFolderAndWhatLiesBelow
+          - DropBoxRekeySliceTest.aMemberIsRefusedTheDropBoxAndItsIdentityFolderAndAnOwnerIsNot
+          - RekeyCoreSliceTest.twoMembersReKeyingTheSameNodeLeaveOneCommit
+          - PotRekeySliceTest.aMemberWithTheCurrentGrantReKeysAPot
+          - MediaNodeRekeySliceTest.aMemberWithTheCurrentGrantReKeysAMemory
+          - MediaNodeRekeySliceTest.aMemberReKeysAMemoryAContributorLinkGaveADropKey
+      web:
+        unit: [src/core/node/rekey/rekeyScope.test.ts]
+        e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts]
   - id: drop-key-replaced
     text: A node's drop key is replaced and its guest identities' keys re-sealed to the new public key; an upload after the re-key does not open with the drop private key from before.
     coverage:

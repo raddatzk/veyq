@@ -2,7 +2,7 @@ package me.raddatz.veyq.core.tasks
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -17,7 +17,6 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -62,9 +61,9 @@ class QueuedRotationSliceTest {
         t.remove(cut)
         val job = liveRotationJobs(group).single()
 
-        // The mixed-tag leg first, while the rotation job is still unclaimed: a pending member makes the plain
+        // The mixed-tag leg first, while the rotation job is still unclaimed: a member behind the epoch makes the plain
         // member's claim reconcile a delivery job, which they may work; the rotation job is never theirs.
-        t.joinGrantless(group, seedUser())
+        t.joinBehind(group, seedUser())
         claim(plain, CapabilityTags.GRANT_DELIVERY, CapabilityTags.SCOPE_ROTATION).then().statusCode(200)
             .body("capabilityTag", equalTo(CapabilityTags.GRANT_DELIVERY))
         claim(plain, CapabilityTags.GRANT_DELIVERY, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
@@ -221,28 +220,28 @@ class QueuedRotationSliceTest {
             val t = tenant()
             val stale = t.member(MembershipEntity.OWNER)
             val reclaimer = t.member(MembershipEntity.OWNER)
-            val target = t.joinGrantless(t.id, seedUser())
+            val target = t.joinBehind(t.id, seedUser())
             val job = claimJob(stale, CapabilityTags.GRANT_DELIVERY)
             expireLease(job)
 
             val answer = raceTheReclaim(reclaimer, CapabilityTags.GRANT_DELIVERY) {
                 given().header("Authorization", bearer(stale)).contentType(ContentType.JSON)
-                    .body("""{"sealedResult":"$LOST_GRANT","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+                    .body("""{"sealedResult":"$LOST_GRANT","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
                     .`when`().post("/api/tasks/$job/complete")
             }
 
             assertEquals(409, answer.statusCode(), "round $round: the stale holder's completion")
             assertEquals("not_lease_holder", answer.path<String>("code"), "round $round")
             assertEquals(JobEntity.LEASED to reclaimer, leaseOf(job), "round $round: the reclaimer keeps the job")
-            assertNull(grantOf(target), "round $round: a lost completion writes no grant")
+            assertEquals(GRANT, grantOf(target), "round $round: a lost completion writes no grant")
         }
         // Positive control, same harness minus the reclaim: the holder's completion lands.
         val t = tenant()
         val holder = t.member(MembershipEntity.OWNER)
-        val target = t.joinGrantless(t.id, seedUser())
+        val target = t.joinBehind(t.id, seedUser())
         val job = claimJob(holder, CapabilityTags.GRANT_DELIVERY)
         given().header("Authorization", bearer(holder)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$LOST_GRANT","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"$LOST_GRANT","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/tasks/$job/complete").then().statusCode(204)
         assertEquals(LOST_GRANT, grantOf(target))
     }
@@ -320,6 +319,51 @@ class QueuedRotationSliceTest {
         }
     }
 
+    @Test
+    fun anOwnerSeesAStuckQueuedRotationOnTheirOwnRowAndRequeuesIt() {
+        // uc.spaces.complete-queued-rotation E2/E8, rebased on the removal cascade's job (cr-secure-the-account: an
+        // account rotation queues none). The owner view is judged on the scope's newest rotation job.
+        val t = tenant()
+        val coOwner = t.member()
+        val removed = t.member()
+        val group = t.group(t.owner)
+        t.join(group, coOwner, MembershipEntity.OWNER)
+        t.join(group, removed)
+        t.remove(removed)
+        val jobId = liveRotationJobs(group).single()
+        assertEquals(null, ownerRow(t.owner, t.id, group), "a live job an owner may claim needs nobody")
+
+        // Every owner declined it: stalled.
+        listOf(t.owner, coOwner).forEach { owner ->
+            QuarkusTransaction.requiringNew().run {
+                JobDeclineEntity().apply { id = UUID.randomUUID().toString(); this.jobId = jobId; workerId = owner; reason = "identity_unanchored" }.persist()
+            }
+        }
+        assertEquals("stalled", ownerRow(t.owner, t.id, group))
+        val member = t.member().also { t.join(group, it) }
+        assertEquals(null, ownerRow(member, t.id, group), "a plain member's row never carries it")
+
+        // Dead-lettered: failed, and an owner queues it again — excluding nobody, so their own worker claims it.
+        QuarkusTransaction.requiringNew().run { JobEntity.update("status = ?1 where id = ?2", JobEntity.FAILED, jobId) }
+        assertEquals("failed", ownerRow(t.owner, t.id, group))
+        requeue(member, group).then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        requeue(t.owner, group).then().statusCode(200).body("compromiseRotation", equalTo(null))
+        assertEquals(1, liveRotationJobs(group).size, "a fresh job, live")
+        assertEquals(null, ownerRow(t.owner, t.id, group))
+        requeue(t.owner, group).then().statusCode(409).body("code", equalTo("rotation_not_failed"))
+        claim(t.owner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200)
+    }
+
+    private fun requeue(userId: String, scopeId: String) =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/rotation/requeue")
+
+    /** The `compromiseRotation` of [userId]'s own row for [scopeId] in `GET /api/scopes` (the tenant's Host). */
+    private fun ownerRow(userId: String, tenantId: String, scopeId: String): String? =
+        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", "t-$tenantId.example.com")
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$scopeId' }.id", equalTo(scopeId))
+            .extract().path("find { it.id == '$scopeId' }.compromiseRotation")
+
     /** A fresh ACTIVE tenant with an owner of its root, and the moves the tests make in it. */
     private fun tenant(): Tenant {
         val owner = seedUser()
@@ -345,10 +389,22 @@ class QueuedRotationSliceTest {
 
         fun join(scopeId: String, userId: String, role: String = MembershipEntity.MEMBER) = membership(userId, scopeId, role)
 
-        /** A grant-less membership on [scopeId] (and the root, for a group) — a delivery target. Returns its id. */
-        fun joinGrantless(scopeId: String, userId: String): String {
+        /**
+         * A membership on [scopeId] (and the root, for a group) BEHIND its epoch — a delivery target, the one state a
+         * delivery serves now that every membership is born with a grant (ADR 0111). A scope still at `E_0` is first
+         * rotated to `E_1`, its grant-holders re-granted as a rotation would; the member keeps its `E_0` [GRANT].
+         * Returns its id.
+         */
+        fun joinBehind(scopeId: String, userId: String): String {
             if (scopeId != id) membership(userId, id, MembershipEntity.MEMBER)
-            return membership(userId, scopeId, MembershipEntity.MEMBER, grant = null)
+            QuarkusTransaction.requiringNew().run {
+                val scope = ScopeEntity.findById(scopeId)!!
+                if (scope.currentEpoch == 0) {
+                    scope.currentEpoch = 1
+                    MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and wrappedGrant is not null", scopeId)
+                }
+            }
+            return membership(userId, scopeId, MembershipEntity.MEMBER)
         }
 
         /** The tenant owner removes [userId] from the tenant — the real cut that queues a co-shared group's rotation. */
@@ -357,7 +413,7 @@ class QueuedRotationSliceTest {
                 .then().statusCode(204)
         }
 
-        private fun membership(userId: String, scopeId: String, role: String, grant: String? = GRANT): String {
+        private fun membership(userId: String, scopeId: String, role: String, grant: String = GRANT): String {
             val membershipId = UUID.randomUUID().toString()
             QuarkusTransaction.requiringNew().run {
                 MembershipEntity().apply {
@@ -390,9 +446,9 @@ class QueuedRotationSliceTest {
     private fun commit(userId: String, scopeId: String, grantees: List<String>) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestAdmission.epochOf(scopeId) + 1},"wrappedPrev":"cHJldg==","grants":[${
-                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$GRANT",${TestAdmission.SIGNATURE_JSON}}""" }
-                }],${TestAdmission.openJson(scopeId)}}""",
+                """{"epoch":${TestGrants.epochOf(scopeId) + 1},"wrappedPrev":"cHJldg==","grants":[${
+                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}""" }
+                }],${TestGrants.openInvitesJson(scopeId)},${TestGrants.othersPendingJson(scopeId, *grantees.toTypedArray())}}""",
             )
             .`when`().post("/api/scopes/$scopeId/epochs")
 

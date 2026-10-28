@@ -1,24 +1,31 @@
 package me.raddatz.veyq.core.account.rotation
 
 import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterEntity
+import me.raddatz.veyq.core.account.email.EmailChangeEntity
+import me.raddatz.veyq.core.account.erasure.AccountPurge
+import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
 import me.raddatz.veyq.core.account.login.SessionFamilyEntity
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.account.pairing.DevicePairingEntity
-import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.account.recovery.RecoveryStore
+import me.raddatz.veyq.core.crypto.GrantSignature
+import me.raddatz.veyq.core.crypto.SecretKeyProof
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.identity.keychain.KeyChainStepEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.tasks.JobDeclineEntity
 import me.raddatz.veyq.core.tasks.JobEntity
-import me.raddatz.veyq.core.spaces.scope.ScopeEpochEntity
-import me.raddatz.veyq.core.crypto.SecretKeyProof
-import me.raddatz.veyq.core.crypto.TestProofKey
-import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
-import me.raddatz.veyq.core.identity.VeyqUser
-import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
-import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -28,796 +35,875 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
-import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.Base64
 import java.util.UUID
 
 /**
- * Slice tests for key rotation after a compromise (uc.account.rotate-keys, ADR 0060).
+ * Slice tests for securing the account (uc.account.rotate-keys, ADR 0060, ADR 0111 decisions 6-10, cr-secure-the-account
+ * Phase 2): the stage, the publish, the key-chain step, the commit gate after it and the states.
  *
- * The happy path is the least interesting case here, as it is in `RecoverySliceTest` and for the same reason:
- * what this operation is *for* is a state where an attacker holds the account's key material, so the tests that
- * matter are the ones about what rotation takes away and who is left unable to act. Three carry weight —
+ * What the publish is FOR is that no state after it can lose a space (#556): one transaction rewrites the account and
+ * grants every scope the account holds a grant on — every tenant — at its current epoch to the identity it publishes,
+ * signed by it. So the tests that carry weight are the ones that (a) find every such grant written and verifying under
+ * the new key, (b) refuse every publish whose set is not the server's, with nothing written, and (c) refuse every step or
+ * proof not made by the stored current keys. Every negative has a positive control differing in one input, anchored on
+ * its status and `code`.
  *
- *  - **every device wrap dies** and both cold wraps are rewritten, or nothing is written at all;
- *  - **the rotator cannot claim their own rotation** (ADR 0060 Decision 4), which is the difference between an
- *    exclusion mechanism and an attacker's finishing move;
- *  - **a co-member still can**, which is the control the exclusion needs: a rotation nobody can complete looks
- *    identical to a correctly-excluded one if only the negative is asserted.
- *
- * The cold-credential gate (Decision 2) is asserted here for its **server** half: a session is not enough, the
- * request must carry a signature under the account's Secret-Key proof key, and the bite is a caller who holds a
- * valid session and signs with a key of their own — exactly what a device-link holder can do. Its password half
- * (re-opening the `PASSWORD` wrap) is client-side and `src/web/` owns that proof.
- *
- * Seeds use UUID-unique ids: the H2 mem DB lives for the whole JVM and is shared across test classes.
+ * Every signature is real (the server verifies the step, both proofs, the attestation and each staged grant); every
+ * ciphertext is a stand-in (it opens none). Seeds use UUID-unique ids: the H2 database lives for the whole JVM.
  */
 @QuarkusTest
 class RotationSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
+    @Inject lateinit var sessions: SessionService
+    @Inject lateinit var purge: RotationStagePurge
+    @Inject lateinit var recoveries: RecoveryStore
+    @Inject lateinit var erasure: AccountPurge
+
+    // --- the publish re-grants every scope (ways 2-4, server half) ---------------------------------------------------
+
+    @Test
+    fun everyScopeIsRegrantedToTheNewIdentityInThePublish() {
+        val (rotation, world) = seedWorld()
+        val before = grantOf(world.coMember, world.tenantId)
+
+        rotation.run().then().statusCode(200)
+            .body("regrantedScopeIds", hasItem(world.personal))
+            .body("regrantedScopeIds", hasItem(world.tenantId))
+            .body("regrantedScopeIds", hasItem(world.group))
+
+        for ((scope, kind) in listOf(world.personal to "PERSONAL", world.tenantId to "TENANT", world.group to "GROUP")) {
+            assertSelfGranted(rotation, scope, kind, epochOf(scope))
+        }
+        assertEquals(before, grantOf(world.coMember, world.tenantId), "control: another member's grant on the tenant scope is untouched")
+        assertEquals(rotation.next.bundle, field(rotation.userId) { it.identityPublicKey })
+    }
+
+    @Test
+    fun aScopeInAnotherTenantIsRegrantedToo() {
+        val (rotation, world) = seedWorld()
+        val other = seedTenant()
+        member(rotation.userId, other, other, MembershipEntity.MEMBER, epoch = 0)
+        val otherPersonal = personalScope(rotation.userId, other)
+
+        // The plan is Host-independent: read on tenant A's Host it lists tenant B's scopes with the caller's grant rows.
+        given().header("Authorization", rotation.bearer()).header("X-Forwarded-Host", "t-${world.tenantId}.example.com")
+            .`when`().get("/api/account/rotation/plan").then().statusCode(200)
+            .body("find { it.scopeId == '$other' }.tenantId", equalTo(other))
+            .body("find { it.scopeId == '$other' }.kind", equalTo("TENANT"))
+            .body("find { it.scopeId == '$otherPersonal' }.wrappedGrant", equalTo(TestFixtures.GRANT))
+            .body("find { it.scopeId == '$otherPersonal' }.currentEpoch", equalTo(0))
+
+        rotation.run().then().statusCode(200).body("regrantedScopeIds", hasItem(otherPersonal))
+        assertSelfGranted(rotation, otherPersonal, "PERSONAL", 0)
+        assertSelfGranted(rotation, other, "TENANT", 0)
+    }
 
     @Test
     fun rotationReplacesEveryKeyRewritesBothColdWrapsAndDeletesTheDeviceOnes() {
-        val user = seedAccount()
-        seedWrap(user, "DEVICE", "ZGV2aWNlLXdyYXA=")
-        seedWrap(user, "DEVICE_KEY", "ZGV2aWNlLWtleS13cmFw")
-        seedWrap(user, "PASSKEY", "cGFzc2tleS13cmFw")
+        val (rotation, _) = seedWorld()
+        seedWrap(rotation.userId, "DEVICE", "ZGV2aWNlLXdyYXA=")
+        seedWrap(rotation.userId, "DEVICE_KEY", "ZGV2aWNlLWtleS13cmFw")
+        seedWrap(rotation.userId, "PASSKEY", "cGFzc2tleS13cmFw")
 
-        rotate(user).then().statusCode(200)
+        rotation.run().then().statusCode(200)
 
-        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is republished")
-        assertEquals(NEW_PRIV, field(user) { it.wrappedIdentityPrivateKey }, "the identity private key rides the new Master Key")
-        assertEquals(PROOF_KEY.publicKey, field(user) { it.secretKeyProofPublicKey }, "the Secret Key does not rotate, so neither does its proof key")
+        val u = rotation.userId
+        assertEquals(rotation.next.bundle, field(u) { it.identityPublicKey }, "the directory value is republished")
+        assertEquals(TestRotation.NEW_PRIV, field(u) { it.wrappedIdentityPrivateKey })
+        assertEquals(rotation.next.proof.publicKey, field(u) { it.secretKeyProofPublicKey }, "the Secret Key rotates, and its proof key with it")
+        assertEquals(rotation.next.auth.publicKey, field(u) { it.authPublicKey }, "the auth key the attestation vouched for")
+        assertEquals(TestRotation.NEW_PW_WRAP, wrapOf(u, "PASSWORD"))
+        assertEquals(TestRotation.NEW_REC_WRAP, wrapOf(u, "RECOVERY"))
+        assertNull(wrapOf(u, "DEVICE"), "a trusted-device wrap cannot be rewritten, so it goes")
+        assertNull(wrapOf(u, "DEVICE_KEY"))
+        assertNull(wrapOf(u, "PASSKEY"))
+    }
 
-        assertEquals(NEW_PW_WRAP, wrapOf(user, "PASSWORD"), "the floor holds the new Master Key")
-        assertEquals(NEW_REC_WRAP, wrapOf(user, "RECOVERY"), "so does the withheld recovery wrap — the Emergency Kit stays valid")
-        // The whole point of the operation: a device-held KEK cannot be rewritten from here, so the wrap that
-        // the granted device can still open must not survive holding the OLD Master Key.
-        assertNull(wrapOf(user, "DEVICE"), "a trusted-device wrap cannot be rewritten, so it goes")
-        assertNull(wrapOf(user, "DEVICE_KEY"), "and the password-less one especially — it needs no password at all")
-        assertNull(wrapOf(user, "PASSKEY"), "every non-cold method goes; the survivor list is a whitelist")
+    // --- the key-chain step (decision 2) -------------------------------------------------------------------------
+
+    @Test
+    fun theChainGainsTheStepAndTheHeadMoves() {
+        val (rotation, _) = seedWorld()
+        val (headBefore, index) = rotation.head()
+        assertEquals(0, index, "a seeded account reads as its genesis")
+        val step = rotation.stepStatement()
+
+        rotation.run().then().statusCode(200)
+
+        given().header("Authorization", rotation.bearer()).`when`().get("/api/people/${rotation.userId}/key-chain").then().statusCode(200)
+            .body("steps.size()", equalTo(2))
+            .body("steps[0].identityPublicKey", equalTo(rotation.current.bundle))
+            .body("steps[0].secretKeyProofPublicKey", equalTo(rotation.current.proof.publicKey))
+            .body("steps[1].index", equalTo(1))
+            .body("steps[1].previousHead", equalTo(b64(headBefore)))
+            .body("steps[1].identityPublicKey", equalTo(rotation.next.bundle))
+            .body("steps[1].secretKeyProofPublicKey", equalTo(rotation.next.proof.publicKey))
+            .body("steps[1].identitySignature", equalTo(rotation.current.identity.signB64(step)))
+            .body("steps[1].proofSignature", equalTo(rotation.current.proof.signB64(step)))
+            .body("head", equalTo(b64(me.raddatz.veyq.core.crypto.KeyChainStatements.head(step))))
+    }
+
+    @Test
+    fun aStepNotSignedByTheStoredIdentityIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val good = rotation.publish(stageId, grants)
+        val thief = TestEd25519.fresh()
+
+        rotation.send(good.copy(stepIdentitySignature = thief.signB64(rotation.stepStatement())))
+            .then().statusCode(422).body("code", equalTo("key_chain_step_invalid"))
+        assertNothingWritten(rotation, world)
+
+        rotation.send(good).then().statusCode(200) // control: the stored identity's own signature
+    }
+
+    @Test
+    fun aStepNotSignedByTheStoredProofKeyIsRefused() {
+        // The device thief: holds the identity (so the identity half verifies) but never the Secret Key.
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val good = rotation.publish(stageId, grants)
+
+        rotation.send(good.copy(stepProofSignature = TestEd25519.fresh().signB64(rotation.stepStatement())))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertNothingWritten(rotation, world)
+
+        rotation.send(good).then().statusCode(200)
+    }
+
+    @Test
+    fun aStepWithAStalePredecessorIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val (head, index) = rotation.head()
+        val stale = rotation.stepStatement(ByteArray(32) { 9 } to index)
+        // Every signature over the stale step is genuine; the server rebuilds the step from the head it stores.
+        val stalePublish = rotation.publish(stageId, grants, step = stale)
+
+        rotation.send(stalePublish).then().statusCode(422).body("code", equalTo("key_chain_step_invalid"))
+        assertNothingWritten(rotation, world)
+
+        rotation.send(rotation.publish(stageId, grants, step = rotation.stepStatement(head to index))).then().statusCode(200)
+    }
+
+    // --- the stage (decision 3) ---------------------------------------------------------------------------------
+
+    @Test
+    fun aStagedGrantSignedByTheOldIdentityIsRefusedAtUpload() {
+        val (rotation, world) = seedWorld()
+        val stageId = rotation.openStageId()
+        val plan = rotation.plan()
+        val good = plan.map { rotation.selfGrant(it) }
+        val oldSigned = rotation.selfGrant(plan.first(), signer = rotation.current.identity)
+
+        rotation.stage(stageId, good.drop(1) + oldSigned).then().statusCode(422).body("code", equalTo("self_grant_invalid"))
+        assertEquals(0L, stagedRows(stageId), "nothing of the refused chunk is stored")
+
+        // A grant naming another identity than the stage's is the same refusal.
+        val otherRecipient = rotation.selfGrant(plan.first(), recipient = rotation.current.bundle)
+        rotation.stage(stageId, listOf(otherRecipient)).then().statusCode(422).body("code", equalTo("self_grant_invalid"))
+        rotation.stage(stageId, listOf(good.first().copy(recipientIdentityDigest = TestGrants.digest(rotation.current.bundle))))
+            .then().statusCode(422).body("code", equalTo("self_grant_invalid"))
+        assertEquals(0L, stagedRows(stageId))
+
+        rotation.stage(stageId, good).then().statusCode(204) // control: the same chunk, signed by the stage's identity
+        assertEquals(good.size.toLong(), stagedRows(stageId))
+        assertEquals(3, good.size, "personal, tenant and group: ${world.personal}")
+    }
+
+    @Test
+    fun aStagedScopeTheCallerHoldsNoGrantOnIsRefused() {
+        val (rotation, world) = seedWorld()
+        val stageId = rotation.openStageId()
+        val foreign = TestRotation.PlanScope(personalScope(world.coMember, world.tenantId), "PERSONAL", 0)
+        val unknown = TestRotation.PlanScope(UUID.randomUUID().toString(), "PERSONAL", 0)
+        val good = rotation.selfGrant(rotation.plan().first())
+
+        rotation.stage(stageId, listOf(good, rotation.selfGrant(foreign))).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        rotation.stage(stageId, listOf(good, rotation.selfGrant(unknown))).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertEquals(0L, stagedRows(stageId))
+        rotation.stage(stageId, listOf(good)).then().statusCode(204)
+    }
+
+    @Test
+    fun anUnknownExpiredOrForeignStageIs404() {
+        val (rotation, world) = seedWorld()
+        val other = TestRotation(world.coMember, world.coMemberKeys) { TestFixtures.bearer(world.coMember) }
+        val foreignStage = other.openStageId()
+        val grant = rotation.selfGrant(rotation.plan().first())
+
+        rotation.stage(UUID.randomUUID().toString(), listOf(grant)).then().statusCode(404).body("code", equalTo("rotation_stage_not_found"))
+        rotation.stage(foreignStage, listOf(grant)).then().statusCode(404).body("code", equalTo("rotation_stage_not_found"))
+
+        val first = rotation.openStageId()
+        val second = rotation.openStageId()
+        rotation.stage(first, listOf(grant)).then().statusCode(404).body("code", equalTo("rotation_stage_not_found"))
+        rotation.stage(second, listOf(grant)).then().statusCode(204) // control: the account's open stage
+        assertEquals(1L, QuarkusTransaction.requiringNew().call { RotationStageEntity.count("userId", rotation.userId) }, "a second open replaced the first")
+
+        expire(second)
+        rotation.stage(second, listOf(grant)).then().statusCode(404).body("code", equalTo("rotation_stage_not_found"))
+    }
+
+    @Test
+    fun aStageAppliesNothingBeforeThePublish() {
+        val (rotation, world) = seedWorld()
+        val before = listOf(world.personal, world.tenantId, world.group).associateWith { grantOf(rotation.userId, it) }
+        val (stageId, _) = stageAll(rotation)
+
+        assertEquals(3L, stagedRows(stageId))
+        listOf(world.personal, world.tenantId, world.group).forEach {
+            assertEquals(before[it], grantOf(rotation.userId, it), "a staged grant is not a grant")
+            assertEquals(0, epochOf(it))
+        }
+        assertEquals(rotation.current.bundle, field(rotation.userId) { it.identityPublicKey })
+    }
+
+    @Test
+    fun anExpiredStageIsPurged() {
+        val (rotation, _) = seedWorld()
+        val (stageId, _) = stageAll(rotation)
+
+        purge.sweep(Instant.now())
+        assertEquals(3L, stagedRows(stageId), "control: a live stage survives the sweep")
+
+        purge.sweep(Instant.now().plus(2, ChronoUnit.HOURS))
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { RotationStageEntity.count("id", stageId) })
+        assertEquals(0L, stagedRows(stageId), "its grants go with it")
+    }
+
+    @Test
+    fun aChunkOverItsBoundIs400() {
+        val (rotation, _) = seedWorld()
+        val stageId = rotation.openStageId()
+        val grant = rotation.selfGrant(rotation.plan().first())
+
+        rotation.stage(stageId, List(257) { grant }).then().statusCode(400).body("code", equalTo("invalid_request"))
+        rotation.stage(stageId, emptyList()).then().statusCode(400)
+        rotation.stage(stageId, List(256) { grant }).then().statusCode(204) // control: 256 is the bound
+    }
+
+    // --- publish refusals: the server's set, the stage, the proofs -------------------------------------------------
+
+    @Test
+    fun aPublishMissingAScopeIsRefused() {
+        // The delta: a membership arrives between stage and publish (any co-member can add the account to a group).
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val late = group(world.tenantId, world.coMember)
+        member(rotation.userId, world.tenantId, late, MembershipEntity.MEMBER, epoch = 0)
+
+        rotation.send(rotation.publish(stageId, grants)).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertNothingWritten(rotation, world)
+
+        // Control: staging only that scope into the same stage, then the same publish with the grown set.
+        val delta = rotation.selfGrant(TestRotation.PlanScope(late, "GROUP", 0))
+        rotation.stage(stageId, listOf(delta)).then().statusCode(204)
+        rotation.send(rotation.publish(stageId, grants + delta)).then().statusCode(200).body("regrantedScopeIds", hasItem(late))
+        assertSelfGranted(rotation, late, "GROUP", 0)
+    }
+
+    @Test
+    fun aSelfGrantAtAStaleEpochIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        setEpoch(world.group, 1) // the group rotated after staging
+
+        rotation.send(rotation.publish(stageId, grants)).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertNothingWritten(rotation, world)
+
+        val moved = rotation.selfGrant(TestRotation.PlanScope(world.group, "GROUP", 1))
+        rotation.stage(stageId, listOf(moved)).then().statusCode(204)
+        rotation.send(rotation.publish(stageId, grants.filter { it.scopeId != world.group } + moved)).then().statusCode(200)
+        assertSelfGranted(rotation, world.group, "GROUP", 1)
+    }
+
+    @Test
+    fun aStageDigestOtherThanTheStagedRowsIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        // Signed over a set without the group: the proof covers it, but the staged rows are another set.
+        val partial = rotation.publish(stageId, grants.filter { it.scopeId != world.group })
+
+        rotation.send(partial).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertNothingWritten(rotation, world)
+        rotation.send(rotation.publish(stageId, grants)).then().statusCode(200)
+    }
+
+    @Test
+    fun aStageOfAnotherIdentityIsRefused() {
+        val (rotation, world) = seedWorld()
+        val decoy = TestRotation(rotation.userId, rotation.current, TestAccountKeys(), rotation.bearer)
+        val stageId = decoy.openStageId()
+        val grants = decoy.plan().map { decoy.selfGrant(it) }
+        decoy.stage(stageId, grants).then().statusCode(204)
+
+        // The publish installs rotation.next but names a stage that declares decoy.next.
+        rotation.send(rotation.publish(stageId, grants)).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertNothingWritten(rotation, world)
+        decoy.send(decoy.publish(stageId, grants)).then().statusCode(200) // control: the identity the stage declares
+    }
+
+    @Test
+    fun anExpiredOrMissingStageIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val publish = rotation.publish(stageId, grants)
+        expire(stageId)
+
+        rotation.send(publish).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        rotation.send(rotation.publish(UUID.randomUUID().toString(), grants)).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertNothingWritten(rotation, world)
     }
 
     @Test
     fun aSessionWithoutTheSecretKeyCannotRotate() {
-        // inbox #159's second door, and the whole reason this check is on the server. The caller holds a valid
-        // session and a well-formed request carrying a fresh identity — everything a device-link holder has — and
-        // signs it with a key of their own, because they do not hold the Secret Key the account's proof key is
-        // derived from. The positive control is the SAME request signed by the account's proof key: without it a
-        // rotation that refused everything would pass this test just as well.
-        val user = seedAccount()
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val good = rotation.publish(stageId, grants)
+        val statement = rotation.statement(rotation.stepStatement(), stageId, decode(good.stagedGrantsDigest))
 
-        rotate(user, signature = OTHER_KEY.sign(rotationStatement()))
+        rotation.send(good.copy(secretKeyProofSignature = TestEd25519.fresh().signB64(statement)))
             .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertNothingWritten(rotation, world)
+        rotation.send(good).then().statusCode(200)
+    }
 
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the attacker's identity is not installed")
-        assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
-        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "nothing was written")
+    @Test
+    fun aPossessionSignatureByAnotherKeyIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val good = rotation.publish(stageId, grants)
+        val statement = rotation.statement(rotation.stepStatement(), stageId, decode(good.stagedGrantsDigest))
 
-        rotate(user).then().statusCode(200)
-        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the account's own proof key rotates")
+        rotation.send(good.copy(secretKeyProofPossession = TestEd25519.fresh().signB64(statement)))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertNothingWritten(rotation, world)
+        rotation.send(good).then().statusCode(200)
+    }
+
+    @Test
+    fun aWrongAttestationIsRefused() {
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val good = rotation.publish(stageId, grants)
+
+        rotation.send(good.copy(attestationSignature = b64(TestEd25519.fresh().sign(rotation.next.auth.raw))))
+            .then().statusCode(403).body("code", equalTo("attestation_failed"))
+        assertNothingWritten(rotation, world)
+        rotation.send(good).then().statusCode(200)
     }
 
     @Test
     fun aCapturedRotationSignatureCannotBeReplayed() {
-        // The statement binds the identity it replaces. Once that rotation has applied, the same bytes — a
-        // captured request replayed against the rotated account — describe a state that no longer exists.
-        val user = seedAccount()
-        rotate(user).then().statusCode(200)
+        val (rotation, _) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val publish = rotation.publish(stageId, grants)
+        rotation.send(publish).then().statusCode(200)
 
-        rotate(user).then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        rotation.send(publish).then().statusCode(409).body("code", equalTo("rotation_plan_changed"))
+        assertEquals(2, chainSize(rotation.userId), "no second step")
     }
 
     @Test
     fun anAccountWithNoProofKeyCannotRotate() {
-        // Born before the proof key existed: nothing is migrated, so such an account can prove nothing and is
-        // refused rather than waved through (ADR 0054 § Consequences: the proof key is a correctness dependency).
-        val user = seedAccount()
-        QuarkusTransaction.requiringNew().run { VeyqUser.findById(user)!!.secretKeyProofPublicKey = null }
+        val (rotation, world) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        QuarkusTransaction.requiringNew().run { VeyqUser.findById(rotation.userId)!!.secretKeyProofPublicKey = null }
 
-        rotate(user).then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey })
+        rotation.send(rotation.publish(stageId, grants)).then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertEquals(rotation.current.bundle, field(rotation.userId) { it.identityPublicKey })
+        assertEquals(TestFixtures.GRANT, grantOf(rotation.userId, world.personal))
     }
 
     @Test
-    fun theRotatorCannotClaimTheirOwnRotationButACoMemberCan() {
-        // ADR 0060 Decision 4. The negative alone would pass just as well against a rotation nobody can ever
-        // complete — a job that was never originated, a scope nobody holds a grant in — so the co-member's
-        // successful claim on the SAME job is the control that gives the refusal its meaning.
-        val rotator = seedAccount()
-        val coMember = seedAccount()
-        val shared = seedTenantScope()
-        seedGrantedMembership(rotator, shared)
-        seedGrantedMembership(coMember, shared)
+    fun anUnreadableScopeKeepsItsGrantAndGetsNoRow() {
+        val (rotation, world) = seedWorld()
+        val before = grantOf(rotation.userId, world.group)
 
-        rotate(rotator).then().statusCode(200)
-            .body("queuedScopeIds", hasItem(shared.scopeId))
-            .body("soleMemberScopeIds", not(hasItem(shared.scopeId)))
+        rotation.run(unreadable = setOf(world.group)).then().statusCode(200)
+            .body("regrantedScopeIds", not(hasItem(world.group)))
+            .body("regrantedScopeIds", hasItem(world.personal))
 
-        val jobId = rotationJobIn(shared)
-        assertNotNull(jobId, "a shared scope must carry a queued rotation for somebody else")
-
-        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
-        claim(coMember, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(jobId))
+        assertEquals(before, grantOf(rotation.userId, world.group), "declared unreadable: its grant is untouched")
+        assertNull(regrantEpoch(rotation.userId, world.group), "and it gets no pending row")
+        assertEquals(0, regrantEpoch(rotation.userId, world.personal), "control: a staged scope gets one")
     }
 
     @Test
-    fun aScopeThatAlreadyHadALiveRotationStillExcludesTheRotator() {
-        // The coalescing trap: origination joins a scope's already-unclaimed rotation job (a removal cut
-        // moments earlier), and the naive shape then writes no exclusion — leaving the rotation this account
-        // triggered claimable by the very account it locks out.
-        val rotator = seedAccount()
-        val coMember = seedAccount()
-        val shared = seedTenantScope()
-        seedGrantedMembership(rotator, shared)
-        seedGrantedMembership(coMember, shared)
-        val preExisting = seedRotationJob(shared)
+    fun aRotatedAccountCanBeSecuredAgainFromTheNewHead() {
+        val (rotation, _) = seedWorld()
+        rotation.run().then().statusCode(200)
+        val again = TestRotation(rotation.userId, rotation.next, TestAccountKeys(), rotation.bearer)
+        val (stageId, grants) = stageAll(again)
 
-        rotate(rotator).then().statusCode(200).body("queuedScopeIds", hasItem(shared.scopeId))
+        // The first publish wrote both documents at revision 1, so the second re-seals against that.
+        again.send(again.publish(stageId, grants).copy(pinsRevision = 1, registerRevision = 1)).then().statusCode(200)
+        assertEquals(3, chainSize(rotation.userId))
+        assertEquals(again.next.proof.publicKey, field(rotation.userId) { it.secretKeyProofPublicKey })
+    }
 
-        assertEquals(preExisting, rotationJobIn(shared), "the rotation coalesces onto the live job rather than adding a second")
-        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
-        claim(coMember, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(preExisting))
+    // --- what the publish also does ---------------------------------------------------------------------------
+
+    @Test
+    fun theNextCredentialFlowVerifiesUnderTheNewProofKey() {
+        val (rotation, _) = seedWorld()
+        rotation.run().then().statusCode(200)
+        val changedAuth = TestEd25519.fresh()
+        val wrap = SecretKeyProof.Wrap("Y2hhbmdlZC13cmFw", TestRotation.KDF)
+        val stmt = SecretKeyProof.passwordChangeStatement(rotation.next.auth.publicKey, changedAuth.publicKey, wrap)
+
+        changePassword(rotation, changedAuth, rotation.current.proof.signB64(stmt))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        changePassword(rotation, changedAuth, rotation.next.proof.signB64(stmt)).then().statusCode(204)
+
+        // Recovery likewise: a reset proved by the old Secret Key is refused, by the new one applied.
+        val email = field(rotation.userId) { it.email }!!
+        val resetAuth = TestEd25519.fresh().publicKey
+        val resetWrap = SecretKeyProof.Wrap("cmVzZXQtd3JhcA==", TestRotation.KDF)
+        val refused = mintRecovery(rotation.userId, email)
+        recover(refused, resetAuth, rotation.current.proof.signB64(SecretKeyProof.recoveryStatement(refused, resetAuth, resetWrap)))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        val applied = mintRecovery(rotation.userId, email)
+        recover(applied, resetAuth, rotation.next.proof.signB64(SecretKeyProof.recoveryStatement(applied, resetAuth, resetWrap))).then().statusCode(204)
+        assertEquals(resetAuth, field(rotation.userId) { it.authPublicKey })
+    }
+
+    private fun mintRecovery(userId: String, email: String): String {
+        val token = Tokens.random()
+        QuarkusTransaction.requiringNew().run { recoveries.mint(userId, email, Tokens.hash(token), Instant.now().plusSeconds(3600)) }
+        return token
     }
 
     @Test
-    fun aSoleMemberScopeIsLeftForTheCallerAndQueuesNothing() {
-        // ADR 0060 Decision 5: with one member there is nobody to be re-admitted by and nobody to exclude but
-        // the rotator's own old identity, so queuing there would be a permanent "awaiting access" nobody could
-        // resolve. The split is drawn on member count, not scope kind.
-        val user = seedAccount()
-        val personal = seedPersonalScope()
-        seedGrantedMembership(user, personal)
+    fun anOpenEmailChangeDoesNotSurviveThePublish() {
+        val (rotation, world) = seedWorld()
+        seedEmailChange(rotation.userId)
+        seedEmailChange(world.coMember)
 
-        rotate(user).then().statusCode(200)
-            .body("soleMemberScopeIds", hasItem(personal.scopeId))
-            .body("queuedScopeIds", not(hasItem(personal.scopeId)))
+        rotation.run().then().statusCode(200)
 
-        assertNull(rotationJobIn(personal), "nobody else could ever claim it, so nothing is queued")
+        assertEquals(0L, emailChanges(rotation.userId), "a change proved under the old key is void")
+        assertEquals(1L, emailChanges(world.coMember), "control: another account's change stays")
+        seedEmailChange(rotation.userId)
+        assertEquals(1L, emailChanges(rotation.userId), "control: one requested after the publish is untouched")
     }
 
     @Test
-    fun aPendingConsentProposalDoesNotMakeAScopeShared() {
-        // A `pendingConsent` row holds no grant and is skipped by grant-delivery until the invitee accepts, so
-        // it cannot complete a rotation either. Counting it would queue a job with no possible claimant.
-        val user = seedAccount()
-        val scope = seedTenantScope()
-        seedGrantedMembership(user, scope)
-        seedPendingConsentMembership(seedAccount(), scope)
+    fun thePublishClearsDeclinesTargetingTheRotator() {
+        val (rotation, world) = seedWorld()
+        val targetingRotator = seedDeliveryJob(world.group, membershipOf(rotation.userId, world.group))
+        val targetingOther = seedDeliveryJob(world.group, membershipOf(world.coMember, world.group))
+        decline(targetingRotator, world.coMember)
+        decline(targetingOther, rotation.userId)
 
-        rotate(user).then().statusCode(200)
-            .body("soleMemberScopeIds", hasItem(scope.scopeId))
-            .body("queuedScopeIds", not(hasItem(scope.scopeId)))
+        rotation.run().then().statusCode(200)
+
+        assertEquals(0L, declines(targetingRotator), "a worker that could not anchor the old key tries the new one")
+        assertEquals(1L, declines(targetingOther), "control: a decline about someone else stays")
     }
 
     @Test
-    fun aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt() {
-        // Inbox #233, ADR 0028 § What is still open. The rotator R wrote co-owner O2's grant through a real grant
-        // path (R's rotation of the tenant scope re-granting O2) and signed it with R's OLD identity. After R rotates
-        // their account keys, both reads must still pair that signature with the OLD key: O2's client verifies the
-        // signature under the served key BEFORE it consults its pin of R, so serving R's new key fails the grant as
-        // `bad_signature` and O2 — the owner who must complete the covering rotation — cannot open the scope at all.
-        val rotator = seedAccount()
-        val coOwner = seedUser(identityPublicKey = CO_OWNER_PUB)
-        val shared = seedTenantScope()
-        seedGrantedMembership(rotator, shared)
-        seedGrantedMembership(coOwner, shared)
-        given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
-            .body(
-                """{"epoch":1,"wrappedPrev":"$ROT_PREV","grants":[
-                   {"userId":"$rotator","wrappedGrant":"$ROTATOR_GRANT","grantSignature":"$SIG_FOR_ROTATOR"},
-                   {"userId":"$coOwner","wrappedGrant":"$CO_OWNER_GRANT","grantSignature":"$SIG_FOR_CO_OWNER"}],
-                   ${TestAdmission.openJson(shared.scopeId)}}""",
-            )
-            .`when`().post("/api/scopes/${shared.scopeId}/epochs").then().statusCode(201)
-        assertGrantServedTo(coOwner, shared, OLD_IDENTITY_PUB) // before: nothing has rotated yet
+    fun aRolledBackRotationLeavesNothing() {
+        val (rotation, world) = seedWorld()
+        seedEmailChange(rotation.userId)
+        val job = seedDeliveryJob(world.group, membershipOf(rotation.userId, world.group))
+        decline(job, world.coMember)
+        seedPins(rotation.userId, revision = 3)
+        val (stageId, grants) = stageAll(rotation)
 
-        rotate(rotator).then().statusCode(200)
+        rotation.send(rotation.publish(stageId, grants).copy(pinsRevision = 2)).then().statusCode(409).body("code", equalTo("stale_revision"))
 
-        assertGrantServedTo(coOwner, shared, OLD_IDENTITY_PUB)
+        assertNothingWritten(rotation, world)
+        assertEquals(3L, stagedRows(stageId), "the stage is not spent")
+        assertEquals(1L, emailChanges(rotation.userId), "no void")
+        assertEquals(1L, declines(job), "no decline cleared")
 
-        // Positive control: a grant R writes AFTER rotating is served with R's NEW key — so the old key above is
-        // the snapshot of the grant's own moment, not a key that simply never updates.
-        val personalId = UUID.randomUUID().toString()
-        given().header("Authorization", bearer(rotator)).header("X-Forwarded-Host", shared.domain)
-            .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$personalId","wrappedGrant":"$ROTATOR_GRANT","grantSignature":"$SIG_FOR_ROTATOR"}""")
-            .`when`().post("/api/scopes").then().statusCode(201)
-        given().header("Authorization", bearer(rotator)).header("X-Forwarded-Host", shared.domain)
-            .`when`().get("/api/scopes").then().statusCode(200)
-            .body("find { it.id == '$personalId' }.granterIdentityPublicKey", equalTo(NEW_IDENTITY_PUB))
-    }
-
-    /** Both reads that serve a grant (`/api/scopes`, `/api/scopes/my-tenants`) hand [recipient] the rotation's grant
-     *  on [scope], signed by the rotator, beside [granterKey]. */
-    private fun assertGrantServedTo(recipient: String, scope: SeededScope, granterKey: String) {
-        given().header("Authorization", bearer(recipient)).header("X-Forwarded-Host", scope.domain)
-            .`when`().get("/api/scopes").then().statusCode(200)
-            .body("find { it.id == '${scope.scopeId}' }.wrappedGrant", equalTo(CO_OWNER_GRANT))
-            .body("find { it.id == '${scope.scopeId}' }.grantSignature", equalTo(SIG_FOR_CO_OWNER))
-            .body("find { it.id == '${scope.scopeId}' }.granterIdentityPublicKey", equalTo(granterKey))
-        given().header("Authorization", bearer(recipient))
-            .`when`().get("/api/scopes/my-tenants").then().statusCode(200)
-            .body("find { it.tenantId == '${scope.tenantId}' }.grantSignature", equalTo(SIG_FOR_CO_OWNER))
-            .body("find { it.tenantId == '${scope.tenantId}' }.granterIdentityPublicKey", equalTo(granterKey))
-    }
-
-    @Test
-    fun rotationSupersedesLivePairingChannelsAndRevokesEveryOtherSession() {
-        val user = seedAccount()
-        val pending = seedPairing(user, DevicePairingEntity.PENDING)
-        val sealed = seedPairing(user, DevicePairingEntity.SEALED)
-        val collected = seedPairing(user, DevicePairingEntity.COLLECTED)
-        val otherFamily = sessions.issue(user).let { familyIdOf(user, it.accessToken) }
-
-        val token = sessions.issue(user).accessToken
-        val ownFamily = familyIdOf(user, token)
-        rotate(user, token).then().statusCode(200)
-
-        // A live channel's envelope carries (or is about to carry) the OLD Master Key and a live delegated
-        // session — a later collect would hand a device a dead key and a working login.
-        assertEquals(DevicePairingEntity.SUPERSEDED, pairingStatus(pending))
-        assertEquals(DevicePairingEntity.SUPERSEDED, pairingStatus(sealed))
-        assertEquals(DevicePairingEntity.COLLECTED, pairingStatus(collected), "a spent channel is already terminal; nothing to supersede")
-
-        assertEquals(SessionFamilyEntity.REVOKED, familyStatus(otherFamily), "the granted device loses server access too")
-        assertEquals(SessionFamilyEntity.ACTIVE, familyStatus(ownFamily), "signing out the device doing the rotation would strand the ceremony")
-    }
-
-    @Test
-    fun withoutARecoveryWrapNothingIsWritten() {
-        // A rotation that applied its identity half and then found nothing to rewrite would leave an account
-        // whose published key nobody can wrap to and whose Master Key nothing can open. It refuses instead, and
-        // the account it refuses on must be exactly the account it started with.
-        val user = seedAccount()
-        QuarkusTransaction.requiringNew().run { MasterKeyWrapEntity.delete("userId = ?1 and method = ?2", user, "RECOVERY") }
-
-        rotate(user).then().statusCode(409).body("code", equalTo("rotation_unavailable"))
-
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is untouched")
-        assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
-        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "the floor still opens the Master Key it always did")
+        rotation.send(rotation.publish(stageId, grants).copy(pinsRevision = 3)).then().statusCode(200) // control
     }
 
     @Test
     fun aStalePinStoreRevisionRollsTheWholeRotationBack() {
-        // ADR 0060 § Consequences: the two Master-Key-sealed documents are re-sealed INSIDE the rotation's
-        // transaction, so a rotation that cannot write them does not happen. The lever is the pin store's
-        // `revision` in the request, one behind the stored one. What makes this a transaction rather than two
-        // writes is the account half: the identity and both cold wraps were already rewritten when the pin write
-        // found itself stale, and they must be exactly as before. The control is the same seed with the matching
-        // revision — without it a rotation that refused everything would pass the negative just as well.
-        val user = seedAccount()
-        seedWrap(user, "DEVICE", "ZGV2aWNlLXdyYXA=")
-        seedPins(user, OLD_PINS, revision = 3)
-        seedRegister(user, OLD_REGISTER, revision = 2)
+        // ADR 0060 § Consequences: both Master-Key-sealed documents are re-sealed INSIDE the publish's transaction, so a
+        // rotation that cannot write them does not happen — the account half, the step and the stage included.
+        val (rotation, world) = seedWorld()
+        seedPins(rotation.userId, revision = 3)
+        val (stageId, grants) = stageAll(rotation)
 
-        rotate(user, pinsRevision = 2, registerRevision = 2)
-            .then().statusCode(409).body("code", equalTo("stale_revision"))
+        rotation.send(rotation.publish(stageId, grants).copy(pinsRevision = 2)).then().statusCode(409).body("code", equalTo("stale_revision"))
+        assertNothingWritten(rotation, world)
+        assertEquals(mapOf("01".repeat(32) to "b2xkLWVudHJ5"), pinEntries(rotation.userId), "the old entry stays under the old key")
 
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is not published")
-        assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
-        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "the floor still opens the Master Key it always did")
-        assertEquals(OLD_REC_WRAP, wrapOf(user, "RECOVERY"))
-        assertEquals("ZGV2aWNlLXdyYXA=", wrapOf(user, "DEVICE"), "nothing was deleted either")
-        assertEquals(OLD_PINS to 3L, pinsRow(user))
-        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user), "no entry of the rolled-back write landed")
-        assertEquals(OLD_REGISTER to 2L, registerRow(user))
-
-        rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
-        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the matching revisions rotate")
-        assertEquals(NEW_PINS to 4L, pinsRow(user), "the pin store's head is the request's, one revision up")
-        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user), "every entry re-keyed: the old id is gone")
-        assertEquals(NEW_REGISTER to 3L, registerRow(user), "and so is the register")
+        rotation.send(rotation.publish(stageId, grants).copy(pinsRevision = 3)).then().statusCode(200) // control
+        assertEquals(mapOf(TestRotation.NEW_PIN_ID to TestRotation.NEW_ENTRY), pinEntries(rotation.userId), "every entry replaced")
     }
 
     @Test
     fun aStaleRegisterRevisionRollsTheWholeRotationBack() {
-        // The register is its own lever: stale there, with the pin store's revision matching. The pin write has
-        // already landed in the transaction when the register write finds itself stale, so the pin row being
-        // untouched is what proves the rollback reaches the documents too, not only the account half.
-        val user = seedAccount()
-        seedPins(user, OLD_PINS, revision = 3)
-        seedRegister(user, OLD_REGISTER, revision = 2)
+        val (rotation, world) = seedWorld()
+        QuarkusTransaction.requiringNew().run {
+            DeviceRegisterEntity().apply { accountId = rotation.userId; sealedBlob = "b2xkLXJlZ2lzdGVy"; revision = 2 }.persist()
+        }
+        val (stageId, grants) = stageAll(rotation)
 
-        rotate(user, pinsRevision = 3, registerRevision = 1)
-            .then().statusCode(409).body("code", equalTo("stale_revision"))
+        rotation.send(rotation.publish(stageId, grants).copy(registerRevision = 1)).then().statusCode(409).body("code", equalTo("stale_revision"))
+        assertNothingWritten(rotation, world)
+        assertEquals("b2xkLXJlZ2lzdGVy" to 2L, registerRow(rotation.userId))
 
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is not published")
-        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"))
-        assertEquals(OLD_PINS to 3L, pinsRow(user), "the pin write rolled back with the rest")
-        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user), "its entries too")
-        assertEquals(OLD_REGISTER to 2L, registerRow(user))
-
-        rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
-        assertEquals(NEW_REGISTER to 3L, registerRow(user), "control: the matching revision rotates")
+        rotation.send(rotation.publish(stageId, grants).copy(registerRevision = 2)).then().statusCode(200) // control
+        assertEquals(TestRotation.NEW_REGISTER to 3L, registerRow(rotation.userId))
     }
 
     @Test
     fun anAccountWithNoDocumentYetGetsBothBornInTheRotation() {
-        // An account that never wrote either document sends each sealed for revision 1 against revision 0 — the
-        // stores' born-empty rule — rather than leaving the field out (a required field is not a mode).
-        val user = seedAccount()
-        assertNull(pinsRow(user))
-        assertNull(registerRow(user))
+        val (rotation, _) = seedWorld()
+        rotation.run().then().statusCode(200)
+        assertEquals(TestRotation.NEW_REGISTER to 1L, registerRow(rotation.userId))
+        assertEquals(TestRotation.NEW_PINS to 1L, QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
+            IdentityPinsEntity.findById(rotation.userId)?.let { it.sealedBlob to it.revision }
+        })
+    }
 
-        rotate(user, pinsRevision = 0, registerRevision = 0).then().statusCode(200)
+    @Test
+    fun aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt() {
+        // Inbox #233, ADR 0028 § What is still open. The rotator wrote the co-member's grant (a commit of the group,
+        // through its pending row after a first securing) and signed it with that identity. Securing the account again
+        // must leave that grant served with the key that SIGNED it: the co-member's client verifies before it reads its
+        // pin. Control: the rotator's own self-grant of the publish is served with its new key.
+        val (rotation, world) = seedWorld()
+        rotation.run().then().statusCode(200)
+        commit(rotation.userId, world.group, 1, everyone(world.group, rotation)).then().statusCode(201)
+        val signedBy = rotation.next.bundle
+        val again = TestRotation(rotation.userId, rotation.next, TestAccountKeys(), rotation.bearer)
+        val (stageId, grants) = stageAll(again)
+        again.send(again.publish(stageId, grants).copy(pinsRevision = 1, registerRevision = 1)).then().statusCode(200)
 
-        assertEquals(NEW_PINS to 1L, pinsRow(user))
-        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user))
-        assertEquals(NEW_REGISTER to 1L, registerRow(user))
+        assertEquals(rotation.userId to signedBy, granterOf(world.coMember, world.group), "the snapshot of the grant's own moment")
+        assertEquals(rotation.userId to again.next.bundle, granterOf(rotation.userId, world.group), "control: a grant written now")
+        given().header("Authorization", TestFixtures.bearer(world.coMember)).header("X-Forwarded-Host", "t-${world.tenantId}.example.com")
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '${world.group}' }.granterIdentityPublicKey", equalTo(signedBy))
+    }
+
+    @Test
+    fun rotationSupersedesLivePairingChannelsAndRevokesEveryOtherSession() {
+        val (rotation, _) = seedWorld()
+        val pending = seedPairing(rotation.userId, DevicePairingEntity.PENDING)
+        val collected = seedPairing(rotation.userId, DevicePairingEntity.COLLECTED)
+        val otherFamily = sessions.issue(rotation.userId).familyId
+        val own = sessions.issue(rotation.userId)
+
+        rotation.run(accessToken = own.accessToken).then().statusCode(200)
+
+        assertEquals(DevicePairingEntity.SUPERSEDED, pairingStatus(pending))
+        assertEquals(DevicePairingEntity.COLLECTED, pairingStatus(collected))
+        assertEquals(SessionFamilyEntity.REVOKED, familyStatus(otherFamily))
+        assertEquals(SessionFamilyEntity.ACTIVE, familyStatus(own.familyId))
+    }
+
+    @Test
+    fun withoutARecoveryWrapNothingIsWritten() {
+        val (rotation, world) = seedWorld()
+        QuarkusTransaction.requiringNew().run { MasterKeyWrapEntity.delete("userId = ?1 and method = ?2", rotation.userId, "RECOVERY") }
+
+        rotation.run().then().statusCode(409).body("code", equalTo("rotation_unavailable"))
+        assertNothingWritten(rotation, world)
     }
 
     @Test
     fun aRotationThatKeepsAPinEntryIsRefused() {
-        // ADR 0104: a new Master Key is a new pin-index key, so the rotation carries the WHOLE re-keyed set. A write
-        // without replaceAll would keep the old entries under ids and seals of the retired key, which every device
-        // then refuses — so it is a 400 with nothing written. The control is the same request with replaceAll.
-        val user = seedAccount()
-        seedPins(user, OLD_PINS, revision = 3)
-
-        rotate(user, pinsRevision = 3, registerRevision = 0, pinsReplaceAll = false)
-            .then().statusCode(400).body("code", equalTo("invalid_request"))
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "nothing published")
-        assertEquals(OLD_PINS to 3L, pinsRow(user))
-        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user))
-
-        rotate(user, pinsRevision = 3, registerRevision = 0).then().statusCode(200)
-        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user), "control: the whole set is replaced")
+        val (rotation, _) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        rotation.send(rotation.publish(stageId, grants).copy(pinsReplaceAll = false)).then().statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     @Test
     fun rotationWithoutAuthIs401() {
-        given().contentType(ContentType.JSON).body(rotationBody())
-            .`when`().post("/api/account/rotation")
-            .then().statusCode(401).body("code", equalTo("authentication_failed"))
+        given().contentType(ContentType.JSON).body("{}").`when`().post("/api/account/rotation").then().statusCode(401)
+        given().`when`().get("/api/account/rotation/plan").then().statusCode(401)
+        given().contentType(ContentType.JSON).body("""{"identityPublicKey":"AQ=="}""").`when`().post("/api/account/rotation/stage").then().statusCode(401)
     }
 
     @Test
-    fun aRequestMissingAColdWrapIsRejectedAtTheBoundary() {
-        // The contract has no way to say "rotate identity only" (ADR 0060 Decision 1, pinned by
-        // scripts/validate_rotation_shape.py). Omitting a required cold wrap is the closest a client can come,
-        // and it is a 400 before any handler runs — never a partial rotation.
-        val user = seedAccount()
-        val body = """
-            {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
-             "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
-             "secretKeyProofSignature":"${PROOF_KEY.sign(rotationStatement())}",
-             "identityPins":{"revision":0,"head":"$NEW_PINS","put":[],"remove":[],"replaceAll":true},
-             "deviceRegister":{"blob":"$NEW_REGISTER","revision":0}}
-        """.trimIndent()
-        given().header("Authorization", bearer(user))
-            .contentType(ContentType.JSON).body(body)
-            .`when`().post("/api/account/rotation").then().statusCode(400)
-
-        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "a rejected request writes nothing")
-    }
-
-    // --- the queued rotation an account rotation leaves behind (uc.spaces.complete-queued-rotation) -----------
-
-    @Test
-    fun anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth() {
-        // D3 + D5: a leased job's worker may already have read the directory with the OLD identity in it, so the
-        // rotation gets a fresh job; and the rotator is excluded from the leased one too, or its lease expiring
-        // would hand the rotator their own rotation by lazy reclaim.
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        val shared = seedTenantScope()
-        seedGrantedMembership(rotator, shared)
-        seedGrantedMembership(coOwner, shared)
-        val leased = seedRotationJob(shared)
-        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(leased))
-
-        rotate(rotator).then().statusCode(200)
-
-        val fresh = rotationJobsIn(shared) - leased
-        assertEquals(1, fresh.size, "an account rotation during a lease queues a job of its own")
-        assertEquals(JobEntity.PENDING, statusOf(fresh.single()))
-        assertEquals(ROTATION_ORIGINATOR, declineReason(fresh.single(), rotator), "excluded from the fresh job")
-        assertEquals(ROTATION_ORIGINATOR, declineReason(leased, rotator), "and from the leased one")
-        expireLease(leased)
-        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
-        // Positive control: both jobs are real work for the other owner.
-        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(leased))
-        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(fresh.single()))
-    }
-
-    @Test
-    fun theRotatorCannotCommitWhileTheirExclusionIsLive() {
-        // D7 clause 1 (#206): for an owner rotator the claim was the only place ADR 0060 Decision 4 was enforced;
-        // a client of their own could post the commit directly.
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        val pending = seedTenantScope()
-        val leased = seedTenantScope()
-        listOf(pending, leased).forEach { seedGrantedMembership(rotator, it); seedGrantedMembership(coOwner, it) }
-        rotate(rotator).then().statusCode(200)
-        claimJob(coOwner, leased) // the leased leg: every live job of that scope is held by the other owner
-
-        listOf(pending, leased).forEach { scope ->
-            commit(rotator, scope, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
-            assertEquals(0, epochOf(scope), "nothing stored")
-            assertEquals(0L, chainLinks(scope), "no chain link stored")
-            // Positive control, same scope and moment: the other owner's identical commit lands.
-            commit(coOwner, scope, rotator, coOwner).then().statusCode(201)
-        }
-
-        // Reason filter: only the rotation exclusion counts — a worker's own decline is about one job.
-        val worker = seedAccount()
-        val other = seedTenantScope()
-        seedGrantedMembership(worker, other)
-        val job = seedRotationJob(other)
-        assertEquals(job, claimJob(worker, other))
-        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON).body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$job/decline").then().statusCode(200)
-        commit(worker, other, worker).then().statusCode(201)
-    }
-
-    @Test
-    fun afterTheCoveringRotationTheRotatorIsBehindUntilReAdmitted() {
-        // D7 clause 2 (#206): once the covering rotation landed (skipping the rotator's changed key), the rotator's
-        // live declines are all on DONE jobs and only their behind grant still holds them — until a human re-admits.
-        val tenant = seedTenantScope()
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        seedGrantedMembership(rotator, tenant)
-        seedGrantedMembership(coOwner, tenant)
-        val group = seedGroup(tenant, rotator, coOwner)
-        rotate(rotator).then().statusCode(200)
-        val job = claimJob(coOwner, group)
-        commit(coOwner, group, coOwner).then().statusCode(201) // a client that sees the rotator's key as changed
-        complete(coOwner, job).then().statusCode(204)
-
-        commit(rotator, group, rotator, coOwner).then().statusCode(409).body("code", equalTo("stale_epoch"))
-        assertEquals(1, epochOf(group), "nothing stored")
-
-        // Re-admission ends it: grant-delivery writes the rotator the current epoch, through the real reconcile.
-        val delivery = claimJob(coOwner, group, CapabilityTags.GRANT_DELIVERY)
-        given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"cmUtYWRtaXR0ZWQ=","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
-            .`when`().post("/api/tasks/$delivery/complete").then().statusCode(204)
-        commit(rotator, group, rotator, coOwner).then().statusCode(201)
-
-        // Grant-less: an owner promoted before any grant reached them holds no key to chain from.
-        val promoted = seedAccount()
-        seedMembership(promoted, tenant, MembershipEntity.MEMBER)
-        seedMembership(promoted, group, MembershipEntity.MEMBER, grant = null)
-        setRole(coOwner, group, promoted, MembershipEntity.OWNER)
-        commit(promoted, group, promoted, coOwner).then().statusCode(409).body("code", equalTo("stale_epoch"))
-        assertEquals(2, epochOf(group))
-    }
-
-    @Test
-    fun theRotatorReadsEachQueuedRotationsStateFromTheServer() {
-        // D9 (#225): the status is the server's, re-readable, and `secured` never shows while the old identity can
-        // hold the current epoch. Every leg is set up before the one rotation, which covers every scope at once.
-        val tenant = seedTenantScope()
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        val member = seedAccount()
-        listOf(rotator, coOwner, member).forEach { seedGrantedMembership(it, tenant) }
-        val waitingThenFailed = seedGroup(tenant, rotator, coOwner)
-        val unswept = seedGroup(tenant, rotator, coOwner)
-        val securedByDone = seedGroup(tenant, rotator, coOwner)
-        val securedByBehind = seedGroup(tenant, rotator, coOwner)
-        val ordering = seedGroup(tenant, rotator, coOwner)
-        val soleOwner = seedGroup(tenant, rotator)
-        seedMembership(member, soleOwner, MembershipEntity.MEMBER)
-        val olderJob = seedRotationJob(ordering)
-        assertEquals(olderJob, claimJob(coOwner, ordering))
-        states(coOwner).then().statusCode(200).body("size()", equalTo(0)) // never rotated: nothing to read
-
-        rotate(rotator).then().statusCode(200)
-
-        assertEquals("waiting", stateOf(rotator, waitingThenFailed))
-        assertEquals("stalled", stateOf(rotator, soleOwner), "no owner but the excluded rotator")
-        setRole(rotator, soleOwner, member, MembershipEntity.OWNER) // E4's remedy
-        assertEquals("waiting", stateOf(rotator, soleOwner), "a granted owner without a decline makes it claimable")
-
-        deadLetter(coOwner, waitingThenFailed)
-        assertEquals("failed", stateOf(rotator, waitingThenFailed))
-
-        repeat(MAX_ATTEMPTS - 1) { fail(coOwner, claimJob(coOwner, unswept)) }
-        expireLease(claimJob(coOwner, unswept)) // the last attempt crashes: LEASED, expired, never swept
-        assertEquals("failed", stateOf(rotator, unswept), "dead in fact although the row still reads LEASED")
-
-        val covering = claimJob(coOwner, securedByDone)
-        commit(coOwner, securedByDone, coOwner).then().statusCode(201)
-        complete(coOwner, covering).then().statusCode(204)
-        assertEquals("secured", stateOf(rotator, securedByDone))
-
-        deadLetter(coOwner, securedByBehind)
-        commit(coOwner, securedByBehind, coOwner).then().statusCode(201) // a synchronous rotation, no job behind it
-        assertEquals("secured", stateOf(rotator, securedByBehind), "the old identity's grant is behind")
-
-        commit(coOwner, ordering, rotator, coOwner).then().statusCode(201) // keeps the rotator current on purpose
-        complete(coOwner, olderJob).then().statusCode(204)
-        deadLetter(coOwner, ordering)
-        assertEquals("failed", stateOf(rotator, ordering), "the newest excluding job decides, not an older DONE one")
-    }
-
-    @Test
-    fun twoCoveringJobsOfOneInstantAreDecidedWithoutTheRandomId() {
-        // The newest covering job is read by `created_at` (millisecond). Forced to the SAME instant, the dead-lettered
-        // job still decides over an older DONE one whichever way their random ids sort — several scopes, so a tie
-        // that fell to the id would be red here with near-certainty (the pure rule: TasksStoreNewestCoveringTest).
-        val tenant = seedTenantScope()
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        listOf(rotator, coOwner).forEach { seedGrantedMembership(it, tenant) }
-        val scopes = List(8) { seedGroup(tenant, rotator, coOwner) }
-        val older = scopes.associateWith { seedRotationJob(it) }
-        scopes.forEach { assertEquals(older.getValue(it), claimJob(coOwner, it)) }
-        rotate(rotator).then().statusCode(200)
-        scopes.forEach { scope ->
-            val newer = rotationJobsIn(scope).single { it != older.getValue(scope) }
-            QuarkusTransaction.requiringNew().run {
-                val at = Instant.now().truncatedTo(ChronoUnit.MILLIS)
-                JobEntity.update("status = ?1, createdAt = ?2 where id = ?3", JobEntity.DONE, at, older.getValue(scope))
-                JobEntity.update("status = ?1, createdAt = ?2 where id = ?3", JobEntity.FAILED, at, newer)
-            }
-            assertEquals("failed", stateOf(rotator, scope), "a tie of one instant: the dead-lettered job decides, not the id")
+    fun aRequestMissingARequiredFieldIsRejectedAtTheBoundary() {
+        val (rotation, _) = seedWorld()
+        val (stageId, grants) = stageAll(rotation)
+        val json = rotation.publish(stageId, grants).json()
+        for (field in listOf("\"secretKeyProofPossession\"", "\"authPublicKey\"", "\"stagedGrantsDigest\"")) {
+            val without = json.replace(Regex("$field:\"[^\"]*\",?"), "")
+            given().header("Authorization", rotation.bearer()).contentType(ContentType.JSON).body(without)
+                .`when`().post("/api/account/rotation").then().statusCode(400).body("code", equalTo("invalid_request"))
         }
     }
 
+    // --- the commit gate after the publish (decision 4) --------------------------------------------------------
+
     @Test
-    fun fromFailedTheRotatorRequeuesAndTheExclusionIsBack() {
-        // D9 + Q6: re-queue only from `failed`; it excludes the rotator again, which closes the Q5 lapse.
-        val tenant = seedTenantScope()
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        val cut = seedAccount()
-        listOf(rotator, coOwner, cut).forEach { seedGrantedMembership(it, tenant) }
-        val scope = seedGroup(tenant, rotator, coOwner)
-        val twin = seedGroup(tenant, rotator, coOwner)
-        val joined = seedGroup(tenant, rotator, coOwner)
-        seedMembership(cut, joined, MembershipEntity.MEMBER)
-        val alone = seedGroup(tenant, rotator)
-        rotate(rotator).then().statusCode(200)
-        listOf(scope, twin, joined).forEach { deadLetter(coOwner, it) }
-        val jobsBefore = rotationJobsIn(scope).size
+    fun aMemberWithAWaitingRowCommitsTheNextEpoch() {
+        val (rotation, world) = seedWorld()
+        rotation.run().then().statusCode(200)
 
-        requeue(rotator, scope).then().statusCode(200).body("scopeId", equalTo(scope.scopeId)).body("state", equalTo("waiting"))
-        val requeued = rotationJobsIn(scope).single { statusOf(it) == JobEntity.PENDING }
-        assertEquals(ROTATION_ORIGINATOR, declineReason(requeued, rotator))
-        commit(rotator, scope, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
-        // The control on the same predicate: the twin, not re-queued, is the Q5 lapse the re-queue closes.
-        commit(rotator, twin, rotator, coOwner).then().statusCode(201)
-
-        requeue(rotator, scope).then().statusCode(409).body("code", equalTo("rotation_not_failed"))
-        assertEquals(jobsBefore + 1, rotationJobsIn(scope).size, "a refused re-queue writes nothing")
-        requeue(rotator, alone).then().statusCode(404).body("code", equalTo("rotation_not_found"))
-        assertEquals(requeued, claimJob(coOwner, scope))
-
-        // A removal queued an unclaimed job since the dead-letter: the re-queue joins it and excludes the rotator.
-        given().header("Authorization", bearer(coOwner)).`when`().delete("/api/tenants/${tenant.tenantId}/members/$cut")
-            .then().statusCode(204)
-        val removalJob = rotationJobsIn(joined).single { statusOf(it) == JobEntity.PENDING }
-        assertNull(declineReason(removalJob, rotator))
-        requeue(rotator, joined).then().statusCode(200)
-        assertEquals(listOf(removalJob), rotationJobsIn(joined).filter { statusOf(it) == JobEntity.PENDING }, "joined, not added")
-        assertEquals(ROTATION_ORIGINATOR, declineReason(removalJob, rotator))
+        // The rotator is a plain MEMBER of the group; its waiting row lets it commit epoch 1, granting everyone.
+        commit(rotation.userId, world.group, 1, everyone(world.group, rotation)).then().statusCode(201)
+        assertEquals(1, epochOf(world.group))
     }
 
     @Test
-    fun anOwnerSeesAStuckCompromiseRotationOnTheirOwnRowAndRequeuesIt() {
-        // D10 (#234): the scope's other owners are the ones who can act, so the state shows on their own rows.
-        val tenant = seedTenantScope()
-        val rotator = seedAccount()
-        val coOwner = seedAccount()
-        val thirdOwner = seedAccount()
-        val member = seedAccount()
-        val decliner = seedAccount()
-        val keyless = seedAccount()
-        listOf(rotator, coOwner, thirdOwner, member, decliner, keyless).forEach { seedGrantedMembership(it, tenant) }
-        val group = seedGroup(tenant, rotator, coOwner, thirdOwner)
-        seedMembership(member, group, MembershipEntity.MEMBER)
-        val stalled = seedGroup(tenant, rotator, decliner)
-        seedMembership(keyless, stalled, MembershipEntity.OWNER, grant = null)
-        rotate(rotator).then().statusCode(200)
+    fun theGateRefusesWithoutTheRowOrWithARemoval() {
+        val (rotation, world) = seedWorld()
+        // Without a row (no publish yet): a plain member is no committer.
+        commit(rotation.userId, world.group, 1, everyone(world.group, rotation))
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
 
-        assertNull(ownerRow(coOwner, tenant, group), "waiting needs nobody")
-        deadLetter(coOwner, group)
-        assertEquals("failed", ownerRow(coOwner, tenant, group))
-        assertEquals("failed", ownerRow(thirdOwner, tenant, group))
-        assertNull(ownerRow(member, tenant, group), "a plain member learns nothing they could act on")
-
-        val declined = claimJob(decliner, stalled)
-        given().header("Authorization", bearer(decliner)).contentType(ContentType.JSON).body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$declined/decline").then().statusCode(200)
-        assertEquals("stalled", ownerRow(decliner, tenant, stalled), "no granted owner without a decline is left")
-
-        // The tenant root, read through the switcher's row.
-        deadLetter(coOwner, tenant)
-        given().header("Authorization", bearer(coOwner)).`when`().get("/api/scopes/my-tenants").then().statusCode(200)
-            .body("find { it.tenantId == '${tenant.tenantId}' }.compromiseRotation", equalTo("failed"))
-
-        val jobsBefore = rotationJobsIn(group).size
-        requeueAsOwner(thirdOwner, group).then().statusCode(200).body("compromiseRotation", nullValue())
-        val requeued = rotationJobsIn(group).single { statusOf(it) == JobEntity.PENDING }
-        assertEquals(ROTATION_ORIGINATOR, declineReason(requeued, rotator), "the failed rotator is excluded again")
-        assertNull(declineReason(requeued, thirdOwner), "the owner who asked is not")
-        assertEquals(requeued, claimJob(thirdOwner, group))
-        commit(rotator, group, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
-
-        requeueAsOwner(thirdOwner, group).then().statusCode(409).body("code", equalTo("rotation_not_failed"))
-        requeueAsOwner(member, group).then().statusCode(403).body("code", equalTo("not_scope_owner"))
-        assertEquals(jobsBefore + 1, rotationJobsIn(group).size, "a refused re-queue writes nothing")
+        rotation.run().then().statusCode(200)
+        val third = seedUser()
+        member(third, world.tenantId, world.group, MembershipEntity.MEMBER, epoch = 0)
+        // With the row, a removal stays an owner's act.
+        commit(rotation.userId, world.group, 1, everyone(world.group, rotation).filterKeys { it != third }, removes = third)
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        assertEquals(0, epochOf(world.group))
+        commit(rotation.userId, world.group, 1, everyone(world.group, rotation)).then().statusCode(201) // control
     }
 
-    // --- helpers ---------------------------------------------------------------------------------------------
+    @Test
+    fun afterSomeoneElsesCommitTheRowAnswersStaleEpoch() {
+        val (rotation, world) = seedWorld()
+        rotation.run().then().statusCode(200)
+        // The co-member owns the group and commits first, granting the rotator's NEW key.
+        commit(world.coMember, world.group, 1, everyone(world.group, rotation)).then().statusCode(201)
 
-    /** A rotation of this fixture's account. The two document revisions default to 0 — what an account that never
-     *  wrote either document sends; a test that seeds a document passes the revision it seeded (or a stale one). */
-    private fun rotate(
-        userId: String,
-        accessToken: String = sessions.issue(userId).accessToken,
-        signature: String = PROOF_KEY.sign(rotationStatement()),
-        pinsRevision: Long = 0,
-        registerRevision: Long = 0,
-        pinsReplaceAll: Boolean = true,
-    ) = given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-        .body(rotationBody(signature, pinsRevision, registerRevision, pinsReplaceAll)).`when`().post("/api/account/rotation")
+        commit(rotation.userId, world.group, 2, everyone(world.group, rotation))
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals("secured", stateOf(rotation, world.group), "someone else's commit finished the row")
+    }
 
-    private fun rotationBody(
-        signature: String = PROOF_KEY.sign(rotationStatement()),
-        pinsRevision: Long = 0,
-        registerRevision: Long = 0,
-        pinsReplaceAll: Boolean = true,
-    ) = """
-        {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
-         "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
-         "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
-         "secretKeyProofSignature":"$signature",
-         "identityPins":{"revision":$pinsRevision,"head":"$NEW_PINS","put":[{"pinId":"$NEW_PIN_ID","entry":"$NEW_ENTRY"}],"remove":[],"replaceAll":$pinsReplaceAll},
-         "deviceRegister":{"blob":"$NEW_REGISTER","revision":$registerRevision}}
-    """.trimIndent()
+    // --- states (decision 8) -------------------------------------------------------------------------------------
 
-    /** What a legitimate client signs for this fixture's rotation: from the seeded identity to the new one. */
-    private fun rotationStatement() = SecretKeyProof.rotationStatement(
-        currentIdentityPublicKey = OLD_IDENTITY_PUB,
-        identityPublicKey = NEW_IDENTITY_PUB,
-        wrappedIdentityPrivateKey = NEW_PRIV,
-        passwordWrap = SecretKeyProof.Wrap(NEW_PW_WRAP, KDF),
-        recoveryWrap = SecretKeyProof.Wrap(NEW_REC_WRAP, KDF),
+    @Test
+    fun theStatesFollowTheRows() {
+        val (rotation, world) = seedWorld()
+        val node = TestFixtures.seedNode(world.personal, "FOLDER", wrappedContentKey = TestFixtures.CONTENT_KEY)
+        rotation.run().then().statusCode(200)
+        assertEquals("waiting", stateOf(rotation, world.personal))
+        assertEquals("waiting", stateOf(rotation, world.tenantId))
+
+        commit(rotation.userId, world.personal, 1, mapOf(rotation.userId to TestGrants.digest(rotation.next.bundle))).then().statusCode(201)
+        assertEquals("rekeying", stateOf(rotation, world.personal), "a node still carries epoch 0")
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where id = ?1", node) }
+        assertEquals("secured", stateOf(rotation, world.personal))
+
+        QuarkusTransaction.requiringNew().run { TenantEntity.update("status = ?1 where id = ?2", TenantEntity.SUSPENDED, world.tenantId) }
+        given().header("Authorization", rotation.bearer()).`when`().get("/api/account/rotation/scopes").then().statusCode(200)
+            .body("find { it.scopeId == '${world.tenantId}' }.state", equalTo("blocked"))
+            .body("find { it.scopeId == '${world.tenantId}' }.reason", equalTo("tenant_suspended"))
+    }
+
+    // --- purge and erasure ---------------------------------------------------------------------------------------
+
+    @Test
+    fun anErasedAccountLeavesNoStepRowOrStage() {
+        val (rotation, world) = seedWorld()
+        rotation.run().then().statusCode(200)
+        rotation.openStageId()
+        assertEquals(2, chainSize(rotation.userId))
+
+        QuarkusTransaction.requiringNew().run {
+            AccountErasureEntity().apply {
+                accountId = rotation.userId; requestedAt = Instant.now(); requestedBy = AccountErasureEntity.SELF; dueAt = Instant.now()
+            }.persist()
+        }
+        erasure.purge(rotation.userId)
+        assertNull(field(rotation.userId) { it.id }, "the account is gone")
+
+        assertEquals(0, chainSize(rotation.userId))
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { RotationRegrantEntity.count("userId", rotation.userId) })
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { RotationStageEntity.count("userId", rotation.userId) })
+    }
+
+    // --- fixtures ------------------------------------------------------------------------------------------------
+
+    /** A rotator (plain MEMBER of a tenant and of a group the co-member owns, owner of its personal space) and the
+     *  co-member, each with real keys. */
+    private data class World(
+        val tenantId: String, val personal: String, val group: String, val coMember: String, val coMemberKeys: TestAccountKeys,
     )
 
-    private fun claim(userId: String, tag: String, scope: SeededScope? = null) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"capabilityTags":["$tag"]${scope?.let { ""","scopeId":"${it.scopeId}"""" } ?: ""}}""")
-            .`when`().post("/api/tasks/claim")
-
-    private fun claimJob(userId: String, scope: SeededScope, tag: String = CapabilityTags.SCOPE_ROTATION): String =
-        claim(userId, tag, scope).then().statusCode(200).extract().path("jobId")
-
-    private fun fail(userId: String, jobId: String): String =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("{}")
-            .`when`().post("/api/tasks/$jobId/fail").then().statusCode(200).extract().path("status")
-
-    private fun complete(userId: String, jobId: String) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("{}")
-            .`when`().post("/api/tasks/$jobId/complete")
-
-    /** Dead-letter [scope]'s live rotation job through the real path: claim and fail it until it is `failed`. */
-    private fun deadLetter(worker: String, scope: SeededScope) {
-        repeat(MAX_ATTEMPTS) { if (fail(worker, claimJob(worker, scope)) == "failed") return }
-        error("the job did not dead-letter after $MAX_ATTEMPTS failed claims")
+    private fun seedWorld(): Pair<TestRotation, World> {
+        val keys = TestAccountKeys()
+        val user = seedAccount(keys)
+        val coKeys = TestAccountKeys()
+        val co = seedAccount(coKeys)
+        val tenant = seedTenant(owner = co)
+        member(user, tenant, tenant, MembershipEntity.MEMBER, epoch = 0)
+        val personal = personalScope(user, tenant)
+        val group = group(tenant, co)
+        member(user, tenant, group, MembershipEntity.MEMBER, epoch = 0)
+        return TestRotation(user, keys) { TestFixtures.bearer(user) } to World(tenant, personal, group, co, coKeys)
     }
 
-    /** A well-formed rotation commit at [scope]'s next epoch, granting [grantees]. */
-    private fun commit(userId: String, scope: SeededScope, vararg grantees: String) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+    private fun seedAccount(keys: TestAccountKeys): String {
+        val id = seedUser(identityPublicKey = keys.bundle, authPublicKey = keys.auth.publicKey, secretKeyProofPublicKey = keys.proof.publicKey)
+        seedWrap(id, "PASSWORD", "b2xkLXBhc3N3b3JkLXdyYXA=")
+        seedWrap(id, "RECOVERY", "b2xkLXJlY292ZXJ5LXdyYXA=")
+        return id
+    }
+
+    private fun personalScope(user: String, tenant: String): String {
+        val id = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity().apply { this.id = id; tenantId = tenant; kind = ScopeEntity.PERSONAL; personalOwner = user }.persist()
+        }
+        member(user, tenant, id, MembershipEntity.OWNER, epoch = 0)
+        return id
+    }
+
+    private fun group(tenant: String, owner: String): String {
+        val id = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity().apply { this.id = id; tenantId = tenant; kind = ScopeEntity.GROUP; encryptedName = "bmFtZQ==" }.persist()
+        }
+        member(owner, tenant, id, MembershipEntity.OWNER, epoch = 0)
+        return id
+    }
+
+    private fun member(user: String, tenant: String, scope: String, role: String, epoch: Int) = QuarkusTransaction.requiringNew().run {
+        MembershipEntity().apply {
+            id = UUID.randomUUID().toString(); userId = user; tenantId = tenant; scopeId = scope; this.role = role
+            wrappedGrant = TestFixtures.GRANT; grantedEpoch = epoch; createdAt = Instant.now()
+        }.persist()
+    }
+
+    private fun stageAll(rotation: TestRotation): Pair<String, List<StagedGrant>> {
+        val stageId = rotation.openStageId()
+        val grants = rotation.plan().map { rotation.selfGrant(it) }
+        rotation.stage(stageId, grants).then().statusCode(204)
+        return stageId to grants
+    }
+
+    private fun assertSelfGranted(rotation: TestRotation, scopeId: String, kind: String, epoch: Int) {
+        val m = QuarkusTransaction.requiringNew().call {
+            MembershipEntity.find("userId = ?1 and scopeId = ?2", rotation.userId, scopeId).firstResult()!!
+        }
+        assertEquals(TestRotation.SELF_GRANT, m.wrappedGrant, "$scopeId: the staged grant")
+        assertEquals(epoch, m.grantedEpoch, "$scopeId: at the current epoch")
+        assertEquals(rotation.userId, m.granterUserId, "$scopeId: granted by the caller")
+        assertEquals(rotation.next.bundle, m.granterIdentityPublicKey, "$scopeId: signed by the new key")
+        val stmt = GrantSignature.statement(scopeId, kind, epoch.toLong(), rotation.userId, rotation.next.bundle, m.wrappedGrant!!)
+        assertTrue(GrantSignature.verify(rotation.next.bundle, stmt, m.grantSignature), "$scopeId: verifies under the new identity")
+        assertFalse(GrantSignature.verify(rotation.current.bundle, stmt, m.grantSignature), "$scopeId: and not under the old one")
+        assertEquals(epoch, regrantEpoch(rotation.userId, scopeId), "$scopeId: a pending re-key row at that epoch")
+    }
+
+    /** Nothing of a refused publish: the identity, proof and auth key as seeded, no step, no self-grant, no row. */
+    private fun assertNothingWritten(rotation: TestRotation, world: World) {
+        val u = rotation.userId
+        assertEquals(rotation.current.bundle, field(u) { it.identityPublicKey }, "identity unchanged")
+        assertEquals(rotation.current.proof.publicKey, field(u) { it.secretKeyProofPublicKey }, "proof key unchanged")
+        assertEquals(rotation.current.auth.publicKey, field(u) { it.authPublicKey }, "auth key unchanged")
+        assertEquals("b2xkLXBhc3N3b3JkLXdyYXA=", wrapOf(u, "PASSWORD"), "floor unchanged")
+        assertEquals(0, chainSize(u), "no step stored")
+        listOf(world.personal, world.tenantId, world.group).forEach {
+            assertNotEquals(TestRotation.SELF_GRANT, grantOf(u, it), "no self-grant on $it")
+            assertNull(regrantEpoch(u, it), "no pending row on $it")
+        }
+    }
+
+    private fun commit(caller: String, scope: String, epoch: Int, grants: Map<String, String>, removes: String? = null) =
+        given().header("Authorization", TestFixtures.bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${epochOf(scope) + 1},"wrappedPrev":"$ROT_PREV","grants":[${
-                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$ROTATOR_GRANT",${TestAdmission.SIGNATURE_JSON}}""" }
-                }],${TestAdmission.openJson(scope.scopeId)}}""",
+                """{"epoch":$epoch,"wrappedPrev":"cHJldg==","grants":[${
+                    grants.entries.joinToString(",") { (u, d) ->
+                        """{"userId":"$u","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"$d"}"""
+                    }
+                }],${TestGrants.openInvitesJson(scope)}${removes?.let { ""","removesUserId":"$it"""" } ?: ""}}""",
             )
-            .`when`().post("/api/scopes/${scope.scopeId}/epochs")
+            .`when`().post("/api/scopes/$scope/epochs")
 
-    private fun setRole(caller: String, scope: SeededScope, target: String, role: String) {
-        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body("""{"role":"$role"}""")
-            .`when`().patch("/api/scopes/${scope.scopeId}/members/$target").then().statusCode(200)
-    }
+    /** A grant to every member of [scope] under their CURRENT key (the rotator's new one once published). */
+    private fun everyone(scope: String, rotation: TestRotation): Map<String, String> =
+        QuarkusTransaction.requiringNew().call { MembershipEntity.find("scopeId", scope).list().map { it.userId } }
+            .associateWith { TestGrants.digestOf(it) }
+            .also { assertTrue(rotation.userId in it) }
 
-    private fun states(userId: String) =
-        given().header("Authorization", bearer(userId)).`when`().get("/api/account/rotation/scopes")
+    private fun stateOf(rotation: TestRotation, scope: String): String? =
+        given().header("Authorization", rotation.bearer()).`when`().get("/api/account/rotation/scopes").then().statusCode(200)
+            .extract().path("find { it.scopeId == '$scope' }.state")
 
-    /** The state [userId]'s own read serves for [scope], or null when it lists no such scope. */
-    private fun stateOf(userId: String, scope: SeededScope): String? =
-        states(userId).then().statusCode(200).extract().path("find { it.scopeId == '${scope.scopeId}' }.state")
+    private fun changePassword(rotation: TestRotation, newAuth: TestEd25519, proof: String) =
+        given().header("Authorization", rotation.bearer()).contentType(ContentType.JSON)
+            .body(
+                """{"passwordWrap":{"wrappedKey":"Y2hhbmdlZC13cmFw","kdfParams":"${TestRotation.KDF}"},"authPublicKey":"${newAuth.publicKey}",
+                   "attestationSignature":"${b64(rotation.next.auth.sign(newAuth.raw))}","secretKeyProofSignature":"$proof"}""",
+            )
+            .`when`().post("/api/account/password")
 
-    private fun requeue(userId: String, scope: SeededScope) =
-        given().header("Authorization", bearer(userId)).`when`().post("/api/account/rotation/scopes/${scope.scopeId}/requeue")
-
-    private fun requeueAsOwner(userId: String, scope: SeededScope) =
-        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/${scope.scopeId}/rotation/requeue")
-
-    /** The `compromiseRotation` of [userId]'s own row for [scope] in `GET /api/scopes` (the tenant's Host). */
-    private fun ownerRow(userId: String, tenant: SeededScope, scope: SeededScope): String? =
-        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", tenant.domain)
-            .`when`().get("/api/scopes").then().statusCode(200)
-            .body("find { it.id == '${scope.scopeId}' }.id", equalTo(scope.scopeId))
-            .extract().path("find { it.id == '${scope.scopeId}' }.compromiseRotation")
-
-    private fun seedAccount(): String {
-        val userId = seedUser(
-            identityPublicKey = OLD_IDENTITY_PUB, wrappedIdentityPrivateKey = OLD_PRIV,
-            secretKeyProofPublicKey = PROOF_KEY.publicKey,
-        )
-        seedWrap(userId, "PASSWORD", OLD_PW_WRAP)
-        seedWrap(userId, "RECOVERY", OLD_REC_WRAP)
-        return userId
-    }
+    private fun recover(token: String, authKey: String, proof: String) =
+        given().contentType(ContentType.JSON)
+            .body("""{"token":"$token","secretKeyProofSignature":"$proof","wrappedKey":"cmVzZXQtd3JhcA==","kdfParams":"${TestRotation.KDF}","authPublicKey":"$authKey"}""")
+            .`when`().post("/api/recovery/complete")
 
     private fun seedWrap(userId: String, method: String, wrapped: String) = QuarkusTransaction.requiringNew().run {
         MasterKeyWrapEntity().apply {
             id = UUID.randomUUID().toString(); this.userId = userId; this.method = method
-            wrappedKey = wrapped; kdfParams = KDF
+            wrappedKey = wrapped; kdfParams = TestRotation.KDF
         }.persist()
     }
 
-    /** A scope plus the tenant it hangs off. The TENANT root scope is keyed `scopeId == tenantId` (cr-0026);
-     *  a PERSONAL one gets its own id, which is why the two ids are carried separately — a membership's
-     *  `tenant_id` is a foreign key, and passing the scope id there works only for the tenant root. */
-    private data class SeededScope(val scopeId: String, val tenantId: String) {
-        /** The tenant's host — what a read of the caller's scopes resolves the tenant from. */
-        val domain get() = "rot-$tenantId.example.com"
+    private fun seedPins(userId: String, revision: Long) = QuarkusTransaction.requiringNew().run {
+        IdentityPinsEntity().apply { accountId = userId; sealedBlob = "b2xkLXBpbnM="; this.revision = revision }.persist()
+        IdentityPinEntryEntity().apply { accountId = userId; pinId = "01".repeat(32); sealedEntry = "b2xkLWVudHJ5" }.persist()
     }
 
-    private fun seedTenantScope(): SeededScope = seedScope(ScopeEntity.TENANT)
-
-    private fun seedPersonalScope(): SeededScope = seedScope(ScopeEntity.PERSONAL)
-
-    private fun seedScope(kind: String): SeededScope {
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = if (kind == ScopeEntity.TENANT) tenantId else UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = SeededScope(scopeId, tenantId).domain
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; this.kind = kind
-            }.persist()
-        }
-        return SeededScope(scopeId, tenantId)
-    }
-
-    private fun seedGrantedMembership(userId: String, scope: SeededScope) = QuarkusTransaction.requiringNew().run {
-        MembershipEntity().apply {
-            id = UUID.randomUUID().toString(); this.userId = userId; tenantId = scope.tenantId
-            scopeId = scope.scopeId; role = MembershipEntity.OWNER
-            wrappedGrant = "bWVtYmVyLWdyYW50"; createdAt = Instant.now()
+    private fun seedEmailChange(userId: String) = QuarkusTransaction.requiringNew().run {
+        EmailChangeEntity.delete("userId", userId)
+        EmailChangeEntity().apply {
+            id = UUID.randomUUID().toString(); this.userId = userId; newEmail = "new-$userId@example.com"
+            authPublicKey = "YXV0aA=="; tokenHash = UUID.randomUUID().toString().replace("-", ""); expiresAt = Instant.now().plusSeconds(3600)
         }.persist()
     }
 
-    private fun seedPendingConsentMembership(userId: String, scope: SeededScope) = QuarkusTransaction.requiringNew().run {
-        MembershipEntity().apply {
-            id = UUID.randomUUID().toString(); this.userId = userId; tenantId = scope.tenantId
-            scopeId = scope.scopeId; role = MembershipEntity.MEMBER; wrappedGrant = null
-            pendingConsent = true; createdAt = Instant.now()
-        }.persist()
+    private fun pinEntries(userId: String): Map<String, String> = QuarkusTransaction.requiringNew().call<Map<String, String>> {
+        IdentityPinEntryEntity.list("accountId", userId).associate { it.pinId to it.sealedEntry }
     }
 
-    private fun seedRotationJob(scope: SeededScope): String {
-        val scopeId = scope.scopeId
-        val jobId = UUID.randomUUID().toString()
+    private fun registerRow(userId: String): Pair<String?, Long>? = QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
+        DeviceRegisterEntity.findById(userId)?.let { it.sealedBlob to it.revision }
+    }
+
+    private fun granterOf(userId: String, scope: String): Pair<String?, String?> = QuarkusTransaction.requiringNew().call {
+        MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scope).firstResult()!!.let { it.granterUserId to it.granterIdentityPublicKey }
+    }
+
+    private fun emailChanges(userId: String): Long = QuarkusTransaction.requiringNew().call { EmailChangeEntity.count("userId", userId) }
+
+    private fun membershipOf(userId: String, scope: String): String =
+        QuarkusTransaction.requiringNew().call { MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scope).firstResult()!!.id }
+
+    private fun seedDeliveryJob(scope: String, membershipId: String): String {
+        val id = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             JobEntity().apply {
-                id = jobId; this.scopeId = scopeId; capabilityTag = CapabilityTags.SCOPE_ROTATION
-                resourceRef = scopeId; status = JobEntity.PENDING; attempts = 0; maxAttempts = 3
-                createdAt = Instant.now()
+                this.id = id; scopeId = scope; capabilityTag = CapabilityTags.GRANT_DELIVERY; resourceRef = membershipId
+                status = JobEntity.PENDING; attempts = 0; maxAttempts = 3; createdAt = Instant.now()
             }.persist()
         }
-        return jobId
+        return id
     }
+
+    private fun decline(jobId: String, workerId: String) = QuarkusTransaction.requiringNew().run {
+        JobDeclineEntity().apply { id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId; reason = "identity_unanchored" }.persist()
+    }
+
+    private fun declines(jobId: String): Long = QuarkusTransaction.requiringNew().call { JobDeclineEntity.count("jobId", jobId) }
 
     private fun seedPairing(userId: String, status: String): String {
         val id = UUID.randomUUID().toString()
@@ -831,52 +917,32 @@ class RotationSliceTest {
         return id
     }
 
-    private fun rotationJobIn(scope: SeededScope): String? = QuarkusTransaction.requiringNew().call<String?> {
-        JobEntity.find("scopeId = ?1 and capabilityTag = ?2", scope.scopeId, CapabilityTags.SCOPE_ROTATION)
-            .firstResult()?.id
+    private fun pairingStatus(id: String): String? = QuarkusTransaction.requiringNew().call<String?> { DevicePairingEntity.findById(id)?.status }
+
+    private fun familyStatus(familyId: String): String? =
+        QuarkusTransaction.requiringNew().call<String?> { SessionFamilyEntity.findById(familyId)?.status }
+
+    private fun expire(stageId: String) = QuarkusTransaction.requiringNew().run {
+        RotationStageEntity.update("expiresAt = ?1 where id = ?2", Instant.now().minusSeconds(1), stageId)
     }
 
-    /** Every rotation job of [scope], whatever its status, oldest first. */
-    private fun rotationJobsIn(scope: SeededScope): List<String> = QuarkusTransaction.requiringNew().call {
-        JobEntity.find("scopeId = ?1 and capabilityTag = ?2 order by createdAt", scope.scopeId, CapabilityTags.SCOPE_ROTATION)
-            .list().map { it.id }
+    private fun setEpoch(scope: String, epoch: Int) = QuarkusTransaction.requiringNew().run {
+        ScopeEntity.update("currentEpoch = ?1 where id = ?2", epoch, scope)
     }
 
-    private fun statusOf(jobId: String): String = QuarkusTransaction.requiringNew().call { JobEntity.findById(jobId)!!.status }
+    private fun stagedRows(stageId: String): Long = QuarkusTransaction.requiringNew().call { RotationStageGrantEntity.count("stageId", stageId) }
 
-    private fun declineReason(jobId: String, workerId: String): String? = QuarkusTransaction.requiringNew().call<String?> {
-        JobDeclineEntity.find("jobId = ?1 and workerId = ?2", jobId, workerId).firstResult()?.reason
+    private fun regrantEpoch(userId: String, scope: String): Int? = QuarkusTransaction.requiringNew().call<Int?> {
+        RotationRegrantEntity.find("userId = ?1 and scopeId = ?2", userId, scope).firstResult()?.epochAtRotation
     }
 
-    private fun expireLease(jobId: String) = QuarkusTransaction.requiringNew().run {
-        JobEntity.update("leaseExpiresAt = ?1 where id = ?2", Instant.now().minusSeconds(60), jobId)
+    private fun chainSize(userId: String): Int = QuarkusTransaction.requiringNew().call { KeyChainStepEntity.count("userId", userId).toInt() }
+
+    private fun grantOf(userId: String, scope: String): String? = QuarkusTransaction.requiringNew().call<String?> {
+        MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scope).firstResult()?.wrappedGrant
     }
 
-    private fun epochOf(scope: SeededScope): Int = TestAdmission.epochOf(scope.scopeId)
-
-    private fun chainLinks(scope: SeededScope): Long =
-        QuarkusTransaction.requiringNew().call { ScopeEpochEntity.count("scopeId", scope.scopeId) }
-
-    /** A GROUP in [tenant] that every one of [owners] owns and holds the grant of. */
-    private fun seedGroup(tenant: SeededScope, vararg owners: String): SeededScope {
-        val group = SeededScope(UUID.randomUUID().toString(), tenant.tenantId)
-        QuarkusTransaction.requiringNew().run {
-            ScopeEntity().apply {
-                id = group.scopeId; tenantId = tenant.tenantId; kind = ScopeEntity.GROUP
-                encryptedName = "bmFtZQ=="
-            }.persist()
-        }
-        owners.forEach { seedMembership(it, group, MembershipEntity.OWNER) }
-        return group
-    }
-
-    private fun seedMembership(userId: String, scope: SeededScope, role: String, grant: String? = "bWVtYmVyLWdyYW50") =
-        QuarkusTransaction.requiringNew().run {
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; tenantId = scope.tenantId
-                scopeId = scope.scopeId; this.role = role; wrappedGrant = grant; createdAt = Instant.now()
-            }.persist()
-        }
+    private fun epochOf(scope: String): Int = TestGrants.epochOf(scope)
 
     private fun <T> field(userId: String, read: (VeyqUser) -> T): T? =
         QuarkusTransaction.requiringNew().call<T?> { VeyqUser.findById(userId)?.let(read) }
@@ -885,83 +951,6 @@ class RotationSliceTest {
         MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()?.wrappedKey
     }
 
-    /** A store at `revision`: its head and one entry, as a device wrote them under the OLD Master Key. */
-    private fun seedPins(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
-        IdentityPinsEntity().apply {
-            accountId = userId; sealedBlob = blob; this.revision = revision
-        }.persist()
-        IdentityPinEntryEntity().apply {
-            accountId = userId; pinId = OLD_PIN_ID; sealedEntry = OLD_ENTRY
-        }.persist()
-    }
-
-    /** The stored entries as `pinId to sealed entry`. */
-    private fun pinEntries(userId: String): Map<String, String> = QuarkusTransaction.requiringNew().call<Map<String, String>> {
-        IdentityPinEntryEntity.list("accountId", userId).associate { it.pinId to it.sealedEntry }
-    }
-
-    private fun seedRegister(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
-        DeviceRegisterEntity().apply {
-            accountId = userId; sealedBlob = blob; this.revision = revision
-        }.persist()
-    }
-
-    /** The stored pin store as `blob to revision`, or null when the account has no row. */
-    private fun pinsRow(userId: String): Pair<String?, Long>? =
-        QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
-            IdentityPinsEntity.findById(userId)?.let { it.sealedBlob to it.revision }
-        }
-
-    private fun registerRow(userId: String): Pair<String?, Long>? =
-        QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
-            DeviceRegisterEntity.findById(userId)?.let { it.sealedBlob to it.revision }
-        }
-
-    private fun pairingStatus(id: String): String? =
-        QuarkusTransaction.requiringNew().call<String?> { DevicePairingEntity.findById(id)?.status }
-
-    private fun familyStatus(familyId: String): String? =
-        QuarkusTransaction.requiringNew().call<String?> { SessionFamilyEntity.findById(familyId)?.status }
-
-    /** The family an issued access token belongs to — read the way the account's own session list reads it. */
-    private fun familyIdOf(userId: String, accessToken: String): String =
-        sessions.listActiveFamilies(userId, accessToken).first { it.current }.id
-
-    private companion object {
-        const val KDF = "a2RmLXBhcmFtcw=="
-
-        const val OLD_IDENTITY_PUB = "b2xkLWlkZW50aXR5LXB1Yg=="
-        const val OLD_PRIV = "b2xkLXdyYXBwZWQtcHJpdg=="
-        const val OLD_PW_WRAP = "b2xkLXBhc3N3b3JkLXdyYXA="
-        const val OLD_REC_WRAP = "b2xkLXJlY292ZXJ5LXdyYXA="
-
-        const val NEW_IDENTITY_PUB = "bmV3LWlkZW50aXR5LXB1Yg=="
-        const val NEW_PRIV = "bmV3LXdyYXBwZWQtcHJpdg=="
-        const val NEW_PW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
-        const val NEW_REC_WRAP = "bmV3LXJlY292ZXJ5LXdyYXA="
-
-        const val OLD_PINS = "b2xkLXBpbnM="
-        const val NEW_PINS = "bmV3LXBpbnM="
-        const val OLD_PIN_ID = "0101010101010101010101010101010101010101010101010101010101010101"
-        const val OLD_ENTRY = "b2xkLXBpbi1lbnRyeQ=="
-        const val NEW_PIN_ID = "0202020202020202020202020202020202020202020202020202020202020202"
-        const val NEW_ENTRY = "bmV3LXBpbi1lbnRyeQ=="
-        const val OLD_REGISTER = "b2xkLXJlZ2lzdGVy"
-
-        const val CO_OWNER_PUB = "Y28tb3duZXItaWRlbnRpdHktcHVi"
-        const val ROT_PREV = "cm90LXByZXY="
-        const val ROTATOR_GRANT = "cm90YXRvci1ncmFudA=="
-        const val CO_OWNER_GRANT = "Y28tb3duZXItZ3JhbnQ="
-        const val SIG_FOR_ROTATOR = "c2lnbmVkLWZvci10aGUtcm90YXRvcg=="
-        const val SIG_FOR_CO_OWNER = "c2lnbmVkLWJ5LXRoZS1vbGQta2V5LWZvci10aGUtY28tb3duZXI="
-        const val NEW_REGISTER = "bmV3LXJlZ2lzdGVy"
-
-        /** The job's attempts budget (`veyq.tasks.max-attempts`) — every claim spends one. */
-        const val MAX_ATTEMPTS = 5
-        const val ROTATION_ORIGINATOR = "rotation_originator"
-
-        /** The Secret-Key proof key every seeded account registers; [OTHER_KEY] is a Secret Key it does not hold. */
-        val PROOF_KEY = TestProofKey()
-        val OTHER_KEY = TestProofKey()
-    }
+    private fun b64(b: ByteArray): String = Base64.getEncoder().encodeToString(b)
+    private fun decode(s: String): ByteArray = Base64.getDecoder().decode(s)
 }

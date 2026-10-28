@@ -40,10 +40,10 @@ with the vaulted identity → the scope key in memory) with **one deliberate sub
    the shell falls back to Personal (below). This subtraction is the crux: minting a tenant scope client-side
    would fork the single shared root.
 2. **Shared, many key-holders.** A personal scope has exactly one grant (its owner). A tenant scope is held by
-   **every member** who was granted it — the owner's cold-birth self-grant plus each member's invite-wrapped
-   grant. This enabler **opens whichever grant the caller holds**; it neither adds nor distributes grants —
+   **every member** who was granted it — the owner's cold-birth self-grant plus each member's self-grant, made at
+   accept from the key the invite held. This enabler **opens whichever grant the caller holds**; it neither adds nor distributes grants —
    **distribution is its own built flow** ([uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
-   [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)), see the Quality notes.
+   [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)), see the Quality notes.
 3. **Unnamed — but no longer anonymous.** The tenant scope carries **no sealed name**: its label is the tenant's
    own name, server-visible operational cleartext, not a sealed name like a group's
    ([en.spaces.group-scope](en.spaces.group-scope.md)). That is a **necessity, not a preference** — the Server
@@ -88,16 +88,19 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **E1 — no tenant grant for this member:** the caller is a tenant member but holds **no `TENANT` grant** — the
-  **awaiting-access** window between admission and grant-delivery wrapping `K_SC` to them
-  ([uc.spaces.add-member](../use-cases/uc.spaces.add-member.md)), so a **transient** state, not a standing one.
+- **E1 — no openable tenant grant for this member:** the caller is a tenant member whose `TENANT` grant does not
+  open — behind the scope's epoch or refused ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 6,
+  [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6) until grant-delivery
+  brings it current ([en.spaces.scope-key-rotation](en.spaces.scope-key-rotation.md) E2), so a **transient**
+  state, not a standing one. A new member is never here: they join holding a grant
+  ([uc.spaces.add-member](../use-cases/uc.spaces.add-member.md)).
   While it lasts the tenant space is **not openable** → the shell **falls back to Personal** as the effective home
   ([ADR 0019](../../../decisions/0019-token-less-tenant-home.md)); the tenant entry is surfaced as unavailable,
   not offered as an empty room.
 - **E1a — the tenant is suspended:** a second, **standing** reason for no grant. `my-tenants` lists the tenant
   with its status and withholds both the grant and the sealed icon — suspension refuses its members every read
   ([uc.spaces.scope-access](../use-cases/uc.spaces.scope-access.md)), and this listing is one of them — so the
-  switcher shows it offline instead of treating it as the awaiting-access window above.
+  switcher shows it offline instead of treating it as the waiting window above.
 - **E2 — not unlocked:** without the identity private bundle the client cannot open the grant → entering the
   tenant is deferred until after unlock (the deep-link-through-login restore of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) applies unchanged).
@@ -121,10 +124,10 @@ sequenceDiagram
 - **Auth ≠ content.** Holding a session does not open the tenant scope; only the identity-unwrapped grant
   yields the key (client-enforced confidentiality, [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md)).
 - **Grant distribution is a separate flow.** This enabler assumes the caller **already holds** a tenant grant
-  (the owner does, from cold birth). **Distributing** tenant grants to new members — invite a person, then wrap
-  `K_SC` to their identity — is [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md)
-  ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)), and it is **built**: a new member is
-  grant-less only until a key-holder comes online (E1), not indefinitely.
+  (the owner does, from cold birth). **Distributing** tenant grants to new members is
+  [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md), and it is **built**: the owner's invite holds a
+  grant to an owner-signed invite key, and the newcomer grants itself from it at accept
+  ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3).
 - **Every tenant's grant, in one Host-independent call.** `GET /api/scopes` is **Host-scoped** — it serves the
   scope rows of the tenant resolved from the request `Host`, and nothing of any other tenant.
   `GET /api/scopes/my-tenants` is **account-scoped** (`MembershipEntity.find("userId", …)`, no Host at all) and

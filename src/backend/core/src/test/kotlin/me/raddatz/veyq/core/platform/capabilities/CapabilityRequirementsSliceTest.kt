@@ -233,7 +233,7 @@ class CapabilityRequirementsSliceTest {
         given().header("Authorization", bearer(w.space.userId)).contentType(ContentType.JSON).body(body)
             .`when`().patch("/api/shares/${w.link}")
 
-    private data class GroupWorld(val owner: String, val domain: String, val tenantId: String, val groupId: String)
+    private data class GroupWorld(val owner: String, val domain: String, val tenantId: String, val groupId: String, val partner: String)
 
     /** A tenant with a group its owner created and a member "partner" whose own setting says no consent needed. */
     private fun groupWorld(): GroupWorld {
@@ -241,7 +241,7 @@ class CapabilityRequirementsSliceTest {
         val tenantId = seedTenant(owner = owner)
         val domain = "t-$tenantId.example.com"
         val groupId = given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${me.raddatz.veyq.core.TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${me.raddatz.veyq.core.membership.TestAdmission.SIGNATURE_JSON},${me.raddatz.veyq.core.membership.TestAdmission.json()}}""")
+            .body("""{"scopeId":"${me.raddatz.veyq.core.TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${me.raddatz.veyq.core.membership.TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${me.raddatz.veyq.core.membership.TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201).extract().path<String>("scopeId")
         val partner = seedUser(requireGroupAddConsent = false)
         QuarkusTransaction.requiringNew().run {
@@ -250,7 +250,7 @@ class CapabilityRequirementsSliceTest {
                 id = java.util.UUID.randomUUID().toString(); userId = partner; this.tenantId = tenantId; username = "partner"
             }.persist()
         }
-        return GroupWorld(owner, domain, tenantId, groupId)
+        return GroupWorld(owner, domain, tenantId, groupId, partner)
     }
 
     private fun resolveMember(g: GroupWorld): Response =
@@ -259,7 +259,7 @@ class CapabilityRequirementsSliceTest {
 
     private fun addMember(g: GroupWorld): Response =
         given().header("Authorization", bearer(g.owner)).header("X-Forwarded-Host", g.domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner",${me.raddatz.veyq.core.membership.TestAdmission.json()}}""")
+            .body("""{"username":"partner",${me.raddatz.veyq.core.membership.TestGrants.groupAddJson(g.groupId, g.partner)}}""")
             .`when`().post("/api/scopes/${g.groupId}/members")
 
     private fun refresh(token: String): Response =

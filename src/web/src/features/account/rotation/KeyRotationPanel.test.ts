@@ -1,267 +1,416 @@
 // @vitest-environment happy-dom
-// uc.account.rotate-keys §9 (web): the state of every rotation an account rotation queued is the SERVER's, read on
-// every visit — never a `waiting` the client synthesised once from the rotation's own response (ADR 0060
-// Decision 6). The derivation is the backend's (RotationSliceTest); here we pin that the panel reads it, renders each
-// state with its own hint, and offers the re-queue only where it can do anything: on `failed`.
+// uc.account.rotate-keys (web), the ceremony — ADR 0060 Decision 2 and § Phase 5. The mechanism
+// (`rotateKeys`, `finishRotation`) is its own suite; here the screen around it: the entry from the plan, the gate with
+// "Also choose a new password" pre-selected, the new Emergency Kit gating the publish (the REAL `EmergencyKitSave`, so
+// "ready" is its own downloaded AND confirmed), every error arm's copy, the per-space states, and the links to renew
+// (the real `linksToRenew`, over a faked share list) opening the node's own share dialog.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, h, ref, computed } from 'vue'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./rotateKeys', () => ({
   rotateKeys: vi.fn(),
-  // Keeps `reason`, so the panel's per-reason arms can be reached.
+  mintSecretKey: vi.fn(),
   RotationRefused: class extends Error {
     constructor(public readonly reason: string) {
       super(`rotation refused: ${reason}`)
     }
   },
-  listQueuedRotations: vi.fn(),
-  requeueQueuedRotation: vi.fn(),
+  RotationOutcomeUnknown: class extends Error {},
 }))
+vi.mock('../coldCredential', () => ({
+  proveColdCredential: vi.fn(),
+  ColdCredentialRefused: class extends Error {
+    constructor(public readonly reason: string) {
+      super(`cold credential refused: ${reason}`)
+    }
+  },
+}))
+vi.mock('./finishRotation', () => ({ listRotationStates: vi.fn(), readRotationPlan: vi.fn() }))
+vi.mock('./rotationEntry', () => ({ readRotationEntry: vi.fn() }))
 vi.mock('../../../app/vault', () => ({ unlockOrigin: () => 'cold' }))
-vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn(), listMyScopes: vi.fn() }))
-vi.mock('./soleOwnerSpaces', () => ({ soleOwnerSpaces: vi.fn() }))
+vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn(), listMyScopes: vi.fn(), openScopeById: vi.fn() }))
+vi.mock('../../../api/client', () => ({ sharesApi: vi.fn() }))
+vi.mock('../../../core/node/tree', () => ({ listTree: vi.fn(), nodeContentKey: vi.fn() }))
+vi.mock('../emergencyKit/emergencyKit', () => ({ renderKitPdf: vi.fn(), saveKitPdf: vi.fn() }))
+vi.mock('../passwordWarning', () => ({ useBreachCheck: vi.fn() }))
 
 import KeyRotationPanel from './KeyRotationPanel.vue'
-import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused } from './rotateKeys'
-import { listMyScopes, listMyTenants } from '../../spaces/scopes'
-import { soleOwnerSpaces } from './soleOwnerSpaces'
+import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused } from './rotateKeys'
+import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
+import { listRotationStates, readRotationPlan } from './finishRotation'
+import { readRotationEntry, type RotationEntry } from './rotationEntry'
+import { listMyScopes, listMyTenants, openScopeById } from '../../spaces/scopes'
+import { sharesApi } from '../../../api/client'
+import { listTree, nodeContentKey } from '../../../core/node/tree'
+import { registry } from '../../../core/applications/registry'
 import { forgetGroupNamesSeen, rememberGroupName } from '../../spaces/groupNamesSeen'
-import { ScopeKind, type ScopeSummary } from '../../../api/generated/scopes'
+import type { RotationPlanScope, RotationScopeState } from '../../../api/generated/account'
+import { ShareRole, type SharingApi, type ShareSummary } from '../../../api/generated/sharing'
+import type { ScopeSummary } from '../../../api/generated/scopes'
 import { realI18n, t } from '../../../test/i18n'
+import { fakeApi } from '../../../test/apiMock'
+import { useBreachCheck } from '../passwordWarning'
+import { renderKitPdf } from '../emergencyKit/emergencyKit'
+import { i18n } from '../../../i18n'
 import { myTenant } from '../../../test/models'
 
+const field = {
+  props: ['modelValue', 'inputId'],
+  emits: ['update:modelValue'],
+  template: '<input :id="inputId" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)">',
+}
 const stubs = {
-  VeyqButton: { props: ['label', 'icon'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqButton: {
+    props: ['label', 'icon', 'disabled'],
+    emits: ['click'],
+    template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>',
+  },
   VeyqMessage: { template: '<div class="msg"><slot /></div>' },
-  VeyqDialog: true,
-  VeyqPassword: true,
-  SecretKeyField: true,
+  VeyqDialog: { props: ['visible'], template: '<div v-if="visible" class="dialog"><slot /></div>' },
+  VeyqPassword: field,
+  SecretKeyField: field,
   EmailAddressSection: true,
   TrustResetLink: true,
+  PasswordBreachNotice: true,
 }
 
-const STATES = ['waiting', 'stalled', 'rekeying', 'secured', 'failed'] as const
-const scopeOf = (state: string) => `s-${state}`
+const MINTED = 'bmV3LXNlY3JldC1rZXktYmFzZTY0LXRoaXJ0eS10d28='
+const NEW_PASSWORD = 'a brand new passphrase'
 
-async function mountPanel() {
-  vi.mocked(listQueuedRotations).mockResolvedValue(STATES.map((state) => ({ scopeId: scopeOf(state), state })))
-  const wrapper = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
-  await flushPromises()
-  return wrapper
-}
+const planRow = (o: Partial<RotationPlanScope> & Pick<RotationPlanScope, 'scopeId'>): RotationPlanScope => ({
+  kind: 'GROUP', tenantId: 't1', currentEpoch: 0, wrappedGrant: 'AA==', grantedEpoch: 0, ...o,
+})
+const noEntry = (): RotationEntry => ({ plan: [], blocked: [], signedOpenInvites: false })
+const share = (o: Partial<ShareSummary> & Pick<ShareSummary, 'shareId'>): ShareSummary => ({
+  nodeId: `node-${o.shareId}`, scopeId: 's-here', role: ShareRole.Read, sealedName: 'AA==', enabled: true, mine: true,
+  reissueRequired: true, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [], createdAt: new Date(0), ...o,
+})
+const scopeSummary = (id: string): ScopeSummary => ({
+  id, kind: 'GROUP', role: 'OWNER', tenantId: 't1', nameEpoch: 0, iconEpoch: 0, currentEpoch: 0, grantedEpoch: 0, wrappedGrant: 'AA==',
+})
+const listShares = vi.fn<SharingApi['listShares']>()
 
 beforeEach(() => {
-  vi.mocked(soleOwnerSpaces).mockResolvedValue([])
+  vi.clearAllMocks()
+  forgetGroupNamesSeen()
+  vi.mocked(mintSecretKey).mockReturnValue(MINTED)
+  vi.mocked(listRotationStates).mockResolvedValue([])
+  vi.mocked(readRotationEntry).mockImplementation(async (plan) => ({ ...noEntry(), plan: plan ?? [] }))
+  vi.mocked(readRotationPlan).mockResolvedValue([])
+  vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(listMyScopes).mockResolvedValue([scopeSummary('s-here')])
+  vi.mocked(openScopeById).mockResolvedValue(null)
+  vi.mocked(proveColdCredential).mockResolvedValue(new Uint8Array(32))
+  listShares.mockResolvedValue([])
+  fakeApi(sharesApi, { listShares })
+  vi.mocked(renderKitPdf).mockResolvedValue(new Uint8Array([1]))
+  vi.mocked(useBreachCheck).mockReturnValue({
+    state: ref({ kind: 'idle' }), useAnyway: computed({ get: () => false, set: () => undefined }), checkNow: vi.fn(), proceed: vi.fn(async () => true),
+  })
 })
 
-const row = (w: ReturnType<typeof mount>, scopeId: string) => w.find(`[data-queued-scope="${scopeId}"]`)
-const requeueIn = (w: ReturnType<typeof mount>, scopeId: string) =>
-  row(w, scopeId).findAll('button').find((b) => b.text() === t('rotation.requeue'))
+async function mountPanel(): Promise<VueWrapper> {
+  const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
+  await flushPromises()
+  return w
+}
 
-describe('KeyRotationPanel — the queued rotations, as the server reads them', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(listMyTenants).mockResolvedValue([])
+const buttons = (w: VueWrapper, label: string) => w.findAll('button').filter((b) => b.text() === label)
+const row = (w: VueWrapper, attr: string, id: string) => w.find(`[${attr}="${id}"]`)
+
+/** Fill the gate: current password + Secret Key, and (pre-selected) the new password twice. */
+async function fillGate(w: VueWrapper, { newPassword = true } = {}) {
+  await w.find('#rotation-password').setValue('pw')
+  await w.find('#rotation-secret-key').setValue('secret')
+  if (newPassword) {
+    await w.find('#rotation-new-password').setValue(NEW_PASSWORD)
+    await w.find('#rotation-new-password-confirm').setValue(NEW_PASSWORD)
+  }
+}
+async function toKit(w: VueWrapper) {
+  await buttons(w, t('rotation.next'))[0].trigger('click')
+  await flushPromises()
+}
+/** The real kit step: download, then tick "I have saved it". */
+async function saveKit(w: VueWrapper, { confirm = true } = {}) {
+  await buttons(w, t('kit.download'))[0].trigger('click')
+  await flushPromises()
+  if (confirm) {
+    await w.find('.kit-confirm [role="checkbox"]').trigger('click')
+    await flushPromises()
+  }
+}
+const publishButton = (w: VueWrapper) => buttons(w, t('rotation.action'))[0]
+async function publish(w: VueWrapper) {
+  await publishButton(w).trigger('click')
+  await buttons(w, t('rotation.action')).at(-1)!.trigger('click')
+  await flushPromises()
+}
+async function throughTheCeremony(w: VueWrapper) {
+  await fillGate(w)
+  await toKit(w)
+  await saveKit(w)
+  await publish(w)
+}
+
+describe('the entry: plain words before any field, from the plan (decision 11)', () => {
+  it('lists the spaces that cannot get their new lock yet, each with the plan’s reason or the device’s', async () => {
+    vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 's-paused', name: 'Raddatz' })])
+    rememberGroupName('s-going', 'Urlaub')
+    vi.mocked(readRotationEntry).mockResolvedValue({
+      plan: [planRow({ scopeId: 's-paused', kind: 'TENANT' }), planRow({ scopeId: 's-going' }), planRow({ scopeId: 's-closed' })],
+      blocked: [
+        { scopeId: 's-paused', kind: 'TENANT', tenantId: 's-paused', reason: 'tenant_suspended' },
+        { scopeId: 's-going', kind: 'GROUP', tenantId: 't1', reason: 'scope_deleting' },
+        { scopeId: 's-closed', kind: 'GROUP', tenantId: 't1', reason: 'unreadable' },
+      ],
+      signedOpenInvites: false,
+    })
+    const w = await mountPanel()
+    expect(w.find('[data-testid="rotation-blocked"]').text()).toContain(t('rotation.blockedTitle'))
+    expect(row(w, 'data-blocked-scope', 's-paused').text()).toContain('Raddatz')
+    expect(row(w, 'data-blocked-scope', 's-paused').text()).toContain(t('rotation.blocked.tenant_suspended'))
+    expect(row(w, 'data-blocked-scope', 's-going').text()).toContain('Urlaub')
+    expect(row(w, 'data-blocked-scope', 's-going').text()).toContain(t('rotation.blocked.scope_deleting'))
+    expect(row(w, 'data-blocked-scope', 's-closed').text()).toContain(t('rotation.blocked.unreadable'))
+    expect(row(w, 'data-blocked-scope', 's-closed').text()).not.toContain('s-closed') // never the raw id
+    // The entry stands before the fields.
+    const html = w.html()
+    expect(html.indexOf('data-testid="rotation-blocked"')).toBeLessThan(html.indexOf('id="rotation-password"'))
   })
 
-  it('reads the states on mount and shows each with its own badge and hint', async () => {
+  it('control: nothing blocked, no list — and the facts still render', async () => {
     const w = await mountPanel()
-    expect(listQueuedRotations).toHaveBeenCalledTimes(1)
-    for (const state of STATES) {
-      const r = row(w, scopeOf(state))
-      expect(r.exists(), state).toBe(true)
-      expect(r.text()).toContain(t(`rotation.status.${state}`))
-      expect(r.text()).toContain(t(`rotation.queuedHint.${state}`))
+    expect(w.find('[data-testid="rotation-blocked"]').exists()).toBe(false)
+    expect(w.text()).toContain(t('rotation.factSharedSpaces'))
+    expect(w.text()).toContain(t('rotation.factNewKit'))
+  })
+
+  it('says invitations stop working only when this account signed open ones', async () => {
+    vi.mocked(readRotationEntry).mockResolvedValue({ ...noEntry(), signedOpenInvites: true })
+    expect((await mountPanel()).text()).toContain(t('rotation.factInvites'))
+    vi.mocked(readRotationEntry).mockResolvedValue(noEntry())
+    expect((await mountPanel()).text()).not.toContain(t('rotation.factInvites'))
+  })
+})
+
+describe('the gate and the new password (decision 7)', () => {
+  it('“Also choose a new password” is pre-selected, and the new password is what the publish installs', async () => {
+    vi.mocked(rotateKeys).mockResolvedValue({ outcome: 'published', states: [], unreadableScopeIds: [] })
+    const w = await mountPanel()
+    expect(w.find('#rotation-new-password-choice').attributes('data-state')).toBe('checked')
+    await throughTheCeremony(w)
+    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyB64: MINTED, password: NEW_PASSWORD })
+  })
+
+  it('control: unticked, the password is kept — the publish names none', async () => {
+    vi.mocked(rotateKeys).mockResolvedValue({ outcome: 'published', states: [], unreadableScopeIds: [] })
+    const w = await mountPanel()
+    await w.find('#rotation-new-password-choice').trigger('click')
+    expect(w.find('#rotation-new-password').exists()).toBe(false)
+    await fillGate(w, { newPassword: false })
+    await toKit(w)
+    await saveKit(w)
+    await publish(w)
+    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyB64: MINTED, password: undefined })
+  })
+
+  it('the gate proves the current credential before a kit is printed; a refusal stays on the gate', async () => {
+    vi.mocked(proveColdCredential).mockRejectedValue(new (ColdCredentialRefused as unknown as new (r: string) => Error)('credentialRejected'))
+    const w = await mountPanel()
+    await fillGate(w)
+    await toKit(w)
+    expect(proveColdCredential).toHaveBeenCalledWith('pw', 'secret')
+    expect(w.text()).toContain(t('rotation.errorCredential'))
+    expect(buttons(w, t('kit.download'))).toHaveLength(0)
+  })
+
+  it('a different new password and confirmation stay on the gate', async () => {
+    const w = await mountPanel()
+    await fillGate(w)
+    await w.find('#rotation-new-password-confirm').setValue('something else entirely')
+    await toKit(w)
+    expect(w.text()).toContain(t('changePassword.mismatch'))
+    expect(proveColdCredential).not.toHaveBeenCalled()
+  })
+
+  it('a floor that opens the account’s NEWER key (an earlier publish committed) finishes it without a kit', async () => {
+    vi.mocked(proveColdCredential).mockRejectedValue(new (ColdCredentialRefused as unknown as new (r: string) => Error)('vaultStale'))
+    vi.mocked(rotateKeys).mockResolvedValue({ outcome: 'resumed', states: [{ scopeId: 's-1', state: 'secured' }], unreadableScopeIds: [] })
+    const w = await mountPanel()
+    await fillGate(w)
+    await toKit(w)
+    expect(rotateKeys).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-testid="rotation-done"]').text()).toContain(t('rotation.doneOldKit'))
+  })
+})
+
+describe('the new Emergency Kit gates the publish (decision 7)', () => {
+  // Bite: `EmergencyKitSave` ready on the download alone (`ready = downloaded`) → the first case is red.
+  it('the publish stays disabled after the download until the kit is confirmed saved', async () => {
+    const w = await mountPanel()
+    await fillGate(w)
+    await toKit(w)
+    expect(publishButton(w).attributes('disabled')).toBeDefined()
+    await saveKit(w, { confirm: false })
+    expect(publishButton(w).attributes('disabled')).toBeDefined()
+    await w.find('.kit-confirm [role="checkbox"]').trigger('click')
+    await flushPromises()
+    expect(publishButton(w).attributes('disabled')).toBeUndefined()
+  })
+
+  it('the kit is printed from the very Secret Key the publish installs, and says to keep the old one until the end', async () => {
+    vi.mocked(rotateKeys).mockResolvedValue({ outcome: 'published', states: [], unreadableScopeIds: [] })
+    const w = await mountPanel()
+    await fillGate(w)
+    await toKit(w)
+    expect(w.text()).toContain(t('rotation.kitKeepOld'))
+    await saveKit(w)
+    expect(vi.mocked(renderKitPdf).mock.calls[0][0]).toMatchObject({ secretKey: MINTED })
+    await publish(w)
+    expect(vi.mocked(rotateKeys).mock.calls[0][2].secretKeyB64).toBe(MINTED)
+  })
+
+  it('the result says the old kit no longer works, and the minted key leaves the panel', async () => {
+    vi.mocked(rotateKeys).mockResolvedValue({ outcome: 'published', states: [{ scopeId: 's-1', state: 'waiting' }], unreadableScopeIds: [] })
+    const w = await mountPanel()
+    await throughTheCeremony(w)
+    expect(w.find('[data-testid="rotation-done"]').text()).toContain(t('rotation.doneOldKit'))
+    expect(w.find('.kit-save').exists()).toBe(false)
+    expect(row(w, 'data-queued-scope', 's-1').text()).toContain(t('rotation.status.waiting'))
+  })
+})
+
+describe('each failure says what it knows (decision 12)', () => {
+  const Refused = RotationRefused as unknown as new (r: string) => Error
+  const cases: [string, () => unknown, string][] = [
+    ['credentialRejected', () => new Refused('credentialRejected'), 'rotation.errorCredential'],
+    ['noFloorWrap', () => new Refused('noFloorWrap'), 'rotation.errorNoFloor'],
+    ['vaultLocked', () => new Refused('vaultLocked'), 'rotation.errorLocked'],
+    ['trustStateRefused', () => new Refused('trustStateRefused'), 'rotation.errorTrustState'],
+    ['requestTooLarge', () => new Refused('requestTooLarge'), 'rotation.errorTooLarge'],
+    ['an unknown outcome', () => new (RotationOutcomeUnknown as unknown as new () => Error)(), 'rotation.errorUnknownOutcome'],
+    ['a declared refusal of the publish', () => new Error('409 stale_revision'), 'rotation.errorFailed'],
+  ]
+  it.each(cases)('%s → its own copy', async (_name, error, key) => {
+    vi.mocked(rotateKeys).mockRejectedValue(error())
+    const w = await mountPanel()
+    await throughTheCeremony(w)
+    expect(w.text()).toContain(t(key))
+    for (const [, , other] of cases) if (other !== key) expect(w.text()).not.toContain(t(other))
+  })
+
+  it('neither the unknown outcome nor a refused credential says nothing was changed — they cannot know it', () => {
+    const say = (key: string, locale: 'en' | 'de') => i18n.global.t(key, {}, { locale })
+    for (const locale of ['en', 'de'] as const) {
+      const nothing = locale === 'en' ? /Nothing was changed/ : /Es wurde nichts geändert/
+      expect(say('rotation.errorFailed', locale)).toMatch(nothing) // control: the copy for a declared refusal does say it
+      expect(say('rotation.errorCredential', locale)).not.toMatch(nothing)
+      expect(say('rotation.errorCredential', locale)).toMatch(/new Emergency Kit|neuen Notfall-Kit/)
+      expect(say('rotation.errorUnknownOutcome', locale)).toMatch(/new Emergency Kit|neuen Notfall-Kit/)
     }
   })
-
-  it('offers the re-queue on the failed row only, and shows the answered state', async () => {
-    const w = await mountPanel()
-    for (const state of STATES.filter((s) => s !== 'failed')) expect(requeueIn(w, scopeOf(state)), state).toBeUndefined()
-    const control = requeueIn(w, scopeOf('failed'))
-    expect(control).toBeTruthy()
-
-    vi.mocked(requeueQueuedRotation).mockResolvedValue({ scopeId: scopeOf('failed'), state: 'waiting' })
-    await control!.trigger('click')
-    await flushPromises()
-
-    expect(requeueQueuedRotation).toHaveBeenCalledWith(scopeOf('failed'))
-    expect(row(w, scopeOf('failed')).text()).toContain(t('rotation.status.waiting'))
-    expect(requeueIn(w, scopeOf('failed'))).toBeUndefined()
-  })
 })
 
-// inbox #280: a queued group's name is sealed under a key the rotator cannot open until re-admitted. The row shows
-// the name this device last opened (held in memory only — nothing new is persisted), marked as possibly stale, or
-// a neutral label; never the raw scope id.
-describe('KeyRotationPanel — a queued group is labelled, never shown by id', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    forgetGroupNamesSeen()
-  })
-
-  it('shows a neutral label for a group this device never opened', async () => {
-    const w = await mountPanel()
-    const r = row(w, scopeOf('waiting'))
-    expect(r.text()).not.toContain(scopeOf('waiting'))
-    expect(r.text()).toContain(t('rotation.groupNameUnavailable'))
-  })
-
-  it('shows the name this device last opened, marked as possibly out of date', async () => {
-    rememberGroupName(scopeOf('stalled'), 'Familie')
-    const w = await mountPanel()
-    const r = row(w, scopeOf('stalled'))
-    expect(r.text()).toContain('Familie')
-    expect(r.text()).toContain(t('rotation.groupNameLastSeen'))
-    expect(r.text()).not.toContain(scopeOf('stalled'))
-    expect(r.text()).not.toContain(t('rotation.groupNameUnavailable'))
-    // The control on the same render: a row the device never opened still reads neutral, not 'Familie'.
-    expect(row(w, scopeOf('waiting')).text()).not.toContain('Familie')
-  })
-
-  it('a tenant root keeps its plaintext name, unmarked', async () => {
-    vi.mocked(listMyTenants).mockResolvedValueOnce([myTenant({ tenantId: scopeOf('secured'), name: 'Raddatz' })])
-    const w = await mountPanel()
-    const r = row(w, scopeOf('secured'))
-    expect(r.text()).toContain('Raddatz')
-    expect(r.text()).not.toContain(t('rotation.groupNameLastSeen'))
-    expect(r.text()).not.toContain(t('rotation.groupNameUnavailable'))
-  })
-})
-
-// inbox #281: the result list right after a rotation — the scopes this device re-keyed alone — carries ids only.
-// The personal space is named as such, a group by the name this device last opened (else neutral), a tenant root by
-// its plaintext name; never the raw id.
-describe('KeyRotationPanel — the scopes re-keyed alone are labelled, never shown by id', () => {
-  const scopeSummary = (o: Partial<ScopeSummary> & Pick<ScopeSummary, 'id' | 'kind'>): ScopeSummary => ({
-    role: 'OWNER',
-    tenantId: 'tenant-1',
-    nameEpoch: 0,
-    iconEpoch: 0,
-    currentEpoch: 0,
-    grantedEpoch: 0,
-    wrappedGrant: 'AA==',
-    ...o,
-  })
-  const field = { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)">' }
-  const rotatingStubs = { ...stubs, VeyqPassword: field, SecretKeyField: field, VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' } }
-  const alone = (w: ReturnType<typeof mount>, scopeId: string) => w.find(`[data-alone-scope="${scopeId}"]`)
-
-  async function rotate(scopes: { scopeId: string; status: 'secured' | 'failed' }[]) {
-    vi.mocked(listQueuedRotations).mockResolvedValue([])
-    vi.mocked(rotateKeys).mockResolvedValue({ scopes })
-    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs: rotatingStubs } })
-    await flushPromises()
-    const [pw, sk] = w.findAll('input')
-    await pw.setValue('pw')
-    await sk.setValue('secret')
-    await w.findAll('button').find((b) => b.text() === t('rotation.action'))!.trigger('click')
-    await w.findAll('button').filter((b) => b.text() === t('rotation.action')).at(-1)!.trigger('click')
-    await flushPromises()
-    return w
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    forgetGroupNamesSeen()
+describe('the spaces of the last rotation, as the server reads them (decision 8)', () => {
+  it('each state with its badge and hint; a blocked one says why; each named, never by id', async () => {
     vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 's-root', name: 'Raddatz' })])
-    vi.mocked(listMyScopes).mockResolvedValue([
-      scopeSummary({ id: 's-personal', kind: ScopeKind.Personal }),
-      scopeSummary({ id: 's-group', kind: ScopeKind.Group }),
-      scopeSummary({ id: 's-unseen', kind: ScopeKind.Group }),
-    ])
-  })
-
-  it('names each row by what this device knows, and shows no id', async () => {
     rememberGroupName('s-group', 'Familie')
-    const w = await rotate([
-      { scopeId: 's-personal', status: 'secured' },
-      { scopeId: 's-group', status: 'secured' },
-      { scopeId: 's-root', status: 'failed' },
-      { scopeId: 's-unseen', status: 'secured' },
-      { scopeId: 's-elsewhere', status: 'secured' },
-    ])
-    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret')
-
-    expect(alone(w, 's-personal').text()).toContain(t('rotation.personalSpace'))
-    expect(alone(w, 's-group').text()).toContain('Familie')
-    expect(alone(w, 's-group').text()).toContain(t('rotation.groupNameLastSeen'))
-    expect(alone(w, 's-root').text()).toContain('Raddatz')
-    expect(alone(w, 's-unseen').text()).toContain(t('rotation.scopeNameUnavailable'))
-    expect(alone(w, 's-elsewhere').text()).toContain(t('rotation.scopeNameUnavailable'))
-    for (const id of ['s-personal', 's-group', 's-root', 's-unseen', 's-elsewhere']) {
-      expect(alone(w, id).text(), id).not.toContain(id)
-      expect(alone(w, id).text(), id).toContain(t(`rotation.statusHint.${id === 's-root' ? 'failed' : 'secured'}`))
+    vi.mocked(readRotationPlan).mockResolvedValue([planRow({ scopeId: 's-personal', kind: 'PERSONAL', tenantId: 't2' })])
+    const states: RotationScopeState[] = [
+      { scopeId: 's-personal', state: 'secured' },
+      { scopeId: 's-root', state: 'rekeying' },
+      { scopeId: 's-group', state: 'waiting' },
+      { scopeId: 's-unseen', state: 'blocked', reason: 'tenant_suspended' },
+    ]
+    vi.mocked(listRotationStates).mockResolvedValue(states)
+    const w = await mountPanel()
+    expect(row(w, 'data-queued-scope', 's-personal').text()).toContain(t('rotation.personalSpace')) // another tenant’s, from the plan
+    expect(row(w, 'data-queued-scope', 's-root').text()).toContain('Raddatz')
+    expect(row(w, 'data-queued-scope', 's-group').text()).toContain('Familie')
+    expect(row(w, 'data-queued-scope', 's-group').text()).toContain(t('rotation.groupNameLastSeen'))
+    expect(row(w, 'data-queued-scope', 's-unseen').text()).toContain(t('rotation.scopeNameUnavailable'))
+    for (const s of states.slice(0, 3)) {
+      expect(row(w, 'data-queued-scope', s.scopeId).text()).toContain(t(`rotation.status.${s.state}`))
+      expect(row(w, 'data-queued-scope', s.scopeId).text()).toContain(t(`rotation.queuedHint.${s.state}`))
     }
-  })
-
-  it('a failed read of the labels leaves every row neutral, still without its id', async () => {
-    vi.mocked(listMyScopes).mockRejectedValue(new Error('offline'))
-    vi.mocked(listMyTenants).mockRejectedValue(new Error('offline'))
-    const w = await rotate([{ scopeId: 's-personal', status: 'secured' }])
-    expect(alone(w, 's-personal').text()).toContain(t('rotation.scopeNameUnavailable'))
-    expect(alone(w, 's-personal').text()).not.toContain('s-personal')
+    expect(row(w, 'data-queued-scope', 's-unseen').text()).toContain(t('rotation.status.blocked'))
+    expect(row(w, 'data-queued-scope', 's-unseen').text()).toContain(t('rotation.blocked.tenant_suspended'))
+    for (const s of states) expect(row(w, 'data-queued-scope', s.scopeId).text()).not.toContain(s.scopeId)
   })
 })
 
-describe('KeyRotationPanel — the spaces this account owns alone, before the button (uc.account.rotate-keys E4)', () => {
-  beforeEach(() => {
-    vi.mocked(listMyTenants).mockResolvedValue([])
-    vi.mocked(listQueuedRotations).mockResolvedValue([])
-  })
-  const line = (w: ReturnType<typeof mount>) => w.find('[data-testid="rotation-sole-owner"]')
-
-  it('names each one under the warning, a space it cannot open by the neutral label', async () => {
-    vi.mocked(soleOwnerSpaces).mockResolvedValue([{ scopeId: 'g1', name: 'Urlaub' }, { scopeId: 'g2', name: null }])
-    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
-    await flushPromises()
-    expect(line(w).text()).toContain(t('rotation.soleOwner'))
-    expect(line(w).findAll('li').map((li) => li.text())).toEqual(['Urlaub', t('rotation.scopeNameUnavailable')])
+describe('the links to renew (decision 13)', () => {
+  const ShareDialogStub = defineComponent({
+    props: ['scopeId', 'nodeId', 'nodeKey', 'nodeEpoch', 'epochs', 'nodeName', 'nodeKind', 'uploader', 'contribute'],
+    emits: ['close'],
+    setup: (props, { emit }) => () => h('div', { class: 'share-dialog-stub', 'data-node': props.nodeId, onClick: () => emit('close') }),
   })
 
-  it('shows no warning when there is none', async () => {
-    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
-    await flushPromises()
-    expect(line(w).exists()).toBe(false)
-    expect(w.text()).toContain(t('rotation.factLinks')) // control: the facts did render
-  })
-})
-
-// uc.account.rotate-keys E10: a rotation the server refused as too large says so, with copy that does not ask for a
-// retry; every other failure keeps the generic copy.
-describe('KeyRotationPanel — what a failed rotation says', () => {
-  const field = { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)">' }
-  const rotatingStubs = { ...stubs, VeyqPassword: field, SecretKeyField: field, VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' } }
-
-  async function rotateFailing(failure: unknown) {
-    vi.mocked(listQueuedRotations).mockResolvedValue([])
-    vi.mocked(rotateKeys).mockRejectedValue(failure)
-    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs: rotatingStubs } })
-    await flushPromises()
-    const [pw, sk] = w.findAll('input')
-    await pw.setValue('pw')
-    await sk.setValue('secret')
-    await w.findAll('button').find((b) => b.text() === t('rotation.action'))!.trigger('click')
-    await w.findAll('button').filter((b) => b.text() === t('rotation.action')).at(-1)!.trigger('click')
-    await flushPromises()
-    return w
+  async function afterRotation(shares: ShareSummary[]) {
+    listShares.mockResolvedValue(shares)
+    vi.mocked(listRotationStates).mockResolvedValue([{ scopeId: 's-here', state: 'secured' }])
+    return mountPanel()
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(listMyTenants).mockResolvedValue([])
-    vi.mocked(listMyScopes).mockResolvedValue([])
+  it('a link the server marks reissueRequired renders Renew; one without the flag, or someone else’s, does not', async () => {
+    const w = await afterRotation([
+      share({ shareId: 'flagged' }),
+      share({ shareId: 'fresh', reissueRequired: false }),
+      share({ shareId: 'theirs', mine: false }),
+    ])
+    expect(listShares).toHaveBeenCalledWith() // account-wide: no nodeId
+    expect(row(w, 'data-renew-share', 'flagged').find('button').text()).toBe(t('rotation.renew'))
+    expect(row(w, 'data-renew-share', 'fresh').exists()).toBe(false)
+    expect(row(w, 'data-renew-share', 'theirs').exists()).toBe(false)
   })
 
-  it('a refusal as too large shows the copy that names the Server Owner', async () => {
-    const w = await rotateFailing(new (RotationRefused as unknown as new (r: string) => Error)('requestTooLarge'))
-    expect(w.text()).toContain(t('rotation.errorTooLarge'))
-    expect(w.text()).not.toContain(t('rotation.errorFailed'))
+  it('control: no flagged link, no list', async () => {
+    const w = await afterRotation([share({ shareId: 'fresh', reissueRequired: false })])
+    expect(w.find('[data-testid="rotation-links"]').exists()).toBe(false)
   })
 
-  it('control: any other failure keeps the generic copy', async () => {
-    const w = await rotateFailing(new Error('offline'))
-    expect(w.text()).toContain(t('rotation.errorFailed'))
-    expect(w.text()).not.toContain(t('rotation.errorTooLarge'))
+  it('a link in another tenant’s space says to open that tenant, with no button; an upload link says to make a new one', async () => {
+    vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't2', name: 'Verein' })])
+    vi.mocked(readRotationPlan).mockResolvedValue([planRow({ scopeId: 's-there', tenantId: 't2' })])
+    const w = await afterRotation([share({ shareId: 'there', scopeId: 's-there' }), share({ shareId: 'drop', role: ShareRole.WriteOnly })])
+    expect(row(w, 'data-renew-share', 'there').text()).toContain(t('rotation.linkElsewhere', { tenant: 'Verein' }))
+    expect(row(w, 'data-renew-share', 'there').find('button').exists()).toBe(false)
+    expect(row(w, 'data-renew-share', 'drop').text()).toContain(t('rotation.linkUpload'))
+    expect(row(w, 'data-renew-share', 'drop').find('button').text()).toBe(t('rotation.linkOpen'))
+  })
+
+  it('Renew opens that node’s share dialog through the registry, with the props its page hands it; closing zeroes its keys', async () => {
+    const nodeKey = new Uint8Array(32).fill(5)
+    const epochKey = new Uint8Array(32).fill(6)
+    vi.mocked(openScopeById).mockResolvedValue({
+      scopeId: 's-here', tenantId: 't1', kind: 'GROUP', key: new Uint8Array(32).fill(4), epochs: { current: 0, keys: new Map([[0, epochKey]]) },
+      nameEpoch: 0, deletedAt: null, purgeAfter: null,
+    } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    vi.mocked(listTree).mockResolvedValue([{ id: 'node-flagged', kind: 'FOLDER', name: 'Reisen', epoch: 0 } as unknown as Awaited<ReturnType<typeof listTree>>[number]])
+    vi.mocked(nodeContentKey).mockReturnValue(nodeKey)
+    const kindOf = vi.spyOn(registry, 'kind').mockReturnValue({ supported: true, shareDialog: ShareDialogStub } as unknown as ReturnType<typeof registry.kind>)
+    const w = await afterRotation([share({ shareId: 'flagged' })])
+    expect(row(w, 'data-renew-share', 'flagged').text()).toContain('Reisen') // the node’s name as this device opens it
+    await row(w, 'data-renew-share', 'flagged').find('button').trigger('click')
+    await flushPromises()
+    const dialog = w.findComponent(ShareDialogStub)
+    expect(dialog.exists()).toBe(true)
+    expect(kindOf).toHaveBeenCalledWith('FOLDER')
+    expect(dialog.props()).toMatchObject({ scopeId: 's-here', nodeId: 'node-flagged', nodeName: 'Reisen', nodeKind: 'FOLDER', uploader: false, contribute: false })
+    await dialog.trigger('click') // the dialog's close
+    await flushPromises()
+    expect(w.findComponent(ShareDialogStub).exists()).toBe(false)
+    expect(nodeKey.every((b) => b === 0)).toBe(true)
+    expect(epochKey.every((b) => b === 0)).toBe(true)
+    kindOf.mockRestore()
+  })
+
+  it('a node that does not open here says so instead of a dialog', async () => {
+    const w = await afterRotation([share({ shareId: 'flagged' })])
+    await row(w, 'data-renew-share', 'flagged').find('button').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain(t('rotation.renewFailed'))
   })
 })

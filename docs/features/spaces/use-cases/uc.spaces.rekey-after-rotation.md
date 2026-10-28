@@ -2,11 +2,13 @@
 
 - **ID:** uc.spaces.rekey-after-rotation
 - **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; an
-  owner's scope-rotation worker, for a queued rotation (an account rotation, a tenant removal that cut a co-shared
-  group) or an explicit re-key; the rotator's own, for the personal scope — and, if that device stops, **any owner
-  holding the current epoch**, through their worker.
-- **Secondary actor:** Every other **writer** of the scope — members and guests — whose writes into a node wait while
-  that node is re-keyed.
+  owner's scope-rotation worker, for a queued rotation (a tenant removal that cut a co-shared group) or an explicit
+  re-key; a secured account's own device, for every scope its rotation re-granted — and, in the background, **any member
+  holding the current epoch**, through their worker ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 11: a re-key is not governance). A drop box and what its guests hold in it are re-keyed by an **owner**
+  only.
+- **Secondary actor:** Every other **writer** of the scope. A member's write into a node not yet re-keyed re-keys
+  that node's path first and goes through; a guest's waits until a member's or an owner's device has reached its node.
 - **Goal:** After a rotation, nothing added to the space seals under a key the excluded party holds — inside a
   folder, Memory or chapter that existed before it as much as at the scope root
   ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
@@ -27,17 +29,20 @@
    and EXIF; every `K_blob` wrap; its buckets' and its contributors' names; its drop key, replaced; every share
    rooted on it, re-wrapped under that share's `K_share` from its recovery copy. A large node's fields may go up in
    parts before the commit.
-3. **Writers wait per node.** Until a node is committed, every write sealed under its key is `409 node_rekey_pending`,
-   and the writer retries; a write stating the node's key from before is `409 stale_epoch`, and the writer re-reads.
-   A node already committed takes writes at once.
+3. **A member's write pulls its path; a guest waits per node.** Until a node is committed, every write sealed under its
+   key is `409 node_rekey_pending`. A member's client then re-keys that node and its lagging ancestors (step 2 on that
+   path only) and retries at once: its write is delayed by its path's re-key, not refused. A guest's client — it holds
+   no key above its root — waits and retries. A write stating the node's key from before is `409 stale_epoch`, and the
+   writer re-reads once. A node already committed takes writes at once.
 4. **Finish.** When no node of the scope is below `n+1`, the rotation is *secured*; a queued job may now complete.
 
 ## Alternate / exception flows
 
 - **E1 — the device stops halfway.** Every committed node opens from its parent's current key, so the tree reads as
-  it stands. The rotation reads *re-keying*; the unreached nodes keep waiting for writes. Any owner's worker that
-  holds `E_{n+1}` resumes at the first node still below `n+1`; for the personal scope, the owner's own device on its
-  next unlock.
+  it stands. The rotation reads *re-keying* on every member's scope row. Any member's worker that holds `E_{n+1}`
+  resumes at the first node still below `n+1` (every 45 s while unlocked, and when the tab becomes visible); for the
+  personal scope, the owner's own device on its next unlock. Two devices re-keying the same node leave one commit: the
+  second is `409 stale_epoch` and re-lists.
 - **E2 — a writer races the commit.** Both take the node's row lock. The writer that loses sees `node_rekey_pending`
   or `stale_epoch` and retries against the new key; nothing lands under the old one, nothing is orphaned.
 - **E3 — a guest's open page.** Its keys are from before; its next write is `stale_epoch`, and the page re-resolves
@@ -50,6 +55,15 @@
   excluded party can rebuild its `K_share`. Its re-issue closes it.
 - **E6 — a node a moderation hold copied.** The hold is a snapshot of the stored ciphertext and stays as it is; the
   report's keys keep opening what was reported.
+- **E7 — a drop box.** A drop box (Depot's: its guests get identity folders), a guest's identity folder and what lies
+  below one are an **owner's** to re-key ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  Decision 11): the listing marks them, a member's worker skips them (the scope then stays *re-keying* until an
+  owner's device runs), a member's operation on one is `403 not_scope_owner`, and a member's write into one waits
+  like a guest's. A Memory or chapter with an uploader link carries a drop key too, but members write into it: any
+  member re-keys it, its drop key included (ADR 0111 decision 11).
+- **E8 — a member's write that carries ciphertext under the old key.** A cover, a banner and a medium's meta edit
+  hold a wrap or a sealed copy under the node's key from before, and an import writes through its own steps: these
+  are not pulled forward yet and wait for the background re-key or are refused at the device floor (inbox #563).
 
 ## Quality notes
 
@@ -64,6 +78,8 @@
 ## User impact
 
 After a space gets new keys, whoever was shut out cannot read anything added to it, wherever in the space it goes.
+A member keeps adding to the space right away: their own device fits the new lock on what they add to, and every
+member's device finishes the rest in the background.
 
 ## Related
 
@@ -75,5 +91,5 @@ After a space gets new keys, whoever was shut out cannot read anything added to 
 - Decisions: [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md), [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
-- End-user view (docs site): [Replace your keys](../../../../site/src/content/docs/account/replace-your-keys.mdx),
+- End-user view (docs site): [Secure your account](../../../../site/src/content/docs/account/replace-your-keys.mdx),
   [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

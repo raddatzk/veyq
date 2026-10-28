@@ -8,7 +8,7 @@ import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type O
 import { getTenantTerms } from '../features/tenant/tenantTerms'
 import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
 import { setTenantCapabilities } from '../shared/state/useCapabilities'
-import { zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
+import { copyEpochKeys, zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
@@ -23,6 +23,8 @@ import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/inv
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
 import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
+import { carryProfileForward } from '../features/account/profile/carryProfileForward'
+import { account } from './account'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -98,9 +100,10 @@ export function activeEpochKeys(): EpochKeys | null {
  * can't be resolved from the Host (404), or `error` otherwise. Requires an unlocked vault (the identity opens the
  * grant).
  *
- * **No client birth of the tenant scope** (ADR 0006): the token-less home is *open-only*. When the caller holds
- * no `TENANT` grant (tenant member-invite is unbuilt), it **falls back to Personal** and flags the tenant
- * unavailable (ADR 0019, en.spaces.tenant-scope E1) — never a `POST`. A `@<slug|id>` group is resolved against the
+ * **No client birth of the tenant scope** (ADR 0006): the token-less home is *open-only*. When the caller's `TENANT`
+ * grant does not open — it is behind the scope's epoch, or refused (ADR 0024 Decision 6, ADR 0028 Decision 6) — it
+ * **falls back to Personal** and flags the tenant unavailable (ADR 0019, en.spaces.tenant-scope E1) — never a `POST`.
+ * A new member is never here: every membership is born with its grant (ADR 0111). A `@<slug|id>` group is resolved against the
  * caller's own scope list (readable slug, or opaque id for a legacy/collision link — en.spaces.group-scope,
  * cr-0032/0120); an unresolvable one falls back to Personal too. Only Personal auto-births.
  */
@@ -159,15 +162,18 @@ export async function enterScope(token: string): Promise<void> {
     // attention badge reflects it. Not awaited — the badge updates whenever it resolves; scope entry never blocks
     // on it, and a failure just leaves the count at 0 (fail-quiet in refreshMyInvitations).
     void refreshMyInvitations()
-    // As a key-holder, keep delivering the scope key to any pending member (cr-0076/cr-0077, first-online-wins):
-    // deliver on entry and then poll in the background so "awaiting access" closes without a re-entry (cr-0079).
-    // A shared TENANT/GROUP scope may have grant-less members; Personal never does, so it just stops any poll.
+    // As a key-holder, keep delivering the scope key to any member whose grant is behind (cr-0076, first-online-wins):
+    // deliver on entry and then poll in the background so the wait for the current key closes without a re-entry
+    // (cr-0079). A shared TENANT/GROUP scope may have members a rotation skipped; Personal never does, so it just stops
+    // any poll.
     if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, opened.kind, activeWriteKey)
     else stopGrantDeliveryPolling()
     // Also drain any queued scope-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — an owner
-    // completes a queued rotation for ANY scope they own (the server offers it to owners only), without opening it. Session-level
+    // completes a queued rotation for ANY scope they own (the server offers it to owners only), without opening it, and
+    // every member's device continues an unfinished re-key of any scope it holds (ADR 0111 decision 11). Session-level
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
+    carryOwnProfile(opened)
   } catch (err) {
     if (mine !== entry) return // superseded: the newer entry (or the clear) owns the status
     // A suspended tenant (uc.spaces.scope-access A7): on this domain's own tenant the router takes over with the
@@ -207,6 +213,16 @@ export async function refreshActiveScope(): Promise<void> {
   // member's master key, not an epoch key — ADR 0068) but are re-read here, because the reset above dropped them.
   if (!favoritesStore.loaded) await loadFavoritesFor(activeSpace.scopeId) // once per reset
   await registry.scopeEntered(activeSpace.scopeId)
+  carryOwnProfile(opened)
+}
+
+/** On entering the TENANT scope (and after its rotation), move the caller's own name and picture forward to its current
+ *  epoch when a rotation left them under an older one (`carryProfileForward`, ADR 0023). Not awaited: the shell never
+ *  waits for it. It runs on a copy of the keys, zeroed when it settles, since the active ones may be zeroed by a switch. */
+function carryOwnProfile(opened: OpenedScope): void {
+  if (opened.kind !== ScopeKind.Tenant || opened.epochs.current === 0) return
+  const epochs = copyEpochKeys(opened.epochs)
+  void carryProfileForward({ tenantId: opened.tenantId, scopeId: opened.scopeId, epochs }, account.userId).finally(() => zeroEpochKeys(epochs))
 }
 
 /** Drop the active space + zero the held key (logout / re-lock). */

@@ -60,17 +60,26 @@ acceptanceCriteria:
           - src/core/people/PersonProfile.test.ts
           - src/features/account/profile/useNameAndPicture.test.ts
   - id: set-at-join-or-after-first-unlock
-    text: A tenant owner seals name and picture together at accept; a joining member, holding no `K_tenant`, is offered the picture after the first unlock, with no unsealed image cached.
+    text: A joiner seals name and picture together at accept — a tenant owner with the key it births, a member with the key its invite's grant carries; one who skipped both is offered them once the device holds the tenant key, with no unsealed image cached.
     coverage:
       backend:
         integration:
           - MemberAvatarSliceTest.theOwnerJoinSealsThePictureAtAcceptWithRevisionOne
-          - MemberAvatarSliceTest.registerAndAcceptSealsThePictureOnlyOnTheOwnerPath
+          - MemberAvatarSliceTest.registerAndAcceptSealsThePictureOnBothPaths
           - MemberAvatarSliceTest.anOversizeOrMalformedAvatarOnAnAcceptBodyIs400AndSpendsNothing
       web:
         unit:
           - src/views/TenantJoinView.avatar.test.ts
+          - src/views/TenantJoinView.member.test.ts
           - src/features/account/profile/FinishProfilePrompt.test.ts
+  - id: picture-opens-across-a-rotation
+    text: A picture saved under an earlier tenant epoch opens for every member holding that epoch; on entering the tenant the member's own client seals the same bytes again under the current epoch, writing only while the stored revision is still the one it opened.
+    coverage:
+      web:
+        unit:
+          - src/core/people/profileAcrossRotation.test.ts
+          - src/features/account/profile/carryProfileForward.test.ts
+        e2e: [src/features/account/profile/profileAcrossRotation.e2e.test.ts]
   - id: removal-clears-picture-keeps-handle
     text: Removing a member from the tenant clears `sealed_avatar` and bumps the revision but keeps the username.
     coverage:

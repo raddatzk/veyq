@@ -14,11 +14,11 @@ acceptanceCriteria:
   - id: joins-only-an-unclaimed-job
     text: >
       An event joins a rotation job only while it is PENDING, read under a row lock on the scope row's lock: a removal
-      or an account rotation that arrives once an owner claimed the job gets a fresh job of its own, and a claim
+      that arrives once an owner claimed the job gets a fresh job of its own, and a claim
       racing a join waits for the event to commit, so it holds the job the event joined (D3/D4, #178 (2)). Many
       removals before anyone claims still cost one rotation.
     coverage:
-      backend: { integration: [QueuedRotationSliceTest.aRemovalDuringALeaseGetsItsOwnJob, QueuedRotationSliceTest.aClaimRacingAJoinLandsAfterTheEvent, RotationSliceTest.anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
+      backend: { integration: [QueuedRotationSliceTest.aRemovalDuringALeaseGetsItsOwnJob, QueuedRotationSliceTest.aClaimRacingAJoinLandsAfterTheEvent, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
   - id: done-only-on-the-holders-commit
     text: >
       A scope-rotation job completes only once its lease holder committed an epoch of its scope while holding the
@@ -35,9 +35,8 @@ acceptanceCriteria:
       backend: { integration: [QueuedRotationSliceTest.aDeliveryCompletionThatLostItsLeaseWritesNothing, QueuedRotationSliceTest.aRotationCompletionThatLostItsLeaseWritesNothing] }
   - id: refusals-about-the-worker-decline
     text: >
-      A worker whose commit is refused for a reason about itself — stale_epoch, not_scope_owner (demoted between
-      claim and commit) or rotation_excluded (it rotated its own account while holding the lease) — declines the
-      job, releasing it to the other owners without spending an attempt; any other error fails it (D2).
+      A worker whose commit is refused for a reason about itself — stale_epoch or not_scope_owner (demoted between
+      claim and commit) — declines the job, releasing it to the other owners without spending an attempt; any other error fails it (D2).
     coverage:
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
   - id: server-originated-tags-refused-at-enqueue
@@ -52,10 +51,10 @@ acceptanceCriteria:
       E2/E8: an OWNER's own scope row (ScopeSummary, and MyTenant for a tenant root) carries compromiseRotation
       stalled (no owner both holds a grant and has not declined the job) or failed (it dead-lettered); a plain
       member's row never does. The member panel shows it — failed with the re-queue, stalled with the promote hint —
-      and the sidebar marks the space. An owner's re-queue excludes every failed rotator again and not the caller;
+      and the sidebar marks the space. An owner's re-queue originates it again, excluding nobody (an account rotation queues no job);
       anything but failed is 409 rotation_not_failed, a non-owner 403 not_scope_owner, nothing written (D10, #234).
     coverage:
-      backend: { integration: [RotationSliceTest.anOwnerSeesAStuckCompromiseRotationOnTheirOwnRowAndRequeuesIt] }
+      backend: { integration: [QueuedRotationSliceTest.anOwnerSeesAStuckQueuedRotationOnTheirOwnRowAndRequeuesIt] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/components/app/AppSidebar.test.ts] }
   - id: done-only-once-rekeyed
     text: >
@@ -68,10 +67,12 @@ acceptanceCriteria:
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
   - id: an-unfinished-rekey-resumes
     text: >
-      E10: while a node lags, an owner's own scope row carries rekeying, derived from the node rows and never on a
-      plain member's row; each run of an owner's worker resumes every scope reading rekeying before it claims
-      anything, and a job whose epoch an earlier lease committed completes once the re-key is done, without a second
-      rotation.
+      E10: while a node lags, every member's own scope row carries rekeying, derived from the node rows; each run of
+      any member's worker resumes every scope reading rekeying before it claims anything, and a job whose epoch an
+      earlier lease committed completes once the re-key is done, without a second rotation.
     coverage:
-      backend: { integration: [RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags] }
+      backend:
+        integration:
+          - RekeyCoreSliceTest.anOwnersScopeRowReadsRekeyingWhileANodeLags
+          - RekeyCoreSliceTest.aMembersScopeRowReadsRekeyingWhileANodeLags
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }

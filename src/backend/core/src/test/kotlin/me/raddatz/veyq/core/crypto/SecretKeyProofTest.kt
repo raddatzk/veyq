@@ -25,15 +25,46 @@ class SecretKeyProofTest {
     @Test
     fun theRotationStatementIsTheVectorsAndItsSignatureVerifies() {
         val r = v["rotation"]
-        val stmt = SecretKeyProof.rotationStatement(
-            currentIdentityPublicKey = b64(r["current_identity_public_key"]),
-            identityPublicKey = b64(r["identity_public_key"]),
-            wrappedIdentityPrivateKey = b64(r["wrapped_identity_private_key"]),
-            passwordWrap = wrap(r["password_wrap"]),
-            recoveryWrap = wrap(r["recovery_wrap"]),
-        )
+        val stmt = rotationStatement(r)
         assertStatementAndSignature(r, stmt)
+        // Possession: the NEW proof key signs the same bytes — and the current key's signature is not it (control).
+        assertTrue(SecretKeyProof.verify(b64(r["secret_key_proof_public_key"]), stmt, b64(r["possession_signature"])))
+        assertFalse(SecretKeyProof.verify(b64(r["secret_key_proof_public_key"]), stmt, b64(r["signature"])))
     }
+
+    @Test
+    fun theRotationStatementBindsTheStepTheStageAndTheKeysItInstalls() {
+        // Each bound value, changed alone, makes a statement the vector's signature does not answer for.
+        val r = v["rotation"]
+        val sig = b64(r["signature"])
+        val step = hex(r["key_chain_step_statement"])
+        val digest = hex(r["staged_grants_digest"])
+        assertFalse(SecretKeyProof.verify(publicKey, rotationStatement(r, step = step + 0), sig), "another step")
+        assertFalse(SecretKeyProof.verify(publicKey, rotationStatement(r, digest = digest.reversedArray()), sig), "another stage set")
+        assertFalse(SecretKeyProof.verify(publicKey, rotationStatement(r, stageId = "5a6e0000-0000-4000-8000-0000000000a2"), sig), "another stage")
+        assertFalse(SecretKeyProof.verify(publicKey, rotationStatement(r, auth = b64(r["current_auth_public_key"])), sig), "another auth key")
+        assertTrue(SecretKeyProof.verify(publicKey, rotationStatement(r), sig), "control: the vector's own values")
+    }
+
+    private fun rotationStatement(
+        r: JsonNode,
+        step: ByteArray = hex(r["key_chain_step_statement"]),
+        digest: ByteArray = hex(r["staged_grants_digest"]),
+        stageId: String = r["stage_id"].asText(),
+        auth: String = b64(r["auth_public_key"]),
+    ) = SecretKeyProof.rotationStatement(
+        currentIdentityPublicKey = b64(r["current_identity_public_key"]),
+        identityPublicKey = b64(r["identity_public_key"]),
+        wrappedIdentityPrivateKey = b64(r["wrapped_identity_private_key"]),
+        passwordWrap = wrap(r["password_wrap"]),
+        recoveryWrap = wrap(r["recovery_wrap"]),
+        keyChainStepStatement = step,
+        currentAuthPublicKey = b64(r["current_auth_public_key"]),
+        authPublicKey = auth,
+        secretKeyProofPublicKey = b64(r["secret_key_proof_public_key"]),
+        stageId = stageId,
+        stagedGrantsDigest = digest,
+    )
 
     @Test
     fun theChangePasswordStatementIsTheVectorsAndItsSignatureVerifies() {

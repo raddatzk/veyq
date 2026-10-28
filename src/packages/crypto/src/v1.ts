@@ -215,6 +215,14 @@ export const kekRecovery = (recoveryCode: Uint8Array, salt: Uint8Array, params: 
   argon2id(recoveryCode, salt, params)
 
 /**
+ * A member invite link's KEK (ADR 0111 decision 1, ./invite.ts): `Argon2id(secret, salt)`, the secret the UTF-8 of the
+ * normalised generated code or of the password the owner chose (`inviteLinkSecret`). The operator holds the sealed
+ * link it protects and can guess offline, which is why it is stretched like a password. Pinned by `#invite_link`.
+ */
+export const kekInviteLink = (secret: Uint8Array, salt: Uint8Array, params: ArgonParams = ARGON): Uint8Array =>
+  argon2id(secret, salt, params)
+
+/**
  * DEVICE-wrap KEK (uc.account.trust-device): `Argon2id(deviceFactor + password)`. Same construction as
  * kekPasswordSecret — factor first, password second — but the device-bound factor (the HMAC of a
  * non-extractable WebCrypto key, computed by the platform glue) replaces the cold Secret Key, so a trusted
@@ -280,7 +288,9 @@ export const authVerify = (publicKey: Uint8Array, message: Uint8Array, signature
 // already that account's alone. (The recovery path could not carry one anyway: it has no session to read it from.)
 
 /** `seed = HKDF-SHA256(ikm = secretKey, salt = "", info = "veyq/v1/secret-key-proof")`, and from it an Ed25519
- *  keypair. Deterministic: the Secret Key never changes in these flows, so neither does this key. */
+ *  keypair. Deterministic: one Secret Key, one proof key. Securing the account (uc.account.rotate-keys) mints a new
+ *  Secret Key and so a new proof key, registered by the rotation under a signature of the current one; change-password,
+ *  recovery and change-email keep both. */
 export function deriveSecretKeyProofKeypair(secretKey: Uint8Array): AuthKeypair {
   const seed = hkdf(sha256, secretKey, new Uint8Array(0), utf8('veyq/v1/secret-key-proof'), 32)
   return { privateKey: seed, publicKey: ed25519.getPublicKey(seed) }
@@ -295,9 +305,13 @@ const statement = (domain: string, ...fields: Uint8Array[]): Uint8Array =>
   concat(lp(utf8(domain)), ...fields.map(lp))
 
 /**
- * Rotation (uc.account.rotate-keys): the identity it replaces, and everything it installs — the new identity
- * public bundle, the new identity private key under the new Master Key, and both rewritten cold wraps. Binding the
- * CURRENT identity is what makes a replay fail after the rotation it authorised: that identity is gone.
+ * Rotation (uc.account.rotate-keys, securing the account): the identity and auth key it replaces, and everything it
+ * installs — the new identity public bundle, the new identity private key under the new Master Key, both rewritten
+ * cold wraps, the key-chain step that names the new keys, the auth key, the new Secret-Key proof public key, and the
+ * stage of self-grants the publish applies (its id and its {@link rotationStageDigest}). Binding the CURRENT identity
+ * and auth key is what makes a replay fail after the rotation it authorised: both are gone. Signed by the current proof
+ * key (the gate) AND by the new one (possession: a client bug cannot register a proof key nobody holds), over the same
+ * bytes. Replaced in place, not versioned: no release has stored one (cr-secure-the-account).
  */
 export const rotationProofStatement = (s: {
   currentIdentityPublicKey: Uint8Array
@@ -305,15 +319,34 @@ export const rotationProofStatement = (s: {
   wrappedIdentityPrivateKey: Uint8Array
   passwordWrap: ProofWrap
   recoveryWrap: ProofWrap
-}): Uint8Array =>
-  statement(
+  keyChainStep: KeyChainStepStatement
+  currentAuthPublicKey: Uint8Array
+  authPublicKey: Uint8Array
+  secretKeyProofPublicKey: Uint8Array
+  stageId: string
+  stagedGrantsDigest: Uint8Array
+}): Uint8Array => {
+  if (typeof s.stageId !== 'string' || !CANONICAL_UUID.test(s.stageId)) {
+    throw new SealContextInvalid('rotation stageId is not a canonical lowercase UUID')
+  }
+  if (!(s.stagedGrantsDigest instanceof Uint8Array) || s.stagedGrantsDigest.length !== 32) {
+    throw new SealContextInvalid('rotation stagedGrantsDigest is not a SHA-256 digest')
+  }
+  return statement(
     'veyq/v1/secret-key-proof/rotation',
     sha256(s.currentIdentityPublicKey),
     sha256(s.identityPublicKey),
     sha256(s.wrappedIdentityPrivateKey),
     wrapDigest(s.passwordWrap),
     wrapDigest(s.recoveryWrap),
+    sha256(encodeStatement(s.keyChainStep)),
+    s.currentAuthPublicKey,
+    s.authPublicKey,
+    s.secretKeyProofPublicKey,
+    utf8(s.stageId),
+    s.stagedGrantsDigest,
   )
+}
 
 /** Change-password (uc.account.change-password): the auth key it replaces, the one it installs, and the new
  *  `PASSWORD` floor. */
@@ -388,30 +421,6 @@ export const eraseAccountAttestationStatement = (s: { userId: string; nonce: Uin
 export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)
 
 export const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n))
-
-// ── Admission tag (ADR 0020 move 6) ─────────────────────────────────────────────────────────────────────
-// An owner's SESSION proves a password, not a key. So every membership that is to receive a grant carries a tag
-// only a holder of the scope's current epoch key can compute, and no client wraps a scope key to anyone whose tag
-// does not verify. `HMAC-SHA256(HKDF(E_epoch, salt = "", info = "veyq/v1/admission-tag"), statement)`, the
-// statement being the canonical `admission-tag` encoding. A MAC, not a signature: it needs no trust root, and any
-// key-holder computing it is no stronger than what a key-holder can already do with the key itself.
-
-/** What an admission tag binds: the scope, the epoch whose key made it, the client-minted admission id, and the
- *  target's account for a group add (`null` for a tenant invite — the invitee has no account yet). */
-export type Admission = { scopeId: string; epoch: number; admissionId: string; userId: string | null }
-
-const ADMISSION_TAG_INFO = utf8('veyq/v1/admission-tag')
-
-/** The admission tag under the epoch key `epochKey`, which must be the key of `a.epoch`. */
-export function admissionTag(epochKey: Uint8Array, a: Admission): Uint8Array {
-  const key = hkdf(sha256, epochKey, new Uint8Array(0), ADMISSION_TAG_INFO, 32)
-  return hmac(sha256, key, encodeStatement({ purpose: 'admission-tag', ...a }))
-}
-
-/** Whether `tag` is the admission tag of `a` under `epochKey`. Constant-time over the tag bytes. The CALLER decides
- *  which epoch key it holds — a worker passes its own current one, so a tag made before a rotation does not admit. */
-export const admissionTagVerifies = (epochKey: Uint8Array, a: Admission, tag: Uint8Array): boolean =>
-  macEquals(admissionTag(epochKey, a), tag)
 
 /** Constant-time over the expected MAC's bytes; a MAC of any other length is refused first. */
 function macEquals(expected: Uint8Array, mac: Uint8Array): boolean {
@@ -604,16 +613,24 @@ export const grantStatement = (g: GrantStatementInput): Extract<StatementContext
   wrappedGrantDigest: sha256(g.wrappedGrant),
 })
 
-/** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`). Only a typed statement can
- *  be signed, so this key never signs bytes whose meaning it does not name. Deterministic, so the vectors pin it. */
-export const identitySign = (signPrivateKey: Uint8Array, statement: Extract<StatementContext, { purpose: 'grant' }>): Uint8Array =>
+/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record, a
+ *  key-chain step (signed by the identity it retires) and a verification of another member (./verification.ts). */
+export type IdentityStatement = Extract<
+  StatementContext,
+  { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' | 'key-chain-step' | 'verification' }
+>
+
+/** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`) — an account's or an invite
+ *  key's (./invite.ts). Only a typed statement can be signed, so this key never signs bytes whose meaning it does not
+ *  name. Deterministic, so the vectors pin it. */
+export const identitySign = (signPrivateKey: Uint8Array, statement: IdentityStatement): Uint8Array =>
   ed25519.sign(encodeStatement(statement), signPrivateKey)
 
 /** Verify an identity signature over a typed statement. False — never a throw — for a malformed key or signature:
  *  both come from the server, and a refusal is the answer either way. */
 export function identityVerify(
   signPublicKey: Uint8Array,
-  statement: Extract<StatementContext, { purpose: 'grant' }>,
+  statement: IdentityStatement,
   signature: Uint8Array,
 ): boolean {
   try {
@@ -621,6 +638,198 @@ export function identityVerify(
   } catch {
     return false
   }
+}
+
+// ── Key chain (ADR 0111 decision 7, cr-secure-the-account) ──────────────────────────────────────
+// An account's identities form one chain. Step 0 (`key-chain-genesis`) is the identity public bundle and the Secret-Key
+// proof public key the account was born with, unsigned. Each securing of the account appends a step (`key-chain-step`)
+// naming the head of the step before it, the SHA-256 of the two keys it retires and the two keys it installs in full,
+// signed over the same bytes by the retired identity AND by the retired proof key — so forging one takes the Secret Key,
+// which a stolen signed-in device never holds. The head is `SHA-256("veyq/v1/key-chain/head" ‖ statement)` of the newest
+// step: one per account, the same in every tenant. A contact pins the head, not only the identity, because the head pins
+// the proof key too: with the identity alone pinned, an operator could serve an invented prefix whose last step names
+// the pinned identity beside a proof key of its own, and whoever holds that identity could then sign a step every
+// member accepts. The server checks a step before it stores one (an honest server's check); every reader walks the
+// chain itself with `verifyKeyChain`. Conformance: v1.json#key_chain.
+
+export type KeyChainGenesisStatement = Extract<StatementContext, { purpose: 'key-chain-genesis' }>
+export type KeyChainStepStatement = Extract<StatementContext, { purpose: 'key-chain-step' }>
+
+/** The two public keys a step of the chain installs: the identity public bundle (`serializeIdentityPublic`) and the
+ *  Secret-Key proof public key (`deriveSecretKeyProofKeypair(…).publicKey`). */
+export type KeyChainKeys = { identityPublicKey: Uint8Array; secretKeyProofPublicKey: Uint8Array }
+
+/** Step 0: the keys `userId` was born with. */
+export const keyChainGenesisStatement = (userId: string, born: KeyChainKeys): KeyChainGenesisStatement => ({
+  purpose: 'key-chain-genesis',
+  userId,
+  identityPublicKey: born.identityPublicKey,
+  secretKeyProofPublicKey: born.secretKeyProofPublicKey,
+})
+
+/** Step `index` (≥ 1): retires `retired` (the keys of the step before, whose head is `previousHead`) for `installed`. */
+export function keyChainStepStatement(s: {
+  userId: string
+  index: number
+  previousHead: Uint8Array
+  retired: KeyChainKeys
+  installed: KeyChainKeys
+}): KeyChainStepStatement {
+  if (!Number.isSafeInteger(s.index) || s.index < 1) throw new SealContextInvalid('key-chain-step index is not 1 or more')
+  return {
+    purpose: 'key-chain-step',
+    userId: s.userId,
+    index: s.index,
+    previousHead: s.previousHead,
+    previousIdentityDigest: sha256(s.retired.identityPublicKey),
+    previousProofKeyDigest: sha256(s.retired.secretKeyProofPublicKey),
+    identityPublicKey: s.installed.identityPublicKey,
+    secretKeyProofPublicKey: s.installed.secretKeyProofPublicKey,
+  }
+}
+
+/** The head a statement makes when it is the newest: `SHA-256(utf8("veyq/v1/key-chain/head") ‖ statement)`. */
+export const keyChainHead = (statement: KeyChainGenesisStatement | KeyChainStepStatement): Uint8Array =>
+  sha256(concat(utf8('veyq/v1/key-chain/head'), encodeStatement(statement)))
+
+/** The step's two signatures over its encoded statement: the retired identity's (`Identity['priv'].sign`) and the
+ *  retired Secret-Key proof key's (`deriveSecretKeyProofKeypair(oldSecretKey).privateKey`). */
+export const signKeyChainStep = (
+  statement: KeyChainStepStatement,
+  retiredIdentitySignKey: Uint8Array,
+  retiredProofPrivateKey: Uint8Array,
+): { identitySignature: Uint8Array; proofSignature: Uint8Array } => ({
+  identitySignature: identitySign(retiredIdentitySignKey, statement),
+  proofSignature: secretKeyProofSign(retiredProofPrivateKey, encodeStatement(statement)),
+})
+
+/** One link of a served chain, decoded: the keys it installs, and — `null` exactly at index 0 — the head it names as
+ *  its predecessor and its two signatures. */
+export type KeyChainLink = KeyChainKeys & {
+  index: number
+  previousHead: Uint8Array | null
+  identitySignature: Uint8Array | null
+  proofSignature: Uint8Array | null
+}
+
+/**
+ * Why a chain was refused, named at the step that failed: `malformed` (an index out of order, a genesis that carries a
+ * predecessor or a signature, a later step that lacks one, a key of the wrong shape, an empty chain), `predecessor` (the
+ * step names another head than the one the step before it makes), `identity_signature` / `proof_signature` (that
+ * signature does not verify under the key the step retires), `head_not_in_chain` (the walk never passes the head the
+ * caller started from — a rollback, or another account's chain).
+ */
+export type KeyChainRefusal = 'malformed' | 'predecessor' | 'identity_signature' | 'proof_signature' | 'head_not_in_chain'
+
+export type KeyChainVerdict =
+  | ({ ok: true; head: Uint8Array; index: number; fromIndex: number | null } & KeyChainKeys)
+  | { ok: false; step: number; reason: KeyChainRefusal }
+
+/**
+ * Walks `links` (the whole chain, genesis first) of `userId` and answers the keys at the newest step with its head and
+ * index, or a refusal naming the first step that fails. Each step must name the head the step before it makes and carry
+ * both signatures under the keys that step retires. With `fromHead` (the head a contact pinned), the walk must also pass
+ * through it, and `fromIndex` says where — the newest index for an unchanged chain, an earlier one for a chain that
+ * advanced; `null` for a first contact. Never a throw for anything a server could serve: every link is untrusted.
+ */
+export function verifyKeyChain(
+  chain: { userId: string; links: readonly KeyChainLink[] },
+  fromHead: Uint8Array | null,
+): KeyChainVerdict {
+  const { userId, links } = chain
+  if (links.length === 0) return { ok: false, step: 0, reason: 'malformed' }
+  let head: Uint8Array = new Uint8Array(0)
+  let fromIndex: number | null = null
+  for (let i = 0; i < links.length; i++) {
+    const link = links[i]
+    if (link.index !== i || !keyChainKeysWellFormed(link)) return { ok: false, step: i, reason: 'malformed' }
+    if (i === 0) {
+      if (link.previousHead !== null || link.identitySignature !== null || link.proofSignature !== null) {
+        return { ok: false, step: 0, reason: 'malformed' }
+      }
+      head = keyChainHead(keyChainGenesisStatement(userId, link))
+    } else {
+      if (link.previousHead === null || link.identitySignature === null || link.proofSignature === null) {
+        return { ok: false, step: i, reason: 'malformed' }
+      }
+      if (!bytesEqual(link.previousHead, head)) return { ok: false, step: i, reason: 'predecessor' }
+      const retired = links[i - 1]
+      const stmt = keyChainStepStatement({ userId, index: i, previousHead: head, retired, installed: link })
+      if (!identityVerify(deserializeIdentityPublic(retired.identityPublicKey).sign, stmt, link.identitySignature)) {
+        return { ok: false, step: i, reason: 'identity_signature' }
+      }
+      if (!ed25519Verifies(retired.secretKeyProofPublicKey, encodeStatement(stmt), link.proofSignature)) {
+        return { ok: false, step: i, reason: 'proof_signature' }
+      }
+      head = keyChainHead(stmt)
+    }
+    if (fromHead !== null && bytesEqual(head, fromHead)) fromIndex = i
+  }
+  const newest = links.length - 1
+  if (fromHead !== null && fromIndex === null) return { ok: false, step: newest, reason: 'head_not_in_chain' }
+  return {
+    ok: true,
+    head,
+    index: newest,
+    fromIndex,
+    identityPublicKey: links[newest].identityPublicKey,
+    secretKeyProofPublicKey: links[newest].secretKeyProofPublicKey,
+  }
+}
+
+/** A served identity bundle that decodes, and a proof public key of Ed25519's size. */
+function keyChainKeysWellFormed(k: KeyChainKeys): boolean {
+  if (!(k.secretKeyProofPublicKey instanceof Uint8Array) || k.secretKeyProofPublicKey.length !== 32) return false
+  try {
+    deserializeIdentityPublic(k.identityPublicKey)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Ed25519 verify that answers false — never a throw — for a malformed key or signature. */
+function ed25519Verifies(publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
+  try {
+    return ed25519.verify(signature, message, publicKey)
+  } catch {
+    return false
+  }
+}
+
+// ── Rotation stage (ADR 0111 decision 6) ───────────────────────────────────────────────────────
+// Securing the account stages its self-grants before the publish, in chunks, and the publish names the stage by its
+// id and by this digest — bound into the rotation proof statement, so the Secret Key's proof covers exactly the staged
+// set and the server applies only what it recomputes from the staged rows. Same shape as the identity-pin set digest:
+// `SHA-256(utf8("veyq/v1/rotation-stage") ‖ lp(utf8(scopeId)) ‖ lp(u64be(epoch)) ‖ lp(SHA-256(wrappedGrant)) …)` over the
+// entries in ascending `scopeId` order (canonical lowercase UUIDs, so text order is byte order), one entry per scope.
+// The grant's signature and recipient digest are not in it: the server verified both at upload under the identity the
+// stage declares, and the publish requires that identity to be the one it publishes. Conformance: v1.json#rotation_stage.
+
+/** One staged self-grant as the digest reads it: the scope, the epoch whose key it carries, its DECODED ciphertext. */
+export type RotationStageEntry = { scopeId: string; epoch: number; wrappedGrant: Uint8Array }
+
+export function rotationStageDigest(entries: Iterable<RotationStageEntry>): Uint8Array {
+  const listed = [...entries]
+  for (const e of listed) {
+    if (typeof e.scopeId !== 'string' || !CANONICAL_UUID.test(e.scopeId)) {
+      throw new SealContextInvalid('rotation-stage scopeId is not a canonical lowercase UUID')
+    }
+    if (!Number.isSafeInteger(e.epoch) || e.epoch < 0) throw new SealContextInvalid('rotation-stage epoch is not an unsigned integer')
+  }
+  const sorted = listed.sort((a, b) => (a.scopeId < b.scopeId ? -1 : a.scopeId > b.scopeId ? 1 : 0))
+  const parts: Uint8Array[] = [utf8('veyq/v1/rotation-stage')]
+  sorted.forEach((e, i) => {
+    if (i > 0 && sorted[i - 1].scopeId === e.scopeId) throw new SealContextInvalid('rotation stage holds one scope twice')
+    parts.push(lp(utf8(e.scopeId)), lp(u64be(e.epoch)), lp(sha256(e.wrappedGrant)))
+  })
+  return sha256(concat(...parts))
+}
+
+const u64be = (n: number): Uint8Array => {
+  const b = new Uint8Array(8)
+  new DataView(b.buffer).setBigUint64(0, BigInt(n), false)
+  return b
 }
 
 // ── The instance moderation key (ADR 0099 § 2) ─────────────────────────────────────────────────────────
@@ -752,6 +961,20 @@ export function fingerprintDigits(h: Uint8Array): string {
     groups.push(String(v % 100000).padStart(5, '0'))
   }
   return groups.join(' ')
+}
+
+/**
+ * The **chain code** (ADR 0111 decision 14): ten digits, two groups of five, rendered from a key-chain head as
+ * {@link fingerprintDigits} renders the safety number — each group a 40-bit big-endian chunk of the head mod 100000.
+ * Shown beside the safety number and compared the same way: the safety number says which key, the chain code which
+ * point of the chain, so two people who see the same key at different heads — one of them missing a step the server
+ * withheld — see two codes. The head is already a domain-separated SHA-256 (`keyChainHead`), so no second hash. About
+ * 33 bits: a withheld step is not ground for, it is a step the withholder cannot sign. Conformance:
+ * contracts/crypto/vectors/v1.json#fingerprint.chain_code.
+ */
+export function chainCodeDigits(head: Uint8Array): string {
+  if (head.length !== 32) throw new Error('chain code: not a 32-byte head')
+  return fingerprintDigits(head).split(' ').slice(0, 2).join(' ')
 }
 
 /**

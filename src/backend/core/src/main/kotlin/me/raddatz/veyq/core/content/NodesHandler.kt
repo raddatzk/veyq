@@ -196,7 +196,11 @@ class NodesHandler(
         // is minted at the current one — at the root, where the entry is under K_SC, and below it, member and guest
         // alike (this narrows ADR 0080 Decision 6's "at or below": a writer told to re-read never leaves a name
         // unopenable). Under the lock a rotation takes, so a rotation that committed first is seen.
-        if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
+        // One exception, answered below instead: a guest knows no scope epoch and states its parent's served one as the
+        // node's (`guestTree.ts`), so under a parent not re-keyed yet its create is the parent's `node_rekey_pending`
+        // — the guest waits for a member's device (ADR 0111 decision 11) — not a `stale_epoch` no re-read could cure.
+        val current = store.currentEpoch(scopeId)
+        if (epoch != current && (parentSlotId == null || epoch != parentEpoch)) return CreateNodeOutcome.StaleEpoch
         // null/absent → the scope root (slot = scope id); a member's create never names the slot itself (parentShapeFault)
         val slot = parentSlotId ?: scopeId
         val parent = store.parentSlot(scopeId, slot)
@@ -222,6 +226,8 @@ class NodesHandler(
                 NodeEpochGate.Verdict.PENDING -> return CreateNodeOutcome.RekeyPending
             }
         }
+        // The deferred case's end: a parent the gate let through is current, so a node epoch still below it is stale.
+        if (epoch != current) return CreateNodeOutcome.StaleEpoch
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
         // stored verbatim or not at all.

@@ -105,10 +105,10 @@ sequenceDiagram
   membership guard runs **first**, so a non-member gets the same `404` as a bogus id
   ([ADR 0042](../../../decisions/0042-http-failure-projection.md)).
 - **A4 — the reader holds no grant for that space:** the icon cannot be opened → the **initial** shows. Not an
-  error. This is the **awaiting-access** window: a member admitted to a tenant is grant-less until a key-holder
-  comes online and grant-delivery wraps `K_SC` to them ([uc.spaces.add-member](uc.spaces.add-member.md),
-  [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)) — so it is **transient**, not the
-  steady state.
+  error. Every member joins holding a grant ([uc.spaces.add-member](uc.spaces.add-member.md)), so this is the
+  window in which a member's grant is behind or refused (*waiting for the current key*) until grant-delivery
+  brings it current ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) E2) — **transient**,
+  not the steady state.
 - **A5 — remove the icon:** the owner clears it → `sealed_icon` + `icon_epoch` are reset and every member falls
   back to the initial. Same owner gate, but **no epoch check**: a removal carries no ciphertext that could be
   sealed under a stale epoch, so the concurrency guard a set needs (A1) has nothing to guard here. Idempotent.
@@ -217,7 +217,7 @@ server never sees the image.
   `my-tenants` read), [uc.spaces.rename-group](uc.spaces.rename-group.md) (the sibling sealed-field write —
   same epoch rule, same owner gate, same stale-epoch `409`),
   [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (the wrapped-key preview the derived
-  `K_icon` keeps open), [uc.spaces.add-member](uc.spaces.add-member.md) (grant-delivery — why A4 is
+  `K_icon` keeps open), [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (grant-delivery — why A4 is
   transient), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (why the tenant name is
   cleartext), [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (the cropper + pixel stage this
   reuses, and the reference-vs-baked contrast)

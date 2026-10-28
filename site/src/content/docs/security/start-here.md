@@ -44,9 +44,11 @@ can move a claim to layer 2 (security model § What holds today).
   authentic version* a client receives; a device refuses an older one only where it keeps a mark of its own (the
   identity pin store, the device register, the per-scope epoch floor).
 - **An active operator on a client it serves.** See the trust tiers below.
-- **Key substitution at first contact.** The operator relays identity keys. A changed key is detected and surfaced
-  to anyone who pinned the old one, and two members who compare safety numbers detect a substituted one; a key
-  substituted before anyone pinned it, between members who never compare, is not detected. Key Transparency, which
+- **Key substitution at first contact.** The operator relays identity keys. A key that a signed step of the person's
+  key chain does not reach is shown as an anomaly to anyone who pinned their chain, and in a tenant to every member
+  when the person joined with an owner-rooted join record; two members who compare safety numbers detect a
+  substituted one. A key substituted before anyone pinned it where no join record anchors it — a tenant's owner, a
+  contact outside a shared tenant — between members who never compare, is not detected. Key Transparency, which
   would close this, is not built ([Roadmap](/veyq/security/roadmap/)).
 - **Recipients.** Sharing gives confidentiality up towards the people it is shared with, on purpose. A public link
   is a bearer capability: whoever holds the full URL decrypts what it shares. Content a recipient already
@@ -89,7 +91,7 @@ operator still ships the code that consumes it; unlock convenience and client in
 3. [What the server sees](/veyq/security/what-the-server-sees/) — the server-visible metadata and the deliberate concessions.
 4. [Cryptography](/veyq/security/cryptography/) — the primitives, the hybrid post-quantum KEM and the conformance-pinned suite.
 5. [Key hierarchy](/veyq/security/key-hierarchy/) — from unlock methods through the Master Key and identity to scope, node and blob keys.
-6. [Protocols](/veyq/security/protocols/) — admission, grant delivery, rotation, sharing, device linking and recovery, step by step.
+6. [Protocols](/veyq/security/protocols/) — inviting a member, grant delivery, rotation, sharing, device linking and recovery, step by step.
 7. [How veyq is tested](/veyq/security/how-veyq-is-tested/) — the checks that stand in for a human code review, what each proves, and which have run.
 8. [Verify it yourself](/veyq/security/verify-it-yourself/) — the vectors, tests and guards that hold these claims, and how to run them.
 9. [Known limitations](/veyq/security/known-limitations/) — every residual the design states, in one place.

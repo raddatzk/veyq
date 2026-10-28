@@ -15,6 +15,9 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
 // The re-key (ADR 0109) is `rekeyScope`'s own suite; here only when the worker runs it and what it does with its answer.
 vi.mock('../../core/node/rekey/rekeyScope', () => ({ rekeyScope: vi.fn() }))
 vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
+// Finishing a secured account is `rotateKeys.test.ts`' (the real mechanism against a fake server); here only that every
+// pass runs it first and goes on whatever it answers.
+vi.mock('../account/rotation/finishRotation', () => ({ finishRotation: vi.fn() }))
 // Hoisted so the (hoisted) vi.mock factory can close over the same mutable object the tests reach into.
 const { activeSpace } = vi.hoisted(() => ({ activeSpace: { scopeId: null as string | null } }))
 vi.mock('../../app/activeSpace', () => ({ activeSpace, refreshActiveScope: vi.fn() }))
@@ -30,6 +33,7 @@ import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import type { ScopeSummary } from '../../api/generated/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
+import { finishRotation } from '../account/rotation/finishRotation'
 
 function mockTasks(
   claimTask: Mock<TasksApi['claimTask']>,
@@ -41,7 +45,7 @@ function mockTasks(
 }
 
 /** The surviving directory the worker fetches post-cut and rotates forward. */
-const SURVIVORS: ScopeMember[] = [{ userId: 'u2', username: 'u2', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'AA==', hasGrant: true }]
+const SURVIVORS: ScopeMember[] = [{ userId: 'u2', username: 'u2', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false }]
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -50,10 +54,31 @@ beforeEach(() => {
   vi.mocked(listScopeMembers).mockResolvedValue(SURVIVORS)
   vi.mocked(listMyScopes).mockResolvedValue([])
   vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
+  vi.mocked(finishRotation).mockResolvedValue([])
 })
 
-/** An owner's scope row as `listMyScopes` serves it, re-keying or not. */
+/** A scope row as `listMyScopes` serves it, re-keying or not (every member's row carries the flag, ADR 0111 decision 11). */
 const row = (id: string, rekeying: boolean) => ({ id, rekeying }) as unknown as ScopeSummary
+
+describe('runScopeRotationWorker finishes a secured account first (ADR 0111 decision 8)', () => {
+  it('runs the finish before it resumes any re-key or claims any job', async () => {
+    const order: string[] = []
+    vi.mocked(finishRotation).mockImplementation(async () => { order.push('finish'); return [] })
+    vi.mocked(listMyScopes).mockImplementation(async () => { order.push('resume'); return [row('g1', true)] })
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockImplementation(async () => { order.push('claim'); return null })
+    mockTasks(claimTask)
+    await runScopeRotationWorker()
+    expect(order).toEqual(['finish', 'resume', 'claim'])
+  })
+
+  it('a finish that fails stops nothing: the queued jobs still drain', async () => {
+    vi.mocked(finishRotation).mockRejectedValue(new Error('offline'))
+    const completeTask = vi.fn<TasksApi['completeTask']>()
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 }).mockResolvedValueOnce(null), completeTask)
+    expect(await runScopeRotationWorker()).toBe(1)
+    expect(completeTask).toHaveBeenCalled()
+  })
+})
 
 describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
   it('resumes a scope an earlier run left re-keying before it claims anything', async () => {
@@ -62,6 +87,16 @@ describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
     await runScopeRotationWorker()
     expect(rekeyScope).toHaveBeenCalledWith('g1')
     expect(rekeyScope).not.toHaveBeenCalledWith('g2') // control: a scope that does not lag is left alone
+  })
+
+  it('a plain member\'s device resumes a scope its row reads re-keying too (ADR 0111 decision 11), with no job to claim', async () => {
+    const memberRow = (id: string, rekeying: boolean) => ({ id, rekeying, role: 'MEMBER' }) as unknown as ScopeSummary
+    vi.mocked(listMyScopes).mockResolvedValue([memberRow('g1', true), memberRow('g2', false)])
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValue(null))
+    vi.mocked(rekeyScope).mockResolvedValue({ done: false, committed: 3 }) // what lags beyond is an owner's drop box
+    await runScopeRotationWorker()
+    expect(rekeyScope).toHaveBeenCalledWith('g1')
+    expect(rekeyScope).not.toHaveBeenCalledWith('g2')
   })
 
   it('re-keys after its own rotation and completes only then', async () => {
@@ -242,8 +277,6 @@ describe('runScopeRotationWorker', () => {
   it.each([
     // An owner demoted between claim and commit (the claim offers rotations to owners only).
     [403, 'not_scope_owner'],
-    // The one lease an account rotation leaves to the rotator: the one they held when they rotated (ADR 0060 D4).
-    [403, 'rotation_excluded'],
   ])('declines, not fails, a rotation refused %i %s — this worker may not perform it at all', async (status, code) => {
     // Each refusal is about this key-holder, never about the job: declining releases it to the scope's other
     // owners without spending an attempt, where failing would burn attempts until the job dead-letters. The

@@ -44,9 +44,10 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 
 - ★ [List & switch spaces](use-cases/uc.spaces.switch-spaces.md) — **built (web)** (tenant switcher +
   per-space `#fragment` switching; enter-tenant + Personal↔Tenant)
-- ★ [Add a member to the shared tenant space](use-cases/uc.spaces.add-member.md) — **built (web)** (invite a
-  person, then wrap `K_SC` to their identity — the grant-distribution primitive;
-  [ADR 0020](../../decisions/0020-grant-distribution-invite-wrap.md); delivery + onboarding + a mail-only invite,
+- ★ [Add a member to the shared tenant space](use-cases/uc.spaces.add-member.md) — **built (web)** (the invite is
+  a placeholder member — an owner-signed invite key holding a grant of `K_SC`, its link mailed and sealed under a
+  code the owner passes on; the invitee checks it, grants itself and writes a join record;
+  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3, a mail-only invite,
   [ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md))
 - [Edit your profile in a space](use-cases/uc.spaces.edit-profile.md) — **built (web)** (change your per-tenant
   username and your real name, sealed under a field key derived from `K_tenant` on the device; empty both name fields to remove the name;
@@ -55,7 +56,8 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   (a sealed constant-length picture on the per-tenant profile row, tenant members only, set in Settings or on your
   own profile page; [ADR 0084](../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md))
 - [Manage pending member invites](use-cases/uc.spaces.manage-member-invites.md) — **built** (the owner lists /
-  re-issues / revokes the member invites add-member mints; owner-gated, additive-safe)
+  re-issues / revokes the member invites add-member mints; owner-gated; a re-issue is a new invite under a new
+  code, and an ended invite holds no key and no grant)
 - [Remove a member from a tenant](use-cases/uc.spaces.remove-tenant-member.md) — **web done (cr-0091)** (TenantOwner
   cuts a member's access to shared + group content immediately, applies the **group orphan rule** (hand over or
   wind down the groups they leave), and gives them a grace window to read their own memories before erase;
@@ -72,17 +74,17 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   **G1** create + open + browse (`en.spaces.group-scope`, cr-0032); **G2** member-add — per-tenant username
   search ([en.spaces.member-identity](enablers/en.spaces.member-identity.md)) + the
   [ADR 0020](../../decisions/0020-grant-distribution-invite-wrap.md) grant-wrap, direct-add default with an
-  optional consent-first toggle (derived name-key for verifiable informed consent, ADR 0027); **G3** member management (promote/
+  optional consent toggle (derived name-key for verifiable informed consent, ADR 0027); **G3** member management (promote/
   demote, multiple owners + last-owner guard), grace-delete + orphan rule, `K_SC` rotation
 - [Add a member to a group](use-cases/uc.spaces.add-group-member.md) — **web done (cr-0086)** (GroupOwner adds an
-  existing tenant member by **username**; a **grant-less** membership is recorded and `K_SC` is delivered later by
-  grant-delivery — direct-add is the default; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4/§5,
-  [ADR 0020](../../decisions/0020-grant-distribution-invite-wrap.md))
+  existing tenant member by **username**; the owner's client wraps `K_SC` to them with the add, so the membership
+  holds its grant from the start — direct-add is the default; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4/§5,
+  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 4)
 - [Consent before being added to a group](use-cases/uc.spaces.consent-group-add.md) — **web done (cr-0094, cr-0096)** (the
-  optional account-global "ask before adding me" opt-in: an add becomes a proposal — a soft membership
-  grant-delivery **skips** + a wrapped **derived name-key** (`group-name-key` context) so the invitee reads the
-  **canonical** name — so `K_SC` is gated **before** the wrap and the owner can't show a divergent name; accept
-  delivers, decline drops silently; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §5,
+  optional account-global "ask before adding me" opt-in: an add becomes a proposal — a soft membership holding the
+  grant + a wrapped **derived name-key** (`group-name-key` context) so the invitee reads the **canonical** name and
+  the owner can't show a divergent name; the group is listed to them only on accept, and a decline or rescind
+  queues the group's rotation; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §5,
   [ADR 0027](../../decisions/0027-group-invite-name-shared-key.md))
 - [Rename a group](use-cases/uc.spaces.rename-group.md) — **web done (cr-0097)** (owner re-seals the name under
   `K_name` from the **current** epoch and bumps `nameEpoch`, so a rename is **forward-secret** — a removed member
@@ -110,20 +112,21 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   an unaccepted proposal is not a member, a deleting group refuses every write, a suspended tenant refuses its
   members everything on any domain, and a non-member — share guests included — learns neither;
   [ADR 0042](../../decisions/0042-http-failure-projection.md), [ADR 0066](../../decisions/0066-tenant-suspension.md))
-- [Trust-on-first-use, notice, and review a changed identity key](use-cases/uc.spaces.verify-identity.md) —
-  **built (cr-0098/cr-0099)** (a client **pins** each contact's identity key on first wrap — operator-blind,
-  cross-device; a **changed** key is never silently trusted: the grant-delivery worker **declines**, the UI
-  surfaces a notice + accept → re-pin, rotation excludes the member;
+- [Trust-on-first-use, then follow a contact's key chain, and surface a key it does not reach](use-cases/uc.spaces.verify-identity.md) —
+  **built** (a client **pins** each contact's key-chain head on first wrap — operator-blind, cross-device; a key the
+  doubly signed chain reaches from the pin is followed with no review, one it does not reach is an anomaly with no
+  accept: nothing is wrapped to it, a rotation declares the member pending, the grant-delivery worker **declines**;
+  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 7, 15, 16,
   [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md),
   [en.account.identity-pinning](../account/enablers/en.account.identity-pinning.md))
 - [Actively verify a member's identity (safety number)](use-cases/uc.spaces.enforce-verified-identities.md) —
   **built (web, cr-identity-verification)** (a member's own profile shows their safety number and its QR; on another
   member's profile you scan their QR or compare the digits, and a match marks them *verified* — pinning an unpinned
-  member with the compared key; "Verified" shows on the profile and in the member lists, and a verified contact's
-  key change is said louder; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 3)
+  member with the compared key; "Verified" shows on the profile and in the member lists, and drops when the contact
+  secures their account; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 3)
 - [Require verified identities before sharing (strict mode)](use-cases/uc.spaces.require-verified-identities.md) —
-  **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members and
-  a changed key is a hard block; needs a scope-wide redesign before it is buildable at all, a per-account toggle
+  **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members;
+  needs a scope-wide redesign before it is buildable at all, a per-account toggle
   can't protect shared-scope content)
 - Person / profile view — **built (web)** (`#people/<userId>`, ADR 0083 — not the `~username` of
   [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)): open a member and see the Memories **you can

@@ -29,8 +29,17 @@ const keys = {
 /** Reactive unlock flag + how the vault was opened — never holds key material. `origin` is null while locked. */
 export const vaultState = reactive({ unlocked: false, origin: null as UnlockOrigin | null })
 
-/** Hold the freshly opened Master Key + identity private key for this working session, and how it was opened. */
+/** Hold the freshly opened Master Key + identity private key for this working session, and how it was opened.
+ *  The vault owns what it is handed, so material it replaces is zeroed here: every getter handed out a copy, and a
+ *  replaced key — the identity and Master Key a secured account retired (uc.account.rotate-keys) — must
+ *  not linger in the heap until GC. */
 export function setUnlocked(masterKey: Uint8Array, identityPrivate: Identity['priv'], origin: UnlockOrigin): void {
+  if (keys.masterKey && keys.masterKey !== masterKey) keys.masterKey.fill(0)
+  const held = keys.identityPrivate
+  if (held && held !== identityPrivate) {
+    if (held.kemSeed !== identityPrivate.kemSeed) held.kemSeed.fill(0)
+    if (held.sign !== identityPrivate.sign) held.sign.fill(0)
+  }
   keys.masterKey = masterKey
   keys.identityPrivate = identityPrivate
   vaultState.unlocked = true

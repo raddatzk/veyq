@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.platform.capabilities
 
 import me.raddatz.veyq.core.TestIds
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.DEVICE_LINKING
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.GROUP_SPACE
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
@@ -179,7 +179,7 @@ class CapabilityDisabledSliceTest {
 
     private fun createGroup(owner: String, domain: String): Response =
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$GROUP_NAME","wrappedGrant":"$GROUP_GRANT",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$GROUP_NAME","wrappedGrant":"$GROUP_GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
 
     /** The error code of a response, or null for one without a JSON body (a 204). */

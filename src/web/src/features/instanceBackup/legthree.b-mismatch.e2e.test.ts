@@ -9,6 +9,7 @@ import { unlockMasterKey } from '../account/unlock/unlock'
 import { getTenantMailSettings } from '../tenant/tenantMailSettings'
 import { tenantError } from '../tenant/tenantError'
 import { inviteMember } from '../spaces/members'
+import { generateInviteCode } from '@veyq/crypto/invite'
 import { openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { listTree } from '../../core/node/tree'
@@ -52,7 +53,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('leg-3 rehearsal — a restore without th
     // by a network error, a boot failure or a crypto failure.
     let refused: { status: number; code: string | null } | null = null
     try {
-      await inviteMember(handoff.tenantId, `nobody-${stamp}@e2e.test`)
+      await inviteMember(handoff.tenantId, `nobody-${stamp}@e2e.test`, { mode: 'code', code: generateInviteCode() })
     } catch (e) {
       refused = await tenantError(e)
     }

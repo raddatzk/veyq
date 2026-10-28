@@ -18,14 +18,18 @@ info:
     context `job`): the task type + parameters — only a scope-key-holding worker unseals it. The residual leak
     is **correlation-bounded, not label-bounded** (ADR 0021; self-hosted moot) — documented, not hidden.
 
-    **First consumer — `grant-delivery` (ADR 0020).** A grant-less TENANT/GROUP membership is a *pending*
-    member; the backend originates a `grant-delivery` job for it (server-structural origination — a blind,
-    already-understood job, no sealed body). Any online key-holder claims it, wraps `K_SC` to the pending
-    member's identity public key (`sealTo` that X-Wing key, purpose `scope-grant` — the first wrap to a
-    **foreign** identity), and completes by posting the ciphertext grant; the backend writes it onto the target
-    membership **idempotently** (no-op if a grant already exists — first-online-wins). The claim resolves the
-    delivery target (the member's userId + identity public key, operational metadata the server already holds)
-    so the worker need not look it up separately.
+    **First consumer — `grant-delivery` (ADR 0020, ADR 0024 Decision 6).** Every TENANT/GROUP membership is born
+    with a grant (ADR 0111 decisions 3-4); a membership whose grant is **behind** the scope's current epoch — a
+    rotation skipped it, or a newcomer joined through an invite a rotation declared pending — is the one the
+    backend originates a `grant-delivery` job for (server-structural origination — a blind, already-understood
+    job, no sealed body). Any online key-holder claims it, wraps the current `K_SC` to that member's identity
+    public key (`sealTo` that X-Wing key, purpose `scope-grant`, a wrap to a **foreign** identity, once the member's
+    key chain reaches that key from the head the worker's client pinned, ADR 0111 decision 15), and completes by
+    posting the ciphertext grant, naming the key it wrapped to; the backend writes it onto the target membership
+    **idempotently** (no-op once the grant is current — first-online-wins) and refuses a wrap to a key that is not
+    the member's current one (`409 recipient_key_not_current`, ADR 0111 decision 10). The claim resolves the delivery
+    target (the member's userId, identity public key and key-chain head, operational metadata the server already
+    holds) so the worker need not look it up separately.
 
     **Second consumer — `scope-rotation` (cr-0092, ADR 0025).** A tenant-member removal that cuts a co-shared
     GROUP membership needs the group rotated forward for forward secrecy, but the removing owner is not
@@ -42,12 +46,8 @@ info:
     lease holder has committed an epoch of the scope while holding the lease (`409 rotation_not_committed`
     otherwise).
 
-    `scope-rotation` has a **second originator**: an account rotating its keys after a compromise
-    (`POST /api/account/rotation`, ADR 0060) queues one per shared scope. The job is identical; what differs is
-    that the originator is also a member, and must **not** complete their own — a rotator who re-granted
-    themselves would let an attacker holding the old identity re-admit only themselves. The exclusion rides on
-    the same per-key-holder decline mechanism the TOFU seam uses, written at origination on **every** live
-    rotation job of the scope.
+    An account securing itself (`POST /api/account/rotation`) queues **no** `scope-rotation` job: it re-grants itself
+    every scope in its publish and mints each next epoch itself, from any of its devices (ADR 0111 decision 8).
 
     Every operation requires an authenticated caller; authorization is enforced by code, not this spec
     (ADR 0008). Working a job is a **write on its space** (uc.spaces.scope-access A5): nothing is claimed,
@@ -229,7 +229,9 @@ paths:
         records exactly that epoch on the target membership. A stated epoch that is not the scope's **current**
         one (a rotation landed between claim and completion, or the worker holds an older grant) is refused
         `409 stale_epoch` with nothing written; the lease is released without spending an attempt, so the job
-        re-runs at the current epoch. **Idempotent**: completing an already-`done` job, or a
+        re-runs at the current epoch. A `recipientIdentityDigest` that is not the target's current identity key (the
+        target secured their account after the claim) is refused `409 recipient_key_not_current` the same way —
+        nothing written, the lease released, the job re-runs against the new key. **Idempotent**: completing an already-`done` job, or a
         `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). Otherwise
         the caller must hold the job's current lease (`409 not_lease_holder`, ADR 0021 §6): idempotency makes a
         *repeated* completion harmless, it does not make an unclaimed one legitimate. The completion lands only for
@@ -254,7 +256,9 @@ paths:
         "204":
           description: The job is done (or was already done — idempotent no-op).
         "400":
-          description: The request was malformed (e.g. a grant-delivery completion with no wrap, no `epoch` or no `grantSignature`).
+          description: >
+            The request was malformed (e.g. a grant-delivery completion with no wrap, no `epoch`, no `grantSignature` or
+            no `recipientIdentityDigest`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -276,7 +280,8 @@ paths:
           description: >
             The job is not currently leased to this worker (`not_lease_holder`), its space is being deleted
             (`scope_deleting`, uc.spaces.scope-access A5), a grant-delivery completion states an epoch that is
-            not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs), or
+            not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs) or
+            names a key that is not the target's current one (`recipient_key_not_current` — the same), or
             the holder of a `scope-rotation` job committed no epoch during its lease (`rotation_not_committed` —
             nothing written, the lease kept), or a node of its scope is not re-keyed yet (`rekey_incomplete` —
             nothing written, the lease kept; ADR 0109 point 7).
@@ -353,17 +358,18 @@ paths:
         A worker **voluntarily refuses** a claimed job and releases it **without a failed attempt**: the lease
         is dropped, the job returns to `pending` (claimable again by **other** workers), and a `(job, worker)`
         decline is recorded so the reconciler **does not re-offer this job to this same worker**. This is the
-        grant-delivery TOFU seam (ADR 0028 / en.account.identity-pinning): a worker that holds a **different**
-        pin for the target's identity key blocks the wrap and declines the job + raises a human-review flag,
-        rather than sealing `K_SC` to a possibly-substituted key. **Per key-holder, not a global veto** — a
-        *different* key-holder without a conflicting pin can still TOFU-deliver (ADR 0028 §Consequences), while
-        the declining worker's own other devices stay excluded, because the exclusion is keyed on the account
-        that declined, not on the browser it declined from. Unlike `fail`, `attempts` is **not** incremented (a
-        legitimate decline must not dead-letter the job). The caller must hold the job's lease.
+        grant-delivery anchor seam (ADR 0111 decision 15, en.account.identity-pinning): a worker whose client cannot
+        reach the target's identity key through the target's key chain from the head it pinned declines the job
+        (`identity_unanchored`) rather than sealing `K_SC` to a key nobody vouched for, and shows the target as an
+        anomaly. **Per key-holder, not a global veto** — a *different* key-holder whose client does anchor the key can
+        still deliver (ADR 0111 decision 9), while the declining worker's own other devices stay excluded, because the
+        exclusion is keyed on the account that declined, not on the browser it declined from. Unlike `fail`,
+        `attempts` is **not** incremented (a legitimate decline must not dead-letter the job). The caller must hold
+        the job's lease.
 
-        A decline is otherwise **permanent** — nothing expires it — which is correct for an unresolved key
-        conflict and wrong once a human resolves it. `POST /api/tasks/declines/clear` is that resolution
-        (ADR 0060 Decision 7).
+        A decline lasts until the target's key chain advances: the publish of the target's account rotation deletes
+        the declines of every job whose target it is, so a worker that could not anchor the old key tries the new one
+        (ADR 0111 decision 9). No human override clears one — an anomaly is never accepted by hand.
       security:
         - bearerAuth: []
       parameters:
@@ -374,7 +380,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/DeclineRequest" }
             example:
-              reason: identity_changed
+              reason: identity_unanchored
       responses:
         "200":
           description: The job was released back to `pending` and will not be re-offered to this worker.
@@ -409,64 +415,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_lease_holder }
-        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
-
-  /api/tasks/declines/clear:
-    post:
-      tags: [tasks]
-      operationId: clearDeclinesForAcceptedKey
-      summary: Drop my own declines against a contact whose changed identity key I just accepted.
-      description: >
-        The other half of the TOFU seam above. A worker that declined `identity_changed` is excluded from that
-        job **permanently**, so
-        [ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) (2)'s promise that on
-        accept *"the wrap then proceeds"* did not hold: the accept authorised a wrap that nothing performed.
-        Nothing exercised it before, because a changed key could until now only be an attack — key rotation
-        after a compromise
-        ([ADR 0060](../../docs/decisions/0060-key-rotation-after-compromise.md) Decision 7) is what makes a
-        legitimate change routine, and a rotation whose re-admission cannot be delivered strands the account.
-
-        **Deliberately narrow, in three ways that are each load-bearing.** It clears only the **caller's own**
-        decline rows — the accept is one human's decision on one client, and a blind server must never
-        generalise it to another key-holder who has not looked (ADR 0028 § Consequences). It clears only rows on
-        **`grant-delivery`** jobs whose target is `targetUserId` — a decline about a *different* contact is not
-        resolved by this accept. And because a `scope-rotation` job has no delivery target at all, this can
-        never reach the exclusion that keeps a rotator from claiming their **own** rotation (ADR 0060
-        Decision 4) — that invariant is preserved by the shape of the query, not by a special case in it.
-
-        Idempotent, and `cleared: 0` is an ordinary answer: the common case is that this caller never declined
-        anything for that contact. The server learns only that one account cleared declines against another —
-        the membership and decline facts it already holds. It does **not** learn that a key was accepted, which
-        pin moved, or what either key is.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ClearDeclinesRequest" }
-            example: { targetUserId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
-      responses:
-        "200":
-          description: >
-            Applied. Any cleared job is claimable by this worker again; the caller re-drives delivery by
-            claiming as usual.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/DeclinesCleared" }
-              example: { cleared: 1 }
-        "400":
-          description: The request was malformed (missing or invalid `targetUserId`).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: authentication_failed }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
@@ -577,55 +525,38 @@ components:
 
     GrantDeliveryTarget:
       type: object
-      required: [targetUserId, targetMembershipId, identityPublicKey]
+      required: [targetUserId, targetMembershipId, identityPublicKey, keyChainHead]
       properties:
         targetUserId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The pending member's user id.
+          description: The member's user id.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         targetMembershipId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The grant-less membership row the wrap will be posted onto.
+          description: The membership row, behind the scope's current epoch, the wrap will be posted onto.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         identityPublicKey:
           type: string
           description: >
-            The pending member's identity public key (opaque base64) — the worker's `asymWrap` target. The
+            The member's identity public key (opaque base64) — the worker's `asymWrap` target. The
             server already stores this as operational metadata; exposing it to a granter does not widen the
-            operator's view (it never yields a key).
+            operator's view (it never yields a key). Wrapped to only once the target's key chain reaches it from the
+            head the worker's client pinned (ADR 0111 decision 15).
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
+        keyChainHead:
+          type: string
           description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the target membership's. The worker recomputes the tag under its **own current** epoch key and declines `admission_unverified` on a mismatch, on an epoch before its current one, or on `null`; on an epoch ahead of its own it pauses instead (its key is behind, not the target).
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-        admissionTag:
-          type: [string, "null"]
-          description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            The head of the target's key chain (ADR 0111 decision 7) — compared with the head the worker pinned; the
+            chain (`getKeyChain`) is fetched only when it moved.
           contentEncoding: base64
           maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
 
     EnqueueRequest:
       type: object
@@ -698,6 +629,16 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: [string, "null"]
+          description: >
+            For a `grant-delivery` job (required there, `400` otherwise): SHA-256 of the identity bundle the grant is
+            sealed to. The server compares it with the target's current identity key and refuses another
+            (`409 recipient_key_not_current`, ADR 0111 decision 10).
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     FailRequest:
       type: object
@@ -717,12 +658,10 @@ components:
           x-veyq-visibility: public
           type: [string, "null"]
           description: >
-            Optional developer-facing decline reason; never content or secrets. For the TOFU seam this is
-            typically `identity_changed`; a target whose admission tag does not verify under the worker's current
-            epoch key is declined `admission_unverified` (ADR 0020 move 6) — lifted when a rotation re-tags that
-            admission.
+            Optional developer-facing decline reason; never content or secrets. For the anchor seam this is
+            typically `identity_unanchored`.
           maxLength: 256
-          example: identity_changed
+          example: identity_unanchored
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
 
     JobCreated:
@@ -762,36 +701,6 @@ components:
           type: integer
           format: int32
           description: The attempt count after this failure.
-          example: 1
-
-    ClearDeclinesRequest:
-      type: object
-      description: >
-        The contact whose changed identity key the caller just accepted. It names a *person*, never a job: the
-        human decision was about an identity, and the jobs it unblocks are whichever ones happen to target that
-        identity — the caller has no reason to know their ids, and asking for them would make the client
-        enumerate its own past refusals.
-      required: [targetUserId]
-      properties:
-        targetUserId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The contact whose new identity key the caller accepted (opaque user id).
-          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-
-    DeclinesCleared:
-      type: object
-      description: How many of the caller's own decline rows were dropped. `0` is an ordinary answer, not an error.
-      required: [cleared]
-      properties:
-        cleared:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          description: The number of decline rows removed.
-          minimum: 0
           example: 1
 
     ErrorResponse:

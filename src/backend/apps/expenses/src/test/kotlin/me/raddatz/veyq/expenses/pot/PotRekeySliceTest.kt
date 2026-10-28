@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import me.raddatz.veyq.expenses.ExpensesNodeKinds
 import me.raddatz.veyq.expenses.pot.PotWire.Rev
 import me.raddatz.veyq.expenses.pot.PotWire.append
@@ -50,6 +51,22 @@ class PotRekeySliceTest {
         list(w, "").statusCode(200).body("revisions.wrappedRevisionKey", equalTo(List(3) { PotWire.WRAP }))
         QuarkusTransaction.requiringNew().run { MembershipEntity.update("grantedEpoch = 0 where scopeId = ?1 and userId = ?2", w.scopeId, w.owner) }
         list(w, "").statusCode(403).body("code", equalTo("grant_behind"))
+    }
+
+    /** ADR 0111 decision 11, the participant's leg: a plain member holding the current grant lists a Pot's wraps, stages
+     *  them and commits through core, as an owner does; one whose grant lags is refused (`grant_behind`, unchanged). */
+    @Test
+    fun aMemberWithTheCurrentGrantReKeysAPot() {
+        val w = world()
+        val behind = seedScopeMember(w.scopeId, grantedEpoch = 0)
+        list(w, "", caller = behind).statusCode(403).body("code", equalTo("grant_behind"))
+        val member = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        list(w, "", caller = member).statusCode(200).body("revisions.size()", equalTo(3))
+        val rekeyId = UUID.randomUUID()
+        stageWraps(w, rekeyId, caller = member).statusCode(204)
+        commit(w, rekeyId, caller = member).statusCode(204)
+        assertEquals(1, QuarkusTransaction.requiringNew().call { NodeEntity.findById(w.pot)!!.epoch })
+        assertEquals(rows(w).map { newWrap(it.entryId, it.revision) }, rows(w).map { it.wrap })
     }
 
     @Test
@@ -162,11 +179,11 @@ class PotRekeySliceTest {
             .sortedWith(compareBy({ it.entryId }, { it.revision }))
     }
 
-    private fun stageWraps(w: World, rekeyId: UUID, skip: Int? = null, receipts: List<String> = emptyList()): ValidatableResponse {
+    private fun stageWraps(w: World, rekeyId: UUID, skip: Int? = null, receipts: List<String> = emptyList(), caller: String = w.owner): ValidatableResponse {
         val wraps = rows(w).filterIndexed { i, _ -> i != skip }
             .joinToString(",") { """{"entryId":"${it.entryId}","revision":${it.revision},"wrappedRevisionKey":"${newWrap(it.entryId, it.revision)}"}""" }
         val receiptWraps = receipts.joinToString(",") { """{"receiptId":"$it","wrappedBlobKey":"${newBlobWrap(it)}"}""" }
-        return post(w, "/pots/${w.pot}/rekey/$rekeyId", """{"fromEpoch":0,"revisions":[$wraps],"receipts":[$receiptWraps]}""")
+        return post(w, "/pots/${w.pot}/rekey/$rekeyId", """{"fromEpoch":0,"revisions":[$wraps],"receipts":[$receiptWraps]}""", caller)
     }
 
     private data class BlobRow(val receiptId: String, val storageKey: String, val byteSize: Long, val meta: String?, val wrap: String)
@@ -193,16 +210,17 @@ class PotRekeySliceTest {
 
     private fun newBlobWrap(receiptId: String): String = Base64.getEncoder().encodeToString("blob-${receiptId.take(8)}".toByteArray())
 
-    private fun commit(w: World, rekeyId: UUID): ValidatableResponse = post(
+    private fun commit(w: World, rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
         w, "/rekey/nodes/${w.pot}/$rekeyId",
         """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXBvdA==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="}""",
+        caller,
     )
 
-    private fun list(w: World, query: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/pots/${w.pot}/rekey$query").then()
+    private fun list(w: World, query: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/${w.scopeId}/pots/${w.pot}/rekey$query").then()
 
-    private fun post(w: World, path: String, body: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON).body(body)
+    private fun post(w: World, path: String, body: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body(body)
             .`when`().post("/api/scopes/${w.scopeId}$path").then()
 
     private fun slug(): String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())

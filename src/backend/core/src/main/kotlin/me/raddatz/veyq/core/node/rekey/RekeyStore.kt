@@ -15,8 +15,9 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 
-/** One node as the re-key reads it: live or trashed, with the identity key its entry opens through, if any. */
-data class RekeyNodeRow(val node: NodeEntity, val trashed: Boolean, val wrappedIdentityKey: String?)
+/** One node as the re-key reads it: live or trashed, with the identity key its entry opens through, if any, and whether
+ *  only an owner re-keys it ([OwnerOnlyRekey]). */
+data class RekeyNodeRow(val node: NodeEntity, val trashed: Boolean, val wrappedIdentityKey: String?, val ownerOnly: Boolean)
 
 /** A node's core-owned re-key parts ([RekeyStore.parts]). */
 data class RekeyParts(
@@ -56,6 +57,7 @@ data class RekeyCommit(
 class RekeyStore(
     private val nodes: NodesStore,
     private val stage: NodeRekeyStage,
+    private val ownerOnly: OwnerOnlyRekey,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val participants: MutableList<NodeRekeyParticipant>,
 ) {
@@ -65,7 +67,8 @@ class RekeyStore(
     fun listNodes(scopeId: String): List<RekeyNodeRow> {
         val all = NodeEntity.find("scopeId", scopeId).list()
         val wrapped = nodes.identityKeys(all.mapNotNull { it.shareIdentityId })
-        return all.map { RekeyNodeRow(it, it.deletedAt != null, it.shareIdentityId?.let(wrapped::get)) }
+        val byId = all.associateBy { it.id }
+        return all.map { RekeyNodeRow(it, it.deletedAt != null, it.shareIdentityId?.let(wrapped::get), ownerOnly.of(it, byId::get)) }
     }
 
     /** The node in [scopeId], live or trashed; null for none. */

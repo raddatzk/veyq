@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The one-time "finish your profile" prompt (ADR 0084 decision 7, uc.spaces.set-profile-picture A3). A member who joined
-// grant-less could not seal a name or picture at join; once this device holds the tenant key and neither is set, a small
+// The one-time "finish your profile" prompt (ADR 0084 decision 7, uc.spaces.set-profile-picture A3). A member may skip
+// the name and the picture at join (both optional); once this device holds the tenant key and neither is set, a small
 // dismissible notice points at Settings > Your profile. Shown once: "Not now" and following the link both store the
 // dismissal per user (`finishProfileDismissed`), and a profile that already has a name or a picture shows nothing. Reads
 // the profile and the key once per document; stores no image.
@@ -10,7 +10,7 @@ import { useRouter } from 'vue-router'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
-import { getMyProfile, openOwnNameKey, unsealName } from './profile'
+import { getMyProfile, openOwnNameKey, unsealNameUnderEpochs } from './profile'
 import { finishProfileDismissed } from './finishProfileDismissed'
 
 const { t } = useI18n()
@@ -23,7 +23,8 @@ async function check() {
   try {
     const [profile, own] = await Promise.all([getMyProfile(), openOwnNameKey()])
     if (!own) return // no tenant key yet: nothing could be sealed, so nothing to ask for
-    const name = unsealName(own.key, own.address, profile.sealedName)
+    // A name saved before a tenant rotation opens under its older epoch: the profile is complete, nothing to ask for.
+    const name = unsealNameUnderEpochs(own.epochs, own.address, profile.sealedName)?.name
     const hasName = Boolean(name && `${name.firstName}${name.lastName}`.trim())
     show.value = !hasName && profile.avatarRevision === 0
   } catch {

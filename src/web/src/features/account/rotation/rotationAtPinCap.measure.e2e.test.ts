@@ -34,7 +34,7 @@ import { createHash } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { accountIdentityPinsApi } from '../../../api/client'
 import { masterKey } from '../../../app/vault'
-import { rotateKeys } from './rotateKeys'
+import { mintSecretKey, rotateKeys } from './rotateKeys'
 import { getPin } from '../identityPins'
 import { birthInstance } from '../../../test/e2eBootstrap'
 import { pinIdOf, sealPinEntry, sealPinHead } from '../../../test/pinStore'
@@ -99,7 +99,7 @@ async function seed(userIds: string[]): Promise<void> {
   const entries = new Map<string, string>()
   const put = userIds.map((userId, i) => {
     const pinId = pinIdOf(mk, userId)
-    const pin = { fingerprint: fingerprintOf(i), state: i % 2 ? 'verified' as const : 'pinned' as const, firstSeenAt: 1_760_000_000_000 + i }
+    const pin = { fingerprint: fingerprintOf(i), head: fingerprintOf(i), index: i, firstSeenAt: 1_760_000_000_000 + i, replaced: i % 2 === 1 }
     const entry = sealPinEntry(mk, userId, pin, pinId)
     entries.set(pinId, entry)
     return { pinId, entry }
@@ -118,13 +118,18 @@ describe.skipIf(!process.env.VEYQ_E2E || process.env.VEYQ_E2E_MEASURE !== '1')('
     expect(POINTS.every((p, i) => Number.isInteger(p) && p > 0 && p <= CAP && (i === 0 || p > POINTS[i - 1])), `points ${POINTS}`).toBe(true)
     const { owner } = await birthInstance('E2E Pin Cap')
     const userIds = Array.from({ length: CAP }, () => crypto.randomUUID())
-    const secretKey = owner.built.emergencyKit.secretKey
+    // Each rotation installs a new Secret Key (ADR 0060 Decision 2); the next one proves with it.
+    let secretKey = owner.built.emergencyKit.secretKey
 
     for (const n of POINTS) {
       await seed(userIds.slice(0, n))
       const watch = watchRotation()
       const started = performance.now()
-      const outcome = await rotateKeys(owner.password, secretKey).then(() => 'ok', (e: unknown) => String(e))
+      const next = mintSecretKey()
+      const outcome = await rotateKeys(owner.password, secretKey, { secretKeyB64: next }).then(() => {
+        secretKey = next
+        return 'ok'
+      }, (e: unknown) => String(e))
       const wholeMs = Math.round(performance.now() - started)
       watch.restore()
       const sent = watch.sent.at(-1)

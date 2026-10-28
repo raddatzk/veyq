@@ -55,11 +55,12 @@
 - A1 — **only one tenant / no groups:** the active-tenant row is shown **without the overview chevron** (there
   is nothing to switch to) and still enters the Tenant space, with Personal below; the groups section is hidden
   until a group exists.
-- A2 — **no tenant grant → Personal is home.** If the member holds **no `TENANT` grant** — the
-  **awaiting-access** window between admission and grant-delivery wrapping `K_SC` to them
-  ([uc.spaces.add-member](uc.spaces.add-member.md)), so transient — the token-less default is **not** openable,
+- A2 — **no openable tenant grant → Personal is home.** If the member's `TENANT` grant does not open — it is
+  behind the scope's epoch or refused, until grant-delivery brings it current
+  ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) E2), so transient; a new member
+  joins holding one ([uc.spaces.add-member](uc.spaces.add-member.md)) — the token-less default is **not** openable,
   so the shell **falls back to Personal** (`~me`) as the effective home and surfaces the Tenant entry as
-  unavailable ([ADR 0019](../../../decisions/0019-token-less-tenant-home.md),
+  *Waiting for the current key* ([ADR 0019](../../../decisions/0019-token-less-tenant-home.md),
   [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md)). No empty shared room is shown, and that
   tenant's row keeps its **initial** — without the grant its icon cannot be opened either.
 - A3 — **a suspended tenant** ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)):
@@ -97,7 +98,7 @@ groups in one click.
   [en.spaces.personal-scope](../enablers/en.spaces.personal-scope.md),
   [en.spaces.group-scope](../enablers/en.spaces.group-scope.md)
 - Use-cases: [uc.spaces.set-space-icon](uc.spaces.set-space-icon.md) (the sealed avatar each row shows, and its
-  initial fallback), [uc.spaces.add-member](uc.spaces.add-member.md) (grant-delivery — why A2 is transient)
+  initial fallback), [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (grant-delivery — why A2 is transient)
 - Decisions: [ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md) (tenant-bound scopes),
   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (groups, sealed names),
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment routing),

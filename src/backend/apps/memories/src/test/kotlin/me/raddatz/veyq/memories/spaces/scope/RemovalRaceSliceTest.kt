@@ -8,7 +8,7 @@ import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TenantRoots
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -134,7 +134,7 @@ class RemovalRaceSliceTest {
     /** The real removal-rotation of [member] out of [group], to epoch 1 — the one way a keyed member leaves. */
     private fun removeFromGroup(owner: String, group: String, member: String, round: Int) {
         val decision = scopes.rotate(
-            group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, GRANT)), emptyList(), emptySet(), removes = member,
+            group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, GRANT, TestGrants.digestOf(owner))), emptyList(), emptySet(), removes = member,
         )
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
     }
@@ -199,6 +199,6 @@ class RemovalRaceSliceTest {
     private companion object {
         const val NAME = "c2VhbGVkLW5hbWU="
         const val WRAP = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
-        val GRANT = SignedGrant("Z3JhbnQ=", TestAdmission.SIGNATURE)
+        val GRANT = SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE)
     }
 }

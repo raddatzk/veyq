@@ -80,8 +80,12 @@ commits the epoch then re-keys every live and trashed node of the scope, top-dow
 fresh node key minted at the new epoch, every field sealed under the old key re-sealed under it, each `K_blob`
 re-wrapped and kept, no store object read or written ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)). Per node that is one key and its children's
 entries, per medium its blob wraps and two field seals, all symmetric and all in the database: a Chapter of 1,000
-photos is about 5,000 seals, about 20 requests. Until a node is re-keyed, a write into it waits
-(`409 node_rekey_pending`); a write stating a node key from before is refused (`409 stale_epoch`). ADR 0024 rejected
+photos is about 5,000 seals, about 20 requests. Until a node is re-keyed, a write into it is refused
+`409 node_rekey_pending`: a member's client re-keys that node's path itself and retries, a guest's waits; a write
+stating a node key from before is refused (`409 stale_epoch`). Any member holding the new epoch may re-key, a
+Memory's drop key included, except a drop box, a guest's identity folder and what lies below one, which only an owner
+re-keys
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11). ADR 0024 rejected
 full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but unopened) and a
 flat set of independent epoch keys (each new member would need one wrap per epoch; the backward chain makes it one).
 What the re-key leaves in the excluded party's reach: what existed at the rotation, and every link they could
@@ -123,7 +127,8 @@ What each account key is for:
 - **Master Key** — the account's root. It opens the identity private key, and it seals the account's own private
   state (the identity-pin store, the device register, private node pins).
 - **Identity keypair** — the account as other members see it. Scope keys are sealed to its encryption key; its
-  signing key signs every grant the account issues. TOFU pins it and the safety number is computed over it.
+  signing key signs every grant the account issues. The safety number is computed over it; a contact pins the head of
+  the account's key chain, which names it.
 - **Auth keypair** — signing in. It proves knowledge of the password to the server without sending it, and opens
   nothing.
 - **Secret-Key proof keypair** — authorising credential changes. It proves possession of the Secret Key to the
@@ -131,15 +136,15 @@ What each account key is for:
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing it means |
 |---|---|---|---|---|---|
-| **Secret Key** | 256 random bits, generated on the device at account birth | Nothing. It is printed in the Emergency Kit and **never stored server-side** | Only the user (Emergency Kit). A device uses it once, at the first sign-in there, and stores it nowhere; it keeps its own automatically written wrap instead (`DEVICE`, or `DEVICE_KEY` with **Stay signed in on this device** on). A device linked by QR never sees it ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)) | Never. No operation rotates it today; a key rotation keeps it, so the kit stays valid | Recovery narrows to another enrolled device, and the account can no longer rotate its keys ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Consequences) |
+| **Secret Key** | 256 random bits, generated on the device at account birth | Nothing. It is printed in the Emergency Kit and **never stored server-side** | Only the user (Emergency Kit). A device uses it once, at the first sign-in there, and stores it nowhere; it keeps its own automatically written wrap instead (`DEVICE`, or `DEVICE_KEY` with **Stay signed in on this device** on). A device linked by QR never sees it ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)) | Only when the account is secured: the rotation mints a new one and issues a new Emergency Kit, saved and confirmed before anything is published; the old kit stops working. A password change, a reset and a change of the sign-in address keep it | Recovery narrows to another enrolled device, and the account can no longer be secured ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Consequences) |
 | **Unlock KEK** (one per method) | Derived fresh on the device each unlock (see the table below), then discarded | Not wrapped; never stored or sent | Nobody at rest | Changes with its inputs (a new password, a new device key) | Its one wrap no longer opens; other methods still do |
 | **Master Key** | A 32-byte symmetric key, generated on the device at registration | One copy per unlock method (`MasterKeyWrap`), each under that method's KEK: still one key, many locks | The unlocked client; the server stores only the wraps | Only in a compromise rotation, together with the identity. A password change or reset keeps it | Losing **every** unlock path loses the account's content; there is no escrow |
 | **Identity keypair**: a hybrid post-quantum encryption key and an Ed25519 signing key | Generated on the device at registration | Private half: only under the Master Key. Public half: published in the key directory | The unlocked client; the public half is visible to fellow members | Only together with the Master Key | Same as the Master Key: it exists only wrapped under it |
 | **Auth keypair** (Ed25519) | Derived from the password with Argon2id over a salt derived from the account address | Not wrapped; the private key is derived on demand, never stored or sent. The server stores the public key | Derived on the client at sign-in | Whenever the password changes (re-derived, public key re-registered) | A forgotten password: one of the recovery paths below. A cracked one: a session, never content |
-| **Secret-Key proof keypair** (Ed25519) | Derived from the Secret Key **alone** | Not wrapped. The public half is registered at account birth | The client, whenever it holds the Secret Key | Never while the Secret Key is unchanged | It decrypts nothing; without it the server refuses rotation, password change, recovery completion and a change of the sign-in address |
+| **Secret-Key proof keypair** (Ed25519) | Derived from the Secret Key **alone** | Not wrapped. The public half is registered at account birth | The client, whenever it holds the Secret Key | With the Secret Key: securing the account registers the new public half under a signature of the current one | It decrypts nothing; without it the server refuses rotation, password change, recovery completion and a change of the sign-in address |
 
 The identity key's two halves do different work. Others seal scope grants to its encryption key; its signing key
-signs every grant this user issues. Its public bundle is what TOFU pins and what the safety number is computed over
+signs every grant this user issues. Its public bundle is what the safety number is computed over, and the key chain's head that a contact pins names it
 ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md);
 [Protocols](/veyq/security/protocols/)). The Master Key also seals the account's **identity-pin store** — one entry
 per pin, at an id derived under a key of its own (`veyq/v1/identity-pin-index`), and a head over all of them — and the
@@ -188,21 +193,29 @@ An Ed25519 keypair derived from the Secret Key **alone**; its public half is reg
 request that mints a cold credential — a key rotation, a password change, completing a recovery, changing the
 sign-in address — must carry a signature with it, and the server checks that signature against the registered
 public key ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-Decision 2). So the server can check that the requester holds the Secret Key without ever seeing it, and someone who
+Decision 2). It changes only when the account is secured: the rotation registers the new public half under a
+signature of the current one and a signature of the new one, which proves the new key is held. So the server can check that the requester holds the Secret Key without ever seeing it, and someone who
 has only the password, a session, or a linked device (which never receives the Secret Key) cannot replace the
 account's keys or credentials. It is a check the server runs, so it binds every caller except the operator.
 
 ### Rotation after a compromise
 
-The Master Key and the identity keypair rotate **together, always**: the identity private key exists only under the
-Master Key, so a leaked identity implies a leaked Master Key, and a new identity wrapped under the old Master Key
-would still be readable ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-Decision 1). Rotation needs a cold unlock, and the server checks a Secret-Key proof signature over what the request
-installs. That is the material a phished linked device never received, so the attacker cannot rotate first and lock
-the holder out. Rotation also re-keys every scope the account belongs to, every node of it included. The rotator is not allowed to re-admit
-themselves: another owner of each shared scope runs the scope rotation, and the new identity is re-admitted through
-the human changed-key review. Every `DEVICE` and `DEVICE_KEY` wrap dies. Rotation is **forward secrecy, not
-repair**: what was already read stays read.
+The Master Key, the identity keypair and the Secret Key rotate **together, always**, as one step of the account's
+**key chain**: the identity private key exists only under the Master Key, so a leaked identity implies a leaked
+Master Key, and someone holding the password and the Secret Key is otherwise indistinguishable from the holder
+([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md) Decisions 1 and 2). The
+step is signed by the **old identity and the old Secret-Key proof key**; a phished linked device holds the identity
+but never the Secret Key, so it cannot rotate first and lock the holder out, and it cannot sign a step anyone accepts.
+The new Emergency Kit is saved and confirmed before anything is published.
+
+**Access moves first, security after.** One transaction appends the step and re-grants every scope the account
+holds a grant on, in every tenant, at its current epoch, to the new identity; the grants were staged just before and
+are verified under that identity ([Protocols](/veyq/security/protocols/#7-the-key-chain-and-securing-an-account)). Then
+the account mints each scope's next epoch itself, from any of its devices, and any member re-keys the nodes
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 6–11). No retired private
+key is kept anywhere; the chain keeps the retired public keys. Other members accept the new identity because the
+chain reaches it from the head they pinned, with no review. Every `DEVICE` and `DEVICE_KEY` wrap dies. Rotation is
+**forward secrecy, not repair**: what was already read stays read.
 
 ### Recovery
 
@@ -219,24 +232,31 @@ A scope (personal, group or tenant) has one content key, `K_SC`, realized as a f
 
 | Key / artifact | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **Epoch key `E_n`** | 32 random bytes, minted on a client: `E0` when the scope is born, each later epoch by the client that rotates | Its predecessor sits under it: the chain link `symWrap(E_{n+1}, E_n)`, stored server-side. Each member receives it in a **grant** | Every member whose grant is at that epoch or later; holding `E_n` derives every earlier epoch, never a later one | Per scope policy (table above), and in every scope of an account that rotates after a compromise | Leaked: the holder opens every node key and name under that epoch and earlier (see the residual below). A member without a current grant waits as *awaiting access* until any online key-holder delivers one |
-| **Grant** | A seal of the epoch key to the member's identity encryption key with the hybrid post-quantum KEM, purpose `scope-grant`, bound to the scope and epoch | It is the wrap. It carries the **granter's Ed25519 signature** over the scope id, the scope's kind, the epoch, the recipient, a digest of the recipient's identity bundle and a digest of the grant ciphertext | Stored as ciphertext on the membership; opened by the recipient's identity private key | Re-issued at each new epoch: by the rotator for the members it keeps, otherwise by any online key-holder (grant delivery) | — |
-| **Admission tag** | An HMAC under a key derived from the current epoch key, over the scope id, the epoch, a client-minted admission id, and the target's user id when the target already has an account | Not a key; stored and relayed by the server, which checks only that it is present | Computable only by a holder of the current epoch key | Re-tagged at every rotation (the rotator verifies it under the old epoch, re-tags under the new one) | A membership whose tag does not verify receives no grant from any honest client |
+| **Epoch key `E_n`** | 32 random bytes, minted on a client: `E0` when the scope is born, each later epoch by the client that rotates | Its predecessor sits under it: the chain link `symWrap(E_{n+1}, E_n)`, stored server-side. Each member receives it in a **grant** | Every member whose grant is at that epoch or later; holding `E_n` derives every earlier epoch, never a later one | Per scope policy (table above), and in every scope of an account that rotates after a compromise | Leaked: the holder opens every node key and name under that epoch and earlier (see the residual below). A member whose grant is behind (a rotation left them out) waits until any online key-holder delivers one |
+| **Grant** | A seal of the epoch key to the member's identity encryption key with the hybrid post-quantum KEM, purpose `scope-grant`, bound to the scope and epoch | It is the wrap. It carries the **granter's Ed25519 signature** over the scope id, the scope's kind, the epoch, the recipient, a digest of the recipient's identity bundle and a digest of the grant ciphertext | Stored as ciphertext on the membership; opened by the recipient's identity private key | Born with the membership — a newcomer's own self-grant at an invite's accept, the adding owner's at a group add — and re-issued at each new epoch: by the rotator for the members it keeps, otherwise by any online key-holder (grant delivery) | — |
+| **Invite key** | An identity-shaped bundle (X-Wing + Ed25519) the inviting owner's client derives from a 32-byte random seed, one per member invite; the owner signs its public half (`invite-key` statement: tenant, invite, SHA-256 of the bundle, expiry) | The seed travels only in the invite link, sealed (purpose `invite-link`) under a key Argon2id derives from a generated 10-character code or an owner-chosen password | The server stores the public half, the owner's signature and a grant of the tenant's current epoch wrapped to it; the invitee's client derives the private half from the seed | Never; every tenant rotation re-grants each open invite or declares it pending, and the invite's key and grant are deleted when it is accepted, revoked, re-sent or expires | Leaked with its code before the accept: the holder opens the tenant epochs the invite was granted and can redeem it. After a revoke the link and code still open the epochs up to the revoke (the tenant does not rotate on removal) |
+| **Join record** | Written by a newcomer's client at an invite's accept: its identity public key, its Secret-Key proof public key and the owner-signed invite, signed by the invite key and by the new identity (`join-record` statement) | Sealed as the field `member-join-record`, bound to the tenant and the member, under the tenant epoch key the invite's grant carried | Every holder of that tenant epoch; the tenant's first owner has none | Never rewritten | Not a key; it records who joined through which owner's invite, and every member's client reads it as the anchor of that member's key in the tenant |
+| **Verification** | Written by a member's client after a matching compare: the verifier's identity signs the `verification` statement (tenant, verifier, subject, the subject's key-chain head, the verifier's own head) | Sealed as the field `member-verification`, bound to tenant, verifier, subject and epoch, under a tenant epoch key | Every holder of that tenant epoch; the server keeps one row per verifier and subject, addressed in the clear | Re-signed by the verifier's new identity when they secure their account; a newer compare replaces it | Not a key; it counts only while it names the subject's current head under the verifier's current key |
 
 **The grant signature closes a gap on the receiving side.** A seal to a public key needs only that key, so
 without a signature the server could plant a scope key of its own choosing. A grant whose signed kind is
 `PERSONAL` opens only if it is self-signed under the vault's own signing key. A shared scope's grant opens under
-the granter's pinned key, with a first-seen granter pinned on first use
+the granter's pinned key, with a first-seen granter pinned on first use — in a group of the active tenant only when the
+granter's join record anchors them there
 ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
 Decision 6). The server stores the signature and does not verify it.
 
-**The admission tag makes admission a key-holder act.** An owner's session proves a password, not a key. Every
-client checks the tag before it wraps a scope key to anyone other than itself, so neither a stolen owner session
-nor the operator can create a member who receives a grant. The tag is a MAC rather than an owner signature
-because a signature would need the client to know who the owner is, and only the server could tell it
-([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md)
-move 6). It deliberately binds neither the role nor the identity key, so a legitimate account rotation does not
-break it.
+**The invite link anchors a newcomer to its owner.** The invite key is minted and signed on the owner's client, and
+its seed travels sealed together with the owner's fingerprint, so an invitee whose client derives the key from the
+seed and checks the owner's signature against that fingerprint trusts nothing the server served unchecked. The seal
+is mandatory because the server mails the link: without the code, the operator holds the link but cannot open it
+except by guessing offline. The newcomer then grants the epoch to itself, so no other member has to be online
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 1–5). Every other wrap to a member in a tenant — a rotation's re-grant, a grant delivery, a group add —
+goes only to a key the recipient's key chain reaches from the step their join record names, rooted at an owner this
+account anchors; a non-owner without a join record is never wrapped to, and an owner without one (the tenant's first)
+is trusted on first use, from then on only where the chain reaches from the head this account pinned
+([Known limitations](/veyq/security/known-limitations/#identity-keys-tofus-first-use-gap)).
 
 **Freshness has one mark here.** Each device remembers the highest epoch it has held for each scope. It never
 seals under, and never opens a grant below, that mark, whatever current epoch the server reports. A member who
@@ -299,7 +319,7 @@ server.
 |---|---|---|---|---|---|
 | **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the field keys of the root's name, the note and the private label, and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link; a rotation re-wraps the root's new node key under it, so the link keeps showing what is added. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
 | **Recovery copy** (`sealed_share_key`) | `K_share` sealed under `K_SC` at the scope's **current** epoch, bound to scope, node, share and epoch; mandatory on every share | `K_SC` | Every scope member; **no link** | Not re-sealed by a rotation: a copy older than the scope's current epoch makes its link re-issue-only ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | — |
-| **Drop keypair** (hybrid post-quantum KEM) | Minted by the owner's client when a Memory's first uploader link is created; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | At **every rotation** of `K_SC`: a new keypair, the private half under the node's new key, the public half re-sealed under each uploader link's `K_share`, every guest identity key re-sealed to it, the old private half discarded ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 5) | Private half leaked: what uploaders added to that node until the next rotation, and after it what a guest identity from before adds (below) |
+| **Drop keypair** (hybrid post-quantum KEM) | Minted by the client of the member who creates a Memory's first uploader link; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | At **every rotation** of `K_SC`: a new keypair, the private half under the node's new key, the public half re-sealed under each uploader link's `K_share`, every guest identity key re-sealed to it, the old private half discarded ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 5) | Private half leaked: what uploaders added to that node until the next rotation, and after it what a guest identity from before adds (below) |
 | **Uploader identity key** | Random, minted by an uploader guest's client | Wrapped to the drop public key | That guest, and every reader of the node | Never. A rotation re-seals it to the new drop public key; only a re-issue starts every guest over | That identity's uploads: their blob keys, metadata and display name |
 
 **Why the recovery copy is sealed under `K_SC` and not `K_node`.** A viewer or contributor link holds `K_node`;

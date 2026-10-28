@@ -29,12 +29,14 @@ import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { NodeSummary, TrashedNodeSummary } from '../../api/generated/content'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
+import { writeKey, keyAt, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
+import { openScopeById } from '../../features/spaces/scopes'
 import { registry } from '../applications/registry'
 import { HttpStatus, isCodedError, isHttpStatus } from '../../shared/httpError'
 import { expectMintedId } from './mintedId'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
+import { pullRekeyPath } from './rekey/rekeyScope'
 import { identityEntryKey } from '../sharing/dropKey'
 
 /** Which node a seal belongs to: its scope, its id, the epoch it is sealed at and the placement revision the wire stores
@@ -277,12 +279,13 @@ export async function createContentNode(
   if (!reread || parent === null) return createContentNodeOnce(scopeId, epochs, parent, kind, name, metaSealer)
   return writeAtNodeEpoch(async (again) =>
     createContentNodeOnce(scopeId, epochs, again ? await reread() : parent, kind, name, metaSealer),
-  )
+  { pull: opts.pull })
 }
 
 /** How a create re-reads its parent after an epoch refusal (ADR 0109 point 6) — `node_rekey_pending` or the device
- *  floor (after a wait), `stale_epoch` (once): the parent's key and epoch as the tree now holds them. */
-export type CreateNodeOptions = { reread?: () => Promise<NodeParent> }
+ *  floor (after a pull or a wait), `stale_epoch` (once): the parent's key and epoch as the tree now holds them. A
+ *  member's create also pulls the parent's path forward first (`pull`, ADR 0111 decision 11). */
+export type CreateNodeOptions = { reread?: () => Promise<NodeParent>; pull?: () => Promise<boolean> }
 
 /** One create attempt (see {@link createContentNode}). The device floor runs first: a parent whose key is from before
  *  the last rotation this device holds is not sealed under (`NodeKeyBelowFloorError`, layer 2). */
@@ -453,7 +456,8 @@ export function placementEpoch(node: { epoch: number }): number {
  * placement rebuilt on the node as it now is, at most {@link PLACEMENT_RETRIES} time(s); then
  * {@link PlacementConflictError}. The two epoch refusals (ADR 0109 point 6) re-read the tree too and rebuild under the
  * keys and epochs it now carries: `node_rekey_pending` (the node or the destination is not re-keyed since the last
- * rotation) after a wait, `stale_epoch` (re-keyed since this tree was read) once — `writeAtNodeEpoch`. Every other
+ * rotation) after this member's device pulled the path forward (or a wait, when it cannot), `stale_epoch` (re-keyed
+ * since this tree was read) once — `writeAtNodeEpoch`. Every other
  * failure (`slug_taken`, `illegal_structure`, …) is the caller's. The server checks structure only (a live destination
  * in the scope, the kind's placement rule, no cycle).
  */
@@ -461,12 +465,15 @@ export async function placeNode(
   scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, to: Placement,
 ): Promise<void> {
   let current = tree
+  // A member's placement pulls forward what it seals under (ADR 0111 decision 11): the destination's path, or the node's
+  // own at the scope root (its entry is under `K_SC` at its own epoch there).
+  const pull = pullRekeyPath(scopeId, [to.parentId ?? nodeId])
   for (let attempt = 0; ; attempt++) {
     try {
       await writeAtNodeEpoch(async (reread) => {
         if (reread) current = await listTree(scopeId, epochs)
         await sendPlacement(scopeId, epochs, current, nodeId, to)
-      })
+      }, { pull })
       return
     } catch (e) {
       if (!(await isCodedError(e, HttpStatus.conflict, 'stale_placement'))) throw e
@@ -599,9 +606,38 @@ export async function restoreNode(
   scopeId: string,
   epochs: EpochKeys,
   tree: TreeNode[],
-  node: { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementRevision: number; name: string } & IdentityChild,
+  node: RestoredNode,
   newName?: string,
 ): Promise<void> {
+  // A member's restore of what is not re-keyed since a rotation (the entry's parent, or any node it brings back — the
+  // server's gate asks for all of them) pulls them forward on this device and restores the node as the re-key left it,
+  // re-read from the scope opened anew (ADR 0111 decision 11); `stale_epoch` re-reads the same way, once.
+  let at = { epochs, tree, node }
+  let opened: EpochKeys | null = null
+  try {
+    await writeAtNodeEpoch(async (reread) => {
+      if (reread) {
+        const scope = await openScopeById(scopeId)
+        if (!scope) throw new v1.OpenRefused('content-key')
+        if (opened) zeroEpochKeys(opened)
+        opened = scope.epochs
+        const live = await listTree(scopeId, opened)
+        const again = (await listTrash(scopeId, opened, live)).find((n) => n.id === node.id)
+        if (!again) throw new v1.OpenRefused('content-key') // restored or purged meanwhile
+        at = { epochs: opened, tree: live, node: again }
+      }
+      await restoreOnce(scopeId, at.epochs, at.tree, at.node, newName)
+    }, { pull: pullRekeyPath(scopeId, [node.id], { subtree: true }) })
+  } finally {
+    if (opened) zeroEpochKeys(opened)
+  }
+}
+
+/** What a restore reads of the trashed node: a {@link TrashedNode} carries it. */
+type RestoredNode = { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementRevision: number; name: string } & IdentityChild
+
+/** One restore attempt (see {@link restoreNode}). */
+async function restoreOnce(scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: RestoredNode, newName?: string): Promise<void> {
   const parentSlot = node.parentId ?? scopeId
   const key = entryKeyOf(scopeId, epochs, tree, node)
   const name = newName ?? node.name

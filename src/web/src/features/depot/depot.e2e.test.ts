@@ -27,7 +27,6 @@ import { ensurePersonalScope, openScope } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'
 import { createFolder, deleteNode, listTrash, listTree, nodeContentKey, restoreNode } from '../../core/node/tree'
 import { CHUNK_SIZE, planBlob, reserveAndPump, authedReserve, authedWindow } from '../../core/blob/transport'
-import { runGrantDeliveryWorker } from '../tasks/grantDeliveryWorker'
 import { httpStatus } from '../../shared/httpError'
 import { filesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
@@ -154,11 +153,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const refused = await filesApi().listFiles({ scopeId, parentId: folderId }).catch((e: unknown) => e)
     expect([403, 404]).toContain(httpStatus(refused))
 
-    // a shared (tenant) scope: A uploads a file, M receives a grant and replaces it with the blob M read
+    // a shared (tenant) scope: A uploads a file, M (holding the tenant key from its accept, ADR 0111) replaces it with the blob M read
     await become(A)
     const shared = (await openScope(ScopeKind.Tenant))!
     const sharedUpload = await fileUploadJob({ scopeId: shared.scopeId, epochs: shared.epochs, parent: null }, fileOf(bytesOf(100, 4), 'shared-e2e.txt')).run(ctx())
-    await runGrantDeliveryWorker({ scopeId: tenant.tenantId, kind: ScopeKind.Tenant, key: shared.key, epoch: shared.epochs.current })
     await become(M)
     const sharedM = (await openScope(ScopeKind.Tenant))!
     const treeM = await listTree(sharedM.scopeId, sharedM.epochs)

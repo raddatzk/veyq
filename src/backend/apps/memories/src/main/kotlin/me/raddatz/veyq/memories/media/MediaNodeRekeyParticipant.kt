@@ -118,14 +118,14 @@ object MediaRekeyRows {
 
 /**
  * The Memories half of a node's re-key (ADR 0109 point 2, CR decision 2): the listing a re-keyer reads and the staging
- * it writes through, under core's re-key rights ([RekeyHandler]) — an owner with the current grant, not excluded.
+ * it writes through, under core's re-key rights ([RekeyHandler]) — any member with the current grant, not excluded (an owner on an owner-only node).
  */
 @ApplicationScoped
 class MediaRekeyHandler(private val rekey: RekeyHandler) {
 
     /** One page of the node's sealed media and every bucket name; the node may be trashed. */
     fun list(userId: String, scopeId: String, nodeId: String, since: ItemsCursor?, limit: Int): MediaRekeyListOutcome {
-        rekey.refusal(userId, scopeId, READ)?.let { return MediaRekeyListOutcome.Refused(it as HttpFailure) }
+        rekey.refusal(userId, scopeId, READ, nodeId)?.let { return MediaRekeyListOutcome.Refused(it as HttpFailure) }
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId }
             ?: return MediaRekeyListOutcome.Refused(RekeyOutcome.NotFound)
         val buckets = MediaRekeyRows.buckets(scopeId, nodeId)

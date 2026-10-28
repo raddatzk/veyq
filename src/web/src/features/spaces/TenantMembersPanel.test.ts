@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// uc.spaces.add-member (web, cr-0077) — the member directory rubric: it lists the active tenant's members with
-// a granted/awaiting-access badge, and shows the invite button only to the OWNER (admission is owner-gated).
+// uc.spaces.add-member (web, cr-0077) — the member directory rubric: it lists the active tenant's members, each
+// active, and shows the invite button only to the OWNER (inviting is owner-gated).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -25,23 +25,36 @@ vi.mock('./scopes', () => ({
   revokeScopeShares: vi.fn(),
   scopeLifecycle: vi.fn(),
 }))
-// The pin store's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
-vi.mock('../account/identityPins', async (orig) => ({ ...(await orig<typeof import('../account/identityPins')>()), trustStates: vi.fn() }))
+// The tenant's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
+vi.mock('../account/tenantTrust', async (orig) => ({ ...(await orig<typeof import('../account/tenantTrust')>()), tenantBadges: vi.fn() }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOption: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
+// The tenant keys the active space holds: none unless a test hands it some (then the names open on the device).
+const held = vi.hoisted(() => ({ write: null as Uint8Array | null, epochs: null as EpochKeys | null }))
+vi.mock('../../app/activeSpace', async (orig) => ({
+  ...(await orig<typeof import('../../app/activeSpace')>()),
+  activeScopeKey: () => held.write,
+  activeEpochKeys: () => held.epochs,
+}))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
-import { trustStates } from '../account/identityPins'
+import { tenantBadges } from '../account/tenantTrust'
+import { account } from '../../app/account'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
+import { formatInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { deriveEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
+import { sealName } from '../account/profile/memberName'
 
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -51,7 +64,7 @@ const stubs = {
 }
 
 beforeEach(() => {
-  vi.mocked(trustStates).mockResolvedValue({})
+  vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
   // ADR 0109: the owner's row says whether the tenant's re-key is unfinished; nothing pending here
@@ -60,14 +73,14 @@ beforeEach(() => {
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true },
-  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', hasGrant: false },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false },
+  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', keyChainHead: 'BB==', pending: false },
 ]
 
 const PENDING: PendingMemberInvite[] = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]
 
-async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING) {
-  vi.mocked(listScopeMembers).mockResolvedValue(MEMBERS)
+async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING, members = MEMBERS) {
+  vi.mocked(listScopeMembers).mockResolvedValue(members)
   vi.mocked(listMemberInvites).mockResolvedValue(pending)
   vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', name: 'Fam', domain: '127.0.0.1', role })])
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
@@ -85,17 +98,15 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     activeSpace.tenantId = 't-1'
   })
 
-  it('lists members with a granted vs awaiting-access badge', async () => {
+  it('lists every member as active — a member holds the tenant key from its join on (ADR 0111)', async () => {
     const wrapper = await mountPanel('OWNER')
     const rows = wrapper.findAll('.member-row')
     expect(rows).toHaveLength(2)
     expect(wrapper.text()).toContain('@owner')
     expect(wrapper.text()).toContain('@partner')
-    // The pending member shows "Awaiting access"; the granted one shows "Active".
-    const badges = wrapper.findAll('.veyq-badge').map((b) => b.text())
-    expect(badges).toContain(t('members.statusActive'))
-    expect(badges).toContain(t('members.statusAwaiting'))
-    expect(wrapper.find('.veyq-badge.warning').text()).toBe(t('members.statusAwaiting'))
+    // One status badge per row, and it is "Active": there is no awaiting-access state to show any more.
+    for (const row of rows) expect(row.findAll('.veyq-badge').map((b) => b.text())).toEqual([t('members.statusActive')])
+    expect(rows.some((r) => r.find('.veyq-badge.warning').exists())).toBe(false)
   })
 
   it('shows the invite button to the owner', async () => {
@@ -103,7 +114,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     expect(wrapper.text()).toContain(t('members.invite'))
   })
 
-  it('hides the invite button from a non-owner member (admission is owner-only)', async () => {
+  it('hides the invite button from a non-owner member (inviting is owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(wrapper.text()).not.toContain(t('members.invite'))
   })
@@ -118,25 +129,37 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     expect(wrapper.find(`[aria-label="${t('members.revoke')}"]`).exists()).toBe(true)
   })
 
-  it('never lists pending invites for a non-owner (admission stays owner-only)', async () => {
+  it('never lists pending invites for a non-owner (inviting stays owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(listMemberInvites).not.toHaveBeenCalled()
     expect(wrapper.find('.invite-row').exists()).toBe(false)
     expect(wrapper.text()).not.toContain(t('members.pendingTitle'))
   })
 
-  it('re-issues an invite by mail and offers no link to hand on', async () => {
-    // ADR 0055 §2: the fresh secret goes to the invitee. The owner gets a confirmation naming the address and
-    // nothing to copy — the absence is the assertion, since a copy-link is exactly what this retired.
+  it('re-issues an invite by mail as a new invite under a new code, shows that code once, and offers no link to hand on', async () => {
+    // ADR 0055 §2: the fresh link goes to the invitee. The owner gets a confirmation naming the address and nothing to
+    // copy but the code (ADR 0111 decision 1) — a link is exactly what this retired, so its absence is asserted too.
     vi.mocked(reissueMemberInvite).mockResolvedValue({
       email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT',
     })
     const wrapper = await mountPanel('OWNER')
     await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()
-    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1')
+    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1', 'newbie@x.z', { mode: 'code', code: expect.any(String) })
+    const { code } = vi.mocked(reissueMemberInvite).mock.calls[0][3] as { code: string }
+    expect(normalizeInviteCode(code)).toBe(code)
+    expect(wrapper.get('[data-testid="reissued-invite-code"]').text()).toBe(formatInviteCode(code))
     expect(wrapper.text()).toContain(t('members.inviteSentTo', { email: 'newbie@x.z' }))
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
+  })
+
+  it('control: a re-issue the server refuses shows no code — there is no invite it would open', async () => {
+    vi.mocked(reissueMemberInvite).mockRejectedValue(httpError(503, 'mail_unavailable'))
+    const wrapper = await mountPanel('OWNER')
+    await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
+    await flushPromises()
+    expect(reissueMemberInvite).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="reissued-invite-code"]').exists()).toBe(false)
   })
 
   it('surfaces a tenant that cannot send mail distinctly, and leaves the invite alone', async () => {
@@ -238,7 +261,7 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
   })
 })
 
-describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
+describe('TenantMembersPanel - who is verified in this tenant (ADR 0111 decision 15)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearActiveSpace()
@@ -249,20 +272,32 @@ describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
 
   const rowOf = (w: Awaited<ReturnType<typeof mountPanel>>, username: string) => w.findAll('.member-row').find((r) => r.text().includes('@' + username))!
 
-  it('shows "verified" in the member list, and a verified contact\'s changed key louder, with the review', async () => {
-    vi.mocked(trustStates).mockResolvedValue({
-      'u-own': { state: 'verified', pinVerified: true },
-      'u-pend': { state: 'changed', pinVerified: true },
-    })
+  it('shows "verified" in the member list, and an anomaly with its note — and no review or accept anywhere', async () => {
+    account.userId = 'u-me'
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'verified', 'u-pend': 'anomaly' })
     const w = await mountPanel('MEMBER')
+    // the active tenant's badges, without this account's own row
+    expect(tenantBadges).toHaveBeenCalledWith('t-1', 'u-me')
     expect(rowOf(w, 'owner').get('[data-testid="member-trust-verified"]').text()).toBe(t('safety.stateVerified'))
-    expect(rowOf(w, 'partner').get('[data-testid="member-trust-changed"]').text()).toBe(t('safety.badgeVerifiedChanged'))
-    expect(rowOf(w, 'partner').text()).toContain(t('verify.review'))
-    expect(rowOf(w, 'owner').text()).not.toContain(t('verify.review'))
+    expect(rowOf(w, 'partner').get('[data-testid="member-trust-anomaly"]').text()).toBe(t('trust.anomaly'))
+    expect(rowOf(w, 'partner').text()).toContain(t('trust.anomalyNote'))
+    expect(rowOf(w, 'owner').find('[data-testid="member-trust-anomaly"]').exists()).toBe(false)
   })
 
-  it('control: a pinned member carries no trust badge', async () => {
-    vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned', pinVerified: false } })
+  it('a member a rotation declared pending reads "waiting for someone who can confirm their key"', async () => {
+    const w = await mountPanel('MEMBER', PENDING, [MEMBERS[0], { ...MEMBERS[1], pending: true }])
+    expect(rowOf(w, 'partner').get('[data-testid="member-pending"]').text()).toBe(t('members.pending'))
+    expect(rowOf(w, 'owner').find('[data-testid="member-pending"]').exists()).toBe(false)
+  })
+
+  it('a member first seen under two weeks ago reads "New"', async () => {
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'new' })
+    const w = await mountPanel('MEMBER')
+    expect(rowOf(w, 'owner').get('[data-testid="member-trust-new"]').text()).toBe(t('safety.stateNew'))
+  })
+
+  it('control: a member nobody verified carries no trust badge', async () => {
+    vi.mocked(tenantBadges).mockResolvedValue({ 'u-own': 'unverified' })
     const w = await mountPanel('MEMBER')
     expect(rowOf(w, 'owner').find('[data-testid^="member-trust-"]').exists()).toBe(false)
   })
@@ -305,5 +340,38 @@ describe('TenantMembersPanel - make owner (ADR 0101 decision 9)', () => {
     await flushPromises()
     expect(setTenantMemberRole).toHaveBeenCalledWith('t-1', 'u-own', 'MEMBER')
     expect(w.find('.msg').text()).toBe(t('members.lastOwner'))
+  })
+})
+
+describe('TenantMembersPanel - names across a tenant rotation (inbox #573)', () => {
+  const T = '5c09e000-0000-4000-8000-0000000005a3'
+  const OLGA = '5c09e000-0000-4000-8000-00000000b001'
+  const PAUL = '5c09e000-0000-4000-8000-00000000b002'
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = T
+    activeSpace.tenantId = T
+  })
+
+  it('shows the real name a member saved under the epoch before the rotation, opened with the key peeled from the chain', async () => {
+    const e0 = v1.randomBytes(32)
+    const e1 = v1.randomBytes(32)
+    const epochs = deriveEpochKeys(T, e1, 1, [{ epoch: 1, wrappedPrev: b64std(v1.seal(epochLinkContext(T, 1), e1, e0)) }])
+    held.write = epochs.keys.get(1)!
+    held.epochs = epochs
+    try {
+      const members: ScopeMember[] = [
+        { ...MEMBERS[0], userId: OLGA, sealedName: sealName(e0, { scopeId: T, userId: OLGA }, { firstName: 'Olga', lastName: 'Owner' }) },
+        { ...MEMBERS[1], userId: PAUL, sealedName: sealName(e1, { scopeId: T, userId: PAUL }, { firstName: 'Paul', lastName: 'Partner' }) },
+      ]
+      const wrapper = await mountPanel('MEMBER', [], members)
+      const titles = wrapper.findAll('.member-row .veyq-row-title').map((x) => x.text())
+      expect(titles).toEqual(['Olga Owner', 'Paul Partner'])
+    } finally {
+      held.write = null
+      held.epochs = null
+    }
   })
 })

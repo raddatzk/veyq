@@ -24,6 +24,7 @@ import { useNameAndPicture } from './useNameAndPicture'
 import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from './profile'
 import { openAvatar } from './memberAvatar'
 import { avatarUrlOf, refreshPeopleDirectory } from '../../../core/people/directory'
+import { epochsOf } from '../../spaces/epochsTestUtil'
 
 const K = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000f1', userId: '5c09e000-0000-4000-8000-0000000000f2' }
@@ -34,7 +35,7 @@ function model() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, address: ADDRESS })
+  vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, epochs: epochsOf(K), tenantId: ADDRESS.scopeId, address: ADDRESS })
   vi.mocked(getMyProfile).mockResolvedValue(memberProfile())
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }))
 })

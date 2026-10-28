@@ -104,6 +104,28 @@ class ShareEpochGateCoreSliceTest {
         nameYourself(link.shareId, identity, role, nodeEpoch = 2).statusCode(201).body("identityId", equalTo(identity))
     }
 
+    // --- createShareNode -------------------------------------------------------------------------------------------
+
+    /**
+     * A guest knows no scope epoch: it states its parent's served one as the new node's (`guestTree.ts`). Under a parent
+     * not re-keyed yet that is the parent's `node_rekey_pending` — the guest waits until a member's device re-keyed it
+     * (ADR 0111 decision 11) — never `stale_epoch`, which a re-read cannot cure while the parent lags. A node epoch
+     * below the parent's is still stale, and once the parent is re-keyed the epoch from before is stale and the current
+     * one lands (the controls).
+     */
+    @Test
+    fun aGuestsCreateUnderAParentNotReKeyedYetWaitsForIt() {
+        val w = lagging()
+        val link = GuestTreeShare.seed(w.owner, w.scopeId, w.folder, ShareEntity.READ_WRITE)
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 1, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 0, parentEpoch = 1).statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { NodeEntity.count("parentId", w.folder) }, "nothing written")
+
+        rekeyed(w.folder, 2)
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 1, parentEpoch = 1).statusCode(409).body("code", equalTo("stale_epoch"))
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 2, parentEpoch = 2).statusCode(201)
+    }
+
     // --- PublicShare.rootEpoch --------------------------------------------------------------------------------------
 
     @Test

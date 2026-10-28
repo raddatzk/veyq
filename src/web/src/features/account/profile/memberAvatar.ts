@@ -8,6 +8,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { ICON_PADDED_LEN } from '../../spaces/spaceIcon'
+import { openUnderHeldEpochs, type EpochKeys } from '../../spaces/epochs'
 
 /** Whose picture it is: the tenant scope it is sealed in and the member it shows (ADR 0072). */
 export type MemberAvatarAddress = { scopeId: string; userId: string }
@@ -48,4 +49,15 @@ export function openAvatar(kTenant: Uint8Array, address: MemberAvatarAddress, se
   } catch {
     return null
   }
+}
+
+/** A `sealedAvatar` opened as every reader opens it - under every held tenant epoch key, newest first, because the profile
+ *  row does not record the epoch it was sealed under (the name's rule, `memberName.ts` § `unsealNameUnderEpochs`). The
+ *  encoded image bytes with the epoch they opened under, or null (the letter). */
+export function openAvatarUnderEpochs(
+  epochs: EpochKeys, address: MemberAvatarAddress, sealedAvatar: string | null | undefined,
+): { bytes: Uint8Array; epoch: number } | null {
+  if (!sealedAvatar) return null
+  const opened = openUnderHeldEpochs(epochs, (key) => openAvatar(key, address, sealedAvatar))
+  return opened && { bytes: opened.value, epoch: opened.epoch }
 }

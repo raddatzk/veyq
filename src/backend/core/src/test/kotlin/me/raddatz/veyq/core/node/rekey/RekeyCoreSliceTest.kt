@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -45,10 +46,11 @@ class RekeyCoreSliceTest {
     @Inject
     lateinit var scopes: ScopesStore
 
-    /** ADR 0109 bite test 2, the listing half: every live and trashed node with its epoch; only an owner holding the
-     *  current grant reads it. */
+    /** ADR 0109 bite test 2, the listing half: every live and trashed node with its epoch; only a caller holding the
+     *  current grant reads it. A plain member's legs are [aMemberWithTheCurrentGrantReKeysANode] and
+     *  [aMemberWithAGrantBehindIsRefused]. */
     @Test
-    fun theListingServesEveryNodeTrashedIncludedAndOnlyToAnOwnerWithTheCurrentGrant() {
+    fun theListingServesEveryNodeTrashedIncludedAndOnlyWithTheCurrentGrant() {
         val w = world(rotated = false)
         rotate(w.scopeId, to = 1, grantFollows = false)
         get(w, "/rekey/nodes").statusCode(403).body("code", equalTo("grant_behind"))
@@ -59,16 +61,104 @@ class RekeyCoreSliceTest {
             .body("nodes.find { it.id == '${w.trashed}' }.trashed", equalTo(true))
             .body("nodes.find { it.id == '${w.child}' }.trashed", equalTo(false))
             .body("nodes.find { it.id == '${w.root}' }.epoch", equalTo(0))
-        // a plain member is refused, with the same 403 an owner would get for nothing else
-        val member = seedUser()
+            .body("nodes.ownerOnly", equalTo(listOf(false, false, false)))
+    }
+
+    /** ADR 0111 decision 11: a re-key is not governance, so a plain member holding the current grant lists, reads, stages
+     *  and commits it — top-down, as an owner does. (Red under the owner-only gate: `not_scope_owner` at the listing.) */
+    @Test
+    fun aMemberWithTheCurrentGrantReKeysANode() {
+        val w = world()
+        val member = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        get(w, "/rekey/nodes", caller = member).statusCode(200).body("nodes.size()", equalTo(3))
+        get(w, "/rekey/nodes/${w.root}", caller = member).statusCode(200).body("shares[0].shareId", equalTo(w.shareId))
+        val rekeyId = UUID.randomUUID()
+        stageRootParts(w, rekeyId, caller = member)
+        commitRoot(w, rekeyId, caller = member).statusCode(204)
+        assertEquals(listOf(1, "bmV3LXJvb3Qtd3JhcA=="), listOf(row(w.root).epoch, row(w.root).wrappedContentKey))
+        commitChild(w, UUID.randomUUID(), placementRevision = 1, caller = member).statusCode(204)
+        assertEquals(1, row(w.child).epoch)
+    }
+
+    /** `grant_behind` is unchanged for a member: one whose grant lags the current epoch neither lists nor commits; the
+     *  control is the same member once its grant follows. */
+    @Test
+    fun aMemberWithAGrantBehindIsRefused() {
+        val w = world()
+        val member = seedScopeMember(w.scopeId, grantedEpoch = 0)
+        get(w, "/rekey/nodes", caller = member).statusCode(403).body("code", equalTo("grant_behind"))
+        val rekeyId = UUID.randomUUID()
+        post(w, "/rekey/nodes/${w.root}/$rekeyId", rootCommit(), caller = member).statusCode(403).body("code", equalTo("grant_behind"))
+        assertEquals(0, row(w.root).epoch)
+        grantAt(w.scopeId, member, 1)
+        get(w, "/rekey/nodes", caller = member).statusCode(200) // control
+    }
+
+    /**
+     * ADR 0111 decision 11, last bullet (ADR 0080 Decision 11): a guest's identity folder and a node below one are
+     * re-keyed by an owner only. The listing marks them `ownerOnly` for everyone; a member is refused `not_scope_owner`
+     * at their parts, stage and commit and nothing moves — after it re-keyed their parent, so the refusal is not the
+     * parent's `node_rekey_pending`. An owner then re-keys each, top-down. (A drop box's own kind is `DropBoxRekeySliceTest`'s:
+     * core alone declares none.)
+     *
+     * The parent is the control on the same predicate, and the narrowing's own case: a node that merely **carries a drop
+     * key** — its WRITE_ONLY link's, as a Memory with an uploader link does — is any member's. Its re-key, the drop key
+     * replaced, the link's drop public key and the guest's `K_up` re-sealed (ADR 0109 point 5), lands from a member.
+     * (Red under the drop-key predicate: `not_scope_owner` at the box.)
+     */
+    @Test
+    fun aMemberReKeysADropKeyedNodeButIsRefusedAnIdentityFolderAndWhatLiesBelow() {
+        val d = dropBoxWorld()
+        val member = seedScopeMember(d.w.scopeId, grantedEpoch = 1)
+        val listing = get(d.w, "/rekey/nodes", caller = member).statusCode(200)
+        for (n in listOf(d.folder, d.inner)) listing.body("nodes.find { it.id == '$n' }.ownerOnly", equalTo(true))
+        listing.body("nodes.find { it.id == '${d.box}' }.ownerOnly", equalTo(false))
+
+        // the drop-keyed node is the member's: its parts read, staged and committed
+        get(d.w, "/rekey/nodes/${d.box}", caller = member).statusCode(200)
+            .body("shares[0].hasDropPublicKey", equalTo(true)).body("identities[0].wrappedIdentityKey", equalTo("b2xkLWstdXA="))
+        val boxRekey = UUID.randomUUID()
+        post(d.w, "/rekey/nodes/${d.box}/$boxRekey/parts", d.boxParts(), caller = member).statusCode(204)
+        d.commitBox(boxRekey, caller = member).statusCode(204)
+        assertEquals(listOf<Any?>(1, "bmV3LWRyb3AtcHJpdg=="), listOf(row(d.box).epoch, row(d.box).sealedDropPrivateKey))
         QuarkusTransaction.requiringNew().run {
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); userId = member; tenantId = ScopeEntity.findById(w.scopeId)!!.tenantId
-                scopeId = w.scopeId; role = MembershipEntity.MEMBER; wrappedGrant = "Z3JhbnQ="; grantedEpoch = 1; createdAt = Instant.now()
-            }.persist()
+            assertEquals("bmV3LWRyb3AtcHVi", ShareEntity.findById(d.w.shareId)!!.sealedDropPublicKey)
+            assertEquals("bmV3LWstdXA=", ShareIdentityEntity.findById(d.w.identityId)!!.wrappedIdentityKey)
         }
-        given().header("Authorization", bearer(member)).`when`().get("/api/scopes/${w.scopeId}/rekey/nodes")
-            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+
+        // the identity folder and what lies below it are an owner's
+        for (n in listOf(d.folder, d.inner)) {
+            get(d.w, "/rekey/nodes/$n", caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
+            post(d.w, "/rekey/nodes/$n/${UUID.randomUUID()}/parts", """{"fromEpoch":0}""", caller = member)
+                .statusCode(403).body("code", equalTo("not_scope_owner"))
+        }
+        d.commitFolder(UUID.randomUUID(), caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
+        d.commitInner(caller = member).statusCode(403).body("code", equalTo("not_scope_owner"))
+        assertEquals(listOf(0, 0), listOf(d.folder, d.inner).map { row(it).epoch }, "a refused re-key moves nothing")
+
+        // an owner re-keys them: the identity folder (its child's entry staged), then the node below it
+        val folderRekey = UUID.randomUUID()
+        post(d.w, "/rekey/nodes/${d.folder}/$folderRekey/parts", d.folderParts()).statusCode(204)
+        d.commitFolder(folderRekey).statusCode(204)
+        d.commitInner(placementRevision = 1).statusCode(204)
+        assertEquals(listOf(1, 1), listOf(d.folder, d.inner).map { row(it).epoch })
+    }
+
+    /** Two members re-keying the same node at once leave one commit and no lost write: each stages under its own re-key
+     *  id; the first commit lands, the second answers `stale_epoch` (the node's row lock and `node.epoch >= current`),
+     *  and the node holds the first one's key. */
+    @Test
+    fun twoMembersReKeyingTheSameNodeLeaveOneCommit() {
+        val w = world()
+        val a = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        val b = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        val (ra, rb) = UUID.randomUUID() to UUID.randomUUID()
+        stageRootParts(w, ra, caller = a)
+        stageRootParts(w, rb, caller = b)
+        commitRoot(w, ra, caller = a).statusCode(204)
+        post(w, "/rekey/nodes/${w.root}/$rb", rootCommit(wrap = "Yi1yb290LXdyYXA="), caller = b)
+            .statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(listOf(1, 1L, "bmV3LXJvb3Qtd3JhcA=="), listOf(row(w.root).epoch, row(w.root).placementRevision, row(w.root).wrappedContentKey))
     }
 
     /** ADR 0109 point 2: top-down — a child before its parent is `node_rekey_pending`; the parent's commit swaps every
@@ -288,7 +378,8 @@ class RekeyCoreSliceTest {
         }
     }
 
-    /** CR decision 4: an owner's scope row reads `rekeying` while a node lags, derived; a member's row carries none. */
+    /** CR decision 4: an owner's scope row reads `rekeying` while a node lags, derived (a member's row:
+     *  [aMembersScopeRowReadsRekeyingWhileANodeLags]). */
     @Test
     fun anOwnersScopeRowReadsRekeyingWhileANodeLags() {
         val (owner, scopeId, tenantId) = seedMemberScope()
@@ -298,6 +389,21 @@ class RekeyCoreSliceTest {
         assertEquals(true, rowRekeying(owner, tenantId, scopeId))
         QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where scopeId = ?1", scopeId) }
         assertEquals(false, rowRekeying(owner, tenantId, scopeId))
+    }
+
+    /** ADR 0111 decision 11: `rekeying` is served to every member, so every member's device continues an unfinished
+     *  re-key. (Red under the owner-only row: a member's read null.) */
+    @Test
+    fun aMembersScopeRowReadsRekeyingWhileANodeLags() {
+        val (owner, scopeId, tenantId) = seedMemberScope(ScopeEntity.GROUP)
+        seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val member = seedScopeMember(scopeId, grantedEpoch = 0)
+        assertEquals(false, rowRekeying(member, tenantId, scopeId), "control: nothing rotated")
+        rotate(scopeId, to = 1, grantFollows = true, owner = owner)
+        grantAt(scopeId, member, 1)
+        assertEquals(true, rowRekeying(member, tenantId, scopeId))
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where scopeId = ?1", scopeId) }
+        assertEquals(false, rowRekeying(member, tenantId, scopeId))
     }
 
     /** ADR 0109 bite test 8: a re-key reads and writes no store object — every blob keeps its storage key and size, and
@@ -359,7 +465,7 @@ class RekeyCoreSliceTest {
         }
     }
 
-    private fun stageRootParts(w: World, rekeyId: UUID, skipTrashedChild: Boolean = false, childRevision: Long = 0) {
+    private fun stageRootParts(w: World, rekeyId: UUID, skipTrashedChild: Boolean = false, childRevision: Long = 0, caller: String = w.owner) {
         val children = buildList {
             add("""{"nodeId":"${w.child}","placementRevision":$childRevision,"encryptedName":"Yy1uYW1l","slugToken":"${slug()}","wrappedContentKey":"Yy13cmFw"}""")
             if (!skipTrashedChild) {
@@ -372,20 +478,84 @@ class RekeyCoreSliceTest {
                "blobs":[{"blobId":"${w.coverBlob}","wrappedBlobKey":"YmxvYi13cmFw"}],
                "shares":[{"shareId":"${w.shareId}","wrap":"c2hhcmUtd3JhcA=="}],
                "identities":[{"identityId":"${w.identityId}","sealedDisplayName":"bmV3LW5hbWU="}]}""",
+            caller,
         ).statusCode(204)
     }
 
-    private fun commitRoot(w: World, rekeyId: UUID): ValidatableResponse = post(w, "/rekey/nodes/${w.root}/$rekeyId", rootCommit())
+    private fun commitRoot(w: World, rekeyId: UUID, caller: String = w.owner): ValidatableResponse =
+        post(w, "/rekey/nodes/${w.root}/$rekeyId", rootCommit(), caller)
 
-    private fun commitChild(w: World, rekeyId: UUID, placementRevision: Long = 0, parentEpoch: Int = 1): ValidatableResponse =
-        post(w, "/rekey/nodes/${w.child}/$rekeyId", childCommit(w, parentEpoch, placementRevision))
+    private fun commitChild(w: World, rekeyId: UUID, placementRevision: Long = 0, parentEpoch: Int = 1, caller: String = w.owner): ValidatableResponse =
+        post(w, "/rekey/nodes/${w.child}/$rekeyId", childCommit(w, parentEpoch, placementRevision), caller)
 
     /** The root's commit body; [parentId] null leaves it out, as the root's one form. */
-    private fun rootCommit(parentId: String? = null, parentEpoch: Int? = null, nodeEpoch: Int = 0): String {
+    private fun rootCommit(parentId: String? = null, parentEpoch: Int? = null, nodeEpoch: Int = 0, wrap: String = "bmV3LXJvb3Qtd3JhcA=="): String {
         val parent = parentId?.let { "\"parentId\":\"$it\"," } ?: ""
         val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
-        return """{$parent$epoch"nodeEpoch":$nodeEpoch,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"bmV3LXJvb3Qtd3JhcA=="}"""
+        return """{$parent$epoch"nodeEpoch":$nodeEpoch,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"$wrap"}"""
     }
+
+    /**
+     * An owner's GROUP scope rotated to epoch 1: a drop-keyed node `box` (a drop key, one WRITE_ONLY link, one guest
+     * identity — a `FOLDER`, since core alone declares no drop box kind), that guest's identity folder `folder` under it
+     * (entry under the guest's `K_up`), and a folder `inner` the guest made inside it. Every node still at epoch 0.
+     */
+    private inner class DropBox {
+        val w: World
+        val box: String
+        val folder: String
+        val inner: String
+
+        init {
+            val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+            box = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+            val shareId = Base64.getUrlEncoder().withoutPadding().encodeToString(UUID.randomUUID().toString().toByteArray()).take(43)
+            val identityId = UUID.randomUUID().toString()
+            QuarkusTransaction.requiringNew().run {
+                NodeEntity.findById(box)!!.sealedDropPrivateKey = "b2xkLWRyb3AtcHJpdg=="
+                ShareEntity().apply {
+                    id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = box; role = "WRITE_ONLY"
+                    sealedDropPublicKey = "b2xkLWRyb3AtcHVi"; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                }.persist()
+                ShareIdentityEntity().apply {
+                    id = identityId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3QtbmFtZQ=="; tokenHash = "h-$identityId".take(64)
+                    wrappedIdentityKey = "b2xkLWstdXA="
+                }.persist()
+            }
+            folder = seedNode(scopeId, NodeEntity.FOLDER, parentId = box, wrappedContentKey = CONTENT_KEY)
+            QuarkusTransaction.requiringNew().run { NodeEntity.findById(folder)!!.shareIdentityId = identityId }
+            inner = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+            rotate(scopeId, to = 1, grantFollows = true, owner = owner)
+            w = World(owner, scopeId, box, folder, inner, "", shareId, identityId)
+        }
+
+        fun boxParts(): String =
+            """{"fromEpoch":0,"shares":[{"shareId":"${w.shareId}","sealedDropPublicKey":"bmV3LWRyb3AtcHVi"}],
+               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWstdXA="}]}"""
+
+        fun folderParts(): String =
+            """{"fromEpoch":0,"children":[{"nodeId":"$inner","placementRevision":0,"encryptedName":"aS1uYW1l","slugToken":"${slug()}","wrappedContentKey":"aS13cmFw"}]}"""
+
+        fun commitBox(rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
+            w, "/rekey/nodes/$box/$rekeyId",
+            """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}""",
+            caller,
+        )
+
+        fun commitFolder(rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
+            w, "/rekey/nodes/$folder/$rekeyId",
+            """{"nodeEpoch":0,"epoch":1,"parentId":"$box","parentEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Zm9sZGVy","slugToken":"${slug()}","wrappedContentKey":"Zm9sZGVyLXdyYXA="}""",
+            caller,
+        )
+
+        fun commitInner(placementRevision: Long = 0, caller: String = w.owner): ValidatableResponse = post(
+            w, "/rekey/nodes/$inner/${UUID.randomUUID()}",
+            """{"nodeEpoch":0,"epoch":1,"parentId":"$folder","parentEpoch":1,"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"aW5uZXI=","slugToken":"${slug()}","wrappedContentKey":"aW5uZXItd3JhcA=="}""",
+            caller,
+        )
+    }
+
+    private fun dropBoxWorld() = DropBox()
 
     /** The child's commit body under the root; [parentEpoch] null leaves it out. */
     private fun childCommit(w: World, parentEpoch: Int?, placementRevision: Long = 0, nodeEpoch: Int = 0): String {
@@ -410,16 +580,16 @@ class RekeyCoreSliceTest {
         given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON).body("{}")
             .`when`().post("/api/tasks/$jobId/complete").then()
 
-    private fun get(w: World, path: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}$path").then()
+    private fun get(w: World, path: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/${w.scopeId}$path").then()
 
-    private fun post(w: World, path: String, body: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON).body(body)
+    private fun post(w: World, path: String, body: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body(body)
             .`when`().post("/api/scopes/${w.scopeId}$path").then()
 
-    /** The owner's scope row as a fresh read: each in its own transaction, so no copy loaded by the last one answers. */
-    private fun rowRekeying(owner: String, tenantId: String, scopeId: String): Boolean? =
-        QuarkusTransaction.requiringNew().call { scopes.listMine(owner, tenantId).single { it.id == scopeId }.rekeying }
+    /** [userId]'s scope row as a fresh read: each in its own transaction, so no copy loaded by the last one answers. */
+    private fun rowRekeying(userId: String, tenantId: String, scopeId: String): Boolean? =
+        QuarkusTransaction.requiringNew().call { scopes.listMine(userId, tenantId).single { it.id == scopeId }.rekeying }
 
     private fun row(id: String): NodeEntity = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!! }
 

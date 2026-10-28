@@ -4,6 +4,7 @@
 // (Node/tsx) can seal identically without pulling in the app graph.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { openUnderHeldEpochs, type EpochKeys } from '../../spaces/epochs'
 
 /** Whose name it is: the tenant scope it is sealed in and the member it names (ADR 0072). */
 export type MemberNameAddress = { scopeId: string; userId: string }
@@ -38,4 +39,17 @@ export function unsealName(
     // wrong key / another member's name / corrupt / not-yet-sealed — treated as "no readable name"
   }
   return null
+}
+
+/**
+ * A member's sealed name as every reader opens it: under the tenant epoch it was sealed under, which the profile row does not
+ * record (the epoch current when its member saved it), so every held epoch key is tried, newest first
+ * ({@link openUnderHeldEpochs}). The name with the epoch it opened under, or null when none opens.
+ */
+export function unsealNameUnderEpochs(
+  epochs: EpochKeys, address: MemberNameAddress, sealedName: string | null | undefined,
+): { name: MemberName; epoch: number } | null {
+  if (!sealedName) return null
+  const opened = openUnderHeldEpochs(epochs, (key) => unsealName(key, address, sealedName))
+  return opened && { name: opened.value, epoch: opened.epoch }
 }

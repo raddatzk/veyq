@@ -24,8 +24,8 @@ What exists to build on (measured in this worktree):
   (line 47); the Server-Owner gate answers only on the admin channel ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
   A tenant owner is a `veyq_membership.role` of `OWNER` in the tenant scope. There is no third account role.
 - **A key wrapped to many accounts, with epochs and rotation, already exists** — the scope key: one grant per member
-  (`sealTo` purpose `scope-grant` [scopeId, epoch], `src/packages/crypto/src/seal.ts`), delivered by a key-holder to a
-  grant-less member ([ADR 0020](0020-grant-distribution-invite-wrap.md)), checked against the recipient's pinned
+  (`sealTo` purpose `scope-grant` [scopeId, epoch], `src/packages/crypto/src/seal.ts`), wrapped by a key-holder to
+  another member ([ADR 0020](0020-grant-distribution-invite-wrap.md)), checked against the recipient's pinned
   identity ([ADR 0028](0028-identity-authenticity-tofu-verification.md)), and rotated forward into a new epoch on a
   removal ([ADR 0024](0024-scope-key-rotation.md)). A moderation key is the same problem with fewer holders.
 - **admin-web holds no vault** and is reachable on localhost by default (ADR 0065); it already does one piece of
@@ -88,7 +88,10 @@ What exists to build on (measured in this worktree):
   instance without an epoch keeps the report action off, and admin-web says so.
 - **A new moderator receives the key from a holder.** Once they accept, the next holder to open the moderation
   surface finds a pending delivery and their client seals every live epoch to the newcomer's identity — after the
-  pinned-identity check of ADR 0028, as a scope grant is. admin-web cannot deliver: it does not hold `M`.
+  anchor check of ADR 0028 Decision 2, as a scope grant is: the delivery serves the newcomer's key-chain head beside
+  their key, and the server serves one accepted moderator's key chain to another, because two moderators may share no
+  tenant (the roster is the instance's, so they already know each other). A key the chain does not reach, or a retired
+  key served beside a newer head, is not delivered to. admin-web cannot deliver: it does not hold `M`.
 - **Moderators watch the published key.** A moderator's client compares the public half the server publishes with
   the one it derives from the `M_n` it opened, on every unlock, and refuses to go on on a mismatch. A reporter cannot
   check it (a guest has no pins), and need not beyond what [ADR 0026](0026-client-trust-tiers.md) already says: the

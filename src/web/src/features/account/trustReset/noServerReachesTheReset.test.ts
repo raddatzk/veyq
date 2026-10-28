@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { fakeApi } from '../../../test/apiMock'
-import { fakePinServer, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import { fakePinServer, pinOf, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import { chainKeys, fakeKeyChains, servedIdentity, type BuiltChain } from '../../../test/keyChain'
 import type { AccountDeviceRegisterApi, DeviceRegister } from '../../../api/generated/account'
 import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 
@@ -15,22 +16,28 @@ import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 //
 // Which paths: every importer of the two document modules outside the reset and the rotation, measured with
 //   grep -rn -E "from '[./]*(account/)?(identityPins|deviceRegister)'" src/web/src | grep -v '\.test\.'
-// — the grant-delivery worker, the member directory (`trustStates`), the changed-key review (`getPin`,
-// `acceptKeyChange`), the group invite (`acceptKeyChange`), opening a scope (`scopes.ts` / `grantTrust.ts`, both
-// through `checkAndPin`), the sessions panel (`readRegisterView`, the reconcile, the rename), the unlock
-// (`rememberThisDevice`), the onboarding tail (`rememberThisDeviceWrap`), and the hub's probe. Opening the
-// active space reaches the store only through `checkAndPin`, so it is driven at that entry point; the worker is
-// driven whole, through its real claim, because its pause is its own decision.
+// — the grant-delivery worker, the member directory (`tenantBadges`), the profile (`personInTenant`), every
+// wrap site (`anchorIdentity`: the group add, the rotation, the open-invite carry, the invite accept), the recipient
+// side and the moderation unlock (`anchorChainKey`, through `grantTrust.ts`), the sessions panel (`readRegisterView`, the
+// reconcile, the rename), the unlock (`rememberThisDevice`), the onboarding tail (`rememberThisDeviceWrap`), and the
+// hub's probe. Opening the active space reaches the store only through `anchorChainKey`, so it is driven at that entry
+// point; the worker is driven whole, through its real claim, because its pause is its own decision.
 vi.mock('../../../api/client', () => ({
   accountIdentityPinsApi: vi.fn(),
   accountDeviceRegisterApi: vi.fn(),
   tasksApi: vi.fn(),
+  keyChainApi: vi.fn(),
 }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn() }))
+// The tenant's directory and key (ADR 0111 decision 15) are no path into either document: the target stands in it as an
+// owner without a join record — a root — so every reader's judgement is the pin store's alone. The worker's view is
+// handed over; the member list and the profile read the REAL tenant view over the directory below.
+vi.mock('../tenantTrust', async (o) => ({ ...(await o<typeof import('../tenantTrust')>()), tenantViewOfScope: vi.fn() }))
+vi.mock('../../spaces/scopes', () => ({ openScopeById: vi.fn(), listMyScopes: vi.fn() }))
+vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
-import { acceptKeyChange, checkAndPin, forgetVerifiedPins, getPin, markVerified, trustStates } from '../identityPins'
-import { fingerprintDigestB64 } from '../safetyCode'
+import { anchorChainKey, anchorIdentity, forgetVerifiedPins, getPin } from '../identityPins'
 import {
   readRegisterView,
   reconcileWithSessions,
@@ -39,9 +46,12 @@ import {
   renameDeviceOfFamily,
 } from '../deviceRegister'
 import { refusedDocuments } from './refusedDocuments'
+import { personInTenant, tenantBadges, tenantViewOfScope } from '../tenantTrust'
+import { openScopeById } from '../../spaces/scopes'
+import { listScopeMembers } from '../../spaces/members'
+import { ScopeKind } from '../../../api/generated/scopes'
 import { runGrantDeliveryWorker } from '../../tasks/grantDeliveryWorker'
 import { GRANT_DELIVERY } from '../../tasks/capabilityTags'
-import { tagAdmission } from '../../spaces/grant'
 import { raiseMarks } from '../trustMarks'
 import { accountDeviceRegisterApi, tasksApi } from '../../../api/client'
 import { identityPrivate, masterKey } from '../../../app/vault'
@@ -59,8 +69,10 @@ const S1 = '5c09e000-0000-4000-8000-0000000000c2'
 const OTHER_ID = '7a26e000-0000-4000-8000-0000000000c3'
 const OTHER_KEY = b64std(v1.serializeIdentityPublic(v1.generateIdentity().pub))
 /** The pin store as this account wrote it at `revision`: one contact pinned (ADR 0104: a head plus an entry). */
-const pinsAt = (revision: number) =>
-  sealPinStore(MK, { [OTHER_ID]: { fingerprint: fingerprintDigestB64(OTHER_KEY), state: 'pinned', firstSeenAt: 1 } }, revision)
+const pinsAt = (revision: number) => sealPinStore(MK, { [OTHER_ID]: pinOf(OTHER_KEY) }, revision)
+/** The target's key chain as the server serves it — born with TARGET — and what a directory serves beside it. */
+let targetChain: BuiltChain
+const target = () => servedIdentity(targetChain)
 const registerAt = (revision: number) =>
   b64std(v1.seal({ purpose: 'device-register', revision }, MK, enc.encode(JSON.stringify({ devices: {}, families: {}, wraps: {} }))))
 
@@ -76,14 +88,11 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
     return { ...served.register }
   })
   fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...served.register }), putDeviceRegister })
-  // The worker's claim: one grant-delivery job to a genuinely admitted target, then drained.
+  // The worker's claim: one grant-delivery job to a target whose grant is behind, then drained.
   const K_SC = v1.randomBytes(32)
   const job: ClaimedJob = {
     jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
-    grantDelivery: {
-      targetUserId: TARGET_ID, targetMembershipId: 'm1', identityPublicKey: TARGET_PUB,
-      ...tagAdmission(K_SC, { scopeId: S1, kind: 'GROUP' }, 0, TARGET_ID),
-    },
+    grantDelivery: { targetUserId: TARGET_ID, targetMembershipId: 'm1', ...target() },
   }
   const completeTask = vi.fn<TasksApi['completeTask']>(async () => undefined)
   fakeApi(tasksApi, {
@@ -91,7 +100,6 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
     completeTask,
     failTask: vi.fn<TasksApi['failTask']>(),
     declineTask: vi.fn<TasksApi['declineTask']>(),
-    clearDeclinesForAcceptedKey: async () => ({ cleared: 0 }),
   })
   return { putIdentityPins, putDeviceRegister, completeTask, K_SC }
 }
@@ -100,10 +108,11 @@ function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, 
 async function driveEveryPath(K_SC: Uint8Array) {
   const attempts: Array<() => Promise<unknown>> = [
     () => getPin(TARGET_ID),
-    () => checkAndPin(TARGET_ID, TARGET_PUB),
-    () => trustStates([{ userId: TARGET_ID, directoryKey: TARGET_PUB }]),
-    () => acceptKeyChange(TARGET_ID, TARGET_PUB),
-    () => markVerified(TARGET_ID, fingerprintDigestB64(TARGET_PUB)),
+    () => anchorIdentity(TARGET_ID, target()),
+    () => anchorChainKey(TARGET_ID, TARGET_PUB),
+    () => tenantBadges(S1),
+    () => personInTenant(S1, TARGET_ID),
+    () => anchorIdentity(TARGET_ID, target(), { tenant: { tenantId: S1, standing: async () => ({ kind: 'root' }) } }),
     () => runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 }),
     () => readRegisterView(['fam1'], [], 'me'),
     () => rememberThisDevice('me', 'Firefox', 'fam1', 'w1'),
@@ -117,9 +126,20 @@ async function driveEveryPath(K_SC: Uint8Array) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(tenantViewOfScope).mockResolvedValue({
+    tenantId: 't', members: new Map(), available: true, standing: async () => ({ kind: 'root' }),
+  })
+  vi.mocked(openScopeById).mockImplementation(async () => {
+    const key = v1.randomBytes(32)
+    return { scopeId: S1, tenantId: S1, kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) }, nameEpoch: 0, deletedAt: null, purgeAfter: null }
+  })
+  vi.mocked(listScopeMembers).mockImplementation(async () => [
+    { userId: TARGET_ID, username: 'target', avatarRevision: 0, role: 'OWNER', ...target(), pending: false },
+  ])
   globalThis.indexedDB = new IDBFactory()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   forgetVerifiedPins()
+  targetChain = fakeKeyChains().born(TARGET_ID, chainKeys(TARGET))
   vi.mocked(identityPrivate).mockImplementation(() => ({
     kemSeed: WORKER.priv.kemSeed.slice(), sign: WORKER.priv.sign.slice(),
   }))

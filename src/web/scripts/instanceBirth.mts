@@ -10,7 +10,7 @@ import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { moderationEpochOne } from '../src/test/moderationEpochOne'
 import { sealName } from '../src/features/account/profile/memberName'
-import { sealGrant, tagAdmission } from '../src/features/spaces/grant'
+import { recipientIdentityDigest, sealGrant } from '../src/features/spaces/grant'
 import { Configuration as SetupConfiguration, SetupApi, type SetupStatus } from '../src/api/generated'
 import { Configuration as AuthConfiguration, LoginApi } from '../src/api/generated/auth'
 import { AccountApi, Configuration as AccountConfiguration } from '../src/api/generated/account'
@@ -93,8 +93,8 @@ export type BirthedTenant = {
 
 /**
  * The configured-domain tenant, accepted as the existing Server Owner: the TENANT grant sealed to its own identity and
- * signed by it (ADR 0028 Decision 6), its admission self-tagged under E_0 (ADR 0020 move 6), and — when given — its real
- * name sealed under K_tenant (operator-blind). The owner invite's secret comes back to the Server Owner who minted it
+ * signed by it (ADR 0028 Decision 6) — the tenant's trust root, which nobody vouches for (ADR 0111 decision 3) — and,
+ * when given, its real name sealed under K_tenant (operator-blind). The owner invite's secret comes back to the Server Owner who minted it
  * (`TenantCreated.bootstrapSecret`), so no mailbox is read for it.
  */
 export async function birthTenant(token: string, built: BuiltAccount, t: {
@@ -107,13 +107,13 @@ export async function birthTenant(token: string, built: BuiltAccount, t: {
   const { userId: ownerId } = await orThrow('key-material', new AccountApi(new AccountConfiguration(onTenant)).getAccountKeyMaterial())
   const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
   const birth = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
-  const admission = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
   const firstName = t.firstName ?? ''
   const lastName = t.lastName ?? ''
   const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
   await orThrow('accept', new TenantsApi(new TenantsConfiguration(onTenant)).acceptTenantInvite({
     acceptInviteRequest: {
-      bootstrapSecret, username: t.username, grant: birth.wrappedGrant, grantSignature: birth.grantSignature, ...admission,
+      bootstrapSecret, username: t.username, grant: birth.wrappedGrant, grantSignature: birth.grantSignature,
+      recipientIdentityDigest: recipientIdentityDigest(ownerPub),
       ...(sealedName ? { sealedName } : {}),
     },
   }))
@@ -126,7 +126,7 @@ export async function birthPersonalScope(token: string, domain: string, ownerId:
   const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
   const grant = sealGrant(v1.randomBytes(32), { scopeId, kind: 'PERSONAL', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
   const scope = await orThrow('createPersonalScope', new ScopesApi(new ScopesConfiguration(tenantChannel(domain, token))).createPersonalScope({
-    createPersonalScopeRequest: { scopeId, ...grant },
+    createPersonalScopeRequest: { scopeId, ...grant, recipientIdentityDigest: recipientIdentityDigest(ownerPub) },
   }))
   return scope.scopeId
 }

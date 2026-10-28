@@ -25,6 +25,7 @@ import { openScopeById } from '../../features/spaces/scopes'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { listTree } from '../node/tree'
 import { assertNodeKeyAtFloor, nodeKeyForWrite } from '../node/rekey/floor'
+import { pullRekeyPath } from '../node/rekey/rekeyScope'
 import { ShareRole, type ShareGuestStop } from '../../api/generated/sharing'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
@@ -217,8 +218,9 @@ export async function mintShare(
   const pw = password.trim() ? await buildPasswordFields(kShare, password) : undefined
   let recovery = recoveryCopy(epochs)
   let at = root
-  assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs)
   const post = async () => {
+    // The device floor inside the attempt, so a node below it is pulled forward and re-read like a server refusal.
+    assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs)
     // Only a READ or READ_WRITE link holds the node's key; a WRITE_ONLY link's guest never does.
     const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, at.key))
     const drop = writeOnly ? await writeOnly.dropFields(kShare, at.key) : undefined
@@ -233,7 +235,9 @@ export async function mintShare(
       }),
     )
   }
-  // Each refusal is retried once: a nothing-written conflict the caller can answer by re-reading what moved.
+  // Each refusal is retried once: a nothing-written conflict the caller can answer by re-reading what moved. A member's
+  // device pulls the shared node's path forward first (ADR 0111 decision 11).
+  const pull = pullRekeyPath(scopeId, [nodeId])
   let retriedDrop = false
   for (;;) {
     try {
@@ -242,7 +246,7 @@ export async function mintShare(
       await writeAtNodeEpoch(async (reread) => {
         if (reread) ({ root: at, recovery } = await rereadShareRoot(scopeId, nodeId, recoveryCopy))
         await post()
-      })
+      }, { pull })
       return { shareId, kShare }
     } catch (e) {
       // The application's own drop-key conflict (another member set the node's drop key first): re-read and re-seal.
@@ -329,8 +333,8 @@ export async function remintShare(
   const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
   let recovery = recoveryCopy(epochs)
   let at = root
-  assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs)
   const post = async () => {
+    assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs) // inside the attempt: pulled and re-read as a refusal
     const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, at.key))
     const sealedDropPublicKey = writeOnly ? (await writeOnly.dropFields(kShare, at.key)).sealedDropPublicKey : undefined
     await withRefresh(() =>
@@ -347,7 +351,7 @@ export async function remintShare(
   await writeAtNodeEpoch(async (reread) => {
     if (reread) ({ root: at, recovery } = await rereadShareRoot(scopeId, nodeId, recoveryCopy))
     await post()
-  })
+  }, { pull: pullRekeyPath(scopeId, [nodeId]) })
   return { shareId, kShare }
 }
 

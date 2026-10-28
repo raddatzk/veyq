@@ -100,7 +100,7 @@ beforeEach(() => {
   vi.mocked(acceptInvite).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active })
   vi.mocked(registerAndAccept).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active, userId: 'user-1' })
   vi.mocked(bornTenantScope).mockReturnValue({
-    birth: { grant: 'AQ==', grantSignature: 'AQ==', admissionId: 'admission-1', admissionEpoch: 0, admissionTag: 'AQ==' },
+    birth: { grant: 'AQ==', grantSignature: 'AQ==', recipientIdentityDigest: 'AQ==' },
     scopeRootKey: new Uint8Array(32),
   })
   vi.mocked(sealName).mockReturnValue('AQ==')

@@ -60,10 +60,41 @@ a tenant.**
   the server never decrypts. Every tenant member holds `K_tenant`, so each can decrypt any member's sealed name
   **locally** — which is where directory **search/sort over names** happens (client-side), so the server needs no
   plaintext name. The real name is **optional**, and is **offered at the tenant join itself** (alongside the
-  required username): when the invitee already holds `K_tenant` at accept — the owner cold-birth, or any accept
-  that seals the grant on-device — the client seals it right there and submits it with the accept; otherwise it is
-  added or edited later in the profile (both entry points seal identically). A grant-less "awaiting access" accept
-  always defers to the profile (Consequences).
+  required username): every invitee holds `K_tenant` at accept — the owner cold-birth, or a member's self-grant from
+  its invite ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 3) — so the client seals it right there and submits it with the accept, or it is added or edited later in
+  the profile (both entry points seal identically).
+- **The epoch of a sealed name.** The name, and the picture of [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md),
+  are sealed under the tenant epoch ([ADR 0024](0024-scope-key-rotation.md)) current when their member saved them, and
+  the profile row records no epoch. **Every reader opens them under every tenant epoch key it holds, newest first** — the
+  join record's rule (`openUnderHeldEpochs`, `src/web/src/features/spaces/epochs.ts`). So a rotation, which securing an
+  account causes in every tenant it is in ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 8), leaves every name and picture readable to every member: a grant at the current epoch peels the chain down
+  to `E_0`, a newcomer's included. Nothing opens under a key the reader does not hold, so no one reads a name their
+  membership did not already give them. **The member's own client moves its name and picture forward** to the current
+  epoch when it enters the tenant (`carryProfileForward.ts`): opened and sealed again, written only while the stored blob
+  (the name) or revision (the picture) is still the one it opened, so a save from another device in between wins.
+  - *Why on entry, not on the next save:* a name is set once and rarely saved again, and each failed trial costs about
+    26 ms per 1,000 members on every directory read (measured 2026-10-28: 19 ms for 1,000 names opening at the first
+    try, 264 ms nine epochs behind) — without the move, every rotation would add that for good.
+  - *Why no epoch beside the blob:* the server could hold one (an epoch number is opaque metadata it already holds per
+    scope), but it would check nothing, and it would cost a field on the profile's writes, the accepts and both reads, and a
+    migration whose existing rows would need the trial open anyway. With the move, the trial is one open in the steady
+    state.
+- **The join record** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 3, built 2026-10-28). The profile row also holds `sealed_join_record`: the member's identity and
+  Secret-Key proof public key with the owner-signed invite it joined through, signed by the invite key and the new
+  identity, sealed under the tenant epoch the invite's grant carried (field purpose `member-join-record`, bound to the
+  tenant and the member). It is written once, by the accept, never by a profile update, and served to every member on
+  `ScopeMember.sealedJoinRecord` in the tenant scope; the tenant's first owner has none (the trust root). Every
+  member's client reads it as the anchor of that member's key in this tenant (ADR 0111 decisions 12 and 15).
+- **The verifications** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 12). Beside the profile, a member's signed verifications of other members of the tenant live in their own
+  table, one row per verifier and subject (`veyq_verification`), each sealed under a tenant epoch (field purpose
+  `member-verification`, bound to the tenant, both members and the epoch). Like the profile, a row is written only by
+  its member — the verifier is always the caller — and read by every member of the tenant; a member's removal deletes
+  the rows naming them. Unlike the name, the row's address is plaintext: the server sees who verified whom in the
+  tenant, never what was confirmed.
 - **Directory visibility.** Every tenant member sees each member's `username` (plaintext) + `firstName`/`lastName`
   (locally decrypted). **Only a tenant `OWNER`** additionally sees `email` (owner correlates a pending member to
   their invite — [ADR 0007](0007-membership-role-grant-relation.md); the field is omitted for ordinary members).
@@ -78,12 +109,10 @@ a tenant.**
   `UNIQUE(tenant_id, username)`) + the sealed name blob (one per person per tenant, independent of how many
   scopes they're in); the member directory (`listScopeMembers`) joins it in and returns username + sealed name to
   every member and `email` only to an owner caller.
-- **The sealed name follows the grant.** A member can seal first/last only once they hold `K_tenant`. When that
-  is true **at accept** (the owner cold-birth, or an accept that seals the grant on-device), the name is offered
-  and sealed **at the join** — one step, no separate profile visit. For a grant-less **"awaiting access"** member
-  `K_tenant` arrives later via grant-delivery ([ADR 0021](0021-operator-blind-background-tasks.md)), so their name
-  **necessarily defers**: the directory shows only `@username` + (owner-only) email until their grant lands and
-  they seal it. Either way it stays **editable** in the profile afterward.
+- **The sealed name follows the grant.** A member can seal first/last only once they hold `K_tenant`, and every
+  invitee holds it at accept (the owner cold-birth, or a member's self-grant from its invite), so the name is offered
+  and sealed **at the join** — one step, no separate profile visit. A member who skips it shows only `@username` +
+  (owner-only) email until they seal it in the profile, where it stays **editable** afterward.
 - **Better operator-blindness than today.** Real names move from plaintext to ciphertext; the server's plaintext
   identity surface shrinks to `email` + a per-tenant pseudonymous `username`. No global handle namespace to
   govern; tenants stay isolated (no cross-tenant handle correlation) — good for the hosted SaaS.

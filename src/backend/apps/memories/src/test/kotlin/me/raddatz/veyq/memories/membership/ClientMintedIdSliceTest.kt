@@ -24,7 +24,7 @@ import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.membership.ScopeAccessWorld
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.memories.testing.nodeId
 import me.raddatz.veyq.memories.testing.mediaId
 import me.raddatz.veyq.memories.testing.blobId
@@ -252,20 +252,20 @@ class ClientMintedIdSliceTest {
 
     @Test
     fun createGroupRefusesAScopeIdTakenByAnotherScope() {
-        asOwnerOnTenant().body("""{"scopeId":"${w.control.scopeId}","encryptedName":"bmV3","wrappedGrant":"bmV3",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+        asOwnerOnTenant().body("""{"scopeId":"${w.control.scopeId}","encryptedName":"bmV3","wrappedGrant":"bmV3",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(409).body("code", equalTo("id_taken"))
         read { assertEquals(B64, ScopeEntity.findById(w.control.scopeId)!!.encryptedName, "the taken group is untouched") }
 
         val fresh = TestIds.uuid()
-        asOwnerOnTenant().body("""{"scopeId":"$fresh","encryptedName":"bmV3","wrappedGrant":"bmV3",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+        asOwnerOnTenant().body("""{"scopeId":"$fresh","encryptedName":"bmV3","wrappedGrant":"bmV3",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).body("scopeId", equalTo(fresh))
     }
 
     @Test
     fun createPersonalScopeRefusesAScopeIdTakenByAnotherScope() {
-        asOwnerOnTenant().body("""{"scopeId":"${w.control.scopeId}","wrappedGrant":"bmV3",${TestAdmission.SIGNATURE_JSON}}""")
+        asOwnerOnTenant().body("""{"scopeId":"${w.control.scopeId}","wrappedGrant":"bmV3",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(409).body("code", equalTo("id_taken"))
         read {
@@ -274,7 +274,7 @@ class ClientMintedIdSliceTest {
         }
 
         val fresh = TestIds.uuid()
-        asOwnerOnTenant().body("""{"scopeId":"$fresh","wrappedGrant":"bmV3",${TestAdmission.SIGNATURE_JSON}}""")
+        asOwnerOnTenant().body("""{"scopeId":"$fresh","wrappedGrant":"bmV3",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(201).body("scopeId", equalTo(fresh))
     }

@@ -1,15 +1,25 @@
-// Identity pinning — the operator-blind, cross-device TOFU pin store (en.account.identity-pinning, ADR 0028, ADR 0104).
-// A client remembers each contact's identity key the first time it wraps to them, so a later *changed* key (an active
-// operator's MITM, or a legitimate rotation) is surfaced, never silently trusted.
+// Identity pinning — the operator-blind, cross-device pin store and the one key check every wrap and every grant from
+// another account goes through (en.account.identity-pinning, ADR 0028, ADR 0104, ADR 0111 decisions 9, 15 and 16).
+//
+// **A pin is a contact's key-chain head** (ADR 0028 Decision 2). A client pins the head of a contact's key
+// chain the first time it meets them (trust on first use) together with the fingerprint of the key at that head. A later
+// key is accepted only when the chain reaches it from that pinned head — every step signed by the identity AND the
+// Secret-Key proof key it retires — and the pin then moves to the new head; anything else is an **anomaly**: never wrapped
+// to, never accepted as a granter, never offered to a human to accept. The head anchors the identity and the proof key
+// together: with the identity alone pinned, an operator could serve an invented prefix whose last step names the pinned
+// identity beside a proof key of its own, and a thief holding that identity could then sign a step every member accepts.
 //
 // **One sealed entry per pin under a sealed head** (ADR 0104). A pin lives at an opaque id only this account can compute
 // — `pinId = HMAC-SHA256(K_pinIndex, userId)`, `K_pinIndex` derived from the Master Key — sealed under the Master Key
-// and bound to that id (`identity-pin`), its plaintext `{ userId, fingerprint, state, firstSeenAt }` padded to one
-// length. What a pin holds is the contact's FINGERPRINT HASH (`v1.fingerprintHash`, the digest the safety number and its
-// QR already are), not their bundle: every reader of a pin is an equality check or a safety number, both functions of
-// the hash (ADR 0104 decision 3). The HEAD (`identity-pins`, bound to the store's revision) holds `{ version: 2, count,
-// digest }`, the digest over every entry in `pinId` order — so a withheld, added, rolled-back or moved entry is refused
-// exactly as a rolled-back store is (ADR 0028 Decision 7). The server sees opaque ids, sealed entries and the count.
+// and bound to that id (`identity-pin`), its plaintext `{ u: userId, f: fingerprint, h: head, i: index, t: firstSeenAt,
+// r: replaced }` (single-letter keys, so an entry with its head stays inside one padded length) padded to one length.
+// There is no `verified` in it: a verification is a signed statement in the tenant (`tenantTrust.ts`, ADR 0111 decision
+// 12), and the pin store is the device's counter only (decision 16). What a pin holds is
+// the contact's FINGERPRINT HASH (`v1.fingerprintHash`, the digest the safety number and its QR already are), not their
+// bundle, and the head of their chain. The HEAD of the store (`identity-pins`, bound to the store's revision) holds
+// `{ version: 2, count, digest }`, the digest over every entry in `pinId` order — so a withheld, added, rolled-back or
+// moved entry is refused exactly as a rolled-back store is (ADR 0028 Decision 7). The server sees opaque ids, sealed
+// entries and the count.
 //
 // **Every open goes through this device's trust-state marks** (`trustMarks.ts`): the head is opened under them like any
 // sealed account document — refused if older than one this device held, missing after it held one, or unreadable — and
@@ -21,10 +31,11 @@
 // and the rotation — the whole set with `replaceAll`. A `409 stale_revision` re-reads and re-applies, bounded.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { accountIdentityPinsApi, tasksApi } from '../../api/client'
+import { accountIdentityPinsApi, keyChainApi } from '../../api/client'
 import type { IdentityPinEntry, IdentityPinsWrite } from '../../api/generated/account'
+import type { KeyChain } from '../../api/generated/scopes'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isCodedError, HttpStatus } from '../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
 import { fingerprintDigestB64 } from './safetyCode'
 import {
@@ -48,8 +59,8 @@ const entryContext = (pinId: Uint8Array) => ({ purpose: 'identity-pin', pinId })
  *  (owner decision Q3 of cr-identity-pins-per-entry — veyq was not live), so anything else does not open. */
 const HEAD_VERSION = 2
 
-/** Every entry's plaintext is padded with spaces to exactly this many bytes, so `pinned` and `verified` (and any two
- *  contacts) seal to one length (ADR 0104 decision 2; v1.json#identity_pin.entry_bytes). */
+/** Every entry's plaintext is padded with spaces to exactly this many bytes, so any two contacts seal to one length
+ *  (ADR 0104 decision 2; v1.json#identity_pin.entry_bytes). */
 export const ENTRY_BYTES = 192
 
 /** The listing's page size — the contract's maximum. */
@@ -59,28 +70,16 @@ const PAGE = 1000
  *  wrote, and is refused rather than followed. */
 const MAX_ENTRIES = 25_000
 
-/** A pin's trust state. `pinned` = trust-on-first-use; `verified` = an out-of-band safety-number compare succeeded (the
- *  ceremony on a member's profile, ADR 0028 Decision 3). */
-export type PinState = 'pinned' | 'verified'
-
-/** The trust a contact reads as, folding the pin state against their *current* directory key (the badge read). */
-export type TrustState = 'verified' | 'pinned' | 'changed' | 'unpinned'
-
-/** One contact's badge read: the folded {@link TrustState}, and whether the pin it folded is `verified`. On `changed`
- *  that second half is the louder case - **a verified contact's key changed** (ADR 0028 Decision 3) - which the badge
- *  and the review say. A separate flag rather than a fifth state, so every `state === 'changed'` check keeps
- *  catching the verified case instead of silently missing it. */
-export interface ContactTrust {
-  state: TrustState
-  pinVerified: boolean
-}
-
-/** One pinned contact: the fingerprint hash of their identity public bundle (base64 of 32 bytes, `fingerprintDigestB64`),
- *  the trust state, and first-seen. */
+/** One pinned contact: the head of their key chain this account pinned (base64 of 32 bytes), the fingerprint hash of the
+ *  identity public bundle at that head (base64 of 32 bytes, `fingerprintDigestB64`), the index of that head's step in the
+ *  chain (-1 for a head pinned unread, at an invite's accept), first-seen, and whether a join record replaced a pin that
+ *  was not on its chain (ADR 0111 decision 15: "the key you saw before wasn't theirs"). */
 export interface Pin {
   fingerprint: string
-  state: PinState
+  head: string
+  index: number
   firstSeenAt: number
+  replaced: boolean
 }
 
 type PinMap = Record<string, Pin>
@@ -102,26 +101,59 @@ interface Head {
   digest: string
 }
 
-/** The TOFU outcome of checking a contact's directory key against the pin store. */
-export type CheckResult = 'firstUse' | 'match' | 'changed'
+/**
+ * What a served key comes to against this account's pin (ADR 0028 Decision 2) — and, in a tenant, against the join
+ * record that anchors the person there (ADR 0111 decisions 12 and 15, {@link Standing}):
+ * - `firstUse` — no pin: the chain was read, its head is the served one and its newest key the served key; the head is
+ *   pinned (trust on first use, ADR 0111 decision 15's unknown person);
+ * - `match` — the served head is the pinned head and the served key the key at it;
+ * - `advanced` — the chain walks from the pinned head to the served head, every step signed by both keys it retires,
+ *   and ends at the served key: the pin moved to the new head;
+ * - `replaced` — in a tenant only: the pinned head is not on the chain the person's join record anchors, and that chain
+ *   is at least as long as the pinned one, so the pin was a key that was not theirs (an operator's at a first contact):
+ *   the pin moves to the anchored head, marked `replaced`. A shorter chain is not this — it may be a rollback;
+ * - `anomaly` — anything else, a served head older than the pinned one included (a rollback). Never wrapped to.
+ */
+export type Anchor = 'firstUse' | 'match' | 'advanced' | 'replaced' | 'anomaly'
 
 /**
- * Thrown by a **UI-path** wrap site (e.g. the group invite name-key) when a contact's directory key differs from
- * the pin — the caller must surface a notice and let the human accept (→ {@link acceptKeyChange}) rather than
- * silently wrap to a possibly-substituted key. The human-less grant-delivery worker does not throw this; it
- * declines the job instead.
+ * Where a person stands in one tenant before any key is judged (ADR 0111 decisions 12 and 15, `tenantTrust.ts`):
+ * - `joined` — their join record opened, verifies owner → invite → newcomer, and its signer is an owner the server lists
+ *   and this device anchors: the chain is walked from the identity and proof key it names;
+ * - `root` — an owner the server lists who has no join record (the tenant's first owner): trusted on first use, by the pin;
+ * - `unanchored` — anyone else: a non-owner without a join record (a membership the server made), a join record that does
+ *   not verify, or no member at all. Never wrapped to;
+ * - `unavailable` — this device could not read the tenant's directory or key: a wrap treats it as `unanchored`, the check
+ *   of a grant's granter falls back to the pin alone.
  */
-export class IdentityChangedError extends Error {
+export type Standing =
+  | { kind: 'joined'; identityPublicKey: Uint8Array; secretKeyProofPublicKey: Uint8Array }
+  | { kind: 'root' }
+  | { kind: 'unanchored' }
+  | { kind: 'unavailable' }
+
+/** One tenant's standings, read once and asked per person (`tenantTrust.ts` § `loadTenantStandings`). */
+export interface TenantStandings {
+  tenantId: string
+  standing(userId: string): Promise<Standing>
+}
+
+/**
+ * Thrown by a **UI-path** wrap site (the group add, its name key) when the contact's served key is an
+ * {@link Anchor} `anomaly`: nothing is sealed to it, and there is no accept — the key returns only through its chain.
+ * The human-less workers do not throw this; they decline or declare the member pending instead.
+ */
+export class IdentityUnanchoredError extends Error {
   constructor(public readonly userId: string) {
-    super(`identity key changed for ${userId}`)
-    this.name = 'IdentityChangedError'
+    super(`identity key not anchored for ${userId}`)
+    this.name = 'IdentityUnanchoredError'
   }
 }
 
 /**
- * Thrown by {@link markVerified} when the pinned fingerprint no longer equals the one the human just compared
- * out-of-band — the contact's key moved (a rotation, or a concurrent-device accept) *between* the compare and the write.
- * The ceremony must not stamp `verified` onto a key nobody actually checked; the caller re-runs the compare.
+ * Thrown by a verification's write (`tenantTrust.ts` § `verifyPerson`) when the person's anchored head is no longer the
+ * one the human just compared out-of-band — their key moved (a rotation the chain reached, or a concurrent device)
+ * *between* the compare and the write. Nothing is signed for a head nobody checked; the caller re-runs the compare.
  */
 export class IdentityMovedError extends Error {
   constructor(public readonly userId: string) {
@@ -185,8 +217,9 @@ const emptyHead = (): Head => ({ count: 0, digest: setDigest(new Map()) })
 // ── The entries ──────────────────────────────────────────────────────────────────────────────────────────────
 
 function sealEntry(mk: Uint8Array, pinId: Uint8Array, userId: string, pin: Pin): string {
+  // Key order and names are the vector's (v1.json#identity_pin): {u, f, h, i, t, r}.
   const json = encoder.encode(
-    JSON.stringify({ userId, fingerprint: pin.fingerprint, state: pin.state, firstSeenAt: pin.firstSeenAt }),
+    JSON.stringify({ u: userId, f: pin.fingerprint, h: pin.head, i: pin.index, t: pin.firstSeenAt, r: pin.replaced ? 1 : 0 }),
   )
   if (json.length > ENTRY_BYTES) throw new Error('identity pin entry: over its padded length')
   const padded = new Uint8Array(ENTRY_BYTES).fill(0x20)
@@ -202,19 +235,23 @@ function openEntry(mk: Uint8Array, indexKey: Uint8Array, pinIdHex: string, entry
   const plain = v1.open(entryContext(pinId), mk, fromB64std(entryB64))
   if (plain.length !== ENTRY_BYTES) throw new Error('identity pin entry: not its padded length')
   const e = JSON.parse(decoder.decode(plain)) as Record<string, unknown>
-  const { userId, fingerprint, state, firstSeenAt } = e
+  const { u: userId, f: fingerprint, h: head, i: index, t: firstSeenAt, r: replaced } = e
   if (
     typeof userId !== 'string' ||
     typeof fingerprint !== 'string' ||
     fromB64std(fingerprint).length !== 32 ||
-    (state !== 'pinned' && state !== 'verified') ||
+    typeof head !== 'string' ||
+    fromB64std(head).length !== 32 ||
+    !Number.isSafeInteger(index) ||
+    (index as number) < -1 ||
+    (replaced !== 0 && replaced !== 1) ||
     !Number.isSafeInteger(firstSeenAt) ||
     (firstSeenAt as number) < 0 ||
     hex(v1.identityPinId(indexKey, userId)) !== pinIdHex
   ) {
     throw new Error('identity pin entry: not the pin of its id')
   }
-  return [userId, { fingerprint, state, firstSeenAt: firstSeenAt as number }]
+  return [userId, { fingerprint, head, index: index as number, firstSeenAt: firstSeenAt as number, replaced: replaced === 1 }]
 }
 
 /** Every listed entry, page by page. A listing that does not advance or runs past the store's bound is refused as
@@ -333,7 +370,14 @@ function isStaleRevision(e: unknown): Promise<boolean> {
 }
 
 const samePin = (a: Pin | undefined, b: Pin | undefined): boolean =>
-  a === b || (!!a && !!b && a.fingerprint === b.fingerprint && a.state === b.state && a.firstSeenAt === b.firstSeenAt)
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.fingerprint === b.fingerprint &&
+    a.head === b.head &&
+    a.index === b.index &&
+    a.firstSeenAt === b.firstSeenAt &&
+    a.replaced === b.replaced)
 
 /**
  * Apply a change to the pins and store it: the changed entries and a new head, revision-guarded. On a `409
@@ -400,59 +444,288 @@ function sealWholeSet(mk: Uint8Array, pins: PinMap, storedRevision: number): Omi
   return { head: sealHead(mk, entries, storedRevision), put, remove: [], replaceAll: true }
 }
 
-// ── The operations ───────────────────────────────────────────────────────────────────────────────────────────
+// ── The key chain ────────────────────────────────────────────────────────────────────────────────────────────
 
-/**
- * TOFU check before a foreign-identity wrap: compare the directory-returned `identityPublicKeyB64` for `userId`
- * against the pin store, by fingerprint.
- * - **no pin** → pin it (`state: pinned`) and return `firstUse` — the caller proceeds with the wrap (trust-on-first-use).
- * - **pin matches** → return `match` — proceed.
- * - **pin differs** → return `changed` — the caller must NOT silently wrap (the worker declines the job; a UI path
- *   surfaces a notice + accept → re-pin). The store is left untouched.
- * A first-use key this device cannot decode is never pinned: it throws, as the wrap to it would.
- * Requires an unlocked vault.
- */
-export async function checkAndPin(userId: string, identityPublicKeyB64: string): Promise<CheckResult> {
-  const store = await loadStore()
-  const existing = store.pins[userId]
-  if (existing) return existing.fingerprint === fingerprintOrNull(identityPublicKeyB64) ? 'match' : 'changed'
-  const fingerprint = fingerprintDigestB64(identityPublicKeyB64)
-  await mutateAndSave(store, (pins) => {
-    // Additive union-merge: only claim the slot if still unpinned after a possible re-base (first-online-wins;
-    // a concurrent device that pinned this same contact first keeps its pin).
-    if (!pins[userId]) pins[userId] = { fingerprint, state: 'pinned', firstSeenAt: Date.now() }
-  })
-  return 'firstUse'
+/** A person's key chain as the server serves it, or null when it serves none to this account (`404`: no such person,
+ *  or one who shares no tenant with it — ADR 0042). Any other failure is thrown: it says nothing about the key. */
+export async function fetchKeyChain(userId: string): Promise<KeyChain | null> {
+  try {
+    return await withRefresh(() => keyChainApi().getKeyChain({ userId }))
+  } catch (e) {
+    if (isHttpStatus(e, HttpStatus.notFound)) return null
+    throw e
+  }
+}
+
+/** What a served chain comes to against a pin: `anomaly`, or the anchor with the chain's head, the fingerprint of the key
+ *  each step installs (index → fingerprint), and the server-observed time of the newest step when it is a rotation. */
+export type ChainReading =
+  | { anchor: 'anomaly' }
+  | { anchor: Exclude<Anchor, 'anomaly'>; head: string; index: number; fingerprints: string[]; rotatedAt: Date | null }
+
+type AnchoredReading = Exclude<ChainReading, { anchor: 'anomaly' }>
+
+const ANOMALY: ChainReading = { anchor: 'anomaly' }
+
+/** One served step, decoded; throws on a field that is no base64 (the caller reads that as an anomaly). Exported for
+ *  the account's own rotation, which walks its own chain to name the step it appends (`rotation/rotateKeys.ts`). */
+export function linkOf(step: KeyChain['steps'][number]): v1.KeyChainLink {
+  const opt = (b: string | null | undefined) => (b == null ? null : fromB64std(b))
+  return {
+    index: step.index,
+    previousHead: opt(step.previousHead),
+    identityPublicKey: fromB64std(step.identityPublicKey),
+    secretKeyProofPublicKey: fromB64std(step.secretKeyProofPublicKey),
+    identitySignature: opt(step.identitySignature),
+    proofSignature: opt(step.proofSignature),
+  }
+}
+
+/** The fingerprint (base64) of a decoded identity bundle; '' for one that does not decode (it then equals no pin). */
+function fingerprintOfBundle(bundle: Uint8Array): string {
+  try {
+    return b64std(v1.fingerprintHash(v1.deserializeIdentityPublic(bundle)))
+  } catch {
+    return ''
+  }
 }
 
 /**
- * Accept a **changed** key for a contact (ADR 0028 human path): re-pin `userId := new key`, preserving the
- * original `firstSeenAt`. Drops back to `state: pinned` even for a contact that was `verified` - `verified` returns
- * only through a new compare on their profile (ADR 0028 Decision 3), never with the accept. Overwrites
- * unconditionally — the human explicitly accepted this key.
- *
- * **Two writes, because a re-pin alone does not deliver anything.** A worker that declined `identity_changed`
- * is excluded from that job permanently — nothing expires a decline — so before ADR 0060 Decision 7 the accept
- * authorised a wrap that nothing then performed. That is uc.account.rotate-keys §E6, the failure mode that
- * strands a rotated account outside the scopes it was rotating to rejoin. Clearing this worker's own declines
- * against this contact is what makes ADR 0028 (2)'s *"the wrap then proceeds"* true; delivery is re-driven by
- * the ordinary next claim.
- *
- * The clear's failure is **not** swallowed, and that is deliberate: silently dropping it would re-create the
- * exact stranding this exists to end. Re-accepting is idempotent — the re-pin overwrites unconditionally and
- * the clear deletes nothing the second time — so a caller that reports the error and lets the human retry ends
- * up in the right state, whereas one that reports success cannot.
+ * Walk a served chain from `pin`'s head (from its genesis for an unpinned contact) — pure, no fetch, no write. Every step
+ * is checked by `verifyKeyChain` (both signatures under the keys the step retires, each predecessor the head the step
+ * before makes); with a pin, the walk must pass through the pinned head, and the key at it must be the pinned
+ * fingerprint. So the pinned head anchors the identity AND the proof key: a chain that names the pinned identity beside
+ * another proof key — behind an invented prefix — never passes the pinned head and is an anomaly. A chain whose newest
+ * head is older than the pinned one (a rollback) never reaches it either. The chain's own `head` field must be the head
+ * its steps make. Never a throw: every byte here came from the server.
  */
-export async function acceptKeyChange(userId: string, identityPublicKeyB64: string): Promise<void> {
-  const fingerprint = fingerprintDigestB64(identityPublicKeyB64)
-  const store = await loadStore()
-  await mutateAndSave(store, (pins) => {
-    const prior = pins[userId]
-    pins[userId] = { fingerprint, state: 'pinned', firstSeenAt: prior?.firstSeenAt ?? Date.now() }
-  })
-  await withRefresh(() =>
-    tasksApi().clearDeclinesForAcceptedKey({ clearDeclinesRequest: { targetUserId: userId } }),
+export function readChain(pin: Pin | undefined, userId: string, chain: KeyChain): ChainReading {
+  if (chain.userId !== userId) return ANOMALY
+  let links: v1.KeyChainLink[]
+  let from: Uint8Array | null = null
+  try {
+    links = chain.steps.map(linkOf)
+    if (pin) from = fromB64std(pin.head)
+  } catch {
+    return ANOMALY
+  }
+  const walked = v1.verifyKeyChain({ userId, links }, from)
+  if (!walked.ok) return ANOMALY
+  const head = b64std(walked.head)
+  if (head !== chain.head) return ANOMALY
+  const fingerprints = links.map((l) => fingerprintOfBundle(l.identityPublicKey))
+  if (pin && (walked.fromIndex === null || fingerprints[walked.fromIndex] !== pin.fingerprint)) return ANOMALY
+  const anchor = !pin ? 'firstUse' : walked.fromIndex === walked.index ? 'match' : 'advanced'
+  return { anchor, head, index: walked.index, fingerprints, rotatedAt: walked.index >= 1 ? chain.steps[walked.index].createdAt : null }
+}
+
+/** The head each step of a chain makes (index → base64 head). Only for links `verifyKeyChain` already accepted. */
+function stepHeads(userId: string, links: readonly v1.KeyChainLink[]): string[] {
+  return links.map((link, i) =>
+    b64std(
+      v1.keyChainHead(
+        i === 0
+          ? v1.keyChainGenesisStatement(userId, link)
+          : v1.keyChainStepStatement({ userId, index: i, previousHead: link.previousHead!, retired: links[i - 1], installed: link }),
+      ),
+    ),
   )
+}
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i])
+
+/** A chain read from a join record: the reading, and the index of the step the person joined the tenant with — no key
+ *  before it counts in that tenant. */
+export type JoinedReading = { anchor: 'anomaly' } | (AnchoredReading & { joinedAt: number })
+
+const JOINED_ANOMALY: JoinedReading = { anchor: 'anomaly' }
+
+/**
+ * Walk a served chain from the step a join record names (ADR 0111 decisions 12 and 15) — pure, no fetch, no write. The
+ * whole chain must verify (`verifyKeyChain`), and one step must install exactly the identity AND proof key the join record
+ * names: from there on every step is signed by keys the record anchors, so whatever prefix the server serves before it
+ * is never trusted. The pin stays the counter (decision 16): a pinned head on the chain must carry the pinned key, and
+ * the walk is `match` or `advanced` from it; a pinned head NOT on the chain is `replaced` when the chain is at least as
+ * long as the pinned one was (the pin was never theirs — an operator's key at a first contact), and an `anomaly`
+ * otherwise (a shorter chain may be a rollback of a head this account saw). Never a throw.
+ */
+export function readJoinedChain(
+  pin: Pin | undefined, userId: string, chain: KeyChain, joined: Extract<Standing, { kind: 'joined' }>,
+): JoinedReading {
+  if (chain.userId !== userId) return JOINED_ANOMALY
+  let links: v1.KeyChainLink[]
+  try {
+    links = chain.steps.map(linkOf)
+  } catch {
+    return JOINED_ANOMALY
+  }
+  const walked = v1.verifyKeyChain({ userId, links }, null)
+  if (!walked.ok) return JOINED_ANOMALY
+  const head = b64std(walked.head)
+  if (head !== chain.head) return JOINED_ANOMALY
+  const joinedAt = links.findIndex(
+    (l) => sameBytes(l.identityPublicKey, joined.identityPublicKey) && sameBytes(l.secretKeyProofPublicKey, joined.secretKeyProofPublicKey),
+  )
+  if (joinedAt < 0) return JOINED_ANOMALY
+  const fingerprints = links.map((l) => fingerprintOfBundle(l.identityPublicKey))
+  const rotatedAt = walked.index >= 1 ? chain.steps[walked.index].createdAt : null
+  const reading = { head, index: walked.index, fingerprints, rotatedAt, joinedAt }
+  if (!pin) return { anchor: 'firstUse', ...reading }
+  const at = stepHeads(userId, links).indexOf(pin.head)
+  if (at >= 0) {
+    if (fingerprints[at] !== pin.fingerprint) return JOINED_ANOMALY
+    return { anchor: at === walked.index ? 'match' : 'advanced', ...reading }
+  }
+  return pin.index >= 0 && pin.index <= walked.index ? { anchor: 'replaced', ...reading } : JOINED_ANOMALY
+}
+
+/** Whether a reading ends exactly at what a directory served: the served head, and the served key at it. */
+const endsAt = (r: ChainReading, served: ServedIdentity): r is AnchoredReading =>
+  r.anchor !== 'anomaly' && r.head === served.keyChainHead && r.fingerprints.at(-1) === fingerprintOrNull(served.identityPublicKey)
+
+/** The pin a reading moves to: the chain's head, its index and its newest key. A move keeps first-seen and the
+ *  `replaced` mark; a replacement starts both afresh (the person is new to this account under the anchored key). */
+const pinAtReading = (r: AnchoredReading, firstSeenAt: number, replaced = false): Pin => ({
+  fingerprint: r.fingerprints.at(-1)!,
+  head: r.head,
+  index: r.index,
+  firstSeenAt,
+  replaced,
+})
+
+/** Store what a reading of `userId` concluded: a first sight claims an empty slot (first-online-wins — a device that
+ *  pinned the contact meanwhile keeps its pin), a move replaces only the pin it was judged against (a device that moved
+ *  it meanwhile keeps its move). `match` writes nothing. */
+function recordReading(pins: PinMap, userId: string, judgedFrom: Pin | undefined, r: AnchoredReading): void {
+  const cur = pins[userId]
+  if (r.anchor === 'firstUse' && !cur) pins[userId] = pinAtReading(r, Date.now())
+  if (r.anchor === 'advanced' && judgedFrom && (!cur || cur.head === judgedFrom.head)) {
+    pins[userId] = pinAtReading(r, judgedFrom.firstSeenAt, judgedFrom.replaced)
+  }
+  if (r.anchor === 'replaced' && judgedFrom && (!cur || cur.head === judgedFrom.head)) {
+    pins[userId] = pinAtReading(r, Date.now(), true)
+  }
+}
+
+// ── The operations ───────────────────────────────────────────────────────────────────────────────────────────
+
+/** A contact's key as a directory read serves it to a check: the identity bundle and the key-chain head beside it
+ *  (`ScopeMember`, `ResolvedGroupCandidate`, `GrantDeliveryTarget`, `OpenInvite`, `ServedMemberInvite`). */
+export interface ServedIdentity {
+  identityPublicKey: string
+  keyChainHead: string
+}
+
+/**
+ * The one check before a wrap to another account's key, and before trusting a key another account signed with
+ * (ADR 0028 Decision 2; it replaces the fingerprint-only `checkAndPin`). Answers {@link Anchor}:
+ * `match` is local (no fetch); the chain is read only when the served head differs from the pinned one, or on first use;
+ * `firstUse` and `advanced` move the pin. Never accepts a prefix the server supplies: the walk starts at the pinned head.
+ *
+ * `firstUse: 'served'` is for the invite accept alone, where the account is not yet a co-member and the server serves it
+ * no chain: an unknown inviter (whose key the link's fingerprint already vouched for) or a foreign granter is pinned at
+ * the head the invite served, unread — trust on first use, which reading the chain would not strengthen (an operator
+ * serves a first contact's chain as freely as its head). A pinned contact is judged as anywhere else.
+ *
+ * **`tenant`** (ADR 0111 decisions 12 and 15): the wrap is in that tenant, so the person's standing there decides first —
+ * `unanchored` and `unavailable` are an `anomaly` with no fetch; a `joined` person's chain is always read and walked from
+ * the step their join record names ({@link readJoinedChain}), the pin kept as the counter; a `root` owner is judged by
+ * the pin alone, as without a tenant. Without `tenant` (an invite's accept, a moderation delivery — no tenant the two
+ * share) the pin alone decides.
+ *
+ * A key this device cannot decode is never pinned; a chain the server does not serve is an anomaly. Requires an
+ * unlocked vault; throws `TrustStateRefused` when this device refuses its own pin store.
+ */
+export async function anchorIdentity(
+  userId: string, served: ServedIdentity, opts: { firstUse?: 'chain' | 'served'; tenant?: TenantStandings } = {},
+): Promise<Anchor> {
+  const standing = opts.tenant ? await opts.tenant.standing(userId) : null
+  if (standing && (standing.kind === 'unanchored' || standing.kind === 'unavailable')) return 'anomaly'
+  const store = await loadStore()
+  const pin = store.pins[userId]
+  const servedFingerprint = fingerprintOrNull(served.identityPublicKey)
+  if (servedFingerprint === null) return 'anomaly'
+  if (standing?.kind === 'joined') {
+    const chain = await fetchKeyChain(userId)
+    if (!chain) return 'anomaly'
+    const reading = readJoinedChain(pin, userId, chain, standing)
+    if (!endsAt(reading, served)) return 'anomaly'
+    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+    return reading.anchor
+  }
+  if (pin && pin.head === served.keyChainHead) return pin.fingerprint === servedFingerprint ? 'match' : 'anomaly'
+  if (!pin && opts.firstUse === 'served') {
+    if (!isHead(served.keyChainHead)) return 'anomaly'
+    const first: Pin = { fingerprint: servedFingerprint, head: served.keyChainHead, index: -1, firstSeenAt: Date.now(), replaced: false }
+    await mutateAndSave(store, (pins) => {
+      if (!pins[userId]) pins[userId] = first
+    })
+    return 'firstUse'
+  }
+  const chain = await fetchKeyChain(userId)
+  if (!chain) return 'anomaly'
+  const reading = readChain(pin, userId, chain)
+  if (!endsAt(reading, served)) return 'anomaly'
+  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+  return reading.anchor
+}
+
+/** A key the server served with no head beside it — the per-grant snapshot of a granter's key, a pending moderator's —
+ *  judged against the chain: its {@link Anchor}, and whether the key is a RETIRED key of that chain (an earlier step's,
+ *  not the newest). */
+export type ChainKeyAnchor = { anchor: Anchor; retired: boolean }
+
+/**
+ * {@link anchorIdentity} for a key served without a head (ADR 0028 Decision 2: the per-grant snapshot gets
+ * none, it may be a retired key). The pinned key itself is `match` with no fetch. Any other key is looked up in the
+ * contact's chain, walked from the pinned head as {@link anchorIdentity} walks it: the newest key is `firstUse` or
+ * `advanced` (the pin moves as there), an earlier key of the chain is answered with `retired` — the caller decides what
+ * a retired key may still do — and a key the chain does not hold, a chain that does not verify from the pinned head, or
+ * one the server does not serve, is an `anomaly`.
+ *
+ * With `tenant`, the person's standing there decides first, as for {@link anchorIdentity}: `unanchored` is an anomaly; a
+ * `joined` person's chain is read from their join record's step, and only a key at or after that step counts; a `root`
+ * owner, and a tenant this device could not read (`unavailable` — a grant in a tenant whose directory it cannot open),
+ * are judged by the pin alone.
+ */
+export async function anchorChainKey(
+  userId: string, identityPublicKeyB64: string, opts: { tenant?: TenantStandings } = {},
+): Promise<ChainKeyAnchor> {
+  const unanchored: ChainKeyAnchor = { anchor: 'anomaly', retired: false }
+  const standing = opts.tenant ? await opts.tenant.standing(userId) : null
+  if (standing?.kind === 'unanchored') return unanchored
+  const store = await loadStore()
+  const pin = store.pins[userId]
+  const fingerprint = fingerprintOrNull(identityPublicKeyB64)
+  if (fingerprint === null) return unanchored
+  if (standing?.kind === 'joined') {
+    const chain = await fetchKeyChain(userId)
+    if (!chain) return unanchored
+    const reading = readJoinedChain(pin, userId, chain, standing)
+    if (reading.anchor === 'anomaly') return unanchored
+    const at = reading.fingerprints.lastIndexOf(fingerprint)
+    if (at < reading.joinedAt) return unanchored
+    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+    return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
+  }
+  if (pin && pin.fingerprint === fingerprint) return { anchor: 'match', retired: false }
+  const chain = await fetchKeyChain(userId)
+  if (!chain) return unanchored
+  const reading = readChain(pin, userId, chain)
+  if (reading.anchor === 'anomaly') return unanchored
+  const at = reading.fingerprints.lastIndexOf(fingerprint)
+  if (at < 0) return unanchored
+  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+  return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
+}
+
+/** A served head that is one: base64 of 32 bytes. */
+function isHead(b64: string): boolean {
+  try {
+    return fromB64std(b64).length === 32
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -515,71 +788,4 @@ export function myIdentityPublicKeyB64(): string {
     priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }
-}
-
-/**
- * Elevate a contact's pin `→ verified` after a successful out-of-band safety-number compare (the human half of
- * ADR 0028). The compare is over a fingerprint (the pin's, or the directory key's for an unpinned contact), and so is
- * the guard: only stamps `verified` if the **current** pin's fingerprint still equals `verifiedFingerprint` — both at
- * load and after any 409 re-base — else throws {@link IdentityMovedError} (the key moved under the compare; nothing is
- * written). `verified` wins a same-contact merge: the re-applied upgrade re-asserts `verified` on top of a concurrent
- * device's `pinned`. Requires an unlocked vault.
- *
- * `pinIfUnpinned` (ADR 0028 Decision 3): the compare was against the DIRECTORY's key because there was no pin, so a
- * contact still unpinned at the write is pinned with the compared fingerprint, already `verified` - in the same one
- * sealed write, never a pin without the verification. A pin that appeared meanwhile (a concurrent device, the delivery
- * worker's TOFU) is held to the same guard: its fingerprint must be the compared one.
- */
-export async function markVerified(
-  userId: string,
-  verifiedFingerprint: string,
-  opts: { pinIfUnpinned?: boolean } = {},
-): Promise<void> {
-  const store = await loadStore()
-  await mutateAndSave(store, (pins) => {
-    const prior = pins[userId]
-    if (!prior && opts.pinIfUnpinned) {
-      pins[userId] = { fingerprint: verifiedFingerprint, state: 'verified', firstSeenAt: Date.now() }
-      return
-    }
-    if (!prior || prior.fingerprint !== verifiedFingerprint) throw new IdentityMovedError(userId)
-    pins[userId] = { ...prior, state: 'verified' }
-  })
-}
-
-/**
- * The **badge read** — fold one pin against a contact's *current* directory key.
- * - no pin → `unpinned`
- * - pin fingerprint ≠ the directory key's (or a key this device cannot decode) → `changed` (surfaced-not-trusted;
- *   wrap/delivery stays gated until reviewed)
- * - pin fingerprint = the directory key's → `verified` if the pin was verified out-of-band, else `pinned`
- * Exported for a surface that already holds the pin ({@link getPin}) - the profile's compare - so it folds without a
- * second store fetch.
- */
-export function foldTrust(pin: Pin | null | undefined, directoryKey: string): TrustState {
-  if (!pin) return 'unpinned'
-  if (pin.fingerprint !== fingerprintOrNull(directoryKey)) return 'changed'
-  return pin.state === 'verified' ? 'verified' : 'pinned'
-}
-
-/** The badge read for a single contact (pure, no write). */
-export async function trustState(userId: string, directoryKey: string): Promise<TrustState> {
-  return foldTrust((await getPin(userId)) ?? undefined, directoryKey)
-}
-
-/**
- * Batch badge read for a whole member directory in **one** store read — folds every contact against the key the
- * directory currently returns for them, and says whether the pin was `verified` ({@link ContactTrust}). Keyed by
- * userId. Pure, no write; requires an unlocked vault.
- */
-export async function trustStates(
-  contacts: ReadonlyArray<{ userId: string; directoryKey: string }>,
-): Promise<Record<string, ContactTrust>> {
-  const store = await loadStore()
-  const out: Record<string, ContactTrust> = {}
-  for (const c of contacts) {
-    const pin = store.pins[c.userId]
-    out[c.userId] = { state: foldTrust(pin, c.directoryKey), pinVerified: pin?.state === 'verified' }
-  }
-  return out
 }

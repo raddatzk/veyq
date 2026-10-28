@@ -1,6 +1,6 @@
 ---
 title: Protocols
-description: The six key-handling protocols veyq runs, each with its steps, what the server learns, what it cannot do, and what stays open.
+description: The seven key-handling protocols veyq runs, each with its steps, what the server learns, what it cannot do, and what stays open.
 sources:
   - docs/crosscutting/security-model.md
   - docs/features/account/enablers/en.account.key-model.md
@@ -8,12 +8,14 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.add-member.md
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/features/account/use-cases/uc.account.rotate-keys.md
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
 ---
 import Mermaid from '../../../components/Mermaid.astro';
 
 This page walks through every protocol in which veyq creates, moves, or replaces key material: account birth and
-login, device linking, member admission, sharing, rotation and revocation, and recovery. Each section names its
+login, device linking, inviting a member, sharing, rotation and revocation, recovery, and the key chain with which
+an account is secured. Each section names its
 participants, gives the steps in prose and as one sequence diagram, and then states what the server learns, what it
 cannot do, and what remains open. Byte formats are not restated here. They live in the conformance-pinned suite
 [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts) and its vectors
@@ -130,8 +132,9 @@ are created and refreshed. It never receives the password, the Secret Key, the M
 directory itself. Through the API, a session or a password is no longer enough to replace an identity or mint a cold
 credential: those requests need a signature of the Secret-Key proof key
 ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
-Decision 2). That check runs on the server, so it binds every caller except the operator. Until Key Transparency
-exists, the only detector is a contact who pinned the old key and now sees it as changed (section 3). A weak
+Decision 2). That check runs on the server, so it binds every caller except the operator. A contact who pinned the
+account's key-chain head sees an identity the operator installed as *Can't confirm this key*, because no step it can
+sign leads there (section 7); one who never pinned the account trusts it on first use until Key Transparency exists. A weak
 password stays crackable at Argon2id cost. The auth keypair is Ed25519; a post-quantum signature is planned but not
 built. See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).
 
@@ -215,93 +218,182 @@ Key it holds ([ADR 0058](https://github.com/raddatzk/veyq/blob/main/docs/decisio
 The remedy that works going forward is rotation (section 5), and it needs the Secret Key, which a linked device
 never received. See [Known limitations](/veyq/security/known-limitations/).
 
-## 3. Admitting a member, TOFU and safety numbers
+## 3. Inviting a member, TOFU and safety numbers
 
-**Purpose.** Give another person a shared scope's key without the server ever holding it, and without letting the
-server invent a member or substitute a key unnoticed
-([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
+**Purpose.** Give a new person a shared scope's key without the server ever holding it, without making them wait for
+another member's device, and without letting the server swap a key unnoticed
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 1–5, [ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
 [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)).
+An invite is a **placeholder member**: it holds a key the owner signed and a grant wrapped to that key, and the
+invitee replaces it with its own identity.
 
-**Participants.** The owner who admits, the invitee, any existing key-holder (every member of the scope holds its
-key), and the server.
+**Participants.** The inviting owner, the invitee, any member of the scope (every member holds its key), and the
+server.
 
-**Steps.**
+**Steps (a member invite into a tenant).**
 
-1. **Admission.** From an unlocked vault, the owner mints a member invite. It carries an **admission tag**: an
-   HMAC under a key derived from the scope's current epoch key, over the scope id, that epoch and a client-minted
-   admission id (for a group add, also the target's user id). Only a holder of the epoch key can compute it. The
-   server mails the single-use invite and stores the invite secret only as a hash.
-2. **Registration.** The invitee's identity is born on their device (section 1) and its public key published. They
-   become a member **without a grant**, shown as *awaiting access*.
-3. **Delivery, automatic.** The next key-holder to come online reads the scope's member directory, sees the pending
-   member with their identity public key, and checks the admission tag under its **own** current epoch key. It runs
-   the **TOFU gate** on the member's key: a first-seen key is pinned and used; a key that differs from the pin is
-   **not** wrapped to. The automated worker declines the job back to the server, and a human reviews the change in
-   the UI. If both checks pass, it seals the epoch key to the member's identity public key and **signs the grant**
-   with its identity key. The signature covers the scope id, the scope kind, the epoch, the recipient's user id, a
-   digest of the recipient's identity key and a digest of the grant ciphertext. The first key-holder wins; the rest
-   find the grant present and do nothing.
-4. **Opening.** The new member's client runs the same TOFU gate on the **granter's** key (pins a first-seen one,
-   refuses a changed one), verifies the signature, and only then opens the grant.
-5. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
-   identity public key shown as 6×5 digits, and a QR code of it. Another member scans that code or compares the
-   digits aloud. On a match the pin becomes *verified* (an unpinned member is pinned at that moment with the compared
-   key), and member lists show the mark. A *verified* contact whose key later changes is flagged as such. Accepting
-   the change re-pins it as only *pinned*, and *verified* comes back only through a new compare.
+1. **The invite key.** From an unlocked vault, the owner's client draws a 32-byte seed and derives from it an
+   **invite key**, shaped like an identity (an X-Wing encryption key and an Ed25519 signing key). The owner signs the
+   `invite-key` statement — the tenant id, the invite id, SHA-256 of the invite key's public bundle and the expiry —
+   with its identity key, and seals a grant of the tenant's **current** epoch key to the invite key, signed like any
+   grant, with the invite id as its recipient.
+2. **The link and the code.** The client draws a **code** (10 Crockford base32 characters, 50 bits), or takes a
+   password the owner types (at least 10 characters). From it and a fresh 16-byte salt it derives a key with Argon2id
+   at the production profile, and seals under that key — purpose `invite-link`, bound to the tenant and the invite —
+   the seed, a hash of the owner's identity fingerprint and the owner's account id. The link is
+   `https://<domain>/tenant/accept#<token>.<sealed>`: `token` is the server's single-use invite secret, `sealed` the
+   mode, the KDF parameters and the seal. The owner's screen shows the code once, and the owner passes it on outside
+   veyq. **The seal is mandatory**: the server mails the link (mail is the only channel), so an unsealed link would
+   hand the invite to the operator.
+3. **What the server keeps.** The invite public key, the owner's signature, the owner's identity key as it signed,
+   the grant and the expiry, on the invite row. Before it mints (or re-sends), it verifies the owner's signature over
+   the invite key under the identity key it stores for the caller (`400 invalid_request` otherwise), so a session
+   without the owner's unlocked vault, such as one from a phished password, mints no invite. It checks that the grant
+   is of the tenant's current epoch under the tenant's lock (`409 stale_epoch`), that the grant names the invite key
+   (`409 recipient_key_not_current`), and that the signed expiry matches its own invite lifetime within a minute, in
+   whole seconds. It mails the link with the sealed part appended
+   and keeps no copy of that part; the invite secret is stored only as a hash. Accepting, revoking, re-sending or
+   expiring the invite clears its key, signature and grant in the same statement; re-sending is a new invite with a
+   new key, link and code.
+4. **Every rotation carries every open invite.** The client that rotates the tenant reads the open invites (keys,
+   signatures, signers; never an address). It re-grants the new epoch to each one whose owner signature verifies
+   under the signer's key and whose signer key it anchors (section 7: the key at the owner's served key-chain head,
+   reached from the head it pinned), and declares any other one pending. So an owner who has since secured their
+   account ends their open invites. The server
+   refuses a rotation that leaves an open invite out (`409 rotation_incomplete`). A pending invite still redeems: its
+   newcomer joins one epoch behind and is brought current by grant delivery (step 9).
+5. **The invitee checks before it trusts.** On the link's page the invitee types the code. Its client opens the seal
+   (a wrong code does not open it), derives the invite key from the seed and requires it to equal the key the server
+   serves, requires the served owner key to hash to the fingerprint inside the seal, and verifies the owner's
+   signature under that key. It then verifies the invite grant's signature: a grant the owner wrapped only under that
+   checked key; one a later rotation re-wrapped names another member as its granter, whom the newcomer has nothing to
+   anchor yet and trusts on first use. Any mismatch stops the accept with *This invitation can’t be checked*, before
+   anything is sent.
+6. **The invitee grants itself.** It registers (its identity is born on its device, section 1) or signs in with
+   password and Secret Key. Its client opens the invite grant with the invite key, seals that epoch key to its own
+   identity (a self-grant naming the digest of that identity), and signs an `invite-accept` proof with the invite key
+   over the invite, its account and its identity's digest. The server verifies the proof under the stored invite key
+   (`403 invite_proof_invalid`), writes the membership **with** the self-grant, and consumes the invite. The newcomer
+   holds the tenant key from this moment; no other member has to be online.
+7. **The join record.** In the same request the client writes a **join record** into its tenant profile: its
+   identity public key, its Secret-Key proof public key and the owner-signed invite it came through, signed over the
+   `join-record` statement by the invite key **and** by the new identity, and sealed as the field
+   `member-join-record`, bound to the tenant and the member, under the tenant epoch key the invite grant carried. The
+   chain owner → invite → newcomer is one neither the operator nor a holder of the tenant key can forge while the
+   owner is not compromised. Every member's client reads it as the **anchor** of the newcomer's key in this tenant
+   (section 7). The tenant's first owner, its trust root, has none.
+8. **Adding a member to a group.** The person already has an identity, so no invite key is needed: the group owner's
+   client runs the anchor gate (section 7) on the key and key-chain head the server serves for that username and seals
+   the group's current epoch to it as it adds them; a key it cannot anchor is not added. With consent on, the proposal holds that grant, and the server hands it out only once the target
+   accepts; a decline, or the owner withdrawing the proposal, queues a rotation of the group, since the key was
+   already wrapped to them.
+9. **Grant delivery, for a member who fell behind.** A member a rotation left out, or the newcomer of a pending
+   invite, holds a grant below the current epoch. Any online key-holder reads that member's identity key and key-chain head and
+   runs the **anchor gate** (section 7): a first-seen person is pinned at the served head and used; a key the chain
+   reaches from the pinned head is used and the pin moves forward; anything else is an anomaly, **not** wrapped to, and
+   the worker declines the job back to the server (`identity_unanchored`). No human accepts a key; a decline is
+   cleared when that member secures their account, so the worker tries the new key. Otherwise it seals the current
+   epoch key to the member, names that key's digest (the server refuses a key that is not the member's current one,
+   `409 recipient_key_not_current`), and **signs the grant**. The signature covers the scope id, the scope kind, the
+   epoch, the recipient's user id, a digest of the recipient's identity key and a digest of the grant ciphertext.
+10. **Opening.** A member's client judges the **granter's** key the grant carries (the key that signed it, as the
+   server stored it) against the granter's key chain from the head it pinned — for a group of the active tenant, from
+   the step the granter's join record names (section 7): a key outside that chain is refused
+   (`granter_key_unanchored`), and a retired key of it is accepted only for an epoch at or below this device's epoch
+   floor for the scope (`granter_key_retired` otherwise), because an honest granter signs every newer epoch with its
+   new key. It verifies the signature, and only then opens the grant.
+11. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
+   identity public key shown as 6×5 digits, their **chain code**, 10 digits of their key chain's head (section 7),
+   shown only once the chain the server serves ends at the identity in their vault, and a QR code of both
+   (`veyqid:2`). Another member scans that code or compares the digits aloud, against the key and head their client
+   anchors in the tenant. On a match the verifier's identity signs the statement `verification` — the tenant, both
+   user ids, the subject's head and the verifier's own head — sealed as the field `member-verification` under the
+   tenant key, bound to tenant, verifier, subject and epoch, and writes it into the verifier's own row
+   (`putMyVerification`; the server keys the row by the caller). Every member reads the tenant's rows
+   (`listVerifications`) and counts one only while it names the subject's current head and verifies under the
+   verifier's current key at the verifier's current head: *verified by …* holds for everyone in that tenant, and only
+   there. When a *verified* contact secures their account their head moves, so *verified* drops by itself; it comes
+   back only through a new compare. A head that differs between the two sides — a withheld step — is a mismatch.
 
 The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key: one
-entry per pin holding the contact's identity **fingerprint** (the digest the safety number is), at an opaque id
+entry per pin holding the contact's identity **fingerprint** (the digest the safety number is) and the **head of
+their key chain** (section 7), at an opaque id
 only the account computes, and a head that carries a digest of every entry ([ADR 0104](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)). Each
 device also keeps a local high-water mark of the highest revision of that head it has opened, and refuses an older,
 missing or unopenable store, and an entry set the head's digest does not describe ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
-Decision 7). That way, rolling back the store cannot turn a detected key change into a silent first use.
+Decision 7). That way, rolling back the store cannot turn an anomaly into a silent first use.
 
 <Mermaid code={`
 sequenceDiagram
   actor O as Owner
   participant S as Server
   participant I as Invitee client
-  participant K as Any key-holder
-  O->>O: admission tag = HMAC under epoch-derived key<br>over scope, epoch, admission id
-  O->>S: mint invite (email, role, admission id, tag)
-  S-->>I: invite by mail (server keeps only its hash)
-  I->>S: register (identity public key) and accept<br>member without grant
-  K->>S: read member directory
-  S-->>K: pending member, identity public key, admission tag
-  K->>K: tag verifies under own current epoch?<br>TOFU: pin first-seen key, refuse a changed one
-  K->>S: grant = epoch key sealed to member, signed by K
-  I->>S: fetch own grant
-  S-->>I: grant and granter signature
-  I->>I: TOFU-pin granter, verify signature, open grant
-  I-->>K: out of band: compare safety numbers (QR or digits)
+  O->>O: seed to invite key, sign invite-key statement,<br>grant current epoch to the invite key
+  O->>O: seal seed and owner fingerprint<br>under Argon2id(code, salt)
+  O->>S: invite (email, invite key, signature, grant, sealed part)
+  S->>S: signed by the caller's key? epoch current?<br>grant names the invite key? expiry matches the lifetime?
+  S-->>I: link #token.sealed by mail (no copy of the sealed part kept)
+  O-->>I: out of band: the code
+  I->>S: preview (token)
+  S-->>I: invite key, owner key and signature, grant
+  I->>I: open seal with the code, derived key = served key,<br>owner key hashes to sealed fingerprint, signatures verify
+  I->>I: open grant, self-grant to own identity,<br>join record signed by invite key and identity
+  I->>S: accept: self-grant, invite-accept proof, sealed join record
+  S->>S: verify proof under stored invite key,<br>membership with grant, clear invite key and grant
+  I-->>O: out of band: compare safety numbers (QR or digits)
 `} />
 
-**What the server learns.** Invite metadata (recipient address, role, send time), the admission tag, identity public
-keys, which memberships hold a grant, signed grant ciphertext, and when a worker declines a delivery. It never
-sees a scope key, a pin, or who verified whom. The trust graph stays on the clients.
+**What the server learns.** Invite metadata (recipient address, role, send time, expiry), the invite public key, the
+owner's signature and identity key, the invite's grant ciphertext, identity public keys, each membership's granted
+epoch, the sealed join records, each account's key chain (section 7), and when a worker declines a delivery. It holds the link's sealed part while it mails
+it. Of a verification it sees the address — which member verified which, in which tenant — and when it was written,
+never its content. It never sees the code, a scope key or a pin.
 
 **What it cannot do.**
 
-- **Get a scope's key by admitting an account of its own** through an owner's session or on its own. Every wrap to
-  another member needs an admission tag that only a holder of the current epoch key computes, and every key-holder's
-  client checks it before wrapping. A session without the vault, like the operator, can create a membership but
-  not a tag ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) move 6).
+- **Open an invite it mailed** without the code. It holds the whole link, so it can guess offline — against 50 bits,
+  with one Argon2id derivation per guess. A password the owner chooses instead is only as strong as that password.
+- **Swap the invite key or the owner in a mailed link.** The invitee derives the invite key from the seed and finds
+  the owner's fingerprint inside the seal, so a key or an owner the server substitutes fails the check.
 - **Plant a scope key of its own choosing** in a personal-scope grant, or under a granter the recipient has already
   pinned (Decision 6).
-- **Swap a key silently after first contact.** A client that pinned a contact sees the change. The UI shows a
-  notice and the worker refuses to wrap.
+- **Swap a key after first contact.** A client that pinned a contact's head accepts a new key only through a step
+  signed by the old identity and the old Secret-Key proof key (section 7). Anything else shows as *Can't confirm this
+  key*, and nobody wraps to it.
+- **Swap a member's key in a tenant, even at first contact,** or invent an ordinary member: a key the chain does not
+  reach from the member's join record, and a non-owner without one, are anomalies (section 7).
+- **Forge or move a verification.** Each is signed by its verifier and bound to its tenant, verifier and subject;
+  the server can only withhold one.
 - **Wipe or roll back the pin store** on a device that has held one (Decision 7).
 
 **Residual.**
 
 - **TOFU's first-use gap.** If the operator substitutes a key before anyone pinned the real one, nothing looks
-  wrong until the two people compare safety numbers. That covers a genuine tenant invite redeemed with the operator's
-  key (a tenant invite cannot name a key, because the invitee has none yet), a shared grant signed by a granter
-  identity the operator fabricated (pinned on first sight), and a device with no trust-state mark yet.
-- **A worker's refusal is per key-holder, not a global veto.** A key-holder who never saw the contact has no
-  conflicting pin and accepts the new key.
-- **A departing member colluding with the operator** can tag a sockpuppet under the epoch they still hold before
-  their removal ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) § Consequences).
+  wrong until the two people compare safety numbers. Inside a tenant that is left for owners, whom no join record
+  anchors; it also covers a shared grant signed by a granter identity the operator fabricated where the pin alone
+  decides (the tenant scope's own grant, a group's outside the active tenant; a rotator's re-grant of an open invite
+  is one), and a device with no trust-state mark yet. A newcomer who registers through an invite has no pin store
+  before its account exists, so it pins the inviting owner only on a later contact.
+- **A member the operator presents as an owner.** Roles are the server's word, so a membership it writes as an owner
+  is a root, trusted on first use, and roots keys of its choosing; and a join record signed by an owner's retired key
+  still anchors, so a thief holding that key could, with the operator, mint one after the owner's rotation
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  § What stays open). Before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
+- **Who verified whom.** The server sees the address of every verification row.
+- **A revoked or expired invite keeps what it was granted.** The tenant does not rotate on removal
+  ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)),
+  so a link and its code still open the epochs up to the revoke — useful only with a dump of the ciphertext. A
+  revoked group proposal rotates the group.
+- **An owner who secures their account ends their open invites.** The link anchors the owner's identity
+  **fingerprint** only, and a fingerprint cannot anchor the chain: it pins the identity but not the proof key, so a
+  thief holding the old identity could, with the operator, serve an invented first step and sign onward from it. The
+  invitee refuses the invite and is told to ask for a new one; the owner is told beforehand. Carrying the owner's
+  head inside the link's seal would keep them, and changes the link format; it is not built.
+- **Who counts as an owner is the server's word.** Roles are not signed; a member the server presents as an owner
+  could, with the operator's help, root an invite of its own choosing.
+- **A worker's decline is per key-holder, not a global veto.** A key-holder who never pinned the contact pins
+  them on first use, at the head the server serves.
 - **Strict mode** (verified-before-share as a hard gate) is **not built**, and its shape is still open. **Key
   Transparency** is not built.
 
@@ -435,24 +527,31 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
 
 1. The owner's client reads the member list **before** the removal and the current epoch `E(n)`.
 2. It mints `E(n+1)` and the chain link, which wraps `E(n)` under `E(n+1)`.
-3. For every member it read, **except** the one being removed, it verifies that member's admission tag under `E(n)`,
-   re-tags it under `E(n+1)`, runs the TOFU gate, and seals and signs a grant of `E(n+1)`.
-4. It sends the removal, the chain link, the grants and the re-tags in **one request**. The server deletes the
+3. For every member it read, **except** the one being removed, it runs the anchor gate (section 7) and seals and
+   signs a grant of `E(n+1)`; a pending consent proposal is re-granted like a member. A member whose key it cannot
+   anchor is declared pending instead, and the server refuses a rotation that leaves anyone out silently
+   (`409 rotation_incomplete`). In a tenant it also re-grants or declares every open invite (section 3).
+4. It sends the removal, the chain link and the grants in **one request**. The server deletes the
    membership and commits epoch `n+1` in one transaction, and only if it is exactly the current epoch plus one.
    Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
 5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
    its per-scope **epoch floor** and never seals under a lower epoch again, whatever epoch the server reports.
-6. The owner's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
+6. The remover's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
    ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key minted at `n+1`, the node's own entry under its parent's new key (under
    `E(n+1)` at the root), each child's entry, the node's meta, its media's meta and EXIF and every `K_blob` wrap
    re-sealed under the new key, `K_blob` itself kept. A node with a drop key gets a new keypair, and its guests'
    identity keys are re-sealed to it. Each link rooted on the node gets the new key wrapped under its unchanged
    `K_share`, opened from its recovery copy, which stays at its epoch. A large node's fields go up in staged parts
    first, and the commit swaps them in one transaction.
-7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending` and retried; a write
+7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending`: a member's client
+   re-keys that node and its lagging ancestors itself and retries at once, a guest's client waits and retries. A write
    stating a node key from before is `409 stale_epoch` and re-reads. A member's device also seals nothing under a node
-   key from before the highest epoch it holds. An interrupted re-key reads *re-keying* and is resumed by the next
-   owner's worker; a queued rotation completes only once no node lags (`409 rekey_incomplete`).
+   key from before the highest epoch it holds. An interrupted re-key reads *re-keying* on every member's scope row and
+   is resumed by the next member's worker: any member holding the current epoch may re-key a node, a Memory's drop key
+   included, except where members place nothing — a drop box, a guest's identity folder and what lies below one — which
+   only an owner re-keys (`403 not_scope_owner`,
+   [ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+   decision 11). A queued rotation completes only once no node lags (`409 rekey_incomplete`).
 
 <Mermaid code={`
 sequenceDiagram
@@ -460,11 +559,11 @@ sequenceDiagram
   participant S as Server
   participant M as Remaining member
   participant D as Removed member
-  R->>S: read members, keys, tags, current epoch E(n)
+  R->>S: read members, keys, current epoch E(n)
   S-->>R: member list (read before the removal)
   R->>R: mint E(n+1), chain link = E(n) wrapped under E(n+1)
-  R->>R: for each member except D: verify tag under E(n),<br>re-tag under E(n+1), TOFU gate, seal and sign grant
-  R->>S: one request: remove D, chain link, grants, re-tags, epoch n+1
+  R->>R: for each member except D: anchor gate, seal and sign grant
+  R->>S: one request: remove D, chain link, grants, epoch n+1
   S->>S: one transaction: delete D membership, commit epoch n+1<br>only if current + 1, else stale_epoch
   D->>S: any request on the scope
   S-->>D: refused (layer 1)
@@ -481,32 +580,12 @@ Revoking a session family removes server access and leaves wraps and the revoked
 separate, explicitly named action deletes that device's saved wrap, which brings back the Secret-Key requirement for
 it at its next sign-in. Neither action takes back a key a device already holds.
 
-**Account rotation after a compromise**
-([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md),
-[uc.account.rotate-keys](https://github.com/raddatzk/veyq/blob/main/docs/features/account/use-cases/uc.account.rotate-keys.md)).
-When someone else holds the Master Key (a phished device link is the case that forces this), the Master Key and the
-identity keypair are replaced **together**. It is one mode with no choice, because the identity private key exists
-only under the Master Key.
-
-1. **Cold gate.** The holder supplies password and Secret Key. The client re-derives the floor key and requires it
-   to open the stored `PASSWORD` wrap to the Master Key it already holds, which proves possession now. The request
-   carries a signature of the **Secret-Key proof key**, which the server checks. A device-linked attacker holds the
-   Master Key but not the Secret Key, so it cannot rotate first and lock the holder out.
-2. The device mints a new Master Key and identity, rewrites the `PASSWORD` and `RECOVERY` wraps (the Emergency Kit
-   stays valid), deletes every device wrap, and re-seals the pin store and the device register in the same request.
-3. The new identity public key is published. Every contact who pinned the old one now sees *changed*.
-4. The personal scope gets a new epoch granted to the new identity, and this device re-keys its nodes. For each
-   shared scope a rotation job is queued for **another owner** to complete, whose device re-keys the scope's nodes
-   before the job completes. The rotator is excluded and is refused by the server if it tries. Re-admission
-   runs through each scope's human changed-key review, which is what stops an attacker who holds the old identity
-   from rotating its way back in.
-5. Every other session is revoked. The result screen shows each scope's status (waiting, stalled, re-keying,
-   secured, failed) as the server reports it; *secured* only once every node of the scope is re-keyed.
+**Securing an account after a compromise** replaces the account's identity, Master Key and Secret Key and then
+rotates every scope it is in, from its own devices: section 7.
 
 **What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node and
 its moving to the current epoch as the re-key reaches it, rewritten ciphertext in rows it already held, the
-grant-present and granted-epoch markers, the rotation jobs and their status, and the new directory value after an
-account rotation. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
+granted-epoch markers, and the rotation jobs a removal queues and their status. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
 
 **What it cannot do.**
 
@@ -520,18 +599,14 @@ account rotation. It never sees an epoch key or a node key, and no store object 
 **Residual.**
 
 - **A withheld rotation (a fork).** A member who never learns of the newer epoch keeps writing under the old one.
-- **Queued rotations** know only the server's member list, so they hold against an honest operator only. Examples
-  are a tenant removal that cuts a co-shared group, and an account rotation's shared scopes.
+- **Queued rotations** know only the server's member list, so they hold against an honest operator only. The
+  example is a tenant removal that cuts a co-shared group.
 - **The tenant default is layer 1 only.** A removed member who kept keys and ciphertext and colludes with a
   malicious operator keeps that narrow reach until an explicit re-key.
 - **Item favorites** are sealed under `E0` by choice, so a former member can read a set written after their removal.
 - **What existed at the rotation** stays readable to whoever held its keys: blobs are re-wrapped, never re-encrypted.
 - **Links from before** keep opening the new key until re-issued, since every former member can rebuild their
   `K_share`; a drop box's guest from before keeps their identity key, re-sealed to the new drop key, until then too.
-- **The proof-key check runs on the server**, so it binds every caller except the operator.
-- Account rotation is impossible without the Emergency Kit. Containment (revoke sessions, remove saved keys) is
-  all that remains.
-
 See [Known limitations](/veyq/security/known-limitations/).
 
 ## 6. Recovery
@@ -607,6 +682,171 @@ learns the Secret Key, the old or new password, or the Master Key.
   accepted and stated.
 - An account in no tenant (the Server Owner after first-run setup) has no mail path until it joins one.
 - The proof-key check is a server check, so it binds every caller except the operator (section 1, residual).
-- Re-issuing an Emergency Kit (rotating the Secret Key) does not exist yet.
+- A new Emergency Kit comes only from securing the account (section 7), which needs the current one: a lost kit
+  cannot be replaced, and a reset keeps the Secret Key, so the kit it was opened with stays valid.
 
 See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/veyq/security/roadmap/).
+
+## 7. The key chain and securing an account
+
+**Purpose.** Replace an account's identity, Master Key and Secret Key when someone else may hold one of them, without
+losing access to any space and without any other member having to accept the new key; and make that new key one that
+only the holder of the password **and** the current Secret Key can introduce
+([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md),
+[ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 6–10, [uc.account.rotate-keys](https://github.com/raddatzk/veyq/blob/main/docs/features/account/use-cases/uc.account.rotate-keys.md)).
+
+**The key chain.** Each account has one, the same in every tenant, stored beside its identity:
+
+- **Step 0** (statement `key-chain-genesis`) is written at account birth: the user id, the birth identity public
+  bundle and the birth Secret-Key proof public key, unsigned.
+- **Each later step** (statement `key-chain-step`) names the user id, its index, the hash of the step before it,
+  SHA-256 of the old identity bundle and of the old proof public key, and the new identity bundle and new proof public
+  key in full. It is signed twice over the same bytes: by the **old identity**'s signing key and by the **old
+  Secret-Key proof key**. A stolen signed-in device holds the identity but never the Secret Key, so it cannot sign a
+  step, with or without the operator's help.
+- **The head** is `SHA-256("veyq/v1/key-chain/head" ‖ statement)` of the newest step (of step 0 for an account that
+  never rotated). Byte formats: the `key_chain` vectors.
+- **Who reads it.** The server serves the whole chain and its head to the person, to users who share a tenant with
+  them, and between two accepted moderators of the instance (a moderator hands the moderation key to another, and
+  the two may share no tenant); anyone else gets the `404` an unknown user gets. Every read that serves another
+  user's key to a check — a member list, a group candidate, a delivery target, an open or served invite, a moderation
+  delivery — serves that user's head beside it.
+
+**The anchor gate.** A client pins, per contact, the head it has seen, in the pin entry beside the fingerprint
+(section 3). For a served key and head it answers:
+
+- **first use** — no pin yet: the chain is read, must end at the served head and the served key, and the head is
+  pinned (trust on first use);
+- **match** — the served head is the pinned head and the served key the key at it;
+- **advanced** — the chain from the pinned head to the served head verifies step by step (both signatures, each
+  predecessor hash, the keys at the pinned head equal to the pinned fingerprint) and ends at the served key: the pin
+  moves to the new head, and *verified* drops, since every verification names the old head;
+- **anomaly** — anything else, a served head older than the pinned one included.
+
+**In a tenant the join record decides first.** A wrap there, and a group grant from the active tenant, ask the
+person's standing: their join record (section 3, step 7) must open under the tenant key, verify owner → invite →
+newcomer, and name as signer an owner the server lists whose key in it this client anchors in the tenant in turn (a
+retired key of that owner included). The chain is then walked from the step that installs the identity **and** proof
+key the record names — whatever the server serves before it counts for nothing — and only a key at or after that step
+counts; the pin is the counter. A pinned head not on that chain is **replaced** when the chain is at least as long as
+the pinned one was (the pin was a key the operator substituted at a first contact; the profile says so) and an anomaly
+when it is shorter. An owner the server lists with no join record is a root, judged by the pin alone; any other
+member without a valid join record is an anomaly with no chain read. Who is an owner is the server's word.
+
+A client wraps only on the first three, and accepts a grant only from a granter key of the chain it pinned (a retired
+one only at or below its epoch floor, section 3). There is no human override: a legitimate rotation is always signed,
+so an anomaly is shown as *Can't confirm this key* and never accepted by hand. **Why the head, not the identity:** with
+only the identity pinned, an operator could serve an invented prefix whose last step names the pinned identity with a
+proof key of its choosing, and a thief holding the old identity could then sign a step every member accepts.
+
+**Participants.** The account holder, their client (any of their devices afterwards), the server, and the other
+members of each scope.
+
+**Steps.**
+
+1. **Cold gate.** The holder types the password and the current Secret Key. The client re-derives the floor key and
+   requires it to open the stored `PASSWORD` wrap to the Master Key it already holds. It reads its own key chain and
+   requires it to end at the vault's identity and at the proof key of the Secret Key just typed.
+2. **The new Emergency Kit first.** The client mints a new Secret Key and shows it as a new Emergency Kit. Nothing is
+   sent until the kit is downloaded and the holder confirms it is saved, so the key the publish installs is always one
+   somebody saved.
+3. **Mint.** A new Master Key and identity; the `PASSWORD` wrap under the new Secret Key and the password (a new one
+   if chosen, offered pre-selected) and the `RECOVERY` wrap under the new Secret Key, both with fresh salts; the new
+   proof key; the auth key of the password the account keeps; and the chain step, signed by the old identity and the
+   old proof key.
+4. **Stage the self-grants.** The client reads the plan: every scope the account holds a grant on, in every tenant,
+   with its current epoch and the account's own grant row. It opens each grant with the old identity and seals that
+   **current** epoch key to the new identity, signed by it and naming its digest. A grant this device cannot open
+   (its signature or the epoch floor refuses it) is declared unreadable, never dropped. It opens a stage declaring the
+   new identity and uploads the self-grants in chunks of at most 256; the server verifies each under the identity the
+   stage declares and refuses the chunk otherwise (`422 self_grant_invalid`). Nothing staged is applied. A stage
+   expires an hour after it opened by default and is purged. The grants are staged rather than sent with the publish
+   because nothing caps an account's memberships (any co-member can add it to groups), so one request cannot carry
+   them all.
+5. **Publish, one transaction.** The request carries the new identity and its wrapped private key, both wraps, the
+   re-sealed pin store and device register, the step's two signatures, the stage's id and the digest of the staged
+   grants, the unreadable scopes, the new auth key with the old auth key's signature over it, the new proof public key,
+   and two signatures over one statement — by the current proof key (the gate) and by the new one (proof that it is
+   held). The statement binds the current and the new identity, the wraps, the step, both auth keys, the new proof key
+   and the stage. Under the account's lock the server checks the stage and its digest, the step under the **stored**
+   identity and proof key with the stored head as its predecessor, both proof signatures and the auth signature. Then,
+   locking each scope in ascending order, it requires every membership that carries a grant to be staged at its
+   current epoch or declared unreadable (`409 rotation_plan_changed` otherwise; the client re-stages only what moved
+   and retries). It writes the account, appends the step, applies each staged self-grant with a *waiting* row, deletes
+   the stage and every wrap but the two cold ones, voids every open change of the sign-in address, clears the
+   grant-delivery declines aimed at the account, and revokes every other session. A refused publish writes nothing.
+6. **Next epochs, from any device.** Every device of the account, one signed in with the new kit included, first
+   finishes: for each scope still *waiting* it opens its self-grant with the new identity and commits the next epoch,
+   granting every member its client anchors and declaring the others pending. The server takes that commit from a
+   member who is not an owner only while the *waiting* row names the scope's current epoch, and never with a removal.
+   If someone else committed first, that commit could not grant the old identity, so the row is met.
+7. **Nodes.** Any member re-keys the scope's nodes (section 5). A scope reads *secured* once no node lags.
+8. **Everyone else.** Their clients see a new head, walk the chain from the head they pinned (*advanced*), and go on
+   granting to the account and accepting its grants with no review.
+9. **The account's verifications.** Before the publish the client collected, in every tenant it can open, its own
+   verifications that verify under the outgoing identity at its head; after it, it signs each again with the new
+   identity and the new head over the old row. A verification counts only under its verifier's current key, so a
+   statement a thief signs with the retired key counts nowhere. Best-effort: one not re-signed stops counting.
+
+A publish failure the server did not answer with a declared refusal is an unknown outcome: the client re-reads the
+served wrapped identity. If it opens under the new Master Key, the publish committed and the client goes on; under the
+old one, nothing was written; otherwise the vault is locked and the holder is asked to unlock with the new kit. A retry
+with the new Secret Key finishes what was left and never mints a second set of keys.
+
+<Mermaid code={`
+sequenceDiagram
+  actor U as Account holder
+  participant C as Client
+  participant S as Server
+  participant M as Other member
+  U->>C: password, current Secret Key
+  C->>C: floor opens to the vault's Master Key<br>own key chain ends at the vault's identity
+  C->>U: new Emergency Kit (new Secret Key), must be saved
+  C->>C: mint Master Key, identity, wraps, proof key<br>step signed by old identity and old proof key
+  C->>S: read plan (every scope, every tenant)
+  C->>C: open each grant with the old identity<br>self-grant of the current epoch to the new identity
+  C->>S: open stage, upload self-grants (256 a chunk)
+  S->>S: verify each under the stage's identity
+  C->>S: publish: step signatures, stage id and digest,<br>proof by old and new proof key
+  S->>S: one transaction: checks, every membership staged,<br>append step, apply self-grants, revoke sessions
+  C->>S: per scope: next epoch, grants to anchored members,<br>the rest declared pending
+  M->>S: read key chain (head moved)
+  M->>M: walk from pinned head: advanced, pin moves
+`} />
+
+**What the server learns.** That the account rotated, and when; the new identity public key and proof public key; the
+key chain (public keys and signatures); the self-grants as ciphertext, for scopes it already knew the account was in;
+which scopes the device declared unreadable; and the next epochs as they are committed. It never sees a Secret Key,
+the Master Key, an epoch key, or whom anybody trusts.
+
+**What it cannot do.**
+
+- **Introduce a key the members accept without the Secret Key.** A step needs the old proof key's signature, which only
+  the Secret Key derives, and every client verifies the chain itself; the server's own check of the step is an honest
+  server's.
+- **Strand a scope through the rotation.** From the publish on, every scope the account holds a grant on holds a grant
+  of its current epoch to the new identity; a lost answer, a closed tab, a failed epoch or a scope in another tenant
+  leaves it *waiting*, never lost.
+- **Apply a stage without the proof.** A stage is inert until a publish proved by the current Secret Key names it and
+  its digest.
+- **Roll a contact back.** A head older than the pinned one is an anomaly.
+
+**Residual.**
+
+- **First use.** A contact this account never pinned is trusted at the head the server serves where no join record
+  anchors them: a tenant's owner, and every contact outside a shared tenant.
+- **Withholding.** A client that never saw a newer step cannot tell it was withheld, unless two people compare chain
+  codes.
+- **The race for the account.** Whoever holds the password and the current Secret Key and secures the account first
+  owns it. That is no new power: the same holder can already move the sign-in address and change the password.
+- **A password holder without the Secret Key** who signs in after the publish could commit an epoch of their own on a
+  scope they own: that denies access, it discloses nothing new. Choosing a new password while securing closes it.
+- **An owner's open invites end** with the owner's rotation, and a grant a rotation re-wrapped to an open invite is
+  trusted by the newcomer on first use (section 3).
+- **The server-side checks bind every caller except the operator**; against an active operator the client's checks
+  hold only on a client it does not serve (the caution at the top).
+- **Without the Emergency Kit the account cannot be secured.** Containment (revoke sessions, remove saved keys) is all
+  that remains.
+
+See [Known limitations](/veyq/security/known-limitations/).

@@ -168,26 +168,36 @@ Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/veyq/de
 Wenn du mit einer anderen Person teilst, braucht deine App ihren Schlüssel, den sie von unserem Server holt.
 Wer den Server unehrlich betreibt, könnte deiner App theoretisch den *falschen* Schlüssel unterschieben.
 
-**Deine App merkt sich den Schlüssel, den sie zuerst gesehen hat.** Liefert der Server später einen anderen,
-wird die Person mit **„Schlüssel geändert"** markiert, und deine App gibt ihr keine Schlüssel mehr, bis du
-dir das angesehen hast. **„Schlüssel prüfen"** zeigt die Nummer, der du vertraut hast, neben der jetzt
-gezeigten — jeder Schlüssel hat eine kurze **Sicherheitsnummer** —, damit ihr beide sie am Telefon
-vergleichen könnt. Danach nimmst du den neuen Schlüssel an oder lehnst ihn ab. Oft ist so eine Änderung
-harmlos (die Person hat ihre Schlüssel ersetzt), sie kann aber auch heißen, dass sich jemand als sie ausgibt.
+**Deine App merkt sich den Schlüssel, den sie zuerst gesehen hat.** Sichert die Person
+[ihr Konto ab](/veyq/de/account/replace-your-keys/), ist ihr neuer Schlüssel mit ihrem vorherigen unterschrieben, und
+deine App folgt dieser Unterschrift von dem Schlüssel aus, den sie sich gemerkt hat: Sie teilt weiter mit ihr, und in
+ihrem Profil steht **„Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben"**. Liefert der Server einen
+Schlüssel, der *nicht* aus dem gemerkten folgt, wird die Person mit **„Schlüssel nicht bestätigt"** markiert, und
+deine App gibt diesem Schlüssel nichts. Eine Schaltfläche zum Annehmen gibt es nicht: Ein echter Wechsel ist immer
+unterschrieben, ein Schlüssel ohne Unterschrift kann also heißen, dass sich jemand als die Person ausgibt. Ihr
+vergleicht dann eure **Sicherheitsnummern** — jeder Schlüssel hat eine kurze — persönlich. In der Zeit gibt ihr ein
+anderes Mitglied des Bereichs, dessen App den Schlüssel bestätigen kann, den Schlüssel des Bereichs, und niemand
+wartet damit beim Posten.
 
-**Prüfen, bevor sich etwas ändert.** Das Merken schützt erst ab dem ersten Schlüssel, den deine App gesehen hat:
-Hätte der Server dir von Anfang an einen falschen geliefert, sähe nichts verdächtig aus. Deshalb kannst du selbst
-prüfen. Dein eigenes Profil zeigt *deine* Sicherheitsnummer und einen Code; öffne das Profil der anderen Person,
-scanne den Code auf ihrem Bildschirm oder lest euch die Ziffern vor, und stimmt sie überein, wird die Person als
-**„Verifiziert"** markiert — im Profil und in jeder Mitgliederliste (Schritt für Schritt:
-[Eine Person verifizieren](/veyq/de/account/verify-a-person/)). Ändert sich der Schlüssel einer verifizierten
-Person einmal, sagt die App das deutlicher, und ihr vergleicht erneut.
+**In einem Bereich bürgt die Einladung für jedes Mitglied.** Jede Einladung unterschreibt eine Person, die den Bereich
+besitzt, und wer sie annimmt, hinterlässt einen über diese Einladung unterschriebenen Nachweis des Schlüssels, mit dem
+die Person beigetreten ist. Deine App prüft den Schlüssel jedes Mitglieds gegen diesen Nachweis. Schiebt der Server
+einen anderen Schlüssel unter — selbst einen, den deine App noch nie gesehen hat —, steht dort **„Schlüssel nicht
+bestätigt"**, und ebenso bei einem Mitglied, das der Server ganz ohne Einladung hinzugefügt hat.
 
-**Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Einen geänderten Schlüssel anzunehmen ist ein
-einziger Klick, und die App kann nicht erkennen, ob ihr verglichen habt — Annehmen markiert niemanden als
-verifiziert, nur ein neuer Vergleich tut das. Nichts verlangt, dass du jemanden verifizierst, bevor du mit dieser
-Person teilst; eine Einstellung, die das verlangt, gibt es noch nicht. Das stärkere System, bei dem der Server über
-Schlüssel gar nicht lügen kann, ist **geplant, aber nicht gebaut** — und das sagen wir lieber, als es vorzutäuschen.
+**Selbst prüfen.** Wer einen Bereich besitzt, hat keine Einladung hinter sich, und wer als besitzend gilt, sagt der
+Server; außerhalb eines gemeinsamen Bereichs hat deine App nur den Schlüssel, den sie zuerst gesehen hat. Deshalb
+kannst du jede Person selbst prüfen. Dein eigenes Profil zeigt *deine* Sicherheitsnummer, einen kürzeren Kettencode
+und einen Code zum Scannen; öffne das Profil der anderen Person, scanne den Code auf ihrem Bildschirm oder lest euch
+die Ziffern vor, und stimmt beides überein, wird die Person als **„Verifiziert"** markiert — im Profil, wo steht, wer
+sie verifiziert hat, und in jeder Mitgliederliste, für alle in diesem Bereich (Schritt für Schritt:
+[Eine Person verifizieren](/veyq/de/account/verify-a-person/)). Sichert eine verifizierte Person ihr Konto ab, gilt
+das für den neuen Schlüssel nicht weiter; vergleicht erneut, um es wiederzubekommen.
+
+**Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Nichts verlangt, dass du jemanden verifizierst, bevor du mit dieser
+Person teilst; eine Einstellung, die das verlangt, gibt es noch nicht. Unser Server kann eine Verifizierung weder lesen
+noch fälschen, sieht aber, wer wen verifiziert hat. Das stärkere System, bei dem der Server über Schlüssel gar nicht
+lügen kann, ist **geplant, aber nicht gebaut** — und das sagen wir lieber, als es vorzutäuschen.
 
 ## Wenn etwas schiefgeht
 

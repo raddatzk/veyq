@@ -9,7 +9,8 @@ import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -223,7 +224,7 @@ class MemberAvatarSliceTest {
         val id = pendingTenant("av-acc.example.com", "owner@av-acc.example.com", secret)
         val userId = seedUser(email = "owner@av-acc.example.com")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"avowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},"sealedAvatar":"c2VhbGVkLWF2YXRhcg=="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"avowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"c2VhbGVkLWF2YXRhcg=="}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         val p = stored(id, userId)
         assertEquals("c2VhbGVkLWF2YXRhcg==", p.sealedAvatar)
@@ -235,14 +236,14 @@ class MemberAvatarSliceTest {
         val id2 = pendingTenant("av-acc2.example.com", "owner2@av-acc.example.com", secret2)
         val user2 = seedUser(email = "owner2@av-acc.example.com")
         given().header("Authorization", bearer(user2)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret2","username":"avowner2","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"bootstrapSecret":"$secret2","username":"avowner2",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assertNull(stored(id2, user2).sealedAvatar)
         assertEquals(0, stored(id2, user2).avatarRevision)
     }
 
     @Test
-    fun registerAndAcceptSealsThePictureOnlyOnTheOwnerPath() {
+    fun registerAndAcceptSealsThePictureOnBothPaths() {
         val ownerSecret = "av-reg-o"
         val id = pendingTenant("av-reg.example.com", "owner@av-reg.example.com", ownerSecret)
         val ownerId = UUID.randomUUID().toString()
@@ -251,19 +252,17 @@ class MemberAvatarSliceTest {
         assertEquals("c2VhbGVkLWF2YXRhcg==", stored(id, ownerId).sealedAvatar)
         assertEquals(1, stored(id, ownerId).avatarRevision)
 
-        // a MEMBER invitee holds no K_tenant yet: a picture on its body is not stored
+        // a MEMBER invitee holds K_tenant at accept too — it opened its invite's grant (ADR 0111 decision 3) — so a
+        // picture on its body is stored like the owner's
+        val key = TestInviteKey()
         QuarkusTransaction.requiringNew().run {
-            TenantInviteEntity().apply {
-                this.id = UUID.randomUUID().toString(); tenantId = id; ownerEmail = "m@av-reg.example.com"
-                tokenHash = Tokens.hash("av-reg-m"); status = TenantInviteEntity.ACTIVE; role = TenantInviteEntity.MEMBER
-                expiresAt = Instant.now().plus(7, ChronoUnit.DAYS); createdAt = Instant.now()
-            }.persist()
+            store.mintMemberInvite(id, "m@av-reg.example.com", Tokens.hash("av-reg-m"), Instant.now().plus(7, ChronoUnit.DAYS), key.stored(ownerId))
         }
         val memberId = UUID.randomUUID().toString()
-        given().contentType(ContentType.JSON).body(registerBody("av-reg-m", memberId, "regmember", owner = false, avatar = "c2VhbGVkLWF2YXRhcg=="))
+        given().contentType(ContentType.JSON).body(registerBody("av-reg-m", memberId, "regmember", owner = false, avatar = "c2VhbGVkLWF2YXRhcg==", key = key))
             .`when`().post("/api/tenants/accept/register").then().statusCode(201)
-        assertNull(stored(id, memberId).sealedAvatar)
-        assertEquals(0, stored(id, memberId).avatarRevision)
+        assertEquals("c2VhbGVkLWF2YXRhcg==", stored(id, memberId).sealedAvatar)
+        assertEquals(1, stored(id, memberId).avatarRevision)
     }
 
     @Test
@@ -273,12 +272,12 @@ class MemberAvatarSliceTest {
         val userId = seedUser(email = "owner@av-bad.example.com")
         for (bad in listOf(full + "AAAA", "not base64!!")) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"bootstrapSecret":"$secret","username":"badowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},"sealedAvatar":"$bad"}""")
+                .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"$bad"}""")
                 .`when`().post("/api/tenants/accept").then().statusCode(400).body("code", equalTo("invalid_request"))
         }
         // the invite survived the refusals: a clean accept still works
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"badowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
     }
 
@@ -328,8 +327,9 @@ class MemberAvatarSliceTest {
             store.createPendingTenant("Fam", domain, ownerEmail, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS)).first
         }
 
-    private fun registerBody(secret: String, userId: String, username: String, owner: Boolean, avatar: String): String {
-        val grant = if (owner) """"grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},""" else ""
+    private fun registerBody(secret: String, userId: String, username: String, owner: Boolean, avatar: String, key: TestInviteKey? = null): String {
+        val grant = if (owner) """${TestGrants.ownerBirthJson("aWRlbnRpdHktcHVibGljLWtleQ==")},"""
+        else key?.let { "${TestGrants.memberJoinJson(it, it.inviteId, userId, "aWRlbnRpdHktcHVibGljLWtleQ==")}," } ?: ""
         return """
             {"bootstrapSecret":"$secret","userId":"$userId","username":"$username",$grant"sealedAvatar":"$avatar",
              "account":{"suiteId":"v1",

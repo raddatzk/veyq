@@ -150,8 +150,9 @@ limiter so the two answers cannot be paired into an address-level oracle
 - **The published promise gets narrower and truer.** `wiki/{en,de}` describes a single-use *recovery code* that
   issues a fresh kit. No such code exists; the Secret Key is the recovery factor, and a reset does not re-issue
   the kit (the Secret Key is unchanged, so the old kit stays valid). The wiki must be corrected to describe what
-  veyq actually does. Re-issuing a kit — which means rotating the Secret Key and re-wrapping — is a separate
-  capability that does not exist today and is not part of this decision.
+  veyq actually does. Re-issuing a kit means rotating the Secret Key and re-wrapping. It is part of securing the
+  account ([ADR 0060](0060-key-rotation-after-compromise.md)), not of a reset: a reset keeps the Secret Key, so the kit
+  it was opened with stays valid.
 - **Recovery never gates on a stored confirmation.** The mailed token proves address control at the time of
   release, which is what matters; a flag recorded months earlier adds no factor. Address confirmation
   ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md)) is therefore recorded and shown,

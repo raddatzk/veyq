@@ -40,7 +40,7 @@ installPinnedFetch({
 session.apiBase = BASE
 
 export type Account = { email: string; password: string; username: string; secretKey: string; userId?: string }
-export type Member = Account & { stage: 'built' | 'joined' | 'granted' | 'profiled' }
+export type Member = Account & { stage: 'built' | 'granted' | 'profiled' }
 export type Accounts = { owner: Account; tenantId: string; members: Member[] }
 export type Place = { scopeId: string; nodeId: string; hash: string; name: string }
 export type Manifest = Partial<Record<'photos' | 'bare' | 'upload' | 'treeDeep' | 'wideDeep', Place>> & {

@@ -1,84 +1,99 @@
 ---
-title: "Deine Schlüssel ersetzen"
+title: "Konto absichern"
 sources:
   - docs/features/account/use-cases/uc.account.rotate-keys.md
-  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
   - docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
 
-Für den Notfall: Jemand anderes hat deine Schlüssel, etwa über ein fremdes Gerät, dem du den Zugang bestätigt hast.
+Für den Fall, dass jemand anderes dein Passwort, deinen Secret Key oder ein Gerät haben könnte, das in deinem Konto
+angemeldet war.
 
 ## Was ersetzt wird
 
-Dein **Master Key** und deine **Identität**. Passwort, Secret Key und Notfall-Kit bleiben, wie sie sind.
+Dein **Master Key**, deine **Identität** und dein **Secret Key**. Du bekommst also ein neues **Notfall-Kit**, und dein
+altes Kit funktioniert nicht mehr, sobald dein Konto abgesichert ist. Du kannst dabei ein neues Passwort wählen; das
+ist angeboten und schon ausgewählt, und wir empfehlen es.
 
 ## Warum
 
 Abmelden beendet den Zugang eines Geräts zum Server, nicht die Schlüssel, die es hat. Neue Schlüssel sperren diese
-für alles aus, was ab jetzt dazukommt.
+für alles aus, was ab jetzt dazukommt. Ein neuer Secret Key sperrt auch aus, wer dein Notfall-Kit kopiert hat.
 
 ## Brauchst du das?
 
-Nur wenn ein fremdes Gerät deine Schlüssel hatte. Für ein verlorenes eigenes Gerät wähle stattdessen **Abmelden und
-gespeicherten Schlüssel entfernen** ([Geräte und Sitzungen](/veyq/de/account/devices-and-sessions/)).
+Nur wenn jemand anderes dein Passwort, deinen Secret Key oder ein Gerät haben könnte, das in deinem Konto angemeldet
+war. Für ein verlorenes eigenes Gerät wähle stattdessen **Abmelden und gespeicherten Schlüssel entfernen**
+([Geräte und Sitzungen](/veyq/de/account/devices-and-sessions/)).
 
-## Was es kostet
+## Was passiert
 
-- **Alle sehen, dass sich dein Schlüssel geändert hat.** Wer dich verifiziert hatte, vergleicht die
-  Sicherheitsnummer neu.
-- **In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt**
-  ([Eine Person verifizieren](/veyq/de/account/verify-a-person/)).
-- **Alle anderen Geräte werden abgemeldet** und brauchen wieder Passwort und Secret Key oder werden von diesem aus
-  über **Gerät hinzufügen** neu hinzugefügt.
-- **Offene Gruppeneinladungen an dich verfallen.**
-- **Es lässt sich nicht rückgängig machen.** Was jetzt da ist, bleibt für den alten Schlüssel lesbar; nur was danach
+- **Du behältst jeden Bereich, in dem du bist.** Die anderen dort sehen, dass dein Konto abgesichert wurde; niemand
+  muss etwas bestätigen. Ihre Apps nehmen deine neue Identität an, weil deine alte sie unterschrieben hat: In deinem
+  Profil steht für sie **Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben** mit dem Datum.
+- **Alle deine Geräte werden abgemeldet.** Jedes meldet sich mit deinem Passwort und deinem **neuen** Notfall-Kit
+  wieder an, oder du fügst es von diesem aus über **Gerät hinzufügen** hinzu. Das Gerät, auf dem du dein Konto
+  absicherst, bleibt entsperrt, auch wenn du die Seite neu lädst.
+- **Du bekommst ein neues Notfall-Kit.** Du speicherst es, bevor sich etwas ändert, und dein altes Kit funktioniert
+  nicht mehr, sobald dein Konto abgesichert ist.
+- **Einladungen, die du verschickt hast und die noch niemand angenommen hat, funktionieren dann nicht mehr.**
+  Verschick sie danach neu.
+- **Es lässt sich nicht rückgängig machen.** Was jemand anderes schon gesehen hat, bleibt gesehen. Nur was danach
   dazukommt, ist für ihn zu.
-- **Vorher erstellte Links bleiben für den alten Schlüssel offen, bis du sie erneuerst**
+- **Links, die du vorher erstellt hast, bleiben offen, bis du sie erneuerst.** Am Ende siehst du eine Liste
   ([Einen Link erneuern](/veyq/de/sharing/manage-links/)).
 
-Zwei Dinge, bevor du anfängst:
+Vor den Feldern nennt die Seite jeden Bereich, der sein neues Schloss noch nicht bekommen kann, und warum: Er ist
+pausiert, er wird gerade gelöscht, oder dieses Gerät kann ihn nicht öffnen, er ist also schon für dich zu.
 
-- **Bist du in einem geteilten Bereich die einzige besitzende Person, nennt die Seite ihn mit Namen.** Mach dort
-  vorher jemand anderen dazu, sonst behält dieser Bereich das alte Schloss.
-- **Du brauchst dein Notfall-Kit.** Ohne es lassen sich deine Schlüssel nicht ersetzen. Bewahr es so auf, dass nur
-  du drankommst.
+Zum Anfangen brauchst du dein jetziges **Notfall-Kit**. Ohne es lässt sich dein Konto nicht absichern.
 
-## Sie ersetzen
+## Absichern
 
-1. Öffne das Menü unten in der Seitenleiste und wähle **Einstellungen**, dann **Sicherheit**.
-2. Gib unter **Schlüssel ersetzen** **Dein Passwort** und **Dein Secret Key** ein.
-3. Wähle **Schlüssel ersetzen** und bestätige im Dialog **Schlüssel wirklich ersetzen?** mit **Schlüssel ersetzen**.
+1. Öffne das Menü unten in der Seitenleiste und wähle **Einstellungen**, dann **Konto absichern**.
+2. Gib **Dein Passwort** und **Dein Secret Key** ein, den aus deinem jetzigen Notfall-Kit.
+3. **Auch ein neues Passwort wählen** ist schon angehakt. Gib **Neues Passwort** und **Neues Passwort bestätigen**
+   ein, oder nimm den Haken weg, um deins zu behalten.
+4. Wähle **Weiter**. Passen Passwort oder Secret Key nicht, bleibst du bei diesem Schritt, und es hat sich nichts
+   geändert.
+5. Wähle unter **Dein neues Notfall-Kit** **Notfall-Kit herunterladen (PDF)** und bewahr die Datei so auf, dass nur du
+   drankommst. Bewahr dein altes Kit auf, bis die Seite sagt, dass dein Konto abgesichert ist.
+6. Setze den Haken bei **Ich habe mein Notfall-Kit sicher gespeichert.** Vorher bleibt die Schaltfläche aus.
+7. Wähle **Konto absichern** und bestätige im Dialog **Konto wirklich absichern?** mit **Konto absichern**.
 
-<Screenshot id="account-replace-keys" shows="Der Block Schlüssel ersetzen unter Sicherheit: was ersetzt wird, warum, wann, Was es kostet, die Liste der Bereiche, in denen du die einzige besitzende Person bist, ein geteilter Bereich mit Niemand kann es tun, die Felder für Passwort und Secret Key und die Schaltfläche Schlüssel ersetzen" />
+<Screenshot id="account-replace-keys" shows="Die Seite Konto absichern unter Einstellungen: Was passiert mit seiner Liste, die Felder für Passwort und Secret Key mit angehaktem Auch ein neues Passwort wählen und die Schaltfläche Weiter" />
 
-Steht dort, dass die Anfrage größer ist, als dieser Server annimmt, wurde nichts geändert, und ein neuer Versuch hilft
-nicht. Bitte die Person, die den Server betreibt, die Grenze für Anfragen anzuheben.
-
-Danach steht dort **Deine Schlüssel sind ersetzt** und jeder Bereich mit seinem Stand:
+Danach steht dort **Dein Konto ist abgesichert. Dein altes Notfall-Kit funktioniert nicht mehr, du kannst es
+vernichten.** Unter **Deine Bereiche** steht jeder Bereich mit seinem Stand:
 
 - **Neues Schloss.** Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für
   ihn offen, bis du sie erneuerst.
-- **Schloss wird eingebaut.** Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.
-- **Altes Schloss.** Dieser Bereich hat noch sein altes Schloss. Versuch es noch einmal.
+- **Schloss wird eingebaut.** Das neue Schloss wird eingebaut. Hinzufügen dauert hier etwas länger, bis das fertig ist.
+- **Noch nicht.** Das neue Schloss wird eingebaut, sobald eines deiner Geräte veyq das nächste Mal öffnet. Was hier
+  ist, bleibt deins.
+- **Noch nicht möglich.** Der Bereich ist pausiert oder wird gerade gelöscht. Ein pausierter Bereich bekommt sein
+  neues Schloss, sobald er zurück ist.
 
-Unter **Geteilte Bereiche** baut jemand anderes das neue Schloss ein und lässt dich wieder hinein:
+Unter **Links zum Erneuern** steht jeder Link, den du vorher erstellt hast, mit seinem Bereich. **Erneuern** öffnet
+den Teilen-Dialog dieses Links. Einen Upload-Link erneuerst du nicht: Erstell einen neuen und schalte den alten dann
+ab. Bei einem Link in einem anderen geteilten Bereich steht, in welchem er liegt; öffne veyq dort, um ihn zu erneuern.
 
-- **Wartet auf eine andere besitzende Person.** Eine andere besitzende Person baut das neue Schloss ein, sobald sie
-  veyq das nächste Mal öffnet. Bis dahin liest der alte Schlüssel, was hier dazukommt.
-- **Niemand kann es tun.** Keine andere besitzende Person kann das neue Schloss einbauen. Mach hier jemanden zur
-  besitzenden Person. Bis dahin liest der alte Schlüssel, was hier dazukommt.
-- **Schloss wird eingebaut.** Das neue Schloss wird eingebaut. Jemand hier muss noch bestätigen, dass du es bist.
-- **Neues Schloss.** Neues Schloss drin. Jemand hier muss noch bestätigen, dass du es bist.
-- **Altes Schloss.** Das Einbauen ist wiederholt gescheitert, deshalb liest der alte Schlüssel noch, was hier
-  dazukommt. Stoß es neu an.
+## Wenn etwas schiefgeht
 
-Besitzt du einen geteilten Bereich oder eine Gruppe und ein anderes Mitglied hat die eigenen Schlüssel ersetzt, baut
-das Gerät einer besitzenden Person, vielleicht deins, das neue Schloss von selbst ein; solange es eingebaut wird,
-wartet dort das Hinzufügen. Klappt das nicht, steht beim Bereich in der Seitenleiste **Braucht ein neues Schloss**,
-und seine Mitgliederliste sagt, warum. Entweder gibt es keine besitzende Person mehr, die es einbauen kann: Mach
-jemand anderen zur besitzenden Person. Oder das Einbauen ist wiederholt gescheitert: Wähle **Neu anstoßen**, und
-dein Gerät übernimmt es.
+- **Die Seite sagt, sie konnte nicht prüfen, ob dein Konto abgesichert wurde.** Entsperre veyq noch einmal mit deinem
+  **neuen** Notfall-Kit. Öffnet es sich, ist dein Konto abgesichert, und veyq erledigt den Rest ohne neues Kit. Wird es
+  abgelehnt, wurde nichts geändert, und dein altes Kit funktioniert weiter.
+- **Die Seite sagt, die Anfrage ist größer, als dieser Server annimmt.** Es wurde nichts geändert, und ein neuer
+  Versuch hilft nicht. Bitte die Person, die den Server betreibt, die Grenze für Anfragen anzuheben.
+- **Du hast die Seite vor dem Ende geschlossen.** Melde dich mit deinem Passwort und deinem **neuen** Kit an. Öffnet
+  es sich, erledigt veyq den Rest von selbst. Wird es abgelehnt, wurde nichts geändert, und dein altes Kit funktioniert
+  weiter.
+- **Du startest Konto absichern noch einmal mit dem Secret Key aus deinem neuen Kit.** Dein Konto ist dann schon
+  abgesichert, also erledigt veyq, was noch fehlt, ohne neues Kit.
+
+Sichert ein anderes Mitglied eines Bereichs, in dem du bist, sein Konto ab, baut sein eigenes Gerät dort das neue
+Schloss ein, und das Gerät jedes Mitglieds hilft dabei. Solange es eingebaut wird, dauert dort das Hinzufügen etwas
+länger. Niemand muss etwas bestätigen.
 
 Mehr: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

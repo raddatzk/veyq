@@ -8,11 +8,11 @@
 // {@link loadTenantPeople} - every member of the tenant (a profile page). A person a roster does not list is a former
 // member to whoever asks (the caller decides how it renders).
 import { shallowRef } from 'vue'
-import { activeScopeKey, activeSpace } from '../../app/activeSpace'
+import { activeEpochKeys, activeSpace } from '../../app/activeSpace'
 import { listScopeMembers } from '../../features/spaces/members'
 import { openScope } from '../../features/spaces/scopes'
-import { zeroEpochKeys } from '../../features/spaces/epochs'
-import { unsealName, type MemberName } from '../../features/account/profile/memberName'
+import { copyEpochKeys, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
+import { unsealNameUnderEpochs, type MemberName } from '../../features/account/profile/memberName'
 import { ScopeKind } from '../../api/generated/scopes'
 import { syncAvatars, resetAvatars } from './avatarCache'
 
@@ -22,7 +22,7 @@ export { avatarUrlOf } from './avatarCache'
 export interface Person {
   userId: string
   username: string
-  /** The sealed real name when it opened; null otherwise (awaiting access, an unreadable blob). */
+  /** The sealed real name when it opened; null otherwise (none set, the tenant key not held, an unreadable blob). */
   realName: string | null
   /** The real name, else the username - the one display rule (ADR 0083 decision 9). */
   displayName: string
@@ -38,11 +38,13 @@ export function displayNameOf(username: string, name: MemberName | null | undefi
 let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
 /** One tenant member as the roster read holds it: the username, the opened real name, and the identity bundle the directory
- *  serves for them (base64) - the key a profile's safety-number compare starts from (ADR 0028 Decision 3). */
+ *  serves for them (base64) with the key-chain head beside it - the key a profile's safety-number compare starts from
+ *  (ADR 0028 Decision 3), and what the profile judges against the pinned head (ADR 0028 Decision 2). */
 interface TenantRow {
   username: string
   name: MemberName | null
   identityPublicKey: string
+  keyChainHead: string
 }
 let namesCache: { at: number; tenantScopeId: string; names: Map<string, TenantRow> } | null = null
 
@@ -71,24 +73,26 @@ export async function refreshPeopleDirectory(): Promise<void> {
   await avatarSync
 }
 
-/** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its key is
- *  held) or is opened for this read and zeroed after it. Empty when the caller holds no tenant grant. */
+/** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its keys
+ *  are held) or is opened for this read and zeroed after it. Each name opens under the tenant epoch it was sealed under,
+ *  tried across every held epoch key ({@link unsealNameUnderEpochs}): a name saved before a rotation still reads. Empty
+ *  when the caller holds no tenant grant. */
 async function tenantNames(): Promise<Map<string, TenantRow>> {
   if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
   let scopeId: string
   let tenantId: string | null
-  let key: Uint8Array | null
+  let epochs: EpochKeys | null
   let release: (() => void) | null = null
   if (activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId) {
     scopeId = activeSpace.scopeId
     tenantId = activeSpace.tenantId
-    key = activeScopeKey()
+    epochs = activeEpochKeys()
   } else {
     const opened = await openScope(ScopeKind.Tenant)
     if (!opened) return new Map()
     scopeId = opened.scopeId
     tenantId = opened.tenantId
-    key = opened.key
+    epochs = opened.epochs
     release = () => zeroEpochKeys(opened.epochs)
   }
   try {
@@ -96,17 +100,18 @@ async function tenantNames(): Promise<Map<string, TenantRow>> {
     const names = new Map(
       rows.map((m) => [m.userId, {
         username: m.username,
-        name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null,
+        name: epochs ? (unsealNameUnderEpochs(epochs, { scopeId, userId: m.userId }, m.sealedName)?.name ?? null) : null,
         identityPublicKey: m.identityPublicKey,
+        keyChainHead: m.keyChainHead,
       }] as const),
     )
     namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
     snapshot.value = new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
     // The pictures, in step with the roster: only the version integers were read; a picture is fetched when its version is new.
-    // The key is copied for the fetches (the scope's own may be zeroed below) and the copy zeroed when they settle.
-    if (key && tenantId) {
-      const copy = key.slice()
-      avatarSync = syncAvatars({ tenantId, scopeId, key: copy }, rows).finally(() => copy.fill(0))
+    // The keys are copied for the fetches (the scope's own may be zeroed below) and the copy zeroed when they settle.
+    if (epochs && tenantId) {
+      const copy = copyEpochKeys(epochs)
+      avatarSync = syncAvatars({ tenantId, scopeId, epochs: copy }, rows).finally(() => zeroEpochKeys(copy))
     }
     return names
   } finally {
@@ -135,8 +140,10 @@ export async function loadTenantPeople(): Promise<Map<string, Person>> {
   return new Map([...names].map(([userId, v]) => [userId, personOf(userId, v.username, v.name)]))
 }
 
-/** The identity bundle (base64) the tenant's directory serves for `userId`, or null for a user it does not list (a former
- *  member). Read with the roster, so it is as fresh as the names: a profile's compare starts from it when no pin exists. */
-export async function loadIdentityKey(userId: string): Promise<string | null> {
-  return (await tenantNames()).get(userId)?.identityPublicKey ?? null
+/** The identity bundle (base64) and key-chain head the tenant's directory serves for `userId`, or null for a user it does
+ *  not list (a former member). Read with the roster, so it is as fresh as the names: a profile's compare starts from it
+ *  when no pin exists. */
+export async function loadServedIdentity(userId: string): Promise<{ identityPublicKey: string; keyChainHead: string } | null> {
+  const row = (await tenantNames()).get(userId)
+  return row ? { identityPublicKey: row.identityPublicKey, keyChainHead: row.keyChainHead } : null
 }

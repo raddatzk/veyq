@@ -31,8 +31,25 @@ import java.util.UUID
  */
 object TestFixtures {
 
+    /**
+     * The default identity bundle of a seeded account: `lp(kem) || lp(sign)` with a stand-in KEM half and the Ed25519 public
+     * key of [IDENTITY_SIGN_SEED] (the `grant_signature` vector's pair). The server stores it opaque except where it
+     * checks a signature by it — the owner's `invite-key` signature at a member invite — so a test signs as any account
+     * seeded with it (`TestGrants.memberInviteJson`).
+     */
+    val IDENTITY_PUBLIC_KEY: String = Base64.getEncoder().encodeToString(
+        lp(ByteArray(1216) { 7 }) + lp(java.util.HexFormat.of().parseHex(IDENTITY_SIGN_PUBLIC_HEX)),
+    )
+
+    /** The Ed25519 public half of [IDENTITY_SIGN_SEED], hex — the `grant_signature` vector's `sign_public`. */
+    const val IDENTITY_SIGN_PUBLIC_HEX = "51bfae7fa92c515512cd3ad442760e41612e59dfec3913f670b721c04255b068"
+
+    /** The Ed25519 private seed behind [IDENTITY_PUBLIC_KEY]'s signing half. */
+    val IDENTITY_SIGN_SEED: ByteArray = ByteArray(32) { 0x7e }
+
+    private fun lp(b: ByteArray): ByteArray = java.nio.ByteBuffer.allocate(4).putInt(b.size).array() + b
+
     /** The default key blobs of a seeded account: opaque base64 the server stores and never interprets. */
-    const val IDENTITY_PUBLIC_KEY = "aWRlbnRpdHktcHVibGljLWtleQ=="
     const val WRAPPED_IDENTITY_PRIVATE_KEY = "aWRlbnRpdHktcHJpdg=="
     const val AUTH_PUBLIC_KEY = "YXV0aC1wdWJsaWMta2V5"
 
@@ -152,6 +169,21 @@ object TestFixtures {
             TenantRoots.join(userId, tenantId)
         }
         return MemberScope(userId, scopeId, tenantId)
+    }
+
+    /** A fresh user added to [scopeId] as a plain MEMBER whose grant stands at [grantedEpoch], joined to the tenant
+     *  root as every writer must be; returns the user id. */
+    fun seedScopeMember(scopeId: String, grantedEpoch: Int): String {
+        val userId = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            val tenantId = ScopeEntity.findById(scopeId)!!.tenantId
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId; this.scopeId = scopeId
+                role = MembershipEntity.MEMBER; wrappedGrant = GRANT; this.grantedEpoch = grantedEpoch; createdAt = Instant.now()
+            }.persist()
+            TenantRoots.join(userId, tenantId)
+        }
+        return userId
     }
 
     /**

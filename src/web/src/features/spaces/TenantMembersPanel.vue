@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // uc.spaces.add-member (web, cr-0077) — the "Members" rubric of the tenant settings. Lists the active tenant's
-// members (name/email + role + granted/awaiting-access status) and, for the tenant OWNER, opens the invite-by-
-// email dialog. Markup + classes mirror the create-tenant admin panel (settings-section-header + veyq-list-row +
-// veyq-badge). Operator-blind: only operational metadata is shown — pubkeys/roles/grant-present, never a key.
-// Admission (invite) is owner-only (the backend 403s otherwise); the directory is any key-holder's.
+// members (name/email + role) and, for the tenant OWNER, opens the invite-by-email dialog. Markup + classes mirror the
+// create-tenant admin panel (settings-section-header + veyq-list-row + veyq-badge). Operator-blind: only operational
+// metadata is shown — pubkeys/roles, never a key. Every listed member holds the tenant's key from its join on (ADR 0111:
+// an invitee grants itself at accept). Inviting is owner-only (the backend 403s otherwise); the directory is any
+// key-holder's.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
-import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
@@ -27,16 +27,17 @@ import {
   type ScopeMember,
 } from './members'
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
+import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeScopeKey, activeWriteKey } from '../../app/activeSpace'
+import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
+import { copyEpochKeys, zeroEpochKeys } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
-import { unsealName, type MemberName } from '../account/profile/profile'
+import { unsealNameUnderEpochs, type MemberName } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
 import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
-import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 import MemberTrustBadge from './MemberTrustBadge.vue'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
@@ -69,34 +70,38 @@ const iconError = ref('')
 // A re-issue mails the fresh secret to the invitee and returns none (ADR 0055 §2) — so there is no link to show
 // and nothing for the owner to hand on. What stays is the confirmation of which address it went to.
 const reissuedTo = ref('')
+// The new invite's code, shown once beside the confirmation: the owner passes it on themselves (ADR 0111 decision 1).
+const reissuedCode = ref('')
 
 const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId !== null)
 
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The load body is Tenant-specific: fetch
 // the roster, decrypt each real name with K_tenant (operator-blind, on-device), then read the owner-only invite
 // list — and resolve ownership from the tenant role.
-const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401 } =
   useMemberDirectory(async () => {
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
-    // A grant-less "awaiting access" member has no sealed name yet → null (the row shows only the @username).
+    // A member who set no name has no sealed name → null (the row shows only the @username).
     // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
-    // server that moves one member's sealed name onto another's row shows no name there, not the wrong one.
-    const kTenant = activeScopeKey()
+    // server that moves one member's sealed name onto another's row shows no name there, not the wrong one. A name opens
+    // under the tenant epoch its member saved it under, tried across every held epoch key: one saved before a rotation
+    // still reads (the row records no epoch).
+    const epochs = activeEpochKeys()
     const scopeId = activeSpace.scopeId
-    names.value = kTenant
-      ? Object.fromEntries(rows.map((m) => [m.userId, unsealName(kTenant, { scopeId, userId: m.userId }, m.sealedName)]))
+    names.value = epochs
+      ? Object.fromEntries(rows.map((m) => [m.userId, unsealNameUnderEpochs(epochs, { scopeId, userId: m.userId }, m.sealedName)?.name ?? null]))
       : {}
     // The members' pictures follow the roster (ADR 0084): the version integers it carries decide what is fetched. Not awaited -
-    // the rows draw their letters at once; the key copy is zeroed when the fetches settle.
-    if (kTenant) {
-      const copy = kTenant.slice()
-      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, key: copy }, rows).finally(() => copy.fill(0))
+    // the rows draw their letters at once; the keys' copy is zeroed when the fetches settle.
+    if (epochs) {
+      const copy = copyEpochKeys(epochs)
+      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, epochs: copy }, rows).finally(() => zeroEpochKeys(copy))
     }
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'
     // The identity header: the tenant name (plaintext) + its icon opened on-device against our own grant (null when
-    // unset / grant-less / unopenable → the initial shows). Every member reads it, not just the owner.
+    // unset / unopenable → the initial shows). Every member reads it, not just the owner.
     tenantName.value = mine?.name ?? ''
     stuckRotation.value = mine?.compromiseRotation ?? null
     rekeying.value = owner && activeSpace.scopeId ? ((await scopeLifecycle(activeSpace.scopeId).catch(() => null))?.rekeying ?? false) : false
@@ -106,15 +111,9 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     // Only the owner may read the pending-invite list (the backend 403s any non-owner).
     pendingInvites.value = owner ? await listMemberInvites(activeSpace.tenantId) : []
     return { rows, isOwner: owner }
-  }, async () => {
-    // The active tenant's write key — the one its admissions are tagged under. Owned by the active space: no release.
-    const held = activeWriteKey()
-    return held && activeSpace.scopeId
-      ? { scopeId: activeSpace.scopeId, kind: ScopeKind.Tenant, key: held.key, epoch: held.epoch }
-      : null
   })
 
-/** The member's decrypted "First Last", or '' when not yet sealed (awaiting access) / unreadable. */
+/** The member's decrypted "First Last", or '' when none is sealed / unreadable. */
 function fullName(userId: string): string {
   const n = names.value[userId]
   return n ? `${n.firstName} ${n.lastName}`.trim() : ''
@@ -172,8 +171,12 @@ async function removeIcon() {
 async function reissue(invite: PendingMemberInvite) {
   actionError.value = ''
   reissuedTo.value = ''
+  reissuedCode.value = ''
   try {
-    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId)
+    // A re-issue is a new invite (ADR 0111): a new key, link and code — the old code opens nothing any more.
+    const code = generateInviteCode()
+    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, { mode: 'code', code })
+    reissuedCode.value = formatInviteCode(code)
     reissuedTo.value = invite.email
     toast.success(t('members.inviteSentTo', { email: invite.email }))
     await reload()
@@ -345,8 +348,8 @@ async function revoke(invite: PendingMemberInvite) {
         <TrustResetLink />
       </VeyqMessage>
 
-      <!-- A re-issue has no link to surface any more: the fresh secret went to the invitee (ADR 0055 §2). This
-           is the confirmation, dismissible, not a handoff. -->
+      <!-- A re-issue has no link to surface: the fresh link went to the invitee (ADR 0055 §2). What the owner passes on
+           is the new code, shown here once (ADR 0111 decision 1). Dismissible. -->
       <div v-if="reissuedTo" class="reissue-link">
         <div class="reissue-link-head">
           <p class="settings-muted">{{ t('members.inviteSentTo', { email: reissuedTo }) }}</p>
@@ -360,6 +363,8 @@ async function revoke(invite: PendingMemberInvite) {
             @click="reissuedTo = ''"
           />
         </div>
+        <p v-if="reissuedCode" class="settings-muted">{{ t('members.inviteCodeNote') }}</p>
+        <code v-if="reissuedCode" class="invite-code" data-testid="reissued-invite-code">{{ reissuedCode }}</code>
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
@@ -382,31 +387,15 @@ async function revoke(invite: PendingMemberInvite) {
                 <span v-if="member.email">{{ member.email }} · </span>{{ member.role }}
               </span>
               <div class="veyq-row-meta">
-                <span class="veyq-badge" :class="member.hasGrant ? 'success' : 'warning'">
-                  {{ member.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
-                </span>
-                <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
-                     when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
-                     verified contact. -->
-                <MemberTrustBadge :trust="trust[member.userId]" />
-                <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
-                <span v-if="unadmitted[member.userId]" class="veyq-badge changed">
-                  <VeyqIcon name="exclamation-triangle" />{{ t('members.badgeNotAdmitted') }}
-                </span>
+                <span class="veyq-badge success">{{ t('members.statusActive') }}</span>
+                <!-- Behind the tenant's epoch, declared pending by a rotation (ADR 0111 decision 9). -->
+                <span v-if="member.pending" class="veyq-badge muted" data-testid="member-pending">{{ t('members.pending') }}</span>
+                <!-- Identity trust (ADR 0028 Decision 2): "Verified" after a compare on the member's profile,
+                     an anomaly when the served key does not follow from the pinned head. -->
+                <MemberTrustBadge :badge="trust[member.userId]" />
               </div>
             </div>
             <div class="management-actions">
-              <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
-                   then accept (re-pin) or refuse (leave blocked). -->
-              <VeyqButton
-                v-if="trust[member.userId]?.state === 'changed'"
-                :label="t('verify.review')"
-                icon="exclamation-triangle"
-                variant="warn"
-                appearance="text"
-                size="small"
-                @click="openReview(member)"
-              />
               <VeyqButton
                 v-if="isOwner && member.role === 'MEMBER'"
                 :label="t('members.promote')"
@@ -520,7 +509,6 @@ async function revoke(invite: PendingMemberInvite) {
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
     <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->
-    <ChangedKeyReviewDialog v-if="reviewTarget" v-model:visible="reviewOpen" :member="reviewTarget" @accepted="refreshTrust" />
   </section>
 </template>
 

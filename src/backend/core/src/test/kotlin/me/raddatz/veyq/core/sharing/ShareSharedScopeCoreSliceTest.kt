@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -99,9 +99,9 @@ class ShareSharedScopeCoreSliceTest {
     private fun removeByRotation(owner: String, group: String, member: String?, revokeLinks: Boolean? = null) =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestAdmission.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
-                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestAdmission.SIGNATURE_JSON}}],""" +
-                    TestAdmission.openJson(group) +
+                """{"epoch":${TestGrants.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
+                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                    TestGrants.openInvitesJson(group) + "," + TestGrants.othersPendingJson(group, owner, member) +
                     (member?.let { ""","removesUserId":"$it"""" } ?: "") +
                     (revokeLinks?.let { ""","revokeLinks":$it""" } ?: "") + "}",
             )

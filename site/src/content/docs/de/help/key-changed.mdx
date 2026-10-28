@@ -1,26 +1,29 @@
 ---
-title: "Ein Schlüssel hat sich geändert"
+title: "Ein Schlüssel lässt sich nicht bestätigen"
 sources:
   - docs/features/account/enablers/en.account.identity-pinning.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
 ---
 
-Steht bei einem Mitglied **Schlüssel geändert**, gibt der Server für diese Person einen anderen Schlüssel aus als den,
-dem deine App vertraut hat. Meist hat die Person einfach [ihre Schlüssel ersetzt](/veyq/de/account/replace-your-keys/).
-Es kann aber auch jemand sein, der versucht, einen Schlüssel als ihren auszugeben, und genau deshalb hält veyq an und
-fragt.
+Steht bei einem Mitglied **Schlüssel nicht bestätigt**, gibt der Server für diese Person einen Schlüssel aus, der nicht
+aus dem folgt, den deine App kannte. Sichert jemand [sein Konto ab](/veyq/de/account/replace-your-keys/), ist der neue
+Schlüssel mit dem vorherigen unterschrieben, und deine App nimmt ihn an, ohne dich zu fragen; das hier ist also etwas
+anderes. Es kann jemand sein, der versucht, einen Schlüssel als den dieser Person auszugeben. Es steht auch bei einem
+Mitglied, das den Bereich nicht mitbesitzt und ohne eine Einladung hineinkam, die eine besitzende Person unterschrieben
+hat: Jede Einladung hinterlässt einen solchen Nachweis, ein Mitglied ohne ihn kann also nur der Server hinzugefügt
+haben.
 
-1. Frag die Person direkt, außerhalb von veyq (am Telefon, persönlich), ob sie ihre Schlüssel ersetzt hat.
-2. Wähle **Schlüssel prüfen** in ihrem Profil oder in der Mitgliederliste und vergleiche die Nummer **Aktuell** mit der
-   in ihrem eigenen Profil.
-3. Ist sie es wirklich, wähle **Neuen Schlüssel akzeptieren**. Wenn nicht, oder du erreichst sie nicht, wähle
-   **Ablehnen**.
+1. Frag die Person direkt, außerhalb von veyq (am Telefon, persönlich), ob mit ihrem Konto etwas passiert ist.
+2. Vergleicht eure Sicherheitsnummern persönlich:
+   [Eine Person verifizieren](/veyq/de/account/verify-a-person/#eine-sicherheitsnummer-vergleichen).
 
-Bis du akzeptierst, gibt dein Gerät dieser Person keinen Schlüssel und fügt sie keiner Gruppe hinzu, damit nichts Neues
-einen Schlüssel erreicht, den du nicht geprüft hast. Schritt für Schritt:
-[Eine Person verifizieren](/veyq/de/account/verify-a-person/#wenn-sich-ein-schlüssel-geändert-hat).
+Solange ihr Schlüssel nicht aus dem folgt, den deine App kannte, gibt dein Gerät ihm nichts: keinen Schlüssel eines
+Bereichs, keine Gruppe. Bekommt ein Bereich in der Zeit ein neues Schloss, steht bei der Person **Wartet auf jemanden,
+der den Schlüssel bestätigen kann**, und ein anderes Mitglied, dessen App den Schlüssel bestätigt, gibt ihn weiter.
+Niemand wartet damit beim Hinzufügen oder Posten, und eine Schaltfläche, um den Schlüssel von Hand anzunehmen, gibt es
+nicht. Mehr: [Eine Person verifizieren](/veyq/de/account/verify-a-person/#wenn-sich-ein-schlüssel-nicht-bestätigen-lässt).
 
-Hast du selbst deine Schlüssel ersetzt, sehen die anderen das bei dir. Bitte sie, mit dir zu prüfen; du bist wieder
-drin, sobald eine Person akzeptiert.
+Hast du dein eigenes Konto abgesichert und jemand sieht das bei dir, vergleicht eure Sicherheitsnummern persönlich.
 
-Vertraut wird nur einem Schlüssel, den dein eigenes Gerät angenommen hat; der Server kann das nicht heimlich ändern:
-[Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
+Vertraut wird nur einem Schlüssel, den dein eigenes Gerät auf den zurückführen kann, den es kannte; der Server kann das
+nicht heimlich ändern: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

@@ -118,7 +118,7 @@ describe('TenantJoinView — handover (ADR 0101 decision 9)', () => {
     priv.value = { kemSeed: v1.randomBytes(32), sign: v1.randomBytes(32) }
     vi.mocked(myUserId).mockResolvedValue('5c09e000-0000-4000-8000-0000000000e2')
     vi.mocked(bornTenantScope).mockReturnValue({
-      birth: { grant: 'Zw==', grantSignature: 'Uw==', admissionId: 'a-1', admissionEpoch: 0, admissionTag: 'VA==' },
+      birth: { grant: 'Zw==', grantSignature: 'Uw==', recipientIdentityDigest: 'RA==' },
       scopeRootKey: new Uint8Array(32),
     })
     const w = await mountView(false)

@@ -16,6 +16,9 @@ import me.raddatz.veyq.core.generated.model.InviteRole
 import me.raddatz.veyq.core.generated.model.InviteStatus
 import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
 import me.raddatz.veyq.core.generated.model.MemberAvatar
+import me.raddatz.veyq.core.generated.model.MemberVerification
+import me.raddatz.veyq.core.generated.model.PutVerificationRequest
+import me.raddatz.veyq.core.generated.model.VerificationPage
 import me.raddatz.veyq.core.generated.model.MemberInviteRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteState
 import me.raddatz.veyq.core.generated.model.PendingMemberInvite
@@ -48,7 +51,9 @@ import me.raddatz.veyq.core.generated.model.TenantSummary
 import me.raddatz.veyq.core.generated.model.TenantTerms
 import me.raddatz.veyq.core.generated.model.TenantTermsUpdate
 import me.raddatz.veyq.core.terms.toWire
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.generated.model.ServedMemberInvite
+import me.raddatz.veyq.core.generated.model.InviteSelfGrant
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -90,6 +95,7 @@ class TenantsResource(
     private val mailSettingsHandler: TenantMailSettingsHandler,
     private val storageHandler: TenantStorageHandler,
     private val avatarHandler: TenantMemberAvatarHandler,
+    private val verificationHandler: TenantVerificationHandler,
     private val capabilitiesHandler: TenantCapabilitySwitchHandler,
     private val identity: SecurityIdentity,
 ) : TenantsApi {
@@ -188,10 +194,7 @@ class TenantsResource(
     @Authenticated
     @RateLimit(key = RateLimitKey.RECIPIENT)
     override fun inviteTenantMember(tenantId: UUID, memberInviteRequest: MemberInviteRequest): Response =
-        when (val outcome = handler.inviteMember(
-            identity.principal.name, tenantId.toString(), memberInviteRequest.email,
-            Admission(memberInviteRequest.admissionId.toString(), memberInviteRequest.admissionEpoch.validated(), memberInviteRequest.admissionTag),
-        )) {
+        when (val outcome = handler.inviteMember(identity.principal.name, tenantId.toString(), memberInviteRequest.toInput())) {
             // No bootstrapSecret on the wire: a member invite's token is minted for the invited person and
             // travels by mail only (ADR 0055 §2). `delivery` can only be SENT here — the other outcomes are 503s.
             is MemberInviteOutcome.Done -> Response.status(Response.Status.CREATED).entity(
@@ -208,12 +211,7 @@ class TenantsResource(
         when (val outcome = handler.listMemberInvites(identity.principal.name, tenantId.toString())) {
             is MemberInvitesOutcome.Listed -> Response.ok(
                 outcome.invites.map {
-                    PendingMemberInvite(
-                        UUID.fromString(it.inviteId), it.email, InviteStatus.decode(it.status), it.expiresAt.utc(),
-                        admissionId = it.admission?.let { a -> UUID.fromString(a.id) },
-                        admissionEpoch = it.admission?.epoch,
-                        admissionTag = it.admission?.tag,
-                    )
+                    PendingMemberInvite(UUID.fromString(it.inviteId), it.email, InviteStatus.decode(it.status), it.expiresAt.utc())
                 },
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -221,8 +219,8 @@ class TenantsResource(
 
     @Authenticated
     @RateLimit(key = RateLimitKey.RECIPIENT) // same per-(tenant,recipient) mail bound as the first mint
-    override fun reissueMemberInvite(tenantId: UUID, inviteId: UUID): Response =
-        when (val outcome = handler.reissueMemberInvite(identity.principal.name, tenantId.toString(), inviteId.toString())) {
+    override fun reissueMemberInvite(tenantId: UUID, inviteId: UUID, memberInviteRequest: MemberInviteRequest): Response =
+        when (val outcome = handler.reissueMemberInvite(identity.principal.name, tenantId.toString(), inviteId.toString(), memberInviteRequest.toInput())) {
             is ReissueOutcome.Done -> Response.ok(
                 MemberInviteState(outcome.invite.ownerEmail, InviteStatus.decode(outcome.invite.status), outcome.invite.expiresAt.utc(), outcome.delivery),
             ).build()
@@ -265,6 +263,48 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // The members' verifications of each other (ADR 0111 decisions 12-13): @Authenticated, membership-gated in the handler
+    // (a non-member: 404, ADR 0042). The verifier of a put is the caller, never a field of the request.
+    @Authenticated
+    override fun listVerifications(
+        tenantId: UUID,
+        subjectUserId: UUID?,
+        verifierUserId: UUID?,
+        after: String?,
+        limit: Int?,
+    ): Response =
+        when (
+            val o = verificationHandler.list(
+                identity.principal.name, tenantId.toString(), subjectUserId?.toString(), verifierUserId?.toString(),
+                TenantVerificationHandler.parseAfter(after), (limit ?: TenantVerificationHandler.PAGE_CAP).coerceIn(1, TenantVerificationHandler.PAGE_CAP),
+            )
+        ) {
+            is ListVerificationsOutcome.Listed -> Response.ok(
+                VerificationPage(
+                    o.page.rows.map {
+                        MemberVerification(
+                            UUID.fromString(it.verifierUserId), UUID.fromString(it.subjectUserId), it.epoch, it.sealedStatement,
+                            it.createdAt.utc(),
+                        )
+                    },
+                    o.page.more,
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    override fun putMyVerification(tenantId: UUID, subjectUserId: UUID, putVerificationRequest: PutVerificationRequest): Response =
+        when (
+            val o = verificationHandler.put(
+                identity.principal.name, tenantId.toString(), subjectUserId.toString(),
+                putVerificationRequest.epoch.validated(), putVerificationRequest.sealedStatement,
+            )
+        ) {
+            PutVerificationOutcome.Stored -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
     // --- Slice B (cr-0010): invite acceptance / activation. Method-level annotations override the class
     // @RolesAllowed: preview + register are @PermitAll (secret-gated), accept is @Authenticated (any user;
     // the email-match is a domain check, not the Server-Owner role).
@@ -281,6 +321,7 @@ class TenantsResource(
                     hasAccount = outcome.hasAccount,
                     role = InviteRole.decode(outcome.role),
                     handover = outcome.handover,
+                    invite = outcome.invite?.served(outcome.heads),
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -300,7 +341,8 @@ class TenantsResource(
         when (val outcome = acceptHandler.accept(
             identity.principal.name,
             acceptInviteRequest.bootstrapSecret,
-            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
+            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
+            with(acceptInviteRequest) { selfGrant.join(inviteProof, sealedJoinRecord) },
             acceptInviteRequest.username,
             acceptInviteRequest.sealedName,
             acceptInviteRequest.sealedAvatar,
@@ -324,7 +366,8 @@ class TenantsResource(
         )
         return when (val outcome = acceptHandler.registerAndAccept(
             registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account,
-            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
+            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
+            with(registerAndAcceptRequest) { selfGrant.join(inviteProof, sealedJoinRecord) },
             registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName, registerAndAcceptRequest.sealedAvatar,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
@@ -549,3 +592,37 @@ class TenantsResource(
 
     private fun Instant.utc() = atOffset(ZoneOffset.UTC)
 }
+
+/** A member invite request as the handler takes it (ADR 0111 decisions 1-2). */
+private fun MemberInviteRequest.toInput() = MemberInviteInput(
+    email = email,
+    inviteId = inviteId.toString(),
+    invitePublicKey = invitePublicKey,
+    inviteKeySignature = inviteKeySignature,
+    expiresAt = expiresAt.toInstant(),
+    sealedLink = sealedLink,
+    epoch = epoch.validated(),
+    grant = SignedGrant(wrappedGrant, grantSignature),
+    recipientIdentityDigest = recipientIdentityDigest,
+)
+
+/** A MEMBER accept's parts, or null when any is missing (the handler answers it as a missing grant). */
+private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String?): MemberJoin? =
+    MemberJoin.of(this?.wrappedGrant, this?.grantSignature, this?.epoch, this?.recipientIdentityDigest, inviteProof, sealedJoinRecord)
+
+/** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check). */
+private fun TenantInviteEntity.served(heads: Map<String, String>): ServedMemberInvite? = ServedMemberInvite(
+    inviteId = UUID.fromString(id),
+    invitePublicKey = invitePublicKey ?: return null,
+    inviteKeySignature = inviteKeySignature ?: return null,
+    expiresAt = expiresAt.atOffset(java.time.ZoneOffset.UTC),
+    signerUserId = UUID.fromString(signerUserId ?: return null),
+    signerIdentityPublicKey = signerIdentityPublicKey ?: return null,
+    wrappedGrant = wrappedGrant ?: return null,
+    grantedEpoch = grantedEpoch ?: return null,
+    grantSignature = grantSignature ?: return null,
+    granterUserId = UUID.fromString(granterUserId ?: return null),
+    granterIdentityPublicKey = granterIdentityPublicKey ?: return null,
+    signerKeyChainHead = heads[signerUserId] ?: return null,
+    granterKeyChainHead = heads[granterUserId] ?: return null,
+)

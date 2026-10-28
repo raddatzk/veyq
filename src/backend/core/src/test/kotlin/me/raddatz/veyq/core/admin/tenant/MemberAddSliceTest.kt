@@ -1,9 +1,13 @@
 package me.raddatz.veyq.core.admin.tenant
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.TestFixtures.IDENTITY_PUBLIC_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -16,17 +20,17 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * Slice tests for member-add onboarding (uc.spaces.add-member, cr-0077): the tenant **owner** mints a MEMBER
- * invite (owner-gated admission), the invitee **cold-births** their account and joins the ACTIVE tenant as a
- * **grant-less** member, which cr-0076 picks up as a `grant-delivery` job; and the owner reads the member
- * directory (pubkeys + grant status). Distinct domains/emails so the JVM-lived H2 mem DB can't bleed state.
+ * Slice tests for member-add onboarding (uc.spaces.add-member, cr-0077, ADR 0111): the tenant **owner** mints a
+ * MEMBER invite — a placeholder member holding the invite key and a grant to it — the invitee **cold-births** their
+ * account (or signs in) and joins the ACTIVE tenant **with the grant it gave itself**, so nobody waits for a
+ * key-holder; a grant delivery originates only for a newcomer whose invite a rotation declared pending (behind). And
+ * the owner reads the member directory (pubkeys). Distinct domains/emails so the JVM-lived H2 mem DB can't bleed state.
  */
 @QuarkusTest
 class MemberAddSliceTest {
@@ -37,7 +41,7 @@ class MemberAddSliceTest {
     fun ownerMintsMemberInviteOutsiderIs404(): Unit = TestMailbox(MINT_SMTP_PORT).start().use { mail ->
         val (tenantId, owner) = seedActiveTenant("mint.example.com", "owner@mint.example.com", mail)
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@mint.example.com",${TestAdmission.json()}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, "newbie@mint.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201).body("email", equalTo("newbie@mint.example.com"))
             .body("inviteStatus", equalTo("ACTIVE")).body("inviteExpiresAt", notNullValue())
@@ -46,29 +50,50 @@ class MemberAddSliceTest {
         // a tenant that does not exist (membership is the first guard, ADR 0042 / cr-0162).
         val outsider = seedUser(email = "outsider@mint.example.com")
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{"email":"x@mint.example.com",${TestAdmission.json()}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, "x@mint.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
 
     @Test
-    fun memberRegisterJoinsGrantLessAndOwnerClaimOriginatesDelivery() {
+    fun memberRegisterJoinsWithItsSelfGrantAndNothingIsDelivered() {
         val (tenantId, owner) = seedActiveTenant("join.example.com", "owner@join.example.com")
         val secret = "member-secret-1"
-        seedMemberInvite(tenantId, "member@join.example.com", secret)
+        val key = seedMemberInvite(tenantId, owner, "member@join.example.com", secret)
 
-        // The invitee cold-births an account and joins — NO grant in the body (a member is grant-less).
-        val newUserId = given().contentType(ContentType.JSON).body(memberRegisterBody(secret))
+        // The invitee cold-births an account and joins with the grant it sealed to its new identity.
+        val newUserId = UUID.randomUUID().toString()
+        given().contentType(ContentType.JSON).body(registerBody(secret, newUserId, join(key, newUserId)))
             .`when`().post("/api/tenants/accept/register")
-            .then().statusCode(201).body("status", equalTo("ACTIVE")).body("userId", notNullValue())
-            .extract().path<String>("userId")
+            .then().statusCode(201).body("status", equalTo("ACTIVE")).body("userId", equalTo(newUserId))
 
-        // The membership exists on the TENANT scope, role MEMBER, with NO grant yet (the hollow state).
+        // The membership exists on the TENANT scope, role MEMBER, holding its self-grant at the current epoch.
         assertEquals("MEMBER", membershipRole(newUserId, tenantId))
-        assertNull(grantOf(newUserId, tenantId), "a freshly onboarded member is grant-less")
+        assertEquals(TestGrants.WRAPPED to 0, grantOf(newUserId, tenantId), "a newcomer holds the tenant key from its accept on")
 
-        // cr-0076 integration: the owner (a key-holder) claims grant-delivery → reconcile-on-claim originates
-        // the job for the pending member and hands it back, resolving the target's pubkey.
+        // Nothing is behind, so a key-holder's claim finds no grant delivery to run (ADR 0111 decision 5).
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"capabilityTags":["${CapabilityTags.GRANT_DELIVERY}"],"scopeId":"$tenantId"}""")
+            .`when`().post("/api/tasks/claim")
+            .then().statusCode(204)
+    }
+
+    @Test
+    fun aNewcomerOfAPendingInviteJoinsBehindAndIsDelivered() {
+        // A rotation that could not verify an invite declares it pending (ADR 0111 decision 2): it keeps its E_0 grant,
+        // its newcomer self-grants E_0 — accepted below the current epoch — and the narrow grant delivery brings the
+        // behind membership current.
+        val (tenantId, owner) = seedActiveTenant("pending-join.example.com", "owner@pending-join.example.com")
+        val secret = "member-secret-pending"
+        val key = seedMemberInvite(tenantId, owner, "member@pending-join.example.com", secret)
+        rotatePastTheInvite(tenantId)
+
+        val newUserId = UUID.randomUUID().toString()
+        given().contentType(ContentType.JSON).body(registerBody(secret, newUserId, join(key, newUserId, epoch = 0)))
+            .`when`().post("/api/tenants/accept/register")
+            .then().statusCode(201)
+        assertEquals(TestGrants.WRAPPED to 0, grantOf(newUserId, tenantId), "joined behind, at the epoch it could open")
+
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["${CapabilityTags.GRANT_DELIVERY}"],"scopeId":"$tenantId"}""")
             .`when`().post("/api/tasks/claim")
@@ -76,7 +101,7 @@ class MemberAddSliceTest {
             .body("capabilityTag", equalTo(CapabilityTags.GRANT_DELIVERY))
             .body("scopeId", equalTo(tenantId))
             .body("grantDelivery.targetUserId", equalTo(newUserId))
-            .body("grantDelivery.identityPublicKey", notNullValue())
+            .body("grantDelivery.identityPublicKey", equalTo(MEMBER_IDENTITY))
     }
 
     @Test
@@ -86,27 +111,23 @@ class MemberAddSliceTest {
         // the response carries no secret, and the one that arrives *in the mail* is the real, usable token.
         val (tenantId, owner) = seedActiveTenant("mailed.example.com", "owner@mailed.example.com", mail)
         val invitee = "newbie@mailed.example.com"
-        val admissionId = UUID.randomUUID().toString()
+        val key = TestInviteKey()
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"$invitee",${TestAdmission.json(0, admissionId)}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, invitee, key)}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201)
             .body("bootstrapSecret", nullValue())
             .body("delivery", equalTo("SENT")) // the only reachable delivery on this path (ADR 0055 §7)
 
         val secret = mail.awaitToken(invitee)
-        val newUserId = given().contentType(ContentType.JSON).body(memberRegisterBody(secret))
+        val newUserId = UUID.randomUUID().toString()
+        given().contentType(ContentType.JSON).body(registerBody(secret, newUserId, join(key, newUserId)))
             .`when`().post("/api/tenants/accept/register")
             .then().statusCode(201).body("status", equalTo("ACTIVE"))
-            .extract().path<String>("userId")
         assertEquals("MEMBER", membershipRole(newUserId, tenantId))
-        assertNull(grantOf(newUserId, tenantId))
-        // ADR 0020 move 6: the admission the owner's client tagged rides the invite onto the membership it becomes.
-        val carried = QuarkusTransaction.requiringNew().call {
-            MembershipEntity.find("userId = ?1 and scopeId = ?2", newUserId, tenantId).firstResult()!!
-                .let { Triple(it.admissionId, it.admissionEpoch, it.admissionTag) }
-        }
-        assertEquals(Triple(admissionId, 0, TestAdmission.TAG), carried)
+        assertEquals(TestGrants.WRAPPED to 0, grantOf(newUserId, tenantId))
+        // ADR 0111 decision 3: the join record the newcomer sealed rides the accept into its tenant profile.
+        assertEquals(TestGrants.JOIN_RECORD, joinRecordOf(newUserId, tenantId))
     }
 
     @Test
@@ -116,7 +137,7 @@ class MemberAddSliceTest {
         // live secret with no recipient, which is exactly what the copy-link used to paper over.
         val (tenantId, owner) = seedActiveTenant("nomail.example.com", "owner@nomail.example.com")
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@nomail.example.com",${TestAdmission.json()}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, "newbie@nomail.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(503).body("code", equalTo("mail_unavailable"))
 
@@ -133,7 +154,7 @@ class MemberAddSliceTest {
         pointAtDeadSmtp(tenantId, "deadsmtp.example.com")
 
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@deadsmtp.example.com",${TestAdmission.json()}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, "newbie@deadsmtp.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(503).body("code", equalTo("mail_send_failed"))
 
@@ -149,33 +170,33 @@ class MemberAddSliceTest {
         val victim = "victim@flood.example.com"
         repeat(3) {
             given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-                .body("""{"email":"$victim",${TestAdmission.json()}}""")
+                .body("""{${TestGrants.memberInviteJson(tenantId, victim)}}""")
                 .`when`().post("/api/tenants/$tenantId/member-invites")
                 .then().statusCode(201)
         }
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"$victim",${TestAdmission.json()}}""")
+            .body("""{${TestGrants.memberInviteJson(tenantId, victim)}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(429).header("Retry-After", notNullValue()).body("code", equalTo("rate_limited"))
     }
 
     @Test
-    fun existingAccountAcceptsMemberInviteAndJoinsGrantLess() {
+    fun existingAccountAcceptsMemberInviteAndJoinsWithItsSelfGrant() {
         // The second onboarding flow (uc.spaces.add-member): the invited email ALREADY has an account, so it
-        // signs in and accepts (POST /api/tenants/accept) rather than cold-registering. A member joins grant-
-        // less here too — no grant in the body, the key delivered later by a key-holder (cr-0076).
-        val (tenantId, _) = seedActiveTenant("existing.example.com", "owner@existing.example.com")
+        // signs in and accepts (POST /api/tenants/accept) rather than cold-registering — with the grant it sealed to
+        // the identity it already has.
+        val (tenantId, owner) = seedActiveTenant("existing.example.com", "owner@existing.example.com")
         val secret = "existing-member-secret"
-        seedMemberInvite(tenantId, "existing@existing.example.com", secret)
+        val key = seedMemberInvite(tenantId, owner, "existing@existing.example.com", secret)
         val existing = seedUser(email = "existing@existing.example.com") // already registered before the invite
 
         given().header("Authorization", bearer(existing)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"existingmbr"}""") // no grant — an existing-account member joins grant-less
+            .body("""{"bootstrapSecret":"$secret","username":"existingmbr",${TestGrants.memberJoinJson(key, key.inviteId, existing, IDENTITY_PUBLIC_KEY)}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
 
         assertEquals("MEMBER", membershipRole(existing, tenantId))
-        assertNull(grantOf(existing, tenantId), "an existing-account member joins grant-less too")
+        assertEquals(TestGrants.WRAPPED to 0, grantOf(existing, tenantId), "an existing-account member joins with its self-grant too")
     }
 
     @Test
@@ -186,29 +207,30 @@ class MemberAddSliceTest {
             store.createPendingTenant("Fam", "owner-need-grant.example.com", "o@owner-need-grant.example.com",
                 Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS))
         }
-        given().contentType(ContentType.JSON).body(memberRegisterBody(secret)) // body omits grant
+        given().contentType(ContentType.JSON).body(registerBody(secret, UUID.randomUUID().toString())) // body omits grant
             .`when`().post("/api/tenants/accept/register")
             .then().statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     @Test
-    fun memberDirectoryListsMembersWithGrantStatus() {
+    fun memberDirectoryListsMembersWithTheirKeys() {
         val (tenantId, owner) = seedActiveTenant("dir.example.com", "owner@dir.example.com")
-        val pending = seedUser(email = "pending@dir.example.com", identityPublicKey = "cGVuZGluZy1wdWJrZXk=")
+        val member = seedUser(email = "member@dir.example.com", identityPublicKey = "cGVuZGluZy1wdWJrZXk=")
         QuarkusTransaction.requiringNew().run {
             MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); userId = pending; this.tenantId = tenantId
-                scopeId = tenantId; role = MembershipEntity.MEMBER; wrappedGrant = null; createdAt = Instant.now()
+                id = UUID.randomUUID().toString(); userId = member; this.tenantId = tenantId
+                scopeId = tenantId; role = MembershipEntity.MEMBER; wrappedGrant = TestGrants.WRAPPED; createdAt = Instant.now()
             }.persist()
         }
 
+        // Every membership holds a grant (ADR 0111), so the directory no longer says whether one does.
         given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$tenantId/members")
             .then().statusCode(200).body("size()", equalTo(2))
-            .body("find { it.userId == '$owner' }.hasGrant", equalTo(true))
             .body("find { it.userId == '$owner' }.role", equalTo("OWNER"))
-            .body("find { it.userId == '$pending' }.hasGrant", equalTo(false))
-            .body("find { it.userId == '$pending' }.identityPublicKey", equalTo("cGVuZGluZy1wdWJrZXk="))
+            .body("find { it.userId == '$member' }.role", equalTo("MEMBER"))
+            .body("find { it.userId == '$member' }.identityPublicKey", equalTo("cGVuZGluZy1wdWJrZXk="))
+            .body("find { it.userId == '$member' }.hasGrant", nullValue())
 
         // A non-member cannot read the directory, and gets the same answer as for a scope that does not exist
         // (membership is the first guard, ADR 0042 / cr-0162 — no scope enumeration).
@@ -249,29 +271,47 @@ class MemberAddSliceTest {
         return tenantId to ownerId
     }
 
-    private fun seedMemberInvite(tenantId: String, email: String, secret: String) =
-        QuarkusTransaction.requiringNew().run {
-            store.mintMemberInvite(
-                tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS),
-                me.raddatz.veyq.core.membership.TestAdmission.admission(), checkEpoch = false,
-            )
+    /** A MEMBER invite signed by [owner], its grant of the tenant's `E_0`, stored as the handler stores one. */
+    private fun seedMemberInvite(tenantId: String, owner: String, email: String, secret: String): TestInviteKey {
+        val key = TestInviteKey()
+        val minted = QuarkusTransaction.requiringNew().call {
+            store.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS), key.stored(owner))
         }
+        assertEquals(MintMemberInvite.Minted(key.inviteId), minted)
+        return key
+    }
+
+    /** The tenant rotates to `E_1`, re-granting its members and declaring every open invite pending — they keep `E_0`. */
+    private fun rotatePastTheInvite(tenantId: String) = QuarkusTransaction.requiringNew().run {
+        ScopeEntity.findById(tenantId)!!.currentEpoch = 1
+        MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1", tenantId)
+    }
 
     private fun membershipRole(userId: String, tenantId: String): String? =
         QuarkusTransaction.requiringNew().call {
             MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()?.role
         }
 
-    private fun grantOf(userId: String, tenantId: String): String? =
+    /** The member's grant on the tenant scope and its epoch. */
+    private fun grantOf(userId: String, tenantId: String): Pair<String?, Int>? =
         QuarkusTransaction.requiringNew().call {
-            MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()?.wrappedGrant
+            MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, tenantId).firstResult()?.let { it.wrappedGrant to it.grantedEpoch }
         }
 
-    /** A cold-birth register body with NO grant (a MEMBER joins grant-less). */
-    private fun memberRegisterBody(secret: String) = """
-        {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newmember",
+    private fun joinRecordOf(userId: String, tenantId: String): String? =
+        QuarkusTransaction.requiringNew().call {
+            TenantProfileEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()?.sealedJoinRecord
+        }
+
+    /** A MEMBER accept's join fields for the account [userId] born with [MEMBER_IDENTITY]. */
+    private fun join(key: TestInviteKey, userId: String, epoch: Int = 0) =
+        TestGrants.memberJoinJson(key, key.inviteId, userId, MEMBER_IDENTITY, epoch)
+
+    /** A cold-birth register body for [userId], with the MEMBER [join] fields (none: an OWNER invite's body without its birth). */
+    private fun registerBody(secret: String, userId: String, join: String? = null) = """
+        {"bootstrapSecret":"$secret","userId":"$userId","username":"newmember",${join?.let { "$it," } ?: ""}
          "account":{"suiteId":"v1",
-           "identityPublicKey":"bWVtYmVyLXB1YmxpYy1rZXk=",
+           "identityPublicKey":"$MEMBER_IDENTITY",
            "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
            "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
            "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
@@ -279,6 +319,9 @@ class MemberAddSliceTest {
     """.trimIndent()
 
     private companion object {
+        /** The identity bundle a cold-born invitee registers. */
+        const val MEMBER_IDENTITY = "bWVtYmVyLXB1YmxpYy1rZXk="
+
         // One JVM for the whole suite ⇒ distinct ports. SmtpInviteMailSendTest holds 13925-13929.
         const val MINT_SMTP_PORT = 13930
         const val MAILED_SMTP_PORT = 13931

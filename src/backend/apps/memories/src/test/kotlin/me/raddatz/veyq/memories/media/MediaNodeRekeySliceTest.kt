@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
@@ -63,11 +64,63 @@ class MediaNodeRekeySliceTest {
             .body("media.find { it.mediaId == '${w.live}' }.wrappedExif", equalTo(EXIF_A))
             .body("media.find { it.mediaId == '${w.live}' }.blobs.role", hasItems("ORIGINAL", "THUMBNAIL"))
             .body("media.find { it.mediaId == '${w.trashed}' }.wrappedExif", nullValue())
-        // only an owner with the current grant reads it
+        // only a caller with the current grant reads it (a plain member's leg: aMemberWithTheCurrentGrantReKeysAMemory)
         QuarkusTransaction.requiringNew().run {
             MembershipEntity.update("grantedEpoch = 0 where scopeId = ?1 and userId = ?2", w.scopeId, w.owner)
         }
         list(w, "").statusCode(403).body("code", equalTo("grant_behind"))
+    }
+
+    /** ADR 0111 decision 11, the participant's leg: a plain member holding the current grant lists a Memory's sealed
+     *  rows, stages them and commits through core, as an owner does; one whose grant lags is refused (`grant_behind`). */
+    @Test
+    fun aMemberWithTheCurrentGrantReKeysAMemory() {
+        val w = world()
+        val behind = seedScopeMember(w.scopeId, grantedEpoch = 0)
+        list(w, "", caller = behind).statusCode(403).body("code", equalTo("grant_behind"))
+        val member = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        list(w, "", caller = member).statusCode(200).body("media.size()", equalTo(2))
+        val rekeyId = UUID.randomUUID()
+        stageAll(w, rekeyId, caller = member)
+        commit(w, rekeyId, caller = member).statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(1, NodeEntity.findById(w.memory)!!.epoch)
+            assertEquals(NEW_META_A, MediaEntity.findById(w.live)!!.wrappedMeta)
+        }
+    }
+
+    /**
+     * ADR 0111 decision 11 narrowed to where members place nothing (ADR 0080 Decision 11): a Memory carrying a drop key
+     * because a contributor link (`WRITE_ONLY`) is rooted on it is no drop box, so a plain member re-keys it — its drop
+     * key replaced, the link's drop public key and the guest's `K_up` re-sealed (ADR 0109 point 5) — and is not left
+     * waiting for an owner. (Red under the drop-key predicate: `ownerOnly` true and `not_scope_owner` at the commit.)
+     */
+    @Test
+    fun aMemberReKeysAMemoryAContributorLinkGaveADropKey() {
+        val w = world()
+        QuarkusTransaction.requiringNew().run {
+            NodeEntity.findById(w.memory)!!.sealedDropPrivateKey = OLD_DROP_PRIVATE
+            ShareEntity.findById(w.shareId)!!.apply { wrap = null; sealedDropPublicKey = OLD_DROP_PUBLIC }
+        }
+        val member = seedScopeMember(w.scopeId, grantedEpoch = 1)
+        given().header("Authorization", bearer(member)).`when`().get("/api/scopes/${w.scopeId}/rekey/nodes").then().statusCode(200)
+            .body("nodes.find { it.id == '${w.memory}' }.ownerOnly", equalTo(false))
+        val rekeyId = UUID.randomUUID()
+        stageMedia(w, rekeyId, caller = member)
+        post(
+            w, "/rekey/nodes/${w.memory}/$rekeyId/parts",
+            """{"fromEpoch":0,"shares":[{"shareId":"${w.shareId}","sealedDropPublicKey":"$NEW_DROP_PUBLIC"},{"shareId":"${w.rwShareId}","wrap":"bmV3LXJ3LXdyYXA="}],
+               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}]}""",
+            member,
+        ).statusCode(204)
+        commit(w, rekeyId, caller = member, sealedDropPrivateKey = NEW_DROP_PRIVATE).statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            val memory = NodeEntity.findById(w.memory)!!
+            assertEquals(listOf<Any?>(1, NEW_DROP_PRIVATE), listOf(memory.epoch, memory.sealedDropPrivateKey))
+            assertEquals(NEW_DROP_PUBLIC, ShareEntity.findById(w.shareId)!!.sealedDropPublicKey)
+            assertEquals("bmV3LWt1cA==", ShareIdentityEntity.findById(w.identityId)!!.wrappedIdentityKey)
+            assertEquals(OLD_WRAP, BlobEntity.findById(w.guestBlob)!!.wrappedBlobKey, "the guest's own upload stays under its K_up")
+        }
     }
 
     @Test
@@ -235,16 +288,17 @@ class MediaNodeRekeySliceTest {
 
     // --- HTTP -------------------------------------------------------------------------------------------------------
 
-    private fun stageAll(w: World, rekeyId: UUID, skipBlob: String? = null, liveRevision: Long = 0) {
-        stageMedia(w, rekeyId, skipBlob = skipBlob, liveRevision = liveRevision)
+    private fun stageAll(w: World, rekeyId: UUID, skipBlob: String? = null, liveRevision: Long = 0, caller: String = w.owner) {
+        stageMedia(w, rekeyId, skipBlob = skipBlob, liveRevision = liveRevision, caller = caller)
         post(
             w, "/rekey/nodes/${w.memory}/$rekeyId/parts",
             """{"fromEpoch":0,"shares":[{"shareId":"${w.shareId}","wrap":"bmV3LXNoYXJlLXdyYXA="},{"shareId":"${w.rwShareId}","wrap":"bmV3LXJ3LXdyYXA="}],
                "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}]}""",
+            caller,
         ).statusCode(204)
     }
 
-    private fun stageMedia(w: World, rekeyId: UUID, skipBlob: String? = null, onlyBlob: String? = null, liveRevision: Long = 0) {
+    private fun stageMedia(w: World, rekeyId: UUID, skipBlob: String? = null, onlyBlob: String? = null, liveRevision: Long = 0, caller: String = w.owner) {
         fun wraps(blobs: List<String>) = blobs.filter { it != skipBlob && (onlyBlob == null || it == onlyBlob) }
             .joinToString(",", "[", "]") { """{"blobId":"$it","wrappedBlobKey":"${newWrap(it)}"}""" }
         val body = if (onlyBlob != null) {
@@ -255,19 +309,24 @@ class MediaNodeRekeySliceTest {
                  {"mediaId":"${w.trashed}","metaRevision":0,"wrappedMeta":"$NEW_META_B","blobs":${wraps(listOf(w.trashedBlob))}}],
                "buckets":[{"bucketId":"${w.sub}","sealedName":"$NEW_SUB"}]}"""
         }
-        post(w, "/nodes/${w.memory}/media-rekey/$rekeyId", body).statusCode(204)
+        post(w, "/nodes/${w.memory}/media-rekey/$rekeyId", body, caller).statusCode(204)
     }
 
-    private fun commit(w: World, rekeyId: UUID): ValidatableResponse = post(
-        w, "/rekey/nodes/${w.memory}/$rekeyId",
-        """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LW1lbW9yeQ==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="}""",
-    )
+    /** The Memory's commit body; [sealedDropPrivateKey] is its new drop key, sent when the Memory carries one. */
+    private fun commit(w: World, rekeyId: UUID, caller: String = w.owner, sealedDropPrivateKey: String? = null): ValidatableResponse {
+        val drop = if (sealedDropPrivateKey == null) "" else ",\"sealedDropPrivateKey\":\"$sealedDropPrivateKey\""
+        return post(
+            w, "/rekey/nodes/${w.memory}/$rekeyId",
+            """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LW1lbW9yeQ==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="$drop}""",
+            caller,
+        )
+    }
 
-    private fun list(w: World, query: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/nodes/${w.memory}/media-rekey$query").then()
+    private fun list(w: World, query: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/${w.scopeId}/nodes/${w.memory}/media-rekey$query").then()
 
-    private fun post(w: World, path: String, body: String): ValidatableResponse =
-        given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON).body(body)
+    private fun post(w: World, path: String, body: String, caller: String = w.owner): ValidatableResponse =
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body(body)
             .`when`().post("/api/scopes/${w.scopeId}$path").then()
 
     private fun slug(): String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())
@@ -292,5 +351,9 @@ class MediaNodeRekeySliceTest {
         const val GUEST_NAME = "Z3Vlc3QtbmFtZQ=="
         const val RW_NAME = "Y29udHJpYnV0b3I="
         const val NEW_RW_NAME = "bmV3LWNvbnRyaWJ1dG9y"
+        const val OLD_DROP_PRIVATE = "b2xkLWRyb3AtcHJpdg=="
+        const val OLD_DROP_PUBLIC = "b2xkLWRyb3AtcHVi"
+        const val NEW_DROP_PRIVATE = "bmV3LWRyb3AtcHJpdg=="
+        const val NEW_DROP_PUBLIC = "bmV3LWRyb3AtcHVi"
     }
 }

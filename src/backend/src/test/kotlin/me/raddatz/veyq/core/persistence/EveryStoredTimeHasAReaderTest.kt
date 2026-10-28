@@ -66,6 +66,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_email_confirmation.expires_at" to "EmailConfirmationStore refuses and expires a stale link",
             "veyq_email_confirmation.created_at" to "EmailConfirmationStore purges terminal rows older than the retention",
             "veyq_email_change.expires_at" to "EmailChangeStore spends only a live change; the confirmation purge deletes on it",
+            "veyq_rotation_stage.expires_at" to "RotationStageStore refuses an expired stage to a chunk and a publish; RotationStagePurge deletes on it",
+            "veyq_key_chain_step.created_at" to "served by getKeyChain (KeyChainStep.createdAt): the profile's \"new identity … on <date>\"",
             "veyq_account_erasure.requested_at" to "AccountErasureMail retries a mail owed for seven days from it; served to the Server Owner",
             "veyq_account_erasure.due_at" to "AccountPurge erases the account once it is due; served to the Server Owner and the member",
             "veyq_account_erasure.mailed_at" to "AccountErasureMail mails only while it is unset, and retries those",
@@ -81,6 +83,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_application_erasure.reminder_mailed_at" to "ApplicationErasureMail's claim: the reminder is owed while it is null",
             "veyq_tenant_invite.expires_at" to "TenantStore/TenantAcceptHandler refuse and expire; served to the admin",
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",
+            "veyq_verification.created_at" to "served: MemberVerification.createdAt on listVerifications (ADR 0111 decision 12) - " +
+                "shown, never what decides whether a verification counts",
             "veyq_scope.deleted_at" to "ScopePurge's grace cutoff; served as deletedAt/purgeAfter of a pending group",
             "veyq_membership.created_at" to "ScopesStore.oldestOtherMember: the orphan rule's successor (ADR 0014 §6)",
             "veyq_tenant_terms_acceptance.accepted_at" to "audit evidence of acceptance, one row per revision (when " +

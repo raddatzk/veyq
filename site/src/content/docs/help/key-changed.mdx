@@ -1,23 +1,26 @@
 ---
-title: "A key changed"
+title: "A key can't be confirmed"
 sources:
   - docs/features/account/enablers/en.account.identity-pinning.md
+  - docs/features/spaces/use-cases/uc.spaces.verify-identity.md
 ---
 
-When a member shows **Key changed**, the server has started handing out a different key for them than the one your app
-trusted. Most of the time that person simply [replaced their keys](/veyq/account/replace-your-keys/). It can also be
-someone trying to pass off a key as theirs, which is exactly why veyq stops and asks.
+When a member shows **Can't confirm this key**, the server is handing out a key for them that does not follow from the
+one your app knew. When someone [secures their account](/veyq/account/replace-your-keys/), their new key is signed by
+their previous one and your app accepts it without asking you; so this is not that. It can be someone trying to pass
+off a key as theirs. It also shows for a member who is not an owner of the space and came in without an invitation an
+owner signed: every invitation leaves such a record, so a member without one is someone only the server could have
+added.
 
-1. Ask the person directly, outside veyq (a call, in person), whether they replaced their keys.
-2. Choose **Review key** on their profile or in the member list, and compare the **Current** number with the one on
-   their own profile.
-3. If it is really them, choose **Accept new key**. If not, or you cannot reach them, choose **Refuse**.
+1. Ask the person directly, outside veyq (a call, in person), whether something happened to their account.
+2. Compare your safety numbers in person: [Verify a person](/veyq/account/verify-a-person/#compare-a-safety-number).
 
-Until you accept, your device hands that person no key and does not add them to a group, so nothing new reaches a key
-you have not checked. Step by step: [Verify a person](/veyq/account/verify-a-person/#when-a-key-has-changed).
+Until their key follows from the one your app knew, your device hands that key nothing: no space key, no group. If a
+space gets a new lock meanwhile, they show **Waiting for someone who can confirm their key**, and another member whose
+app confirms their key passes it on. Nobody's adding or posting waits for it, and there is no button to accept the key
+by hand. More: [Verify a person](/veyq/account/verify-a-person/#when-a-key-cant-be-confirmed).
 
-If you replaced your own keys, the others see this about you. Ask them to check with you, and you are back in once one
-of them accepts.
+If you secured your own account and someone sees this about you, compare your safety numbers with them in person.
 
-Only a key your own device has accepted is trusted; the server cannot change that quietly:
+Only a key your own device can trace back to the one it knew is trusted; the server cannot change that quietly:
 [Is my data safe?](/veyq/privacy/is-my-data-safe/)

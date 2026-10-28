@@ -4,7 +4,7 @@ import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TenantRoots
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -81,7 +81,7 @@ class RemovalRaceCoreSliceTest {
     private companion object {
         const val NAME = "c2VhbGVkLW5hbWU="
         const val WRAP = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
-        val GRANT = SignedGrant("Z3JhbnQ=", TestAdmission.SIGNATURE)
+        val GRANT = SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE)
     }
 
     @Test
@@ -90,13 +90,14 @@ class RemovalRaceCoreSliceTest {
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
+            val digest = TestGrants.digestOf(member)
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, member) },
-                overlapping = { handler.createGroup(member, t.id, scopeId, NAME, GRANT, TestAdmission.admission()) },
+                overlapping = { handler.createGroup(member, t.id, scopeId, NAME, GRANT, digest) },
             )
             assertEquals(CreateGroupOutcome.NoTenant, outcome, "round $round: a removed member created a group")
             assertNull(tx { ScopeEntity.findById(scopeId) }, "round $round: nothing written")
-            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), NAME, GRANT, TestAdmission.admission())
+            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), NAME, GRANT, TestGrants.digestOf(t.owner))
             assertTrue(control is CreateGroupOutcome.Created, "round $round: control $control")
         }
     }
@@ -107,13 +108,14 @@ class RemovalRaceCoreSliceTest {
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
+            val digest = TestGrants.digestOf(member)
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, member) },
-                overlapping = { handler.createPersonal(member, t.id, scopeId, GRANT) },
+                overlapping = { handler.createPersonal(member, t.id, scopeId, GRANT, digest) },
             )
             assertEquals(CreatePersonalOutcome.NoTenant, outcome, "round $round: a removed member created a personal space")
             assertNull(tx { ScopeEntity.findById(scopeId) }, "round $round: nothing written")
-            val control = handler.createPersonal(t.owner, t.id, UUID.randomUUID().toString(), GRANT)
+            val control = handler.createPersonal(t.owner, t.id, UUID.randomUUID().toString(), GRANT, TestGrants.digestOf(t.owner))
             assertTrue(control is CreatePersonalOutcome.Created, "round $round: control $control")
         }
     }
@@ -126,12 +128,12 @@ class RemovalRaceCoreSliceTest {
             val group = t.group()
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, target) },
-                overlapping = { handler.addGroupMember(t.owner, group, "target", null, TestAdmission.admission()) },
+                overlapping = { handler.addGroupMember(t.owner, group, "target", null, GRANT, 0, TestGrants.digestOf(target)) },
             )
             assertEquals(AddGroupMemberOutcome.MemberNotFound, outcome, "round $round: a removed member was added")
             assertEquals(0L, tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", target, group) }, "round $round")
-            t.member(username = "stays")
-            val control = handler.addGroupMember(t.owner, group, "stays", null, TestAdmission.admission())
+            val stays = t.member(username = "stays")
+            val control = handler.addGroupMember(t.owner, group, "stays", null, GRANT, 0, TestGrants.digestOf(stays))
             assertTrue(control is AddGroupMemberOutcome.Added, "round $round: control $control")
         }
     }

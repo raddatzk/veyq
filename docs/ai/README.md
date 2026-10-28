@@ -43,7 +43,9 @@ Five rules follow:
    go.** The obligation that leaves is on the docs, not on the repo. Work-order ids (`cr-…`) are **provenance
    labels, not resolvable pointers** — a CR is deleted when done, and no `git log --grep` recovers what it
    said. So a doc that cites one carries the whole reason in its own sentence; the id records where a decision
-   came from, never where to go read it. A reason that only a `git log` holds is a reason the next reader will
+   came from, never where to go read it. That holds for code comments and contract prose too: a `cr-… decision 3` there
+   is a pointer into a file that goes, so cite the ADR or use case that states the decision (cr-secure-the-account's
+   implementers wrote 95 such pointers, repointed before the CR could be deleted). A reason that only a `git log` holds is a reason the next reader will
    not find.
 
 ## State vs. flow
@@ -111,7 +113,9 @@ Five rules follow:
    measurement like any other: **wait for a state, not for a duration; read the console and the failed-request
    list before believing the DOM; and name which tree the dev server is serving.** The fix that pass did find
    was real, but it was found only after the substrate was established — everything before that was noise
-   presented as evidence.
+   presented as evidence. And a pass across a key rotation opens a **fresh tab** after it: a tab that still held the old epoch
+  key showed every name, and only a reload showed that every member's name, sealed under the old epoch, no longer opened
+  (cr-trust-records-in-the-tenant; secure-the-account's pass, which rotated the tenant, had not reloaded).
 
    **And a UI slice is not done before it was clicked in a real browser.** The public folder page of
    cr-node-key-hierarchy landed with 33 new unit tests green and two defects only a browser showed: a breadcrumb
@@ -288,7 +292,7 @@ A refined CR nails **decisions, not keystrokes**:
   server's copies of it as well as the keys onto its row: cr-account-erasure's second angle searched for account ids and
   missed the address a tenant row and its old invites had copied, which its admin-web implementer found on the tenant
   list. A refine that lets the operator give someone a role in a space names who hands them its key: ADR 0101 let the
-  Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 6),
+  Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 3),
   so the implementation had to narrow the invite to members. And a refine that reuses an operation ("as a removal
   does") lists that operation's refusals beside its own decision: the same ADR's "the Server Owner's door does not
   refuse" met the moderator removal's last-holder refusal only in the implementation. The reverse holds too: a refusal
@@ -309,6 +313,37 @@ A refined CR nails **decisions, not keystrokes**:
   settled it (another link's guests were reachable that way before the CR). Before designing keys for a field,
   name the weakest attacker the new layer stops and what that attacker reads anyway, and put the cheap variant
   with its residual beside the expensive one.
+- **A request a CR grows is measured at the bound of everything it carries, and a list with no cap has no bound.**
+  cr-secure-the-account put one self-grant per membership into the rotation's one body, beside a pin store already at
+  92 % of the request limit, and grew the pin entry past its padded size. Its Phase 0 found that nothing caps an
+  account's memberships — any co-member can add it to groups — and that the entry change alone would have pushed the
+  pin cap past the limit; the self-grants moved to a stage the publish applies. A refine that adds a list to a
+  single-body request names the cap behind the list's length, or the staging that makes a cap unnecessary. The next CR
+  planned a closing list per tenant in the same publish (the outgoing key's verifications, cr-trust-records-in-the-tenant);
+  a set of signed items a rotation must carry needs no list at all when each item is re-signed in place, one bounded
+  write each, read before the publish so nothing signed after it is carried.
+- **"The server learns only that it exists" names the row's key.** cr-trust-records-in-the-tenant sealed every
+  verification under the tenant key and still keyed its rows by verifier and subject, served to every member: the docs
+  phase found the invariant false — the operator reads who verified whom and when. A refine that claims a record tells
+  the server nothing lists the columns it is addressed and filtered by, and either accepts them as metadata or addresses
+  it by an opaque id.
+- **A gated read lists every caller the change sends to it.** The same CR served the key chain to a person's tenant
+  co-members, and the anchor check it built reads that chain from an invite accept (not a co-member yet) and from
+  moderation delivery (moderators may share no tenant): the first was designed around in implementation, the second
+  failed closed until the gate admitted moderators.
+- **A CR that removes a defence, or builds only the first half of its successor, lists per attacker what the old
+  one stopped and what stops it in between.** cr-invite-is-a-placeholder-member removed the admission tag (ADR 0111
+  decision 5) while the join record that replaces it is written but read by nothing until a later CR; the refine
+  priced the gap against the operator only, and its docs phase found that on an honest server a stolen owner
+  password without the vault could again get an account of its own the tenant key, because the server stored the
+  new invite's owner signature unchecked — closed in the same CR by a check at mint. The rows are the operator, a
+  stolen session, and a member.
+- **A value the client must sign or state is one it can read.** The same CR had the owner sign the invite's expiry
+  and the server check it against its own lifetime, which is operator-configured, so the client could not know it
+  until the implementer added `MyTenant.memberInviteTtlSeconds`. A refine that makes a client state a value the
+  server checks against its configuration names the read that serves it — and a new seal or statement purpose is
+  checked against `seal.ts`'s tables, where no purpose may sit in two (the CR's `join-record` became the field
+  purpose `member-join-record`).
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
   `core/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't

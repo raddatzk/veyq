@@ -5,7 +5,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.tasks.JobEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -189,7 +189,7 @@ class MemberRemoveSliceTest {
         given().header("Authorization", bearer(keyholder)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$keyholder","wrappedGrant":"Z3JhbnQ=",""" +
-                    """${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(group)}}""",
+                    """${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(keyholder)}"}],${TestGrants.openInvitesJson(group)}}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
         given().header("Authorization", bearer(keyholder)).contentType(ContentType.JSON).body("{}")

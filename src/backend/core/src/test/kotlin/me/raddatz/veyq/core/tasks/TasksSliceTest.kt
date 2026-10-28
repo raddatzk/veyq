@@ -1,8 +1,7 @@
 package me.raddatz.veyq.core.tasks
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.admit
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -13,6 +12,7 @@ import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -25,22 +25,28 @@ import java.util.UUID
 /**
  * Slice tests for the operator-blind background-task queue (ADR 0021, cr-0076): the atomic claim/lease
  * (first-wins), lazy reclaim of an expired lease, dead-letter on exhausted attempts, and the first consumer —
- * grant-delivery originated on a **seeded grant-less membership**, claimed, and completed idempotently by
- * posting a wrap (the server writes the opaque ciphertext onto the target membership, never a key). Seeds use
- * UUID-unique ids so the JVM-lived H2 mem DB (shared across test classes) can't bleed state.
+ * grant-delivery originated on a **seeded membership behind the scope's epoch** (every membership is born with a
+ * grant, ADR 0111, so behind is the only case), claimed, and completed idempotently by posting a wrap (the server
+ * writes the opaque ciphertext onto the target membership, never a key). Seeds use UUID-unique ids so the JVM-lived
+ * H2 mem DB (shared across test classes) can't bleed state.
  */
 @QuarkusTest
 class TasksSliceTest {
 
+    private companion object {
+        /** The `E_0` grant a behind member still holds ([seedBehindMembership]). */
+        const val OLD_GRANT = "b2xkLWdyYW50"
+    }
+
     // --- grant-delivery: the first, trivially-blind consumer -------------------------------------------------
 
     @Test
-    fun grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently() {
+    fun grantDeliveryOriginatedOnABehindMembershipThenClaimedAndCompletedIdempotently() {
         val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==") // "target-pubkey"
-        val targetMembership = seedGrantlessMembership(target, scopeId)
+        val targetMembership = seedBehindMembership(target, scopeId)
 
         // The worker pulls its scopes with the grant-delivery tag → the server originates + leases the job,
         // resolving the delivery target (userId + identity pubkey — operational metadata, never a key).
@@ -61,7 +67,7 @@ class TasksSliceTest {
         // target membership (the first wrap to a foreign identity) and marks the job done.
         val wrap = "d3JhcC10by1mb3JlaWdu" // "wrap-to-foreign"
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$wrap","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"$wrap","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
 
@@ -80,36 +86,33 @@ class TasksSliceTest {
     }
 
     @Test
-    fun grantDeliveryServesTheTargetsAdmissionAndRecordsTheWorkerAsGranter() {
-        // ADR 0020 move 6 / ADR 0028 Decision 6: the target carries its admission so the worker can verify it
-        // before it wraps, and the grant it posts is written with the worker as granter and its signature.
+    fun grantDeliveryRecordsTheWorkerAsGranter() {
+        // ADR 0028 Decision 6: the grant a worker posts is written with the worker as granter and its signature. The
+        // target carries no admission any more (ADR 0111 decision 5): the worker's gate is its pin of the target's key.
         val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
-        val targetMembership = seedGrantlessMembership(seedUser(), scopeId)
-        val admission = TestAdmission.admission()
-        QuarkusTransaction.requiringNew().run { MembershipEntity.findById(targetMembership)!!.admit(admission) }
+        val targetMembership = seedBehindMembership(seedUser(), scopeId)
 
         val jobId = claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200)
-            .body("grantDelivery.admissionId", equalTo(admission.id))
-            .body("grantDelivery.admissionEpoch", equalTo(0))
-            .body("grantDelivery.admissionTag", equalTo(TestAdmission.TAG))
+            .body("grantDelivery.targetMembershipId", equalTo(targetMembership))
+            .body("grantDelivery.admissionTag", nullValue())
             .extract().path<String>("jobId")
 
         // No signature → 400, nothing written; the same completion signed → delivered, granter recorded.
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcA==","epoch":0}""")
+            .body("""{"sealedResult":"d3JhcA==","epoch":1}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(400).body("code", equalTo("invalid_request"))
-        assertNull(grantOf(targetMembership))
+        assertEquals(OLD_GRANT, grantOf(targetMembership), "a refused completion writes nothing")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcA==","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcA==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
         val (granter, signature) = QuarkusTransaction.requiringNew().call {
             MembershipEntity.findById(targetMembership)!!.let { it.granterUserId to it.grantSignature }
         }
-        assertEquals(worker to TestAdmission.SIGNATURE, granter to signature)
+        assertEquals(worker to TestGrants.SIGNATURE, granter to signature)
     }
 
     @Test
@@ -117,7 +120,7 @@ class TasksSliceTest {
         val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
-        seedGrantlessMembership(seedUser(), scopeId)
+        seedBehindMembership(seedUser(), scopeId)
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON).body("{}")
@@ -135,11 +138,11 @@ class TasksSliceTest {
         val worker = seedUser()
         seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 1) // current → not itself behind
         val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==")
-        val targetMembership = seedGrantlessMembership(target, scopeId) // grantedEpoch defaults to 0
+        val targetMembership = seedBehindMembership(target, scopeId) // holds E_0
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(1, grantedEpochOf(targetMembership), "grant-delivery must record the delivered (current) epoch")
@@ -156,20 +159,20 @@ class TasksSliceTest {
         val worker = seedUser()
         seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 2)
         val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==")
-        val targetMembership = seedGrantlessMembership(target, scopeId)
+        val targetMembership = seedBehindMembership(target, scopeId)
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
-        assertEquals(null, grantOf(targetMembership), "a grant sealed at a stale epoch is never written")
+        assertEquals(OLD_GRANT, grantOf(targetMembership), "a grant sealed at a stale epoch is never written")
         assertEquals(JobEntity.PENDING, statusOf(jobId), "the job is released to run again, not done")
         assertEquals(0, attemptsOf(jobId), "a stale completion does not spend an attempt")
 
         assertEquals(jobId, claimGrantDelivery(worker), "the same job is claimable again")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(target)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
         assertEquals("d3JhcC1FMg==", grantOf(targetMembership), "the current-epoch grant is written")
         assertEquals(2, grantedEpochOf(targetMembership), "at exactly the epoch the worker stated")
@@ -189,7 +192,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker) // reconcile-on-claim originates a delivery for the stale member
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(stale)}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(2, grantedEpochOf(staleMembership), "the stale member is re-granted at the current epoch")
@@ -258,7 +261,7 @@ class TasksSliceTest {
 
     @Test
     fun declineReleasesJobToOtherWorkersButNeverBackToTheDecliner() {
-        // cr-0098 / ADR 0028: a worker that refuses a job (a conflicting identity pin) releases it back to
+        // cr-0098 / ADR 0028: a worker that refuses a job (a key it cannot anchor, ADR 0111 decision 9) releases it back to
         // PENDING — still claimable by OTHER workers — but is itself never re-offered it (per KEY-HOLDER, not a
         // global veto; the exclusion is keyed on the account, so the decliner's other devices stay out too).
         // The declined attempt is rolled back, so a legitimate decline never dead-letters the job.
@@ -273,7 +276,7 @@ class TasksSliceTest {
         claim(workerA, tag).then().statusCode(200).body("jobId", equalTo(jobId)).body("attempts", equalTo(1))
         // A declines → back to pending, attempt rolled back to 0 (not a failed attempt).
         given().header("Authorization", bearer(workerA)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
+            .body("""{"reason":"identity_unanchored"}""")
             .`when`().post("/api/tasks/$jobId/decline")
             .then().statusCode(200).body("status", equalTo("pending")).body("attempts", equalTo(0))
 
@@ -281,60 +284,6 @@ class TasksSliceTest {
         claim(workerA, tag).then().statusCode(204)
         // B has no conflicting decline → the job is still delivered to B (attempts freshly 1).
         claim(workerB, tag).then().statusCode(200).body("jobId", equalTo(jobId)).body("attempts", equalTo(1))
-    }
-
-    @Test
-    fun acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain() {
-        // ADR 0028 (2) promised that on accept "the wrap then proceeds", and nothing made it true: no code
-        // deleted a decline row, so the accept authorised a wrap that never happened (ADR 0060 Decision 7).
-        // This is the failure mode that strands a rotated account — its re-admission is exactly a delivery to a
-        // contact somebody already declined.
-        val scopeId = seedTenant()
-        val worker = seedUser()
-        seedGrantedMembership(worker, scopeId, "worker-grant")
-        val target = seedUser()
-        seedGrantlessMembership(target, scopeId)
-
-        val jobId = claimGrantDelivery(worker)
-        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$jobId/decline").then().statusCode(200)
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
-
-        // The control the positive needs: clearing for a DIFFERENT contact must change nothing. Without it, a
-        // clear that simply dropped every row of the caller's would pass the happy path identically.
-        clearDeclines(worker, seedUser()).then().statusCode(200).body("cleared", equalTo(0))
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
-
-        clearDeclines(worker, target).then().statusCode(200).body("cleared", equalTo(1))
-        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(jobId))
-    }
-
-    @Test
-    fun clearingDeclinesNeverFreesARotationExclusion() {
-        // The two mechanisms share a table, so the accept path could trivially have unblocked the rotation
-        // exclusion that keeps a rotator off their own re-grant (ADR 0060 Decision 4) — the takeover's finishing
-        // move, handed over by a cleanup. It cannot, because a scope-rotation job has no delivery target for a
-        // membership id to resolve to; this asserts that in the one run where both rows belong to one worker.
-        val scopeId = seedTenant()
-        val rotator = seedUser()
-        seedGrantedMembership(rotator, scopeId, "rotator-grant")
-        val target = seedUser()
-        seedGrantlessMembership(target, scopeId)
-
-        val rotationJob = seedJob(scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.PENDING, attempts = 0, resourceRef = scopeId)
-        seedDecline(rotationJob, rotator, "rotation_originator")
-
-        val deliveryJob = claimGrantDelivery(rotator)
-        given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
-            .body("""{"reason":"identity_changed"}""")
-            .`when`().post("/api/tasks/$deliveryJob/decline").then().statusCode(200)
-
-        clearDeclines(rotator, target).then().statusCode(200).body("cleared", equalTo(1))
-
-        // The delivery is unblocked; the rotation exclusion is not.
-        claim(rotator, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(deliveryJob))
-        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
     }
 
     @Test
@@ -498,9 +447,9 @@ class TasksSliceTest {
         seedGrantedMembership(attacker, scopeA, "attacker-grant")
 
         val scopeB = seedTenant()
-        val victimMembership = seedGrantlessMembership(seedUser(), scopeB)
+        val victimMembership = seedBehindMembership(seedUser(), scopeB)
 
-        // A grant-delivery job in scope A (attacker's) pointing at the victim's grant-less membership in scope B,
+        // A grant-delivery job in scope A (attacker's) pointing at the victim's behind membership in scope B,
         // leased to the attacker — completing needs the lease (ADR 0021 §6), so this is the strongest position the
         // attacker can hold.
         val jobId = seedJob(
@@ -509,12 +458,12 @@ class TasksSliceTest {
         )
 
         // The attacker completes it (they hold the lease and a grant in A) — the job is marked done, but the
-        // cross-scope write is refused: the victim's membership in B stays grant-less.
+        // cross-scope write is refused: the victim's membership in B keeps the grant it held.
         given().header("Authorization", bearer(attacker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0,${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
-        assertNull(grantOf(victimMembership), "a cross-scope resourceRef must not receive a grant")
+        assertEquals(OLD_GRANT, grantOf(victimMembership), "a cross-scope resourceRef must not receive a grant")
     }
 
     @Test
@@ -526,11 +475,17 @@ class TasksSliceTest {
 
     @Test
     fun grantLessWorkerCannotClaim() {
-        // Eligibility is holding the scope key: a grant-less member is a *target*, not a worker.
+        // Eligibility is holding the scope key. Every membership is born with a grant now (ADR 0111), but the column
+        // stays nullable for scope rows written before a key exists — such a row is no worker.
         val scopeId = seedTenant()
-        val pending = seedUser()
-        seedGrantlessMembership(pending, scopeId)
-        claim(pending, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
+        val worker = seedUser()
+        seedGrantedMembership(worker, scopeId, "owner-grant")
+        seedBehindMembership(seedUser(), scopeId)
+        val grantless = seedUser()
+        seedGrantlessMembership(grantless, scopeId)
+        claim(grantless, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
+        // Control: the same job is claimable by a holder of the key.
+        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200)
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------
@@ -539,18 +494,6 @@ class TasksSliceTest {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["$tag"]}""")
             .`when`().post("/api/tasks/claim")
-
-    private fun clearDeclines(userId: String, targetUserId: String) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"targetUserId":"$targetUserId"}""")
-            .`when`().post("/api/tasks/declines/clear")
-
-    private fun seedDecline(jobId: String, workerId: String, reason: String) = QuarkusTransaction.requiringNew().run {
-        JobDeclineEntity().apply {
-            id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId
-            this.reason = reason
-        }.persist()
-    }
 
     private fun claimGrantDelivery(userId: String): String =
         claim(userId, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).extract().path("jobId")
@@ -565,13 +508,36 @@ class TasksSliceTest {
             }.persist()
         }
 
-    /** A pending member: a role, no grant — the state the delivery job reconciles. Returns the membership id. */
+    /** A membership with a role and no grant — a scope row written before a key exists (no member is born so since
+     *  ADR 0111). Returns the membership id. */
     private fun seedGrantlessMembership(userId: String, scopeId: String): String {
         val membershipId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             MembershipEntity().apply {
                 id = membershipId; this.userId = userId; tenantId = scopeId
                 this.scopeId = scopeId; role = MembershipEntity.MEMBER; wrappedGrant = null
+                createdAt = Instant.now()
+            }.persist()
+        }
+        return membershipId
+    }
+
+    /**
+     * A member **behind** the scope's epoch — the one state grant delivery serves (every membership is born with a
+     * grant, ADR 0111): a scope still at `E_0` is first rotated to `E_1`, every grant-holder seeded so far re-granted as
+     * a rotation would, and the member keeps its [OLD_GRANT] of `E_0`. Returns the membership id.
+     */
+    private fun seedBehindMembership(userId: String, scopeId: String): String {
+        val membershipId = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            val scope = ScopeEntity.findById(scopeId)!!
+            if (scope.currentEpoch == 0) {
+                scope.currentEpoch = 1
+                MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and wrappedGrant is not null", scopeId)
+            }
+            MembershipEntity().apply {
+                id = membershipId; this.userId = userId; tenantId = scopeId
+                this.scopeId = scopeId; role = MembershipEntity.MEMBER; wrappedGrant = OLD_GRANT; grantedEpoch = 0
                 createdAt = Instant.now()
             }.persist()
         }

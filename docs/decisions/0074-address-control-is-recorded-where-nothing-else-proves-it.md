@@ -100,8 +100,10 @@ session is revoked; the request answers alike for a free and a taken address. Th
   (repeating is allowed); a wrong address is corrected only by its holder, who needs the password and the Secret Key for
   it; the old address is told, not asked; the old Emergency Kit names the old address (its Secret Key still works, a new
   kit is offered); open invites to the old address can no longer be accepted, because an invite matches by address; and
-  a member invite mailed to a wrong address can be redeemed by that mailbox's owner, where the key-holder's admission
-  step is the human check ([ADR 0020](0020-grant-distribution-invite-wrap.md)).
+  a member invite mailed to a wrong address cannot be redeemed by that mailbox's owner alone, because the link opens only
+  with the code the inviting owner passes on outside veyq
+  ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 1) — the human check there, not this record.
 - **Recovery gates on the mailed token, never on this record** (Decision 3); ADR 0054 says the same from its side.
 - **Rejected:**
   - **Gating recovery on confirmation.** It adds no factor — the mailed token proves the mailbox at use time — and

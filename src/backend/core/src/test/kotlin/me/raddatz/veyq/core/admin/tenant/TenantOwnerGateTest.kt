@@ -1,6 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -47,13 +47,14 @@ class TenantOwnerGateTest {
 
         val a = bearer(actor)
         // --- the 5 TenantHandler ops + terms: the owner gate fires first, so a random invite/member id still 403s
-        given().header("Authorization", a).contentType(ContentType.JSON).body("""{"email":"x@gate.example.com",${TestAdmission.json()}}""")
+        given().header("Authorization", a).contentType(ContentType.JSON).body("""{${TestGrants.memberInviteJson(tenantId, "x@gate.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(403).body("code", equalTo("not_tenant_owner"))
         given().header("Authorization", a)
             .`when`().get("/api/tenants/$tenantId/member-invites")
             .then().statusCode(403).body("code", equalTo("not_tenant_owner"))
-        given().header("Authorization", a)
+        given().header("Authorization", a).contentType(ContentType.JSON)
+            .body("""{${TestGrants.memberInviteJson(tenantId, "x@gate.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites/${UUID.randomUUID()}/reissue")
             .then().statusCode(403).body("code", equalTo("not_tenant_owner"))
         given().header("Authorization", a)
@@ -91,7 +92,7 @@ class TenantOwnerGateTest {
 
         val o = bearer(owner)
         // passes the owner gate: mint succeeds (201), list succeeds (200) — not the 403 the escalation actor gets
-        given().header("Authorization", o).contentType(ContentType.JSON).body("""{"email":"new@owner.example.com",${TestAdmission.json()}}""")
+        given().header("Authorization", o).contentType(ContentType.JSON).body("""{${TestGrants.memberInviteJson(tenantId, "new@owner.example.com")}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201)
         given().header("Authorization", o)

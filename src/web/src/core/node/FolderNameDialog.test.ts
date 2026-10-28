@@ -75,7 +75,7 @@ describe('FolderNameDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey, epoch: 0 }, { reread: expect.any(Function) })
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey, epoch: 0 }, { reread: expect.any(Function), pull: expect.any(Function) })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })

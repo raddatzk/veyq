@@ -8,45 +8,59 @@ sources:
 import Screenshot from '../../../components/Screenshot.astro';
 
 You get into veyq when someone who owns a space invites you. The invitation comes by email, in English and German,
-with a link that works until the date it names.
+with a link that works until the date it names. The person who invited you passes on a **code** to you themselves,
+by message or in person: the link alone does not open the invitation.
+
+## Enter the code
+
+1. Open the link in the email. The page **Accept your invitation** says which space you have been invited to join.
+2. Enter the **Code** the person who invited you passed on, and choose **Continue**. Capitals, spaces and the hyphen
+   do not matter. If they chose a password for the invitation instead, the page asks for the **Password for the
+   invitation**.
+
+Your device then checks that the invitation really comes from the person who sent it, before anything leaves it.
 
 ## Create your account
 
-1. Open the link in the email. The page **Accept your invitation** says which space you have been invited to join.
-2. Enter a **Username**. It is how the others in this space find you (letters, digits, `.`, `_` and `-`), and it
+3. Enter a **Username**. It is how the others in this space find you (letters, digits, `.`, `_` and `-`), and it
    must not be taken yet.
-3. Choose a **Password** of at least 10 characters. When you leave the field, veyq checks whether the password is
+4. If you like, add your first and last name and a picture. Only members of the space can see them, and you can
+   change them later in the settings.
+5. Choose a **Password** of at least 10 characters. When you leave the field, veyq checks whether the password is
    known from data breaches; if it is, choose another one, or tick **Use it anyway**.
-4. Choose **Continue**.
+6. Choose **Continue**.
 
 <Screenshot id="getting-started-accept-form" shows="The Accept your invitation page with the space's name, the Username and Password fields and the Continue button" />
 
 Your email address is the one the invitation was sent to; you do not type it. If you were invited to **own** a new
-space, the page also offers your first and last name and a picture (all optional, and changeable later in the
-settings), and the last button below says **Accept & activate**.
+space, there is no code to enter, and the last button below says **Accept & activate**.
 
 ## Save your Emergency Kit
 
-5. Choose **Download Emergency Kit (PDF)** and keep the file somewhere safe. What it is and where to keep it:
+7. Choose **Download Emergency Kit (PDF)** and keep the file somewhere safe. What it is and where to keep it:
    [Your Emergency Kit](/veyq/getting-started/emergency-kit/).
-6. Tick **I have saved my Emergency Kit somewhere safe.**
-7. Choose **Accept & join**.
+8. Tick **I have saved my Emergency Kit somewhere safe.**
+9. Choose **Accept & join**.
 
 <Screenshot id="getting-started-accept-kit" shows="The Save your Emergency Kit step with the Download Emergency Kit (PDF) button, the confirmation checkbox ticked and the Accept & join button" />
 
 The page then says **You’ve joined “Example Family”.**, with your space's name. Choose **Sign in** and sign in with your
 email, your password and the Secret Key from the kit you just saved: [Sign in](/veyq/getting-started/sign-in/).
 
-You may first see only **Personal**, and the shared space marked **Awaiting access**. The key to the shared space
-reaches you from another member's device, by itself, the next time one of them is online. You do not need to do
-anything.
+The shared space is yours to see right away: the invitation carried its key, locked under the code, and your device
+took it over when you joined. Nobody else has to be online for that.
 
 ## If it does not work
 
-- **This invitation is no longer valid.** It has expired. Ask whoever invited you to send a new one.
-- **This invitation link is invalid.** The link is incomplete or was already used. Open it again from the email.
+- **This invitation is no longer valid.** It has expired, was cancelled or sent again, or was already used. Ask
+  whoever invited you to send a new one.
+- **This invitation link is invalid.** The link is incomplete. Open it again from the email.
+- **That code does not open this invitation.** The code is mistyped, or it belongs to another invitation. Check it
+  and try again.
+- **This invitation can’t be checked — ask for a new one.** The invitation does not match the person who sent it, or
+  they have secured their account since they sent it, so your device sends nothing. When they send it again, you get a new link and they get a new code to pass on.
 - **That email already has an account — sign in instead.** You already have a veyq account with this address on
-  this server. The page then asks for your password and your Secret Key instead of a new password.
+  this server. After the code, the page asks for your password and your Secret Key instead of a new password.
 
 Your password and your Secret Key never leave your device. veyq turns them into keys on your device, and the server
 only ever receives locked data: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

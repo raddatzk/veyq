@@ -1,6 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -62,7 +62,7 @@ class TenantAcceptSliceTest {
         val id = seedPendingTenant("acc.example.com", "owner2@example.com", secret)
         val userId = seedUser(email = "owner2@example.com")
         given().header("Authorization", bearer(userId))
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
         assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
@@ -77,7 +77,7 @@ class TenantAcceptSliceTest {
         val userId = seedUser(email = "owner-name@example.com")
         given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"named","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},"sealedName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"named",${TestGrants.ownerBirthJson()},"sealedName":"c2VhbGVkLW5hbWU="}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
         // The server stored the opaque sealed blob verbatim on the profile row (never a plaintext name).
@@ -87,7 +87,7 @@ class TenantAcceptSliceTest {
         val id2 = seedPendingTenant("accnoname.example.com", "owner-noname@example.com", secret2)
         val userId2 = seedUser(email = "owner-noname@example.com")
         given().header("Authorization", bearer(userId2))
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret2","username":"noname","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret2","username":"noname",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assert(profileSealedName(id2, userId2) == null)
     }
@@ -122,7 +122,7 @@ class TenantAcceptSliceTest {
         seedPendingTenant("mm.example.com", "intended@example.com", secret)
         val otherId = seedUser(email = "other@example.com")
         given().header("Authorization", bearer(otherId))
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(403).body("code", equalTo("not_invited_owner"))
     }
@@ -208,7 +208,7 @@ class TenantAcceptSliceTest {
 
     @Test
     fun unauthenticatedAcceptIs401() {
-        given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"x","username":"anyone","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+        given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"x","username":"anyone",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -236,7 +236,7 @@ class TenantAcceptSliceTest {
     /** An existing-account OWNER accept, as (status, error code). */
     private fun ownerAccept(auth: String, secret: String, username: String = "accowner"): Pair<Int, String?> =
         given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"$username","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"bootstrapSecret":"$secret","username":"$username",${TestGrants.ownerBirthJson()}}""")
             .`when`().post("/api/tenants/accept").then().extract().let { it.statusCode() to it.path<String?>("code") }
 
     /** A register-and-accept, each call with its own client-minted account id, as (status, error code). */
@@ -258,7 +258,7 @@ class TenantAcceptSliceTest {
            "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
            "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
            "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"},
-         "grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}
+         ${TestGrants.ownerBirthJson("aWRlbnRpdHktcHVibGljLWtleQ==")}}
     """.trimIndent()
 
     private companion object {

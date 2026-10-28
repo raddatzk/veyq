@@ -1,33 +1,37 @@
 useCase: uc.spaces.add-group-member
 feature: spaces
 title: Add a member to a group
-# cr-0086 delivers resolve/admit; grant-delivery of K_SC is the shared cr-0076/0079 primitive. cr-0093 makes that
-# delivery epoch-aware: the completion states the epoch it sealed and the server records exactly that as
-# grantedEpoch, refusing a non-current one (so a member added to an already-rotated group reads post-rotation
-# content) and re-delivering members left stale by a rotation (§E2) — backend slice tests + a live
-# read-after-add-to-rotated-group e2e.
+# cr-0086 built resolve/add. Since ADR 0111 decision 4 (cr-invite-is-a-placeholder-member) the add carries the grant:
+# the owner's client wraps the group's current epoch to the resolved key after the anchor check, and the membership
+# holds it from the add on. Grant delivery (cr-0076/0079, epoch-aware since cr-0093) is left only for a member a
+# rotation skipped.
 acceptanceCriteria:
   - id: resolve-username
     text: A tenant-scoped username resolve returns an existing tenant member's identity public key (not a global user-search); an unknown/foreign handle is a generic not-found.
     coverage:
       backend: { integration: [ScopesSliceTest.addGroupMemberUnknownUsernameIs404] }
       web: { unit: [src/features/spaces/members.test.ts] }
-  - id: admit-group-member
-    text: The GroupOwner adds a resolved member → the server records a grant-less GROUP membership (role=MEMBER); no key crosses the wire, and the group name stays sealed. A non-owner caller is rejected; adding an existing member is a no-op.
-    coverage:
-      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, ScopesSliceTest.addGroupMemberAlreadyMemberIs409] }
-      web: { unit: [src/features/spaces/members.test.ts] }
   - id: auto-deliver-group-grant
-    text: The admitted member lands grant-less (hasGrant=false, "awaiting access") in the group directory — the input the grant-delivery reconciler (cr-0076) picks up to wrap K_SC, first-online-wins; the delivery wrap itself is the shared primitive's coverage (cr-0076/0079).
+    # The id predates ADR 0111, when a key-holder delivered the key after the add; it stays because lane L1 tags it
+    # (`@uc.spaces.add-group-member:auto-deliver-group-grant` in expenses-pot.spec.ts).
+    text: The GroupOwner adds a resolved member with a grant of the group's current epoch, wrapped by their client to the identity key the resolve served and signed by them → the server records a GROUP membership (role=MEMBER) holding that grant, its granter the adding owner, so the member opens the group at once with no other device online. The group name stays sealed. A non-member of the group gets 404; adding an existing member is 409 `already_member`.
     coverage:
-      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember] }
+      backend: { integration: [GroupAddGrantSliceTest.aGroupAddCarriesTheGrant, ScopesSliceTest.addGroupMemberByUsernameRecordsAGrantedMember, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, ScopesSliceTest.addGroupMemberAlreadyMemberIs409, GrantWriterSnapshotSliceTest.aGroupAddRecordsTheAddingOwnersKey] }
+      web: { unit: [src/features/spaces/members.test.ts, src/features/spaces/GroupMembersPanel.test.ts], e2e: [src/features/spaces/memberInvite.e2e.test.ts] }
+  - id: add-wraps-only-to-the-current-key
+    # The anchor check is the owner client's (ADR 0028 Decision 2); the server checks the epoch and the key the grant names
+    # (recipientIdentityDigest, ADR 0111: a grant names its recipient key from birth).
+    text: The owner's client wraps only after the anchor check passed the resolved key — a key the target's key chain does not reach from this account's pin is refused with nothing sent and the anomaly's note ("Can't confirm this key") shown, with no accept. The server refuses a grant of an epoch a rotation left (409 `stale_epoch`, the client rebuilds once) and one naming a key that is not the target's current identity (409 `recipient_key_not_current`), each with nothing written.
+    coverage:
+      backend: { integration: [GroupAddGrantSliceTest.aGroupAddAtAStaleEpochIsRefused, GroupAddGrantSliceTest.aGroupAddNamingAnotherKeyIsRefused, ScopesSliceTest.aGroupAddGrantedAtAStaleEpochIsRefused] }
+      web: { unit: [src/features/spaces/members.test.ts, src/features/spaces/GroupMembersPanel.test.ts] }
   - id: epoch-aware-delivery
     text: >
       Delivery is epoch-aware (cr-0093): grant-delivery wraps the CURRENT epoch key E_current and its completion
       states that epoch (the grant is sealed bound to it, ADR 0072); the server records exactly the stated epoch as
       grantedEpoch and refuses one that is not the scope's currentEpoch (409 stale_epoch — nothing written, the lease
-      released without spending an attempt, the job re-runs) — so a member added to an already-rotated group reads
-      post-rotation content immediately (not stranded peeling E_current as E_0). A member left STALE by a rotation
+      released without spending an attempt, the job re-runs) — so a member it reaches reads post-rotation content
+      (not stranded peeling E_current as E_0). A member left STALE by a rotation
       (grantedEpoch < currentEpoch — e.g. a re-wrap that failed, en.spaces.scope-key-rotation §E2) is re-originated
       by the reconciler and re-delivered at the current epoch. Idempotent + first-online-wins.
     coverage:
@@ -36,33 +40,10 @@ acceptanceCriteria:
   - id: operator-blind-group-add
     text: The server sees only the membership row, identity public keys, and opaque grant ciphertext — never K_SC, never the group's plaintext name; the add response never exposes email.
     coverage:
-      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember] }
-  - id: admission-needs-the-group-key
-    # ADR 0020 move 6 / ADR 0014: the group add — direct or a consent proposal — carries a tag the owner's client
-    # computed under the group's current epoch key, bound to the resolved target's account; a worker declines
-    # `admission_unverified` on a mismatch, on a tag from before a rotation, or on none. The server stores the tag
-    # blind and only refuses one stated at an epoch a rotation already left.
-    text: A group member receives the group key only if their admission carries a tag made with the group's current epoch key and bound to their account; an add without the vault is never delivered to.
-    coverage:
-      backend:
-        integration: [ScopesSliceTest.aGroupAddTaggedAtAStaleEpochIsRefused]
-      web:
-        unit: [src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts]
-        e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
-  - id: admission-refusal-lasts-as-long-as-its-admission
-    # ADR 0020 move 6 § What a refusal lasts: an `admission_unverified` decline excludes that key-holder's account
-    # from the job, so it may record only a judgment of the target. A tag ahead of the worker's epoch (its key is
-    # behind) pauses instead; a rotation that re-tags the admission lifts the declines its old tag earned, never an
-    # `identity_changed` one, never a dropped admission's.
-    text: A member is never kept from the group key by a key-holder whose own key was behind their admission, and a rotation that re-admits them makes every key-holder judge their admission again.
-    coverage:
-      backend:
-        integration: [ScopesSliceTest.aReTaggedAdmissionLiftsTheAdmissionDeclinesItsOldTagEarned]
-      web:
-        unit: [src/features/tasks/grantDeliveryWorker.test.ts]
+      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsAGrantedMember] }
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `auto-deliver-group-grant` on
-    its way to the Expenses pass: a group's owner adds a tenant member by username, re-entering the group delivers
-    the key, and the member's sidebar then lists the group. Green only in local runs of the lane (the V1 heavy
+    its way to the Expenses pass: a group's owner adds a tenant member by username, the add carries the group's key,
+    and the member's sidebar lists the group at once. Green only in local runs of the lane (the V1 heavy
     stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

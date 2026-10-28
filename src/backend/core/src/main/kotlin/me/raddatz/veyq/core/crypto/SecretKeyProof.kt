@@ -10,7 +10,8 @@ import java.util.Base64
  *
  * Every flow that mints a cold credential — rotation, change-password, recovery completion, change-email —
  * carries an Ed25519 signature under the account's **Secret-Key proof key**: a keypair the client derives from the
- * Secret Key alone, whose public half is registered at account birth (`veyq_user.secret_key_proof_public_key`). A
+ * Secret Key alone, whose public half is registered at account birth (`veyq_user.secret_key_proof_public_key`) and
+ * replaced only when the account is secured, under a signature of the current one (cr-secure-the-account). A
  * session is not enough, because a device-link holder is handed one without a password and a phished password buys
  * one; neither has the Secret Key. The server rebuilds each statement here from the request and the account's
  * current state, so a client cannot choose what it signed, and verifies it against the stored public key.
@@ -29,8 +30,13 @@ object SecretKeyProof {
     data class Wrap(val wrappedKey: String, val kdfParams: String)
 
     /**
-     * Rotation: the identity it replaces, and everything it installs. Binding the **current** identity is what
-     * makes a captured signature useless after the rotation it authorised.
+     * Securing the account (ADR 0111 decision 7, ADR 0111 decision 6, ADR 0060 Decision 2): the identity and auth key it replaces, and
+     * everything it installs — the new identity bundle, the new identity private key under the new Master Key, both
+     * rewritten cold wraps, the key-chain step [keyChainStepStatement] (as the server rebuilt it, bound by its SHA-256),
+     * the auth key, the new Secret-Key proof public key, and the stage of self-grants it applies ([stageId], canonical
+     * lowercase, and [stagedGrantsDigest], raw). Binding the **current** identity and auth key is what makes a captured
+     * signature useless after the rotation it authorised. Signed by the current proof key (the gate) and by the new one
+     * (possession), over the same bytes.
      */
     fun rotationStatement(
         currentIdentityPublicKey: String,
@@ -38,6 +44,12 @@ object SecretKeyProof {
         wrappedIdentityPrivateKey: String,
         passwordWrap: Wrap,
         recoveryWrap: Wrap,
+        keyChainStepStatement: ByteArray,
+        currentAuthPublicKey: String,
+        authPublicKey: String,
+        secretKeyProofPublicKey: String,
+        stageId: String,
+        stagedGrantsDigest: ByteArray,
     ): ByteArray? = runCatching {
         statement(
             "veyq/v1/secret-key-proof/rotation",
@@ -46,6 +58,12 @@ object SecretKeyProof {
             sha256(decode(wrappedIdentityPrivateKey)),
             wrapDigest(passwordWrap),
             wrapDigest(recoveryWrap),
+            sha256(keyChainStepStatement),
+            decode(currentAuthPublicKey),
+            decode(authPublicKey),
+            decode(secretKeyProofPublicKey),
+            stageId.toByteArray(Charsets.UTF_8),
+            stagedGrantsDigest,
         )
     }.getOrNull()
 

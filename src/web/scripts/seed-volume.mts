@@ -38,10 +38,10 @@ import { birthInstance, HOST, mkActor } from '../src/test/e2eBootstrap'
 import { mailCursor, waitForMail } from '../src/test/mailpit'
 import { setupApi } from '../src/api/client'
 import { updateTenantMailSettings } from '../src/features/tenant/tenantMailSettings'
-import { registerAndAccept } from '../src/features/tenant/tenantInvite'
+import { memberInviteFragment, registerThroughMemberInvite } from '../src/test/memberJoin'
+import { generateInviteCode } from '@veyq/crypto/invite'
 import { inviteMember, listScopeMembers } from '../src/features/spaces/members'
 import { createGroup, listMyGroups, openScopeById, type OpenedScope } from '../src/features/spaces/scopes'
-import { ScopeKind } from '../src/api/generated/scopes'
 import { createContentNode, listTree, nodeContentKey, type TreeNode, type NodeParent } from '../src/core/node/tree'
 import { FOLDER_KIND } from '../src/core/node/kind'
 import { hashForNode, TENANT_SCOPE } from '../src/core/node/location'
@@ -51,7 +51,6 @@ import { createChapter, createMemory } from '../src/features/memories/memoryNode
 import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memories/media'
 import { ItemMarksTooMany, loadItemFavorites, saveItemFavorites } from '../src/features/memories/itemFavorites'
 import { keyAt } from '../src/features/spaces/epochs'
-import { runGrantDeliveryWorker } from '../src/features/tasks/grantDeliveryWorker'
 import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../src/features/account/profile/profile'
 import { httpStatus } from '../src/shared/httpError'
 import { backingOff } from './backingOff.mts'
@@ -63,8 +62,6 @@ registry.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
 function remember(update: Partial<Manifest>): void {
   writeJson('manifest.json', { ...manifest(), ...update })
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Run `count` jobs with at most `width` in flight; the first failure stops the run. */
 async function pool(count: number, width: number, job: (i: number) => Promise<void>): Promise<void> {
@@ -317,20 +314,10 @@ function saveMember(m: Member): void {
   writeJson('accounts.json', a)
 }
 
-/** Deliver every pending tenant grant as the owner's key-holder device does: the app's own grant-delivery worker. */
-async function deliverGrants(tenant: OpenedScope, expect: number): Promise<void> {
-  let delivered = 0
-  for (let i = 0; i < 25 && delivered < expect; i++) {
-    delivered += await runGrantDeliveryWorker({ scopeId: tenant.scopeId, kind: ScopeKind.Tenant, key: tenant.key, epoch: tenant.epochs.current })
-    if (delivered < expect) await sleep(400)
-  }
-  if (delivered < expect) die(`the grant-delivery worker delivered ${delivered} of ${expect} grants`)
-}
-
 async function members(target: number): Promise<void> {
   const a = accounts()
   await signIn(a.owner)
-  let tenant = await tenantScope()
+  const tenant = await tenantScope()
   // The owner is a row of the directory too: named like every member, so "every row named" holds for the whole list.
   const ownName = await openOwnNameKey()
   if (!ownName) die('the owner holds no tenant grant')
@@ -340,7 +327,8 @@ async function members(target: number): Promise<void> {
   const inTenant = new Set(listed.map((m) => m.username))
   console.log(`members: the tenant has ${listed.length}, target ${target}`)
   const joinRate = progress('members', 'accounts')
-  // 1 — the owner's half: invite, the invitee's cold birth and register-and-accept, then the grant delivery.
+  // 1 — the owner's half: invite with a code; the invitee's cold birth, its check of the invite and its register-and-
+  // accept, which grants it the tenant key (ADR 0111 decision 3) — no grant delivery waits behind it.
   let count = listed.length
   let invites = 0
   for (let i = 0; count < target; i++) {
@@ -353,8 +341,9 @@ async function members(target: number): Promise<void> {
     const member: Member = { email: actor.email, password: actor.password, username: actor.username, secretKey: built.emergencyKit.secretKey, stage: 'built' }
     saveMember(member) // the Secret Key exists nowhere else: written before anything can fail
     const cursor = await mailCursor(member.email)
+    const code = generateInviteCode()
     try {
-      await inviteMember(tenant.tenantId, member.email)
+      await inviteMember(tenant.tenantId, member.email, { mode: 'code', code })
       invites++
     } catch (e) {
       if (httpStatus(e) === 429) {
@@ -365,13 +354,10 @@ async function members(target: number): Promise<void> {
       throw e
     }
     const body = await waitForMail(member.email, { after: cursor })
-    const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
-    if (!link) die(`no invite link in the mail to ${member.email}`)
-    const accepted = await registerAndAccept(link[1], crypto.randomUUID(), member.username, built.material)
+    const fragment = memberInviteFragment(body)
+    if (!fragment) die(`no member invite link in the mail to ${member.email}`)
+    const accepted = await registerThroughMemberInvite(fragment, code, member.username, built)
     member.userId = accepted.userId
-    member.stage = 'joined'
-    saveMember(member)
-    await deliverGrants(tenant, 1)
     member.stage = 'granted'
     saveMember(member)
     count++
@@ -379,12 +365,7 @@ async function members(target: number): Promise<void> {
   }
   console.log(`members: joined ${joinRate.end()}`)
   // 2 — each member's own half: its sealed name, and every fifth a picture.
-  const pending = accounts().members.filter((m) => m.stage === 'joined' || m.stage === 'granted')
-  if (pending.some((m) => m.stage === 'joined')) {
-    await backingOff('the owner signs in', () => signIn(a.owner))
-    tenant = await tenantScope()
-    await deliverGrants(tenant, pending.filter((m) => m.stage === 'joined').length)
-  }
+  const pending = accounts().members.filter((m) => m.stage === 'granted')
   const avatars = [0, 1, 2, 3, 4].map((k) => fixture(`avatar-${k}.webp`))
   const profileRate = progress('profiles', 'accounts')
   for (const m of pending) {

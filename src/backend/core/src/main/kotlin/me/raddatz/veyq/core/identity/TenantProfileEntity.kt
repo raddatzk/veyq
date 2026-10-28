@@ -12,9 +12,11 @@ import org.hibernate.annotations.DynamicUpdate
  * A member's identity **within one tenant** (cr-0083, ADR 0023): a per-`(user, tenant)` row — one per person
  * per tenant, independent of how many scopes they hold there. `username` is a plaintext handle, unique within
  * the tenant (`UNIQUE(tenant_id, username)`); `sealedName` is the first+last name sealed under `K_tenant`
- * (ciphertext, operator-blind) — **nullable**, since a grant-less member seals it only once they hold the key.
+ * (ciphertext, operator-blind) — **nullable**: a member may leave it out.
  * `sealedAvatar` is the profile picture (ADR 0084): one constant-length ciphertext under `K_tenant`, null = none;
  * `avatarRevision` is bumped on every set and clear and is what the directory and the avatar read's `ETag` carry.
+ * `sealedJoinRecord` is the member's join record (ADR 0111 decisions 3 and 12), sealed under `K_tenant`: written once
+ * at the invite's accept, never by the profile op, null for the tenant's first owner.
  */
 @Entity
 @Table(name = "veyq_tenant_profile")
@@ -41,6 +43,9 @@ class TenantProfileEntity : PanacheEntityBase {
 
     @Column(name = "avatar_revision", nullable = false)
     var avatarRevision: Int = 0
+
+    @Column(name = "sealed_join_record")
+    var sealedJoinRecord: String? = null
 
     /** The revision the wire shows: `0` = no picture, else the counter (which a clear also bumped, ADR 0084). */
     fun wireAvatarRevision(): Int = if (sealedAvatar == null) 0 else avatarRevision

@@ -25,8 +25,10 @@ import { setupApi } from '../api/client'
 import { Configuration as SetupConfiguration, SetupApi } from '../api/generated'
 import { Configuration as TenantsConfiguration, TenantsApi } from '../api/generated/tenants'
 import { updateTenantMailSettings } from '../features/tenant/tenantMailSettings'
-import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
+import { acceptInvite, scopeGrant } from '../features/tenant/tenantInvite'
+import { generateInviteCode } from '@veyq/crypto/invite'
 import { inviteMember } from '../features/spaces/members'
+import { memberInviteFragment, registerThroughMemberInvite } from './memberJoin'
 import { myUserId } from '../features/account/profile/profile'
 import { mailCursor, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
 // Every address an account is signed up with is a `pii` needle: no log of the run may hold it (ADR 0092 § 4).
@@ -199,30 +201,32 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
 }
 
 /**
- * Onboard a tenant MEMBER: an owner-minted invite, redeemed by a grant-less cold-birth accept. The caller must
- * currently `become()` the owner (the invite endpoint is owner-gated). Leaves the session as the OWNER, not the
- * new member — the caller decides who acts next.
+ * Onboard a tenant MEMBER: an owner-minted invite with a code (ADR 0111 decision 1), redeemed by a cold-birth accept
+ * that opens the invite with that code, checks it and grants itself the tenant key (`registerThroughMemberInvite`) —
+ * the member holds the tenant key from the accept on, with nobody else online. The caller must currently `become()`
+ * the owner (the invite endpoint is owner-gated, and the invite is built in the owner's vault). Leaves the session as
+ * the OWNER, not the new member — the caller decides who acts next.
  *
- * **The token is read out of the mailbox, because that is the only channel it travels on.** The invite response
- * no longer carries `bootstrapSecret`: a member invite is minted for the invited person (ADR 0055 §2). The
- * dev-invite file is not an alternative — a booted fast-jar never writes it (`TenantInviteMailer` early-returns
- * in `LaunchMode.NORMAL` before the append). So this helper onboards a member exactly the way a member is
- * onboarded, which is the point: nothing here is a test-only shortcut around the product's own routing.
+ * **The link is read out of the mailbox, because that is the only channel it travels on.** The invite response
+ * carries no token: a member invite is minted for the invited person (ADR 0055 §2). The dev-invite file is not an
+ * alternative — a booted fast-jar never writes it (`TenantInviteMailer` early-returns in `LaunchMode.NORMAL` before
+ * the append). The code travels the other way, from the owner's client to the invitee outside veyq — here, a
+ * variable. So this helper onboards a member exactly the way a member is onboarded, which is the point: nothing here
+ * is a test-only shortcut around the product's own routing.
  *
- * The regex anchors on the accept path + **fragment** (`SmtpTenantInviteMailer`: `https://$domain/tenant/accept#…`),
- * never on a base URL — the mail's link is `https` with no port, while the suite talks to `http://…:8080`, so a
- * pattern built from the suite's own base would match nothing. A mail cursor is taken for this recipient first,
- * so a leftover from an earlier hand run (which shares the default `VEYQ_STAMP`, hence the same address) fails as
- * a clean timeout instead of as an expired token three calls later.
+ * The link is found by `memberInviteFragment`, anchored on the accept path + fragment, never on a base URL. A mail
+ * cursor is taken for this recipient first, so a leftover from an earlier hand run (which shares the default
+ * `VEYQ_STAMP`, hence the same address) fails as a clean timeout instead of as an expired token three calls later.
  */
 export async function onboardMember(tenantId: string, actor: Actor, salt: Uint8Array): Promise<Actor> {
   actor.built = await buildAccount(recordPii(actor.email), actor.password, salt)
   const cursor = await mailCursor(actor.email)
-  await inviteMember(tenantId, actor.email)
+  const code = generateInviteCode()
+  await inviteMember(tenantId, actor.email, { mode: 'code', code })
   const body = await waitForMail(actor.email, { after: cursor })
-  const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
-  expect(link, `no invite link in the mail to ${actor.email}:\n${body}`).toBeTruthy()
-  const accepted = await registerAndAccept(link![1], crypto.randomUUID(), actor.username, actor.built.material)
+  const fragment = memberInviteFragment(body)
+  expect(fragment, `no member invite link in the mail to ${actor.email}:\n${body}`).toBeTruthy()
+  const accepted = await registerThroughMemberInvite(fragment!, code, actor.username, actor.built)
   actor.userId = accepted.userId
   return actor
 }

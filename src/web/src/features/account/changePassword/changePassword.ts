@@ -17,7 +17,7 @@ import { loginApi, accountPasswordApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { account } from '../../../app/account'
-import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
+import { ColdCredentialRefused, proveColdCredential, staleAsRejected } from '../coldCredential'
 import type { ColdCredentialRefusal } from '../coldCredential'
 
 const ARGON = v1.ARGON
@@ -48,7 +48,7 @@ export class ChangePasswordRefused extends Error {
  * opened it — the same statement of fact rotation makes for the same reason.
  */
 export async function changePassword(newPassword: string, secretKeyB64: string, currentPassword: string): Promise<void> {
-  const mk = await proveColdCredential(currentPassword, secretKeyB64).catch((e: unknown) => {
+  const mk = await proveColdCredential(currentPassword, secretKeyB64).catch(staleAsRejected).catch((e: unknown) => {
     if (e instanceof ColdCredentialRefused) throw new ChangePasswordRefused(e.reason)
     throw e
   })

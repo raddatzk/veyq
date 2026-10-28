@@ -28,7 +28,7 @@ import java.util.UUID
 @Authenticated
 @RateLimitExempt(
     reason =
-        "Authenticated, membership- and owner-gated re-key of one scope the caller owns. Its volume is bounded by the " +
+        "Authenticated, membership-gated re-key of one scope whose current grant the caller holds. Its volume is bounded by the " +
         "scope's own nodes, each staged at the contracts' caps; no anonymous surface and no external cost.",
 )
 class RekeyResource(private val handler: RekeyHandler, private val identity: SecurityIdentity) : RekeyApi {
@@ -120,6 +120,7 @@ class RekeyResource(private val handler: RekeyHandler, private val identity: Sec
         id = UUID.fromString(node.id),
         kind = node.kind,
         trashed = trashed,
+        ownerOnly = ownerOnly,
         epoch = node.epoch,
         placementRevision = node.placementRevision,
         metaRevision = node.metaRevision,

@@ -1,43 +1,36 @@
 useCase: uc.spaces.verify-identity
 feature: spaces
-title: Trust-on-first-use, notice, and review a changed identity key
+title: Trust-on-first-use, then follow a contact's key chain, and surface a key it does not reach
 # Split 2026-08-25 (inbox #128) from what this file used to also cover: the proactive verify ceremony (QR /
 # read-aloud compare -> mark verified) lives on uc.spaces.enforce-verified-identities (built by
 # cr-identity-verification) and strict mode on uc.spaces.require-verified-identities (planned). Everything below this file
 # still claims IS built and tested, so the split also closes a second, quieter hole `status: planned` had been
 # hiding: three of these four criteria carried ZERO coverage refs before this split, riding on the file-wide
-# `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only `changed-key-review` had a ref.
+# `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only the changed-key review had a ref.
 acceptanceCriteria:
   - id: tofu-pin-on-first-use
-    text: The first time a client wraps to a contact's identity key it pins the fingerprint hash of the full identity public bundle (kem+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one entry per pin sealed under the Master Key at an opaque id, under a sealed head, synced across the account, account-global (one pin per contact across tenants). The server sees opaque ids and ciphertext, never a userId, key or state.
+    text: The first time a client wraps to a contact's identity key it pins the contact's key-chain head with the fingerprint hash of the full identity public bundle (kem+sign) keyed by userId and proceeds — trust-on-first-use. An entry holds the head, the index of its step, the first-seen time and a replacement mark, and no verified state. The pin store is one entry per pin sealed under the Master Key at an opaque id, under a sealed head, synced across the account, account-global (one pin per contact across tenants). The server sees opaque ids and ciphertext, never a userId or key.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
   - id: change-surfaced-not-trusted
-    text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker), leaving the directory's changed badge as the review surface. A change is attack-or-legitimate-rotation, resolved by a human.
-    # "a human-review flag" (the pre-split wording) named a field that was never built — the decline + the
-    # directory's `changed` badge (trustState/trustStates) IS the review surface; corrected on this split
-    # rather than left to overclaim next to its own new refs.
+    text: A served key is trusted only when the contact's key chain reaches it from the head this account pinned (both signatures of every step, ADR 0111 decision 7); anything else - a rollback to an older head, a step not signed by the retired Secret Key, an invented prefix naming the pinned identity - is an anomaly. In the UI it is a notice with no accept; at a rotation the member is declared pending; on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline `identity_unanchored` back to the server (do not re-offer this account). A legitimate rotation is always signed, so it never reaches a human.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/tasks/grantDeliveryWorker.test.ts] }
       backend: { unit: [TasksSliceTest.declineReleasesJobToOtherWorkersButNeverBackToTheDecliner] }
-  - id: changed-key-review
-    text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key as pinned - verified returns only through a new compare on the profile) or refuses (leave blocked, the wrap/delivery stays gated).
-    # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
-    # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare
-    # (ChangedKeyReviewDialog.test.ts: the accept's ordering, an unreadable key, a verified contact said louder).
-    # The accept was only HALF an accept until cr-account-key-rotation-after-compromise: a decline is permanent —
-    # nothing expired one — so the re-pin authorised a wrap that nothing then performed (ADR 0028 (2)'s "the wrap
-    # then proceeds" did not hold; ADR 0060 Decision 7). `acceptKeyChange` now also clears this key-holder's own
-    # declines against that contact, and the backend refs below are that seam: the delivery becomes claimable
-    # again, and — the half that shares a table with it — a rotator's exclusion from their own rotation does not.
+  - id: a-rotated-key-is-followed-by-its-chain
+    # Was `changed-key-review`, a human accept that no longer exists. Bites in identityPins.test.ts: skip the proof
+    # signature in the walk → the identity-only step is accepted; anchor on the identity alone → the prefix attack is
+    # accepted.
+    text: A key the chain reaches from the pinned head moves the pin to the new head (every verification of the old head stops counting) with no review; a key it does not reach is an anomaly with its reason ("This person's key doesn't follow from the one you knew") and no accept; a grant signed by a retired key of the chain opens only at an epoch at or below this device's floor (granter_key_retired above it); and the declines of a delivery against an account clear when that account's chain advances (the account's publish clears them).
     coverage:
-      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts] }
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/grantTrust.test.ts, src/features/tasks/grantDeliveryWorker.anchor.test.ts] }
+      backend: { integration: [RotationSliceTest.thePublishClearsDeclinesTargetingTheRotator] }
   - id: operator-blind-pinning
-    text: Verification is client-only (compare against the sealed pin, no server call) and every pin is a Master-Key-sealed entry at an opaque id, so the operator never learns who pinned or verified whom — the trust graph stays off the server. It does learn how many pins an account holds, as it always could (ADR 0104 decision 5).
+    text: Every pin is a Master-Key-sealed entry at an opaque id, so the operator never learns who pinned whom. It does learn how many pins an account holds, as it always could (ADR 0104 decision 5). (Who verified whom is not in the pin store; uc.spaces.enforce-verified-identities says what the server sees of it.)
     # Real but indirect: no test asserts the negative (that what the server stores names no contact) as its own
     # property. Coverage here is inferred — the backend refs prove the wire shape is opaque ids, sealed entries and a
-    # sealed head, the web refs prove the compare functions make no network call — not a dedicated
+    # sealed head, the web refs prove what an entry holds — not a dedicated
     # "operator learns nothing" test. Named honestly rather than stretched; a stronger direct test is a genuine
     # gap, not a citation problem. Until ADR 0104 this text also claimed the count was hidden; the single blob's length
     # (29 + 1,771 x n bytes) had always shown it, so the claim was corrected, not defended.
@@ -58,7 +51,7 @@ acceptanceCriteria:
     # grant-delivery poller). Bitten: without the account lock the racing first writes answered a 500 (the primary
     # key); with the entries written before the head's compare-and-set the stale write's put landed; without the cap a
     # 25,001st entry landed. The 1,000-member run on the dev stack is a hand proof, not a coverage surface.
-    text: Each pin is one entry sealed under the Master Key at an opaque id only the account computes (HMAC of the contact's userId under a Master-Key-derived key), and the store's head binds the whole set by a digest. A pin, an accept and a verify write one entry plus the head in one compare-and-set on the head's revision — a stale revision lands nothing of the write, and two racing first writes answer one success and one stale_revision — so a key-holder's store grows past the old 1 MiB single-blob ceiling (444 pins) and one write stays the size of one entry. A store holds at most 25,000 entries, the bound of the one write that carries them all.
+    text: Each pin is one entry sealed under the Master Key at an opaque id only the account computes (HMAC of the contact's userId under a Master-Key-derived key), and the store's head binds the whole set by a digest. A pin, a move along the chain and a replacement write one entry plus the head in one compare-and-set on the head's revision — a stale revision lands nothing of the write, and two racing first writes answer one success and one stale_revision — so a key-holder's store grows past the old 1 MiB single-blob ceiling (444 pins) and one write stays the size of one entry. A store holds at most 25,000 entries, the bound of the one write that carries them all.
     coverage:
       backend:
         integration:
@@ -77,8 +70,19 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustReset/noServerReachesTheReset.test.ts] }
       backend: { integration: [IdentityPinsSliceTest.theListingPagesInPinIdOrderByKeyset, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
+  - id: the-join-record-anchors-a-member-per-tenant
+    # ADR 0111 decisions 12 and 15, built. Bites named in tenantTrust.test.ts / identityPins.test.ts: accept a non-owner
+    # signer → its negative reds; drop the "must install BOTH keys" check → the other-proof-key negative reds.
+    text: In a tenant a wrap, and a group grant from the active tenant, ask the member's standing there first. A member is anchored when their join record opens under the tenant key, verifies owner → invite → newcomer, names as signer another member the server lists as an owner, and carries a signer key anchored in the tenant in turn (a retired key of that owner's chain included); their chain is then walked from the step that installs the identity AND proof key the record names, and only a key at or after it counts. An owner with no join record is a root, trusted on first use by the pin. A non-owner without a join record, a record whose invite key a non-owner or nobody signed, a pending proposal, someone the directory does not list and a cycle of signers are anomalies with no chain read and no pin — never wrapped to (the delivery worker declines, a rotation declares pending). A tenant this device cannot read is an anomaly for a wrap and leaves a grant's granter to the pin alone.
+    coverage:
+      web: { unit: [src/features/account/tenantTrust.test.ts, src/features/account/identityPins.test.ts, src/features/tasks/grantDeliveryWorker.anchor.test.ts, src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/scopes.test.ts, src/features/spaces/grantTrust.test.ts] }
+  - id: a-pin-off-the-anchored-chain-is-replaced
+    # ADR 0111 decision 15 and § What stays open. The index in the pin entry is what makes the rollback case an anomaly.
+    text: A pinned head that is not on the chain a member's join record anchors is replaced - the pin moves to the anchored head, marked, and the profile says "The key you saw before wasn't theirs. Their invitation confirms this one." - only when that chain is at least as long as the pinned one was; a shorter chain is an anomaly (a possible rollback), a head pinned unread at an invite's accept is no replacement either, and a pinned head on the chain must carry the pinned key.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/core/people/PersonSafetyNumber.test.ts] }
   - id: a-refused-pin-store-is-started-over-only-by-the-user
-    text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, every verification gone, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
+    text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
     # ADR 0028 Decision 7's way back (inbox #192). Bitten: swapping the mark's set for a raise reddened the
     # rolled-back case (the reset's own write was refused); an injected write on the refusal path reddened the
     # no-server-reaches-it negative, whose control serves a readable store to the same paths and sees the writes.

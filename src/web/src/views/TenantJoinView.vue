@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// uc.admin.create-tenant Slice B (cr-0010) — the invited owner accepts and activates the tenant. The
-// bootstrap secret rides in the URL #fragment (never sent until accept). preview tells us whether the
-// invited email already has an account: a NEW owner registers cold (Emergency Kit) here, an EXISTING owner
-// signs in + unlocks. Either way the client cold-births the TENANT scope and seals the first grant to its
-// own identity — the scope key never leaves the device.
+// uc.admin.create-tenant Slice B (cr-0010), uc.spaces.add-member — the invitee accepts. The bootstrap secret rides in
+// the URL #fragment (never sent until accept). preview tells us whether the invited email already has an account: a
+// NEW invitee registers cold (Emergency Kit) here, an EXISTING one signs in + unlocks. An OWNER invite cold-births the
+// TENANT scope and seals the first grant to its own identity. A MEMBER invite (ADR 0111 decisions 1 and 3) carries a
+// sealed part after the token (`#<token>.<sealed>`): the invitee types the code the owner passed on, the client opens
+// the invite and checks it against the owner's fingerprint inside the seal before anything is sent, grants itself the
+// tenant key the invite holds and writes its join record — it is in the space at once. No key leaves the device.
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -15,7 +17,15 @@ import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
-import { previewInvite, acceptInvite, acceptOwnership, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
+import {
+  previewInvite, acceptInvite, acceptOwnership, registerAndAccept, bornTenantScope, tenantError, openMemberInvite, forgetMemberInvite,
+  memberInviteAnchored,
+  buildMemberJoin, inviteLinkMode, InviteCodeWrong, InviteCheckFailed,
+  type TenantBirth, type TenantOwner, type OpenedMemberInvite, type MemberJoin,
+} from '../features/tenant/tenantInvite'
+import type { ServedMemberInvite } from '../api/generated/tenants'
+import { parseInviteFragment } from '@veyq/crypto/invite'
+import { deriveSecretKeyProofKeypair } from '@veyq/crypto/v1'
 import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
@@ -37,7 +47,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'register' | 'kit' | 'signin' | 'done'
+type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'code' | 'register' | 'kit' | 'signin' | 'done'
 const phase = ref<Phase>('loading')
 const error = ref('')
 const busy = ref(false)
@@ -48,8 +58,8 @@ const tenantName = ref('')
 const tenantId = ref('')
 const domain = ref('')
 const ownerEmail = ref('')
-// The invite's role (cr-0077): an OWNER cold-births the TENANT scope + seals the first grant; a MEMBER joins
-// grant-less (no scope birth, no grant) and a key-holder delivers the key later (cr-0076).
+// The invite's role (cr-0077): an OWNER cold-births the TENANT scope + seals the first grant; a MEMBER opens its
+// invite's grant with the code and grants itself the tenant key (ADR 0111 decision 3).
 const role = ref<InviteRole>(InviteRole.Owner)
 const isMember = computed(() => role.value === InviteRole.Member)
 // An OWNER invite into an ACTIVE tenant whose member the invitee already is (ADR 0101 decision 9): accepting makes them
@@ -64,13 +74,12 @@ function jcopy(base: string, params?: Record<string, unknown>): string {
   return t(`tenant.join.${base}${variant}`, params ?? {})
 }
 
-// register + signin form: the per-tenant handle chosen on join (ADR 0023), plus an OPTIONAL real name. For an
-// OWNER accept the client cold-births K_tenant here, so it can seal the name at join (cr-0106); a grant-less
-// MEMBER has no key yet, so its name field is hidden and the name is added later in profile settings.
+// register + signin form: the per-tenant handle chosen on join (ADR 0023), plus an OPTIONAL real name and picture,
+// sealed under K_tenant at join — born here for an OWNER, opened from the invite's grant for a MEMBER (cr-0106).
 const username = ref('')
 const firstName = ref('')
 const lastName = ref('')
-// The optional picture's encoded bytes (OWNER only, ADR 0084): sealed with the born tenant key at accept, never held anywhere else.
+// The optional picture's encoded bytes (ADR 0084): sealed with the tenant key at accept, never held anywhere else.
 const avatarBytes = shallowRef<Uint8Array | null>(null)
 const password = ref('')
 const { state: breachState, useAnyway, checkNow: checkBreaches, proceed: breachCheckPasses } = useBreachCheck(password)
@@ -87,13 +96,23 @@ const usernameReady = computed(() => handover.value || username.value.trim().len
 // This browser already holds the INVITED owner's unlocked vault (same-origin setup → create-tenant flow):
 // the identity key is in memory, so we can seal the grant and accept in one click — no password, no Secret
 // Key. Gated on the email so we never seal to a different signed-in identity (the server also enforces this).
+// A MEMBER's join record names its Secret-Key proof key (ADR 0111 decision 9), which only the Secret Key derives — so a
+// MEMBER invite always takes the sign-in form, which asks for it.
 const alreadyUnlocked = computed(
-  () => vaultState.unlocked && account.email.trim().toLowerCase() === ownerEmail.value.trim().toLowerCase(),
+  () => !isMember.value && vaultState.unlocked && account.email.trim().toLowerCase() === ownerEmail.value.trim().toLowerCase(),
 )
 
-const secret = String(route.hash || '').replace(/^#/, '')
+// The fragment: the token, and — for a MEMBER invite — the sealed part the code opens (ADR 0111 decision 1).
+const fragment = parseInviteFragment(String(route.hash || ''))
+const secret = fragment.token
 // Non-reactive: keep the freshly born identity's Uint8Arrays out of Vue's deep proxy.
 let built: BuiltAccount | null = null
+// A MEMBER invite: what the preview served, and — once the code opened and checked it — the invite and its tenant key.
+let served: ServedMemberInvite | null = null
+let openedInvite: OpenedMemberInvite | null = null
+// The code (or password) the owner passed on outside veyq; which of the two the link asks for is in its clear header.
+const code = ref('')
+const codeMode = ref<'code' | 'password'>('code')
 
 onMounted(async () => {
   if (!secret) {
@@ -114,12 +133,57 @@ onMounted(async () => {
     ownerEmail.value = p.ownerEmail
     role.value = p.role
     handover.value = p.handover
+    if (p.role === InviteRole.Member) {
+      // A member invite opens only with its sealed part and the code: without them, or with one this client cannot
+      // read, the link cannot be checked — refused before anything else.
+      const mode = fragment.sealed ? inviteLinkMode(fragment.sealed) : null
+      if (!p.invite || !mode) {
+        phase.value = 'invalid'
+        return
+      }
+      served = p.invite
+      codeMode.value = mode
+      hasAccount = p.hasAccount
+      phase.value = 'code'
+      return
+    }
     phase.value = p.hasAccount || p.handover ? 'signin' : 'register'
   } catch (e) {
     const { status } = await tenantError(e)
     phase.value = status === HttpStatus.gone ? 'expired' : 'invalid'
   }
 })
+
+let hasAccount = false
+
+/**
+ * A MEMBER invite's first step: open the link's sealed part with the code and check the invite before anything is
+ * sent (ADR 0111 decision 1) — a wrong code is the invitee's to retype; a check that fails is "ask for a new one".
+ */
+async function openWithCode() {
+  if (!served || !fragment.sealed || code.value.trim().length === 0) return
+  error.value = ''
+  busy.value = true
+  try {
+    openedInvite = await openMemberInvite(tenantId.value, served, fragment.sealed, code.value)
+    code.value = ''
+    phase.value = hasAccount ? 'signin' : 'register'
+  } catch (e) {
+    if (e instanceof InviteCodeWrong) error.value = t(codeMode.value === 'code' ? 'tenant.join.codeWrong' : 'tenant.join.passwordWrong')
+    else if (e instanceof InviteCheckFailed) error.value = t('tenant.join.inviteUncheckable')
+    else error.value = t('tenant.join.failed')
+  } finally {
+    busy.value = false
+  }
+}
+
+/** The MEMBER join for [userId] under [identity] (ADR 0111 decision 3), with the Secret-Key proof key it names. */
+function memberJoinFor(
+  userId: string, identity: TenantOwner['identity'], secretKeyProofPublicKey: Uint8Array,
+): MemberJoin {
+  if (!openedInvite) throw new Error('invite not opened')
+  return buildMemberJoin(openedInvite, { userId, identity, secretKeyProofPublicKey })
+}
 
 /** Register step 1: build the account on-device and show its Emergency Kit before activating. */
 async function prepareRegistration() {
@@ -144,16 +208,16 @@ async function prepareRegistration() {
   }
 }
 
-/** Seal the OPTIONAL real name under the freshly-born K_tenant, or undefined when both fields are empty. Only
- *  called on the OWNER path (which holds K_tenant at accept); a grant-less MEMBER never reaches it. */
+/** Seal the OPTIONAL real name under K_tenant (born for an OWNER, opened from the invite for a MEMBER), or undefined
+ *  when both fields are empty. */
 function sealedNameFor(scopeRootKey: Uint8Array, userId: string): string | undefined {
   if (!firstName.value.trim() && !lastName.value.trim()) return undefined
   // Bound to (this tenant scope, the member it names) — ADR 0072.
   return sealName(scopeRootKey, { scopeId: tenantId.value, userId }, { firstName: firstName.value, lastName: lastName.value })
 }
 
-/** Seal the OPTIONAL picture under the same freshly-born K_tenant (`member-avatar`, bound to the tenant scope and the member), or
- *  undefined when none was chosen. OWNER path only - a MEMBER's body never carries it (it holds no key at join). */
+/** Seal the OPTIONAL picture under the same K_tenant (`member-avatar`, bound to the tenant scope and the member), or
+ *  undefined when none was chosen. */
 function sealedAvatarFor(scopeRootKey: Uint8Array, userId: string): string | undefined {
   return avatarBytes.value ? sealAvatar(scopeRootKey, { scopeId: tenantId.value, userId }, avatarBytes.value) : undefined
 }
@@ -170,21 +234,25 @@ async function finishRegistration() {
   error.value = ''
   busy.value = true
   try {
-    // A MEMBER joins grant-less (no scope birth, no name); only an OWNER cold-births the TENANT scope + seals a
-    // grant — and, holding K_tenant here, can seal the optional real name at join (cr-0106).
-    // The new account's id is minted here, before the account exists — the optional name is sealed bound to it.
+    // An OWNER cold-births the TENANT scope + seals a grant; a MEMBER grants itself the key its invite holds and writes
+    // its join record (ADR 0111 decision 3). Either holds K_tenant here, so the optional name and picture are sealed at
+    // join (cr-0106). The new account's id is minted here, before the account exists — everything is bound to it.
     const userId = crypto.randomUUID()
     let birth: TenantBirth | undefined
-    let sealedName: string | undefined
-    let sealedAvatar: string | undefined
-    if (!isMember.value) {
+    let join: MemberJoin | undefined
+    let tenantKey: Uint8Array
+    if (isMember.value) {
+      join = memberJoinFor(userId, built.identity, fromB64std(built.material.secretKeyProofPublicKey))
+      tenantKey = openedInvite!.epochKey
+    } else {
       const born = bornTenantScope({ userId, identity: built.identity }, tenantId.value)
       birth = born.birth
-      sealedName = sealedNameFor(born.scopeRootKey, userId)
-      sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
+      tenantKey = born.scopeRootKey
     }
-    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName, sealedAvatar)
-    phase.value = 'done'
+    const sealedName = sealedNameFor(tenantKey, userId)
+    const sealedAvatar = sealedAvatarFor(tenantKey, userId)
+    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName, sealedAvatar, join)
+    finish()
   } catch (e) {
     error.value = await mapError(e)
   } finally {
@@ -207,23 +275,40 @@ async function signInAndAccept() {
     }
     const priv = identityPrivate()
     if (!priv) throw new Error('locked')
-    let birth: TenantBirth | undefined
-    let sealedName: string | undefined
-    let sealedAvatar: string | undefined
-    if (!isMember.value) {
+    if (isMember.value) {
+      // The link anchored the inviting owner's key; this account's pin store must not know them under a key their chain
+      // does not reach. A grant a rotation re-wrapped is trusted on first use, and refused on an anomaly.
+      if (!(await memberInviteAnchored(openedInvite!))) {
+        error.value = t('tenant.join.inviteUncheckable')
+        return
+      }
       const userId = await myUserId()
-      const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
-      birth = born.birth
-      sealedName = sealedNameFor(born.scopeRootKey, userId)
-      sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
+      const proofKey = deriveSecretKeyProofKeypair(fromB64std(secretKey.value.trim())).publicKey
+      const join = memberJoinFor(userId, ownerOf(userId, priv).identity, proofKey)
+      const tenantKey = openedInvite!.epochKey
+      await acceptInvite(secret, username.value.trim().toLowerCase(), undefined, sealedNameFor(tenantKey, userId), sealedAvatarFor(tenantKey, userId), join)
+      finish()
+      return
     }
-    await acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar)
-    phase.value = 'done'
+    const userId = await myUserId()
+    const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
+    await acceptInvite(
+      secret, username.value.trim().toLowerCase(), born.birth,
+      sealedNameFor(born.scopeRootKey, userId), sealedAvatarFor(born.scopeRootKey, userId),
+    )
+    finish()
   } catch (e) {
     error.value = await mapError(e)
   } finally {
     busy.value = false
   }
+}
+
+/** The accept went through: the invite's keys are wiped, and the done step says what the invitee holds now. */
+function finish() {
+  if (openedInvite) forgetMemberInvite(openedInvite)
+  openedInvite = null
+  phase.value = 'done'
 }
 
 /** With an already-unlocked identity in memory, cold-birth the scope grant and accept. acceptInvite isn't
@@ -235,18 +320,14 @@ async function sealAndAccept() {
     phase.value = 'done'
     return
   }
+  // An OWNER invite only: a MEMBER takes the sign-in form (its join record needs the Secret Key, see alreadyUnlocked).
   const priv = identityPrivate()
   if (!priv) throw new Error('locked')
-  let birth: TenantBirth | undefined
-  let sealedName: string | undefined
-  let sealedAvatar: string | undefined
-  if (!isMember.value) {
-    const userId = await myUserId()
-    const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
-    birth = born.birth
-    sealedName = sealedNameFor(born.scopeRootKey, userId)
-    sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
-  }
+  const userId = await myUserId()
+  const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
+  const birth = born.birth
+  const sealedName = sealedNameFor(born.scopeRootKey, userId)
+  const sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
   await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar))
   password.value = ''
   phase.value = 'done'
@@ -302,6 +383,7 @@ async function mapError(e: unknown): Promise<string> {
   if (code === 'username_taken') return t('tenant.join.usernameTaken')
   if (code === 'not_invited_owner') return t('tenant.join.wrongOwner')
   if (code === 'not_tenant_member') return t('tenant.join.notMemberHandover')
+  if (code === 'invite_proof_invalid') return t('tenant.join.inviteUncheckable')
   return t('tenant.join.failed')
 }
 </script>
@@ -316,6 +398,19 @@ async function mapError(e: unknown): Promise<string> {
       <VeyqMessage v-else-if="phase === 'invalid'" tone="error">{{ t('tenant.join.invalid') }}</VeyqMessage>
       <VeyqMessage v-else-if="phase === 'expired'" tone="warn">{{ t('tenant.join.expired') }}</VeyqMessage>
 
+      <template v-else-if="phase === 'code'">
+        <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
+        <p class="veyq-form-copy">{{ t(codeMode === 'code' ? 'tenant.join.codeSub' : 'tenant.join.passwordSub') }}</p>
+        <form class="veyq-form" @submit.prevent="openWithCode">
+          <label v-if="codeMode === 'code'">{{ t('tenant.join.code') }}
+            <VeyqInput v-model="code" name="invite-code" autocomplete="off" required />
+          </label>
+          <label v-else>{{ t('tenant.join.invitePassword') }}<VeyqPassword v-model="code" input-id="invite-password" /></label>
+          <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+          <VeyqButton type="submit" :label="t('tenant.join.continue')" icon="arrow-right" :loading="busy" :disabled="code.trim().length === 0" />
+        </form>
+      </template>
+
       <template v-else-if="phase === 'register'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
         <p class="veyq-form-copy">{{ jcopy('registerSub', { email: ownerEmail }) }}</p>
@@ -325,7 +420,7 @@ async function mapError(e: unknown): Promise<string> {
             <VeyqInput v-model="username" name="username" autocomplete="username" required />
             <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
           </label>
-          <template v-if="!isMember">
+          <template v-if="!handover">
             <div class="name-row">
               <label>{{ t('profile.firstName') }}
                 <VeyqInput v-model="firstName" name="given-name" autocomplete="given-name" />
@@ -365,7 +460,7 @@ async function mapError(e: unknown): Promise<string> {
           <VeyqInput v-model="username" name="username" autocomplete="username" required />
           <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
         </label>
-        <template v-if="!isMember && !handover">
+        <template v-if="!handover">
           <div class="name-row">
             <label class="veyq-form-field">{{ t('profile.firstName') }}
               <VeyqInput v-model="firstName" name="given-name" autocomplete="given-name" />

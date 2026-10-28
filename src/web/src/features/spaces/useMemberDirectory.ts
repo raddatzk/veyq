@@ -1,16 +1,16 @@
 // Shared member-directory core for the tenant + group members panels (cr-0156, audit #74/P3d). Both panels
-// repeated the same skeleton by copy — the member list + identity-trust state, the byte-identical `refreshTrust`
-// and changed-key review wiring, and the load path (on the cr-0155 `useAsyncData` + `handle401` primitives with
+// repeated the same skeleton by copy — the member list + identity-trust state, the byte-identical `refreshTrust`,
+// and the load path (on the cr-0155 `useAsyncData` + `handle401` primitives with
 // the `loadErrorKind` enum). This is that skeleton, once. Each panel keeps its own divergent halves (Tenant:
 // invite-by-email + K_tenant name-decrypt; Group: add-by-username + role/rotation/rename/lifecycle) and passes a
 // `loadBody` that fetches its rows + resolves ownership; the composable owns everything the two share.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ScopeMember } from './members'
-import { trustStates, type ContactTrust } from '../account/identityPins'
+import { tenantBadges, type MemberBadge } from '../account/tenantTrust'
+import { activeSpace } from '../../app/activeSpace'
+import { account } from '../../app/account'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
-import { admissionVerifies } from './grant'
-import type { ScopeKind } from '../../api/generated/scopes'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { handle401 } from '../../shared/handle401'
 
@@ -20,40 +20,23 @@ export interface MemberLoad {
   isOwner: boolean
 }
 
-/** The key a panel's scope is admitted under: its current epoch key and that epoch. `release` zeroes a key the
- *  panel opened for this read (a key the active space owns is not released). */
-export interface AdmissionKey {
-  scopeId: string
-  kind: ScopeKind
-  key: Uint8Array
-  epoch: number
-  release?: () => void
-}
-
-export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissionKey?: () => Promise<AdmissionKey | null>) {
+export function useMemberDirectory(loadBody: () => Promise<MemberLoad>) {
   const on401 = handle401(useRouter())
 
   const members = ref<ScopeMember[]>([])
   const isOwner = ref(false)
-  // Identity trust (cr-0099, ADR 0028 Decision 3): per-member trust from the sealed pin store - `verified` (compared on
-  // the member's profile) and `changed` (a key differing from the pin: a rotation or a substitution, louder when the
-  // pin was verified) are shown in the list; `changed` drives the review dialog.
-  const trust = ref<Record<string, ContactTrust>>({})
+  // Identity trust in the active tenant (ADR 0111 decision 15): per-member badges from `tenantBadges` - `verified` (a
+  // verification of the member's current head counts there), `new`, `unverified`, and `anomaly` (a key the tenant does
+  // not anchor). A GROUP's list reads its tenant's badges: a group lives in the active tenant. No review, no accept.
+  const trust = ref<Record<string, MemberBadge>>({})
   // The i18n key naming why this device refused its own pin store (ADR 0028 Decision 7), or null. Every wrap to a
   // foreign key is blocked while it holds, so the panel says so rather than showing a directory with no flags.
   const trustRefusal = ref<string | null>(null)
-  const reviewTarget = ref<ScopeMember | null>(null)
-  const reviewOpen = ref(false)
-  // Admission (ADR 0020 move 6): a pending member whose admission tag does not verify under this scope's current
-  // epoch key is one no key-holder's worker will deliver to (it declines `admission_unverified`). Surfaced beside
-  // the changed-key badge, the same way — the member would otherwise just sit "awaiting access" forever.
-  const unadmitted = ref<Record<string, true>>({})
-
-  // Read every member's trust state in one fetch. Vault-gated: degrade to no flags rather than break the directory if
-  // the store/identity is unavailable.
+  // Read every member's badge in one read of the tenant. Vault-gated: degrade to no flags rather than break the directory
+  // if the store/identity is unavailable.
   async function refreshTrust() {
     try {
-      trust.value = await trustStates(members.value.map((m) => ({ userId: m.userId, directoryKey: m.identityPublicKey })))
+      trust.value = activeSpace.tenantId ? await tenantBadges(activeSpace.tenantId, account.userId || undefined) : {}
       trustRefusal.value = null
     } catch (e) {
       trust.value = {}
@@ -61,46 +44,15 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
     }
   }
 
-  // Verify every pending member's admission with the key this device holds — the check the worker runs before it
-  // wraps. Degrades to no flags (never a broken directory) when the key cannot be had.
-  async function refreshAdmission() {
-    if (!admissionKey) return
-    try {
-      const held = await admissionKey()
-      if (!held) {
-        unadmitted.value = {}
-        return
-      }
-      try {
-        const out: Record<string, true> = {}
-        for (const m of members.value) {
-          if (m.hasGrant || m.pendingConsent) continue
-          if (!admissionVerifies(held.key, held.epoch, held, m.userId, m)) out[m.userId] = true
-        }
-        unadmitted.value = out
-      } finally {
-        held.release?.()
-      }
-    } catch {
-      unadmitted.value = {}
-    }
-  }
-
-  function openReview(member: ScopeMember) {
-    reviewTarget.value = member
-    reviewOpen.value = true
-  }
-
   const { pending: loading, error, reload } = useAsyncData(async () => {
     const loaded = await loadBody()
     members.value = loaded.rows
     isOwner.value = loaded.isOwner
     await refreshTrust()
-    await refreshAdmission()
   }, { onError: on401 })
   // The panels' shared load-error enum: 403 → in the scope but not a key-holder, else → failed, 401 → the
   // redirect handled it. (A non-member gets 404 → failed; see `loadErrorKind`.)
   const loadError = computed<'' | 'notAuthorized' | 'failed'>(() => loadErrorKind(error.value) ?? '')
 
-  return { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 }
+  return { members, isOwner, trust, trustRefusal, loading, loadError, refreshTrust, reload, on401 }
 }

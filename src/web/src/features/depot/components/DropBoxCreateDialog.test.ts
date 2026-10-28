@@ -69,7 +69,7 @@ describe('DropBoxCreateDialog', () => {
 
   it('a free name is created under the parent, trimmed', async () => {
     const w = await createWith('  Fotos  ')
-    expect(createDropBox).toHaveBeenCalledWith(SCOPE, EPOCHS, { id: 'p', key: KEY, epoch: 0 }, 'Fotos', { reread: expect.any(Function) })
+    expect(createDropBox).toHaveBeenCalledWith(SCOPE, EPOCHS, { id: 'p', key: KEY, epoch: 0 }, 'Fotos', { reread: expect.any(Function), pull: expect.any(Function) })
     expect(w.emitted('done')).toBeTruthy()
   })
 

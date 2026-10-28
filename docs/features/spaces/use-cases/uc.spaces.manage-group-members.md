@@ -27,8 +27,11 @@
    - The server **deletes** the membership — the instant **layer-1** cut (a 403 on the scope) — and commits the
      epoch in **one transaction**. It refuses a request whose grants name the removed member, and applies the
      last-owner guard. A failed removal leaves the member in place; there is no removal without its rotation.
-   - Members the rotation could not re-grant (a changed key, an unverified admission) get the new epoch later by
-     grant-delivery; until then their scope reads as awaiting access and they write nothing (A4). New content
+   - Members the rotation could not re-grant (a key the owner's client cannot anchor) are declared pending in the
+     request, which the server requires (`409 rotation_incomplete` otherwise), and get the new epoch later by
+     grant-delivery from any member who anchors them; until then
+     their scope reads as *waiting for the current key* and they write nothing (A4). A pending consent proposal is
+     re-granted like any member: it holds the group's key from its add on. New content
      seals under the new epoch. The removed member keeps the old epoch → reads pre-removal content, **never**
      post-removal content — against a malicious operator as far as ADR 0024 § Guarantee states.
 
@@ -49,7 +52,7 @@
   (ADR 0024 § Guarantee). A group owner's own removal never queues: it is step 4's one request.
 - **A3 — a non-owner attempts an action:** rejected (owner-gated, enforced by code, [ADR 0008](../../../decisions/0008-centralized-http-auth.md)).
 - **A4 — a member whose grant is older than the current epoch** (a rotation skipped them, or its re-grant has not
-  arrived): their client reads the scope as awaiting access and writes nothing into it until re-granted, and the
+  arrived): their client reads the scope as waiting for the current key and writes nothing into it until re-granted, and the
   server refuses a node create tagged with an older epoch (`409 stale_epoch`) — content under an old epoch would
   be readable by every member removed since ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 6).
 - **A5 — turn off every link of the group.** An owner may turn off every public link of the group at once — on a
@@ -72,9 +75,9 @@
 
 - **Operator-blind.** Role changes + membership deletion are operational metadata the server already holds; the
   rotation stores only opaque epoch links + grants + a per-node epoch index — never a key or a name.
-- **Admission stays owner-gated; delivery is any key-holder.** Only an OWNER may change roles or remove; a
-  re-grant the removal's rotation had to skip is completed by any online key-holder (first-online-wins), matching
-  the add-member split ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
+- **Membership stays owner-gated; a skipped re-grant is any key-holder's.** Only an OWNER may change roles or
+  remove; a re-grant the removal's rotation had to skip is completed by any online key-holder (first-online-wins)
+  ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
 - **Roles are per-scope.** A group OWNER/MEMBER is independent of any tenant role — a GroupOwner need not be the
   tenant owner, and the tenant owner has no say over group roles ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).
 

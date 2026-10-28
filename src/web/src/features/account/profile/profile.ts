@@ -8,10 +8,11 @@ import { openScope } from '../../spaces/scopes'
 import { ScopeKind } from '../../../api/generated/scopes'
 import type { MemberProfile } from '../../../api/generated/account'
 import type { MemberNameAddress } from './memberName'
+import type { EpochKeys } from '../../spaces/epochs'
 
 export type { MemberProfile } from '../../../api/generated/account'
-export { sealName, unsealName, type MemberName } from './memberName'
-export { sealAvatar } from './memberAvatar'
+export { sealName, unsealName, unsealNameUnderEpochs, type MemberName } from './memberName'
+export { sealAvatar, openAvatarUnderEpochs } from './memberAvatar'
 
 /** The caller's profile in the active tenant (Host-resolved): the plaintext handle + the sealed name blob. */
 export function getMyProfile(): Promise<MemberProfile> {
@@ -53,16 +54,26 @@ export async function myUserId(): Promise<string> {
   return (await withRefresh(() => accountApi().getAccountKeyMaterial())).userId
 }
 
+/** What the caller's own name and picture are sealed and opened with: `key` (the tenant's write key, the current epoch's,
+ *  which a save seals under), `epochs` (every tenant epoch key held, which a read tries — the profile row records no
+ *  epoch, `memberName.ts` § `unsealNameUnderEpochs`), the tenant's id and the address (tenant scope, own user id). */
+export interface OwnNameKey {
+  key: Uint8Array
+  epochs: EpochKeys
+  tenantId: string
+  address: MemberNameAddress
+}
+
 /**
- * `K_tenant` plus the address the caller's **own** name is sealed at — (the tenant scope, the caller's user id)
+ * The tenant's keys plus the address the caller's **own** name is sealed at — (the tenant scope, the caller's user id)
  * (ADR 0072). The user id comes from the caller's own key material, the one read that hands it over; null when
  * the caller holds no tenant grant yet.
  */
-export async function openOwnNameKey(): Promise<{ key: Uint8Array; address: MemberNameAddress } | null> {
+export async function openOwnNameKey(): Promise<OwnNameKey | null> {
   const [tenant, material] = await Promise.all([
     openScope(ScopeKind.Tenant),
     withRefresh(() => accountApi().getAccountKeyMaterial()),
   ])
   if (!tenant) return null
-  return { key: tenant.key, address: { scopeId: tenant.scopeId, userId: material.userId } }
+  return { key: tenant.key, epochs: tenant.epochs, tenantId: tenant.tenantId, address: { scopeId: tenant.scopeId, userId: material.userId } }
 }

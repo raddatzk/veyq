@@ -31,6 +31,7 @@ import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.scope.MembershipEraser
+import me.raddatz.veyq.core.admin.tenant.VerificationMembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.CoreTestGuestCreatableKinds
@@ -93,8 +94,8 @@ import org.junit.jupiter.api.Test
  *
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's four (attachments, pins, nodes, shares),
  *    `NodeKindRules`, `ShareRoots` and `GuestPlaceholders` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
- *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
- *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
+ *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), `MembershipEraser` core's tenant
+ *    verifications (ADR 0111 decision 12), and every other seam — `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
  *    `GuestCreatableKinds`, `MemberBlobRoles` — none. The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
@@ -184,8 +185,10 @@ class CoreAloneSliceTest {
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
+        assertEquals(setOf(VerificationMembershipEraser::class.java), classes(membershipErasers),
+            "MembershipEraser: core's tenant verifications only (ADR 0111 decision 12)")
         for ((seam, beans) in mapOf(
-            "MembershipEraser" to membershipErasers, "NodeRekeyParticipant" to rekeyParticipants,
+            "NodeRekeyParticipant" to rekeyParticipants,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
             "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
         )) {

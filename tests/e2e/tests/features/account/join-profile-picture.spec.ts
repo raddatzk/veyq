@@ -6,9 +6,11 @@
 //      frame in the cropper, use — seals the picture with the name and sends it with the accept. A new tenant, created
 //      by the Server Owner, is accepted by a fresh account that way; signed in on a new document, its sidebar avatar is
 //      the picture (fetched as ciphertext, opened on the device), its name reads back, and no notice asks for either.
-//   2. At join, as a MEMBER (A3): no key yet, so the join page offers no picture (nor name). That owner sets its space's
-//      mail to the run's relay and invites a fresh account, which registers from the mailed link; the owner's device
-//      delivers the key (first-online-wins). On the member's next document the notice shows — once: "Not now" stores
+//   2. At join, as a MEMBER (A3): the code opens the invite's grant, so the member holds `K_tenant` at accept and the
+//      join page offers a name and a picture too (ADR 0111) — both optional, and this member skips them. That owner
+//      sets its space's mail to the run's relay and invites a fresh account, which registers from the mailed link with
+//      the code the owner was shown; its row is Active at once, no delivery waited for. A member who skipped both is
+//      what the notice exists for. On the member's next document the notice shows — once: "Not now" stores
 //      the dismissal for that user on that browser (`veyq.finishProfileDismissed:u:<userId>` in localStorage, a flag,
 //      never an image), so a reload shows nothing; on a second browser of the same member it shows again (the flag is
 //      per browser by design), and following its link to Your profile dismisses it there too. The member, now holding
@@ -16,9 +18,8 @@
 //
 // Everything happens in a tenant of its own ("E2E Picture"), so the shared tenant every domain project starts from is
 // untouched; the tenant stays, as moderation.spec.ts's and server-owner-statement.spec.ts's do. Left out: that a member
-// holding no key yet sees no notice — the owner's device is online from the first test and delivers the key whenever
-// its poll runs (uc.spaces.add-member step 3), so that state has no window a browser could hold still; the notice's
-// absence before the key is FinishProfilePrompt.test.ts's. The labels are src/web/'s and admin-web's own (each
+// holding no current key sees no notice — a new member holds it from its accept on, so that state has no window a
+// browser could hold still; the notice's absence before the key is FinishProfilePrompt.test.ts's. The labels are src/web/'s and admin-web's own (each
 // package's i18n, en). Every name and secret typed is a canary (recordTyped); the handles are declared plaintext.
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
@@ -245,7 +246,7 @@ test(
 )
 
 test(
-  'a member invited by mail joins with no picture offered, and signs in',
+  'a member invited by mail opens the invite with its code, skips the name and picture offered, and signs in',
   { tag: '@uc.spaces.set-profile-picture:set-at-join-or-after-first-unlock' },
   async () => {
     const { page } = owner
@@ -268,6 +269,8 @@ test(
     await invite.getByLabel('Email address').fill(fresh.email)
     await invite.getByRole('button', { name: 'Send invite' }).click()
     await expect(invite.getByText(`Invitation sent to ${fresh.email}.`)).toBeVisible({ timeout: 30_000 })
+    // The code is shown once, here, and travels outside veyq (ADR 0111 decision 1): never in the mail, never on the wire.
+    const code = recordTyped((await invite.getByTestId('invite-code').textContent())!.trim())
     await invite.getByRole('button', { name: 'Done' }).click()
 
     const [mail] = await awaitMails(fresh.email, new RegExp(`^You're invited to ${escape(pictureDomain())} `))
@@ -275,13 +278,16 @@ test(
     expect(link, `an invite link in:\n${mail!.text}`).toBeDefined()
     expect(new URL(link!).origin, 'the invite opens on the tenant domain').toBe(pictureOrigin())
 
-    // A member holds no tenant key at accept, so the join page asks for a handle only — no name, no picture.
+    // The link alone opens nothing: the code opens its sealed part, the client checks the invite, and the member then
+    // holds the tenant key at accept — so the join page offers a name and a picture, as it does an owner. Both skipped.
     const tab = member.page
     await tab.goto(link!)
     await expect(tab.getByText(`You have been invited to join “${TENANT}” (${pictureDomain()}).`)).toBeVisible({ timeout: 60_000 })
+    await tab.getByRole('textbox', { name: 'Code', exact: true }).fill(code)
+    await tab.getByRole('button', { name: 'Continue' }).click()
     await expect(tab.getByLabel('Username')).toBeVisible()
-    await expect(tab.getByTestId('join-picture'), 'no picture is offered to a member at join').toHaveCount(0)
-    await expect(tab.getByLabel('First name'), 'nor a name').toHaveCount(0)
+    await expect(tab.getByTestId('join-picture'), 'a picture is offered to a member at join').toHaveCount(1)
+    await expect(tab.getByLabel('First name'), 'and a name').toHaveCount(1)
     await tab.getByLabel('Username').fill(handles.member)
     await tab.locator('#join-password').fill(recordTyped(fresh.password))
     await tab.getByRole('button', { name: 'Continue' }).click()
@@ -301,15 +307,13 @@ test(
 )
 
 test(
-  'the owner\'s device delivers the space\'s key to the new member',
+  'the new member holds the space\'s key from its accept on',
   { tag: '@uc.spaces.set-profile-picture:set-at-join-or-after-first-unlock' },
   async () => {
     const { page } = owner
-    // Each entry into the space runs the delivery at once (grantDeliveryPolling.ts); the row turns Active once it took.
-    await expect(async () => {
-      await openSettingsOn(owner, accountOwner, 'Members')
-      await expect(memberRow(page, handles.member).locator('.veyq-badge').first()).toHaveText('Active', { timeout: 10_000 })
-    }).toPass({ timeout: 90_000, intervals: [2_000] })
+    // The member granted itself the key at its accept (ADR 0111): its row is Active at once, no delivery waited for.
+    await openSettingsOn(owner, accountOwner, 'Members')
+    await expect(memberRow(page, handles.member).locator('.veyq-badge').first()).toHaveText('Active', { timeout: 30_000 })
   },
 )
 

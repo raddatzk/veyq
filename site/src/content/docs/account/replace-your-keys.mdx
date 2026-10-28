@@ -1,79 +1,92 @@
 ---
-title: "Replace your keys"
+title: "Secure your account"
 sources:
   - docs/features/account/use-cases/uc.account.rotate-keys.md
-  - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
   - docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
 
-For an emergency: someone else has your keys, for example through a device you approved that wasn't yours.
+For when someone else may have your password, your Secret Key, or a device that was signed in to your account.
 
 ## What gets replaced
 
-Your **Master Key** and your **identity**. Your password, Secret Key and Emergency Kit stay as they are.
+Your **Master Key**, your **identity** and your **Secret Key**. So you get a new **Emergency Kit**, and your old kit
+stops working once your account is secured. You can choose a new password at the same time; it is offered and
+pre-selected, and we recommend it.
 
 ## Why
 
 Signing a device out ends its access to the server, not the keys it holds. New keys shut those out of everything
-added from now on.
+added from now on. A new Secret Key also shuts out someone who copied your Emergency Kit.
 
 ## Do you need this?
 
-Only if a device that isn't yours had your keys. For a lost device of your own, choose **Sign out and remove this
-device's saved key** instead ([Devices and sessions](/veyq/account/devices-and-sessions/)).
+Only if someone else may have your password, your Secret Key or a device that was signed in to your account. For a
+lost device of your own, choose **Sign out and remove this device's saved key** instead
+([Devices and sessions](/veyq/account/devices-and-sessions/)).
 
-## What it costs
+## What happens
 
-- **Everyone sees that your key changed.** Whoever had verified you compares the safety number again.
-- **You are outside every shared space until someone there confirms your new key**
-  ([Verify a person](/veyq/account/verify-a-person/)).
-- **Every other device is signed out** and needs your password and Secret Key again, or to be added from this one
-  with **Add a device**.
-- **Open group invitations to you lapse.**
-- **It can't be undone.** What is there now stays readable to the old key; only what is added afterwards is closed
-  to it.
-- **Links made before stay open to the old key until you renew them**
+- **You keep every space you are in.** The people there see that your account was secured; nobody has to confirm
+  anything. Their apps accept your new identity because your old one signed it: your profile shows them **New
+  identity, signed by their previous key** with the date.
+- **All your devices are signed out.** Each signs in again with your password and your **new** Emergency Kit, or you
+  add it from this one with **Add a device**. The device you secure your account on stays unlocked, even after you
+  reload the page.
+- **You get a new Emergency Kit.** You save it before anything changes, and your old kit stops working once your
+  account is secured.
+- **Invitations you sent that were not accepted yet stop working.** Send them again afterwards.
+- **It can't be undone.** What someone else already saw stays seen. Only what is added afterwards is closed to them.
+- **Links you made before stay open until you renew them.** You see a list at the end
   ([Renew a link](/veyq/sharing/manage-links/)).
 
-Two things before you start:
+Before the fields, the page lists any space that can't get its new lock yet, and why: it is paused, it is being
+deleted, or this device can't open it, so it is already closed to you.
 
-- **If you are the only owner of a shared space, the page lists it by name.** Make someone else an owner there
-  first, or that space keeps the old lock.
-- **You need your Emergency Kit.** Without it, your keys can't be replaced. Keep it where only you can reach it.
+You need your current **Emergency Kit** to start. Without it, your account can't be secured.
 
-## Replace them
+## Secure it
 
-1. Open the menu at the bottom of the sidebar and choose **Settings**, then **Security**.
-2. Under **Replace your keys**, enter **Your password** and **Your Secret Key**.
-3. Choose **Replace my keys** and confirm with **Replace my keys** in the dialog.
+1. Open the menu at the bottom of the sidebar and choose **Settings**, then **Secure your account**.
+2. Enter **Your password** and **Your Secret Key**, the one from your current Emergency Kit.
+3. **Also choose a new password** is already ticked. Enter **New password** and **Confirm new password**, or untick it
+   to keep yours.
+4. Choose **Continue**. If the password or Secret Key doesn't match, you stay on this step and nothing has changed.
+5. Under **Your new Emergency Kit**, choose **Download Emergency Kit (PDF)** and keep the file where only you can reach
+   it. Keep your old kit until the page says your account is secured.
+6. Tick **I have saved my Emergency Kit somewhere safe.** The button stays off until you have.
+7. Choose **Secure your account** and confirm with **Secure your account** in the dialog.
 
-<Screenshot id="account-replace-keys" shows="The Replace your keys block under Security: what gets replaced, why, when, What it costs, the list of spaces where you are the only owner, a shared space reading Nobody can do it, the password and Secret Key fields and the Replace my keys button" />
+<Screenshot id="account-replace-keys" shows="The Secure your account page under Settings: What happens with its list, the password and Secret Key fields with Also choose a new password ticked, and the Continue button" />
 
-If the page says the request is larger than this server accepts, nothing was changed and trying again won't help.
-Ask whoever runs your server to raise its request limit.
-
-The page then says **Your keys are replaced** and lists each space with its state:
+The page then says **Your account is secured. Your old Emergency Kit no longer works, so you can destroy it.** Under
+**Your spaces** each space shows its state:
 
 - **New lock.** What is added here from now on is closed to the old key. Links made before stay open to it until
   you renew them.
-- **Fitting the new lock.** The new lock is going in. Adding things here waits until it's done.
-- **Old lock.** This space still has its old lock. Try again.
+- **Fitting the new lock.** The new lock is going in. Adding something here takes a moment longer until it's done.
+- **Not yet.** The new lock goes in the next time one of your devices opens veyq. What is here stays yours.
+- **Not possible yet.** The space is paused or being deleted. A paused space gets its new lock once it is back.
 
-Under **Shared spaces**, someone else fits the new lock and lets you back in:
+Under **Links to renew**, each link you made before is listed with its space. **Renew** opens that link's own share
+dialog. An upload link isn't renewed: make a new one, then switch the old one off. A link in another shared space says which one
+it is in; open veyq there to renew it.
 
-- **Waiting for another owner.** Another owner fits the new lock the next time they open veyq. Until then, the old
-  key reads what is added here.
-- **Nobody can do it.** No other owner is left who can fit the new lock. Make someone an owner here. Until then, the
-  old key reads what is added here.
-- **Fitting the new lock.** The new lock is going in. Someone here still has to confirm it's you.
-- **New lock.** New lock in. Someone here still has to confirm it's you.
-- **Old lock.** Fitting the new lock kept failing, so the old key still reads what is added here. Start it again.
+## If something goes wrong
 
-If you own a shared space or a group and another member replaced their keys, one owner's device, perhaps yours, fits
-the new lock by itself; adding things there waits while it goes in. If that cannot happen, the space shows **Needs a
-new lock** in the sidebar, and its member list says why. Either no owner is left who can fit it: make someone else
-an owner. Or fitting it kept failing: choose **Start again**, and your device takes it on.
+- **The page says it couldn't confirm whether your account was secured.** Unlock again with your **new** Emergency
+  Kit. If it opens, your account is secured and veyq finishes the rest without a new kit. If it is refused, nothing was
+  changed and your old kit still works.
+- **The page says the request is larger than this server accepts.** Nothing was changed, and trying again won't help.
+  Ask whoever runs your server to raise its request limit.
+- **You closed the page before the end.** Sign in with your password and your **new** kit. If it opens, veyq
+  finishes the rest by itself. If it is refused, nothing was changed and your old kit still works.
+- **You start Secure your account again with the Secret Key from your new kit.** Your account was already secured, so
+  veyq finishes what was left, with no new kit.
+
+When another member of a space you are in secures their account, their own device fits the new lock there, and every
+member's device helps put it in. Adding something there takes a moment longer while it goes in. Nobody has to confirm
+anything.
 
 More: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

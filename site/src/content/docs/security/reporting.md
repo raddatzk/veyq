@@ -57,8 +57,9 @@ a table of attacks with the state of each today, followed by a list of what stay
   ([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md)).
 - **Content that was already shared.** Revoking a share stops future access. It cannot un-download what a
   recipient already has.
-- **The first-use trust gap.** Identity keys are trust-on-first-use. A changed key is surfaced, every grant is
-  signed by its granter, and out-of-band safety-number verification is built, but nothing *enforces* it. The
+- **The first-use trust gap.** Identity keys are trust-on-first-use where no join record anchors them (a tenant's
+  owners, contacts outside a shared tenant). A new key is accepted only through a
+  key-chain step signed by the old identity and the old Secret-Key proof key, every grant is signed by its granter, and out-of-band safety-number verification is built, but nothing *enforces* it. The
   opt-in strict mode that would require a verified key before a first share is not built, and its shape is still
   open ([Roadmap](/veyq/security/roadmap/)).
 - **Findings against the development stack** in

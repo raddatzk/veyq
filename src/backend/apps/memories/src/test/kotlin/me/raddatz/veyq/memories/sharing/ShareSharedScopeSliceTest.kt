@@ -8,7 +8,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -108,8 +108,8 @@ class ShareSharedScopeSliceTest {
         // the owner removes the member from the group — a removal-rotation, the one way a keyed member leaves
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestAdmission.SIGNATURE_JSON}}],""" +
-                    """${TestAdmission.openJson(group)},"removesUserId":"$member"}""",
+                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                    """${TestGrants.openInvitesJson(group)},"removesUserId":"$member"}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
 
@@ -467,7 +467,7 @@ class ShareSharedScopeSliceTest {
         val share = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         removeByRotation(owner, group, member = null, revokeLinks = true).then().statusCode(400).body("code", equalTo("invalid_request"))
-        assertEquals(0, TestAdmission.epochOf(group))
+        assertEquals(0, TestGrants.epochOf(group))
         resolves(share, 200)
     }
 
@@ -484,7 +484,7 @@ class ShareSharedScopeSliceTest {
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$share/reactivate")
             .then().statusCode(409).body("code", equalTo("reissue_required"))
         resolves(share, 404)
-        assertEquals(0, TestAdmission.epochOf(tenantId)) // the tenant epoch never moved
+        assertEquals(0, TestGrants.epochOf(tenantId)) // the tenant epoch never moved
     }
 
     // --- a tenant removal marks every link the removed member could copy (ADR 0075 point 4, the removal counter) ---
@@ -500,7 +500,7 @@ class ShareSharedScopeSliceTest {
         val memory = seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
         val before = createShare(coMember, memory, copyEpoch = 0)
         removeFromTenant(owner, tenantId, member).then().statusCode(204)
-        assertEquals(0, TestAdmission.epochOf(tenantId)) // no epoch signal: the counter carries it alone
+        assertEquals(0, TestGrants.epochOf(tenantId)) // no epoch signal: the counter carries it alone
         val after = createShare(coMember, memory, copyEpoch = 0)
         revoke(coMember, before)
         revoke(coMember, after)
@@ -545,7 +545,7 @@ class ShareSharedScopeSliceTest {
         val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val before = createShare(coMember, memory, copyEpoch = 0)
         removeFromTenant(owner, tenantId, member).then().statusCode(204)
-        assertEquals(0, TestAdmission.epochOf(group)) // the queued rotation has not run: asserted, not assumed
+        assertEquals(0, TestGrants.epochOf(group)) // the queued rotation has not run: asserted, not assumed
         val after = createShare(coMember, memory, copyEpoch = 0)
         revoke(coMember, before)
         revoke(coMember, after)
@@ -724,7 +724,7 @@ class ShareSharedScopeSliceTest {
             val outcome = whileUncommitted(
                 change = {
                     val decision = scopes.rotate(
-                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestAdmission.SIGNATURE))),
+                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
                         emptyList(), emptySet(), removes = member,
                     )
                     assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
@@ -826,9 +826,9 @@ class ShareSharedScopeSliceTest {
     private fun removeByRotation(owner: String, group: String, member: String?, revokeLinks: Boolean? = null) =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestAdmission.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
-                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestAdmission.SIGNATURE_JSON}}],""" +
-                    TestAdmission.openJson(group) +
+                """{"epoch":${TestGrants.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
+                    """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                    TestGrants.openInvitesJson(group) + "," + TestGrants.othersPendingJson(group, owner, member) +
                     (member?.let { ""","removesUserId":"$it"""" } ?: "") +
                     (revokeLinks?.let { ""","revokeLinks":$it""" } ?: "") + "}",
             )

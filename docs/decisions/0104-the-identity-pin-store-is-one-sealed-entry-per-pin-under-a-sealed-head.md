@@ -4,10 +4,10 @@
   the fingerprint hash per entry (decision 3), the count named openly (decision 5), no read path for the single-blob
   store (decision 7: veyq was not live) and keeping the cap and the rotation's one request once it was measured
   (§ Consequences, 2026-10-26). [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decisions 1 and 7
-  say what is pinned and which revision is marked in place. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (accepted 2026-10-27, **not built**) keeps this
+  say what is pinned and which revision is marked in place. [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) keeps this
   store's shape and its rollback rules and changes what an entry holds: per person, the highest key-chain head this
-  account has seen, in place of the fingerprint a key change is judged against and the personal *verified* state
-  (decision 2's plaintext), which becomes a signed statement in the tenant.
+  account has seen, its index in the chain and whether a join record replaced it, and no *verified* state, which is a
+  signed verification in the tenant now (decision 2, built 2026-10-28).
 - Date: 2026-10-19
 
 Provenance: **(M)** measured when the store was built (`IdentityPinsSliceTest`, on H2 and on MariaDB); **(R)**
@@ -20,7 +20,7 @@ capped by the contract at 1,048,576 base64 characters (M). A pin holds the conta
 base64 inside JSON, then base64 again around the seal — and costs **2,361 bytes** of the cap (M: 444 pins seal to
 exactly the 1,048,484 the volume measurement read in `veyq_identity_pins`). So the 445th member a key-holder admits is
 refused with `400 invalid_request`, the grant-delivery worker cannot wrap `K_tenant` to anyone after that, and the error
-is swallowed (`grantDeliveryPolling.ts`, M): the member stays *awaiting access* with no sign why (inbox #491). The
+was swallowed (`grantDeliveryPolling.ts`, M): the member stayed *awaiting access* with no sign why (inbox #491). The
 instance run for a club, an organisation or a company stops at about 445 members per key-holder. Every pin
 written today also re-uploads the whole store — 1 MiB per new member at the cap.
 
@@ -42,12 +42,20 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
    a concurrent first use is a revision conflict, not two entries.
 2. **An entry is sealed under the Master Key with its own purpose, `identity-pin`, bound to its `pinId`** (ADR 0072).
    Its plaintext names the `userId`, and a reader refuses an entry whose `userId` does not derive its `pinId`, so the
-   server cannot move an entry to another contact's slot. The plaintext is compact JSON `{userId, fingerprint, state,
-   firstSeenAt}` padded with spaces to 192 bytes, so `pinned` and `verified` (and any two contacts) seal to the same
-   size — 221 bytes, 296 base64 characters.
-3. **What an entry pins is the identity's `fingerprintHash`** — the 32-byte, domain-separated SHA-256 over the full
-   identity bundle that the safety number and its QR already are ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
-   Decision 3) — with `state` and `firstSeenAt`, not the bundle itself (Q1). **This keeps the security claim:** every
+   server cannot move an entry to another contact's slot. The plaintext is compact JSON `{u, f, h, i, t, r}` — the
+   `userId`, the fingerprint, the contact's key-chain **head** (ADR 0111 decision 16), the index of that head's step in
+   the chain (`-1` for a head pinned unread at an invite's accept), `firstSeenAt`, and `r` = 1 when a join record
+   replaced a pin that was not on its chain (ADR 0111 decision 15) — padded with spaces to 192 bytes, so any two
+   contacts seal to the same size — 221 bytes, 296 base64 characters. There is no state: whether someone is verified is
+   a signed statement in the tenant (ADR 0111 decision 12), and the index is what tells a pin the anchored chain does
+   not hold from a rollback (a replacement needs that chain at least as long as the pinned one). The keys are single
+   letters so the head fits: the entry is 176 bytes for a chain of under ten steps (179 at a four-digit index), where
+   the spelled-out keys would make it 215 and push it to the next padding size, 428 bytes a pin on the wire, and
+   25,000 of those past the request limit below. An entry without a 32-byte head does not open.
+3. **What an entry pins is the key-chain head and the identity's `fingerprintHash`** — the 32-byte, domain-separated
+   SHA-256 over the full identity bundle that the safety number and its QR already are ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
+   Decision 3) — with the head's index, `firstSeenAt` and the replacement mark, not the bundle itself (Q1). The head is compared with a served one and
+   is where the client walks the contact's chain from (ADR 0028 Decision 2). **This keeps the security claim:** every
    reader of a pin compares it for equality with a key the directory serves or shows its safety number (M: five reads of a
    pin's key in `src/web/` — three equality comparisons, and two safety numbers, one of them also the input of the QR
    compare), and both are functions of the hash; nothing wraps to,
@@ -95,8 +103,12 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   HTTP/1.1, bodies of 1.1×, 2× and 10× the limit, 30 of 30 direct to the jar, 29 of 30 through a Traefik v3.6 whose
   thirtieth was its own `502`; no `fetch` rejected), so the client maps it to a refusal of its own that names the Server
   Owner (uc.account.rotate-keys E10). undici, still sending, sees `ECONNRESET` instead.
-  **The cap and the one request stay** (owner, 2026-10-26): the measured margin is 883 KB. Above it a rotation would
-  need a staged write, which is not built. One new pin writes about 400 bytes instead of the whole store.
+  **The cap and the one request stay** (owner, 2026-10-26): the measured margin is 883 KB. Securing the account
+  ([ADR 0060](0060-key-rotation-after-compromise.md)) adds fixed fields of 2,424 bytes and 39 bytes per scope this
+  device cannot open (at most 10,000), measured with the real encoders on 2026-10-28: about 9,605,224 bytes at the cap
+  with nothing unreadable, and about 10,092,524 with every field at its contract cap — still under the limit. Its
+  self-grants do not ride in this request; they are staged before it (ADR 0111 decision 6). Above the cap a rotation
+  would need the pin store staged as well (inbox #569). One new pin writes about 400 bytes instead of the whole store.
 - **What the operator learns per write changes shape, not amount.** It sees which entry was written; today it sees that
   the store was. Linking an entry to a contact by timing (a write right after a directory read of that contact) works
   for both shapes alike, and the server already relays the grant the pin precedes.

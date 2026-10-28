@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The link every trust-state refusal notice carries to the settings hub's one reset (ADR 0028 Decision 7's way
-// back, inbox #192): the pin-store notices (home, both member panels, the changed-key review) and the register's
+// back, inbox #192): the pin-store notices (home, both member panels) and the register's
 // (devices and sessions). One component, so the hub gains ONE more door rather than five — it is listed in
 // `veyq/one-settings-door`'s ignores with that reason. It only navigates; starting a document over is the confirm
 // dialog's alone.

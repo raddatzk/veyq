@@ -79,7 +79,7 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
     expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aChapter'), name: 'Tag 1' }))
 
     await typeAndClickSubmit(w, 'Tag 2')
-    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', 0, { reread: expect.any(Function) })
+    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', 0, { reread: expect.any(Function), pull: expect.any(Function) })
   })
 
   it('a collision the loaded tree cannot see still ends on the server\'s 409', async () => {

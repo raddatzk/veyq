@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.identity
 
+import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -15,7 +16,7 @@ data class WrapData(val method: String, val wrappedKey: String, val kdfParams: S
  * cr-0010). The setup single-owner lock is *not* this store's concern — its caller writes it.
  */
 @ApplicationScoped
-class AccountStore {
+class AccountStore(private val keyChain: KeyChainStore) {
 
     /** The account under [email], or null. The **only** user-by-email lookup (`validate_lookup_single_home.py`
      *  rule C), and it normalizes for itself ([normalizeEmail]) so no caller can look up a different spelling of
@@ -40,7 +41,8 @@ class AccountStore {
      */
     fun lock(userId: String): VeyqUser? = VeyqUser.findById(userId, LockModeType.PESSIMISTIC_WRITE)
 
-    /** Persist a new account (identity + wraps) with the given server role. Returns the new user id. */
+    /** Persist a new account (identity + wraps) with the given server role, and step 0 of its key chain — the identity
+     *  and Secret-Key proof key it is born with (ADR 0111 decision 7) — in the same transaction. Returns the new user id. */
     @Transactional
     fun createAccount(
         email: String,
@@ -74,6 +76,7 @@ class AccountStore {
                 kdfParams = wrap.kdfParams
             }.persist()
         }
+        keyChain.writeGenesis(userId, identityPublicKey, secretKeyProofPublicKey)
         return userId
     }
 }

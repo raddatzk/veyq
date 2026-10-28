@@ -15,7 +15,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountEmailChangeApi, loginApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { account } from '../../../app/account'
-import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
+import { ColdCredentialRefused, proveColdCredential, staleAsRejected } from '../coldCredential'
 import type { ColdCredentialRefusal } from '../coldCredential'
 import { HttpStatus, httpStatus, isCodedError } from '../../../shared/httpError'
 
@@ -32,7 +32,7 @@ export class EmailChangeRefused extends Error {
  * link went to it: the answer is the same for an address another account holds (uc.account.change-email E1).
  */
 export async function requestEmailChange(newEmail: string, password: string, secretKeyB64: string): Promise<void> {
-  const mk = await proveColdCredential(password, secretKeyB64).catch((e: unknown) => {
+  const mk = await proveColdCredential(password, secretKeyB64).catch(staleAsRejected).catch((e: unknown) => {
     if (e instanceof ColdCredentialRefused) throw new EmailChangeRefused(e.reason)
     throw e
   })
