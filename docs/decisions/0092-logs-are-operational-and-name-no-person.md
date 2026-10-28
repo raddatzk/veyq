@@ -135,14 +135,14 @@ of [cc.privacy.retention](../crosscutting/cc.privacy.retention.md).
 
 #### Still open
 
-Taken as met by what is built and decided, as ADR 0093's Still open are: while veyq is not offered as a service, none
-holds back a CR or a release; before it is, each is answered by counsel, and an answer that differs is a legal duty
-that wins over what is built (`CLAUDE.md`).
+Not pursued (owner 2026-10-28), as ADR 0093's Still open are: what is built and decided is taken to meet them, no row
+tracks them and none holds back a CR or a release; an answer that differs, should one come, is a legal duty that wins
+over what is built (`CLAUDE.md`).
 
 1. Whether a period stated as a criterion — size-based rotation and recreation, no time bound — meets Art. 5(1)(e) for a
-   log holding pseudonymous ids only — inbox #589.
+   log holding pseudonymous ids only.
 2. Whether an operator who exposes the admin console must be told more than § 5 says about its error log naming the
-   hop — inbox #590.
+   hop.
 
 ### 7. Structure and correlation
 

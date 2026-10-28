@@ -21,7 +21,10 @@
   completes a rotation a removal had to queue) and [uc.spaces.rekey-after-rotation](../use-cases/uc.spaces.rekey-after-rotation.md)
   (the node re-key every rotation runs). Removal and compromise are two triggers on one mechanism, and the
   *scope-type policy* in [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) governs only the first:
-  on **removal** a tenant is ACL-revoked and a personal scope has nobody to rotate away from; on **compromise** every
+  on **removal** a tenant is ACL-revoked (its owner may opt into a re-key after it, or run one alone,
+  [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A8–A9; a group owner runs the same
+  re-key with nobody removed, [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md) A6) and a personal scope has
+  nobody to rotate away from; on **compromise** every
   scope the account is in rotates, the tenant and the personal scope included, each committed by the account itself
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the grant primitive
@@ -89,7 +92,7 @@ sequenceDiagram
 - **E3 — the rotation was built on a superseded epoch:** another rotation committed first (two owners, two tabs,
   a job reclaimed after its lease lapsed, or a panel removal meeting a queued job), or the rotating device's
   grant lags the scope (E2's skipped member). The server answers `409 stale_epoch` and stores nothing: no link and
-  no grant. The device re-opens its grant and rebuilds the rotation **once**, from a fresh key
+  no grant. The device re-opens its grant, reads the members again and rebuilds the rotation **once**, from a fresh key
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4 says why the key must be fresh). After a race
   the re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
   synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it

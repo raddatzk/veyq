@@ -320,6 +320,25 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     expect(server.nodes.get(ids.box)!.epoch).toBe(1)
   })
 
+  it('a member\'s refused pull still re-opens the active scope it holds behind, so the write\'s re-read after the wait opens an owner\'s re-key (inbox #670)', async () => {
+    server.role = 'MEMBER'
+    const active = await import('../../../app/activeSpace')
+    active.activeSpace.scopeId = SCOPE
+    vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ current: 0, keys: new Map() })
+    try {
+      expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(false)
+      expect(active.refreshActiveScope).toHaveBeenCalledOnce()
+      expect(server.commits).toEqual([])
+      vi.mocked(active.refreshActiveScope).mockClear()
+      vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ current: 1, keys: new Map() }) // control: held at the current epoch
+      expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(false)
+      expect(active.refreshActiveScope).not.toHaveBeenCalled()
+    } finally {
+      active.activeSpace.scopeId = null
+      vi.mocked(active.activeEpochKeys).mockRestore?.()
+    }
+  })
+
   /** The server's gate on a write under [nodeId]'s key: `409 node_rekey_pending` while it lags. */
   const writeUnder = (nodeId: string, attempts: number[]) => async (n: number) => {
     attempts.push(n)

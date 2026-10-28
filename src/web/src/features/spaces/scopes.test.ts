@@ -31,7 +31,7 @@ vi.mock('../account/identityPins', () => ({
 // which the anchor checks above must receive — so a wrap or a grant judged outside its tenant is red.
 vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenantView: vi.fn(), tenantViewOfScope: vi.fn() }))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares } from './scopes'
 import { ScopeKind, type MyTenant, type OpenInvite, type ScopeEpochLink, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, accountApi } from '../../api/client'
@@ -704,13 +704,17 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
   const stale = () => httpError(409, 'stale_epoch')
 
   /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. */
-  function holdGroupAt(grantedEpoch: number, rotate: Mock<ScopesApi['rotateScope']>, list = vi.fn<ScopesApi['listMyScopes']>()): Uint8Array[] {
+  function holdGroupAt(
+    grantedEpoch: number, rotate: Mock<ScopesApi['rotateScope']>, list = vi.fn<ScopesApi['listMyScopes']>(),
+    directory = vi.fn<ScopesApi['listScopeMembers']>(async () => self),
+  ): Uint8Array[] {
     const keys = Array.from({ length: grantedEpoch + 1 }, () => v1.randomBytes(32))
     const links: ScopeEpochLink[] = keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(G1, i + 1, k, keys[i]) }))
     const grant = ownGrant(G1, keys[grantedEpoch], grantedEpoch)
     list.mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, grantedEpoch })])
     fakeApi(scopesApi, {
       listMyScopes: list, listScopeEpochs: vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue(links), rotateScope: rotate,
+      listScopeMembers: directory,
     })
     return keys
   }
@@ -784,6 +788,96 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
     expect(await commitRotation(G1, self)).toBe(1)
     expect(rotate).toHaveBeenCalledTimes(2)
     expect(newKeyOf(rotate.mock.calls[1])).not.toEqual(newKeyOf(rotate.mock.calls[0]))
+  })
+
+  describe('the rebuild reads the members again (inbox #661)', () => {
+    const A = 'a1000000-0000-4000-8000-0000000000a1'
+    const C = 'c1000000-0000-4000-8000-0000000000c1'
+    const R = 'c2000000-0000-4000-8000-0000000000c2'
+    const row = (userId: string, who = v1.generateIdentity()): ScopeMember => ({
+      userId, username: userId.slice(0, 2), avatarRevision: 0, role: 'MEMBER', identityPublicKey: pubOf(who), keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=', pending: false,
+    })
+    /** A rotateScope with the server's completeness check over `members()` as they stand at each commit (ADR 0111
+     *  decision 9): a membership neither granted, declared pending nor removed is `409 rotation_incomplete`. */
+    const coverChecked = (members: () => string[]) => vi.fn<ScopesApi['rotateScope']>(async ({ rotateScopeRequest: r }) => {
+      const covered = new Set([...r.grants.map((g) => g.userId), ...(r.pendingUserIds ?? []), ...(r.removesUserId ? [r.removesUserId] : [])])
+      if (members().some((id) => !covered.has(id))) throw httpError(409, 'rotation_incomplete')
+      return { epoch: r.epoch }
+    })
+    const grantedIn = (call: unknown[]) =>
+      (call[0] as { rotateScopeRequest: { grants: { userId: string }[] } }).rotateScopeRequest.grants.map((g) => g.userId)
+
+    it('a member who joined after the caller\'s read is granted by the one rebuild', async () => {
+      // Bite: build the rebuild from the handed list again — C is never granted and the second commit is refused too.
+      const c = row(C)
+      const directory = vi.fn<ScopesApi['listScopeMembers']>(async () => [...self, c]) // C has joined by now
+      const rotate = coverChecked(() => [ME, C])
+      holdGroupAt(0, rotate, undefined, directory)
+
+      expect(await commitRotation(G1, self)).toBe(1)
+
+      expect(rotate).toHaveBeenCalledTimes(2)
+      expect(grantedIn(rotate.mock.calls[0])).toEqual([ME])
+      expect(grantedIn(rotate.mock.calls[1])).toEqual([ME, C])
+      expect(directory).toHaveBeenCalledTimes(1)
+      expect(directory).toHaveBeenCalledWith({ scopeId: G1 })
+    })
+
+    it('control: a commit taken the first time reads no directory — the caller\'s list is the one it builds from', async () => {
+      const directory = vi.fn<ScopesApi['listScopeMembers']>(async () => [...self, row(C)])
+      const rotate = coverChecked(() => [ME])
+      holdGroupAt(0, rotate, undefined, directory)
+
+      expect(await commitRotation(G1, self)).toBe(1)
+      expect(rotate).toHaveBeenCalledTimes(1)
+      expect(directory).not.toHaveBeenCalled()
+    })
+
+    it('a group removal\'s rebuild never grants the member it removes, however the re-read lists them', async () => {
+      // The re-read lists the removed member — twice — beside the newcomer: the remover's exclusion holds for it as well.
+      const a = row(A)
+      const removed = row(R)
+      const directory = vi.fn<ScopesApi['listScopeMembers']>(async () => [...self, a, removed, row(C), { ...removed }])
+      const rotate = coverChecked(() => [ME, A, R, C])
+      holdGroupAt(0, rotate, undefined, directory)
+
+      expect(await rotateGroupForRemoval(G1, [...self, a, removed], R)).toBe(1)
+
+      expect(rotate).toHaveBeenCalledTimes(2)
+      const retry = rotate.mock.calls[1][0].rotateScopeRequest
+      expect(retry.grants.map((g) => g.userId)).toEqual([ME, A, C]) // the control on the same predicate: C is granted
+      expect(retry.pendingUserIds).toEqual([])
+      expect(retry.removesUserId).toBe(R)
+    })
+
+    it('`excluding` holds for the re-read too: the member left out is never granted and never named', async () => {
+      const removed = row(R)
+      const directory = vi.fn<ScopesApi['listScopeMembers']>(async () => [...self, removed, row(C)])
+      // A server that still counts R refuses both attempts: nothing commits, and neither attempt wrapped to R.
+      const rotate = coverChecked(() => [ME, R, C])
+      holdGroupAt(0, rotate, undefined, directory)
+
+      await expect(commitRotation(G1, [...self, removed], { excluding: R })).rejects.toMatchObject({ message: 'http 409 rotation_incomplete' })
+
+      expect(rotate).toHaveBeenCalledTimes(2)
+      for (const [req] of rotate.mock.calls) {
+        expect(req.rotateScopeRequest.grants.map((g) => g.userId)).not.toContain(R)
+        expect(req.rotateScopeRequest.pendingUserIds).not.toContain(R)
+        expect(req.rotateScopeRequest.removesUserId).toBeUndefined()
+      }
+      // the control: the newcomer the re-read found is granted in the rebuild
+      expect(grantedIn(rotate.mock.calls[1])).toEqual([ME, C])
+    })
+
+    it('is bounded: a server that answers every commit with rotation_incomplete gets two commits and one re-read', async () => {
+      const directory = vi.fn<ScopesApi['listScopeMembers']>(async () => self)
+      const rotate = vi.fn<ScopesApi['rotateScope']>().mockRejectedValue(httpError(409, 'rotation_incomplete'))
+      holdGroupAt(0, rotate, undefined, directory)
+
+      await expect(commitRotation(G1, self)).rejects.toMatchObject({ message: 'http 409 rotation_incomplete' })
+      expect(rotate).toHaveBeenCalledTimes(ROTATION_REBUILDS + 1)
+      expect(directory).toHaveBeenCalledTimes(ROTATION_REBUILDS)
+    })
   })
 
   it('control: another 409 is no rebuild — it propagates after one commit', async () => {

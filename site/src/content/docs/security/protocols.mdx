@@ -7,6 +7,7 @@ sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.onboard-device.md
   - docs/features/spaces/use-cases/uc.spaces.add-member.md
+  - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/account/use-cases/uc.account.rotate-keys.md
@@ -534,8 +535,11 @@ See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/ve
 
 **When layer 2 runs is a per-scope policy**
 ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)).
-A **group** rotates on every removal. The **tenant** removes by layer 1 alone, and an owner can run an explicit
-"re-key this space" for the compromise case. A **personal** scope never rotates on removal (it has one member).
+A **group** rotates on every removal, and its owner can run an explicit "re-key this space" with nobody removed, for a
+member's lost device. The **tenant** removes by layer 1 alone, and an owner can run the same explicit re-key for the
+compromise case: on its own, or opted into a removal, where the removal lands first and the rotation's member set, read
+after it, drops the removed member by the owner's own choice. It is the same rotation and re-key as below, and so is
+securing an account. A **personal** scope never rotates on removal (it has one member).
 A removal does not turn links off by itself: a link minted before it can no longer be re-activated, only re-issued,
 and until then it keeps working for whoever holds it; the remover may tick *also turn off every link* of the space in
 the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).

@@ -148,6 +148,42 @@ describe('reserveAndPump over the authed control plane', () => {
     expect(store.putAnswers.map((r) => r.bodyUsed)).toEqual([true, true, true])
   })
 
+  it('a PUT the store refuses 403 (its window ran out) is re-signed from that chunk and sent once more, sealed anew', async () => {
+    const store = fakeBlobStore()
+    const stored = globalThis.fetch
+    const refused: Uint8Array[] = []
+    // The first PUT of chunk 1 is refused, as an expired signature is; every other request reaches the store.
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT' && url.endsWith('/1') && refused.length === 0) {
+        refused.push(new Uint8Array(init.body as Uint8Array))
+        return new Response('', { status: 403 })
+      }
+      return stored(url, init)
+    }))
+    const key = v1.randomBytes(32)
+    const data = new Uint8Array(3 * CHUNK_SIZE).map((_, i) => (i * 3) % 251)
+    const plan = planBlob(SCOPE_ID, OWNER, key, new Blob([data]))
+
+    await reserveAndPump([plan], (d) => authedReserve(SCOPE_ID, d), authedWindow(SCOPE_ID))
+
+    expect(store.events.filter((e) => e.startsWith('window:'))).toEqual(['window:1']) // re-signed from the refused chunk
+    expect(store.events.filter((e) => e === 'put:1')).toHaveLength(1) // the store saw the retry, once
+    expect(await openBlob(SCOPE_ID, key, plan)).toEqual(data)
+    // The retry is the same chunk sealed again: it opens to the same plaintext under a fresh nonce.
+    const retried = store.objects.get('mem://up-0/1')!
+    expect(v1.openFrame(plan.blobKey, 1, 3, refused[0])).toEqual(v1.openFrame(plan.blobKey, 1, 3, retried))
+  })
+
+  it('a PUT the store refuses with anything but 403 fails the upload without a re-sign (control: the case above)', async () => {
+    const store = fakeBlobStore()
+    const stored = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method === 'PUT' && url.endsWith('/1') ? new Response('', { status: 500 }) : stored(url, init)))
+    const plan = planBlob(SCOPE_ID, OWNER, v1.randomBytes(32), new Blob([new Uint8Array(3 * CHUNK_SIZE)]))
+    await expect(reserveAndPump([plan], (d) => authedReserve(SCOPE_ID, d), authedWindow(SCOPE_ID))).rejects.toThrow('chunk_put_failed:500')
+    expect(store.events.filter((e) => e.startsWith('window:'))).toEqual([])
+  })
+
   it('a pre-aborted signal throws AbortError before anything is reserved', async () => {
     const reserve = vi.fn(async () => [])
     const ctl = new AbortController()

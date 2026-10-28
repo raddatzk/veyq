@@ -84,7 +84,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     const w = mountDialog({ mode: 'create', parentId: null })
     await typeAndClickSubmit(w, 'Trips')
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', null, {})
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', null, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(w.emitted('done')).toBeTruthy()
   })
 

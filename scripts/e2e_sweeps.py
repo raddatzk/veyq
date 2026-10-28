@@ -33,9 +33,11 @@ import email.message
 import email.policy
 import hashlib
 import json
+import os
 import re
 import shutil
 import smtplib
+import socket
 import subprocess
 import time
 import urllib.error
@@ -1299,6 +1301,120 @@ def sweep_containers(stack: Stack, workdir: Path, canary_files: Iterable[Path], 
 # The statement log — every SQL statement the database received during the run, not only what it ended with
 # ----------------------------------------------------------------------------------------------------------
 
+# Runs that share ONE stack. Two orchestrators started at once against the same `veyq-mariadb` (two worktrees, two
+# agents) share its databases, its global query log and its `/tmp`; a run that assumed it was alone dropped the
+# other's `veyq_e2e_1` and switched its statement log off under it (2026-10-28). So each run REGISTERS on the stack:
+# a directory per registration in the container's `/tmp`, made under a lock that is itself a `mkdir` (atomic), holding
+# `<host> <pid> <stamp>` of the orchestrator that made it. A registration whose process this host no longer runs is
+# stale (a killed run) and the next run that reads the registry removes it; one from another host is never judged
+# dead. Only the container's `/tmp`: gone with it, outside the data volume, as the statement log is.
+REGISTRY = "/tmp/veyq-e2e.runs"
+_THIS_HOST = socket.gethostname()
+
+
+def _in_mariadb(stack: Stack, script: str) -> subprocess.CompletedProcess:
+    return subprocess.run([*stack.compose, "exec", "-T", "mariadb", "sh", "-c", script], capture_output=True, text=True)
+
+
+def _owner_alive(owner: str) -> bool:
+    """Whether the `<host> <pid> ...` a registration holds names a process still running. An unreadable one is stale."""
+    parts = owner.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        return False
+    if parts[0] != _THIS_HOST:
+        return True
+    try:
+        os.kill(int(parts[1]), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class StackLock:
+    """The registry's lock: a `mkdir` in the container, broken only when the run holding it is dead."""
+
+    def __init__(self, stack: Stack, timeout: float = 120) -> None:
+        self.stack = stack
+        self.path = f"{REGISTRY}/lock"
+        self.timeout = timeout
+
+    def __enter__(self) -> "StackLock":
+        deadline = time.time() + self.timeout
+        mine = f"{_THIS_HOST} {os.getpid()}"
+        while True:
+            taken = _in_mariadb(self.stack, f"mkdir -p {REGISTRY} && mkdir {self.path} 2>/dev/null && echo '{mine}' > {self.path}/owner")
+            if taken.returncode == 0:
+                return self
+            holder = _in_mariadb(self.stack, f"cat {self.path}/owner 2>/dev/null").stdout.strip()
+            # An empty owner is a lock taken a moment ago whose owner line is not written yet: wait, never break it.
+            if holder and not _owner_alive(holder):
+                log(f"breaking the e2e registry lock a killed run left ({holder})")
+                _in_mariadb(self.stack, f"rm -rf {self.path}")
+                continue
+            if time.time() > deadline:
+                raise SweepError(f"the e2e registry lock {self.path} in the mariadb container is held by "
+                                 f"{holder or 'a run'} for more than {self.timeout:.0f}s")
+            time.sleep(0.3)
+
+    def __exit__(self, *exc: object) -> None:
+        _in_mariadb(self.stack, f"rm -rf {self.path}")
+
+
+def _live(stack: Stack, kind: str) -> dict[int, str]:
+    """The live registrations of `kind`, by index; a stale one is removed on the way. Call with [StackLock] held."""
+    listed = _in_mariadb(stack, f'for d in {REGISTRY}/{kind}-*; do [ -d "$d" ] && echo "${{d##*-}} $(cat "$d/owner" 2>/dev/null)"; done')
+    live: dict[int, str] = {}
+    for line in listed.stdout.splitlines():
+        index, _, owner = line.partition(" ")
+        if not index.isdigit():
+            continue
+        if _owner_alive(owner):
+            live[int(index)] = owner
+        else:
+            log(f"removing the stale e2e registration {kind}-{index} ({owner or 'no owner'}) a killed run left")
+            _in_mariadb(stack, f"rm -rf {REGISTRY}/{kind}-{index}")
+    return live
+
+
+def _register(stack: Stack, kind: str, stamp: str = "") -> int:
+    """Take the lowest free index of `kind`. Call with [StackLock] held."""
+    taken = _live(stack, kind)
+    index = next(i for i in range(len(taken) + 1) if i not in taken)
+    made = _in_mariadb(stack, f"mkdir -p {REGISTRY}/{kind}-{index} && "
+                              f"echo '{_THIS_HOST} {os.getpid()} {stamp}' > {REGISTRY}/{kind}-{index}/owner")
+    if made.returncode != 0:
+        raise SweepError(f"could not register {kind}-{index} in the mariadb container: {made.stderr.strip()[-200:]}")
+    return index
+
+
+def claim_run_slot(stack: Stack) -> tuple[int, str]:
+    """This run's SLOT on the stack and its stamp: 0 when no other run is live on it, else the lowest free one.
+
+    The slot names what the run creates on the shared stack (its databases and buckets, `run_web_e2e.py`), and slot 0
+    keeps the names a lone run always used. The stamp (unix seconds) is one no live run of the stack holds: it names the
+    run's directory, its sentinels and the addresses its suites sign up with in the one shared Mailpit, so a run started
+    in the same second as another waits for the next one."""
+    with StackLock(stack):
+        others = {owner.split()[2] for owner in _live(stack, "run").values() if len(owner.split()) > 2}
+        stamp = str(int(time.time()))
+        while stamp in others:
+            time.sleep(0.2)
+            stamp = str(int(time.time()))
+        return _register(stack, "run", stamp), stamp
+
+
+def release_run_slot(stack: Stack, slot: int) -> None:
+    """Give the slot back (from `atexit`). A run that cannot reach the container leaves it behind, and the next run
+    removes it once this process is gone."""
+    try:
+        with StackLock(stack, timeout=30):
+            _in_mariadb(stack, f"rm -rf {REGISTRY}/run-{slot}")
+    except SweepError as e:
+        log(f"could not release e2e slot {slot}: {e}")
+
+
 # MariaDB's general query log is written INSIDE the container, under `/tmp` — outside the data volume
 # (`/var/lib/mysql`), so it never grows the developer's data and is gone with the container. The run's own name
 # is in it, which is what lets a later run recognise a log a killed run left switched on ([StatementLog.open]).
@@ -1321,6 +1437,14 @@ class StatementLog:
 
     The retained copy (`mariadb-general.log`) is the developer's data on their disk, in a gitignored directory —
     stated in the concern, not filtered: a filter by connection would be a second parser to be wrong in.
+
+    **Concurrent runs share ONE window.** The log is a global of the server, so two runs against one stack cannot each
+    have their own. Each run registers (`statements-<n>`, [REGISTRY]): the first opens the window and leaves the globals
+    to restore in the registry; a later one that finds the log ON writing a harness file while another registration
+    lives JOINS it and changes nothing; and [close] restores the globals and deletes the file only for the LAST run out.
+    Every run retains a copy of the shared file, which holds its own sentinels and its boots' `Connect` entries beside
+    the other run's statements (the window was never only the run's, [sweep_statements] says so). Before this, the
+    second run took the first's live log for a killed run's, switched it off and deleted its file.
     """
 
     def __init__(self, stack: Stack, stamp: str, workdir: Path) -> None:
@@ -1330,12 +1454,29 @@ class StatementLog:
         self.retained = workdir / "mariadb-general.log"
         self.prior: list[str] | None = None
         self.closed = False
+        # This run's registration on the stack ([REGISTRY]); None until [open] took it.
+        self.registration: int | None = None
         # What [close] could not do, reported by the sweep as an unmet control rather than raised mid-cleanup.
         self.problems: list[str] = []
 
+    # The globals the last run out restores, written by the run that opened the window.
+    PRIOR = f"{REGISTRY}/statements.prior"
+
     def open(self) -> None:
-        general_log, log_file, log_output = self.stack.mysql_row(
-            "SELECT @@global.general_log, @@global.general_log_file, @@global.log_output")
+        with StackLock(self.stack):
+            others = _live(self.stack, "statements")
+            self.registration = _register(self.stack, "statements", self.stamp)
+            general_log, log_file, log_output = self.stack.mysql_row(
+                "SELECT @@global.general_log, @@global.general_log_file, @@global.log_output")
+            if others and general_log == "1" and log_file.startswith(STATEMENT_LOG_PREFIX):
+                self.path = log_file
+                self.prior = [general_log, log_file, log_output]
+                log(f"statement log already ON for {len(others)} concurrent run(s) on this stack, writing {log_file} - "
+                    f"joining that window; the last run out switches it off")
+                return
+            self._open_alone(general_log, log_file, log_output)
+
+    def _open_alone(self, general_log: str, log_file: str, log_output: str) -> None:
         self.prior = [general_log, log_file, log_output]
         if general_log == "1" and log_file.startswith(STATEMENT_LOG_PREFIX):
             log(f"found the statement log ALREADY ON, writing {log_file} — a run was killed before it could switch "
@@ -1348,6 +1489,7 @@ class StatementLog:
         # A file a killed run left behind after switching off holds the same developer statements: delete it too.
         subprocess.run([*self.stack.compose, "exec", "-T", "mariadb", "sh", "-c", f"rm -f {STATEMENT_LOG_PREFIX}*.log"],
                        capture_output=True)
+        _in_mariadb(self.stack, f"printf '%s\\t%s\\t%s' '{self.prior[0]}' '{self.prior[1]}' '{self.prior[2]}' > {self.PRIOR}")
         self.stack.mysql(f"SET GLOBAL log_output = 'FILE'; SET GLOBAL general_log_file = '{self.path}'; "
               f"SET GLOBAL general_log = ON")
         log(f"statement log ON for the run's window: {self.path} in the mariadb container "
@@ -1365,11 +1507,26 @@ class StatementLog:
         return sentinel
 
     def close(self) -> None:
-        """Switch the log off and restore the prior globals FIRST, then retain the file and delete it. Idempotent."""
+        """Switch the log off and restore the prior globals FIRST, then retain the file and delete it; while another run
+        on the stack still has the window open, only retain a copy. Idempotent."""
         if self.closed or self.prior is None:
             return
         self.closed = True
-        general_log, log_file, log_output = self.prior
+        with StackLock(self.stack):
+            if self.registration is not None:
+                _in_mariadb(self.stack, f"rm -rf {REGISTRY}/statements-{self.registration}")
+            others = _live(self.stack, "statements")
+            if others:
+                self._retain()
+                log(f"statement log left ON for {len(others)} concurrent run(s); the last one out switches it off")
+                return
+            recorded = _in_mariadb(self.stack, f"cat {self.PRIOR} 2>/dev/null").stdout.split("\t")
+            if len(recorded) == 3:
+                self.prior = recorded
+            self._close_last()
+
+    def _close_last(self) -> None:
+        general_log, log_file, log_output = self.prior or ["0", "", "FILE"]
         try:
             self.stack.mysql(f"SET GLOBAL general_log = OFF; SET GLOBAL general_log_file = '{log_file}'; "
                   f"SET GLOBAL log_output = '{log_output}'; SET GLOBAL general_log = {'ON' if general_log == '1' else 'OFF'}")
@@ -1378,6 +1535,15 @@ class StatementLog:
             self.problems.append(f"restoring the statement-log globals failed ({e}) — check "
                                  f"`SELECT @@global.general_log` on the mariadb container by hand")
             log(f"RESTORING THE STATEMENT LOG FAILED: {e}")
+        self._retain()
+        _in_mariadb(self.stack, f"rm -f {self.PRIOR}")
+        removed = subprocess.run([*self.stack.compose, "exec", "-T", "mariadb", "rm", "-f", self.path],
+                                 capture_output=True)
+        if removed.returncode != 0:
+            self.problems.append(f"deleting {self.path} in the mariadb container failed: "
+                                 f"{removed.stderr.decode('utf-8', errors='replace').strip()[-200:]}")
+
+    def _retain(self) -> None:
         copied = subprocess.run([*self.stack.compose, "exec", "-T", "mariadb", "cat", self.path], capture_output=True)
         if copied.returncode == 0:
             self.retained.write_bytes(copied.stdout)
@@ -1385,11 +1551,6 @@ class StatementLog:
         else:
             self.problems.append(f"the container holds no statement log at {self.path} — it was never switched on, "
                                  f"or something removed it")
-        removed = subprocess.run([*self.stack.compose, "exec", "-T", "mariadb", "rm", "-f", self.path],
-                                 capture_output=True)
-        if removed.returncode != 0:
-            self.problems.append(f"deleting {self.path} in the mariadb container failed: "
-                                 f"{removed.stderr.decode('utf-8', errors='replace').strip()[-200:]}")
 
 
 # One entry of the general log: `<YYMMDD HH:MM:SS>` on the first entry of a second, else empty, then a tab, the

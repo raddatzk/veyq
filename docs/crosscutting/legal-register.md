@@ -3,9 +3,8 @@
 - **ID:** legal-register
 - **Type:** **Cross-cutting reference** — the research behind veyq's legal duties: which law, which duty, which
   primary source, and what the project concluded from it. It decides nothing: each conclusion is applied by the ADR
-  it names, and every question still open is an [inbox](../inbox.md) row.
-- **Status:** **Research, not legal advice.** Each answer needs a qualified review before veyq is offered as a
-  service; until then the open questions are treated as
+  it names, and the questions the law leaves open are listed at the end and not pursued.
+- **Status:** **Research, not legal advice.** The open questions are not pursued (owner 2026-10-28) and are treated as
   [ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § Still open says. Where a legal duty and an ADR or the code disagree, the duty wins and the ADR or code is
   corrected (`CLAUDE.md`).
@@ -139,24 +138,25 @@ a capture lives at most B days, and an erasure is re-applied when an older one i
 
 ## Open questions
 
-Each is an inbox row. The ADRs keep their own *Still open* numbering, since code and docs cite it.
+Questions the law leaves open, **not pursued (owner 2026-10-28)**: no row tracks them, and what is built and decided is
+taken to meet them. The ADRs keep their own *Still open* numbering, since code and docs cite it.
 
-| Question | Row | Cited as |
-|---|---|---|
-| § 184b(5) StGB beyond the 90 days, and for a non-commercial operator | #575 | ADR 0093 Still open 1 |
-| A time-bound authority link to a hold snapshot | #576 | ADR 0093 Still open 2 |
-| Whether the German IP-retention bill has passed | #577 | ADR 0093 Still open 3 |
-| What the recorded source port is worth behind the operator's own NAT | #578 | ADR 0093 Still open 4 |
-| § 184b(5) StGB for a club's volunteer moderators | #579 | ADR 0093 Still open 5 |
-| Who is the controller of a member's account data | #580 | ADR 0093 Still open 6 |
-| Third-party requests on by default: the breached-password check and the exchange rates | #581 | ADR 0093 Still open 7 |
-| Whether a non-economic club is an "enterprise" for DSA Art. 15(2) | #582 | ADR 0093 Still open 8 |
-| Whether TCO Art. 3(7) excuses an unattended private operator | #583 | ADR 0093 Still open 9 |
-| Layered Art. 13 information on a guest page, and Art. 14 for people a report names | #584 | ADR 0093 Still open 10 |
-| Reported content inside a backup capture | #585 | ADR 0093 Still open 11 |
-| Whether erasing a switched-off application's content needs a basis in the terms | #586 | ADR 0093 Still open 12 |
-| Whether the notice of that erasure is adequate | #587 | ADR 0093 Still open 13 |
-| Whether switching an application off is a moderation decision | #588 | ADR 0093 Still open 14 |
-| A log's period stated as a criterion | #589 | ADR 0092 Still open 1 |
-| The admin console's error log names the hop | #590 | ADR 0092 Still open 2 |
-| Whether DSA Art. 14(1) reaches a space's own terms before sign-in | — | ADR 0035 decision 6 |
+| Question | Cited as |
+|---|---|
+| § 184b(5) StGB beyond the 90 days, and for a non-commercial operator | ADR 0093 Still open 1 |
+| A time-bound authority link to a hold snapshot | ADR 0093 Still open 2 |
+| Whether the German IP-retention bill has passed | ADR 0093 Still open 3 |
+| What the recorded source port is worth behind the operator's own NAT | ADR 0093 Still open 4 |
+| § 184b(5) StGB for a club's volunteer moderators | ADR 0093 Still open 5 |
+| Who is the controller of a member's account data | ADR 0093 Still open 6 |
+| Third-party requests on by default: the breached-password check and the exchange rates | ADR 0093 Still open 7 |
+| Whether a non-economic club is an "enterprise" for DSA Art. 15(2) | ADR 0093 Still open 8 |
+| Whether TCO Art. 3(7) excuses an unattended private operator | ADR 0093 Still open 9 |
+| Layered Art. 13 information on a guest page, and Art. 14 for people a report names | ADR 0093 Still open 10 |
+| Reported content inside a backup capture | ADR 0093 Still open 11 |
+| Whether erasing a switched-off application's content needs a basis in the terms | ADR 0093 Still open 12 |
+| Whether the notice of that erasure is adequate | ADR 0093 Still open 13 |
+| Whether switching an application off is a moderation decision | ADR 0093 Still open 14 |
+| A log's period stated as a criterion | ADR 0092 Still open 1 |
+| The admin console's error log names the hop | ADR 0092 Still open 2 |
+| Whether DSA Art. 14(1) reaches a space's own terms before sign-in | ADR 0035 decision 6 |

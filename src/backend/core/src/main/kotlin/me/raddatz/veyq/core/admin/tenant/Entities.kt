@@ -25,8 +25,9 @@ import org.hibernate.annotations.DynamicUpdate
  * names that reader). Written once per revision: a re-acceptance of a revision already recorded keeps its first
  * time. The client never supplies it.
  *
- * Erased with the tenant (`ON DELETE CASCADE`). The user FK has no cascade, like `veyq_tenant_profile`'s: a future
- * account erasure must name this table.
+ * No foreign key to the account or the tenant: the account's erasure (`AccountPurge`) and the tenant's (`TenantPurge`)
+ * each delete the rows no moderation case keeps, and a kept row outlives both, under the opaque ids, until the sweep of
+ * kept rows (`AccountPurge.sweepKeptTerms`) finds no case naming its account (ADR 0101 decision 6, `TermsEvidence`).
  */
 @Entity
 @Table(name = "veyq_tenant_terms_acceptance")

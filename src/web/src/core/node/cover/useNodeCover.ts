@@ -23,7 +23,7 @@ import { shareBlob, type SharedBlob } from '../../blob/sharedBlob'
 import type { CoreHeaderAction } from '../nodeHeader'
 import type { CoreRowAction } from '../levelRow'
 import { nodeMetaState, unsealNodeMeta } from '../nodeMeta'
-import { assertActiveScopeFloor } from '../rereadNode'
+import { writeUnderMemberNode } from '../rereadNode'
 import type { TreeNode } from '../tree'
 import { patchNodeMeta, treeStore } from '../treeStore'
 import { useToast } from '../../../shared/state/useToast'
@@ -157,29 +157,34 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
           // A cover another writer changed meanwhile, or an image the browser cannot decode: a retry changes nothing.
           isFinal: (e) => e === 'cover_stale' || e === COVER_UNREADABLE || e === 'meta_unreadable',
           async run({ onProgress, signal }) {
-            // An equal picture the node already stores is shared, not uploaded again (ADR 0013 § 5); a failure to look is
-            // no match. Its row is minted per attempt: a retry never reuses an id the server may have taken.
-            // the device floor before anything is sealed under the node's key (ADR 0109 point 6, layer 2)
-            assertActiveScopeFloor(scopeId, node)
-            const stored = await findStoredOf(node)?.({ scopeId, nodeId: node.id, nodeKey: key, file, signal }).catch(() => null)
-            const shared: SharedBlob | null = stored
-              ? shareBlob(scopeId, stored, key, { ownerId: node.id, role: COVER_ROLE }, DERIVED_META)
-              : null
-            const up = shared
-              ? null
-              : await uploadCoverImage(
-                scopeId, node.id, key,
-                { blob: file, mediaType: file.type, lastModified: file.lastModified, name: file.name },
-                undefined, { strict: true, onProgress, signal },
-              )
-            // The freshest meta and version, read AFTER the upload: it may have taken a while, and a stale base only costs a retry.
-            // The epoch stated is the one `key` was read at (`node`'s), never a fresher tree's: the blob is wrapped under `key`.
-            const state = await writeNodeCover({
-              scopeId, nodeId: node.id, nodeKey: key, current: { ...nodeMetaState(latest(node)), nodeEpoch: node.epoch },
-              cover: uploadedCover(shared ? shared.ref : up!.plan, crop),
-              uploadId: up?.uploadId, shared: shared?.request, surfaceConflict: false,
+            // The cover is sealed under the node's key, so an epoch refusal - the device floor before anything is sealed
+            // (ADR 0109 point 6, layer 2), or the server's `node_rekey_pending` after the upload - runs the WHOLE cover again:
+            // this member's device pulls the node's path forward, re-reads its key, and looks up, uploads and writes under it;
+            // the first upload's `K_blob` is wrapped under the key the re-key replaced (ADR 0111 decision 11). A node only an
+            // owner re-keys (a drop box) is not this member's to pull: the cover waits for an owner's device then.
+            await writeUnderMemberNode(scopeId, node.id, { key, epoch: node.epoch }, async (at) => {
+              // An equal picture the node already stores is shared, not uploaded again (ADR 0013 § 5); a failure to look is
+              // no match. Its row is minted per attempt: a retry never reuses an id the server may have taken.
+              const stored = await findStoredOf(node)?.({ scopeId, nodeId: node.id, nodeKey: at.key, file, signal }).catch(() => null)
+              const shared: SharedBlob | null = stored
+                ? shareBlob(scopeId, stored, at.key, { ownerId: node.id, role: COVER_ROLE }, DERIVED_META)
+                : null
+              const up = shared
+                ? null
+                : await uploadCoverImage(
+                  scopeId, node.id, at.key,
+                  { blob: file, mediaType: file.type, lastModified: file.lastModified, name: file.name },
+                  undefined, { strict: true, onProgress, signal },
+                )
+              // The freshest meta and version, read AFTER the upload: it may have taken a while, and a stale base only costs a
+              // retry. The epoch stated is the one `at.key` was read at, never a fresher tree's: the blob is wrapped under it.
+              const state = await writeNodeCover({
+                scopeId, nodeId: node.id, nodeKey: at.key, current: { ...nodeMetaState(latest(node)), nodeEpoch: at.epoch },
+                cover: uploadedCover(shared ? shared.ref : up!.plan, crop),
+                uploadId: up?.uploadId, shared: shared?.request, surfaceConflict: false,
+              })
+              patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
             })
-            patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
             onProgress(1)
           },
         },
@@ -194,12 +199,23 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     )
   }
 
-  async function writeSealed(node: TreeNode, key: Uint8Array, scopeId: string, cover: unknown | null, surfaceConflict: boolean): Promise<void> {
+  /** A cover write that uploads nothing (a removal, a moved crop): `cover` builds the value from the key the attempt holds
+   *  and - in a rebuild after an epoch refusal - the node as the re-read tree holds it (`undefined`: nothing to write). The
+   *  same pull and rebuild as an upload's (`writeUnderMemberNode`): a kept cover's wraps are re-read from the meta the
+   *  re-key re-sealed, never carried over from under the old key. */
+  async function writeSealed(
+    node: TreeNode, key: Uint8Array, scopeId: string,
+    cover: (key: Uint8Array, reread: TreeNode | null) => unknown | null | undefined, surfaceConflict: boolean,
+  ): Promise<void> {
     try {
-      // the epoch `key` was read at (`node`'s), whatever a fresher tree says: the cover's wraps are under `key`
-      const current = { ...nodeMetaState(latest(node)), nodeEpoch: node.epoch }
-      const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: key, current, cover, surfaceConflict })
-      patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
+      await writeUnderMemberNode(scopeId, node.id, { key, epoch: node.epoch }, async (at, reread) => {
+        const value = cover(at.key, reread)
+        if (value === undefined) return
+        // the epoch `at.key` was read at, whatever a fresher tree says: the cover's wraps are under `at.key`
+        const current = { ...nodeMetaState(latest(node)), nodeEpoch: at.epoch }
+        const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: at.key, current, cover: value, surfaceConflict })
+        patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
+      })
     } catch (e) {
       await writeFailed(node, e)
     }
@@ -220,13 +236,19 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
       return
     }
     if (intent.kind === 'remove') {
-      void writeSealed(node, key, a.scopeId, null, false)
+      void writeSealed(node, key, a.scopeId, () => null, false)
       return
     }
-    // keep: the current cover's own value with only the crop moved (its source stays).
+    // keep: the current cover's own value with only the crop moved (its source stays) - in a rebuild the one the re-read
+    // meta holds, its wrap moved to the new key by the re-key.
     const stored = storedCover(node)
     if (!stored || typeof stored !== 'object') return
-    void writeSealed(node, key, a.scopeId, { ...(stored as object), crop: intent.crop }, true)
+    const scopeId = a.scopeId
+    const kept = (k: Uint8Array, reread: TreeNode | null) => {
+      const now = reread ? (unsealNodeMeta(k, { scopeId, nodeId: node.id }, reread.wrappedMeta).cover ?? null) : stored
+      return now && typeof now === 'object' ? { ...(now as object), crop: intent.crop } : undefined
+    }
+    void writeSealed(node, key, scopeId, kept, true)
   }
 
   function build(node: TreeNode | null): (CoreHeaderAction & CoreRowAction)[] {

@@ -178,11 +178,13 @@ an owner of the tenant's root scope. The mechanics behind a row — what a grant
 | Invite one of a tenant's members to own it | the **Server Owner** ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) |
 | Invite a person into a tenant (by email); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
 | Remove a member from the tenant | a tenant owner, by the removal cascade only; never the last owner |
+| Give the tenant a new lock (*"re-key this space"*), alone or after a removal | a tenant owner, from an unlocked vault ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 2) |
 | Make a tenant member an owner, or demote one | a tenant owner; never the last owner |
 | Set the tenant's terms, mail settings and per-link storage limit; see members' email | a tenant owner |
 | Create a group or one's own personal scope | any member of the tenant (a group also needs its capability) |
 | Add a tenant member to a group (by username) | a group owner — the tenant owner has **no** power over a group it does not own ([ADR 0014](../decisions/0014-group-scopes-and-governance.md)) |
 | Remove a group member | a group owner, as a removal-rotation; never the last owner |
+| Give a group a new lock (*"re-key this space"*) with nobody removed | a group owner, from an unlocked vault ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 1) |
 | Make a group member an owner, or demote one | a group owner, of an accepted member (a consent proposal is refused `404 member_not_found`); never the last owner |
 | Rename a group or set its icon; delete it into its grace and restore it | a group owner |
 | Rotate a scope's key | an owner of the scope, any kind, with a removal on a group only (`400 invalid_request` elsewhere); a non-owner only for a scope its own account's securing left pending, and never with a removal |

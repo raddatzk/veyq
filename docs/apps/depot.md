@@ -497,8 +497,9 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
   refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
 - **The member** (a drop box's row in the level list — icon, name, "Drop box · N people", open on a click, move and delete in its menu —, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
-  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
-  on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
+  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question; only the
+  caller's own link, the served `mine`) and on again (core's `reactivateShare`; a link a departed member may hold says
+  to make a new one) and deletes its links (where the served `deletable` says so),
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
   drop box's name, its share, and its delete in the header's ⋯ menu; inbox #385 (b), ADR 0110) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's

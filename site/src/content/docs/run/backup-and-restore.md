@@ -163,7 +163,7 @@ dismissal's, a handover's — so a held copy is not kept again, moves a case on 
 closed), and brings back a case the capture lacked as a stub — **restored**, with no report and nothing sealed: a case's
 sealed parts are lost with a capture older than them. A line it cannot apply stops the start: the instance does not
 serve with an erasure undone. The start's log line says what it did
-(`./veyqctl logs app | grep 'erasure ledger'`). Lines older than B are dropped, since no backup is older.
+(`./veyqctl logs app | grep 'erasure ledger'`). Lines older than B are dropped, at every start and hourly while it runs, since no backup is older.
 
 `veyqctl restore` and `rollback` read the ledger out of the app's volume and hand it to the tool, so an object erased
 after the capture is reported as erased, not missing. **On a new host the instance re-applies only the ledger you bring:

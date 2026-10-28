@@ -322,8 +322,9 @@ class ScopesHandler(
     }
 
     /**
-     * Every open member invite of the TENANT scope [scopeId] with its key (ADR 0111 decision 2) — what any member's
-     * rotation must carry, so every member reads it; never an email. Membership first (ADR 0042). A scope that is no
+     * Every open member invite of the TENANT scope [scopeId] with its key (ADR 0111 decision 2) — what every rotation
+     * of the tenant must carry, and a member who is not an owner commits one once its own account rotation left a
+     * pending re-key row for the tenant ([rotateScope]), so every member reads it; never an email. Membership first (ADR 0042). A scope that is no
      * TENANT has none: an empty list.
      */
     fun listOpenInvites(callerId: String, scopeId: String): ListOpenInvitesOutcome {

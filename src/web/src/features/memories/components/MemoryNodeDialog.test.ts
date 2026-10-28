@@ -36,6 +36,8 @@ const stubs = {
   },
 }
 
+/** A member's create at the scope root: re-opens the scope on a `stale_epoch` and states the epochs held then (inbox #670). */
+const ROOT_CREATE = { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) }
 const SCOPE = '11111111-1111-1111-1111-111111111111'
 const KEY = new Uint8Array(32).fill(7)
 const EPOCHS = epochsOf(KEY)
@@ -73,7 +75,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('input').setValue('Italy')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey, epoch: 0 }, { location: null, participants: [] }, { reread: expect.any(Function), pull: expect.any(Function) })
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey, epoch: 0 }, { location: null, participants: [] }, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })
@@ -84,7 +86,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
     // maps opt-in is off in this test's i18n/config → no location step shown, location arg is null
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', null, { location: null, participants: [] }, {})
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', null, { location: null, participants: [] }, ROOT_CREATE)
   })
 
   it('a MEMORY under a parent whose key is missing creates nothing', async () => {
@@ -105,7 +107,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('input').setValue('Day 1')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, memoryKey, 'Day 1', 'italy', 0, { reread: expect.any(Function), pull: expect.any(Function) })
+    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, memoryKey, 'Day 1', 'italy', 0, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(createMemory).not.toHaveBeenCalled()
     expect(wrapper.emitted('done')).toBeTruthy()
   })
@@ -127,7 +129,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Climbing 2026', null, { location: AUTO_PENDING, participants: [] }, {})
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Climbing 2026', null, { location: AUTO_PENDING, participants: [] }, ROOT_CREATE)
   })
 
   it('leaving the opt-in unchecked creates the Memory with no location', async () => {
@@ -137,7 +139,7 @@ describe('MemoryNodeDialog', () => {
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trip', null, { location: null, participants: [] }, {})
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trip', null, { location: null, participants: [] }, ROOT_CREATE)
   })
 
   it('maps a 409 to the slug-taken message and stays open', async () => {
@@ -172,7 +174,7 @@ describe('MemoryNodeDialog: "I was there"', () => {
       expect((wasThere(w).element as HTMLInputElement).checked, 'ticked by default').toBe(true)
       expect(w.text()).toContain(t('memory.participants.wasThere'))
       await create(w)
-      expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [ME] }, {})
+      expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [ME] }, ROOT_CREATE)
     })
   }
 
@@ -181,7 +183,7 @@ describe('MemoryNodeDialog: "I was there"', () => {
     const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
     await wasThere(w).setValue(false)
     await create(w)
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] }, {})
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] }, ROOT_CREATE)
   })
 
   it('is not remembered: the next create offers it ticked again', async () => {
@@ -199,7 +201,7 @@ describe('MemoryNodeDialog: "I was there"', () => {
     expect(wasThere(w).exists()).toBe(false)
     expect(w.text()).not.toContain(t('memory.participants.wasThere'))
     await create(w)
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] }, {})
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] }, ROOT_CREATE)
   })
 
   it('is absent on a chapter, without the own id, and for a scope other than the open one', async () => {

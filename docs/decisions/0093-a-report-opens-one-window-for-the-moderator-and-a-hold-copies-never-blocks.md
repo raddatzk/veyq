@@ -356,8 +356,8 @@ range and its no-extension rule (§ 2 there).
   sentence on every guest write page, with N as it stands at the write, linking the record passage of the instance
   privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, the one home of every Art. 13 passage).
   **The right to object (Art. 21) is stated separately** (Art. 21(4)); an objection erases the rows so far without
-  stopping later writes from being recorded. The sentence's wording waits on counsel (§ Legal basis, Still open 4
-  and 10).
+  stopping later writes from being recorded. The sentence is a draft like every legal text; the questions it touches
+  (§ Legal basis, Still open 4 and 10) are not pursued.
 - The table, the writes, the purge, the objection, the disclosure and the operator's own backups are
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md); the period
   beside every other is [cc.privacy.retention](../crosscutting/cc.privacy.retention.md).
@@ -572,23 +572,23 @@ What it concluded, and where this ADR applies it:
 
 ### Still open
 
-**Until veyq is offered as a service** — while instances are run by their operators for a household, a club or a
-company — the items below are taken to be met by what is built and decided, so none of them holds back a CR or a
-release. Nothing they name is built on that assumption (no hold past 90 days, no authority link), and every legal text
-stays a draft. **Before veyq is offered as a service, each is answered by counsel**, and an answer that differs is a
-legal duty that wins over what is built (`CLAUDE.md`). Each is an [inbox](../inbox.md) row:
+Questions the law leaves open for an operator who runs veyq for a household, a club or a company. **They are not
+pursued (owner 2026-10-28)**: no row tracks them and none holds back a CR or a release. What is built and decided is
+taken to meet them, nothing they name is built on that assumption (no hold past 90 days, no authority link), and every
+legal text stays a draft. They stay named here because code and docs cite them by number, and because an answer that
+differs, should one come, is a legal duty that wins over what is built (`CLAUDE.md`).
 
-1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator — #575.
-2. A time-bound authority link to a hold snapshot — #576.
-3. Whether the German IP-retention bill has passed — #577.
-4. What the recorded source port is worth behind an operator's own NAT — #578.
-5. § 184b(5) StGB for a club's volunteer moderators — #579.
-6. Who is the controller of a member's account data — #580.
-7. The breached-password check and the exchange rates on by default — #581.
-8. Whether a non-economic club is an "enterprise" for DSA Art. 15(2) — #582.
-9. Whether TCO Art. 3(7) excuses a private operator who cannot be reached within the hour — #583.
-10. The layered Art. 13 information on a guest page, and Art. 14 for people a report names — #584.
-11. Reported content inside a backup capture — #585.
-12. Whether erasing a switched-off application's content needs a basis in the terms — #586.
-13. Whether the notice of that erasure is adequate — #587.
-14. Whether switching an application off is a moderation decision — #588.
+1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator.
+2. A time-bound authority link to a hold snapshot.
+3. Whether the German IP-retention bill has passed.
+4. What the recorded source port is worth behind an operator's own NAT.
+5. § 184b(5) StGB for a club's volunteer moderators.
+6. Who is the controller of a member's account data.
+7. The breached-password check and the exchange rates on by default.
+8. Whether a non-economic club is an "enterprise" for DSA Art. 15(2).
+9. Whether TCO Art. 3(7) excuses a private operator who cannot be reached within the hour.
+10. The layered Art. 13 information on a guest page, and Art. 14 for people a report names.
+11. Reported content inside a backup capture.
+12. Whether erasing a switched-off application's content needs a basis in the terms.
+13. Whether the notice of that erasure is adequate.
+14. Whether switching an application off is a moderation decision.

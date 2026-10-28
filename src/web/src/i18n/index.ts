@@ -113,6 +113,9 @@ const en = {
     invitePasswordNote: 'Tell them this password yourself, not by email.',
     email: 'Email address',
     inviteSubmit: 'Send invite',
+    // inbox #566: the send's progress line - the owner's device seals first, then the server stores it and mails the link
+    inviteSecuring: 'Securing the invitation on this device…',
+    inviteSending: 'Sending the invitation by email…',
     inviteSent: 'Invite sent.',
     inviteFailed: 'Could not send the invite. Please try again.',
     alreadyMember: 'That email is already a member of this space.',
@@ -167,6 +170,24 @@ const en = {
     revokedAll: 'No link was on. | One link turned off. | {count} links turned off.',
     revokeAllFailed: 'The links could not be turned off. Please try again.',
   },
+  // ADR 0025 § 2: a tenant owner's "re-key this space" — a new lock for the whole space, nobody removed, or after a removal
+  spaceLock: {
+    title: 'New lock',
+    sub: 'If a member’s device was lost, or someone who left may have kept a copy of this space’s key, give the space a new lock. What is added from now on is closed to the old key. What was already seen stays seen.',
+    action: 'Give it a new lock',
+    confirmTitle: 'Give this space a new lock?',
+    confirm:
+      'Every member and every open invitation gets the new key from this device. Whoever holds only the old key, a removed member or a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
+    done: 'This space has its new lock.',
+    failed: 'The new lock could not be put in. Nothing was changed. Please try again.',
+    removeOption: 'Also give this space a new lock',
+    removeOptionHint: 'The removal already shuts them out of the app. A new lock also keeps a copy of the key they may have kept from opening what is added from now on.',
+    removedNotRekeyed: 'The member was removed, but the new lock could not be put in. Try again with “Give it a new lock” below.',
+    // a group: removing a member already gives it a new lock, so only the lost device is left
+    subGroup: 'If a member’s device was lost, give the space a new lock. Removing a member already does this by itself. What is added from now on is closed to the old key. What was already seen stays seen.',
+    confirmGroup:
+      'Every member gets the new key from this device. Whoever holds only the old key, such as a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
+  },
   spaceIcon: {
     change: 'Change icon',
     add: 'Add icon',
@@ -193,6 +214,19 @@ const en = {
     anomalyNote:
       'This person’s key doesn’t follow from the one you knew. Nothing is shared with it until it does. Compare your safety numbers in person.',
     rotated: 'New identity, signed by their previous key, on {date}.',
+  },
+  // Who's who in a space (inbox #562, uc.spaces.enforce-verified-identities main flow 5): every other member's key there.
+  // The states, "verified by" and the rotation line are `safety.*` and `trust.*`, as on a profile.
+  whoIsWho: {
+    navTitle: 'Who’s who',
+    title: 'Who’s who',
+    sub: 'Everyone you share this space with: whose key your app confirms, who verified them, and who has a new identity.',
+    loading: 'Checking everyone’s key…',
+    loadFailed: 'Could not check everyone’s key. Please try again.',
+    unavailable: 'This space can’t be opened on this device right now, so no key can be checked.',
+    empty: 'Nobody else is in this space yet.',
+    compare: 'Compare safety numbers',
+    openProfile: 'Open {name}’s profile',
   },
   settings: {
     title: 'Settings',
@@ -1934,7 +1968,7 @@ const en = {
       nameTitle: 'What is your name?',
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
       // the guest-write record's first-layer notice (core/sharing/GuestWriteRecordNotice.vue, ADR 0093 § 10): N as the
-      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. Wording awaits counsel.
+      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. The wording is a draft.
       recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
       recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
       recordMore: 'Who keeps it, why, and your rights',
@@ -2104,6 +2138,8 @@ const de: typeof en = {
     invitePasswordNote: 'Sag der Person dieses Passwort selbst, nicht per E-Mail.',
     email: 'E-Mail-Adresse',
     inviteSubmit: 'Einladung senden',
+    inviteSecuring: 'Einladung wird auf diesem Gerät gesichert…',
+    inviteSending: 'Einladung wird per E-Mail versendet…',
     inviteSent: 'Einladung gesendet.',
     inviteFailed: 'Einladung konnte nicht gesendet werden. Bitte erneut versuchen.',
     alreadyMember: 'Diese E-Mail ist bereits Mitglied dieses Bereichs.',
@@ -2156,6 +2192,22 @@ const de: typeof en = {
     revokedAll: 'Es war kein Link aktiv. | Ein Link abgeschaltet. | {count} Links abgeschaltet.',
     revokeAllFailed: 'Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen.',
   },
+  spaceLock: {
+    title: 'Neues Schloss',
+    sub: 'Ist das Gerät eines Mitglieds verloren gegangen, oder könnte jemand, der den Bereich verlassen hat, eine Kopie seines Schlüssels behalten haben, gib dem Bereich ein neues Schloss. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
+    action: 'Neues Schloss einbauen',
+    confirmTitle: 'Diesem Bereich ein neues Schloss geben?',
+    confirm:
+      'Jedes Mitglied und jede offene Einladung bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, ein entferntes Mitglied oder ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
+    done: 'Dieser Bereich hat sein neues Schloss.',
+    failed: 'Das neue Schloss konnte nicht eingebaut werden. Es wurde nichts geändert. Bitte versuch es erneut.',
+    removeOption: 'Auch ein neues Schloss einbauen',
+    removeOptionHint: 'Die Entfernung sperrt die Person in der App schon aus. Mit einem neuen Schloss öffnet auch eine Kopie des Schlüssels, die sie behalten haben könnte, nicht, was ab jetzt dazukommt.',
+    removedNotRekeyed: 'Das Mitglied wurde entfernt, aber das neue Schloss konnte nicht eingebaut werden. Versuch es unten mit „Neues Schloss einbauen“ noch einmal.',
+    subGroup: 'Ist das Gerät eines Mitglieds verloren gegangen, gib dem Bereich ein neues Schloss. Das Entfernen eines Mitglieds baut von selbst eins ein. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
+    confirmGroup:
+      'Jedes Mitglied bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, etwa ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
+  },
   spaceIcon: {
     change: 'Icon ändern',
     add: 'Icon hinzufügen',
@@ -2182,6 +2234,17 @@ const de: typeof en = {
     anomalyNote:
       'Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern persönlich.',
     rotated: 'Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben, am {date}.',
+  },
+  whoIsWho: {
+    navTitle: 'Wer ist wer',
+    title: 'Wer ist wer',
+    sub: 'Alle, mit denen du diesen Bereich teilst: wessen Schlüssel deine App bestätigt, wer sie verifiziert hat und wer eine neue Identität hat.',
+    loading: 'Die Schlüssel werden geprüft…',
+    loadFailed: 'Die Schlüssel konnten nicht geprüft werden. Bitte versuche es erneut.',
+    unavailable: 'Dieser Bereich lässt sich auf diesem Gerät gerade nicht öffnen, daher kann kein Schlüssel geprüft werden.',
+    empty: 'Außer dir ist noch niemand in diesem Bereich.',
+    compare: 'Sicherheitsnummern vergleichen',
+    openProfile: 'Profil von {name} öffnen',
   },
   settings: {
     title: 'Einstellungen',

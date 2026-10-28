@@ -1,7 +1,7 @@
 # ADR 0025 — Forward-secrecy policy per scope type (when to rotate `K_SC`)
 
 - Status: Accepted
-- Built: partly (not built: § 2's owner-triggered "re-key this space" action)
+- Built: yes
 - Date: 2026-07-05
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
 - Replaced in part: § 3 by ADR 0060 (built); § 2 by ADR 0111 (built)
@@ -50,17 +50,30 @@ vault") is an explicit, rare action. This is the established practice for per-us
    Small `N`, intentional and often sensitive sharing; the `O(N)` burst is small and rotation delivers
    post-removal forward-confidentiality, against a malicious operator as far as
    [ADR 0024](0024-scope-key-rotation.md) § Guarantee states — a rotation queued to another owner, as a
-   tenant removal that cuts a co-shared group is, holds against an honest operator only.
+   tenant removal that cuts a co-shared group is, holds against an honest operator only. For the compromise case with
+   nobody to remove — a member's device lost — a group owner gives the group the same explicit **"re-key this space"**
+   as a tenant owner (§ 2): a plain rotation of the group from its members panel, over the members then present
+   ([uc.spaces.manage-group-members](../features/spaces/use-cases/uc.spaces.manage-group-members.md) A6). A removal
+   needs none, it already rotates.
 
 2. **Tenant — ACL-revoke by default; no automatic content-key rotation on routine removal.** Removing a member
-   **deletes the membership** (instant 403) and stops there. Content-key rotation is offered as an **explicit,
-   owner-triggered "re-key this space"** action, reserved for the **compromise case** (a member's key leaked or
-   device stolen), where the `O(N)` re-grant is justified and rare. Its caller is an account rotation
-   ([ADR 0060](0060-key-rotation-after-compromise.md)): the securing account re-keys the tenant from its own device
-   and grants every member from there
-   ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-   decision 8); only the node re-key is spread across members' devices, and a member it declares pending is brought
-   current by grant-delivery ([ADR 0024](0024-scope-key-rotation.md) §5).
+   **deletes the membership** (instant 403) and stops there. Content-key rotation is an **explicit "re-key this
+   space"**, reserved for the **compromise case** (a member's key leaked, a device lost, a removed member who may have
+   kept the key), where the `O(N)` re-grant is justified and rare. It has two callers, and both take the one rotation
+   path ([ADR 0024](0024-scope-key-rotation.md) §4):
+   - **A tenant owner**, from the tenant's members panel — on its own, or as an opt-in on a removal, unchecked by
+     default so a routine removal stays ACL-revoke. With a removal, the removal lands first and the rotation follows
+     over the members then remaining, the removed one excluded by the owner's own choice: it is never wrapped to them.
+     A failed rotation leaves the removal standing and says so.
+   - **An account rotation** ([ADR 0060](0060-key-rotation-after-compromise.md)): the securing account re-keys the
+     tenant from its own device
+     ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+     decision 8).
+
+   Either rotator grants every member it anchors from its own device and declares the rest, and every open invite it
+   cannot vouch for, pending (ADR 0111 decisions 2 and 9); only the node re-key is spread across members' devices, and
+   a member declared pending is brought current by grant-delivery ([ADR 0024](0024-scope-key-rotation.md) §5).
+   The flow is [uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9.
 
 3. **Personal — never on a removal** (a single member; nothing to rotate away from). It rotates when its account is
    secured, self-served: there the old identity is exactly the somebody to rotate away from

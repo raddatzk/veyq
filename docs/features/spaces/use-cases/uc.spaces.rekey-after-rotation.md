@@ -2,8 +2,10 @@
 
 - **ID:** uc.spaces.rekey-after-rotation
 - **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; an
-  owner's scope-rotation worker, for a queued rotation (a tenant removal that cut a co-shared group) or an explicit
-  re-key; a secured account's own device, for every scope its rotation re-granted — and, in the background, **any member
+  owner's, right after their explicit re-key of the tenant or a group
+  ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A8–A9,
+  [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) A6); an owner's scope-rotation worker, for a
+  queued rotation (a tenant removal that cut a co-shared group); a secured account's own device, for every scope its rotation re-granted — and, in the background, **any member
   holding the current epoch**, through their worker ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 11: a re-key is not governance). A drop box and what its guests hold in it are re-keyed by an **owner**
   only.
@@ -61,9 +63,24 @@
   owner's device runs), a member's operation on one is `403 not_scope_owner`, and a member's write into one waits
   like a guest's. A Memory or chapter with an uploader link carries a drop key too, but members write into it: any
   member re-keys it, its drop key included (ADR 0111 decision 11).
-- **E8 — a member's write that carries ciphertext under the old key.** A cover, a banner and a medium's meta edit
-  hold a wrap or a sealed copy under the node's key from before, and an import writes through its own steps: these
-  are not pulled forward yet and wait for the background re-key or are refused at the device floor (inbox #563).
+- **E8 — a member's write that carries ciphertext under the old key.** A cover and a banner upload a blob wrapped under
+  the node's key, and a medium's meta edit starts from a tier sealed under it. Each pulls its path like any member's write
+  and is then rebuilt, not resent: a cover or a banner runs again from scratch under the re-read key, the upload included
+  (a kept one's wraps read from the meta the re-key re-sealed); a meta edit re-applies its change to the tier's plaintext
+  as listed and re-bases on the re-sealed tier through `409 stale_revision`. An import or a copy pulls the target it
+  creates under. Into a drop box each waits for an owner (E7).
+- **E9 — a rotation while an import or a copy is under way.** What the run already created is at the epoch the run
+  started with, so its next write meets the gate: a create below one of its nodes, a Memory's next medium, its cover
+  or banner, a Pot's next batch or receipt, a Depot file's content. Each is **one write** that pulls that node forward
+  on this device and is sealed again under the re-read key; the run goes on under the key and epoch it left, and never
+  repeats a kind's whole import, which would create the node twice. A download's medium seals its corrected capture time
+  and place name in the upload that adds it, so no write after the last medium opens a tier the re-key re-sealed.
+  Another member's device may re-key the node first: the write then meets `409 stale_epoch`, and the pull runs before
+  the re-read anyway, since the device holds the scope
+  at the old epoch and opens the new key only once it re-opened it. A create at the scope root, which states no parent
+  epoch, re-opens the scope the same way. Below a drop box the write waits for an owner (E7); the refused pull still
+  re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
+  rolled back.
 
 ## Quality notes
 

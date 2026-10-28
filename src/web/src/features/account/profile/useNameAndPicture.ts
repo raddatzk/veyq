@@ -2,9 +2,13 @@
 // and both are written by their owner only, so ONE composable serves the two places that edit them - Settings > Your profile
 // (`ProfilePanel`) and the member's OWN profile page (`PersonProfile`, shown only when the page is theirs). It holds the name
 // fields and the picture choice (kept, replaced or removed) as a draft; the host's Save seals the name (`sealedName`) and
-// writes the picture (`savePicture`). `K_tenant` stays in a closure, never in reactivity.
-import { computed, reactive, ref } from 'vue'
-import { getMyProfile, openOwnNameKey, sealName, unsealNameUnderEpochs, sealAvatar, setMyAvatar, clearMyAvatar, type MemberProfile } from './profile'
+// writes the picture (`savePicture`). `K_tenant` stays in a closure, never in reactivity, and is zeroed when the editor goes away
+// (its effect scope ends) or a new load replaces it (inbox #574).
+import { computed, getCurrentScope, onScopeDispose, reactive, ref } from 'vue'
+import {
+  getMyProfile, openOwnNameKey, zeroOwnNameKey, sealName, unsealNameUnderEpochs, sealAvatar, setMyAvatar, clearMyAvatar,
+  type MemberProfile, type OwnNameKey,
+} from './profile'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { avatarUrlOf, loadTenantPeople, refreshPeopleDirectory } from '../../../core/people/directory'
 
@@ -20,8 +24,20 @@ export function useNameAndPicture() {
   const draft = ref<Draft>({ kind: 'keep' })
   const dialogOpen = ref(false)
   const preview = useObjectUrl() // the draft picture's object URL; revoked on replace and on unmount
-  // `K_tenant` + the address our name and picture are sealed at: outside any reactive proxy.
-  let ownKey: Awaited<ReturnType<typeof openOwnNameKey>> = null
+  // `K_tenant` + the address our name and picture are sealed at: outside any reactive proxy. Every use is synchronous
+  // (`sealName`, `sealAvatar` before the PUT's await), so zeroing it between uses never pulls it from under one.
+  let ownKey: OwnNameKey | null = null
+  let disposed = false
+  function release() {
+    if (ownKey) zeroOwnNameKey(ownKey)
+    ownKey = null
+  }
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      disposed = true
+      release()
+    })
+  }
 
   /** The picture to draw: the draft's preview, nothing for a removal, else the directory's cached one. */
   const pictureUrl = computed<string | null>(() => {
@@ -35,7 +51,14 @@ export function useNameAndPicture() {
   /** Read the key and fill the fields from an already-read profile (or read it). */
   async function load(profile?: MemberProfile): Promise<MemberProfile> {
     const p = profile ?? (await getMyProfile())
-    ownKey = await openOwnNameKey()
+    const opened = await openOwnNameKey()
+    if (disposed) {
+      // The editor went away while the keys were opening: nobody will seal with them.
+      if (opened) zeroOwnNameKey(opened)
+      return p
+    }
+    release()
+    ownKey = opened
     hasKey.value = ownKey !== null
     meId.value = ownKey?.address.userId ?? ''
     serverHasPicture.value = p.avatarRevision > 0

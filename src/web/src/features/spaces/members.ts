@@ -5,7 +5,7 @@
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
-import { openScopeById } from './scopes'
+import { commitRotation, openScopeById } from './scopes'
 import { buildMemberInvite, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { writeKey, zeroEpochKeys } from './epochs'
@@ -25,15 +25,26 @@ export { SetTenantMemberRoleRequestRoleEnum } from '../../api/generated/tenants'
 export { DeliveryResult } from '../../api/generated/tenants'
 
 export type { InviteSecret } from './memberInvite'
+export { prepareInviteCode } from './memberInvite'
+
+/** Where an invite's send stands, for the dialog's progress line (inbox #566): `securing` while the client opens the tenant key
+ *  and seals the invite (the link key's Argon2id included, unless it was derived ahead), `sending` while the server stores it
+ *  and mails the link — its answer waits for the mail to be handed over. */
+export type InvitePhase = 'securing' | 'sending'
 
 /**
  * Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). The invite is a
  * placeholder member (ADR 0111 decisions 1-2, {@link buildMemberInvite}): it needs the unlocked vault and the tenant's
- * key. A `409 stale_epoch` — a rotation landed while it was built — is rebuilt once against the new epoch.
+ * key. A `409 stale_epoch` — a rotation landed while it was built — is rebuilt once against the new epoch. [onPhase] hears
+ * each phase as it begins.
  */
-export async function inviteMember(tenantId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+export async function inviteMember(
+  tenantId: string, email: string, secret: InviteSecret, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteState> {
   return onceMoreIfStale(async () => {
+    onPhase?.('securing')
     const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    onPhase?.('sending')
     return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest }))
   })
 }
@@ -54,10 +65,15 @@ export function listMemberInvites(tenantId: string): Promise<PendingMemberInvite
 }
 
 /** Re-issue a pending member invite: supersede it (its key and grant go) and mail a new one to the same [email] — a new
- *  invite key, grant, link and code ({@link buildMemberInvite}) — owner-gated. */
-export function reissueMemberInvite(tenantId: string, inviteId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+ *  invite key, grant, link and code ({@link buildMemberInvite}) — owner-gated. [onPhase] hears each phase as it begins, as
+ *  an invite's does (inbox #630). */
+export function reissueMemberInvite(
+  tenantId: string, inviteId: string, email: string, secret: InviteSecret, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteState> {
   return onceMoreIfStale(async () => {
+    onPhase?.('securing')
     const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    onPhase?.('sending')
     return withRefresh(() => tenantsApi().reissueMemberInvite({ tenantId, inviteId, memberInviteRequest }))
   })
 }
@@ -85,6 +101,26 @@ export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
  */
 export function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
   return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
+}
+
+/**
+ * Give a shared space a new lock (ADR 0025 §§ 1-2; uc.spaces.remove-tenant-member A8-A9 for a TENANT,
+ * uc.spaces.manage-group-members A6 for a GROUP) — an owner's plain rotation of the scope with nobody removed in it, for
+ * the compromise case: a member's device lost, or (a tenant) a removed member who may have kept the key. It is
+ * {@link commitRotation}, the one path every rotation takes: the next epoch minted on this device, every member whose
+ * key it anchors re-granted, the rest and (a tenant) every open invite it cannot vouch for declared pending. Returns the
+ * new epoch. The caller re-keys the nodes after it (ADR 0109).
+ *
+ * The directory is read **now**, after any removal, so the request covers every membership the server holds (`409
+ * rotation_incomplete` otherwise; the rotation's one rebuild reads it again). `excluding` — the member a tenant removal
+ * just took out — is dropped from it, and from the re-read, by the owner's own choice, however the server lists them:
+ * the new epoch is never wrapped to them. A server that kept their membership meets the rotation's cover check, and
+ * nothing commits. Never a `removesUserId`: a tenant member leaves only by the removal cascade (`400 invalid_request` on
+ * a TENANT, inbox #595), which runs first, and a group member by the group's own removal-rotation
+ * ({@link ./scopes#rotateGroupForRemoval}), which needs no second rotation.
+ */
+export async function rekeySpace(scopeId: string, excluding?: string): Promise<number> {
+  return commitRotation(scopeId, await listScopeMembers(scopeId), { excluding })
 }
 
 /**

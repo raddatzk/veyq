@@ -1,29 +1,34 @@
-// Page-side front door to core's frame worker (`frames.worker.ts`, inbox #536): every chunk frame core's blob transport
-// seals or opens goes through here. The shape is the other front doors' (`features/memories/listingOpener.ts`,
-// `shared/image/mediaDeriveWorker.ts`): a lazily created module-level Worker, a `workerUnavailable` latch, a `seq`-keyed
-// map of the jobs not yet answered, each with its own way to finish on the page thread, and a one-time warning when a
-// Worker that existed could not run. The Worker is an optimisation, never a requirement:
+// Page-side front door to core's frame worker (`frames.worker.ts`, inbox #536, #220): every chunk an upload sends and
+// every frame core's blob transport opens goes through here. The shape is the other front doors'
+// (`features/memories/listingOpener.ts`, `shared/image/mediaDeriveWorker.ts`): a lazily created module-level Worker, a
+// `workerUnavailable` latch, a `seq`-keyed map of the jobs not yet answered, each with its own way to finish on the page
+// thread, and a one-time warning when a Worker that existed could not run. The Worker is an optimisation, never a
+// requirement:
 //   - an infrastructure failure (the Worker does not load, `error`/`messageerror`, a `postMessage` that throws) latches
-//     it off for the session and finishes every outstanding job on the page thread, through the same `keys.ts` call the
-//     Worker runs: the same `@noble` code on another thread, so no second implementation;
-//   - a `source` answer (a frame the AEAD refuses) rejects, with no page-thread retry: the same bytes fail the same way;
-//   - an abort rejects with an `AbortError` at once, and the answer of a job already in the Worker is dropped by its id.
+//     it off for the session and finishes every outstanding job on the page thread, through the same `keys.ts` call and
+//     the same `putFrame` the Worker runs: the same `@noble` code on another thread, so no second implementation;
+//   - a `source` answer (a frame the AEAD refuses, a chunk the Worker could not read) and a `network` answer (a `PUT`
+//     that failed in the network) reject, with no page-thread retry: the same input fails the same way, and a failed
+//     request is the queue's to retry, not this door's;
+//   - an abort rejects with an `AbortError` at once, the answer of a job already in the Worker is dropped by its id, and
+//     a chunk's `PUT` in the Worker is told to stop (`cancel`).
 // Where there is no `Worker` at all (node: vitest) every job runs on the page thread, silently: that is the designed path
 // there. That the build emitted the Worker is `verify:frame-worker` (`scripts/assert-frame-worker-in-dist.mjs`).
 //
-// What crosses: `K_blob` by structured clone in each job (the Worker zeroes its copy once it answered); the plaintext and
-// the frames in the transfer list, never copied, so the caller's buffers are DETACHED after a post — every caller hands
-// over bytes it does not read again. A view that does not span its whole buffer is copied first (`ownBuffer`).
+// What crosses: `K_blob` by structured clone in each job (the Worker zeroes its copy once it answered); a chunk's `Blob`
+// slice as a handle (nothing is read on the page); bytes — the frames to open, a chunk read on the page because its
+// source is no `Blob` — in the transfer list, never copied, so the caller's buffers are DETACHED after a post: every caller
+// hands over bytes it does not read again. A view that does not span its whole buffer is copied first (`ownBuffer`).
 //
 // Why the front door waits for the Worker's `ready` before it posts anything: a module Worker that fails to load (a
 // mis-bundled chunk, a CSP refusal) fires `error` only after the first posts were made, and a post transfers its bytes at
 // once, so the jobs it would have to finish on the page thread would have nothing left to finish with. Until `ready`, a
 // job waits here with its bytes intact; after it, a load failure cannot happen any more, and what is left is a Worker
-// that dies mid-job: a seal is then read again from its source (`reread`), and an open, whose fetched frames are gone,
-// rejects `frame_worker_lost`.
+// that dies mid-job: a chunk is then read, sealed and sent again on the page (from its source; a `PUT` is idempotent),
+// and an open, whose fetched frames are gone, rejects `frame_worker_lost`.
 import * as v1 from '@veyq/crypto/v1'
-import { openFrameRun, sealFrameOf } from './keys'
-import { buffersOf, ownBuffer, type FrameMessage, type FrameRequest } from './frameOps'
+import { openFrameRun } from './keys'
+import { ownBuffer, transferOf, type FrameMessage, type FrameRequest } from './frameOps'
 
 /** Frames per open job: 16 frames, 4 MiB of plaintext, ≈ 70 ms at `@noble`'s measured rate. The seal and the open
  *  share one Worker, which runs one job at a time, so a whole-blob open is cut into runs: an upload's seals wait at most
@@ -31,10 +36,10 @@ import { buffersOf, ownBuffer, type FrameMessage, type FrameRequest } from './fr
 export const OPEN_RUN_FRAMES = 16
 
 type Job = {
-  req: FrameRequest
+  req: Exclude<FrameRequest, { op: 'cancel' }>
   /** Posted, so its bytes were transferred: the page no longer holds them. */
   posted: boolean
-  resolve: (bytes: Uint8Array) => void
+  resolve: (value: unknown) => void
   reject: (reason: unknown) => void
   /** Finish this job on the page thread (the Worker is gone). */
   onPage: () => void
@@ -72,10 +77,21 @@ function latch(): void {
 function post(w: Worker, job: Job): void {
   const { req } = job
   try {
-    w.postMessage(req, buffersOf(req.op === 'seal-frame' ? [req.plaintext] : req.frames))
+    w.postMessage(req, transferOf(req))
     job.posted = true
   } catch {
     latch() // a post that throws transferred nothing (the clone fails first), so the job finishes here intact
+  }
+}
+
+/** Tell the Worker to stop a posted chunk's `PUT`. Best effort: a Worker that cannot take it is latched or gone, and
+ *  either way the job's answer is nobody's. */
+function cancel(job: Job): void {
+  if (!job.posted || !worker || job.req.op !== 'seal-put') return
+  try {
+    worker.postMessage({ id: (seq += 1), op: 'cancel', target: job.req.id } satisfies FrameRequest)
+  } catch {
+    /* the job is dropped either way */
   }
 }
 
@@ -109,8 +125,9 @@ function getWorker(): Worker | null {
       const job = jobs.get(msg.id)
       if (!job) return // aborted: nobody waits for it
       jobs.delete(msg.id)
-      if (msg.ok) job.resolve(msg.bytes)
-      else job.reject(new Error(job.req.op === 'seal-frame' ? 'frame_seal_failed' : 'frame_open_failed'))
+      if (msg.ok) job.resolve('bytes' in msg ? msg.bytes : msg.status)
+      else if (msg.kind === 'network') job.reject(new Error(msg.error))
+      else job.reject(new Error(job.req.op === 'seal-put' ? 'frame_seal_failed' : 'frame_open_failed'))
     })
     w.addEventListener('error', latch)
     w.addEventListener('messageerror', latch)
@@ -124,27 +141,28 @@ function getWorker(): Worker | null {
 
 /** Run `req` in the Worker, or `here` on the page thread where there is none (or once it failed before taking the job);
  *  `recover` where the Worker took the job's bytes and then died. */
-function submit(
-  req: FrameRequest,
-  here: () => Uint8Array,
-  recover: () => Promise<Uint8Array>,
+function submit<T>(
+  req: Job['req'],
+  here: () => T | Promise<T>,
+  recover: () => Promise<T>,
   signal?: AbortSignal,
-): Promise<Uint8Array> {
+): Promise<T> {
   if (signal?.aborted) return Promise.reject(aborted())
   const w = getWorker()
   if (!w) return Promise.resolve().then(here)
-  return new Promise<Uint8Array>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
       jobs.delete(req.id) // never posted if it still waited; its answer dropped if it was
+      cancel(job)
       reject(aborted())
     }
     const done = () => signal?.removeEventListener('abort', onAbort)
     const job: Job = {
       req,
       posted: false,
-      resolve: (bytes) => {
+      resolve: (value) => {
         done()
-        resolve(bytes)
+        resolve(value as T)
       },
       reject: (reason) => {
         done()
@@ -162,26 +180,30 @@ function submit(
 }
 
 /**
- * Seal frame `index` of a blob of `total` frames under its `K_blob`, in the frame worker, else on the page thread.
- * `plaintext` is handed over (detached after the call); `reread` reads the same bytes again, for a job the Worker took
- * and could not answer. Resolves to the sealed frame, a buffer the caller owns.
+ * Read, seal and `PUT` chunk `index` of a blob of `total` frames under its `K_blob` to `url`, in the frame worker (inbox
+ * #220), else on the page thread through `here` — the caller's same three steps, reading the chunk from its source,
+ * which is also what finishes a chunk the Worker took and could not answer (a `PUT` is idempotent). `chunk` is asked
+ * for only when a Worker will take it: the slice as a `Blob` handle, or its bytes where the source is no `Blob` (handed
+ * over: detached after the call). Resolves to the store's status; rejects where the `PUT` failed in the network, with an
+ * `AbortError` when `signal` aborts first.
  */
-export function sealFrameOff(
+export function sealPutOff(
   blobKey: Uint8Array,
   index: number,
   total: number,
-  plaintext: Uint8Array,
-  reread?: () => Promise<Uint8Array>,
-): Promise<Uint8Array> {
-  const own = ownBuffer(plaintext)
-  return submit(
-    { id: (seq += 1), op: 'seal-frame', blobKey, index, total, plaintext: own },
-    () => sealFrameOf(blobKey, index, total, own),
-    async () => {
-      if (!reread) throw new Error('frame_worker_lost')
-      return sealFrameOf(blobKey, index, total, await reread())
-    },
-  )
+  chunk: () => Promise<Blob | Uint8Array>,
+  url: string,
+  here: () => Promise<number>,
+  signal?: AbortSignal,
+): Promise<number> {
+  if (signal?.aborted) return Promise.reject(aborted())
+  if (!getWorker()) return Promise.resolve().then(here)
+  return chunk().then((c) => submit(
+    { id: (seq += 1), op: 'seal-put', blobKey, index, total, chunk: c instanceof Uint8Array ? ownBuffer(c) : c, url },
+    here,
+    here,
+    signal,
+  ))
 }
 
 /**

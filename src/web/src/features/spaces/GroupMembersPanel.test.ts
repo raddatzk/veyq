@@ -12,6 +12,7 @@ vi.mock('./members', () => ({
   resolveGroupMember: vi.fn(),
   setMemberRole: vi.fn(),
   removeGroupMember: vi.fn(),
+  rekeySpace: vi.fn(),
   memberError: vi.fn(),
   SetMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
 }))
@@ -35,6 +36,8 @@ vi.mock('../account/tenantTrust', () => ({ tenantBadges: vi.fn() }))
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
+// The node re-key after a rotation is rekeyScope.test.ts's; here only that it runs, and after what.
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({ ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn() }))
 const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
@@ -43,7 +46,9 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
-import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError } from './members'
+import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError, rekeySpace } from './members'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { httpError } from '../../test/httpError'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation, revokeScopeShares } from './scopes'
 import { IdentityUnanchoredError } from '../account/identityPins'
 import { tenantBadges } from '../account/tenantTrust'
@@ -94,6 +99,7 @@ async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me:
 const button = (w: ReturnType<typeof mount>, label: string) => w.findAll('button').find((b) => b.text() === label)
 
 beforeEach(() => {
+  vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(scopeLifecycle).mockResolvedValue(null)
@@ -221,6 +227,73 @@ describe('GroupMembersPanel — turn off every link (ADR 0075)', () => {
   it('control: a member who does not own the group is not offered it', async () => {
     const w = await mountPanel({ me: 'stranger' })
     expect(button(w, t('spaceLinks.revokeAll'))).toBeFalsy()
+  })
+})
+
+// ADR 0025 § 1 (inbox #660): a group owner gives the group a new lock with nobody removed — the tenant panel's action,
+// for a member's lost device. The rotation is the plain one (rekeySpace, members.test.ts) and the nodes follow (ADR 0109).
+describe('GroupMembersPanel — a new lock for the group (ADR 0025 § 1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    globalThis.URL.revokeObjectURL = vi.fn()
+    vi.mocked(rekeySpace).mockResolvedValue(2)
+    vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
+  })
+  const lockAction = (w: ReturnType<typeof mount>) => button(w, t('spaceLock.action'))
+
+  it('offers the owner the new lock and, confirmed, rotates this group with nobody removed, then re-keys its nodes', async () => {
+    confirmAsk.mockResolvedValue(true)
+    const w = await mountPanel({ me: 'owner' })
+    expect(w.text()).toContain(t('spaceLock.subGroup'))
+    await lockAction(w)!.trigger('click')
+    await flushPromises()
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: t('spaceLock.confirmGroup'), acceptLabel: t('spaceLock.action') }))
+    expect(rekeySpace).toHaveBeenCalledWith('g-1')
+    expect(rekeyScope).toHaveBeenCalledWith('g-1')
+    const order = (f: unknown) => vi.mocked(f as () => void).mock.invocationCallOrder[0]
+    expect(order(rekeySpace)).toBeLessThan(order(rekeyScope))
+    // a plain rotation: no removal rides on it
+    expect(rotateGroupForRemoval).not.toHaveBeenCalled()
+    expect(toastSuccess).toHaveBeenCalledWith(t('spaceLock.done'))
+  })
+
+  it('control: declined, nothing rotates', async () => {
+    confirmAsk.mockResolvedValue(false)
+    const w = await mountPanel({ me: 'owner' })
+    await lockAction(w)!.trigger('click')
+    await flushPromises()
+    expect(rekeySpace).not.toHaveBeenCalled()
+    expect(rekeyScope).not.toHaveBeenCalled()
+  })
+
+  it('a member who does not own the group is not offered it, nor an owner while the group is being deleted', async () => {
+    expect(lockAction(await mountPanel({ me: 'stranger' }))).toBeUndefined()
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: new Date(), purgeAfter: new Date(Date.now() + 86_400_000), compromiseRotation: null, rekeying: false })
+    const pending = await mountPanel({ me: 'owner' })
+    expect(button(pending, t('groups.restore'))).toBeTruthy() // the control: the owner's pending-deletion view is on screen
+    expect(lockAction(pending)).toBeUndefined()
+  })
+
+  it('a rotation that fails says nothing was changed and re-keys nothing', async () => {
+    confirmAsk.mockResolvedValue(true)
+    vi.mocked(rekeySpace).mockRejectedValue(httpError(409, 'rotation_incomplete'))
+    const w = await mountPanel({ me: 'owner' })
+    await lockAction(w)!.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain(t('spaceLock.failed'))
+    expect(rekeyScope).not.toHaveBeenCalled()
+    expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
+  // The group's copy says what the lock protects and what it does not, in both languages, and that a removal needs none.
+  it('the group\'s copy names what it protects and what it does not, in EN and DE', () => {
+    const de = (i18n.global.getLocaleMessage('de') as { spaceLock: { confirmGroup: string; subGroup: string } }).spaceLock
+    for (const copy of [t('spaceLock.confirmGroup'), de.confirmGroup]) {
+      expect(copy).toMatch(/from now on|ab jetzt/)
+      expect(copy).toMatch(/stays seen|bleibt gesehen/)
+    }
+    for (const sub of [t('spaceLock.subGroup'), de.subGroup]) expect(sub).toMatch(/Removing a member|Entfernen eines Mitglieds/)
   })
 })
 

@@ -874,6 +874,10 @@ interface VeyqConfig {
         /** How often the sweep appends the outbox's unsent rows to the file: the window an erasure is not yet in it. */
         fun sweep(): Interval
 
+        /** How often the file is trimmed to B while the instance runs (`ErasureLedgerFile.scheduledTrim`): how long a
+         *  line may outlive B. The start trims it too. */
+        fun purge(): Interval
+
         /** The ledger's path; unset, `erasures.log` in the directory of the config-secret key file — the state
          *  directory both deployment targets persist and no restore touches. The tests give each boot its own. */
         fun file(): java.util.Optional<String>

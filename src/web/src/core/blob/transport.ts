@@ -17,8 +17,9 @@ import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
 import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, BlobSource, ChunkPut, ReservedUpload, WindowFn } from './types'
 import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
-import { blobKeyContext, unwrapBlobKey } from './keys'
-import { openFrameRunOff, openFramesOff, sealFrameOff } from './frameWorker'
+import { blobKeyContext, sealFrameOf, unwrapBlobKey } from './keys'
+import { openFrameRunOff, openFramesOff, sealPutOff } from './frameWorker'
+import { putFrame } from './framePut'
 import { PRESIGN_BATCH_MAX, PRESIGN_REFRESH_MS, PresignExpired, readScheduler, type Presigned, type ReadOpts } from './readScheduler'
 
 // The wrap's binding, its unwrap, a listed blob's meta and the frames' open are pure, and live in `keys.ts` so a Worker
@@ -48,16 +49,30 @@ export function planBlob(
   return plan
 }
 
-/** Read frame `index`'s plaintext of a planned blob — one [CHUNK_SIZE] slice of the source, never more. The page reads
- *  it (async I/O, no main-thread work); a `BlobSource` answers a fresh buffer, which the seal then hands over. */
+/** Read frame `index`'s plaintext of a planned blob — one [CHUNK_SIZE] slice of the source, never more. A `BlobSource`
+ *  answers a fresh buffer, which the seal then hands over. */
 async function readSlice(plan: BlobPlan, index: number): Promise<Uint8Array> {
   return new Uint8Array(await plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE).arrayBuffer())
 }
 
-/** Read and seal frame `index` of a planned blob in core's frame worker (`frameWorker.ts`, inbox #536): the slice is
- *  read here and transferred, the sealed frame comes back transferred. */
-async function sealFrameAt(plan: BlobPlan, index: number): Promise<Uint8Array> {
-  return sealFrameOff(plan.blobKey, index, plan.chunkCount, await readSlice(plan, index), () => readSlice(plan, index))
+/**
+ * Read, seal and `PUT` frame `index` of a planned blob to `url`, resolving to the store's status: in core's frame worker
+ * (`frameWorker.ts`, inbox #536, #220), which reads a `Blob` source's slice itself — the page hands over a handle and
+ * reads nothing — and never sends the frame back; a source that is no `Blob` (a copy's frame reader) is read here and
+ * its slice transferred. On the page thread (no Worker, or one that could not answer) the same three steps run here.
+ */
+function sealPutAt(plan: BlobPlan, index: number, url: string, signal?: AbortSignal): Promise<number> {
+  const chunk = async () => plan.source instanceof Blob
+    ? plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
+    : readSlice(plan, index)
+  const onPage = async () => putFrame(url, sealFrameOf(plan.blobKey, index, plan.chunkCount, await readSlice(plan, index)), signal)
+  return sealPutOff(plan.blobKey, index, plan.chunkCount, chunk, url, onPage, signal)
+}
+
+/** Send frame `index`; a `PUT` the store answers with an error throws `chunk_put_failed:<status>`. */
+async function putChunkAt(plan: BlobPlan, index: number, url: string, signal?: AbortSignal): Promise<void> {
+  const status = await sealPutAt(plan, index, url, signal)
+  if (status < 200 || status >= 300) throw new Error(`chunk_put_failed:${status}`)
 }
 
 /** Throw an AbortError if the caller cancelled — the upload queue maps it to a cancelled (not failed) upload. */
@@ -116,13 +131,13 @@ async function pumpBlob(
         await nextWindow()
         if (signedUpTo === before) throw new Error('upload_failed') // a window that signs nothing would spin forever
       }
-      const frame = await sealFrameAt(plan, i)
       try {
-        await putChunk(urls.get(i)!, frame, signal)
+        await putChunkAt(plan, i, urls.get(i)!, signal)
       } catch (e) {
         if (chunkPutStatus(e) !== HttpStatus.forbidden) throw e
-        take(await signWindow(upload.uploadId, i)) // the window expired → re-sign from this chunk, retry it once
-        await putChunk(urls.get(i)!, frame, signal)
+        // The window expired → re-sign from this chunk and send it once more, sealed anew: the refused PUT stored nothing.
+        take(await signWindow(upload.uploadId, i))
+        await putChunkAt(plan, i, urls.get(i)!, signal)
       }
       urls.delete(i)
       onChunkDone()
@@ -386,21 +401,7 @@ function byIndex(urls: PresignedUrl[]): string[] {
   return [...urls].sort((a, b) => a.index - b.index).map((u) => u.url)
 }
 
-/** The one `Content-Type` a presigned PUT signs, so the store refuses any other (ADR 0013 §6). The uploader no
- *  longer chooses the stored type: whatever the store later serves is never renderable. */
-const PUT_CONTENT_TYPE = 'application/octet-stream'
-
-async function putChunk(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
-  // The store's answer is empty (`200`, `Content-Length: 0`) and nothing here needs it — but Chromium cancels the load
-  // of an empty body nobody reads and reports the PUT `net::ERR_ABORTED` although the store took the chunk: 1,163 of
-  // 1,176 PUTs of a 50-photo upload in the V1 heavy stage. So it is read to its end; a failure to read an empty body
-  // says nothing about the PUT, whose status is already known.
-  await res.arrayBuffer().catch(() => undefined)
-  if (!res.ok) throw new Error(`chunk_put_failed:${res.status}`)
-}
-
-/** Parse the HTTP status out of a {@link putChunk} failure (`chunk_put_failed:<status>`), or undefined if not one. */
+/** Parse the HTTP status out of a {@link putChunkAt} failure (`chunk_put_failed:<status>`), or undefined if not one. */
 function chunkPutStatus(e: unknown): number | undefined {
   const m = e instanceof Error ? /^chunk_put_failed:(\d+)$/.exec(e.message) : null
   return m ? Number(m[1]) : undefined

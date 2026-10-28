@@ -539,8 +539,12 @@ export function isStaleEpoch(e: unknown): Promise<boolean> {
   return isCodedError(e, HttpStatus.conflict, 'stale_epoch')
 }
 
-/** Whether a failed rotation is worth one rebuild: built on a superseded epoch, or on a list of open invites a
- *  concurrent invite changed (`409 rotation_incomplete`, ADR 0111 decision 2). */
+/** How often {@link commitRotation} rebuilds after a rebuildable refusal: once (ADR 0024 Decision 4). A bound, not a
+ *  retry policy: a server that refuses every attempt gets two, never a loop. */
+export const ROTATION_REBUILDS = 1
+
+/** Whether a failed rotation is worth a rebuild: built on a superseded epoch, or on a member list or a list of open
+ *  invites a concurrent join or invite changed (`409 rotation_incomplete`, ADR 0111 decisions 2 and 9). */
 async function isRebuildable(e: unknown): Promise<boolean> {
   return (await isStaleEpoch(e)) || isCodedError(e, HttpStatus.conflict, 'rotation_incomplete')
 }
@@ -649,8 +653,9 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
  *
  * **Excluded by the remover's own choice.** `pickedFrom` is the directory the owner picked the member from, read
  * **before** the removal; every row carrying `removedUserId` is dropped from it — a duplicate included — so a server
- * that re-lists the removed member cannot get the new epoch wrapped to their genuine key. Never pass a list read
- * after the removal: that is the server's word on who remains, not the owner's.
+ * that re-lists the removed member cannot get the new epoch wrapped to their genuine key — nor in a rebuild, which reads
+ * the directory again and drops them from it the same way. Never pass a list read after the removal: that is the
+ * server's word on who remains, not the owner's.
  *
  * `revokeLinks` (ADR 0075) also turns off every public link of the group in the same transaction — any of them the
  * removed member could have copied; each link's owner then renews the ones still needed.
@@ -677,6 +682,10 @@ export type RotationOpener = (scopeId: string) => Promise<OpenedScope | null>
 export type CommitRotationOptions = {
   /** A removal-rotation: the member with this id is dropped from the grants and removed in the same commit. */
   removes?: string
+  /** A member the caller leaves out by its own choice without removing them here — a tenant owner's re-key after the
+   *  removal cascade took them out (ADR 0025 § 2): dropped from every member list the rotation builds from, the one
+   *  handed in and every re-read, and never named in the request. */
+  excluding?: string
   /** Turn off every public link of the scope in the same commit (ADR 0075). */
   revokeLinks?: boolean
   /** Where the caller's own grant is opened from: the active tenant's scope list by default; the account rotation's
@@ -738,8 +747,11 @@ async function inviteVouched(tenantId: string, open: OpenInvite, tenant: TenantS
  * TENANT, carry every open member invite ({@link carryOpenInvites}) — and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's
  * epoch, so the server takes the commit only as the scope's current epoch + 1: a rotation that lost a race or rode a
  * lagging grant is `409 stale_epoch` with nothing stored, and would otherwise link the new epoch to a key that is not
- * its predecessor. On that answer — or on `409 rotation_incomplete`, an invite minted meanwhile — the whole attempt runs
- * **once** more from a re-opened grant.
+ * its predecessor. On that answer — or on `409 rotation_incomplete`, a member who joined or an invite minted meanwhile —
+ * the whole attempt runs **once** more ({@link ROTATION_REBUILDS}) from a re-opened grant, over the scope's members
+ * **read again** (`listScopeMembers`) and its open invites read again: never the list the caller was handed, which is
+ * what the server just found incomplete (inbox #661). One rebuild, never a loop, so a server that answers every attempt
+ * with a conflict cannot keep this device minting keys.
  *
  * Every member whose key is anchored ({@link anchorIdentity}: `firstUse`, `match` or `advanced`) is re-granted — a
  * pending consent proposal too, which holds a grant from its proposal on (ADR 0111 decision 4) — and the rotator itself
@@ -751,7 +763,9 @@ async function inviteVouched(tenantId: string, open: OpenInvite, tenant: TenantS
  * hand them. Returns the new epoch; a second stale answer (our grant still lags) is thrown, see {@link isStaleEpoch}.
  *
  * With `removes` it is a removal-rotation ({@link rotateGroupForRemoval}): no row with that id is carried, and the
- * request names them so the server deletes their membership in the same commit. With `open`, the caller's grant comes
+ * request names them so the server deletes their membership in the same commit. `excluding` drops its id from every
+ * list the same way, without naming it. Both hold for the re-read list too: however the server lists the member a caller
+ * leaves out, a rebuild never wraps the new epoch to them. With `open`, the caller's grant comes
  * from there instead of the active tenant's list — the account rotation's finish, whose scopes may live in any tenant.
  *
  * Every member the caller is handed is judged — however many there are (ADR 0111 decision 8: the finish of
@@ -760,9 +774,13 @@ async function inviteVouched(tenantId: string, open: OpenInvite, tenant: TenantS
 export async function commitRotation(
   scopeId: string, members: ScopeMember[], opts: CommitRotationOptions = {},
 ): Promise<number> {
-  const { removes, revokeLinks = false, open = (id: string) => openById(id, 'open'), openTenant } = opts
-  const carry = removes === undefined ? members : members.filter((m) => m.userId !== removes)
+  const { removes, excluding, revokeLinks = false, open = (id: string) => openById(id, 'open'), openTenant } = opts
+  const leftOut = (m: ScopeMember) => m.userId === removes || m.userId === excluding
   for (let attempt = 0; ; attempt++) {
+    // The first attempt builds from the list the caller read; a rebuild reads the directory again, because the answer
+    // that sent it here may be a membership the caller's list lacks. The caller's exclusions hold for both.
+    const listed = attempt === 0 ? members : await withRefresh(() => scopesApi().listScopeMembers({ scopeId }))
+    const carry = listed.filter((m) => !leftOut(m))
     // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
     // refuses the epoch this rotation states unless it is the next one, which is the stale answer handled below.
     const opened = await open(scopeId)
@@ -810,7 +828,8 @@ export async function commitRotation(
       await raiseEpochFloor(scopeId, epoch)
       return rotated.epoch
     } catch (e) {
-      if (attempt === 0 && (await isRebuildable(e))) continue // superseded — re-open + rebuild once, fresh key
+      // superseded or incomplete — re-read, re-open and rebuild, from a fresh key, a bounded number of times
+      if (attempt < ROTATION_REBUILDS && (await isRebuildable(e))) continue
       throw e
     } finally {
       newKey.fill(0)

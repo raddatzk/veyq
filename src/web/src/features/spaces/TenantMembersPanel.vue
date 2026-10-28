@@ -5,10 +5,11 @@
 // metadata is shown — pubkeys/roles, never a key. Every listed member holds the tenant's key from its join on (ADR 0111:
 // an invitee grants itself at accept). Inviting is owner-only (the backend 403s otherwise); the directory is any
 // key-holder's.
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
@@ -18,18 +19,22 @@ import {
   listMemberInvites,
   listScopeMembers,
   reissueMemberInvite,
+  rekeySpace,
   removeTenantMember,
   revokeMemberInvite,
   setTenantMemberRole,
   SetTenantMemberRoleRequestRoleEnum,
   memberError,
+  prepareInviteCode,
+  type InvitePhase,
   type PendingMemberInvite,
   type ScopeMember,
 } from './members'
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
-import { formatInviteCode, generateInviteCode } from '@veyq/crypto/invite'
+import { formatInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
+import { activeSpace, activeEpochKeys, refreshActiveScope } from '../../app/activeSpace'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { copyEpochKeys, zeroEpochKeys } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
 import { unsealNameUnderEpochs, type MemberName } from '../account/profile/profile'
@@ -45,7 +50,7 @@ import type { CompromiseRotation } from '../../api/generated/scopes'
 
 const { t } = useI18n()
 const toast = useToast()
-const { ask, askWithOption } = useConfirm()
+const { ask, askWithOptions } = useConfirm()
 
 // Locally-decrypted real names (first+last) keyed by userId — the sealed blob opened with K_tenant on-device.
 const names = ref<Record<string, MemberName | null>>({})
@@ -72,6 +77,10 @@ const iconError = ref('')
 const reissuedTo = ref('')
 // The new invite's code, shown once beside the confirmation: the owner passes it on themselves (ADR 0111 decision 1).
 const reissuedCode = ref('')
+// The re-issue running now (one at a time: every re-issue button is disabled meanwhile, so a double click sends nothing
+// twice) and the phase its row's status line names - securing on this device, then sending by email (inbox #630).
+const reissuing = ref<string | null>(null)
+const reissuePhase = ref<InvitePhase | null>(null)
 
 const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId !== null)
 
@@ -112,6 +121,22 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     pendingInvites.value = owner ? await listMemberInvites(activeSpace.tenantId) : []
     return { rows, isOwner: owner }
   })
+
+// The next re-issue's code, its link key's Argon2id already deriving (`prepareInviteCode`, inbox #566/#630): a re-issue
+// has no typing time to hide the derivation in, so it starts as the owner sees a pending invite, and the click finds it
+// done. One at a time and single-use - a re-issue takes it, a failed one zeroes what it derived and arms the next; an
+// unused one is zeroed when the list goes or the panel closes. The cost is one derivation (about 0.85 s in the Argon2
+// worker) per visit to a non-empty list.
+let prepared: ReturnType<typeof prepareInviteCode> | null = null
+function armReissue(): void {
+  if (!prepared && isOwner.value && pendingInvites.value.length > 0) prepared = prepareInviteCode()
+}
+function dropPrepared(): void {
+  prepared?.ahead.discard()
+  prepared = null
+}
+watch(() => isOwner.value && pendingInvites.value.length > 0, (shown) => (shown ? armReissue() : dropPrepared()), { immediate: true })
+onBeforeUnmount(dropPrepared)
 
 /** The member's decrypted "First Last", or '' when none is sealed / unreadable. */
 function fullName(userId: string): string {
@@ -169,18 +194,23 @@ async function removeIcon() {
 }
 
 async function reissue(invite: PendingMemberInvite) {
+  if (reissuing.value) return // one at a time: the buttons are disabled, and a click that slips through sends nothing
+  reissuing.value = invite.inviteId
   actionError.value = ''
   reissuedTo.value = ''
   reissuedCode.value = ''
+  // A re-issue is a new invite (ADR 0111): a new key, link and code — the old code opens nothing any more. Its code is the
+  // one prepared ahead, its link key derived or deriving; this re-issue owns it now.
+  const secret = prepared ?? prepareInviteCode()
+  prepared = null
   try {
-    // A re-issue is a new invite (ADR 0111): a new key, link and code — the old code opens nothing any more.
-    const code = generateInviteCode()
-    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, { mode: 'code', code })
-    reissuedCode.value = formatInviteCode(code)
+    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, secret, (p) => (reissuePhase.value = p))
+    reissuedCode.value = formatInviteCode(secret.code)
     reissuedTo.value = invite.email
     toast.success(t('members.inviteSentTo', { email: invite.email }))
     await reload()
   } catch (e) {
+    secret.ahead.discard() // a failed re-issue's derivation is zeroed; its code is never reused
     on401(e)
     if (!isUnauthorized(e)) {
       actionError.value = (await isCodedError(e, HttpStatus.tooManyRequests, 'rate_limited'))
@@ -191,32 +221,83 @@ async function reissue(invite: PendingMemberInvite) {
                 ? t('members.mailSendFailed')
                 : t('members.actionFailed')
     }
+  } finally {
+    reissuing.value = null
+    reissuePhase.value = null
+    armReissue() // the next re-issue's code, while invites are still pending
   }
 }
 
 // Remove a member from the tenant (uc.spaces.remove-tenant-member, cr-0091) — owner-only, behind the confirmation
 // dialog. The server runs the whole cascade; here we just fire it and refresh the directory (the ex-member drops
 // out). Not offered on OWNER rows (owners are managed via co-ownership, not removed from the roster here). The
-// dialog's opt-in (ADR 0075 point 5), unchecked by default, also turns off every link of the space in the same act.
+// dialog's two opt-ins, unchecked by default: turn off every link of the space in the same act (ADR 0075 point 5), and
+// give the space a new lock after it (ADR 0025 § 2). LOAD-BEARING ORDER: the removal first, the rotation only once it
+// landed — so the rotation's member set is one the member is no longer in, and never wraps to them.
 async function remove(member: ScopeMember) {
-  const answer = await askWithOption({
+  const answer = await askWithOptions({
     header: t('members.removeConfirmTitle'),
     message: t('members.removeConfirm'),
     acceptLabel: t('members.remove'),
     acceptIcon: 'user-minus',
-    option: { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
+    options: [
+      { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
+      { label: t('spaceLock.removeOption'), hint: t('spaceLock.removeOptionHint') },
+    ],
   })
   if (!answer) return
+  const [revokeLinks, alsoLock] = answer.options
   actionError.value = ''
   reissuedTo.value = ''
   try {
-    await removeTenantMember(activeSpace.tenantId!, member.userId, answer.option)
+    await removeTenantMember(activeSpace.tenantId!, member.userId, revokeLinks)
     toast.success(t('members.removed'))
-    await reload()
   } catch (e) {
     on401(e)
     if (!isUnauthorized(e)) actionError.value = t('members.actionFailed')
+    return
   }
+  if (alsoLock) await giveNewLock(member.userId)
+  await reload()
+}
+
+// Give the space a new lock (ADR 0025 § 2) — owner-only, from the standalone action or after a removal. The rotation is
+// the one every rotation is (`rekeySpace` → `commitRotation`): the next epoch minted here, every member this device
+// anchors re-granted, the rest declared pending. Then, as after a group removal, the nodes are re-keyed on this device
+// right away (ADR 0109); one that stops leaves the space re-keying — the hint below says so — and any member's worker
+// resumes it. `excluding` is the member a removal just took out. Answers whether the new epoch landed.
+const lockBusy = ref(false)
+async function giveNewLock(excluding?: string): Promise<boolean> {
+  const scopeId = activeSpace.scopeId
+  if (!scopeId) return false
+  lockBusy.value = true
+  try {
+    try {
+      await rekeySpace(scopeId, excluding)
+    } catch (e) {
+      on401(e)
+      if (!isUnauthorized(e)) actionError.value = excluding ? t('spaceLock.removedNotRekeyed') : t('spaceLock.failed')
+      return false
+    }
+    const { done } = await rekeyScope(scopeId).catch(() => ({ done: false }))
+    if (activeSpace.scopeId === scopeId) await refreshActiveScope()
+    if (done) toast.success(t('spaceLock.done'))
+    return true
+  } finally {
+    lockBusy.value = false
+  }
+}
+
+async function newLock() {
+  const accepted = await ask({
+    header: t('spaceLock.confirmTitle'),
+    message: t('spaceLock.confirm'),
+    acceptLabel: t('spaceLock.action'),
+    acceptIcon: 'lock',
+  })
+  if (!accepted) return
+  actionError.value = ''
+  if (await giveNewLock()) await reload()
 }
 
 // Make a member an owner, or an owner a member again (ADR 0101 decision 9) — owner-only, mirroring GroupMembersPanel's
@@ -452,6 +533,14 @@ async function revoke(invite: PendingMemberInvite) {
               <div class="veyq-row-meta">
                 <span class="veyq-badge warning">{{ t('members.statusInvited') }}</span>
               </div>
+              <p
+                v-if="reissuing === invite.inviteId && reissuePhase"
+                class="settings-muted reissue-progress"
+                role="status"
+                data-testid="reissue-progress"
+              >
+                <VeyqIcon name="spinner" spin />{{ reissuePhase === 'sending' ? t('members.inviteSending') : t('members.inviteSecuring') }}
+              </p>
             </div>
             <div class="management-actions">
               <VeyqButton
@@ -461,6 +550,8 @@ async function revoke(invite: PendingMemberInvite) {
                 size="small"
                 :aria-label="t('members.reissue')"
                 :title="t('members.reissue')"
+                :loading="reissuing === invite.inviteId"
+                :disabled="reissuing !== null"
                 @click="reissue(invite)"
               />
               <VeyqButton
@@ -470,6 +561,7 @@ async function revoke(invite: PendingMemberInvite) {
                 size="small"
                 :aria-label="t('members.revoke')"
                 :title="t('members.revoke')"
+                :disabled="reissuing === invite.inviteId"
                 @click="revoke(invite)"
               />
             </div>
@@ -493,6 +585,26 @@ async function revoke(invite: PendingMemberInvite) {
           size="small"
           :loading="revokingLinks"
           @click="revokeAllLinks"
+        />
+      </div>
+    </section>
+
+    <!-- A new lock for the whole space, nobody removed (ADR 0025 § 2) — owner-only, for the compromise case. Laid out
+         as the links section above: one owner action that acts on the whole space. -->
+    <section v-if="isOwner && !loading" class="settings-form space-lock">
+      <div class="settings-section-header">
+        <div>
+          <h2>{{ t('spaceLock.title') }}</h2>
+          <p>{{ t('spaceLock.sub') }}</p>
+        </div>
+        <VeyqButton
+          :label="t('spaceLock.action')"
+          icon="lock"
+          variant="danger"
+          appearance="outlined"
+          size="small"
+          :loading="lockBusy"
+          @click="newLock"
         />
       </div>
     </section>
@@ -524,6 +636,20 @@ async function revoke(invite: PendingMemberInvite) {
   .member-row .management-actions {
     grid-column: 1 / -1;
   }
+}
+
+.reissue-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+}
+
+/* A whole-space action beside a long explanation keeps its label on one line: the shared header lets the button shrink,
+   which wrapped "Neues Schloss einbauen" over three lines and clipped it at 1280 px. */
+.space-links .settings-section-header > button,
+.space-lock .settings-section-header > button {
+  flex-shrink: 0;
 }
 
 .reissue-link {

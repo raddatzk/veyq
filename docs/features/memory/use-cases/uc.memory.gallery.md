@@ -155,6 +155,12 @@
   876–910 ms at 1,000 and 3,000 under the 4× throttle, with no long task after it over 120 ms; *end complete* 117–122 ms;
   at most 1,098 DOM nodes at any size. Seen in a browser: the windowed grid (that reading) and its keyboard model (lane
   L1's `gallery-keyboard.spec.ts`). Not yet: a screen reader's reading of it.
+- **An upload's progress redraws its own tile, never the layout** (inbox #640). The justified layout's input is only
+  what places a tile — its id, aspect ratio and capture time, and the preview it shows — and it changes only when a
+  tile appears, gets its probe's answer, settles or moves. A tile's stage and progress are read from the queue's own
+  item by that tile alone (`OptimisticTileVM.upload`), so a chunk, which writes the progress, re-renders one tile; when
+  every chunk re-ran the layout over the whole gallery, that was the largest part of the main thread during a
+  50-photo upload at the 4× throttle.
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
   is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's

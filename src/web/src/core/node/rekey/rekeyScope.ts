@@ -83,9 +83,10 @@ export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal }
   })
 }
 
-/** A path this device may not bring forward: it runs through a node only an owner re-keys, and the caller is none. */
+/** A path this device may not bring forward: it runs through a node only an owner re-keys, and the caller is none.
+ *  `current` is the scope's epoch as the refusing round listed it. */
 export class RekeyPathNotMineError extends Error {
-  constructor(readonly nodeId: string) {
+  constructor(readonly nodeId: string, readonly current: number) {
     super(`rekey_path_not_mine: ${nodeId}`)
     this.name = 'RekeyPathNotMineError'
   }
@@ -108,7 +109,7 @@ export async function rekeyPath(
     const frontier = lagging.filter((n) => parentCurrent(n, byId, current))
     if (!frontier.length) throw new Error('rekey: no node of the path can be re-keyed (a parent lags that is not listed)')
     const notMine = owner ? undefined : frontier.find((n) => n.ownerOnly)
-    if (notMine) throw new RekeyPathNotMineError(notMine.id)
+    if (notMine) throw new RekeyPathNotMineError(notMine.id, current)
     return frontier
   })
 }
@@ -121,17 +122,23 @@ export async function rekeyPath(
  *
  * When the scope is the active one and the device still holds it at an older epoch (another member rotated it, and
  * nothing re-opened it here since), the active scope is re-opened after the pull: the write's re-read derives the
- * re-keyed node's key from the active scope's epochs, which must reach the one the node now carries.
+ * re-keyed node's key from the active scope's epochs, which must reach the one the node now carries. A path that is an
+ * owner's re-opens it too before it says no: the write then waits for an owner's device, and its re-read after the wait
+ * opens the key that device minted only at that epoch (inbox #670).
  */
 export function pullRekeyPath(scopeId: string, nodeIds: readonly string[], opts: { subtree?: boolean } = {}): () => Promise<boolean> {
+  const reopenIfBehind = async (current: number | undefined) => {
+    const held = activeSpace.scopeId === scopeId ? activeEpochKeys()?.current : undefined
+    if (held !== undefined && current !== undefined && held < current) await refreshActiveScope()
+  }
   return async () => {
     try {
       const run = await rekeyPath(scopeId, nodeIds, opts)
       if (!run.done) return false
-      const held = activeSpace.scopeId === scopeId ? activeEpochKeys()?.current : undefined
-      if (held !== undefined && run.current !== undefined && held < run.current) await refreshActiveScope()
+      await reopenIfBehind(run.current)
       return true
-    } catch {
+    } catch (e) {
+      if (e instanceof RekeyPathNotMineError) await reopenIfBehind(e.current).catch(() => {})
       return false
     }
   }

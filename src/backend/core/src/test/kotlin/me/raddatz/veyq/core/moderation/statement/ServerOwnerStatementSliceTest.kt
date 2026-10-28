@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.admin.instance.InstanceMailUpdateOutcome
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
 import me.raddatz.veyq.core.admin.tenant.TenantPurge
+import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
 import me.raddatz.veyq.core.account.erasure.AccountPurge
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
@@ -303,6 +304,83 @@ class ServerOwnerStatementSliceTest {
             listOf(tenantStatement, memberStatement).forEach { assertNull(ModerationStatementEntity.findById(it)) }
             measures.forEach { assertNull(ModerationBlockEntity.findById(it)) }
         }
+    }
+
+    /**
+     * A tenant-level step names the tenant's owners at the time of the step, as its statement's recipients (inbox #620,
+     * ADR 0101 decision 6): a tenant deleted over content on no case keeps its owners' terms acceptance rows past its
+     * purge, as long as the step is kept and no longer; a member it did not tell keeps none.
+     */
+    @Test
+    fun aTenantDeletedOverContentKeepsItsOwnersTermsRowsPastItsPurgeForAsLongAsTheStepIsKept() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val owner = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            TenantRoots.join(owner, m.tenantId, MembershipEntity.OWNER)
+            accept(owner, m.tenantId)
+            accept(m.userId, m.tenantId)
+        }
+        val statementId = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"${domainOf(m.tenantId)}","overContent":true,"statement":${statement(statementId)}}""")
+            .post("/api/tenants/${m.tenantId}/deletion").then().statusCode(200)
+        tenantPurge.purge(m.tenantId)
+        QuarkusTransaction.requiringNew().run {
+            assertNull(TenantEntity.findById(m.tenantId))
+            assertEquals(1L, termsRows(owner, m.tenantId), "the step told the owner: its terms rows are the evidence")
+            assertEquals(0L, termsRows(m.userId, m.tenantId), "control: a member the step did not tell keeps none")
+        }
+        val lifted = liftOf(statementId)
+        keptUntilTheStepsDate(owner, m.tenantId, lifted)
+    }
+
+    /**
+     * The same on the account's erasure (inbox #620): an owner of a tenant taken offline over content on no case, erased
+     * while it is offline, keeps their terms rows past the account until the step's own date; another member erased
+     * alike keeps none.
+     */
+    @Test
+    fun anOwnerOfATenantTakenOfflineOverContentKeepsTheTermsRowsPastTheirErasureForAsLongAsTheStepIsKept() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val owner = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            TenantRoots.join(owner, m.tenantId, MembershipEntity.OWNER)
+            accept(owner, m.tenantId)
+            accept(m.userId, m.tenantId)
+        }
+        val statementId = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"overContent":true,"statement":${statement(statementId)}}""")
+            .post("/api/tenants/${m.tenantId}/suspend").then().statusCode(200)
+        listOf(owner, m.userId).forEach { account ->
+            ModerationTestKit.asOwner(mod.id).body("""{"address":"${emailOf(account)}"}""").post("/api/instance/accounts/erasures")
+                .then().statusCode(200)
+            accountPurge.purge(account)
+        }
+        QuarkusTransaction.requiringNew().run {
+            assertNull(me.raddatz.veyq.core.identity.VeyqUser.findById(owner))
+            assertEquals(1L, termsRows(owner, m.tenantId), "the step in force told the owner: its terms rows are the evidence")
+            assertEquals(0L, termsRows(m.userId, m.tenantId), "control: a member the step did not tell keeps none")
+        }
+        ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/reactivate").then().statusCode(204)
+        keptUntilTheStepsDate(owner, m.tenantId, liftOf(statementId))
+    }
+
+    private fun accept(userId: String, tenantId: String) = TenantTermsAcceptanceEntity().apply {
+        id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId; acceptedRevision = 1; acceptedAt = Instant.now()
+    }.persist()
+
+    private fun termsRows(userId: String, tenantId: String): Long =
+        TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", userId, tenantId)
+
+    private fun liftOf(statementId: String): Instant = QuarkusTransaction.requiringNew().call {
+        ModerationBlockEntity.findById(ModerationStatementEntity.findById(statementId)!!.measureId)!!.liftedAt!!
+    }
+
+    /** The kept rows' sweep leaves [userId]'s rows in [tenantId] to the lifted step's own date, and deletes them after it. */
+    private fun keptUntilTheStepsDate(userId: String, tenantId: String, lifted: Instant) {
+        QuarkusTransaction.requiringNew().run { accountPurge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).minusSeconds(60)) }
+        assertEquals(1L, QuarkusTransaction.requiringNew().call { termsRows(userId, tenantId) }, "kept while the step is")
+        QuarkusTransaction.requiringNew().run { accountPurge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).plusSeconds(60)) }
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { termsRows(userId, tenantId) }, "past the step's date they go")
     }
 
     @Test

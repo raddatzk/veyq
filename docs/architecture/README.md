@@ -318,7 +318,16 @@ client's largest avoidable cost was sealing an upload's blobs in pure JS on the 
 Each original's SHA-256 is now read in core's digest worker (`src/web/src/core/blob/digest.worker.ts`), on the same
 `@noble` code, while the original's tiers are derived, so it is off the main thread and off the upload's critical path:
 read without the CPU profiler, the upload took 25.8 s at throttle 1 against 32.0 s before (2026-10-27). At throttle 4
-what bounds it is the main thread's own work, the pump's requests among it (inbox #220). The method,
+the main thread still bounded it: read by its tasks (`scripts/profile_attribute.py`), the pump's per-chunk round trip —
+a sealed frame back from the worker, then a `fetch` started on the page — held 41–44 s of its 63–67 s (2026-10-28,
+inbox #220). Each chunk is now read, sealed and `PUT` in the frame worker, as a `Blob` (a byte-array body cost a
+thread about seven times as much per `PUT`); the page keeps the windows, the re-sign and the progress. Its after-reading
+(2026-10-28, a machine at load 25–40, three runs each without the CPU profiler, beside two passes of the tree before)
+put the upload at 25.9 s against 29.8–32.2 s at throttle 1 and 37.5 s against 73.4–75.4 s at throttle 4, the pump's
+tasks at 0.5–0.9 s, and the frame worker at 7.7–8.9 s. What held the main thread then was Vue re-laying out the gallery
+on each chunk's progress, 24 % of the upload at throttle 4; a chunk now redraws only its own tile
+([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) § Quality notes), its after-reading still to
+be taken (inbox #220). The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 

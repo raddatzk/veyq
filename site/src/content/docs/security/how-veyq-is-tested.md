@@ -107,7 +107,15 @@ per scenario at CPU throttle 1 and 4):
   against 32.0 s (31.4–32.9 s) and 93.4 s (88.5–93.7 s) just before; with it, 24.6–27.2 s and 71.1–78.5 s. The main
   thread no longer hashes, the hashing worker spends 4.4–4.5 s on it, about what the main thread had spent, and the
   network is now 18 % of the upload at throttle 1 and 8 % at throttle 4. Opening a 20 MB original or downloading a
-  64 MB file put no task longer than 50 ms on the main thread.
+  64 MB file put no task longer than 50 ms on the main thread. Read on 2026-10-28 by the main thread's tasks, sorted by
+  the code each one ran, sending the chunks held most of what was left: each sealed chunk came back from the worker and
+  the page started its upload request, 41–44 s of the main thread's 63–67 s at throttle 4. The worker now reads, seals
+  and sends each chunk itself, handing the browser the chunk as a file object, which cost the sending thread about a
+  seventh of what the same bytes cost as an array. On a machine at load 25 to 40, three runs each without the profiler
+  beside two passes of the version before: 25.9 s against 29.8–32.2 s at throttle 1, and 37.5 s against 73.4–75.4 s at
+  throttle 4. What held the main thread then was the gallery laid out again on each chunk's progress, about a quarter of
+  the upload at throttle 4. A chunk now redraws only its own tile, which a unit test proves by counting the layouts;
+  the upload has not been timed again since.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
   about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.

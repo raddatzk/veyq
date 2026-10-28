@@ -11,7 +11,8 @@
   as today, [uc.admin.create-tenant](uc.admin.create-tenant.md)).
 - **Postconditions (success):** The tenant is offline at once; after the scope trash's retention every scope, profile,
   terms row, mail setting, invite, switch and the tenant row are erased, its blobs are on the reclaim list, the
-  erasure is in the erasure ledger, and holds and moderation records remain.
+  erasure is in the erasure ledger, and holds and moderation records remain — and the terms rows of a member a
+  moderation case names, kept as an account's erasure keeps them (ADR 0101 decision 6).
 
 ## Main flow
 

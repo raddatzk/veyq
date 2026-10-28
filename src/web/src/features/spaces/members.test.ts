@@ -5,7 +5,7 @@ vi.mock('../../api/client', () => ({
   tenantsApi: vi.fn(),
 }))
 // The group's key comes from the caller's own grant (scopes.ts, tested there); here the scope is handed over opened.
-vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
+vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn(), commitRotation: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 // The pin store is identityPins.test.ts's; here its answer for the target is driven directly.
 vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), anchorIdentity: vi.fn() }))
@@ -18,11 +18,12 @@ import {
   setMemberRole,
   removeGroupMember,
   removeTenantMember,
+  rekeySpace,
   SetMemberRoleRequestRoleEnum,
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
 import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
-import { openScopeById } from './scopes'
+import { commitRotation, openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
 import { anchorIdentity, IdentityUnanchoredError } from '../account/identityPins'
 import { tenantViewOfScope, type TenantView } from '../account/tenantTrust'
@@ -185,5 +186,39 @@ describe('listScopeMembers', () => {
 
     expect(await listScopeMembers('g1')).toEqual(rows)
     expect(listFn).toHaveBeenCalledWith({ scopeId: 'g1' })
+  })
+})
+
+// ADR 0025 § 2: the owner's "new lock" is the plain rotation every rotation is (commitRotation, scopes.test.ts), over the
+// directory read now; the member a removal just took out is the owner's own exclusion, never the server's word.
+describe('rekeySpace (uc.spaces.remove-tenant-member A8-A9)', () => {
+  const row = (userId: string): ScopeMember => ({
+    userId, username: userId, avatarRevision: 0, sealedName: null, role: 'MEMBER', identityPublicKey: 'AA==', keyChainHead: 'AA==', pending: false,
+  })
+
+  it('rotates the tenant over the directory read now, without the member just removed however the server lists them', async () => {
+    stubApi(scopesApi, { listScopeMembers: [row('u-owner'), row('u-removed'), row('u-kept')] })
+    vi.mocked(commitRotation).mockResolvedValue(4)
+
+    expect(await rekeySpace('t1', 'u-removed')).toBe(4)
+
+    const [scopeId, members, opts] = vi.mocked(commitRotation).mock.calls[0]
+    expect(scopeId).toBe('t1')
+    expect(members.map((m) => m.userId)).toEqual(['u-owner', 'u-removed', 'u-kept'])
+    // The exclusion rides as the rotation's own option, so it holds for the directory its one rebuild reads again
+    // (inbox #661; commitRotation's `excluding`, scopes.test.ts) — a filter here alone would not reach that re-read.
+    expect(opts?.excluding).toBe('u-removed')
+    // a plain rotation: no removal rides on it (the server refuses one on a TENANT, the cascade ran first)
+    expect(opts?.removes).toBeUndefined()
+  })
+
+  it('control: with nobody removed, every member the directory lists is handed to the rotation, and nobody is excluded', async () => {
+    stubApi(scopesApi, { listScopeMembers: [row('u-owner'), row('u-kept')] })
+    vi.mocked(commitRotation).mockResolvedValue(1)
+
+    await rekeySpace('t1')
+
+    expect(vi.mocked(commitRotation).mock.calls[0][1].map((m) => m.userId)).toEqual(['u-owner', 'u-kept'])
+    expect(vi.mocked(commitRotation).mock.calls[0][2]?.excluding).toBeUndefined()
   })
 })

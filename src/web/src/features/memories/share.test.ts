@@ -16,6 +16,12 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../spaces/scopes')>()),
   openScopeById: vi.fn(),
 }))
+// A member's `stale_epoch` runs its pull before the re-read (inbox #670); the pull's own re-key and re-open are core's and
+// pinned in `core/node/rekey/rekeyScope.test.ts`. Here it brings nothing, so the re-open counted is the re-read's own.
+vi.mock('../../core/node/rekey/rekeyScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../core/node/rekey/rekeyScope')>()),
+  pullRekeyPath: () => async () => false,
+}))
 
 import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNote, NO_NOTE, readShareName, readSharePassword, shareChunkProvider, openSharedMemory, listShareMedia } from './share'
 import { pickLocaleText, derivePasswordToken, resolvePublicShare, ShareUnavailableError, SharePasswordRequiredError } from '../../core/sharing/resolvePublicShare'

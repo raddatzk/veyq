@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.tenant.ResolvedTenant
+import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -288,6 +289,31 @@ class EmailChangeSliceTest {
         assertEquals(live, emailOf(b.id))
     }
 
+    /**
+     * No copy of the old address outlives the change (inbox #591, ADR 0101 decision 4): a tenant's record of the address
+     * its owner invite named follows it, so the account's erasure, which blanks the address it holds then, finds it.
+     */
+    @Test
+    fun theTenantsRecordOfTheOwnerAddressFollowsTheChange() {
+        val tenant = silentTenantThatCanSend()
+        val a = account(tenant)
+        val b = account(tenant)
+        val owned = seedTenant(ownerEmail = a.email)
+        val other = seedTenant()
+        val othersAddress = ownerEmailOf(other)
+        val target = fresh("owner")
+        val token = pending(a, target, Instant.now().plus(1, ChronoUnit.HOURS))
+
+        // A refusal moves it no more than it moves the account: the link opened in another account's session.
+        confirm(b, token, host = tenant.domain).then().statusCode(404)
+        assertEquals(a.email, ownerEmailOf(owned), "a refused confirmation leaves the record as it was")
+
+        confirm(a, token, host = tenant.domain).then().statusCode(204)
+        assertEquals(target, ownerEmailOf(owned), "the record follows the address")
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { TenantEntity.count("ownerEmail", a.email) }, "no tenant keeps the old one")
+        assertEquals(othersAddress, ownerEmailOf(other), "control: a tenant naming another address is untouched")
+    }
+
     @Test
     fun aRelayThatCannotSendTheNoticeChangesNothing(): Unit = TestMailbox(CONFIRM_RELAY_SMTP_PORT).start().use { mail ->
         val silent = silentTenant()
@@ -390,6 +416,9 @@ class EmailChangeSliceTest {
 
     private fun pendingOf(userId: String): EmailChangeEntity? =
         QuarkusTransaction.requiringNew().call { EmailChangeEntity.find("userId", userId).firstResult() }
+
+    private fun ownerEmailOf(tenantId: String): String =
+        QuarkusTransaction.requiringNew().call { TenantEntity.findById(tenantId)!!.ownerEmail }
 
     private fun emailOf(userId: String): String = QuarkusTransaction.requiringNew().call { VeyqUser.findById(userId)!!.email }
 

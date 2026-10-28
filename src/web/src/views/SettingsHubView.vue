@@ -16,6 +16,7 @@ import ChangePasswordPanel from '../features/account/changePassword/ChangePasswo
 import AddDevicePanel from '../features/account/pairing/AddDevicePanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
+import PeopleOverviewPanel from '../features/spaces/PeopleOverviewPanel.vue'
 import TenantTermsPanel from '../features/tenant/TenantTermsPanel.vue'
 import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.vue'
 import TenantStoragePanel from '../features/tenant/TenantStoragePanel.vue'
@@ -174,6 +175,9 @@ const categories = computed<NavCategory[]>(() => {
   if (activeSpace.kind === ScopeKind.Tenant) {
     cats.push({ key: 'tenant', label: t('settings.tenant'), collapsible: false, items: [
       { id: 'tenant-members', label: t('members.title'), icon: 'users' },
+      // Who's who (inbox #562): every member's key in this space - confirmed or not, verified by whom, a new identity.
+      // Every member's, like Members: the records it reads are every member's, so no role changes what it shows.
+      { id: 'tenant-people', label: t('whoIsWho.navTitle'), icon: 'verified' },
       { id: 'terms', label: t('terms.navTitle'), icon: 'file-edit' },
       // Mail settings, storage and capabilities are owner-only (their reads are owner-gated): only an owner's rail lists them, so a member is
       // never taken to a page that says it could not load. The panels still gate - the server refuses a member either way.
@@ -237,7 +241,7 @@ const isHidden = (id: string): boolean =>
 // The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
 // pages that depend on an answer still on its way, before that answer is in.
 // A tenant page reads the tenant the shell opened, so it is not mounted while the space is still being entered.
-const TENANT_PAGES = new Set(['tenant-members', 'terms', ...OWNER_ONLY])
+const TENANT_PAGES = new Set(['tenant-members', 'tenant-people', 'terms', ...OWNER_ONLY])
 const detailVisible = computed(
   () =>
     !isHidden(activeId.value) &&
@@ -267,6 +271,7 @@ watch([hasSection, defaultId], reflectDefaultSection)
 const activeView = computed<{ component: Component; props: Record<string, unknown> }>(() => {
   const id = activeId.value
   if (id === 'tenant-members') return { component: TenantMembersPanel, props: {} }
+  if (id === 'tenant-people') return { component: PeopleOverviewPanel, props: {} }
   if (id === 'terms') return { component: TenantTermsPanel, props: {} }
   if (id === 'mail') return { component: TenantMailSettingsPanel, props: {} }
   if (id === 'storage') return { component: TenantStoragePanel, props: {} }

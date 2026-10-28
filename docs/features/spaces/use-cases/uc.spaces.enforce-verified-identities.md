@@ -18,7 +18,8 @@
   ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)); a member it does not anchor offers no compare. A pin is
   not required: the anchor check pins a member seen for the first time.
 - **Status:** **built** — crypto, contracts, backend and web; clicked in a real browser (2026-10-28, three members:
-  two compared, the third saw *verified by*, which fell away when the verified member secured their account).
+  two compared, the third saw *verified by*, which fell away when the verified member secured their account; the
+  overview of main flow 5 on 2026-10-28, three members, one verification, one rotation, and again at 50 members).
 - **Postconditions (success):** the caller's signed verification of the target's current head sits in the caller's
   own row in the tenant; every member's client that anchors both counts it, so the profile reads *Verified* and
   *Verified by {names}.*, and the tenant's and groups' member lists badge *Verified*. The operator stores the row and
@@ -51,6 +52,17 @@
    and counts one while it opens at its slot, names the subject's **current** head and verifies under the verifier's
    **current** key at the verifier's current head, the verifier anchored in the tenant (`countVerifications`). The
    profile names the verifiers; the lists badge *Verified*.
+5. **See who's who.** Settings → Shared space → **Who's who** lists every other member of the active tenant (not the
+   caller, not a pending proposal), the anomalies first and then by name, each with one state — *Can't confirm this
+   key* with its note, *Verified* or *Not verified* — and *New*, *Verified by {names}.*, *New identity, signed by their
+   previous key, on {date}.* while that rotation is under 14 days old, and the replacement note; every row the caller
+   has not verified at its current head offers **Compare safety numbers**, which opens the profile of steps 1–3. It
+   reads what the member lists and the profile read (`loadPeopleOverview`, `src/web/src/features/account/peopleOverview.ts`):
+   one view of the tenant, every member anchored as a wrap anchors them (the pin moves as at any anchor check), the
+   pin store once, the verification rows once, and a key chain for a rotation's date only past a genesis head —
+   nothing new reaches the server. A verification counts only for an anchored member, so an anomaly never reads as
+   verified; a member whose check failed for a request shows no state. The same page for an owner and a member, in
+   the tenant category beside Members.
 
 ```mermaid
 ---

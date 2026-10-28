@@ -14,7 +14,7 @@ import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { NODE_REKEY_PENDING, NodeRekeyPendingError } from '../../shared/rekeyRetry'
+import { NODE_REKEY_PENDING, NodeRekeyPendingError, STALE_NODE_EPOCH, StaleNodeEpochError, writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
@@ -264,11 +264,16 @@ export function rawMediaMeta(scopeId: string, memoryKey: Uint8Array, item: Media
 
 /** The listed tier for a WRITE: absent → a fresh `{ v: 1 }`; present but unopenable or unparseable → refused. */
 function openMediaMetaForWrite(scopeId: string, memoryKey: Uint8Array, media: MediaRef, wrappedMeta: string | null): RawMediaMeta {
+  return openMediaMetaUnder(scopeId, () => mediaKey(scopeId, memoryKey, media), media.mediaId, wrappedMeta)
+}
+
+/** {@link openMediaMetaForWrite} under the key `key` resolves to (the media's own, [mediaKey]); a key that does not
+ *  resolve is a tier that does not open. */
+function openMediaMetaUnder(scopeId: string, key: () => Uint8Array, mediaId: string, wrappedMeta: string | null): RawMediaMeta {
   if (!wrappedMeta) return { v: 1 }
   let parsed: unknown
   try {
-    const key = mediaKey(scopeId, memoryKey, media)
-    parsed = JSON.parse(new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, media.mediaId), key, fromB64std(wrappedMeta))))
+    parsed = JSON.parse(new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, mediaId), key(), fromB64std(wrappedMeta))))
   } catch {
     throw new MetaUnreadableError()
   }
@@ -442,7 +447,7 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 /**
  * Seal the two metadata tiers under `K_node` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
- * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
+ * + GPS; and what an import restores, a corrected capture time and a place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
  * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
  */
 async function sealMetadata(
@@ -454,21 +459,24 @@ async function sealMetadata(
   /** The geometry the tier derivation already measured, when it had it — an image always does. Absent for a
    *  video or an underivable source, and only then is a probe (its own decode) worth paying for. */
   knownDims: Dimensions | null = null,
+  /** What an import restores beside the bytes ([RestoredMediaFacts]), sealed into the listed tier with the rest. */
+  restored: RestoredMediaFacts = {},
 ): Promise<{ wrappedMeta: string | null; wrappedExif: string | null }> {
   const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
   const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, source.lastModified)
+  const placeName = cleanStr(restored.placeName)
   const metaTier: MediaMeta = {
     v: 1,
     w: dims?.w,
     h: dims?.h,
     capturedAt,
+    capturedAtOverride: finiteNum(restored.capturedAtOverride),
     capturedAtSource,
     gpsLat: meta.gpsLat,
     gpsLng: meta.gpsLng,
+    placeName: placeName === undefined ? undefined : clampPlaceName(placeName),
   }
-  const hasMeta =
-    metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
-    metaTier.gpsLng !== undefined
+  const hasMeta = metaHasContent(metaTier)
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
   const wrappedExif = meta.exif ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), meta.exif) : null
   return { wrappedMeta, wrappedExif }
@@ -563,7 +571,18 @@ export type AddMediaOptions = {
    *  every wrap and seal of the medium is under that node's key (ADR 0109 point 6). Every production caller states it
    *  ([UploadTarget.nodeEpoch], the import); absent it is 0, the epoch of a scope never rotated — a suite's fake scope. */
   nodeEpoch?: number
+  /** What an import restores that the bytes cannot carry ([RestoredMediaFacts]); absent for every other upload. */
+  restored?: RestoredMediaFacts
 }
+
+/**
+ * What an import of a download restores of a medium beside its original (uc.platform.export-import): a capture time the
+ * member CORRECTED (`capturedAtOverride`) and a place name the bytes do not carry. Both are sealed into the listed tier
+ * at birth, in the one completion that adds the medium and under the key it lands under — so a rotation and re-key that
+ * lands while the import runs cannot leave them to a second write opening a tier the re-key re-sealed (inbox #700), as a
+ * copy seals every fact at birth ([addCopiedMedia]). The name is clamped as a backfill clamps it ([clampPlaceName]).
+ */
+export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string }
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
@@ -624,7 +643,7 @@ export async function uploadMediaVia(
   const stored = opts.storedOriginal?.(sha256, sealedByteSize(typed.blob.size)) ?? null
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
-  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions)
+  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions, opts.restored)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order.
   return uploadSealedMedia(scopeId, memoryKey, mediaId, {
@@ -733,8 +752,9 @@ function mediaApiTransport(scopeId: string, nodeId: string, nodeEpoch: number): 
         }),
       )
       const m = done.results[0]
-      // the per-item refusal of a node not re-keyed yet, as the retry reads a `409 node_rekey_pending`
+      // the per-item epoch refusals (`MediaStore.attach`), as the retry reads a `409 node_rekey_pending` / `409 stale_epoch`
       if (m?.error === NODE_REKEY_PENDING) throw new NodeRekeyPendingError()
+      if (m?.error === STALE_NODE_EPOCH) throw new StaleNodeEpochError()
       if (!m || m.error || !m.blobId || !m.mediaId) throw new Error(m?.error ?? 'attach_failed')
       return { blobId: m.blobId, mediaId: m.mediaId }
     },
@@ -991,6 +1011,7 @@ export async function setMediaMeta(
   memoryKey: Uint8Array,
   nodeEpoch: number,
   overrideMs: number | null,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   const openedWith = unsealMeta(scopeId, memoryKey, media as MediaItem)?.capturedAtOverride
   return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw, { retry, state }) => {
@@ -998,7 +1019,7 @@ export async function setMediaMeta(
     if (overrideMs === null) delete raw.capturedAtOverride
     else raw.capturedAtOverride = overrideMs
     return raw
-  })
+  }, opts)
 }
 
 /**
@@ -1040,6 +1061,7 @@ export async function backfillPlaceName(
   nodeEpoch: number,
   placeName: string,
   placeLevel?: string,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw) => {
     if (cleanStr(raw.placeName) !== undefined) return null // the fresh tier already has one — nothing to fill
@@ -1047,7 +1069,7 @@ export async function backfillPlaceName(
     if (placeLevel === undefined) delete raw.placeLevel
     else raw.placeLevel = placeLevel
     return raw
-  })
+  }, opts)
 }
 
 /** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). Any field but `v`
@@ -1055,6 +1077,18 @@ export async function backfillPlaceName(
  *  the name resolved again on every open) or one a newer client wrote that this one does not know. */
 function metaHasContent(m: RawMediaMeta): boolean {
   return Object.entries(m).some(([k, v]) => k !== 'v' && v !== undefined)
+}
+
+/**
+ * How a MEMBER's media-meta write meets an epoch refusal of the medium's node (ADR 0109 point 6): the device floor before
+ * each attempt (`atFloor`), and on `node_rekey_pending` (or the floor's refusal) the node's path pulled forward on this
+ * device (`pull`, ADR 0111 decision 11) and its key re-read (`reread`) for a rebuild; `stale_epoch` re-reads once. Without
+ * `reread` a refusal is the caller's — a guest's write, which has no key above its root to pull with.
+ */
+export type MediaMetaWriteOptions = {
+  atFloor?: (nodeEpoch: number) => void
+  reread?: () => Promise<{ key: Uint8Array; epoch: number }>
+  pull?: () => Promise<boolean>
 }
 
 /**
@@ -1067,6 +1101,12 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * key, never under `K_node`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
  * left worth sealing. `nodeEpoch` is the medium's node's epoch as read with `memoryKey`, which the write states (ADR 0109
  * point 6).
+ *
+ * A rebuild after the node's re-key ([MediaMetaWriteOptions]) seals under the re-read key at its epoch, and starts from the
+ * tier AS LISTED — opened once, under the key it was listed with: the re-key re-sealed that tier without changing a byte of
+ * its plaintext and raised its revision, so the rebuild's send meets `409 stale_revision` and re-bases on the re-sealed tier,
+ * which opens under the new key. A WRITE_ONLY guest's medium is neither re-sealed nor re-revised by a re-key, and its `K_up`
+ * stays the same: it is resolved once, from the origin as listed (whose drop key the re-key replaced).
  */
 async function persistMeta(
   scopeId: string,
@@ -1074,20 +1114,36 @@ async function persistMeta(
   memoryKey: Uint8Array,
   nodeEpoch: number,
   edit: (raw: RawMediaMeta, ctx: MetaEditContext) => RawMediaMeta | null,
+  opts: MediaMetaWriteOptions = {},
 ): Promise<MediaMetaWrite> {
   const { mediaId } = media
-  const { state, meta, wrote } = await writeSealedMeta<RawMediaMeta>(
-    { wrappedMeta: media.wrappedMeta ?? null, metaRevision: media.metaRevision ?? 0 },
-    {
-      open: (wrappedMeta) => openMediaMetaForWrite(scopeId, memoryKey, media, wrappedMeta),
-      seal: (raw) =>
-        metaHasContent(raw) ? sealJson(mediaKey(scopeId, memoryKey, media), prune(raw), mediaMetaContext(scopeId, mediaId)) : null,
-      send: async (wrappedMeta, metaRevision) => {
-        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision, nodeEpoch } }))
+  const base = { wrappedMeta: media.wrappedMeta ?? null, metaRevision: media.metaRevision ?? 0 }
+  let guestKey: Uint8Array | undefined
+  const keyFor = (nodeKey: Uint8Array) => (media.uploader ? (guestKey ??= mediaKey(scopeId, memoryKey, media)) : nodeKey)
+  let listed: RawMediaMeta | undefined
+  const openListed = () => (listed ??= openMediaMetaForWrite(scopeId, memoryKey, media, base.wrappedMeta))
+  const once = async (nodeKey: Uint8Array, epoch: number) => {
+    opts.atFloor?.(epoch)
+    return writeSealedMeta<RawMediaMeta>(
+      base,
+      {
+        open: (wrappedMeta) =>
+          wrappedMeta === base.wrappedMeta ? structuredClone(openListed()) : openMediaMetaUnder(scopeId, () => keyFor(nodeKey), mediaId, wrappedMeta),
+        seal: (raw) => (metaHasContent(raw) ? sealJson(keyFor(nodeKey), prune(raw), mediaMetaContext(scopeId, mediaId)) : null),
+        send: async (wrappedMeta, metaRevision) => {
+          await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaRevision, nodeEpoch: epoch } }))
+        },
       },
-    },
-    edit,
-  )
+      edit,
+    )
+  }
+  const reread = opts.reread
+  const { state, meta, wrote } = reread
+    ? await writeAtNodeEpoch(async (again) => {
+      const at = again ? await reread() : { key: memoryKey, epoch: nodeEpoch }
+      return once(at.key, at.epoch)
+    }, { pull: opts.pull })
+    : await once(memoryKey, nodeEpoch)
   return { tier: state.wrappedMeta ? normalizeMediaMeta(meta) : null, wrappedMeta: state.wrappedMeta, metaRevision: state.metaRevision, wrote }
 }
 

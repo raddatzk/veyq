@@ -741,8 +741,9 @@ control, honest-operator; L2 crypto, the only real operator boundary), here appl
 
 **Whether layer 2 fires is a per-scope policy** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)),
 because rotation re-grants **every** remaining member (`O(N)`): **groups** rotate automatically on removal (small,
-sensitive sharing); the **tenant** (the primary, potentially large content home) uses layer 1 alone by default and
-rotates only on an **explicit re-key** for the compromise case — securing the account; a **personal** scope has
+sensitive sharing), and on an owner's explicit re-key for the compromise case; the **tenant** (the primary, potentially large content home) uses layer 1 alone by default and
+rotates only on an **explicit re-key** for the compromise case — a tenant owner's own, alone or opted into a
+removal, or securing the account; a **personal** scope has
 nobody to rotate away from on a removal, and rotates only when its own account is secured. Layer 1 is unconditional
 for all three. Who commits a rotation and who re-keys the nodes, per kind, is
 [keys, grants and trust § Rotating a scope](keys-grants-and-trust.md#rotating-a-scope).

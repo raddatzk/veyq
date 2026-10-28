@@ -67,7 +67,8 @@ it, for a mistaken or coerced request; the person cannot sign in to do so. Thirt
 ### 4. What goes
 
 The `veyq_user` row (address, keys, wraps) and the address wherever it was copied (the invites sent to it, a login
-challenge, a tenant's record of whom its owner invite named), master key wraps, session families and their tokens, identity pins,
+challenge, a tenant's record of whom its owner invite named — which follows an address change, so it never keeps an
+address the account gave up), master key wraps, session families and their tokens, identity pins,
 recovery, device register and pairings, address confirmations and changes, the tenant profile in every tenant,
 every membership, the favorites (core's and Memories'), the moderator row and its grants, and the terms acceptance
 rows except as decision 6 keeps them. The browser that erased clears its own records for the address (session vault,
@@ -84,11 +85,19 @@ the person, before they erase, to delete what they want gone from shared scopes 
 
 ### 6. The terms acceptance history goes, unless a case needs it
 
-Deleted with the account (ADR 0035 decision 4 names the table for this), **except** while a moderation case names the
-account — a measure on it in force, or a case about its content not closed: then its rows stay under the opaque id
-until that case's log retention date (31 December of the third year after it closes, ADR 0093 § 11), as the evidence of
-which terms a breach was measured against (Art. 17(3)(e)). No new period: the case's — or, for a Server Owner's step on
-no case (ADR 0093 § 7), the step's own: 31 December of the third year after its lift.
+Deleted with the account (ADR 0035 decision 4 names the table for this), **except** while a moderation record still
+kept names the account — a measure on it in force, a case about its content open or inside its log retention (31
+December of the third year after it closes, ADR 0093 § 11), or a Server Owner's step on no case (ADR 0093 § 7) inside
+its own (31 December of the third year after its lift): then its rows stay under the opaque id until that record's
+date, as the evidence of which terms a breach was measured against (Art. 17(3)(e)). No new period. The erasure asks the
+question its later sweep of kept rows asks (owner, the safe side): an account erased the day after its case closed is
+named by that case's records as long as one erased the day before, and a dispute over a kept record needs the terms it
+was measured against. A step on a tenant (taken offline or deleted over content) names the tenant's owners at the time
+of the step — the recipients of its statement — and is then a measure on each of them (owner, the safe side): it
+targets the tenant id and often answers no case, so without this a tenant deleted over its content would lose its
+owners' rows at its purge while the step's record stays to its date. A tenant's erasure (decision 10) keeps them by the
+same rule, asked when it starts: the evidence is the account's, and erasing the space it was given in does not settle
+the case.
 
 ### 7. What survives, and is said to survive
 
@@ -130,7 +139,7 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
 The Server Owner deletes an `ACTIVE` or `SUSPENDED` tenant in admin-web and with `veyq-admin tenant delete`. At once it
 is offline exactly as a suspension takes it (ADR 0066: every request refused, ingress withdrawn, links dead); after the
 same `P30D` the Server Owner can still stop (Q), one purge erases every scope through `ScopePurge.eraseScope` (its blobs
-onto the reclaim list), the tenant profiles, the terms rows (their cascade), the mail settings, the invites, the
+onto the reclaim list), the tenant profiles, the terms rows (except as decision 6 keeps them), the mail settings, the invites, the
 capability switches and quota, and the tenant row. Holds and the moderation records survive: their tables hang on
 cases, not tenants (`grep -n REFERENCES backend/core/src/main/resources/db/migration/V202610172000__core_moderation_holds.sql`).
 Members keep their accounts, also one the deletion leaves in no tenant (owner, Q20): nothing erases an account its

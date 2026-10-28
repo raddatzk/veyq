@@ -97,8 +97,8 @@
 - An erasure is the host's to announce, so its mails go through the instance mail, not the space's
   ([ADR 0097](../../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3).
 - The privacy notice names how long content is kept (GDPR Art. 13(2)(a)). Art. 17 is met by the ledger, and Art. 20 by
-  the download the window keeps. Three questions stay with counsel: a basis in the terms, the notice's adequacy, and
-  whether a switch-off is DSA moderation
+  the download the window keeps. Three questions the law leaves open are not pursued: a basis in the terms, the notice's
+  adequacy, and whether a switch-off is DSA moderation
   ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § Legal basis, Still open 12–14).
 

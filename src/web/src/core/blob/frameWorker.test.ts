@@ -15,6 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { openFrameRun, openFrames, sealFrameOf } from './keys'
+import { putFrame } from './framePut'
 import type { FrameMessage, FrameRequest, FrameResponse } from './frameOps'
 
 vi.mock('../../api/client', () => ({ blobApi: vi.fn(), tokenApi: vi.fn() }))
@@ -24,7 +25,7 @@ type Listener = (e: unknown) => void
 
 /** The fake Worker. `hold` keeps answers back until `release()`, so a case can act while a job is in the Worker. */
 function stubWorker(mode: Mode = 'real', opts: { hold?: boolean } = {}) {
-  const stats = { constructed: 0, posted: [] as FrameRequest[], terminated: 0 }
+  const stats = { constructed: 0, posted: [] as FrameRequest[], terminated: 0, cancelled: [] as number[] }
   const held: (() => void)[] = []
   class FakeWorker {
     private handlers: Record<string, Listener[]> = {}
@@ -44,11 +45,15 @@ function stubWorker(mode: Mode = 'real', opts: { hold?: boolean } = {}) {
       if (mode === 'throw-post') throw new DOMException('could not be cloned', 'DataCloneError')
       const copy = structuredClone(msg, { transfer }) // detaches what `transfer` names, on the page
       stats.posted.push(copy)
+      if (copy.op === 'cancel') {
+        stats.cancelled.push(copy.target)
+        return // a cancel is no job: it has no answer
+      }
       if (mode === 'dies-after-post') {
         setTimeout(() => this.emit('error', {}), 1)
         return
       }
-      const reply = () => this.emit('message', { data: answer(copy) })
+      const reply = () => void answer(copy).then((data) => this.emit('message', { data }))
       if (opts.hold) held.push(reply)
       else setTimeout(reply, 1)
     }
@@ -64,13 +69,20 @@ function stubWorker(mode: Mode = 'real', opts: { hold?: boolean } = {}) {
   }
 }
 
-/** What the real worker answers (`frames.worker.ts`), over the same `keys.ts` calls. */
-function answer(req: FrameRequest): FrameMessage {
+/** What the real worker answers (`frames.worker.ts`), over the same `keys.ts` calls and the same `putFrame`. */
+async function answer(req: FrameRequest): Promise<FrameMessage> {
   try {
-    const bytes = req.op === 'seal-frame'
-      ? sealFrameOf(req.blobKey, req.index, req.total, req.plaintext)
-      : openFrameRun(req.blobKey, req.total, req.from, req.frames)
-    return { id: req.id, ok: true, bytes } satisfies FrameResponse
+    if (req.op === 'seal-put') {
+      const plaintext = req.chunk instanceof Uint8Array ? req.chunk : new Uint8Array(await req.chunk.arrayBuffer())
+      const frame = new Blob([sealFrameOf(req.blobKey, req.index, req.total, plaintext) as BlobPart])
+      try {
+        return { id: req.id, ok: true, status: await putFrame(req.url, frame) } satisfies FrameResponse
+      } catch (e) {
+        return { id: req.id, ok: false, kind: 'network', error: (e as Error).message }
+      }
+    }
+    if (req.op === 'cancel') throw new Error('a cancel has no answer')
+    return { id: req.id, ok: true, bytes: openFrameRun(req.blobKey, req.total, req.from, req.frames) } satisfies FrameResponse
   } catch (e) {
     return { id: req.id, ok: false, kind: 'source', error: String(e) }
   }
@@ -114,16 +126,14 @@ describe('the front door, with a healthy Worker', () => {
     expect(warn).not.toHaveBeenCalled() // the control for the latch cases' one warning
   })
 
-  it('seals a frame the page opens, and a frame the AEAD refuses rejects without latching the Worker', async () => {
+  it('a frame the AEAD refuses rejects without latching the Worker', async () => {
     const worker = stubWorker()
     const door = await freshDoor()
-    const blobKey = v1.randomBytes(32)
-    const frame = await door.sealFrameOff(blobKey, 1, 2, plain(9, 1))
-    expect(v1.openFrame(blobKey, 1, 2, frame)).toEqual(plain(9, 1))
-    await expect(door.openFrameRunOff(v1.randomBytes(32), 2, 1, [frame.slice()])).rejects.toThrow('frame_open_failed')
+    const b = blob(2, 9)
+    await expect(door.openFrameRunOff(v1.randomBytes(32), 2, 1, [b.frames()[1]])).rejects.toThrow('frame_open_failed')
     // the refusal was the input's: the Worker still takes the next job
-    expect(await door.openFrameRunOff(blobKey, 2, 1, [frame])).toEqual(plain(9, 1))
-    expect(worker.stats.posted.map((r) => r.op)).toEqual(['seal-frame', 'open-frames', 'open-frames'])
+    expect(await door.openFrameRunOff(b.blobKey, 2, 1, [b.frames()[1]])).toEqual(plain(9, 1))
+    expect(worker.stats.posted.map((r) => r.op)).toEqual(['open-frames', 'open-frames'])
     expect(worker.stats.constructed).toBe(1)
     expect(warn).not.toHaveBeenCalled()
   })
@@ -131,43 +141,34 @@ describe('the front door, with a healthy Worker', () => {
   it('posts nothing before the Worker said it is ready', async () => {
     const worker = stubWorker()
     const door = await freshDoor()
-    const sealed = door.sealFrameOff(v1.randomBytes(32), 0, 1, plain(4, 0))
+    const b = blob(1)
+    const opened = door.openFrameRunOff(b.blobKey, 1, 0, b.frames())
     expect(worker.stats.posted).toHaveLength(0) // the Worker exists, its module has not run yet
-    await sealed
+    await opened
     expect(worker.stats.posted).toHaveLength(1)
   })
 })
 
 describe('what crosses: K_blob cloned, the bytes transferred', () => {
   it('a transferred buffer is detached on the page, and the page\'s K_blob is untouched', async () => {
-    const worker = stubWorker()
+    stubWorker()
     const door = await freshDoor()
-    const blobKey = v1.randomBytes(32)
-    const keyBefore = blobKey.slice()
-    const plaintext = plain(64, 3)
-    const frame = await door.sealFrameOff(blobKey, 0, 1, plaintext)
-    expect(plaintext.byteLength).toBe(0) // moved, not copied
-    expect(worker.stats.posted[0].op === 'seal-frame' && worker.stats.posted[0].plaintext).toEqual(plain(64, 3))
-    expect(blobKey).toEqual(keyBefore)
-    const frames = [frame]
-    await door.openFrameRunOff(blobKey, 1, 0, frames)
-    expect(frames[0].byteLength).toBe(0)
+    const b = blob(1, 64)
+    const keyBefore = b.blobKey.slice()
+    const frames = b.frames()
+    expect(await door.openFrameRunOff(b.blobKey, 1, 0, frames)).toEqual(b.plaintext)
+    expect(frames[0].byteLength).toBe(0) // moved, not copied
+    expect(b.blobKey).toEqual(keyBefore)
   })
 
   it('a sub-view is copied, so its parent stays whole and usable (control: the whole buffer above is detached)', async () => {
     stubWorker()
     const door = await freshDoor()
-    const blobKey = v1.randomBytes(32)
-    const parent = plain(100, 5)
-    const view = parent.subarray(10, 60)
-    const frame = await door.sealFrameOff(blobKey, 0, 1, view)
-    expect(parent).toEqual(plain(100, 5))
-    expect(view.byteLength).toBe(50)
-    expect(v1.openFrame(blobKey, 0, 1, frame)).toEqual(plain(100, 5).subarray(10, 60))
-    // the same for a frame that is a view into a larger buffer
+    const b = blob(1, 50)
+    const [frame] = b.frames()
     const framed = new Uint8Array(frame.byteLength + 8)
     framed.set(frame, 8)
-    expect(await door.openFrameRunOff(blobKey, 1, 0, [framed.subarray(8)])).toEqual(view)
+    expect(await door.openFrameRunOff(b.blobKey, 1, 0, [framed.subarray(8)])).toEqual(b.plaintext)
     expect(framed.byteLength).toBe(frame.byteLength + 8)
   })
 })
@@ -220,16 +221,16 @@ describe('a Worker that cannot run latches off and the jobs finish on the page t
     const worker = stubWorker('no-load')
     const door = await freshDoor()
     const b = blob(20)
-    const blobKey = v1.randomBytes(32)
+    const c = blob(2, 5)
     const outstanding = [
       door.openFramesOff(b.blobKey, b.frames()),
-      door.sealFrameOff(blobKey, 0, 2, plain(5, 0)),
-      door.sealFrameOff(blobKey, 1, 2, plain(5, 1)),
+      door.openFrameRunOff(c.blobKey, 2, 0, [c.frames()[0]]),
+      door.openFrameRunOff(c.blobKey, 2, 1, [c.frames()[1]]),
     ] as const
     const [opened, f0, f1] = await Promise.all(outstanding)
     expect(opened).toEqual(b.plaintext)
-    expect(v1.openFrame(blobKey, 0, 2, f0)).toEqual(plain(5, 0))
-    expect(v1.openFrame(blobKey, 1, 2, f1)).toEqual(plain(5, 1))
+    expect(f0).toEqual(plain(5, 0))
+    expect(f1).toEqual(plain(5, 1))
     expect(warn).toHaveBeenCalledTimes(1)
     expect(worker.stats.terminated).toBe(1)
 
@@ -238,19 +239,11 @@ describe('a Worker that cannot run latches off and the jobs finish on the page t
     expect(warn).toHaveBeenCalledTimes(1)
   })
 
-  it('a Worker that dies with a job in it: a seal is read again from its source, an open rejects frame_worker_lost', async () => {
+  it('a Worker that dies with an open in it: the open rejects frame_worker_lost (its fetched frames are gone)', async () => {
     stubWorker('dies-after-post')
     const door = await freshDoor()
-    const blobKey = v1.randomBytes(32)
-    const reread = vi.fn(async () => plain(5, 9))
     const b = blob(2)
-    const [sealed, opened] = await Promise.allSettled([
-      door.sealFrameOff(blobKey, 0, 1, plain(5, 9), reread),
-      door.openFramesOff(b.blobKey, b.frames()),
-    ])
-    expect(sealed.status === 'fulfilled' && v1.openFrame(blobKey, 0, 1, sealed.value)).toEqual(plain(5, 9))
-    expect(reread).toHaveBeenCalledTimes(1)
-    expect(opened).toMatchObject({ status: 'rejected', reason: { message: 'frame_worker_lost' } })
+    await expect(door.openFramesOff(b.blobKey, b.frames())).rejects.toThrow('frame_worker_lost')
     expect(warn).toHaveBeenCalledTimes(1)
   })
 
@@ -292,7 +285,8 @@ describe('the upload pump seals through the Worker', () => {
       const attempt = (attempts.get(index) ?? 0) + 1
       attempts.set(index, attempt)
       if (deny(index, attempt)) return new Response('', { status: 403 })
-      objects.set(index, new Uint8Array(init.body as Uint8Array))
+      // The Worker sends a Blob (framePut.ts), the page's fall-back the bytes.
+      objects.set(index, init.body instanceof Blob ? new Uint8Array(await init.body.arrayBuffer()) : new Uint8Array(init.body as Uint8Array))
       return new Response('', { status: 200 })
     }))
     return objects
@@ -309,7 +303,7 @@ describe('the upload pump seals through the Worker', () => {
     return { plan, run, signWindow, reopen, CHUNK_SIZE }
   }
 
-  it('every frame is sealed in the Worker, and what the store holds opens back to the source', async () => {
+  it('every chunk is read, sealed and PUT in the Worker: the page sends a Blob handle and gets a status back, never the bytes', async () => {
     const worker = stubWorker()
     vi.resetModules()
     const objects = store()
@@ -317,23 +311,55 @@ describe('the upload pump seals through the Worker', () => {
     const { plan, run, reopen } = await upload(data, objects)
     await run
     expect(plan.chunkCount).toBe(3)
-    expect(worker.stats.posted.map((r) => r.op === 'seal-frame' && r.index).sort()).toEqual([0, 1, 2])
+    const sent = worker.stats.posted.filter((r) => r.op === 'seal-put')
+    expect(sent.map((r) => r.index).sort()).toEqual([0, 1, 2])
+    expect(sent.map((r) => r.chunk instanceof Blob && r.chunk.size)).toEqual(expect.arrayContaining([262144, 262144, 11]))
+    expect(sent.map((r) => r.url).sort()).toEqual(['mem://up/0', 'mem://up/1', 'mem://up/2'])
+    expect(worker.stats.posted.map((r) => r.op)).toEqual(['seal-put', 'seal-put', 'seal-put']) // nothing else crossed
     expect(reopen()).toEqual(data)
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('still re-signs and retries a PUT the store answers 403', async () => {
-    stubWorker()
+  it('a source that is no Blob (a copy\'s frame reader) is read on the page and its slice transferred', async () => {
+    const worker = stubWorker()
+    vi.resetModules()
+    const objects = store()
+    const { planBlob, reserveAndPump } = await import('./transport')
+    const data = plain(262144 + 5, 2)
+    const read: Uint8Array[] = []
+    const source = {
+      size: data.byteLength,
+      type: '',
+      slice: (start = 0, end = data.byteLength) => ({
+        arrayBuffer: async () => {
+          const bytes = data.slice(start, end)
+          read.push(bytes)
+          return bytes.buffer
+        },
+      }),
+    }
+    const plan = planBlob(SCOPE, OWNER, v1.randomBytes(32), source)
+    await reserveAndPump([plan], async () => [{ uploadId: 'up', puts: putsFrom(0, plan.chunkCount) }], vi.fn())
+    const sent = worker.stats.posted.filter((r) => r.op === 'seal-put')
+    expect(sent.map((r) => r.chunk instanceof Uint8Array && r.chunk.byteLength).sort()).toEqual([262144, 5].sort())
+    expect(read.map((b) => b.byteLength)).toEqual([0, 0]) // transferred: the page's copies are detached
+    const reopened = v1.concat(...[0, 1].map((i) => v1.openFrame(plan.blobKey, i, 2, objects.get(i)!)))
+    expect(reopened).toEqual(data)
+  })
+
+  it('still re-signs and retries a PUT the store answers 403, through the Worker again', async () => {
+    const worker = stubWorker()
     vi.resetModules()
     const objects = store((index, attempt) => index === 1 && attempt === 1)
     const data = plain(2 * 262144 + 11, 6)
     const { run, signWindow, reopen } = await upload(data, objects)
     await run
     expect(signWindow).toHaveBeenCalledWith('up', 1)
+    expect(worker.stats.posted.filter((r) => r.op === 'seal-put' && r.index === 1)).toHaveLength(2)
     expect(reopen()).toEqual(data)
   })
 
-  it('cancels on abort: AbortError, and no frame is sealed after it', async () => {
+  it('cancels on abort: AbortError at once, a cancel for every chunk in the Worker, and no chunk sent after it', async () => {
     const worker = stubWorker('real', { hold: true })
     vi.resetModules()
     const objects = store()
@@ -341,14 +367,52 @@ describe('the upload pump seals through the Worker', () => {
     const { run } = await upload(plain(9 * 262144, 1), objects, ctl.signal)
     const outcome = run.then(() => 'resolved', (e: unknown) => e) // observed at once: it rejects while answers drain
     await tick()
-    const posted = worker.stats.posted.length
-    expect(posted).toBeGreaterThan(0)
+    const inWorker = worker.stats.posted.filter((r) => r.op === 'seal-put').map((r) => r.id)
+    expect(inWorker.length).toBeGreaterThan(0)
     ctl.abort()
-    for (let i = 0; i < posted; i++) {
+    expect(await outcome).toMatchObject({ name: 'AbortError' })
+    expect(worker.stats.cancelled.sort()).toEqual(inWorker.sort())
+    for (let i = 0; i < inWorker.length; i++) {
       worker.release()
       await tick()
     }
-    expect(await outcome).toMatchObject({ name: 'AbortError' })
-    expect(worker.stats.posted).toHaveLength(posted)
+    expect(worker.stats.posted.filter((r) => r.op === 'seal-put')).toHaveLength(inWorker.length)
+  })
+
+  it('control: the same upload, unaborted, cancels nothing', async () => {
+    const worker = stubWorker()
+    vi.resetModules()
+    const objects = store()
+    const data = plain(9 * 262144, 1)
+    const { run, reopen } = await upload(data, objects, new AbortController().signal)
+    await run
+    expect(worker.stats.cancelled).toEqual([])
+    expect(reopen()).toEqual(data)
+  })
+
+  it('a Worker that dies with a chunk in it: the chunk is read, sealed and PUT again on the page', async () => {
+    const worker = stubWorker('dies-after-post')
+    vi.resetModules()
+    const objects = store()
+    const data = plain(262144 + 3, 8)
+    const { run, reopen } = await upload(data, objects)
+    await run
+    expect(worker.stats.posted.some((r) => r.op === 'seal-put')).toBe(true) // the Worker had taken a chunk
+    expect(reopen()).toEqual(data)
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('a PUT that failed in the network rejects with the Worker\'s error and is not run on the page again', async () => {
+    stubWorker()
+    vi.resetModules()
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url)
+      throw new TypeError('Failed to fetch')
+    }))
+    const { run } = await upload(plain(10, 1), new Map())
+    await expect(run).rejects.toThrow('Failed to fetch')
+    expect(calls).toEqual(['mem://up/0']) // once, in the Worker
+    expect(warn).not.toHaveBeenCalled()
   })
 })

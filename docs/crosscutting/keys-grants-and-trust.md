@@ -222,7 +222,10 @@ member leaves by the removal cascade, which also cuts their groups. Under the sc
   a client that lost a race re-opens its grant and rebuilds **once**, from a fresh key
   ([ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4).
 - **Nobody is left out silently.** Grants, pending members and the removed member must cover every membership, and
-  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`). A pending member keeps
+  for a tenant the re-granted and pending invites every open invite (`409 rotation_incomplete`): a member who joined or
+  an invite minted after the client's read. The client's one rebuild (as for `stale_epoch`) reads the members and the
+  open invites again, keeping its own exclusions — the member it removes, or the one a tenant re-key leaves out — on the
+  re-read list too, so the new epoch is never wrapped to them; a second refusal is the answer. A pending member keeps
   the grant it holds, behind — that **is** the stored pending marker, and grant delivery brings it current
   (ADR 0111 decision 9). A removal-rotation's grants must not name the member it removes
   (`422 removed_member_granted`), and the last accepted owner cannot be removed (`409 last_owner`; a consent
@@ -240,15 +243,24 @@ its epoch floor for the scope.
 
 | Kind | Member removed | Account secured | Other triggers | Who commits |
 |---|---|---|---|---|
-| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued | an owner; the securing account through its pending row |
-| **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations | yes, by the securing account | — | an owner; the securing account through its pending row |
+| **Group** | **yes** — by a group owner as one removal-rotation (`rotateGroupForRemoval`); by a tenant owner's removal cascade as a **queued** rotation, which also covers the open proposals the only accepted owner's departure expires | yes, by the securing account | a declined, rescinded or removal-dropped consent proposal: queued; an owner's *"re-key this space"*, nobody removed | an owner; the securing account through its pending row |
+| **Tenant** | **no** — the membership is deleted (layer-1 revoke), the co-shared groups get queued rotations; the owner may opt into a re-key after it | yes, by the securing account | an owner's *"re-key this space"*, nobody removed | an owner; the securing account through its pending row |
 | **Personal** | **no** — the account's personal scope is soft-deleted with its tenant membership | yes, by the account itself (its sole owner) | — | the owner |
 
 The policy is [ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)'s for removals
 (`RemovalPolicy` in `src/backend/core/.../admin/tenant/`) and [ADR 0060](../decisions/0060-key-rotation-after-compromise.md)'s
 for a compromise. Revoking a link or a member invite rotates nothing. The server accepts a rotation of any kind from
-an owner, and a removal only on a group; the client starts one in exactly three places: the group removal, the queued-rotation worker and the
-securing account's finish.
+an owner, and a removal only on a group; the client starts one in exactly four places: the group removal, the queued-rotation worker, the
+securing account's finish and an owner's re-key of a tenant or a group (`rekeySpace`, `src/web/src/features/spaces/members.ts`).
+
+**An owner's re-key** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) §§ 1–2) is a plain rotation
+of the TENANT or a GROUP scope from its members panel, for the compromise case. A tenant owner runs it on its own, or
+opted into a removal, unchecked by default. With a removal the cascade lands first and the rotation follows, over the
+directory read after it with the removed member dropped by the owner's own choice, so the new epoch is never wrapped to
+them; a server that kept their membership meets `409 rotation_incomplete` and nothing commits. A group owner runs it
+on its own only, since a group removal already rotates. The nodes are re-keyed right after, as for any rotation
+([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9,
+[uc.spaces.manage-group-members](../features/spaces/use-cases/uc.spaces.manage-group-members.md) A6).
 
 ### A queued rotation
 
@@ -283,9 +295,23 @@ the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-
   background, which resumes any scope its row marks *re-keying* (`resumeRekeys`) and skips the owner-only nodes.
 - **A member's write pulls its path forward.** A write into a node not yet re-keyed is `409 node_rekey_pending`; the
   client's one retry helper (`writeAtNodeEpoch`, `src/web/src/shared/rekeyRetry.ts`) re-keys that node and its lagging
-  ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write stating an older
-  node epoch (`409 stale_epoch`) re-reads once. A **guest**, holding no key above its root, waits and retries until a
-  member's or an owner's device reached its node.
+  ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write that carries
+  ciphertext under the old key is rebuilt, not resent: a cover's or a banner's whole save runs again under the re-read
+  key (`writeUnderMemberNode`), a medium's meta edit re-bases on the re-sealed tier (`persistMeta`); an import or a copy
+  pulls its target (`memberCreateOptions`). A write stating an older node epoch (`409 stale_epoch`) re-reads once,
+  running the pull first when it has not run: another member's device re-keyed the node, and this device opens the new
+  key only once it re-opened the scope at the epoch that minted it. A member's medium completion answers either refusal
+  per item, inside a `200`; the client throws each as the HTTP refusal it stands for (`NodeRekeyPendingError`,
+  `StaleNodeEpochError`), or the write would not know it. A **guest**, holding no key above its root, waits and
+  retries until a member's or an owner's device reached its node.
+- **A long run keeps up with a rotation.** An import or a copy creates its nodes at the epoch it started with, so a
+  rotation landing mid-run leaves them behind too. Every create states the scope's epoch as the device holds it at that
+  attempt (`CreateNodeOptions.epochs`), and each write into a node the run created goes through that node's
+  `memberNodeWriter`: one write — a medium, a cover, a banner, a Pot's batch or receipt — pulled, re-read and sealed
+  again, the writer keeping the key it landed under for the run's next write and for the children created below. Never
+  the kind's whole import again, which would create the node twice. A create at the scope root re-opens the scope on a
+  `stale_epoch` (the pull of an empty path). A pull refused below a drop box still re-opens a scope held behind, so the
+  write's re-read after the wait opens an owner's re-key.
 
 ## Securing the account
 
@@ -397,7 +423,8 @@ so the gate never fires for one, and it never blocks anybody's write.
   deletes every row naming them.
 - **Display only, per tenant.** A member reads *New* (first pinned less than 14 days ago), *Not verified*, *Verified by
   …* (the members whose verification counts), *New identity, signed by their previous key, on {date}* after a rotation,
-  and the anomaly, *Can't confirm this key* (`tenantBadges`, `MemberTrustBadge.vue`). Nothing here blocks anyone; requiring
+  and the anomaly, *Can't confirm this key* (`tenantBadges`, `MemberTrustBadge.vue`); Settings → **Who's who** shows all
+  of it for every member at once (`loadPeopleOverview`, from the same reads). Nothing here blocks anyone; requiring
   *verified* is not built ([uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md)).
 
 ### The device's counter

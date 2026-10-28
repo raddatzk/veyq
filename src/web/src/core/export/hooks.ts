@@ -5,7 +5,7 @@
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { BlobSource } from '../blob/types'
 import type { Access, TreeSource } from '../access'
-import type { NodeParent, TreeNode } from '../node/tree'
+import type { CreateNodeOptions, NodeParent, TreeNode } from '../node/tree'
 import type { ManifestContent, ManifestNode, ManifestPayload } from './manifest'
 
 /** A payload's plaintext by frame, in any order: frame `i` holds bytes `[i * frameSize, (i + 1) * frameSize)` of the payload, the
@@ -67,9 +67,17 @@ export type ImportNodeContext = {
    *  content only here, never from an archive. */
   purpose: 'import' | 'copy'
   scopeId: string
+  /** The scope's epochs as this device held them when the hook was called; `createOptions` re-reads them at each attempt,
+   *  since a rotation met mid-run re-opens the scope (inbox #670). */
   epochs: EpochKeys
   /** Where to create the node (null: the scope root). */
   parent: NodeParent
+  /** What the create under `parent` passes `createContentNode` (`CreateNodeOptions`): an import or a copy is a member's
+   *  flow, so a parent not re-keyed since a rotation is pulled forward on this device and re-read, and the create retried
+   *  (ADR 0111 decision 11) - core's `memberCreateOptions`; an owner-only parent (a drop box) waits for an owner. What the
+   *  hook writes into the node it created goes through core's `memberNodeWriter`, which pulls that node forward the same
+   *  way when a rotation lands while the run is under way (inbox #670). */
+  createOptions: CreateNodeOptions
   /** The name to create it under: the exported name, made free among the target's siblings. */
   name: string
   node: ManifestNode
@@ -88,6 +96,8 @@ export type ImportNodeContext = {
  *  with its subtree, is then left out and reported). */
 export type ExportContentHook = (ctx: ExportNodeContext) => Promise<ManifestContent | null>
 
-/** Creates the node (with its content) under `ctx.parent` and returns its id and key, so core can create its children
- *  under it. On a failure it leaves behind nothing it can clean up itself; core trashes the top-level node it created. */
-export type ImportContentHook = (ctx: ImportNodeContext) => Promise<{ nodeId: string; nodeKey: Uint8Array }>
+/** Creates the node (with its content) under `ctx.parent` and returns its id, key and the epoch that key is at, so core
+ *  can create its children under it: the key its last write landed under, which a rotation met during the hook's own
+ *  content writes moved (`memberNodeWriter`, inbox #670). On a failure it leaves behind nothing it can clean up itself;
+ *  core trashes the top-level node it created. */
+export type ImportContentHook = (ctx: ImportNodeContext) => Promise<{ nodeId: string; nodeKey: Uint8Array; epoch?: number }>

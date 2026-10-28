@@ -9,7 +9,8 @@ import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
 import { loadTree, treeStore } from './treeStore'
 import { pullRekeyPath } from './rekey/rekeyScope'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
-import type { CreateNodeOptions, NodeParent } from './tree'
+import type { CreateNodeOptions, NodeParent, TreeNode } from './tree'
+import type { EpochKeys } from '../../features/spaces/epochs'
 
 /** The node is not in the active scope's tree any more, or its key chain does not open: nothing to rebuild under. */
 export class NodeRereadError extends Error {
@@ -79,22 +80,76 @@ export function rereadMemberKey(scopeId: string, nodeId: string): () => Promise<
  * A member's write sealed under `nodeId`'s key in the ACTIVE scope `scopeId`, built by `write` from `at` (the key and
  * epoch it read): the device floor before each attempt, and on an epoch refusal the node's path pulled forward on this
  * device (ADR 0111 decision 11) — or waited for, when it cannot — the key re-read and the write rebuilt under it
- * (`writeAtNodeEpoch`). Only for a write whose payload is sealed afresh from plaintext each time, never one carrying a
- * ciphertext read under the old key.
+ * (`writeAtNodeEpoch`). Only for a write whose payload is sealed afresh each time, never one carrying a ciphertext read
+ * under the old key: a rebuild gets `node`, the node as the re-read tree holds it (its meta re-sealed by the re-key, so
+ * what the write reads from it — a cover's or a banner's wraps — opens under the new key), null on the first attempt,
+ * where the caller's own read stands. A flow that uploads under the key (a cover, a banner) uploads again in the rebuild.
  */
 export function writeUnderMemberNode<T>(
-  scopeId: string, nodeId: string, at: { key: Uint8Array; epoch: number }, write: (at: { key: Uint8Array; epoch: number }) => Promise<T>,
+  scopeId: string, nodeId: string, at: { key: Uint8Array; epoch: number },
+  write: (at: { key: Uint8Array; epoch: number }, node: TreeNode | null) => Promise<T>,
 ): Promise<T> {
   const reread = rereadMemberKey(scopeId, nodeId)
   return writeAtNodeEpoch(async (again) => {
     const now = again ? await reread() : at
     assertActiveScopeFloor(scopeId, { id: nodeId, epoch: now.epoch })
-    return write(now)
+    return write(now, again ? treeStore.nodes.find((n) => n.id === nodeId) ?? null : null)
   }, { pull: pullRekeyPath(scopeId, [nodeId]) })
 }
 
+/** The scope's epochs as this device holds them now, when `scopeId` is the active scope; null otherwise. What a long run
+ *  states once a pull re-opened the scope after a rotation it raced (`pullRekeyPath`): the epochs it was started with
+ *  are then the old ones, and zeroed (`refreshActiveScope`). */
+export function heldScopeEpochs(scopeId: string): EpochKeys | null {
+  return activeSpace.scopeId === scopeId ? activeEpochKeys() : null
+}
+
 /** A member's create under `parent` in the active scope: pull the parent's path forward on an epoch refusal (ADR 0111
- *  decision 11) and re-read the parent; none at the root (a create there states no parent epoch). */
+ *  decision 11) and re-read the parent, the new node minted at the epoch the device holds then. At the root, where a
+ *  create states no parent epoch, only that epoch can move: a `stale_epoch` has the pull of an empty path re-open the
+ *  scope this device held behind, and the create runs again at its current epoch (inbox #670). */
 export function memberCreateOptions(scopeId: string, parent: NodeParent): CreateNodeOptions {
-  return parent ? { reread: rereadMemberParent(scopeId, parent.id), pull: pullRekeyPath(scopeId, [parent.id]) } : {}
+  const epochs = () => heldScopeEpochs(scopeId)
+  return parent
+    ? { reread: rereadMemberParent(scopeId, parent.id), pull: pullRekeyPath(scopeId, [parent.id]), epochs }
+    : { reread: async () => null, pull: pullRekeyPath(scopeId, []), epochs }
+}
+
+/** A node's key and the epoch it was minted at, as a write seals under them and states them. */
+export type NodeKeyAt = { key: Uint8Array; epoch: number }
+
+/**
+ * A node a member's run created and keeps writing into — an import's or a copy's Memory, Pot or file, a new Pot's first
+ * records (inbox #670). A rotation that lands while the run is under way leaves the node at the epoch it was born at, so
+ * each write goes through {@link writeUnderMemberNode} — the device floor, the pull of the node's path on an epoch refusal,
+ * the re-read and the rebuild — and the writer keeps the key and epoch the last write landed under, so the run's next
+ * write, and what it creates below the node, seal under the node's key now rather than the one the re-key replaced.
+ * Only for writes that are sealed afresh on each attempt (an upload, an append), never one carrying a ciphertext read
+ * under the old key. A node only an owner re-keys (below a drop box) is not this member's to pull: its writes wait.
+ */
+export type MemberNodeWriter = {
+  readonly scopeId: string
+  readonly nodeId: string
+  /** The key and epoch the node's last write landed under — its birth's until a re-key moved them. */
+  readonly at: NodeKeyAt
+  /** Run `build` under the node's key as {@link writeUnderMemberNode} does; `node` is the re-read tree's row in a rebuild,
+   *  null on the first attempt. */
+  write<T>(build: (at: NodeKeyAt, node: TreeNode | null) => Promise<T>): Promise<T>
+}
+
+/** The {@link MemberNodeWriter} of `nodeId` in the active scope `scopeId`, starting from `at` (its key as created). */
+export function memberNodeWriter(scopeId: string, nodeId: string, at: NodeKeyAt): MemberNodeWriter {
+  let now = at
+  return {
+    scopeId,
+    nodeId,
+    get at() {
+      return now
+    },
+    write: (build) => writeUnderMemberNode(scopeId, nodeId, now, async (attempt, node) => {
+      const result = await build(attempt, node)
+      now = attempt
+      return result
+    }),
+  }
 }

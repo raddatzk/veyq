@@ -54,6 +54,13 @@ acceptanceCriteria:
           - src/features/account/coldCredential.test.ts
           - src/features/account/rememberMe/deviceKeyWrap.test.ts
           - src/features/account/rememberMe/sessionVault.test.ts
+  - id: no-copy-of-the-old-address-stays
+    # ADR 0101 decision 4, inbox #591: the account's erasure blanks the address the account holds then.
+    text: >-
+      The swap carries a tenant's record of the address its owner invite named from the old address to the new one, in
+      the same transaction, so no tenant keeps the old address; a refused confirmation moves nothing.
+    coverage:
+      backend: { integration: [EmailChangeSliceTest.theTenantsRecordOfTheOwnerAddressFollowsTheChange] }
   - id: keys-and-content-untouched
     text: >-
       After the change the account signs in with the new address and its password, unlocks with the same Secret Key,
