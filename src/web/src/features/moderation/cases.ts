@@ -140,8 +140,11 @@ export type StatementDraft = {
 /**
  * The facts for every member [kind] on [target] would tell — the server's list, read with a proof over the case: sealed
  * once under a fresh `K_facts`, which alone is wrapped to each member. Wrapped to the identity the server serves,
- * unpinned: the moderation surface holds no Master Key to read a pin store (ADR 0099 § 6), and a substituted key would
- * win the operator nothing the moderation key's copy of the same facts does not.
+ * UNCHECKED — a named residual (cr-trust-anchors-survive-rotation decision 16): the moderation surface holds no Master Key
+ * to read a pin store (ADR 0099 § 6), and the member may share no tenant with the moderator, so no join record or pinned
+ * head anchors the key — any check would be a first use the operator serves. An active operator that substitutes a
+ * member's key reads the facts (and can re-wrap them to the genuine key afterwards, unnoticed); it already reads the
+ * measure's kind, target, ground and provision in the clear.
  */
 async function factsForMembers(
   caseId: string,
