@@ -506,10 +506,14 @@ class ScopesHandler(
      * the scope row's lock (lock order scope → membership → job). No `declined` marker is kept. Idempotent — always
      * succeeds (no open proposal is still a silent no-op, so it is no enumeration oracle).
      */
-    fun declineInvitation(callerId: String, scopeId: String) {
+    fun declineInvitation(callerId: String, scopeId: String) = dropProposal(callerId, scopeId)
+
+    /** Delete [userId]'s proposal on [scopeId] and, when there was one, queue the group's rotation in the same
+     *  transaction under the scope row's lock — the decline's and the owner's rescind's one path. */
+    private fun dropProposal(userId: String, scopeId: String) {
         QuarkusTransaction.requiringNew().run {
             store.lockScope(scopeId)
-            if (store.deletePendingMembership(callerId, scopeId) > 0) tasks.originateScopeRotation(scopeId, maxAttempts)
+            if (store.deletePendingMembership(userId, scopeId) > 0) tasks.originateScopeRotation(scopeId, maxAttempts)
         }
     }
 
@@ -542,8 +546,9 @@ class ScopesHandler(
     }
 
     /**
-     * Rescind a pending consent proposal (cr-0094) — the one membership a delete may take without a rotation, since
-     * a proposal was never keyed. Any other member leaves only by a removal-rotation ([rotateScope] with `removes`,
+     * Rescind a pending consent proposal (cr-0094) — the one membership a delete may take without committing a rotation
+     * itself: a proposal holds the group's key (ADR 0111 decision 4), so the rescind queues the group's rotation for the
+     * next online owner, as a decline does. Any other member leaves only by a removal-rotation ([rotateScope] with `removes`,
      * ADR 0024 Decision 4), so this refuses them (`removal_requires_rotation`) and deletes nothing: a delete that
      * committed on its own is how a removal used to end without its rotation. Owner-gated.
      */
@@ -556,7 +561,8 @@ class ScopesHandler(
             ConsentState.NONE -> RemoveMemberOutcome.MemberNotFound
             ConsentState.ACTIVE -> RemoveMemberOutcome.RemovalRequiresRotation
             ConsentState.PENDING -> {
-                store.deletePendingMembership(targetId, scopeId)
+                // The proposal held a grant (ADR 0111 decision 4): a rescind queues the group's rotation, as a decline does.
+                dropProposal(targetId, scopeId)
                 RemoveMemberOutcome.Ok
             }
         }

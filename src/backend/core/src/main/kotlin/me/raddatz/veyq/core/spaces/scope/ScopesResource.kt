@@ -65,6 +65,7 @@ class ScopesResource(
 ) : ScopesApi {
     // The grace window (cr-0090) — used to derive `purgeAfter = deletedAt + retention` for a pending-deletion group.
     private val deleteRetention: Duration = config.scope().delete().retention()
+    private val inviteTtlSeconds: Int = config.tenant().invite().ttl().seconds.toInt()
 
     override fun createPersonalScope(createPersonalScopeRequest: CreatePersonalScopeRequest): Response =
         when (val outcome = handler.createPersonal(
@@ -255,6 +256,7 @@ class ScopesResource(
                     grantSignature = it.granter?.signature,
                     granterIdentityPublicKey = it.granter?.identityPublicKey,
                     compromiseRotation = it.compromiseRotation?.toWire(),
+                    memberInviteTtlSeconds = inviteTtlSeconds,
                 )
             },
         ).build()

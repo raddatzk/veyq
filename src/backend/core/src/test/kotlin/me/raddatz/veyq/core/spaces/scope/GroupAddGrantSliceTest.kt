@@ -106,6 +106,23 @@ class GroupAddGrantSliceTest {
         assertEquals(TestGrants.WRAPPED, membership(accepts, h.groupId)!!.wrappedGrant)
     }
 
+    @Test
+    fun anOwnersRescindOfAProposalQueuesTheGroupsRotation() {
+        // The owner withdrawing a proposal takes back a key the target already held — the same as a decline.
+        val g = world()
+        val target = g.member("rescinded", consent = true)
+        add(g, "rescinded", """"sealedNameKey":"$NAME_KEY",${TestGrants.groupAddJson(g.groupId, target)}""").then().statusCode(201)
+        given().header("Authorization", bearer(g.owner)).`when`().delete("/api/scopes/${g.groupId}/members/$target")
+            .then().statusCode(204)
+        assertEquals(null, membership(target, g.groupId), "the proposal is gone")
+        assertEquals(1L, rotationJobs(g.groupId), "the rescinded key's group rotation is queued")
+        // Control: a rescind of nobody's proposal deletes nothing and queues nothing.
+        val h = world()
+        given().header("Authorization", bearer(h.owner)).`when`().delete("/api/scopes/${h.groupId}/members/${h.member("never")}")
+            .then().statusCode(404)
+        assertEquals(0L, rotationJobs(h.groupId))
+    }
+
     // --- helpers ---
 
     private class World(val tenantId: String, val owner: String, val groupId: String) {

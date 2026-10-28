@@ -485,7 +485,8 @@ paths:
       summary: Rescind a pending consent proposal (a keyed member is removed by the rotation that excludes them).
       description: >
         Deletes a GROUP membership that is still a **pending consent proposal** (uc.spaces.consent-group-add) — the
-        owner withdraws it before the invitee accepts. A proposal was never keyed, so nothing is rotated. Every other
+        owner withdraws it before the invitee accepts. A proposal holds the group's key (ADR 0111 decision 4), so the
+        rescind queues the group's rotation for the next online owner, as a decline does. Every other
         membership is removed only by a **removal-rotation** (`POST /api/scopes/{scopeId}/epochs` with
         `removesUserId`, ADR 0024 Decision 4), which deletes it and commits the new epoch in one transaction, so no
         removal can end without its rotation; this path refuses it (`409 removal_requires_rotation`) and deletes
@@ -1504,6 +1505,15 @@ components:
             and derives `K_icon`. 0 when no icon is set.
           minimum: 0
           example: 0
+        memberInviteTtlSeconds:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            How long a member invite this instance mints stays valid (`veyq.tenant.invite.ttl`), in seconds. The owner's
+            client signs the invite's expiry (ADR 0111 decision 1) and the server takes it only within a minute of this
+            lifetime from now, so the client reads it here.
+          minimum: 1
+          example: 604800
         grantedEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
