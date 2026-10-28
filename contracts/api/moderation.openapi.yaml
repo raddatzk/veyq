@@ -2331,11 +2331,18 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The member's account (what the pin store keys by).
+          description: The member's account, which the wrap of the facts' key is bound to.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         identityPublicKey:
           type: string
-          description: The member's identity public bundle as the directory serves it; pin-check it before sealing.
+          description: >
+            The member's identity public bundle as the directory serves it — the key the moderator's client wraps the
+            statement's `K_facts` to, **unchecked** (cr-trust-anchors-survive-rotation decision 16): the moderation
+            surface holds no Master Key and so no pin store (ADR 0099 § 6), and the member may share no tenant with the
+            moderator, so there is no join record and no pinned head to anchor this key by — any check would be a first
+            use the operator serves. An active operator that substitutes it reads the statement's facts (and can re-wrap
+            them to the genuine key afterwards, so nobody notices); it already reads the measure's kind, target, legal
+            ground and provision in the clear. A named residual, not a check this field promises.
           contentEncoding: base64
           maxLength: 2048
           example: aWRlbnRpdHktcHVibGljLWtleQ==

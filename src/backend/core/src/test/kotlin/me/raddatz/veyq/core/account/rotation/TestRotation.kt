@@ -205,7 +205,8 @@ class TestRotation(
         const val NEW_REC_WRAP = "bmV3LXJlY292ZXJ5LXdyYXA="
         const val NEW_PINS = "bmV3LXBpbnM="
         const val NEW_PIN_ID = "0202020202020202020202020202020202020202020202020202020202020202"
-        const val NEW_ENTRY = "bmV3LXBpbi1lbnRyeQ=="
+        /** A sealed pin is exactly 221 bytes, 296 base64 characters (`IdentityPinEntry.entry`); any other length is a 400. */
+        val NEW_ENTRY: String = Base64.getEncoder().encodeToString(ByteArray(221) { 0x6e })
         const val NEW_REGISTER = "bmV3LXJlZ2lzdGVy"
         const val SELF_GRANT = "c2VsZi1ncmFudC10by10aGUtbmV3LWlkZW50aXR5"
     }
