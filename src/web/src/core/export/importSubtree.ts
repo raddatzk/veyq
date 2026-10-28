@@ -19,7 +19,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { createContentNode, deleteNode, type NodeParent, type TreeNode } from '../node/tree'
-import { memberCreateOptions } from '../node/rereadNode'
+import { heldScopeEpochs, memberCreateOptions } from '../node/rereadNode'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { ZipError } from './zip'
 import { isArchivePath } from './archiveName'
@@ -320,30 +320,35 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
   const cache = new Map<string, unknown>()
   const tops: string[] = []
 
-  async function create(n: ManifestNode, at: NodeParent, item: ReplayItem): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
+  // The scope's epochs as this device holds them now: a rotation another member makes while the run is under way is met by
+  // a pull, which re-opens the scope here (and zeroes the epochs the run was started with, `refreshActiveScope`) — every
+  // node created and every write from then on is at the new epoch (inbox #670).
+  const held = (): EpochKeys => heldScopeEpochs(scopeId) ?? epochs
+
+  async function create(n: ManifestNode, at: NodeParent, item: ReplayItem): Promise<{ nodeId: string; nodeKey: Uint8Array; epoch?: number }> {
     const parentId = at?.id ?? null
     const used = takenIn(parentId)
     let lastError: unknown = null
     const nodeBytes = collectPayloads(n).reduce((s, p) => s + p.size, 0)
     const kind = createdKind(n)
-    // A member's create under `at`: a target not re-keyed since a rotation is pulled forward on this device and re-read, and
-    // the create retried, never refused (ADR 0111 decision 11). Only the import's target (and its ancestors) can lag: what
-    // this run creates is minted at the current epoch.
+    // A member's create under `at`: a parent not re-keyed since a rotation is pulled forward on this device and re-read, and
+    // the create retried, never refused (ADR 0111 decision 11). The import's target (and its ancestors) can lag, and so can
+    // what this run created itself, once a rotation landed after it: the next create under it pulls it the same way.
     const createOptions = memberCreateOptions(scopeId, at)
     for (const name of candidates(n.name)) {
       const slug = registry.slugFor(kind, name)
       if (used.has(slug)) continue
       try {
         if (kind === FOLDER_KIND) {
-          const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at, FOLDER_KIND, name, undefined, createOptions)
+          const { nodeId, contentKey, epoch } = await createContentNode(scopeId, held(), at, FOLDER_KIND, name, undefined, createOptions)
           used.add(slug)
-          return { nodeId, nodeKey: contentKey }
+          return { nodeId, nodeKey: contentKey, epoch }
         }
         const hook = registry.kind(n.kind)
         if (!hook.supported || !hook.importContent) throw new ExportError('nothing_to_import', `no import for ${n.kind}`)
         const filesBefore = bytesDone
         const made = await hook.importContent({
-          purpose: item.purpose ?? 'import', scopeId, epochs, parent: at, createOptions, name, node: n, signal, cache, payload: item.payload,
+          purpose: item.purpose ?? 'import', scopeId, epochs: held(), parent: at, createOptions, name, node: n, signal, cache, payload: item.payload,
           onProgress: (fraction) => {
             bytesDone = filesBefore + Math.round(fraction * nodeBytes)
             report()
@@ -371,8 +376,9 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
     if (top) tops.push(made.nodeId)
     nodesDone++
     report()
-    // a node this import just made is minted at the scope's current epoch, the one its children's creates state
-    const here: NodeParent = { id: made.nodeId, key: made.nodeKey, epoch: epochs.current }
+    // the node as its last write left it: minted at the epoch the device held, or re-keyed since by its kind's own content
+    // writes pulling it forward (a hook that names no epoch: the epoch held now); its children's creates state that one
+    const here: NodeParent = { id: made.nodeId, key: made.nodeKey, epoch: made.epoch ?? held().current }
     for (const c of n.children ?? []) {
       if (leftOut.has(c)) continue // listed in the plan, named in the result
       await walk(c, here, item, leftOut, false)

@@ -3,8 +3,9 @@
 // so the create of each top node - core's folder, an application's own through its import hook (`ImportNodeContext.
 // createOptions`) - pulls the target's path forward on this device, re-reads it and creates under its new key, instead of
 // waiting for another device's re-key. A drop box is an owner's to re-key: its pull says no, and the create waits. What the
-// run itself creates is minted at the current epoch and never lags. The pull itself is core's (`pullRekeyPath`,
-// `core/node/rekey/rekeyScope.test.ts`); here only that the replay asks it, for which node, and what it does with the answer.
+// run itself creates lags only when a rotation lands while it is under way: `importSubtree.midRun.test.ts` (inbox #670).
+// The pull itself is core's (`pullRekeyPath`, `core/node/rekey/rekeyScope.test.ts`); here only that the replay asks it,
+// for which node, and what it does with the answer.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import type { EpochKeys } from '../../features/spaces/epochs'
