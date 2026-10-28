@@ -40,7 +40,9 @@
      proposals held. "Solely" is decided under the lock of every scope the target is in, so a co-owner who steps down
      while the removal runs is counted, and the group is handed on instead of being left without an owner.
    - **No accepted member remains** (a solo group, perhaps with open proposals) → handled by step 5 (it's the
-     target's own); its proposals are deleted, and nothing rotates — nobody is left to hold a key.
+     target's own); its proposals are deleted, and nothing rotates — nobody is left to hold a key. An invitee's
+     accept takes the group's lock too, so one that overlaps the removal waits for it and finds the invitation gone
+     (`404 invitation_not_found`): it never joins a group the removal read as the target's own (inbox #599).
 5. **The target's *own* scopes — grace-tombstone, keep read access.** The target's **personal scope** and any
    **group with no other accepted member** are **soft-deleted** (the cr-0090 grace + read-only + scheduled purge) —
    but the target **keeps their grant** on them. So the removed member can still sign in to the tenant and
@@ -82,7 +84,9 @@
   ([uc.spaces.consent-group-add](uc.spaces.consent-group-add.md)): the row is deleted and, since it held the key, the
   group's rotation is queued; no removal is counted on the group (a proposal was served nothing of it,
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4), and the group keeps
-  its own owner — it is never tombstoned or handed on for a proposal.
+  its own owner — it is never tombstoned or handed on for a proposal. An accept of that proposal that overlaps the
+  removal waits on the group's lock and finds the proposal gone, so a removed member never stays in the group as an
+  accepted one (inbox #599).
 - **E1 — already-downloaded content:** the target keeps whatever they saved locally — **not retractable** by any
   design. Removal (and the grace purge) erase the **server** copy, not what already left it.
 
