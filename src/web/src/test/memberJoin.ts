@@ -1,8 +1,9 @@
 // A member joins a tenant the one way the product joins one (ADR 0111 decisions 1 and 3) — for the live e2e suites and
 // the dev seeders, which onboard members over the real API: the owner's invite (`inviteMember` with a code), the mailed
 // link read out of the mailbox, and the invitee's half through the client's own functions — the code opens the link's
-// sealed part, `openMemberInvite` checks it against the owner's fingerprint inside the seal, `buildMemberJoin` grants the
-// newcomer the tenant key and writes its join record. Nothing here is a shortcut around those checks.
+// sealed part, `openMemberInvite` checks it against the owner's chain walked from the head inside the seal and against
+// the owner's anchor grant (ADR 0111 decision 19), `buildMemberJoin` grants the newcomer the tenant key and writes its
+// join record. Nothing here is a shortcut around those checks.
 import { parseInviteFragment } from '@veyq/crypto/invite'
 import { fromB64std } from '@veyq/crypto/base64'
 import type { BuiltAccount } from '@veyq/crypto/accountBirth'
