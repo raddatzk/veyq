@@ -44,8 +44,8 @@ can move a claim to layer 2 (security model § What holds today).
   authentic version* a client receives; a device refuses an older one only where it keeps a mark of its own (the
   identity pin store, the device register, the per-scope epoch floor).
 - **An active operator on a client it serves.** See the trust tiers below.
-- **Key substitution at first contact.** The operator relays identity keys. A changed key is detected and surfaced
-  to anyone who pinned the old one, and two members who compare safety numbers detect a substituted one; a key
+- **Key substitution at first contact.** The operator relays identity keys. A key that a signed step of the person's
+  key chain does not reach is shown as an anomaly to anyone who pinned their chain, and two members who compare safety numbers detect a substituted one; a key
   substituted before anyone pinned it, between members who never compare, is not detected. Key Transparency, which
   would close this, is not built ([Roadmap](/veyq/security/roadmap/)).
 - **Recipients.** Sharing gives confidentiality up towards the people it is shared with, on purpose. A public link

@@ -42,8 +42,9 @@ Notices about new cases reach you only at a confirmed address. If the code did n
 3. If you are new, you do not hold the key yet. It reaches you when a moderator who holds it next opens this page; the
    page says so.
 4. If you hold the key and someone else is waiting for it, your page passes it on, after checking that person's key
-   is the one you have seen before. If their account key changed, it is not passed on, and the page says so: compare
-   their safety number first ([Verify a person](/veyq/account/verify-a-person/)).
+   follows from the one you have seen before (the first time, the one the server shows). If it can't be confirmed, it
+   is not passed on, and the page says so: compare your safety numbers in person
+   ([A key can't be confirmed](/veyq/help/key-changed/)).
 5. Then the page shows **Reports**, the cases of every space on the server.
 
 If the page says it **stopped** because the key the server publishes is not the one you hold, do not go on, and tell

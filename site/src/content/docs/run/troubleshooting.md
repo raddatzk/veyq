@@ -31,16 +31,17 @@ where the deployment brings its Garage the server has set the bundled store and 
 the step that failed; otherwise save a store of your own. Fix the named step and run **Check store**
 ([uc.admin.configure-object-store](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.configure-object-store.md)).
 
-## Replacing keys is refused as too large
+## Securing an account is refused as too large
 
-A member who replaces their keys is told the request is larger than this server accepts, and to ask you. Nothing was
-changed on their account. The request carries their whole list of checked contacts, so it grows with that list.
+A member who secures their account is told the request is larger than this server accepts, and to ask you. Nothing was
+changed on their account. The request carries their whole list of checked contacts, so it grows with that list. (The re-grant of
+each of their spaces is uploaded ahead of it in parts, so the number of spaces does not count against the limit.)
 
 - **Cause:** the instance's request limit, `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE`, is set below its default of
   10,240 KiB, or a proxy in front of the instance has a lower limit of its own.
 - **What to do:** raise the limit to at least the default, on the instance and on every proxy in front of it. Then
   the member tries again.
-- **Why the default:** it is sized so that a key replacement still fits when the list holds its cap of 25,000
+- **Why the default:** it is sized so that securing an account still fits when the list holds its cap of 25,000
   contacts ([ADR 0104](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)).
 
 ## A certificate does not come
