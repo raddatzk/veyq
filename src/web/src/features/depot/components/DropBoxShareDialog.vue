@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The drop box's `shareDialog` (cr-files-application F3): its WRITE_ONLY links — list, create, copy, switch off,
-// delete — on core's `manageShares`/`shareLink`, as core's `FolderShareDialog` builds a folder's. A drop box is shared
+// delete, each offered only where the server takes it (the served `mine` and `deletable`, inbox #596) — on core's `manageShares`/`shareLink`, as core's `FolderShareDialog` builds a folder's. A drop box is shared
 // WRITE_ONLY only (the backend's `DepotShareRoots`), so there is no role to pick: a new link carries the drop box's drop
 // public key (`mintDropBoxLink`), never its key. Switching a link off asks first and is undone by switching it on again
 // (core's `reactivateShare`, as the folder dialog does, inbox #394); a link a departed member may hold comes back only by
@@ -227,8 +227,10 @@ async function copy(text: string, id: string) {
               size="small"
               @click="copy(row.link, row.share.shareId)"
             />
+            <!-- inbox #596: switch-off and delete only where the server takes them — its owner switches a link off (the
+                 served `mine`), and `deletable` is the delete gate's own answer; any other caller would get a 404. -->
             <VeyqButton
-              v-if="row.share.enabled"
+              v-if="row.share.enabled && row.share.mine"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="power-off"
               :aria-label="t('depot.dropBox.shareRevoke')"
@@ -239,7 +241,7 @@ async function copy(text: string, id: string) {
               @click="switchOff(row.share.shareId)"
             />
             <VeyqButton
-              v-else-if="!row.share.reissueRequired"
+              v-else-if="!row.share.enabled && !row.share.reissueRequired"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="refresh"
               :aria-label="t('depot.dropBox.shareReactivate')"
@@ -250,6 +252,7 @@ async function copy(text: string, id: string) {
               @click="switchOn(row.share.shareId)"
             />
             <VeyqButton
+              v-if="row.share.deletable"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="trash"
               :aria-label="t('depot.dropBox.shareDelete')"

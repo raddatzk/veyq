@@ -93,12 +93,13 @@ acceptanceCriteria:
       id kept — so the link 404s, is in neither listing, and revoke, update, re-activate, re-issue and a second delete
       answer 404; its id is refused id_taken. The panel folds switched-off links under a count, offers delete on a
       switched-off link the server marks deletable, behind a confirm, and drops the row once deleted; switching off no
-      longer wears the trash can (A7).
+      longer wears the trash can (A7). The drop box's dialog offers switch-off only on the caller's own link (`mine`)
+      and delete only where `deletable` says so.
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ShareSharedScopeSliceTest.aCoMembersLinkIsDeletableOnlyOnceItsOwnerLeft]
       web:
-        unit: [src/features/memories/components/ShareDialog.test.ts, src/features/memories/share.test.ts]
+        unit: [src/features/memories/components/ShareDialog.test.ts, src/features/memories/share.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
   - id: a-stopped-link-says-why
     text: >
       Every row of the manage list carries why a guest is not served the link now (`guestStops`, empty exactly when one
