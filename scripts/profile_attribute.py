@@ -22,6 +22,10 @@ interval below is cut to them. Every number is of the page's renderer, never of 
     Vue's scheduler flush is `reactivity` (a re-render's stack starts there, never at the write that caused it), anything
     under the pick-time tile probe is `pick-time probe` — then by the leaf-most frame whose source a rule in [RULES]
     names; a stack no rule names is `other`.
+  - **M by its tasks' bucket**: each top-level task's whole time, its native part included, goes to the bucket most of
+    its sampled script falls in ([task_buckets]). The samples alone see only a task's script: #220's first reading put
+    the pump's script at 18.6 % of the throttle-4 upload, while the pump's tasks — a frame arriving from the worker, the
+    `fetch` its continuation started — held 56 %.
   - **Per file N**, from the window's API requests: its reserve (`blob-uploads-batch`) and its complete (`media-batch`).
     Pₙ, the on-device stage, runs from N−1's complete's end to N's reserve (P₁ from the window's start, so it holds the
     pick-time burst and is reported apart); Uₙ, the upload stage, from N's reserve to its complete's end; mPₙ and mUₙ are

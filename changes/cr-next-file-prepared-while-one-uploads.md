@@ -80,9 +80,14 @@ and each profiled total is above its unprofiled median, the switch's own control
    the blob's frame count, the chunk's source (the picked file's `Blob`, which crosses as a handle and is read in the
    worker; a source that is no `Blob` — a copy's frame reader — is read on the page and its slice transferred, as today),
    the presigned URL, and `PUT_CONTENT_TYPE`. The worker seals with `keys.ts` `sealFrameOf` (no second implementation),
-   `PUT`s the frame, reads the empty answer to its end, and answers the status alone. The sealed frame never returns to
-   the page. Rejected: a worker that owns the whole pump (windows, retries, progress): the control plane would move
-   into the worker and every application's transport with it; the per-chunk round trip is what costs.
+   `PUT`s the frame **as a `Blob`**, reads the empty answer to its end, and answers the status alone. The sealed frame
+   never returns to the page. Rejected: a worker that owns the whole pump (windows, retries, progress): the control plane
+   would move into the worker and every application's transport with it; the per-chunk round trip is what costs.
+   - **Why a `Blob`** (added after the first after-reading): with a byte-array body the frame worker was busy 16–17 s
+     instead of 5.5 s and bounded the upload at throttle 1 (34.3–42.2 s against 31.8–32.6 s adjacent before). Measured in
+     a worker in Chrome, 400 `PUT`s of 256 KiB, four in flight: 6.2–6.7 ms per `PUT` as bytes, 0.85–0.89 ms as a `Blob`,
+     the `Blob`'s making included. The page's fall-back keeps the byte body: it runs only without a Worker, and 38 test
+     files read a `PUT` body as bytes.
 2. **The page keeps the control plane**: the window presigns, the `403` re-sign and its one retry, the progress per
    chunk, `PUMP_IN_FLIGHT`. A `403` retry submits `seal-put` again with the re-signed URL, so the retried chunk is
    sealed again under a fresh nonce; the refused `PUT` stored nothing, so no two frames of one index are ever stored.
@@ -133,16 +138,56 @@ and each profiled total is above its unprofiled median, the switch's own control
      `media.test.ts`'s one slice per frame and the copy suites' one read per frame stay as they are.
    - The wire snapshots stay byte-equal.
 
-   **Done when:** `npm run check` in `src/web` is green.
-2. **The browser pass**: a real multi-file upload into a Memory on this branch's build, in headless system Chrome:
-   every file settles, the worker made the PUTs (the page's Resource Timing has none, the worker's has them), no
-   worker warning in the console; one cancel mid-upload settles `cancelled` and the rest finish.
-3. **The after-reading** — S2 on this branch's images, three unprofiled runs at throttle 1 and 4, read by
-   `profile_attribute.py`, beside phase 0's. Record W, M, R, G and the pump's tasks. A result that contradicts the
-   expectation (the pump's tasks fall, W falls at throttle 4) is reported with its numbers, never fixed in place.
-4. **Docs and site**: architecture § 10, ADR 0017's paragraph, how-veyq-is-tested, #220's row (the after-reading's G and
-   R, the overlap to be re-judged), #640 (reactivity), the retrospective, then this CR is deleted.
+   **Done when:** `npm run check` in `src/web` is green. — Done: red only on timeouts at load 18–24 (as on `main`), the
+   timed-out files green alone with a longer timeout, build and every `verify:*` green.
+2. **The browser pass** — done on the branch's production build (a kept profile instance: real Traefik, the shell's CSP,
+   the bundled store), headless system Chrome, German UI, the instance's throwaway owner through the sign-in form: 12
+   photos, 277 PUTs, every one in the frame worker's Resource Timing and none in the page's; then 10 more, one cancelled
+   while uploading and one while queued, both `cancelled`, the other 8 done; no worker warning; the one aborted request
+   was the cancelled file's `PUT` in flight.
+3. **The after-reading** — done (2026-10-28, load 25–40 at the starts, up to 75 between): three unprofiled runs per
+   throttle, the branch beside two passes of `main` taken just before and just after it.
+
+   | median (range) | `main`, before | `main`, after | branch (frame as bytes) | **branch (frame as `Blob`)** |
+   |---|---|---|---|---|
+   | W at throttle 1 | 32.2 s (31.8–32.6) | 29.8 s (26.1–29.9) | 35.4 s (34.3–42.2) | **25.9 s (24.6–28.6)** |
+   | W at throttle 4 | 75.4 s (70.8–90.1) | 73.4 s (68.2–81.0) | 42.8 s (41.5–45.6) | **37.5 s (34.5–38.0)** |
+   | M at 1 / 4 | 17.3 / 66.9 s | 15.2 / 62.7 s | 6.4 / 23.7 s | **6.6 / 24.1 s** |
+   | the pump's tasks at 1 / 4 | 10.9 / 43.6 s | 9.7 / 41.2 s | 0.7 / 1.7 s | **0.5 / 0.9 s** |
+   | frame worker | 5.3–6.3 s | 5.2–6.0 s | 16.1–17.2 s | **7.7–8.9 s** |
+   | R at 4 (bucket) | 17.9 % (pump) | 17.8 % (pump) | 17.1 % (reactivity) | **23.6 % (reactivity)** |
+   | G at 1 / 4 | 31.5 / 11.1 % | 32.1 / 13.6 % | 28.5 / 27.5 % | **36.5 / 27.5 %** |
+
+   Every control holds in every pass but the bytes branch's one refused run (the access token expired in a 99 s window
+   at load 75, four API requests answered 401 — environmental, and its M against the CPU time failed, as that control
+   is meant to on a starved machine). Two passes ended "REFUSED" only by the driver's host check, because another
+   agent's race database container went away during them; their runs are complete. The gate the refine set holds: the
+   throttle-4 median fell below every before-run, and the throttle-1 median (25.9 s) is below every before-run (26.1 s
+   the lowest).
+4. **Docs and site** — done: architecture § 10, ADR 0017's paragraph, how-veyq-is-tested, #220's row (G and R on the
+   relieved tree, waiting on #640), #640 (reactivity).
 
 ## Retrospective
 
-To be written at the end of implementation.
+- **The fork was refined for one branch only.** The CR designed branch A in detail and left B as "a CR of its own"; the
+  brief then asked for whichever route phase 0 chose, so B's design (where the PUT runs, what crosses, cancel, the
+  fall-back) was decided by the implementer without an owner review. A CR whose phase 0 chooses between builds should
+  sketch each branch's shape, or say that the chosen branch goes back to refinement.
+- **Sampled script undercounts a main thread.** The CR's buckets were keyed on the script the samples see; the pump's
+  script was 18.6 % of the throttle-4 upload while its tasks — the native half of each chunk's round trip, which no
+  trace event names — held 56 %. The reader counts both now ([task_buckets], its docstring says why).
+- **The first build of the relief moved the cost instead of removing it.** The worker took the `fetch`es and became the
+  bottleneck at throttle 1; only the after-reading showed it, and a ten-minute benchmark found the cause (a byte-array
+  body costs about seven times a `Blob`'s). A relief that moves work between threads is read on both throttles before
+  it is called done, and the cost of what moves is measured where it lands.
+- **Controls designed without data needed four corrections on the first real trace** (TaskDuration as the second angle,
+  the throttle's own CPU time, the digest worker's housekeeping, the frame worker's range). Each was corrected from a
+  measured cause and is recorded in the reader's docstring; a control written into a CR before any trace was read is a
+  guess until one has.
+- **The machine was never quiet.** The five-minute wait for a load ≤ 8 ended at 19.9; every reading here ran at load
+  13–40 (up to 75), beside other agents' builds and races, Microsoft Defender and Word. The adjacent before/after passes
+  carried the comparison; absolute numbers from this day are not comparable with #554's. A measurement CR is best run
+  alone, not in a wave of five.
+- **Tooling:** the worktree's command guard refuses heredocs and compound `git`/`docker` lines, so file edits went
+  through the editor and scripts through files; the shared scratchpad holds other sessions' files, one of which shadowed
+  Python's `email` module for a script run from its root — run helper scripts from a directory of their own.

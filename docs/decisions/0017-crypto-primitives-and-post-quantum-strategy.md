@@ -112,7 +112,8 @@ strategy; they do not choose it.
   under CPU throttling. Rejected because it is a second implementation of a primitive of the suite. Its agreement
   would need a proof in every engine, and a disagreement writes frames only that engine opens. The frames' cost is
   answered by placement instead: they are sealed and opened in a worker of core's blob transport
-  (`src/web/src/core/blob/frames.worker.ts`), off the page's main thread. The worker is also where WebCrypto could
+  (`src/web/src/core/blob/frames.worker.ts`), off the page's main thread; an upload's chunk is also read and sent
+  from there, so its frame never returns to the page (inbox #220). The worker is also where WebCrypto could
   come in without a wire change, because the bytes are the same. Re-ask when a reading shows that the frame worker,
   and not the wire, bounds an upload.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories
