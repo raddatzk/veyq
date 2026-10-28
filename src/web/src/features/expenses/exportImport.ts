@@ -30,6 +30,7 @@ import { potMetaOf, MAX_CATEGORY_NAME, MAX_OWN_CATEGORIES } from './domain/potMe
 import { claimsReceipt } from './domain/receiptRules'
 import type { HeldRevision } from './domain/revisions'
 import { appendInBatches, createPotNode } from './createPot'
+import { memberNodeWriter } from '../../core/node/rereadNode'
 import {
   RECEIPT_MAX_BYTES, readGuestReceipts, readMemberReceipts, receiptChunks, receiptName, receiptPresign, receiptSize, uploadReceipt, type HeldReceipt,
 } from './receipts'
@@ -318,27 +319,29 @@ export const importPot: ImportContentHook = async (ctx) => {
   let done = 0
   const created = await createPotNode(ctx.scopeId, ctx.epochs, ctx.parent, ctx.name, base, ctx.createOptions, categories)
   const target = { kind: 'member' as const, scopeId: ctx.scopeId, nodeId: created.nodeId }
-  const key = { key: created.nodeKey, epoch: created.epoch }
+  // Every write into the new Pot - each batch, each receipt - is one write through its writer (inbox #670): a rotation met
+  // while the import is under way pulls the Pot forward on this device and seals that one write again under its key now.
+  const pot = memberNodeWriter(ctx.scopeId, created.nodeId, { key: created.nodeKey, epoch: created.epoch })
   /** The receipts of [batch]'s entries, uploaded into the new Pot and completed against them. */
   const receiptsOf = async (batch: readonly PotWrite[]) => {
     for (const w of batch) {
       for (const { receiptId: rid, receipt } of uploads.get(w.entryId) ?? []) {
         const file = await ctx.payload(receipt.file, receipt.name ?? baseName(receipt.file.path))
         const before = done
-        await uploadReceipt(target, key, w.entryId, rid, file, {
+        await pot.write((at) => uploadReceipt(target, at, w.entryId, rid, file, {
           signal: ctx.signal,
           onProgress: (f) => void (total > 0 && ctx.onProgress?.((before + f * receipt.file.size) / total)),
-        })
+        }))
         done += receipt.file.size
       }
     }
   }
   try {
-    await appendInBatches(ctx.scopeId, created.nodeId, key, base, [...people, ...money], receiptsOf)
+    await appendInBatches(pot, base, [...people, ...money], receiptsOf)
   } catch (e) {
     // the Pot holds only part of what it imports: none is left behind (best effort; core trashes what holds it)
     await deleteNode(ctx.scopeId, created.nodeId).catch(() => {})
     throw e
   }
-  return { nodeId: created.nodeId, nodeKey: created.nodeKey }
+  return { nodeId: created.nodeId, nodeKey: pot.at.key, epoch: pot.at.epoch }
 }
