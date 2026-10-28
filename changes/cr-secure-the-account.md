@@ -7,7 +7,7 @@ adrs: ["0111", "0060", "0054", "0028", "0104", "0109", "0024", "0020", "0025", "
 invariants:
   - the server stores and serves only ciphertext, scope ids, epoch indices, public keys and signatures; no retired PRIVATE material (identity, Master Key, Secret Key) is kept anywhere, on the server or in the browser - the key chain keeps retired PUBLIC keys, by design
   - from the moment the publish commits, every scope the account holds a grant on holds a grant of its CURRENT epoch to the published identity - no state after it can lose access
-  - a self-grant in the publish is accepted only if it verifies under the identity published in the same request, and the set of self-grants plus the declared unreadable scopes equals the server's own set, or nothing is written
+  - a staged self-grant is accepted only if it verifies under the identity its stage declares; the publish names the stage and its digest under the Secret-Key proof, publishes that same identity, and applies the stage only if every grant-carrying membership is staged at its current epoch or declared unreadable, or nothing is written; nothing staged is applied before the publish
   - a key-chain step is accepted only if signed by the stored current identity AND the stored current Secret-Key proof key, and names the stored head as its predecessor
   - the server refuses every grant whose named recipient key is not that recipient's current key (ADR 0111 decision 10)
   - a rotation commit leaves nobody out silently - every member it does not grant is declared pending in the request
@@ -33,9 +33,10 @@ from the member.
 Under ADR 0111 the rotation becomes **self-service and complete**:
 1. The client mints the new Master Key, identity and Secret Key, and the **key-chain step** old → new, signed by the
    old identity **and** the old Secret-Key proof key.
-2. **One publish, one transaction**, carries the account rewrite, the chain step, and for **every** scope the account
-   holds a grant on — sole and shared, across all tenants — that scope's **current** epoch key granted to the new
-   identity, signed by it. From that moment no state can lose access.
+2. **One publish, one transaction**, carries the account rewrite and the chain step, and applies the self-grants the
+   client **staged** just before it: for **every** scope the account holds a grant on — sole and shared, across all
+   tenants — that scope's **current** epoch key granted to the new identity, signed by it. From that moment no state
+   can lose access; before it, nothing staged is applied.
 3. **The rotator mints the next epoch of every such scope itself**, from any unlocked device of the account, and
    grants it to every member whose key its client anchors and to its own new identity — never to the old one, which
    the server refuses. Every member it does not grant is declared pending.
@@ -81,6 +82,20 @@ flowchart LR
   to be exactly the open invites (`409 rotation_incomplete`, `RotationPolicy.kt`). `commitRotation`'s
   `carryOpenInvites` (`src/web/src/features/spaces/scopes.ts`) re-grants an invite whose owner signature verifies and
   whose signer passes `checkAndPin`; this CR's anchor function takes that pin check's place.
+- **An owner's open invites do not survive the owner's rotation** (decided 2026-10-28, ADR 0111 § What stays open
+  keeps it). The invitee's link anchors the owner's identity **fingerprint** only, and an owner-wrapped grant must
+  verify under that key. Accepting a rotated owner through the key chain would need the invitee to anchor the step
+  old → new, but a fingerprint pins the identity and not the proof key: an operator holding a stolen device's identity
+  could serve an invented step 0 naming that identity with a proof key of its choosing, then sign a step to a key of
+  its own — exactly the prefix decision 9 refuses. Re-signing the invite under the new identity fails the fingerprint
+  for the same reason, and a one-tap re-issue mints fresh codes the owner would have to hand out again anyway. So the
+  invite dies, as today, and the invitee is told to ask for a new one; the ceremony's entry says so when the account
+  signed open invites (`factInvites`, from `listOpenInvites`' `signerUserId`). The sound way to keep them — the
+  owner's **head** inside the link's seal, so the invitee walks the chain from a pinned head — changes the built link
+  format and is inbox #568.
+- **A grant a rotation re-wrapped to an open invite stays trusted on first use (inbox #565).** The key chain anchors
+  a key from a head someone pinned; a newcomer has pinned no rotator, so the chain does not close it. Join records do
+  (`cr-trust-records-in-the-tenant`).
 - **Before `cr-trust-records-in-the-tenant`.** Until that CR, the anchor of decision 15 is this account's **pinned
   head** (decision 9 below): ADR 0111 decision 15 already trusts a person without a join record on first use. That CR
   makes the join record the anchor, adds verifications and the closing list of decision 13 (which needs verification
@@ -219,7 +234,8 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
 1. **The order: access first, security after.**
    - **Mint.** The cold proof (password + current Secret Key, `proveColdCredential`, as today), then `MK'`, the new
      identity, the new Secret Key `SK'`, and the chain step (decision 2), all in memory.
-   - **Publish.** One request, one transaction (decisions 2, 3, 6, 7).
+   - **Stage.** The self-grants, in chunks, verified at upload, applied by nothing yet (decision 3).
+   - **Publish.** One request, one transaction, which applies the stage (decisions 2, 3, 6, 7).
    - **New epochs.** Each self-granted scope gets `E_{n+1}`, minted by the account from any unlocked device
      (decision 4).
    - **Nodes.** Each scope's nodes are re-keyed by any member (ADR 0111 decision 11, built).
@@ -243,7 +259,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
      half, `422 key_chain_step_invalid` for the rest), writing nothing. That is an honest-server check; every reader
      verifies the chain itself (decision 9).
    - **The rotation proof statement binds the step**: it gains `sha256(step statement)`, the current and new auth public
-     keys (decision 7) and the new proof public key. It stays signed by the **current** proof key (the gate) and is
+     keys (decision 7), the new proof public key, and the stage (`stageId`, `stagedGrantsDigest`, decision 3). It stays signed by the **current** proof key (the gate) and is
      also signed by the **new** one (`secretKeyProofPossession`), so a client bug cannot register a key nobody holds.
      There is no release (`scripts/applied_migrations.sha256`, `release: none`), so the statement is replaced, not
      versioned, and its vector regenerated by an independent implementation, per `v1.json`'s note.
@@ -256,31 +272,57 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    - **`keyChainHead` rides every read that serves another user's key**: `ScopeMember`, `ResolvedGroupCandidate`,
      `GrantDeliveryTarget` *(assistant, for owner review: so a client compares heads without fetching chains, and
      fetches a chain only when a head moved)*.
-3. **Self-grants of every scope, in the publish.**
-   - `selfGrants`: one per scope the account holds a grant on — PERSONAL, TENANT and GROUP, across every tenant, a group
-     invitation the account has not yet answered included (a consent proposal holds a grant from the add on, ADR 0111
-     decision 4, built 2026-10-28). Each grants the scope's **current** epoch key
-     `E_n` to the new identity and is signed by it.
-   - **The client opens those grants with the old identity before the publish**, from the plan (decision 5), not from
-     `listMyScopes`.
+3. **Self-grants of every scope, staged before the publish and applied in it** (Phase 0: one request cannot carry
+   them — no cap bounds an account's memberships, and any co-member can add it to groups; decided 2026-10-28 by the
+   coordinator under the owner's delegation, ADR 0111 decision 6 states it).
+   - **What is granted.** One self-grant per scope the account holds a grant on — PERSONAL, TENANT and GROUP, across
+     every tenant, a group invitation the account has not yet answered included (a consent proposal holds a grant
+     from the add on, ADR 0111 decision 4). Each grants the scope's **current** epoch key `E_n` to the new identity,
+     names it (`recipientIdentityDigest` = `sha256` of the new bundle) and is signed by it.
+   - **The client opens those grants with the old identity before the publish**, from the plan (decision 5), not
+     from `listMyScopes`.
+   - **The stage.** `openRotationStage` (`POST /api/account/rotation/stage`, body: the new identity public bundle)
+     opens the account's one stage — a second open replaces the first and its grants — and answers `stageId` and
+     `expiresAt`. `putRotationStageGrants` (`PUT /api/account/rotation/stage/{stageId}/grants`, at most **256** a
+     chunk: 256 × 8,501 bytes at every field cap ≈ 2.2 MB, a fifth of the limit) upserts by `scopeId`. Each staged
+     grant is **verified at upload** under the bundle the stage declares (Kotlin `GrantSignature` beside
+     `SecretKeyProof`: the `grant` statement, `scopeId`, the scope's own kind, `epoch`, the caller's id, `sha256` of the
+     stage's bundle, `sha256` of `wrappedGrant`; `Ed25519Verifier`; pinned to `v1.json`'s `grant_signature` vector,
+     both cases) and its `recipientIdentityDigest` must equal `sha256` of that bundle — one that does not is
+     **`422 self_grant_invalid`** and nothing of the chunk is written; a scope the caller holds no grant on is `409
+     rotation_plan_changed`; an unknown, expired or other account's stage is `404 rotation_stage_not_found`. The
+     epoch is not judged at upload — the publish does. **Nothing staged is applied before the publish**: a stage is
+     ciphertext and scope ids the server already holds as grant rows, inert until a Secret-Key-proved publish names
+     it. A stage expires `veyq.account.rotation.stage.ttl` (default `PT1H`, server-observed) after it opened;
+     `RotationStagePurge` deletes expired ones, in the `@Scheduled` purge pattern (`PairingPurge.kt`), and
+     `veyq_user`'s erasure cascades to it.
+   - **The publish names the stage**: `stageId` and `stagedGrantsDigest`, both bound into the rotation proof
+     statement (decision 2). Under the account lock the server takes the stage (missing, expired, or declaring
+     another bundle than the request publishes → `409 rotation_plan_changed`), recomputes the digest over the staged
+     rows (`rotationStageDigest`, `v1.ts` and Kotlin, vector `rotation_stage`: domain `veyq/v1/rotation-stage`, the
+     entries in ascending `scopeId` byte order, each `lp(scopeId) ‖ u32(epoch) ‖ sha256(wrappedGrant)`), and refuses a
+     different one with `409 rotation_plan_changed` before it checks the proof.
    - **The server's set.** Under each scope's row lock it recomputes the account's memberships that carry a grant. It
-     requires `selfGrants ∪ unreadableScopeIds` to equal that set and each self-grant's `epoch` to be the scope's
-     current one; otherwise **`409 rotation_plan_changed`**, nothing written; the client re-reads the plan, re-opens
-     and re-signs with the same new keys, counted against `MAX_PUBLISH_ATTEMPTS` (`rotateKeys.ts:36`).
-   - **The server verifies each self-grant under the identity the same request publishes** (Kotlin `GrantSignature`
-     beside `SecretKeyProof`: the `grant_signature` statement, `scopeId`, the scope's own kind, `epoch`, the caller's id,
-     `sha256` of the new bundle, `sha256` of `wrappedGrant`; checked with `Ed25519Verifier`, `core/crypto/Ed25519Verifier.kt:22`;
-     pinned to `v1.json`'s `grant_signature` vector, both cases). One that does not verify is
-     **`422 self_grant_invalid`**, nothing written. This is the one place the server checks a grant signature: a
-     consistency check of the request against itself, under the Secret Key's proof, not a trust judgment (ADR 0028
-     Decision 6 gains that sentence).
+     requires every one to be **staged at the scope's current epoch** or named in `unreadableScopeIds`; otherwise
+     **`409 rotation_plan_changed`**, nothing written (a membership arrived, or a scope rotated, in between). A staged
+     grant for a scope the account no longer holds a grant on is not written (the membership ended in between;
+     writing it would make one). The client re-reads the plan, **re-stages only the delta** (a new scope, a moved
+     epoch) into the same stage — or a new one after `404 rotation_stage_not_found` — re-signs with the same new keys,
+     counted against `MAX_PUBLISH_ATTEMPTS` (`rotateKeys.ts:36`).
+   - **The size, measured (Phase 0):** the publish keeps the pin store and gains only fixed fields and
+     `unreadableScopeIds` (`maxItems` 10,000, 39 bytes each). At the pin cap with every other field at its contract
+     cap it is ≈ 9,700,000 + 2,524 + 390,000 = **10,092,524 < 10,485,760**; a real one at the pin cap with nothing
+     unreadable ≈ 9,605,224.
+   - **This is the one place the server checks a grant signature**: a consistency check of the stage against the
+     identity the publish then registers under the Secret Key's proof, not a trust judgment (ADR 0028 Decision 6
+     gains that sentence).
    - **The lock order.** The account lock first, as today; then one ascending pass over all the publish's scopes takes
      each scope's row lock and writes its self-grant (`wrapped_grant`, `granted_epoch`, `granter_user_id` = the caller,
-     `grant_signature`, `granter_identity_public_key` = the new key) and its pending row (decision 4). That replaces the
-     shared-only origination loop (`RotationHandler.kt:203-205`); scope → membership order holds
-     (`ScopeEntity.kt:104-116`). `originateScopeRotationExcluding`, `exclude` and `isRotationExcluded` lose their last
-     caller and go, with `rotation_excluded` (`RekeyAccess.kt:23`, `ScopesStore.kt:422`) and the requeue path
-     (`RotationSliceTest.kt:651`).
+     `grant_signature`, `granter_identity_public_key` = the new key) and its pending row (decision 4); the stage is
+     deleted in the same transaction. That replaces the shared-only origination loop (`RotationHandler.kt:203-205`);
+     scope → membership order holds (`ScopeEntity.kt:104-116`). `originateScopeRotationExcluding`, `exclude` and
+     `isRotationExcluded` lose their last caller and go, with `rotation_excluded` (`RekeyAccess.kt`, `ScopesStore.kt`)
+     and the requeue path (`RotationSliceTest.kt`).
    - **A grant this device cannot open is left out, and declared** (kept). If `verifyOwnGrant` or the epoch floor
      refuses a scope's grant (`GrantRefused`, `AwaitingCurrentKey`, a grant behind the current epoch, `scopes.ts:288-289`),
      the client names it in `unreadableScopeIds`; the server keeps its grant untouched and writes no pending row. The
@@ -319,7 +361,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    - Every grant a client sends names its recipient key: `recipientIdentityDigest`, the `sha256` of the recipient bundle
      the grant statement already signs. The existing writers gain it — `CreatePersonalScopeRequest`, `CreateGroupRequest`,
      `ScopeGrantEntry` (`rotateScope`), `CompleteRequest` (grant delivery), the tenant birth in
-     `AcceptInviteRequest`/`RegisterAndAcceptRequest` — and the publish's self-grants. The four writers ADR 0111
+     `AcceptInviteRequest`/`RegisterAndAcceptRequest` — and the staged self-grants. The four writers ADR 0111
      decisions 1–5 added (2026-10-28) already carry it and the server already checks it (`409
      recipient_key_not_current`): the member invite's grant, the accept's self-grant, a tenant rotation's invite
      re-grant (`inviteGrants`) and a group add's grant.
@@ -354,9 +396,10 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
    `uc.spaces.complete-queued-rotation` remain for the removal cascade (`TenantHandler.kt:688`).
 9. **Trust: a key is accepted when the chain reaches it from the pinned head (ADR 0111 decisions 15–16, the part that
    needs no join record).**
-   - **The pin entry gains the head** *(assistant, for owner review)*: `{userId, fingerprint, head, state,
-     firstSeenAt}`; `ENTRY_BYTES` grows if the JSON no longer fits 192 bytes, and the `identity_pin` vector's
-     `entry_bytes` with it. The head pins the identity **and** the proof key: with only the identity pinned, an operator
+   - **The pin entry gains the head** *(assistant, for owner review)*: `{u: userId, f: fingerprint, h: head, s: state,
+     t: firstSeenAt}` — single-letter keys, so the entry stays inside `ENTRY_BYTES = 192` (179 bytes, 182 at the largest
+     `firstSeenAt`; with today's keys it is 211 and would cost 428 bytes a pin, 25,000 × 428 = 10,700,000 past the
+     limit — Phase 0). The `identity_pin` vector is regenerated, its `entry_bytes` unchanged. The head pins the identity **and** the proof key: with only the identity pinned, an operator
      could serve an invented prefix whose last step names the pinned identity with a proof key of its choosing, and a
      device thief holding the old identity could then sign a step every member accepts — where today each would see
      "key changed". The personal `verified` state stays in the entry until `cr-trust-records-in-the-tenant` lands.
@@ -402,7 +445,8 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
     - **Entry**, plain words before any field (copy in § Copy): all devices signed out; a new Emergency Kit to save, the
       old one stops working; a new password offered; **you keep every space**, and the people there see that your
       account was secured; what was already seen stays seen; links made before stay open until renewed; which spaces
-      cannot get their new lock yet and why (suspended, being deleted, unreadable on this device).
+      cannot get their new lock yet and why (suspended, being deleted, unreadable on this device); and, when the account
+      signed open invites, that those invitations stop working and are sent again (`factInvites`).
     - **Steps:** the gate (password + current Secret Key); "Also choose a new password" (pre-selected); the new
       Emergency Kit (ready gates the next button); the confirm dialog; the publish; the result.
     - The minted keys live only in the panel's memory and are zeroed when it is left; the kit step says to keep the old
@@ -414,7 +458,7 @@ were taken by the assistant on 2026-10-27 under the owner's instruction to decid
       replaced is corrected, the kit PDF's `kit.pdfKeepSafe` (`i18n/index.ts:625`, DE `:2579`) included.
 12. **Failure handling (kept from the former refine).**
     - **Unknown outcome.** Declared refusals, where nothing was written: `400`, `401`, `403 secret_key_proof_failed`,
-      `409 rotation_unavailable`, `409 stale_revision` and `409 rotation_plan_changed` (retried), `413` (#553's
+      `409 rotation_unavailable`, `409 stale_revision` and `409 rotation_plan_changed` (re-staged and retried), `413` (#553's
       `requestTooLarge`, `rotateKeys.ts:211`), `422`. Anything else — a `FetchError`, a `5xx`, a proxy's `502`/`504`,
       today's final rethrow `rotateKeys.ts:212` — re-reads `getAccountKeyMaterial` and tries the served
       `wrappedIdentityPrivateKey`: opens under `MK'` to the minted identity → committed, the vault swaps, decision 4
@@ -506,7 +550,13 @@ largest N the membership caps allow (read them, do not assume them), against the
 fit, phase 1 stops and the CR goes back to the owner with the numbers (the self-grants must stay in the publish's
 transaction; splitting them out reopens way 2).
 
-#### Phase 0 measured (2026-10-28, `main` at `23da80658`) — **the worst case does not fit; back to the owner**
+#### Phase 0 measured (2026-10-28, `main` at `23da80658`) — **the worst case did not fit; option 2 taken**
+
+**Decided 2026-10-28** (the coordinator, under the owner's delegation of design decisions for this run; presented to
+the owner at the end): **option 2, staged self-grants** — option 1 is a product limit another member can push an
+account into, options 3 and 4 only move the ceiling; option 2 bounds nothing and keeps way 2 closed. Decision 3 holds
+the design. The pin store stays in the publish with the short keys of decision 9 (384 bytes a pin). Staging the pin
+store too, to lift ADR 0104's ceiling, is inbox #569, not this CR.
 
 **The limit:** `quarkus.http.limits.max-body-size` is set nowhere, so Quarkus' default `10240K` = **10,485,760 bytes**
 (`git grep -n "max-body-size" -- src infra` → only `RequestTooLargeRoutes.kt:39`'s default and test comments).
@@ -595,16 +645,20 @@ yet, and the server's refusal is a compare of `Content-Length` with the limit be
 Decisions 2, 3, 5, 6, 7, 8, 10 in the contract; the statements and vectors.
 
 - `RotateAccountKeysRequest` gains, all required: `keyChainStep` (`{newIdentityPublicKey, newSecretKeyProofPublicKey,
-  identitySignature, proofSignature}`; index and predecessor are the server's), `selfGrants` (`{scopeId, epoch,
-  wrappedGrant, grantSignature, recipientIdentityDigest}`), `unreadableScopeIds`, `authPublicKey`,
-  `attestationSignature`, `secretKeyProofPublicKey`, `secretKeyProofPossession`. Each new property carries its
-  `x-veyq-visibility` and bound (`validate_field_visibility.py`, `validate_request_bounds.py`); arrays bounded from
-  phase 0.
+  identitySignature, proofSignature}`; index and predecessor are the server's), `stageId`, `stagedGrantsDigest`,
+  `unreadableScopeIds` (`maxItems` 10,000), `authPublicKey`, `attestationSignature`, `secretKeyProofPublicKey`,
+  `secretKeyProofPossession`. Each new property carries its `x-veyq-visibility` and bound
+  (`validate_field_visibility.py`, `validate_request_bounds.py`).
+- The stage (decision 3): `openRotationStage` (`OpenRotationStageRequest {identityPublicKey}` → `RotationStage
+  {stageId, expiresAt}`) and `putRotationStageGrants` (`RotationStageGrants {grants}`, `maxItems` 256 per chunk, each
+  `StagedSelfGrant {scopeId, epoch, wrappedGrant, grantSignature, recipientIdentityDigest}`), tag `account-rotation`;
+  `404 rotation_stage_not_found`, `409 rotation_plan_changed`, `422 self_grant_invalid`.
 - `recipientIdentityDigest` on every grant-carrying request (decision 6); `pendingUserIds` on `RotateScopeRequest`;
   `keyChainHead` on `ScopeMember`, `ResolvedGroupCandidate`, `GrantDeliveryTarget`; `pending` on `ScopeMember`.
 - Declared refusals: `409 rotation_plan_changed`, `422 self_grant_invalid`, `422 key_chain_step_invalid`,
   `409 recipient_key_not_current`, `409 rotation_incomplete`; `rotation_excluded` removed.
-- New operations: `getAccountRotationPlan`; `getKeyChain` (new tag `key-chain`). Removed: `clearDeclinesForAcceptedKey`.
+- New operations: `getAccountRotationPlan`, `openRotationStage`, `putRotationStageGrants`; `getKeyChain` (new tag
+  `key-chain`). Removed: `clearDeclinesForAcceptedKey`.
 - `RotateAccountKeysResult.soleMemberScopeIds` → `regrantedScopeIds`; `RotationScopeState` per decision 8.
 - Contract prose that says the Secret Key survives, or that the rotator is excluded, is rewritten (Inventory rows 2, 7).
 - `validate_rotation_shape.py`: the new property set, each required, a docstring line per field on why it is not a mode.
@@ -612,10 +666,10 @@ Decisions 2, 3, 5, 6, 7, 8, 10 in the contract; the statements and vectors.
   the snapshot.
 - `v1.ts`: the chain-step statement and purpose, the head, the genesis hash, the rotation statement's new fields; a
   chain verifier (`verifyKeyChain(chain, fromHead)` → the keys at the head, or a refusal naming the failing step) in
-  `@veyq/crypto`, so web and admin-web share it. Vectors: `key_chain` (genesis, two steps, the heads, one step per
-  failure — wrong predecessor, identity signature by another key, proof signature by another key), regenerated
-  `secret_key_proof.rotation`, `identity_pin` if `ENTRY_BYTES` moves — each by an independent implementation, per
-  `v1.json:3`. `v1.ts:283`'s "never changes" goes.
+  `@veyq/crypto`, so web and admin-web share it; `rotationStageDigest`. Vectors: `key_chain` (genesis, two steps, the
+  heads, one step per failure — wrong predecessor, identity signature by another key, proof signature by another key),
+  `rotation_stage` (two entries out of order, the digest), regenerated `secret_key_proof.rotation`, `identity_pin` with
+  the short keys — each by an independent implementation, per `v1.json:3`. `v1.ts:283`'s "never changes" goes.
 - `OperatorBlindProbeTest`: a line per new operation (a probe, or an exclusion with its reason).
 
 **Done when:** `npm run generate:api` runs; `npm run check` in `src/packages/crypto` is green, conformance included; the
@@ -634,7 +688,9 @@ with its client phase).
 Decisions 2, 3, 4 (the gate), 6, 7 (server half), 8, 10.
 
 - **Migration:** `veyq_key_chain_step` (with step 0 written for every existing account — there are none: no release,
-  every dev database is recreated), `veyq_rotation_regrant`, both cascading, their pin lines.
+  every dev database is recreated), `veyq_rotation_regrant`, `veyq_rotation_stage` and its grants, all cascading,
+  their pin lines.
+- **The stage:** its two operations, the upload check, `RotationStagePurge` with its TTL and purge interval config.
 - `AccountStore` writes step 0 at birth; `GrantSignature.kt` and `KeyChainStep.kt` beside `SecretKeyProof.kt`, each
   with a conformance test against its vector.
 - **The publish:** the step check and append; the new statement and the possession check; the attestation; the one
@@ -658,8 +714,13 @@ Decisions 2, 3, 4 (the gate), 6, 7 (server half), 8, 10.
 - **The step:** `theChainGainsTheStepAndTheHeadMoves`; refusals `aStepNotSignedByTheStoredIdentityIsRefused`,
   `aStepNotSignedByTheStoredProofKeyIsRefused`, `aStepWithAStalePredecessorIsRefused` — each answers its code, writes
   nothing (re-read identity, chain and grants), and has a passing control differing in that one input.
-- **Publish refusals**, same discipline: `aPublishMissingAScopeIsRefused`, `aSelfGrantAtAStaleEpochIsRefused`
-  (`409 rotation_plan_changed`); `aSelfGrantSignedByTheOldIdentityIsRefused` (`422 self_grant_invalid`);
+- **The stage:** `aStagedGrantSignedByTheOldIdentityIsRefusedAtUpload` (`422 self_grant_invalid`, nothing of the
+  chunk stored; control: the same chunk signed by the stage's identity is stored); `aStageAppliesNothingBeforeThePublish`
+  (grants and epochs unchanged after a full stage); `anExpiredStageIsPurged`; `aChunkOverItsBoundIs400`.
+- **Publish refusals**, same discipline: `aPublishMissingAScopeIsRefused` — **the delta**: a membership added between
+  stage and publish answers `409 rotation_plan_changed`, nothing written; staging only that scope into the same stage
+  then publishes (control); `aSelfGrantAtAStaleEpochIsRefused` (a scope rotated after staging, `409
+  rotation_plan_changed`); `aStageDigestOtherThanTheStagedRowsIsRefused`; `aStageOfAnotherIdentityIsRefused`;
   `aPossessionSignatureByAnotherKeyIsRefused` (`403 secret_key_proof_failed`); `aWrongAttestationIsRefused`.
 - `anUnreadableScopeKeepsItsGrantAndGetsNoRow`.
 - **Decision 10:** `aGrantToTheRetiredIdentityIsRefused` on each writer (control: the same grant to the current key
@@ -675,7 +736,8 @@ Decisions 2, 3, 4 (the gate), 6, 7 (server half), 8, 10.
   someone else's commit; `blocked` for a suspended tenant.
 - **Purge:** an erased account leaves no step and no row.
 
-**Bite** each, with its lever: drop the set equality (missing-scope red); skip the self-grant signature check
+**Bite** each, with its lever: drop the set check (the delta red); skip the upload signature check (old-identity
+red); drop the digest compare (digest red); skip the self-grant signature check
 (old-identity red); skip the proof half of the step check (proof-key red); keep the old proof key (change-password red);
 skip the void (email red); write the row outside the pass (rollback red); drop the recipient-digest compare
 (retired-identity red); drop the completeness check (silent-omission red).
@@ -721,8 +783,8 @@ the states read, the set check and the chain.
   identity; `rotateAccountKeys` called once. *Red today:* it rejects.
 - **Way 1, retry:** vault still on `MK`, server committed, the user types the **new** Secret Key: no second
   `rotateAccountKeys`, vault on the published identity. *Red today:* `credentialRejected`.
-- **Way 2, closed tab:** the posted `selfGrants` holds the personal **and** the tenant scope's `E_n`, each opening
-  under the new identity; a fresh worker pass with a vault opened from `MK'` alone commits `E_{n+1}` for both, links
+- **Way 2, closed tab:** the staged self-grants hold the personal **and** the tenant scope's `E_n`, each opening
+  under the new identity, and the publish names that stage; a fresh worker pass with a vault opened from `MK'` alone commits `E_{n+1}` for both, links
   opening to `E_n`, and grants the other tenant member (whose pinned head the chain reaches). *Red today:* no field, no
   grant but to the old identity.
 - **Way 3, step 3 fails:** `listScopeMembers` rejects once → state `waiting`, vault on the new identity, the `E_n`
@@ -733,8 +795,9 @@ the states read, the set check and the chain.
   `FetchError` whose re-read shows the old identity is `errorFailed`, vault on `MK`.
 - **#553's controls restated:** `httpError(500)` and the `FetchError` are never `requestTooLarge`, and both are
   re-read; the `413` case stays.
-- **`rotation_plan_changed`:** re-read, resubmit with the same identity and new Secret Key; bounded by
-  `MAX_PUBLISH_ATTEMPTS`.
+- **`rotation_plan_changed`:** re-read, re-stage only the delta (a scope added or rotated since), resubmit with the
+  same identity and new Secret Key; after `404 rotation_stage_not_found` open a new stage and stage all; bounded by
+  `MAX_PUBLISH_ATTEMPTS`. More than 256 scopes stage in several chunks.
 
 **Bite tests for the fix:** the old identity never reaches the vault and never signs a self-grant (each verifies under
 the new key and not `OLD_ID`'s, as `rotateKeys.test.ts:453-454`; no `setUnlocked` with `OLD_ID`; lever: sign with the
@@ -893,6 +956,7 @@ it's you"). New *(assistant, for owner review; the owner finds the key topic har
 | `trust.anomalyNote` | This person’s key doesn’t follow from the one you knew. Nothing is shared with it until it does. Compare your safety numbers in person. | Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern persönlich. |
 | `trust.rotated` (profile) | New identity, signed by their previous key, on {date}. | Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben, am {date}. |
 | `members.pending` | Waiting for someone who can confirm their key | Wartet auf jemanden, der den Schlüssel bestätigen kann |
+| `factInvites` | Invitations you sent that were not accepted yet stop working. Send them again afterwards. | Einladungen, die du verschickt hast und die noch niemand angenommen hat, funktionieren dann nicht mehr. Verschick sie danach neu. |
 
 They keep the panel's lock wording (`i18n/index.ts:304-322`), name no key but the Emergency Kit in the ceremony, and a
 suspended tenant reads "paused" as `share.spaceUnavailable` does (`:1859`, DE `:3746`). German follows
