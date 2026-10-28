@@ -1,6 +1,9 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.account.erasure.AccountPurge
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -42,6 +45,9 @@ class TenantDeletionSliceTest {
 
     @Inject
     lateinit var holds: Holds
+
+    @Inject
+    lateinit var accounts: AccountPurge
 
     @Test
     fun aDeletedTenantIsOfflineAtOnceAndAStopReturnsItSuspended() {
@@ -111,6 +117,51 @@ class TenantDeletionSliceTest {
         }
     }
 
+    /**
+     * A tenant's erasure keeps the terms evidence exactly as an account's erasure does (inbox #593, ADR 0101 decision 6):
+     * a member a moderation case names keeps their acceptance rows past the tenant, to that case's log date, and the one
+     * sweep of kept rows deletes them once no case names the member any more.
+     */
+    @Test
+    fun aCaseNamingAMemberKeepsItsTermsRowsPastTheTenantsErasureUntilNoCaseNamesItAnyMore() {
+        val tenant = seedTenant(owner = seedUser())
+        val elsewhere = seedTenant(owner = seedUser())
+        val named = seedUser()
+        val control = seedUser()
+        val blockId = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            listOf(named, control).forEach { TenantRoots.join(it, tenant); accept(it, tenant) }
+            TenantRoots.join(named, elsewhere)
+            accept(named, elsewhere)
+            ModerationBlockEntity().apply {
+                id = blockId; kind = "MEMBER_SIGN_IN"; targetId = named; takenBy = UUID.randomUUID().toString()
+                takenAt = Instant.now(); activeKey = "MEMBER_SIGN_IN:$named"
+            }.persist()
+        }
+        delete(tenant, domainOf(tenant)).then().statusCode(200)
+        purge.purge(tenant)
+        QuarkusTransaction.requiringNew().run {
+            assertNull(TenantEntity.findById(tenant))
+            assertEquals(1L, TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", named, tenant), "a measure in force keeps the evidence")
+            assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", control), "control: no case, no rows")
+        }
+        // The measure lifted: its record, a step on no case, keeps the rows to its own date, and no further.
+        val lifted = Instant.now()
+        QuarkusTransaction.requiringNew().run {
+            ModerationBlockEntity.findById(blockId)!!.apply { activeKey = null; liftedAt = lifted; liftedBy = UUID.randomUUID().toString() }
+        }
+        QuarkusTransaction.requiringNew().run { accounts.sweepKeptTerms(ModerationLog.retentionEnd(lifted).minusSeconds(60)) }
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(1L, TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", named, tenant))
+        }
+        QuarkusTransaction.requiringNew().run { accounts.sweepKeptTerms(ModerationLog.retentionEnd(lifted).plusSeconds(60)) }
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(0L, TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", named, tenant), "past that date they go")
+            assertEquals(1L, TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", named, elsewhere),
+                "control: a living member's rows in a living tenant are no kept rows, and the sweep never touches them")
+        }
+    }
+
     @Test
     fun anOwnerMakesAMemberAnOwnerAndTheLastOwnerCannotBeDemoted() {
         val owner = seedUser()
@@ -168,6 +219,13 @@ class TenantDeletionSliceTest {
     private fun role(token: String, tenantId: String, userId: String, role: String): Response =
         given().header("Authorization", token).contentType(ContentType.JSON)
             .body("""{"role":"$role"}""").`when`().patch("/api/tenants/$tenantId/members/$userId")
+
+    private fun accept(userId: String, tenantId: String) {
+        TenantTermsAcceptanceEntity().apply {
+            id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId; acceptedRevision = 1
+            acceptedAt = Instant.now()
+        }.persist()
+    }
 
     private fun terms(token: String, tenantId: String): Response =
         given().header("Authorization", token).`when`().get("/api/tenants/$tenantId/terms")

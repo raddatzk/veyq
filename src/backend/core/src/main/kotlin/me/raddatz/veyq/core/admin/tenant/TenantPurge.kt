@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.account.erasure.TermsEvidence
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.TenantProfileEntity
@@ -19,12 +20,13 @@ import org.jboss.logging.Logger
 /**
  * The purge of a deleted tenant (uc.admin.delete-tenant step 5, ADR 0101 decision 10): once a `PENDING_DELETION`
  * tenant is due — the deletion plus the scope trash's retention — one transaction erases every scope of it through the
- * scope erasure ([ScopePurge.purge], which puts their blobs onto the reclaim list), the tenant's profiles and invites,
- * and the tenant row, whose terms rows, mail settings, capability switches and requirements cascade with it. Pending
- * or complete, never partial: a failure rolls the tenant back, is logged, and the next tick tries again.
+ * scope erasure ([ScopePurge.purge], which puts their blobs onto the reclaim list), the tenant's profiles, invites and
+ * terms acceptance rows, and the tenant row, whose mail settings, capability switches and requirements cascade with it.
+ * Pending or complete, never partial: a failure rolls the tenant back, is logged, and the next tick tries again.
  *
- * What stays: holds and the moderation records hang on cases, not tenants, so they survive to their own ends; every
- * account stays, also one this leaves in no tenant (owner, Q20). `scripts/validate_account_erasure_arity.py` holds
+ * What stays: holds and the moderation records hang on cases, not tenants, so they survive to their own ends; the terms
+ * acceptance rows of a member a case names stay as an account's erasure keeps them ([TermsEvidence]); every account
+ * stays, also one this leaves in no tenant (owner, Q20). `scripts/validate_account_erasure_arity.py` holds
  * that every table reachable by foreign key from `veyq_tenant` is deleted here, is the scope erasure's, or cascades.
  * Operator-blind: nothing is decrypted; store objects go only through the reclaim list (ADR 0062).
  */
@@ -78,6 +80,12 @@ class TenantPurge(
         val tenant = TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE) ?: return
         if (tenant.status != TenantEntity.PENDING_DELETION) return
         if (cutoff != null && tenant.deletionDueAt?.isAfter(cutoff) != false) return
+        // The terms acceptance history, as an account's erasure keeps it (ADR 0101 decision 6): a member a moderation
+        // case names keeps their rows here past the tenant, under the opaque ids, until AccountPurge's sweep finds no case
+        // naming them. Asked before the scopes go, whose purge ends the measures on their content: the question is about
+        // the state the erasure found, and a measure it ends still counts.
+        val members = TenantTermsAcceptanceEntity.list("tenantId", tenantId).map { it.userId }.distinct()
+        val evidence = members.filter { TermsEvidence.namesAtErasure(it) }
         // Every scope, the TENANT scope last: ascending ids for the groups and personal scopes, the order every
         // multi-scope lock takes, then the root the others' members joined through.
         ScopeEntity.list("tenantId", tenantId).map { it.id }.filter { it != tenantId }.sorted()
@@ -85,6 +93,11 @@ class TenantPurge(
         if (ScopeEntity.findById(tenantId) != null) scopePurge.purge(tenantId)
         TenantProfileEntity.delete("tenantId", tenantId)
         TenantInviteEntity.delete("tenantId", tenantId)
+        if (evidence.isEmpty()) {
+            TenantTermsAcceptanceEntity.delete("tenantId", tenantId)
+        } else {
+            TenantTermsAcceptanceEntity.delete("tenantId = ?1 and userId not in ?2", tenantId, evidence)
+        }
         // A suspension's or this deletion's record over content ends with the tenant, so its records run to their date.
         steps.targetErased(tenantId, listOf(BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED), Instant.now())
         // The erasure ledger's line (ADR 0056 decision 8, ADR 0101 decision 8), in this transaction, before the row goes.

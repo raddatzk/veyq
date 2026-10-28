@@ -23,8 +23,8 @@ import org.jboss.logging.Logger
  * state directory both deployment targets persist (Compose's `veyq-config-secret` volume, the cluster's kept
  * `veyq-config-secret` claim) and no restore or rollback touches. One JSON object per line ([LedgerLine]).
  *
- * Three writers, one lock: [sweep] appends the outbox's unsent rows (every minute, and first at start), [rewrite] drops
- * the lines older than B atomically (at start), and nothing else writes the file. An append is forced to disk before its
+ * Two writers, one lock: [sweep] appends the outbox's unsent rows (every minute, and first at start), [rewrite] drops
+ * the lines older than B atomically (at start, and hourly through [scheduledTrim]), and nothing else writes the file. An append is forced to disk before its
  * rows are stamped sent, so a crash between the two appends a line twice — harmless, re-applying is idempotent — and
  * never stamps one the file lacks. The window ADR 0056 states as its limit is the sweep's interval: an erasure not yet
  * appended when a crash also loses the file is not re-applied.
@@ -51,6 +51,27 @@ class ErasureLedgerFile(config: VeyqConfig, private val retention: BackupRetenti
     }
 
     /**
+     * The file held to B while the instance runs (ADR 0056 decision 8, inbox #592): the start trims it too, but an
+     * instance that runs for months without a restart would otherwise keep account and moderator ids past B. A purge's
+     * shape and cadence (`veyq.erasure-ledger.purge.every`, hourly), so a line outlives B by at most one tick.
+     */
+    @Scheduled(every = "{veyq.erasure-ledger.purge.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    fun scheduledTrim() {
+        try {
+            trim()
+        } catch (e: Exception) {
+            // The file is left as it was (the rewrite moves a finished copy over it, or nothing); the next tick tries again.
+            log.error("the erasure ledger ${path.fileName} could not be trimmed to B; the next run tries again", e)
+        }
+    }
+
+    /** Drop the lines older than B before [now] ([rewrite]); answers how many went. */
+    fun trim(now: Instant = Instant.now()): Int = rewrite(cutoff(now))
+
+    private fun cutoff(now: Instant): Instant =
+        now.minus(Duration.ofDays(QuarkusTransaction.requiringNew().call { retention.retention() }.days.toLong()))
+
+    /**
      * Append every unsent outbox row to the file, oldest first, force it to disk, then stamp the rows sent; and delete the
      * sent rows older than B, which no capture that could be restored predates. Answers how many lines it appended.
      */
@@ -66,7 +87,7 @@ class ErasureLedgerFile(config: VeyqConfig, private val retention: BackupRetenti
                 }
             }
         }
-        val cutoff = now.minus(Duration.ofDays(QuarkusTransaction.requiringNew().call { retention.retention() }.days.toLong()))
+        val cutoff = cutoff(now)
         QuarkusTransaction.requiringNew().run { ErasureOutboxEntity.delete("sentAt is not null and recordedAt < ?1", cutoff) }
         unsent.size
     }

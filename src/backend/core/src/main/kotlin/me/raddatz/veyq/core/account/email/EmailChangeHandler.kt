@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.account.email
 
 import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.AuthAttestation
 import me.raddatz.veyq.core.crypto.SecretKeyProof
@@ -78,6 +79,7 @@ class EmailChangeHandler(
     private val accounts: AccountStore,
     private val sessions: SessionService,
     private val membership: MembershipStore,
+    private val tenants: TenantStore,
     private val mailer: EmailChangeMailer,
     // The confirmation's per-account budget, shared: both mail kinds are one account aiming its tenant's relay, and a
     // change mails an address of the caller's choosing, so it must not get a budget of its own on top.
@@ -205,6 +207,9 @@ class EmailChangeHandler(
         user.authPublicKey = row.authPublicKey
         // The link proved the new address (ADR 0074 Decision 2). The one writer of the stamp binds it to the address.
         user.confirmAddress(user.email)
+        // No copy of the old address outlives the change (ADR 0101 decision 4): a tenant's record of whom its owner
+        // invite named follows it. A settled invite to the old address keeps it only until its own purge.
+        tenants.followOwnerAddress(oldEmail, user.email)
         presentedAccessToken?.let { sessions.revokeOtherFamilies(userId, it) }
         return EmailChangeConfirmOutcome.Changed(oldEmail)
     }

@@ -179,7 +179,8 @@ class TenantTermsSliceTest {
 
     @Test
     fun deletingATenantErasesEveryAcceptanceRow() {
-        // The tenant's erasure takes the whole history with it (ON DELETE CASCADE): no orphaned evidence rows.
+        // A pending tenant's revoke takes the whole history with it: no orphaned evidence rows. (An active tenant's purge
+        // keeps the rows of a member a case names, TenantDeletionSliceTest.)
         val tenantId = seedTenant(status = TenantEntity.PENDING, tenantScope = false)
         val member = seedUser(email = "member@terms-erase.example.com")
         QuarkusTransaction.requiringNew().run {

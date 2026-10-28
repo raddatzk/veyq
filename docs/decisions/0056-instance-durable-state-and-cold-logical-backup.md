@@ -256,7 +256,9 @@ erasure report asks a controller to track erasures and apply them again on a res
 - **An erasure ledger outside the three legs**, beside leg (c)'s key, so neither a restore nor a rollback touches it,
   lists every hard erasure no restored row would trigger again by itself, and every moderation block, lift, case
   change and hold end. **At every start, before the instance serves,** the application re-applies it through each
-  kind's own eraser, so no restore needs to be detected, and fails the start closed where a line cannot be applied.
+  kind's own eraser, so no restore needs to be detected, and fails the start closed where a line cannot be applied. A
+  line older than B goes, since no capture is older — at every start and hourly while the instance runs, so an instance
+  that is never restarted keeps no id longer than a capture could.
   **Moderation survives a restore**, by the rule that a legal duty wins: a TCO Art. 3 block and a DSA Art. 17 measure
   must not be undone by one, and a hold that had ended must not come back past its bound.
 

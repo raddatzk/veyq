@@ -45,6 +45,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.scheduler.Scheduled
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.http.ContentType
 import io.restassured.specification.RequestSpecification
@@ -150,6 +151,24 @@ class ErasureLedgerSliceTest {
         QuarkusTransaction.requiringNew().run { BackupRetentionEntity().apply { retentionDays = 7 }.persist() }
         start.run(now)
         assertTrue(lines().isEmpty())
+    }
+
+    /**
+     * The file is held to B while the instance runs, not only at a start (inbox #592): an instance that runs for months
+     * without a restart must not keep account and moderator ids in it past B. Every scheduled job of the file runs here
+     * as the scheduler fires it, whichever of them does the trimming.
+     */
+    @Test
+    fun aLineOlderThanBIsDroppedWhileTheInstanceRunsWithoutARestart() {
+        val now = Instant.now()
+        val old = LedgerLine(mapOf("at" to now.minus(Duration.ofDays(31)).toString(), "kind" to "SCOPE", "id" to UUID.randomUUID().toString()))
+        val young = LedgerLine(mapOf("at" to now.minus(Duration.ofDays(29)).toString(), "kind" to "SCOPE", "id" to UUID.randomUUID().toString()))
+        Files.createDirectories(file.path.parent)
+        Files.writeString(file.path, "${old.json()}\n${young.json()}\n")
+        val jobs = ErasureLedgerFile::class.java.declaredMethods.filter { it.isAnnotationPresent(Scheduled::class.java) }
+        assertTrue(jobs.isNotEmpty(), "precondition: the file has scheduled jobs")
+        jobs.forEach { it.invoke(file) }
+        assertEquals(listOf(young.id), lines().map { it.id }, "the 31-day line went, the 29-day one (control) stayed")
     }
 
     // --- each kind erased again after a restore, and nothing else ---------------------------------------------------------

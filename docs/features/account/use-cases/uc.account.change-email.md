@@ -29,8 +29,10 @@
    relay. It answers the same way whether or not the address is free (no enumeration): "If the address can be used, a
    link was sent to it."
 4. The actor opens the link **in a session of the same account**; the server checks the address is still free, then in
-   one transaction swaps the email and the auth public key, sets the address confirmed (the link proved it), revokes
-   every other session, and mails the **old** address a fixed notice ("your sign-in address was changed", the domain,
+   one transaction swaps the email and the auth public key, sets the address confirmed (the link proved it), carries a
+   tenant's record of the address its owner invite named along to the new address (no copy of the old one stays,
+   [ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 4),
+   revokes every other session, and mails the **old** address a fixed notice ("your sign-in address was changed", the domain,
    no new address - [ADR 0049](../../../decisions/0049-email-delivery-boundary.md)'s closed variable set).
 5. The app says the change is done and offers a **new Emergency Kit** (the old one prints the old address; its Secret
    Key is still valid): the password and the Secret Key are entered on that page (the key typed, pasted, or imported
