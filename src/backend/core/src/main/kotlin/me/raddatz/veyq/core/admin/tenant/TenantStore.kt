@@ -536,6 +536,9 @@ class TenantStore(
     @Transactional
     fun deleteTenant(tenantId: String) {
         TenantInviteEntity.delete("tenantId", tenantId)
+        // No cascade any more (the rows a case keeps outlive an active tenant's purge, TenantPurge): a pending tenant has
+        // no accepted member, so nothing here is kept, and nothing is left behind either.
+        TenantTermsAcceptanceEntity.delete("tenantId", tenantId)
         ledger.erased(ErasureKind.TENANT, tenantId)
         TenantEntity.deleteById(tenantId)
     }
