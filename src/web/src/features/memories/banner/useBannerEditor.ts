@@ -8,7 +8,7 @@
 // banner the medium's ORIGINAL and its PREVIEW as the poster. The file's SHA-256 is read once here - it is the match key, a
 // video's `blob-meta` and the banner meta's `sha256`.
 import { contentDigest } from '../../../core/blob/sharedBlob'
-import { nodeMetaState } from '../../../core/node/nodeMeta'
+import { nodeMetaState, unsealNodeMeta } from '../../../core/node/nodeMeta'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import type { TreeNode } from '../../../core/node/tree'
 import { createBrowserDeriver, type MediaDeriver } from '../../../shared/image/mediaDeriver'
@@ -46,11 +46,13 @@ export function useBannerEditor(ctx: BannerEditorContext) {
   const deriver = () => ctx.deriver ?? createBrowserDeriver()
 
   /**
-   * A picked file's bytes as the banner takes them: the stored tiers of an equal gallery medium where there is one, else an
-   * image derived, a video as it is with the poster already decoded (or decoded now).
+   * A picked file's bytes as the banner takes them, under `key`: the stored tiers of an equal gallery medium where there is
+   * one, else an image derived, a video as it is with the poster already decoded (or decoded now). `sha256` is the file's,
+   * read once per save.
    */
-  async function fromFile(file: File, type: string, poster: Uint8Array | null, key: Uint8Array, signal?: AbortSignal): Promise<PreparedBanner & { sha256: string }> {
-    const sha256 = await contentDigest(file, signal)
+  async function fromFile(
+    file: File, type: string, poster: Uint8Array | null, key: Uint8Array, sha256: string, signal?: AbortSignal,
+  ): Promise<PreparedBanner & { sha256: string }> {
     const equal = await findEqualMedium(ctx.scopeId(), key, ctx.items(), file, signal, sha256)
     if (isVideoType(type)) {
       const original = equal && storedTier(equal, 'ORIGINAL')
@@ -84,26 +86,31 @@ export function useBannerEditor(ctx: BannerEditorContext) {
     if (!door || !key) throw new Error('banner_not_writable')
     const node = ctx.node()
     const nodeId = node.id
-    const current = nodeMetaState(node)
-    let state
-    if (intent.kind === 'remove') {
-      state = await door.write({ nodeId, nodeKey: key, current, banner: null })
-    } else if (intent.kind === 'keep') {
-      const banner = reframedBanner(ctx.raw(), intent.framing)
-      if (!banner) throw new Error(BANNER_UNREADABLE)
-      state = await door.write({ nodeId, nodeKey: key, current, banner })
-    } else {
-      const prepared = await fromFile(intent.file, intent.type, intent.poster, key, opts.signal)
-      const uploaded = await door.upload(nodeId, key, prepared, opts)
+    // The file's digest is read once: it is the match key, a video's `blob-meta` and the banner meta's `sha256`, whatever key.
+    const sha256 = intent.kind === 'file' ? await contentDigest(intent.file, opts.signal) : ''
+    // One save at the Memory's key; on an epoch refusal the door pulls the Memory's path forward and runs it again under the
+    // key it re-read, from scratch - the base meta and a kept banner's wraps from the re-read node (the re-key re-sealed
+    // them), the bytes uploaded again (ADR 0111 decision 11).
+    const state = await door.under(nodeId, { key, epoch: node.epoch }, async (at, reread) => {
+      const current = { ...nodeMetaState(reread ?? node), nodeEpoch: at.epoch }
+      if (intent.kind === 'remove') return door.write({ nodeId, nodeKey: at.key, current, banner: null })
+      if (intent.kind === 'keep') {
+        const raw = reread ? unsealNodeMeta(at.key, { scopeId: ctx.scopeId(), nodeId }, reread.wrappedMeta).banner ?? null : ctx.raw()
+        const banner = reframedBanner(raw, intent.framing)
+        if (!banner) throw new Error(BANNER_UNREADABLE)
+        return door.write({ nodeId, nodeKey: at.key, current, banner })
+      }
+      const prepared = await fromFile(intent.file, intent.type, intent.poster, at.key, sha256, opts.signal)
+      const uploaded = await door.upload(nodeId, at.key, prepared, opts)
       const banner = sealedBanner({
         medium: uploaded.medium, blob: uploaded.blob, poster: uploaded.poster, type: uploaded.type, sha256: prepared.sha256,
         framing: intent.framing,
       })
-      state = await door.write({
-        nodeId, nodeKey: key, current, banner,
+      return door.write({
+        nodeId, nodeKey: at.key, current, banner,
         upload: { uploadId: uploaded.uploadId, posterUploadId: uploaded.posterUploadId, shared: uploaded.shared, posterShared: uploaded.posterShared },
       })
-    }
+    })
     ctx.onMetaUpdated({ nodeId, ...state })
   }
 

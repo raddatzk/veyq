@@ -118,9 +118,9 @@ device finishes it (point 7).
 - **Writing waits per node while a rotation re-keys — a member's write only for its own path.** A guest's write meets
   `node_rekey_pending` on a node not yet reached and retries after a wait; a member's client re-keys that node and its
   lagging ancestors and retries at once (point 7), except into a drop box, where it waits for an owner like a guest. A
-  crashed re-key leaves the unreached nodes until any member's worker resumes it. Not yet pulled, and so still
-  waiting or refused at the device floor, are a member's writes that carry ciphertext under the old key across the
-  retry — a cover, a banner, a medium's meta edit — and an import's writes (inbox #563).
+  crashed re-key leaves the unreached nodes until any member's worker resumes it. A member's write that carries
+  ciphertext under the old key — a cover, a banner, a medium's meta edit — is rebuilt under the new key after its pull,
+  not resent ([uc.spaces.rekey-after-rotation](../features/spaces/use-cases/uc.spaces.rekey-after-rotation.md) E8).
 - **Slug keys change with each rotation.** ADR 0080 Decision 2's "stable per parent key" holds between rotations; the
   re-key recomputes every token under the new key in the same commit.
 - **New write paths.** Fields that only an insert wrote so far are rewritten in place: `wrapped_blob_key`,

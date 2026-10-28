@@ -5,7 +5,7 @@
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { BlobSource } from '../blob/types'
 import type { Access, TreeSource } from '../access'
-import type { NodeParent, TreeNode } from '../node/tree'
+import type { CreateNodeOptions, NodeParent, TreeNode } from '../node/tree'
 import type { ManifestContent, ManifestNode, ManifestPayload } from './manifest'
 
 /** A payload's plaintext by frame, in any order: frame `i` holds bytes `[i * frameSize, (i + 1) * frameSize)` of the payload, the
@@ -70,6 +70,10 @@ export type ImportNodeContext = {
   epochs: EpochKeys
   /** Where to create the node (null: the scope root). */
   parent: NodeParent
+  /** What the create under `parent` passes `createContentNode` (`CreateNodeOptions`): an import or a copy is a member's
+   *  flow, so a parent not re-keyed since a rotation is pulled forward on this device and re-read, and the create retried
+   *  (ADR 0111 decision 11) - core's `memberCreateOptions`; an owner-only parent (a drop box) waits for an owner. */
+  createOptions: CreateNodeOptions
   /** The name to create it under: the exported name, made free among the target's siblings. */
   name: string
   node: ManifestNode

@@ -9,7 +9,7 @@ import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
 import { loadTree, treeStore } from './treeStore'
 import { pullRekeyPath } from './rekey/rekeyScope'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
-import type { CreateNodeOptions, NodeParent } from './tree'
+import type { CreateNodeOptions, NodeParent, TreeNode } from './tree'
 
 /** The node is not in the active scope's tree any more, or its key chain does not open: nothing to rebuild under. */
 export class NodeRereadError extends Error {
@@ -79,17 +79,20 @@ export function rereadMemberKey(scopeId: string, nodeId: string): () => Promise<
  * A member's write sealed under `nodeId`'s key in the ACTIVE scope `scopeId`, built by `write` from `at` (the key and
  * epoch it read): the device floor before each attempt, and on an epoch refusal the node's path pulled forward on this
  * device (ADR 0111 decision 11) — or waited for, when it cannot — the key re-read and the write rebuilt under it
- * (`writeAtNodeEpoch`). Only for a write whose payload is sealed afresh from plaintext each time, never one carrying a
- * ciphertext read under the old key.
+ * (`writeAtNodeEpoch`). Only for a write whose payload is sealed afresh each time, never one carrying a ciphertext read
+ * under the old key: a rebuild gets `node`, the node as the re-read tree holds it (its meta re-sealed by the re-key, so
+ * what the write reads from it — a cover's or a banner's wraps — opens under the new key), null on the first attempt,
+ * where the caller's own read stands. A flow that uploads under the key (a cover, a banner) uploads again in the rebuild.
  */
 export function writeUnderMemberNode<T>(
-  scopeId: string, nodeId: string, at: { key: Uint8Array; epoch: number }, write: (at: { key: Uint8Array; epoch: number }) => Promise<T>,
+  scopeId: string, nodeId: string, at: { key: Uint8Array; epoch: number },
+  write: (at: { key: Uint8Array; epoch: number }, node: TreeNode | null) => Promise<T>,
 ): Promise<T> {
   const reread = rereadMemberKey(scopeId, nodeId)
   return writeAtNodeEpoch(async (again) => {
     const now = again ? await reread() : at
     assertActiveScopeFloor(scopeId, { id: nodeId, epoch: now.epoch })
-    return write(now)
+    return write(now, again ? treeStore.nodes.find((n) => n.id === nodeId) ?? null : null)
   }, { pull: pullRekeyPath(scopeId, [nodeId]) })
 }
 

@@ -263,6 +263,25 @@ describe('a code prepared ahead (inbox #566): its link key derived while the own
     expect(seen).toEqual(['securing', 'open', 'sending', 'post'])
   })
 
+  it('a re-issue names the same phases, and seals under the code prepared ahead, its derivation taken (inbox #630)', async () => {
+    const seen: string[] = []
+    vi.mocked(openScopeById).mockImplementationOnce(async () => {
+      seen.push('open')
+      const key = TENANT_KEY.slice()
+      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: EPOCH, keys: new Map([[EPOCH, key]]) } })
+    })
+    const send = vi.fn<TenantsApi['reissueMemberInvite']>().mockImplementation(async () => {
+      seen.push('post')
+      return STATE
+    })
+    fakeApi(tenantsApi, { reissueMemberInvite: send })
+    const p = prepareInviteCode()
+    await reissueMemberInvite(T, 'inv-old', 'b@x.z', p, (phase) => seen.push(phase))
+    expect(seen).toEqual(['securing', 'open', 'sending', 'post'])
+    expect(p.ahead.take(), 'the re-issue took the derivation it was handed').toBeNull()
+    expect(() => openLink(send.mock.calls[0][0].memberInviteRequest, p.code)).not.toThrow()
+  })
+
   it('a build that fails before sealing leaves the derivation untaken, for the dialog to discard', async () => {
     vi.mocked(openScopeById).mockResolvedValueOnce(null)
     const p = prepareInviteCode()

@@ -65,10 +65,15 @@ export function listMemberInvites(tenantId: string): Promise<PendingMemberInvite
 }
 
 /** Re-issue a pending member invite: supersede it (its key and grant go) and mail a new one to the same [email] — a new
- *  invite key, grant, link and code ({@link buildMemberInvite}) — owner-gated. */
-export function reissueMemberInvite(tenantId: string, inviteId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+ *  invite key, grant, link and code ({@link buildMemberInvite}) — owner-gated. [onPhase] hears each phase as it begins, as
+ *  an invite's does (inbox #630). */
+export function reissueMemberInvite(
+  tenantId: string, inviteId: string, email: string, secret: InviteSecret, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteState> {
   return onceMoreIfStale(async () => {
+    onPhase?.('securing')
     const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    onPhase?.('sending')
     return withRefresh(() => tenantsApi().reissueMemberInvite({ tenantId, inviteId, memberInviteRequest }))
   })
 }

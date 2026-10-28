@@ -39,6 +39,8 @@ function setup(opts: { raw?: unknown; items?: MediaItem[] } = {}) {
         ? { medium: 'image' as const, uploadId: 'u', blob: ref('b') }
         : { medium: 'video' as const, uploadId: 'u', posterUploadId: 'pu', blob: ref('v'), poster: ref('p'), type: 'video/mp4' }),
     write: vi.fn(async (_args: Record<string, unknown>) => ({ wrappedMeta: 'w2', metaRevision: 5 })),
+    // one attempt at the key it is handed (the pull and rebuild are `useBannerEditor.pull.test.ts`'s)
+    under: vi.fn((_n: string, at: { key: Uint8Array; epoch: number }, save: (at: { key: Uint8Array; epoch: number }, reread: null) => Promise<unknown>) => save(at, null)),
   }
   const source = { loaders: {}, banner } as unknown as MemorySource
   const onMetaUpdated = vi.fn()
