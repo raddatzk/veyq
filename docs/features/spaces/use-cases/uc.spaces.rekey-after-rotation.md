@@ -68,7 +68,17 @@
   and is then rebuilt, not resent: a cover or a banner runs again from scratch under the re-read key, the upload included
   (a kept one's wraps read from the meta the re-key re-sealed); a meta edit re-applies its change to the tier's plaintext
   as listed and re-bases on the re-sealed tier through `409 stale_revision`. An import or a copy pulls the target it
-  creates under; what it creates is minted current. Into a drop box each waits for an owner (E7).
+  creates under. Into a drop box each waits for an owner (E7).
+- **E9 — a rotation while an import or a copy is under way.** What the run already created is at the epoch the run
+  started with, so its next write meets the gate: a create below one of its nodes, a Memory's next medium, its cover
+  or banner, a Pot's next batch or receipt, a Depot file's content. Each is **one write** that pulls that node forward
+  on this device and is sealed again under the re-read key; the run goes on under the key and epoch it left, and never
+  repeats a kind's whole import, which would create the node twice. Another member's device may re-key the node first:
+  the write then meets `409 stale_epoch`, and the pull runs before the re-read anyway, since the device holds the scope
+  at the old epoch and opens the new key only once it re-opened it. A create at the scope root, which states no parent
+  epoch, re-opens the scope the same way. Below a drop box the write waits for an owner (E7); the refused pull still
+  re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
+  rolled back.
 
 ## Quality notes
 

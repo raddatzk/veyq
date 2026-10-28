@@ -8,7 +8,7 @@ vi.mock('./media', async (orig) => ({
 }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), readShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
-vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), listTree: vi.fn() }))
+vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), fetchTreeRows: vi.fn() }))
 vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
@@ -25,7 +25,7 @@ import { guestAccessOf, memberAccessOf } from '../../test/models'
 import type { Access } from '../../core/access'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { loadTenantPeople, type Person } from '../../core/people/directory'
-import { createContentNode, listTree, type TreeNode } from '../../core/node/tree'
+import { createContentNode, fetchTreeRows, type TreeNode } from '../../core/node/tree'
 import { writeNodeCover, uploadCoverBlob, uploadCoverImage } from '../../core/node/cover/coverWrite'
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
@@ -184,7 +184,7 @@ describe('a place that is a name only (inbox #458)', () => {
 
     const nodeKey = v1.randomBytes(32)
     vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
-    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
     const n = { id: 'n4', kind: MEMORY_KIND, name: 'Granny', content: { ...wire, media: [], cover: undefined } } as unknown as ManifestNode
     const made = await importMemoryContent(MEMORY_KIND)({
       scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Granny', node: n, cache: new Map(), payload: vi.fn(),
@@ -225,7 +225,7 @@ describe('importMemoryContent', () => {
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue(['m1', 'm2', 'm3'].map((id) => ({ ...item(id), wrappedMeta: 'w', metaRevision: 1 })))
     vi.mocked(setMediaMeta).mockResolvedValue({ tier: null, wrappedMeta: 'w2', metaRevision: 2, wrote: true })
-    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
   })
 
   it('creates the Memory with its date and place sealed at birth, adds the originals; an older archive\'s cover by mediaIndex is not restored', async () => {
@@ -414,7 +414,7 @@ describe('the banner travels with its Memory', () => {
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue([])
-    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
     vi.mocked(uploadBanner).mockResolvedValue({ medium: 'video', uploadId: 'bu', posterUploadId: 'pu', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', sha256: DIG })
   })
 

@@ -28,9 +28,9 @@
 // it. A replace never trashes anything — the node was there before the job.
 import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
 import { assertNodeKeyAtFloor } from '../../core/node/rekey/floor'
-import { memberCreateOptions, rereadMemberKey } from '../../core/node/rereadNode'
+import { heldScopeEpochs, memberCreateOptions, rereadMemberKey } from '../../core/node/rereadNode'
 import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
-import { retryWhileRekeying } from '../../shared/rekeyRetry'
+import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
 import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/queue'
 import type { BlobMeta } from '../../core/blob/meta'
@@ -170,17 +170,20 @@ export function fileUploadJob<F extends PayloadFile = File>(target: FileUploadTa
         created = node.nodeId
       }
       const at = node
-      // A file node not re-keyed since a rotation (a replace of one that existed before it): this member's device pulls
+      // A file node not re-keyed since a rotation (a replace of one that existed before it, or a node this job created
+      // just before another member rotated the scope — an import's or a copy's, inbox #670): this member's device pulls
       // its path forward, re-reads its key and epoch, and seals and uploads the content again under them — the first
-      // upload's `K_blob` is wrapped under the key the re-key replaced (ADR 0111 decision 11).
-      await retryWhileRekeying(async (n) => {
-        if (n > 0) {
+      // upload's `K_blob` is wrapped under the key the re-key replaced (ADR 0111 decision 11). A node another member's
+      // device re-keyed first answers `stale_epoch`, met the same way (`writeAtNodeEpoch`).
+      await writeAtNodeEpoch(async (reread) => {
+        if (reread) {
           const now = await rereadMemberKey(scopeId, at.nodeId)()
           at.nodeKey = now.key
           at.nodeEpoch = now.epoch
         }
-        // the device floor before the content is sealed under the file's key (ADR 0109 point 6, layer 2)
-        assertNodeKeyAtFloor({ id: at.nodeId, epoch: at.nodeEpoch }, target.epochs)
+        // the device floor before the content is sealed under the file's key (ADR 0109 point 6, layer 2), against the
+        // epochs this device holds now (a pull may have re-opened the scope since the job began)
+        assertNodeKeyAtFloor({ id: at.nodeId, epoch: at.nodeEpoch }, heldScopeEpochs(scopeId) ?? target.epochs)
         const plan = planBlob(scopeId, { ownerId: at.nodeId, role: FILE_CONTENT_ROLE }, at.nodeKey, file, fileBlobMeta(file))
         const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), onProgress, signal)
         throwIfAborted(signal)

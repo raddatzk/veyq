@@ -7,6 +7,7 @@
 // The two steps are apart ({@link createPotNode}, {@link appendInBatches}) for the import: a new entry's receipts are
 // completed before its first revision, so the import uploads each batch's receipts between the node and that batch.
 import { createContentNode, type CreateNodeOptions, type NodeParent } from '../../core/node/tree'
+import { memberNodeWriter, type MemberNodeWriter } from '../../core/node/rereadNode'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { EpochKeys } from '../spaces/epochs'
 import { appendPotWrites, heldOfSent, type PotWrite } from './domain/potApi'
@@ -35,13 +36,17 @@ export function participantWrites(names: readonly string[], now = Date.now()): P
 /**
  * Append [writes] to a new Pot in batches, each batch on what the ones before wrote (its heads name them): the sealed
  * revisions of one batch are opened back into what is held, so the next batch's revision numbers and heads follow them.
+ * Each batch is one write through the Pot's [MemberNodeWriter] (inbox #670): a rotation that lands while a large import
+ * is under way has the batch meet `node_rekey_pending` (or `stale_epoch`), this member's device pull the Pot forward, and
+ * the batch sealed again under its key now - the batches before it were re-keyed with the Pot.
  */
 export async function appendInBatches(
-  scopeId: string, nodeId: string, key: { key: Uint8Array; epoch: number }, base: BaseCurrency, writes: readonly PotWrite[],
+  pot: MemberNodeWriter, base: BaseCurrency, writes: readonly PotWrite[],
   beforeBatch?: (batch: readonly PotWrite[]) => Promise<void>,
 ): Promise<void> {
-  const seal = async (batch: readonly PotWrite[], held: readonly HeldRevision[]) =>
-    heldOfSent(scopeId, nodeId, key.key, await appendPotWrites({ kind: 'member', scopeId, nodeId }, key, held, batch, base))
+  const { scopeId, nodeId } = pot
+  const seal = (batch: readonly PotWrite[], held: readonly HeldRevision[]) =>
+    pot.write(async (at) => heldOfSent(scopeId, nodeId, at.key, await appendPotWrites({ kind: 'member', scopeId, nodeId }, at, held, batch, base)))
   let held: HeldRevision[] = []
   for (let i = 0; i < writes.length; i += APPEND_BATCH) {
     const batch = writes.slice(i, i + APPEND_BATCH)
@@ -74,7 +79,7 @@ export async function createPot(
   const writes = participantWrites(names)
   if (writes.length) {
     try {
-      await appendInBatches(scopeId, created.nodeId, { key: created.nodeKey, epoch: created.epoch }, base, writes)
+      await appendInBatches(memberNodeWriter(scopeId, created.nodeId, { key: created.nodeKey, epoch: created.epoch }), base, writes)
     } catch (e) {
       throw new PotPeopleNotAdded(created.nodeId, e)
     }

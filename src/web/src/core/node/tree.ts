@@ -276,16 +276,25 @@ export async function createContentNode(
   opts: CreateNodeOptions = {},
 ): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
   const reread = opts.reread
-  if (!reread || parent === null) return createContentNodeOnce(scopeId, epochs, parent, kind, name, metaSealer)
+  // the epochs this device holds NOW: a long run (an import, a copy) outlives a rotation, and the node it mints states the
+  // epoch the device re-opened the scope at when its pull met that rotation (inbox #670)
+  const held = () => opts.epochs?.() ?? epochs
+  if (!reread) return createContentNodeOnce(scopeId, held(), parent, kind, name, metaSealer)
   return writeAtNodeEpoch(async (again) =>
-    createContentNodeOnce(scopeId, epochs, again ? await reread() : parent, kind, name, metaSealer),
+    createContentNodeOnce(scopeId, held(), again ? await reread() : parent, kind, name, metaSealer),
   { pull: opts.pull })
 }
 
 /** How a create re-reads its parent after an epoch refusal (ADR 0109 point 6) — `node_rekey_pending` or the device
- *  floor (after a pull or a wait), `stale_epoch` (once): the parent's key and epoch as the tree now holds them. A
- *  member's create also pulls the parent's path forward first (`pull`, ADR 0111 decision 11). */
-export type CreateNodeOptions = { reread?: () => Promise<NodeParent>; pull?: () => Promise<boolean> }
+ *  floor (after a pull or a wait), `stale_epoch` (once): the parent's key and epoch as the tree now holds them (null at
+ *  the scope root, where only the epoch moves). A member's create also pulls the parent's path forward first (`pull`,
+ *  ADR 0111 decision 11), and states the scope's epochs as the device holds them at each attempt (`epochs`; absent, the
+ *  ones the caller passed): the pull re-opens a scope this device held behind, and the new node's epoch is that one. */
+export type CreateNodeOptions = {
+  reread?: () => Promise<NodeParent>
+  pull?: () => Promise<boolean>
+  epochs?: () => EpochKeys | null
+}
 
 /** One create attempt (see {@link createContentNode}). The device floor runs first: a parent whose key is from before
  *  the last rotation this device holds is not sealed under (`NodeKeyBelowFloorError`, layer 2). */

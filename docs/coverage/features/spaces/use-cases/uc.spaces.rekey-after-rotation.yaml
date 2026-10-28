@@ -76,6 +76,14 @@ acceptanceCriteria:
           - src/features/memories/uploadQueue.test.ts
           - src/core/node/tree.test.ts
         e2e: [src/features/spaces/anyMemberRekeys.e2e.test.ts]
+  - id: a-run-pulls-what-it-created
+    text: A rotation that lands while an import or a copy is under way leaves the run's own nodes behind; each later write into one - a create below it, a Memory's medium, cover or banner, a Pot's batch or receipt, a Depot file's content - is one write that pulls that node forward on this device and is sealed again under its re-read key, the run going on under that key and creating nothing twice; a stale_epoch from another device's re-key pulls before its re-read, so a device holding the scope behind re-opens it; a create at the scope root re-opens the scope and states its epoch; below a drop box the write waits, the refused pull re-opening the scope so the re-read after the wait opens an owner's re-key, and the run is rolled back only when the waits run out.
+    coverage:
+      web:
+        unit:
+          - src/core/export/importSubtree.midRun.test.ts
+          - src/shared/rekeyRetry.test.ts
+          - src/core/node/rekey/rekeyScope.test.ts
   - id: links-follow-and-stay-marked
     text: A link from before shows what is added after the re-key and stays marked reissueRequired; its re-issue's key does not open what the old recovery copy's key reaches.
     coverage:

@@ -111,6 +111,12 @@ export async function retryWhileRekeying<T>(attempt: (n: number) => Promise<T>, 
  * included, at most once per write), `stale_epoch` by one more attempt. `attempt(reread)` is told whether to re-read
  * first — false on the first run, true after either refusal — and builds the write from what it then holds. A second
  * `stale_epoch` is thrown.
+ *
+ * A member's `stale_epoch` runs the `pull` before the re-read, when it has not run yet: the node was re-keyed since it
+ * was read — most often by another member's device after a rotation this device has not seen — and the re-read opens the
+ * node's new key only from the scope's epoch the re-key minted it at, which the pull brings this device to (on a path
+ * already current it re-keys nothing and only re-opens a scope held behind, `pullRekeyPath`). Its answer does not
+ * matter: the re-read decides (inbox #670).
  */
 export async function writeAtNodeEpoch<T>(attempt: (reread: boolean) => Promise<T>, opts: RekeyRetryOptions = {}): Promise<T> {
   let staleRetried = false
@@ -123,6 +129,7 @@ export async function writeAtNodeEpoch<T>(attempt: (reread: boolean) => Promise<
     } catch (e) {
       if (staleRetried || !(await isStaleNodeEpoch(e))) throw e
       staleRetried = true
+      if (pull) await pullOnce!().catch(() => false)
     }
   }
 }
