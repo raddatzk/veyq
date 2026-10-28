@@ -3,7 +3,7 @@
 // and falls back to the page thread only where no Worker can run. Four call sites once bypassed it (device trust,
 // share-password create and open, account birth), each found by reading, none by a check: this is the check.
 //
-// Written once, here, and imported by the three ESLint configs (packages/crypto, web, admin-web), so the five entry
+// Written once, here, and imported by the three ESLint configs (packages/crypto, web, admin-web), so the six entry
 // points cannot drift between them. A rule of its own rather than `no-restricted-syntax` + `no-restricted-imports`:
 // flat config resolves a rule by NAME and the last matching block wins, and src/web/ already spends both core names (and
 // `@typescript-eslint/no-restricted-imports`) on other doors — a second block setting them would silently replace
@@ -17,13 +17,14 @@
 // LIMIT: a dynamic `import()`, the namespace copied into another binding first (`const x = v1; x.kekRecovery(…)`),
 // and a re-export through an EXEMPT file are not seen — the same class of limit `veyq/one-sign-out` states.
 
-/** The five Argon2id entry points of v1.ts (its only `argon2id(` callers) → the front door's async twin of each. */
+/** The six Argon2id entry points of v1.ts (its only `argon2id(` callers) → the front door's async twin of each. */
 const ENTRY_POINTS = new Map([
   ['deriveAuthKeypair', 'deriveAuthKeypairAsync'],
   ['kekPasswordSecret', 'unlockKekAsync'],
   ['kekDevicePassword', 'deviceKekAsync'],
   ['kekRecovery', 'recoveryKekAsync'],
   ['sharesPwToken', 'sharesPwTokenAsync'],
+  ['kekInviteLink', 'inviteLinkKekAsync'],
 ])
 
 /** `@veyq/crypto/v1` from a consumer; `./v1` (or any relative `…/v1`) inside the package. */
@@ -38,7 +39,7 @@ const rule = {
       direct:
         "{{name}} runs Argon2id on the calling thread. Await {{twin}} from '@veyq/crypto/argonWorker' instead: it runs in the Worker and falls back to the page thread only where none can run.",
       reexport:
-        'Re-exporting the v1 module hands its Argon2id entry points past the worker door. Export what the caller needs by name, and never one of the five.',
+        'Re-exporting the v1 module hands its Argon2id entry points past the worker door. Export what the caller needs by name, and never one of the six.',
     },
   },
   create(context) {

@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.http
 
 import me.raddatz.veyq.core.sharing.ShareWriteProof
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.membership.ScopeAccessWorld
@@ -209,14 +209,16 @@ class OperatorBlindProbeTest {
         },
         // --- scopes ---
         "listScopeMembers" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/members") },
-        "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost",${TestAdmission.json()}}""") },
+        "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost",${TestGrants.grantJson()}}""") },
         "resolveGroupMember" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/members/resolve", """{"username":"ghost"}""")
         },
         "setMemberRole" to Probe(Address.SCOPE) { s -> Call("PATCH", "/api/scopes/${s.scopeId}/members/$someId", """{"role":"OWNER"}""") },
         "removeMember" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/members/$someId") },
         "listScopeEpochs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/epochs") },
-        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[],"admissions":[]}""") },
+        // Any member reads a TENANT's open invites (ADR 0111 decision 2); the control's live group holds none: `200 []`.
+        "listOpenInvites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/open-invites") },
+        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[]}""") },
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
         "revokeScopeShares" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/shares/revoke") },
@@ -230,9 +232,9 @@ class OperatorBlindProbeTest {
         "requeueRotationScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/account/rotation/scopes/${s.scopeId}/requeue") },
         // Host-resolved: the Host names the tenant, so its root is what the gate checks. The suspended persona
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
-        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestAdmission.SIGNATURE_JSON}}""", host = s.domain) },
+        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON}}""", host = s.domain) },
         "createGroup" to Probe(Address.HOST) { s ->
-            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""", host = s.domain)
+            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON}}""", host = s.domain)
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
@@ -264,10 +266,12 @@ class OperatorBlindProbeTest {
         "declineTask" to Probe(Address.JOB) { s -> Call("POST", "/api/tasks/${s.jobId}/decline", "{}") },
         // --- tenant-addressed (the gate on the tenant's root scope) ---
         "inviteTenantMember" to Probe(Address.TENANT) { s ->
-            Call("POST", "/api/tenants/${s.tenantId}/member-invites", """{"email":"invitee-${UUID.randomUUID()}@example.com",${TestAdmission.json()}}""")
+            Call("POST", "/api/tenants/${s.tenantId}/member-invites", """{${TestGrants.memberInviteJson(s.tenantId, "invitee-${UUID.randomUUID()}@example.com", epoch = 0)}}""")
         },
         "listMemberInvites" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/member-invites") },
-        "reissueMemberInvite" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue") },
+        "reissueMemberInvite" to Probe(Address.TENANT) { s ->
+            Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue", """{${TestGrants.memberInviteJson(s.tenantId, "invitee-${UUID.randomUUID()}@example.com", epoch = 0)}}""")
+        },
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
         "removeTenantMember" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/members/$someId") },
         "setTenantMemberRole" to Probe(Address.TENANT) { s -> Call("PATCH", "/api/tenants/${s.tenantId}/members/$someId", """{"role":"OWNER"}""") },

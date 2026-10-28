@@ -1,6 +1,6 @@
-// Background grant-delivery polling (cr-0079). The pull worker (cr-0076) delivers a scope key to pending
-// members, but only ran on scope entry (cr-0077/0078) — so a member who registers while a key-holder is
-// already sitting in the space waited until that holder's next entry. This closes the "awaiting access" window
+// Background grant-delivery polling (cr-0079). The pull worker (cr-0076) delivers a scope's current key to members
+// whose grant is behind (a rotation skipped them), but only ran on scope entry (cr-0077/0078) — so such a member
+// waited until a key-holder's next entry. This closes that window
 // without a re-entry: while a shared scope is open, poll the worker on an interval, pausing when the tab is
 // hidden and firing immediately when it becomes visible again. Idempotent + first-online-wins, so multiple
 // tabs/members polling is harmless. This is the interim; an SSE push from the same backend is the eventual

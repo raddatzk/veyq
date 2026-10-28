@@ -51,8 +51,8 @@ object Failures {
     val tenantSuspended: HttpFailure = httpFailure("tenant_suspended", FORBIDDEN)
 
     /**
-     * The caller **is** an accepted member of the scope but holds no grant there yet — not a key-holder (ADR 0020:
-     * a grant is a capability *within* the membership boundary, delivered after admission). Never an unaccepted
+     * The caller **is** an accepted member of the scope but holds no grant there — not a key-holder (ADR 0020: a
+     * grant is a capability *within* the membership boundary; every membership is born with one, ADR 0111). Never an unaccepted
      * proposal: the gate answers that one like a stranger. A legitimate 403: the scope-access gate already ran, so this caller knows the scope exists and no existence is disclosed
      * (ADR 0042). Do not raise it for a non-member — that is [scopeNotFound].
      */
@@ -76,6 +76,11 @@ object Failures {
     /** A write stated an epoch that is no longer the scope's current one — a concurrent rotation moved it → 409; the
      *  client re-reads and rebuilds against the current epoch (ADR 0024). */
     val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
+
+    /** A grant names the key it is wrapped to (`recipientIdentityDigest`), and that is not the key the server stores for
+     *  its recipient — an account's current identity, an invite's key → 409; nothing written. The client re-reads the
+     *  recipient's key and rewraps (ADR 0111: a grant names its recipient key from birth). */
+    val recipientKeyNotCurrent: HttpFailure = httpFailure("recipient_key_not_current", CONFLICT)
 
     /** A write sealed under the key of a node the scope's last rotation has not re-keyed yet → 409; nothing was
      *  written, and the writer retries once the re-key reached the node (ADR 0109 point 6). Only that node waits. */

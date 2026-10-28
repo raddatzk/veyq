@@ -1,19 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { createHash } from 'node:crypto'
 import {
-  admissionTarget,
-  admissionVerifies,
   grantContext,
   grantSignatureVerifies,
+  recipientIdentityDigest,
   sealGrant,
   signGrant,
-  tagAdmission,
   wrapScopeKeyToMember,
   type GrantScope,
 } from './grant'
 
-// The pure half of ADR 0020 move 6 and ADR 0028 Decision 6, one assertion per rule so a weakened branch fails by
+// The pure half of ADR 0028 Decision 6 and ADR 0111's recipient digest, one assertion per rule so a weakened branch fails by
 // name (src/web/stryker.mutate.json scopes this file). The byte formats themselves are pinned by the crypto vectors.
 const S = '5c09e000-0000-4000-8000-0000000000c1'
 const OTHER = '5c09e000-0000-4000-8000-0000000000c2'
@@ -60,58 +59,17 @@ describe('the grant signature (ADR 0028 Decision 6)', () => {
   })
 })
 
-describe('the admission tag (ADR 0020 move 6)', () => {
-  const group = { scopeId: S, kind: 'GROUP' as const }
-  const tenant = { scopeId: S, kind: 'TENANT' as const }
+describe('the recipient digest (ADR 0111)', () => {
+  // Computed here independently of the suite (node's own SHA-256), over the DECODED bundle.
+  const sha256b64 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('base64')
 
-  it('a TENANT admission binds no account; every other kind binds its target', () => {
-    expect(admissionTarget('TENANT', U)).toBeNull()
-    expect(admissionTarget('GROUP', U)).toBe(U)
-    expect(admissionTarget('PERSONAL', U)).toBe(U)
+  it('is base64 SHA-256 of the decoded identity bundle a grant is sealed to', () => {
+    expect(recipientIdentityDigest(recipientPub)).toBe(sha256b64(v1.serializeIdentityPublic(recipient.pub)))
   })
 
-  it('tagAdmission mints a fresh UUIDv4 id, or carries the one it is given', () => {
-    const k = v1.randomBytes(32)
-    const a = tagAdmission(k, group, 2, U)
-    const b = tagAdmission(k, group, 2, U)
-    expect(a.admissionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
-    expect(a.admissionId).not.toBe(b.admissionId)
-    expect(a.admissionEpoch).toBe(2)
-    expect(tagAdmission(k, group, 2, U, a.admissionId)).toEqual(a) // same id, same key, same tag: deterministic
-  })
-
-  it('verifies under the key and epoch it was made at, for the target it binds', () => {
-    const k = v1.randomBytes(32)
-    const a = tagAdmission(k, group, 2, U)
-    expect(admissionVerifies(k, 2, group, U, a)).toBe(true)
-    expect(admissionVerifies(v1.randomBytes(32), 2, group, U, a)).toBe(false) // another epoch key
-    expect(admissionVerifies(k, 3, group, U, a)).toBe(false) // the holder's epoch is not the tag's
-    expect(admissionVerifies(k, 2, group, V, a)).toBe(false) // another target
-    expect(admissionVerifies(k, 2, { ...group, scopeId: OTHER }, U, a)).toBe(false) // another scope
-  })
-
-  it('an epoch stated differently from the holder\'s does not admit, even with a tag made at the holder\'s epoch', () => {
-    const k = v1.randomBytes(32)
-    const a = tagAdmission(k, group, 2, U)
-    expect(admissionVerifies(k, 2, group, U, { ...a, admissionEpoch: 1 })).toBe(false)
-  })
-
-  it('a tenant tag verifies for whoever redeemed the invite — the named residual, not a check to add', () => {
-    const k = v1.randomBytes(32)
-    const a = tagAdmission(k, tenant, 0, U) // the target is dropped for a tenant admission
-    expect(a).toEqual(tagAdmission(k, tenant, 0, null, a.admissionId))
-    expect(admissionVerifies(k, 0, tenant, V, a)).toBe(true)
-  })
-
-  it('a missing part, or a malformed one, does not verify', () => {
-    const k = v1.randomBytes(32)
-    const a = tagAdmission(k, group, 0, U)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionId: null })).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionEpoch: null })).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionTag: null })).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, {})).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionTag: undefined })).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionId: 'not-a-uuid' })).toBe(false)
-    expect(admissionVerifies(k, 0, group, U, { ...a, admissionTag: 'AQ==' })).toBe(false)
+  it('control: it names exactly that key — another bundle, or the base64 text itself, is another digest', () => {
+    expect(recipientIdentityDigest(recipientPub)).not.toBe(recipientIdentityDigest(b64std(v1.serializeIdentityPublic(granter.pub))))
+    // Over the text rather than the bytes would be a different value: the digest is of what the base64 decodes to.
+    expect(recipientIdentityDigest(recipientPub)).not.toBe(sha256b64(new TextEncoder().encode(recipientPub)))
   })
 })

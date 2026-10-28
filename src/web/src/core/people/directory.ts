@@ -22,7 +22,7 @@ export { avatarUrlOf } from './avatarCache'
 export interface Person {
   userId: string
   username: string
-  /** The sealed real name when it opened; null otherwise (awaiting access, an unreadable blob). */
+  /** The sealed real name when it opened; null otherwise (none set, the tenant key not held, an unreadable blob). */
   realName: string | null
   /** The real name, else the username - the one display rule (ADR 0083 decision 9). */
   displayName: string

@@ -37,8 +37,8 @@ What exists to build on (measured in this worktree):
   (line 47); the Server-Owner gate answers only on the admin channel ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
   A tenant owner is a `veyq_membership.role` of `OWNER` in the tenant scope. There is no third account role.
 - **A key wrapped to many accounts, with epochs and rotation, already exists** — the scope key: one grant per member
-  (`sealTo` purpose `scope-grant` [scopeId, epoch], `src/packages/crypto/src/seal.ts`), delivered by a key-holder to a
-  grant-less member ([ADR 0020](0020-grant-distribution-invite-wrap.md)), checked against the recipient's pinned
+  (`sealTo` purpose `scope-grant` [scopeId, epoch], `src/packages/crypto/src/seal.ts`), wrapped by a key-holder to
+  another member ([ADR 0020](0020-grant-distribution-invite-wrap.md)), checked against the recipient's pinned
   identity ([ADR 0028](0028-identity-authenticity-tofu-verification.md)), and rotated forward into a new epoch on a
   removal ([ADR 0024](0024-scope-key-rotation.md)). A moderation key is the same problem with fewer holders.
 - **admin-web holds no vault** and is reachable on localhost by default (ADR 0065); it already does one piece of

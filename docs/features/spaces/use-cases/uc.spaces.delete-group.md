@@ -72,9 +72,9 @@
 - **E1 — locally-saved copies.** A member who **downloads** content during the grace window keeps those local files
   — **not retractable** by any design (the stated limit). Purge erases the **shared** group from the server, not
   what already left it.
-- **E2 — a member who has no key yet.** Delivering a member's grant is a write too, so someone added just before
-  the deletion (or re-keying after an account key rotation) stays *awaiting access* for the window and can see
-  the group again only after a restore ([scope-access](uc.spaces.scope-access.md) A6). The window promises that
+- **E2 — a member whose key is behind.** Delivering a member's grant is a write too, so someone a rotation skipped
+  (or re-keying after an account key rotation) stays *waiting for the current key* for the window and can see the
+  group again only after a restore ([scope-access](uc.spaces.scope-access.md) A6). The window promises that
   nothing changes; it cannot also promise a key that was not yet delivered.
 
 > **Sibling — the orphan rule (deferred).** [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6

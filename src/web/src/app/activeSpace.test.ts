@@ -97,7 +97,7 @@ describe('enterScope — tenant', () => {
     expect(capabilityState.tenantErasures).toBeNull()
   })
 
-  it('falls back to Personal (auto-birth + open) when there is no TENANT grant, flagging it unavailable', async () => {
+  it('falls back to Personal (auto-birth + open) when the TENANT grant does not open (behind or refused), flagging it unavailable', async () => {
     const key = new Uint8Array(32).fill(5)
     vi.mocked(openScope).mockImplementation(async (kind) =>
       kind === ScopeKind.Personal ? opened(PERSONAL_SCOPE_ID, ScopeKind.Personal, key) : null,

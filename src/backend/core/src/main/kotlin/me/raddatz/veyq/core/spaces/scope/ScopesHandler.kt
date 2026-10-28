@@ -18,7 +18,8 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.membership.Access
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.admin.tenant.OpenInviteRow
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
@@ -61,13 +62,20 @@ sealed interface RequeueScopeRotationOutcome {
     object NotFailed : RequeueScopeRotationOutcome, HttpFailure by httpFailure("rotation_not_failed", CONFLICT)
 }
 
+/** Outcome of listing a tenant's open member invites (ADR 0111 decision 2) — any member reads them, none sees an email. */
+sealed interface ListOpenInvitesOutcome {
+    data class Listed(val invites: List<OpenInviteRow>) : ListOpenInvitesOutcome
+    object Suspended : ListOpenInvitesOutcome, HttpFailure by Failures.tenantSuspended
+    object ScopeNotFound : ListOpenInvitesOutcome, HttpFailure by Failures.scopeNotFound
+}
+
 /** Outcome of listing the caller's scopes. */
 sealed interface ListScopesOutcome {
     data class Scopes(val rows: List<ScopeRow>) : ListScopesOutcome
     object NoTenant : ListScopesOutcome, HttpFailure by Failures.tenantNotFound
 }
 
-/** Outcome of adding a member to a group by username (cr-0086). Admission only — the key is delivered later.
+/** Outcome of adding a member to a group by username (cr-0086), with the grant the owner wrapped (ADR 0111 decision 4).
  *  `ConsentRequired` (cr-0096): the target has consent on but no `sealedNameKey` was supplied. */
 sealed interface AddGroupMemberOutcome {
     data class Added(val row: ScopeMemberRow) : AddGroupMemberOutcome
@@ -78,8 +86,10 @@ sealed interface AddGroupMemberOutcome {
     object MemberNotFound : AddGroupMemberOutcome, HttpFailure by Failures.memberNotFound
     object AlreadyMember : AddGroupMemberOutcome, HttpFailure by Failures.alreadyMember
     object ConsentRequired : AddGroupMemberOutcome, HttpFailure by httpFailure("consent_required", BAD_REQUEST)
-    /** The admission was tagged at an epoch that is no longer the scope's current one (ADR 0020 move 6). */
+    /** The grant is of an epoch that is no longer the scope's current one. */
     object StaleEpoch : AddGroupMemberOutcome, HttpFailure by Failures.staleEpoch
+    /** The grant names a key that is not the target's current identity. */
+    object RecipientKeyNotCurrent : AddGroupMemberOutcome, HttpFailure by Failures.recipientKeyNotCurrent
 }
 
 /** Outcome of resolving a per-tenant username to a group-add candidate (cr-0094) — records nothing. */
@@ -136,8 +146,10 @@ sealed interface RotateOutcome {
     /** The caller's account rotation queued a still-live rotation of this scope that excludes them (ADR 0060 Decision 4). */
     object RotationExcluded : RotateOutcome, HttpFailure by httpFailure("rotation_excluded", FORBIDDEN)
     object StaleEpoch : RotateOutcome, HttpFailure by Failures.staleEpoch
-    /** The rotation leaves an open admission neither re-tagged nor dropped (ADR 0020 move 6) — nothing stored. */
-    object AdmissionsIncomplete : RotateOutcome, HttpFailure by httpFailure("admissions_incomplete", CONFLICT)
+    /** A TENANT rotation leaves an open member invite neither re-granted nor declared pending (ADR 0111 decision 2). */
+    object Incomplete : RotateOutcome, HttpFailure by httpFailure("rotation_incomplete", CONFLICT)
+    /** An invite re-grant names a key that is not the invite's — nothing stored. */
+    object RecipientKeyNotCurrent : RotateOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     /** A removal-rotation names no member of the scope — nothing stored. */
     object MemberNotFound : RotateOutcome, HttpFailure by Failures.memberNotFound
     /** A removal-rotation would remove the last OWNER (ADR 0007) — nothing stored. */
@@ -278,7 +290,7 @@ class ScopesHandler(
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
     fun createGroup(
-        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, admission: Admission,
+        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant,
     ): CreateGroupOutcome {
         // Policy first (ADR 0032, ADR 0088): a personal-only instance or tenant switches group scopes off → 422,
         // enforced server-side even if a stale client still offers the affordance. The instance level is asked even
@@ -293,8 +305,19 @@ class ScopesHandler(
             store.lockScope(tenantId)
             access.check(userId, tenantId, WRITE)
                 .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return@createOrConflict it }
-            if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant, admission)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
+            if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
         }
+    }
+
+    /**
+     * Every open member invite of the TENANT scope [scopeId] with its key (ADR 0111 decision 2) — what any member's
+     * rotation must carry, so every member reads it; never an email. Membership first (ADR 0042). A scope that is no
+     * TENANT has none: an empty list.
+     */
+    fun listOpenInvites(callerId: String, scopeId: String): ListOpenInvitesOutcome {
+        access.check(callerId, scopeId, READ)
+            .refusal(ListOpenInvitesOutcome.ScopeNotFound, ListOpenInvitesOutcome.Suspended)?.let { return it }
+        return ListOpenInvitesOutcome.Listed(store.openInvites(scopeId))
     }
 
     fun listMine(userId: String, tenantId: String?): ListScopesOutcome {
@@ -360,14 +383,15 @@ class ScopesHandler(
     }
 
     /**
-     * Add an existing tenant member to a **group** by username (uc.spaces.add-group-member, cr-0086). Admission
-     * is owner-gated ([ADR 0014](0014) §4 — only a group OWNER; the tenant owner has no say); the username is
-     * resolved **within the scope's own tenant** (ADR 0020 — never a global search). Records a **grant-less**
-     * MEMBER membership — no key crosses the wire; grant-delivery wraps `K_SC` to them afterwards (cr-0076). The
-     * returned row has its `email` nulled (the add response never exposes it).
+     * Add an existing tenant member to a **group** by username (uc.spaces.add-group-member, cr-0086). Owner-gated
+     * ([ADR 0014](0014) §4 — only a group OWNER; the tenant owner has no say); the username is resolved **within the
+     * scope's own tenant** (ADR 0020 — never a global search). Records a MEMBER membership **with the grant** the
+     * owner's client wrapped to the target's identity key (ADR 0111 decision 4): no invite key, the target has an
+     * account. The returned row has its `email` nulled (the add response never exposes it).
      */
     fun addGroupMember(
-        callerId: String, scopeId: String, username: String, sealedNameKey: String?, admission: Admission,
+        callerId: String, scopeId: String, username: String, sealedNameKey: String?, grant: SignedGrant, epoch: Int,
+        recipientIdentityDigest: String,
     ): AddGroupMemberOutcome {
         val tenantId = when (val gate = addGate(callerId, scopeId, username)) {
             is AddGate.Refused -> return gate.outcome
@@ -381,7 +405,7 @@ class ScopesHandler(
             listOf(tenantId, scopeId).sorted().forEach { store.lockScope(it) }
             when (val gate = addGate(callerId, scopeId, username)) {
                 is AddGate.Refused -> gate.outcome
-                is AddGate.Open -> addUnderLocks(gate.tenantId, gate.targetId, scopeId, sealedNameKey, callerId, admission)
+                is AddGate.Open -> addUnderLocks(gate.tenantId, gate.targetId, scopeId, sealedNameKey, callerId, grant, epoch, recipientIdentityDigest)
             }
         }
     }
@@ -407,20 +431,24 @@ class ScopesHandler(
     }
 
     private fun addUnderLocks(
-        tenantId: String, targetId: String, scopeId: String, sealedNameKey: String?, callerId: String, admission: Admission,
+        tenantId: String, targetId: String, scopeId: String, sealedNameKey: String?, callerId: String, grant: SignedGrant,
+        epoch: Int, recipientIdentityDigest: String,
     ): AddGroupMemberOutcome {
+        // The grant names the key it is wrapped to (ADR 0111): the target's current identity, or nothing is written.
+        if (!InviteAcceptProof.digestMatches(store.identityPublicKeyOf(targetId), recipientIdentityDigest)) {
+            return AddGroupMemberOutcome.RecipientKeyNotCurrent
+        }
         // Consent-first (cr-0096, ADR 0027): if the target asked to be consulted, record a soft `pendingConsent`
-        // membership grant-delivery skips — so `K_SC` is gated **before** the wrap — carrying the wrapped name-key
-        // `K_name`. The owner must have derived + sealed it (learned consent is required from the prior resolve);
-        // no name-key → ConsentRequired.
-        if (consentRequired(targetId, tenantId)) {
-            if (sealedNameKey == null) return AddGroupMemberOutcome.ConsentRequired
-            if (!store.addSoftPendingMember(targetId, tenantId, scopeId, sealedNameKey, callerId, admission)) {
-                return AddGroupMemberOutcome.StaleEpoch
-            }
-        } else if (!store.addGrantlessMember(targetId, tenantId, scopeId, admission)) {
-            // Both paths store the admission the owner's client tagged (ADR 0020 move 6) — opaque here, verified by
-            // every key-holder before it wraps; refused only when stated at an epoch a rotation already left.
+        // membership carrying the wrapped name-key `K_name` beside the grant; the group is not listed to them until
+        // they accept. The owner must have derived + sealed it (learned consent is required from the prior resolve);
+        // no name-key → ConsentRequired. Without consent, any name-key sent is not stored.
+        val proposal = if (consentRequired(targetId, tenantId)) {
+            sealedNameKey ?: return AddGroupMemberOutcome.ConsentRequired
+        } else {
+            null
+        }
+        if (!store.addMember(targetId, tenantId, scopeId, grant, epoch, callerId, proposal)) {
+            // Refused only when stated at an epoch a rotation already left.
             return AddGroupMemberOutcome.StaleEpoch
         }
         val row = store.scopeMemberRow(scopeId, targetId) ?: return AddGroupMemberOutcome.MemberNotFound
@@ -461,7 +489,7 @@ class ScopesHandler(
 
     /**
      * Accept a consent proposal (cr-0094): clear the caller's own `pendingConsent` flag, so it becomes an ordinary
-     * grant-less membership and grant-delivery wraps `K_SC` to them. Invitee-gated (acts only on the caller's
+     * membership — with the grant the proposal already holds (ADR 0111 decision 4). Invitee-gated (acts only on the caller's
      * membership); idempotent — an already-accepted membership is a no-op Ok; no membership at all is NotFound.
      */
     fun acceptInvitation(callerId: String, scopeId: String): AcceptInvitationOutcome =
@@ -473,11 +501,20 @@ class ScopesHandler(
 
     /**
      * Decline (invitee) / rescind (owner reuses this via member-remove) a consent proposal (cr-0094): delete the
-     * caller's own soft membership. Nothing was wrapped, so **no rotation**; no `declined` marker is kept.
-     * Idempotent — always succeeds (no open proposal is still a silent no-op, so it is no enumeration oracle).
+     * caller's own soft membership. The proposal held a grant of the group's key (ADR 0111 decision 4), so a decline
+     * that deleted one **queues the group's rotation** in the same transaction, as a tenant removal's cut does — under
+     * the scope row's lock (lock order scope → membership → job). No `declined` marker is kept. Idempotent — always
+     * succeeds (no open proposal is still a silent no-op, so it is no enumeration oracle).
      */
-    fun declineInvitation(callerId: String, scopeId: String) {
-        store.deletePendingMembership(callerId, scopeId)
+    fun declineInvitation(callerId: String, scopeId: String) = dropProposal(callerId, scopeId)
+
+    /** Delete [userId]'s proposal on [scopeId] and, when there was one, queue the group's rotation in the same
+     *  transaction under the scope row's lock — the decline's and the owner's rescind's one path. */
+    private fun dropProposal(userId: String, scopeId: String) {
+        QuarkusTransaction.requiringNew().run {
+            store.lockScope(scopeId)
+            if (store.deletePendingMembership(userId, scopeId) > 0) tasks.originateScopeRotation(scopeId, maxAttempts)
+        }
     }
 
     /** The caller's pending group invitations in the active tenant (cr-0094) — the invitee's Accept/Decline view. */
@@ -509,8 +546,9 @@ class ScopesHandler(
     }
 
     /**
-     * Rescind a pending consent proposal (cr-0094) — the one membership a delete may take without a rotation, since
-     * a proposal was never keyed. Any other member leaves only by a removal-rotation ([rotateScope] with `removes`,
+     * Rescind a pending consent proposal (cr-0094) — the one membership a delete may take without committing a rotation
+     * itself: a proposal holds the group's key (ADR 0111 decision 4), so the rescind queues the group's rotation for the
+     * next online owner, as a decline does. Any other member leaves only by a removal-rotation ([rotateScope] with `removes`,
      * ADR 0024 Decision 4), so this refuses them (`removal_requires_rotation`) and deletes nothing: a delete that
      * committed on its own is how a removal used to end without its rotation. Owner-gated.
      */
@@ -523,7 +561,8 @@ class ScopesHandler(
             ConsentState.NONE -> RemoveMemberOutcome.MemberNotFound
             ConsentState.ACTIVE -> RemoveMemberOutcome.RemovalRequiresRotation
             ConsentState.PENDING -> {
-                store.deletePendingMembership(targetId, scopeId)
+                // The proposal held a grant (ADR 0111 decision 4): a rescind queues the group's rotation, as a decline does.
+                dropProposal(targetId, scopeId)
                 RemoveMemberOutcome.Ok
             }
         }
@@ -541,7 +580,7 @@ class ScopesHandler(
      */
     fun rotateScope(
         callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
-        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
+        grants: List<RotationGrant>, inviteGrants: List<InviteGrant>, pendingInviteIds: Set<String>, removes: String? = null,
         revokeLinks: Boolean = false,
     ): RotateOutcome {
         // A request-shape refusal, like the bean validation before it: `revokeLinks` belongs to a removal (ADR 0075).
@@ -550,11 +589,12 @@ class ScopesHandler(
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped, removes, revokeLinks)) {
+        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, inviteGrants, pendingInviteIds, removes, revokeLinks)) {
             is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
             RotationDecision.Excluded -> RotateOutcome.RotationExcluded
             RotationDecision.Stale -> RotateOutcome.StaleEpoch
-            RotationDecision.AdmissionsIncomplete -> RotateOutcome.AdmissionsIncomplete
+            RotationDecision.Incomplete -> RotateOutcome.Incomplete
+            RotationDecision.RecipientKeyNotCurrent -> RotateOutcome.RecipientKeyNotCurrent
             RotationDecision.MemberNotFound -> RotateOutcome.MemberNotFound
             RotationDecision.LastOwner -> RotateOutcome.LastOwner
             RotationDecision.RemovedMemberGranted -> RotateOutcome.RemovedMemberGranted

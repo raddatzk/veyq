@@ -38,6 +38,10 @@ const CASES: Record<ArgonOp, { request: Record<string, unknown>; expected: () =>
     request: { password, salt, params: TEST_ARGON },
     expected: () => v1.sharesPwToken(password, salt, TEST_ARGON),
   },
+  inviteLinkKek: {
+    request: { secret: secretKey, salt, params: TEST_ARGON },
+    expected: () => v1.kekInviteLink(secretKey, salt, TEST_ARGON),
+  },
 }
 
 type Reply = { id: number; ok: boolean; result?: unknown; error?: string }

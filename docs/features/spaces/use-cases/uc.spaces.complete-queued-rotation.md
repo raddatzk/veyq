@@ -82,9 +82,10 @@
   not offer the job ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) § Guarantee). What the server
   proves is that the holder committed an epoch during its lease; that the holder's directory read came after the
   claim is the client's ordering (step 3).
-- **Owners only, on purpose.** A non-owner cannot build a complete rotation commit: it must carry every open
-  admission, and a pending consent proposal and a tenant's open member invites are hidden from non-owners
-  ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md) §4).
+- **Owners only, on purpose.** A non-owner cannot build a complete rotation commit: it must re-grant a pending
+  consent proposal, which is hidden from non-owners
+  ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md) §4). A tenant's open member invites are
+  no longer the reason: every member reads them (`listOpenInvites`).
 - **The states are derived, not stored.** `waiting`, `stalled`, `rekeying`, `secured` and `failed` are computed
   from job, decline, membership and node rows the server already holds; the owner's row carries `stalled` and
   `failed`, the two that need an owner, and `rekeying` as its own flag, which a worker resumes without anyone

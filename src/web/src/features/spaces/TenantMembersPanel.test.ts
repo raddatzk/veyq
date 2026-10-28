@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// uc.spaces.add-member (web, cr-0077) — the member directory rubric: it lists the active tenant's members with
-// a granted/awaiting-access badge, and shows the invite button only to the OWNER (admission is owner-gated).
+// uc.spaces.add-member (web, cr-0077) — the member directory rubric: it lists the active tenant's members, each
+// active, and shows the invite button only to the OWNER (inviting is owner-gated).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -42,6 +42,7 @@ import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
+import { formatInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
 
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -60,8 +61,8 @@ beforeEach(() => {
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true },
-  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', hasGrant: false },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==' },
+  { userId: 'u-pend', username: 'partner', avatarRevision: 0, sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==' },
 ]
 
 const PENDING: PendingMemberInvite[] = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]
@@ -85,17 +86,15 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     activeSpace.tenantId = 't-1'
   })
 
-  it('lists members with a granted vs awaiting-access badge', async () => {
+  it('lists every member as active — a member holds the tenant key from its join on (ADR 0111)', async () => {
     const wrapper = await mountPanel('OWNER')
     const rows = wrapper.findAll('.member-row')
     expect(rows).toHaveLength(2)
     expect(wrapper.text()).toContain('@owner')
     expect(wrapper.text()).toContain('@partner')
-    // The pending member shows "Awaiting access"; the granted one shows "Active".
-    const badges = wrapper.findAll('.veyq-badge').map((b) => b.text())
-    expect(badges).toContain(t('members.statusActive'))
-    expect(badges).toContain(t('members.statusAwaiting'))
-    expect(wrapper.find('.veyq-badge.warning').text()).toBe(t('members.statusAwaiting'))
+    // One status badge per row, and it is "Active": there is no awaiting-access state to show any more.
+    for (const row of rows) expect(row.findAll('.veyq-badge').map((b) => b.text())).toEqual([t('members.statusActive')])
+    expect(rows.some((r) => r.find('.veyq-badge.warning').exists())).toBe(false)
   })
 
   it('shows the invite button to the owner', async () => {
@@ -103,7 +102,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     expect(wrapper.text()).toContain(t('members.invite'))
   })
 
-  it('hides the invite button from a non-owner member (admission is owner-only)', async () => {
+  it('hides the invite button from a non-owner member (inviting is owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(wrapper.text()).not.toContain(t('members.invite'))
   })
@@ -118,25 +117,37 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     expect(wrapper.find(`[aria-label="${t('members.revoke')}"]`).exists()).toBe(true)
   })
 
-  it('never lists pending invites for a non-owner (admission stays owner-only)', async () => {
+  it('never lists pending invites for a non-owner (inviting stays owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(listMemberInvites).not.toHaveBeenCalled()
     expect(wrapper.find('.invite-row').exists()).toBe(false)
     expect(wrapper.text()).not.toContain(t('members.pendingTitle'))
   })
 
-  it('re-issues an invite by mail and offers no link to hand on', async () => {
-    // ADR 0055 §2: the fresh secret goes to the invitee. The owner gets a confirmation naming the address and
-    // nothing to copy — the absence is the assertion, since a copy-link is exactly what this retired.
+  it('re-issues an invite by mail as a new invite under a new code, shows that code once, and offers no link to hand on', async () => {
+    // ADR 0055 §2: the fresh link goes to the invitee. The owner gets a confirmation naming the address and nothing to
+    // copy but the code (ADR 0111 decision 1) — a link is exactly what this retired, so its absence is asserted too.
     vi.mocked(reissueMemberInvite).mockResolvedValue({
       email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT',
     })
     const wrapper = await mountPanel('OWNER')
     await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()
-    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1')
+    expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1', 'newbie@x.z', { mode: 'code', code: expect.any(String) })
+    const { code } = vi.mocked(reissueMemberInvite).mock.calls[0][3] as { code: string }
+    expect(normalizeInviteCode(code)).toBe(code)
+    expect(wrapper.get('[data-testid="reissued-invite-code"]').text()).toBe(formatInviteCode(code))
     expect(wrapper.text()).toContain(t('members.inviteSentTo', { email: 'newbie@x.z' }))
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
+  })
+
+  it('control: a re-issue the server refuses shows no code — there is no invite it would open', async () => {
+    vi.mocked(reissueMemberInvite).mockRejectedValue(httpError(503, 'mail_unavailable'))
+    const wrapper = await mountPanel('OWNER')
+    await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
+    await flushPromises()
+    expect(reissueMemberInvite).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="reissued-invite-code"]').exists()).toBe(false)
   })
 
   it('surfaces a tenant that cannot send mail distinctly, and leaves the invite alone', async () => {

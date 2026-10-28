@@ -88,9 +88,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 
 4. **Opt-in strict mode — decided in principle, not built.** A user (or a group owner) may require
    **verified-before-first-share** and turn the change-notice into a **hard block**. Under strict mode the worker
-   **skips unverified members** (they stay *awaiting access*) until a human verifies them in the UI. This gives
-   security-maximalists the pre-first-wrap gate without imposing its friction — or breaking the async
-   "awaiting-access" model — on the default flow. It needs redesigning before it is wired (§ What is still open),
+   **skips unverified members** (they stay without the current key) until a human verifies them in the UI. This
+   gives security-maximalists the pre-first-wrap gate without imposing its friction on the default flow. It needs redesigning before it is wired (§ What is still open),
    on its own use-case,
    [uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md).
 
@@ -175,18 +174,20 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 - **The first-use gap remains (honest).** If the operator substitutes a key **before** a client ever pinned the
   real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** (the compare of
   Decision 3) or Key Transparency. TOFU cannot detect a lie told before first sight. The gap is narrower since two later changes.
-  It no longer lets the operator *invent* a member: every wrap to someone else needs an admission tag that only
-  a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6). [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) (not built) replaces the
-  tag with a join record rooted at the tenant's owner, which closes the gap inside a tenant for an invite sealed
-  under a password. And it no longer reaches
-  the personal scope at all (Decision 6).
+  A newcomer's first contact with its inviting owner is anchored by the owner's fingerprint inside the invite link's
+  seal, which the operator that mails the link cannot open without the code
+  ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 1, built 2026-10-28). And it no longer reaches the personal scope at all (Decision 6). The other
+  direction widened: with the admission tag gone (ADR 0111 decision 5), a membership the operator invents is, to a
+  key-holder that never pinned it, a first use like any other, wrapped to by a rotation or a delivery, until the
+  owner-rooted join record each newcomer writes is read as an anchor (ADR 0111 decisions 12 and 15, not built).
 - **Grant-delivery is first-online-wins across key-holders, so a worker block is per key-holder — keyed on the
   declining account, not on the browser it declined from — and not a global veto.**
   A key-holder who pinned the old key refuses + flags; a *different* key-holder who never saw the contact has no
   conflicting pin → TOFU-accepts the new key and delivers. This is deliberate: the blind server **must not**
   adjudicate a crypto claim, and a server-side **global quarantine** on one worker's say-so would be a **DoS**
   (any device — including an attacker's — could veto delivery). The value is raised detection: everyone who knew
-  the contact refuses, so the target stays *awaiting access* from them — a visible anomaly the flag surfaces.
+  the contact refuses, so the target stays behind the current key from them — a visible anomaly the flag surfaces.
 - **The advisory default trusts the human to actually check.** A user who reflexively accepts a change notice is
   no safer than Plain for that contact; strict mode (4), once built, is the answer for those who want enforcement.
   Stated, not hidden.
@@ -199,7 +200,7 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   the same tier as all veyq E2EE, no authenticity-specific weakness.
 - **Alternatives rejected:** (a) *hard-block every change by default* — locks out a legitimate rotation and adds
   friction; the human path is advisory instead (strict mode keeps the hard gate opt-in). (b) *verify-before-first-wrap
-  as the global default* — impossible for the human-less worker and breaks the async awaiting-access model; kept as
+  as the global default* — impossible for the human-less worker and would hold every wrap for a human; kept as
   opt-in strict. (c) *server-side pin/verification store* — a who-trusts-whom graph is a metadata leak that breaks
   operator-blindness; the store is client-side + sealed. (d) *master-key rotation alone for compromise recovery* —
   useless without identity rotation (the master-key holder already holds the identity private key). Its mirror

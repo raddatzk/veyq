@@ -102,7 +102,7 @@ sequenceDiagram
   alt accepted out-of-band (after the rotation)
   M->>S: grant-delivery wraps the new epoch to identity'
   else not yet reviewed
-  Note over U,M: holder stays outside that scope<br>#35;awaiting access
+  Note over U,M: holder stays outside that scope<br>waiting for the current key
   end
 ```
 

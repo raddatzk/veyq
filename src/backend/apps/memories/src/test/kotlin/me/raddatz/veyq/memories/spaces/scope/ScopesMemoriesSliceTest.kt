@@ -4,7 +4,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -89,8 +89,6 @@ class ScopesMemoriesSliceTest {
 
     // --- every grant says who sealed it (ADR 0028 Decision 6) ---
 
-    // --- a rotation carries every open admission forward (ADR 0020 move 6, ADR 0024 §4) ---
-
     // --- rename a group (uc.spaces.rename-group, cr-0097) ---
 
     // --- space icon (uc.spaces.set-space-icon) ---
@@ -111,7 +109,7 @@ class ScopesMemoriesSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 

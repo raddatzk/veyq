@@ -3,26 +3,28 @@
 - **ID:** uc.spaces.require-verified-identities
 - **Primary actor:** **an account holder** (or, in a scope-wide design, a scope owner) who wants a verified identity
   *required* before a scope key reaches anyone.
-- **Goal:** an unverified member is never silently trusted with a share: the grant-delivery worker skips them (they
-  stay *awaiting access*) until someone verifies them, and a changed key is a hard block rather than a notice.
+- **Goal:** an unverified member is never silently trusted with a share: no wrap to them — a group add, a
+  rotation's re-grant, a grant delivery — happens until someone verifies them, and a changed key is a hard block
+  rather than a notice.
 - **Preconditions:** an **authenticated, unlocked** caller; the verification ceremony this gates on exists —
   [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md) (compare a member's safety
   number on their profile, mark them *verified*).
 - **Status:** **planned, and not buildable as specified** — its shape is open (A1).
-- **Postconditions (success):** with strict mode on, the worker delivers no scope key to an **unverified** member and
-  wraps nothing to a **changed** key; both stay *awaiting access* until a human verifies them. Operator-blind: the
+- **Postconditions (success):** with strict mode on, the caller's client wraps no scope key to an **unverified**
+  member and nothing to a **changed** key; both wait until a human verifies them. Operator-blind: the
   setting never leaves the client as anything a server could key on.
 
 ## Main flow
 
 1. **Turn it on.** The caller switches on "require verification before sharing" ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
    Decision 4). Off by default: the default flow is advisory TOFU ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)).
-2. **Delivery waits for verification.** When the grant-delivery worker would wrap a scope key to a member whose pin
-   is not `verified`, it skips the job instead; the member stays *awaiting access*.
+2. **A wrap waits for verification.** Where the caller's client would wrap a scope key to a member whose pin is not
+   `verified` — adding them to a group, re-granting them in a rotation (declared pending), delivering to them — it
+   does not.
 3. **A changed key is a hard block.** A directory key that differs from the pin blocks the wrap on every path, the
    UI's included, until the member is verified again on their profile.
 4. **Verify to release.** Once the caller verifies the member
-   ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)), the next claim delivers.
+   ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)), the next wrap goes ahead.
 
 ## Alternate / exception flows
 

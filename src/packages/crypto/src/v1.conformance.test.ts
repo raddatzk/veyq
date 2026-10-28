@@ -808,50 +808,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
-  describe('admission tag (ADR 0020 move 6)', () => {
-    const a = vectors.admission_tag
-    type Case = { context: v1.Admission; statement: string; tag: string }
-    const cases: [string, Case][] = [
-      ['tenant invite (no account yet: userId absent)', a.tenant_invite],
-      ['group add (bound to the target account)', a.group_add],
-    ]
-    const epochKey = unhex(a.epoch_key)
-
-    it('derives its MAC key from the epoch key under its own info string', () => {
-      expect(hex(v1.hkdfSha256(epochKey, new Uint8Array(0), v1.utf8('veyq/v1/admission-tag'), 32))).toBe(a.tag_key)
-    })
-
-    it.each(cases)('%s: statement bytes and tag', (_name, c) => {
-      expect(hex(v1.encodeStatement({ purpose: 'admission-tag', ...c.context }))).toBe(c.statement)
-      expect(hex(v1.admissionTag(epochKey, c.context))).toBe(c.tag)
-      expect(v1.admissionTagVerifies(epochKey, c.context, unhex(c.tag))).toBe(true)
-    })
-
-    // Each bound value, moved one step, and the epoch KEY itself: every one must stop the tag from verifying — the
-    // epoch key is the one a worker at a later epoch holds, which is what makes a pre-rotation tag not admit.
-    it.each(cases)('%s: a tag answers for nothing else', (_name, c) => {
-      const tag = unhex(c.tag)
-      for (const field of ['scopeId', 'epoch', 'admissionId'] as const) {
-        const moved = { ...c.context, [field]: otherValue(c.context[field]) }
-        expect(v1.admissionTagVerifies(epochKey, moved, tag), field).toBe(false)
-      }
-      const otherUser = c.context.userId === null ? 'b0b00000-0000-4000-8000-000000000009' : null
-      expect(v1.admissionTagVerifies(epochKey, { ...c.context, userId: otherUser }, tag)).toBe(false)
-      expect(v1.admissionTagVerifies(unhex('5b'.repeat(32)), c.context, tag)).toBe(false)
-      expect(v1.admissionTagVerifies(epochKey, c.context, tag.slice(0, 31))).toBe(false)
-      // A longer "tag" whose first 32 bytes ARE the tag must not pass either — the length is part of the check.
-      expect(v1.admissionTagVerifies(epochKey, c.context, v1.concat(tag, Uint8Array.of(0)))).toBe(false)
-      const flipped = tag.slice()
-      flipped[31] ^= 1
-      expect(v1.admissionTagVerifies(epochKey, c.context, flipped)).toBe(false)
-    })
-
-    it('an absent userId is explicit: undefined is a forgotten field, not a tenant invite', () => {
-      const { userId: _u, ...rest } = a.tenant_invite.context as v1.Admission
-      expect(() => v1.admissionTag(epochKey, rest as v1.Admission)).toThrow(v1.SealContextInvalid)
-    })
-  })
-
   describe('item-mark self-tag (ADR 0068 §9)', () => {
     const s = vectors.item_mark_self
     type Case = { context: { scopeId: string; nodeId: string; ids: string[] }; marks: string; statement: string; tag: string }
@@ -1177,7 +1133,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       }
     })
 
-    it('the statement\'s label domain-separates it from the admission tag and from every seal purpose', () => {
+    it('the statement\'s label domain-separates it from every seal purpose', () => {
       const stmt = v1.encodeStatement(v1.grantStatement(input(g.personal)))
       expect(new TextDecoder().decode(stmt.slice(4, 9))).toBe('grant')
       expect(Object.keys(vectors.seal.sym)).not.toContain('grant')

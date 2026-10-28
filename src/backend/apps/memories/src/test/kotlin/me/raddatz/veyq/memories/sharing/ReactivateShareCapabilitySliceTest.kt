@@ -4,7 +4,7 @@ import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.membership.ScopeAccessWorld
 import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.B64
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.sharing.ShareWriteProof
@@ -54,7 +54,7 @@ class ReactivateShareCapabilitySliceTest {
         val contributor = seededShare(w.live, ShareEntity.READ_WRITE)
         val viewer = seededShare(w.live, ShareEntity.READ)
         val auth = bearer(w.live.ownerId)
-        val epoch = TestAdmission.epochOf(w.live.scopeId)
+        val epoch = TestGrants.epochOf(w.live.scopeId)
 
         capabilities.with(CapabilityIds.PUBLIC_SHARES_CONTRIBUTE) {
             reissue(auth, contributor, epoch).then().statusCode(422).body("code", equalTo("capability_disabled"))

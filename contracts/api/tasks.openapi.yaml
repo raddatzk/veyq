@@ -18,14 +18,16 @@ info:
     context `job`): the task type + parameters — only a scope-key-holding worker unseals it. The residual leak
     is **correlation-bounded, not label-bounded** (ADR 0021; self-hosted moot) — documented, not hidden.
 
-    **First consumer — `grant-delivery` (ADR 0020).** A grant-less TENANT/GROUP membership is a *pending*
-    member; the backend originates a `grant-delivery` job for it (server-structural origination — a blind,
-    already-understood job, no sealed body). Any online key-holder claims it, wraps `K_SC` to the pending
-    member's identity public key (`sealTo` that X-Wing key, purpose `scope-grant` — the first wrap to a
-    **foreign** identity), and completes by posting the ciphertext grant; the backend writes it onto the target
-    membership **idempotently** (no-op if a grant already exists — first-online-wins). The claim resolves the
-    delivery target (the member's userId + identity public key, operational metadata the server already holds)
-    so the worker need not look it up separately.
+    **First consumer — `grant-delivery` (ADR 0020, ADR 0024 Decision 6).** Every TENANT/GROUP membership is born
+    with a grant (ADR 0111 decisions 3-4); a membership whose grant is **behind** the scope's current epoch — a
+    rotation skipped it, or a newcomer joined through an invite a rotation declared pending — is the one the
+    backend originates a `grant-delivery` job for (server-structural origination — a blind, already-understood
+    job, no sealed body). Any online key-holder claims it, wraps the current `K_SC` to that member's identity
+    public key (`sealTo` that X-Wing key, purpose `scope-grant`, a wrap to a **foreign** identity, after its pin
+    check), and completes by posting the ciphertext grant; the backend writes it onto the target membership
+    **idempotently** (no-op once the grant is current — first-online-wins). The claim resolves the delivery target
+    (the member's userId + identity public key, operational metadata the server already holds) so the worker need
+    not look it up separately.
 
     **Second consumer — `scope-rotation` (cr-0092, ADR 0025).** A tenant-member removal that cuts a co-shared
     GROUP membership needs the group rotated forward for forward secrecy, but the removing owner is not
@@ -583,49 +585,23 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The pending member's user id.
+          description: The member's user id.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         targetMembershipId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The grant-less membership row the wrap will be posted onto.
+          description: The membership row, behind the scope's current epoch, the wrap will be posted onto.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         identityPublicKey:
           type: string
           description: >
-            The pending member's identity public key (opaque base64) — the worker's `asymWrap` target. The
+            The member's identity public key (opaque base64) — the worker's `asymWrap` target. The
             server already stores this as operational metadata; exposing it to a granter does not widen the
             operator's view (it never yields a key).
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the target membership's. The worker recomputes the tag under its **own current** epoch key and declines `admission_unverified` on a mismatch, on an epoch before its current one, or on `null`; on an epoch ahead of its own it pauses instead (its key is behind, not the target).
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-        admissionTag:
-          type: [string, "null"]
-          description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
-          contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
 
     EnqueueRequest:
       type: object
@@ -718,9 +694,7 @@ components:
           type: [string, "null"]
           description: >
             Optional developer-facing decline reason; never content or secrets. For the TOFU seam this is
-            typically `identity_changed`; a target whose admission tag does not verify under the worker's current
-            epoch key is declined `admission_unverified` (ADR 0020 move 6) — lifted when a rotation re-tags that
-            admission.
+            typically `identity_changed`.
           maxLength: 256
           example: identity_changed
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'

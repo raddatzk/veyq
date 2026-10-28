@@ -29,10 +29,10 @@ operator is you, and the active-operator entries do not apply.
 | Limitation | Who can use it | Decided in | Closed by |
 |---|---|---|---|
 | [Operator-served web is passive-only](#the-operator-served-web-client-is-passive-operator-only) | the operator who serves your client | ADR 0026 | serving your own client; [trusted third-party client](/veyq/security/roadmap/) |
-| [TOFU's first-use gap](#identity-keys-tofus-first-use-gap) | active operator | ADR 0028, ADR 0020 | a safety-number compare (built); [Key Transparency, strict mode](/veyq/security/roadmap/) |
+| [TOFU's first-use gap](#identity-keys-tofus-first-use-gap) | active operator | ADR 0028, ADR 0111 | a safety-number compare (built); [Key Transparency, strict mode](/veyq/security/roadmap/) |
 | [Freshness only where a device keeps a mark](#freshness-only-where-a-device-keeps-a-mark) | active operator | ADR 0072, ADR 0028 Decision 7 | nothing recorded beyond the three marks |
-| [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-a-colluding-departing-member) | active operator | ADR 0024 | nothing recorded |
-| [A departing member's sockpuppet](#scope-rotation-forks-queued-rotations-and-a-colluding-departing-member) | departing member + operator | ADR 0020, ADR 0024 | a client-held member roster (not taken) |
+| [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-an-invented-member) | active operator | ADR 0024 | nothing recorded |
+| [A member the operator invents](#identity-keys-tofus-first-use-gap) | active operator | ADR 0111 | join records as the anchor (ADR 0111 decisions 12 and 15, not built) |
 | [QR reader who also runs the relay](#device-linking-an-attacker-who-reads-the-qr-and-runs-the-relay) | operator who also sees the QR | ADR 0059 §11 | nothing recorded |
 | [Item favorites under `E_0`](#item-favorites-sealed-under-the-base-epoch) | former member with a dump or the operator; the operator alone for counts | ADR 0068 | re-open condition named in ADR 0068 §9 |
 | [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075, ADR 0109 | re-issue (built; with a rotation also against a dump) |
@@ -79,26 +79,34 @@ key and an Ed25519 signing key), which the server relays from its directory. Wha
   or compares the digits and marks them *verified*.
 - **Grants are signed.** Every grant carries its granter's Ed25519 signature, which the recipient verifies before
   opening it: in the personal scope only under its own key, in a shared scope under the granter's pinned key.
-- **The operator cannot invent a member.** A wrap to anyone else needs an admission tag that only a holder of the
-  scope's current epoch key can compute.
+- **A tenant invite is anchored by its link.** The invitee's client derives the invite key from the seed sealed in the
+  link and checks the owner's signature on it against the owner fingerprint sealed beside it, so the operator, which
+  mails the link, cannot swap the key or the owner in it. The seal opens only with a code the owner passes on outside
+  veyq (50 bits behind Argon2id), or a password the owner chose
+  ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 1).
 
 **What remains.** TOFU cannot detect a lie told before first sight. If the operator substitutes a member's key
 *before* anyone pinned the real one, and re-wraps genuine content too, nothing looks wrong until the two members
-compare safety numbers. The same gap covers three further cases:
+compare safety numbers. The same gap covers further cases:
 
 - **A device with no trust-state mark yet** — one that signed in with the password and Secret Key, or lost its local
   storage — trusts the first pin store it is served (ADR 0028 Decision 7; see
   [Freshness](#freshness-only-where-a-device-keeps-a-mark)).
-- **A genuine tenant invite redeemed with the operator's key.** A tenant invite's admission tag cannot name a key,
-  because the invitee has none yet, so a malicious operator can redeem an admission the owner really made with a key
-  it controls, and cannot be stopped from attaching that one admission to more than one identity. A group add names
-  the target's account and is narrower
-  ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md)
-  move 6 and § Consequences).
+- **A member the operator invents.** A key-holder's client wraps to every member the server lists, behind the TOFU
+  gate alone: a rotation re-grants them, and grant delivery brings a membership whose grant is behind the current
+  epoch up to date. An operator that writes a membership of its own therefore receives the current key from the next
+  key-holder that has not pinned that account. Each accept now writes a join record that chains the newcomer's key to
+  an owner's signature, which is the anchor meant to close this; nothing checks the records yet (ADR 0111 decisions 12
+  and 15, not built). This is the operator's door only: before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
+- **A tenant invite guessed open.** The operator holds every mailed link, sealed part included, and can guess the code
+  offline; a weak password the owner chose instead falls faster.
 - **A shared-scope grant signed by a granter identity the operator fabricated.** A brand-new member's first grant
   pins its granter on first use, so an operator that fabricates both the granter and the key is not detected on the
   spot — only by the next verification of that granter's safety number. The signature does rule out a grant
-  presented under the identity of someone the recipient has already pinned (ADR 0028 Decision 6).
+  presented under the identity of someone the recipient has already pinned (ADR 0028 Decision 6). A newcomer's invite
+  grant that a rotation re-wrapped is one such grant: it names the rotating member, whom the newcomer has nothing to
+  anchor yet.
 
 **Related residuals of the same mechanism:**
 
@@ -158,12 +166,12 @@ inherits the linker's marks inside the authenticated pairing envelope.
   is visible and consented, not silent. On a client the operator serves, it could ship a client that writes the
   empty store itself.
 - **A fork** — a newer version the server keeps from a device that never held it
-  ([next section](#scope-rotation-forks-queued-rotations-and-a-colluding-departing-member)).
+  ([next section](#scope-rotation-forks-queued-rotations-and-an-invented-member)).
 
 
 **Closed by:** nothing beyond the three marks. ADR 0072 names a floor for no other object.
 
-## Scope rotation: forks, queued rotations and a colluding departing member
+## Scope rotation: forks, queued rotations and an invented member
 
 Removing a member from a group mints a new content-key epoch in the same request, wrapped only to the members the
 remover's own client picked, minus the one it removes; new content seals under it. Against an active operator, on a
@@ -179,17 +187,16 @@ Three things it does not cover:
   rotation after a compromise, are completed by whichever owner of the scope is next online. That client knows only
   the member list the server returns and has nothing of its own to exclude by, so these hold against an honest
   operator only.
-- **A departing member colluding with the operator.** A member being removed holds the epoch key their removal
-  rotates away from. With the operator's help they can tag a sockpuppet admission at that epoch before the removal,
-  and the rotation's re-grant check accepts it. Closing this needs a member roster the client holds itself — in
-  ADR 0024's words, a key-tree-sized change not taken.
+- **A member the server adds to the list.** A rotation wraps to the members it reads, behind the TOFU gate alone, so
+  a membership the operator writes before a rotation is re-granted by it (see
+  [TOFU's first-use gap](#identity-keys-tofus-first-use-gap)).
 
 **Decided in:** ADR 0024 § Guarantee;
-  [ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md)
-  § Consequences (the sockpuppet).
+  [ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  § What stays open (the invented member).
 
-**Closed by:** ADR 0024 records no closing mechanism for the fork or the queued rotations; the sockpuppet needs
-  the client-held roster above.
+**Closed by:** ADR 0024 records no closing mechanism for the fork or the queued rotations; the invented member needs
+  the join records as an anchor (ADR 0111 decisions 12 and 15, not built).
 
 ## Device linking: an attacker who reads the QR and runs the relay
 
@@ -300,6 +307,8 @@ can retract content a recipient already downloaded and decrypted; rotation prote
 - **Layer 2 is a per-scope policy.** Groups rotate on removal; the **tenant** uses layer 1 alone by default and
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
+  A revoked or expired tenant invite is the same class: its link and code still open the epochs it was granted up to
+  the revoke, useful only with a dump of the ciphertext (ADR 0111 § Consequences).
 - **A rotation closes what is added afterwards, not everything.** It re-keys every live and trashed node of the
   scope ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)); a member's write into a node not yet re-keyed re-keys its path first, a guest's waits. What stays in the excluded party's reach:
   - what existed at the rotation;

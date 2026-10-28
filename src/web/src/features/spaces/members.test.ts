@@ -4,8 +4,11 @@ vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
   tenantsApi: vi.fn(),
 }))
-// The admission tag is computed under the scope's epoch key (scopes.ts, tested there); here only its threading.
-vi.mock('./scopes', () => ({ admissionFor: vi.fn() }))
+// The group's key comes from the caller's own grant (scopes.ts, tested there); here the scope is handed over opened.
+vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
+vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
+// The pin store is identityPins.test.ts's; here its answer for the target is driven directly.
+vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), checkAndPin: vi.fn() }))
 
 import {
   addGroupMember,
@@ -17,36 +20,101 @@ import {
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
 import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
-import { admissionFor } from './scopes'
+import { openScopeById } from './scopes'
+import { identityPrivate } from '../../app/vault'
+import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { grantContext, grantSignatureVerifies } from './grant'
 import { stubApi, fakeApi } from '../../test/apiMock'
-import type { ScopeMember } from '../../api/generated/scopes'
+import { httpError } from '../../test/httpError'
+import { openedScope } from '../../test/models'
+import { ScopeKind, type ScopeMember, type ScopesApi } from '../../api/generated/scopes'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
-const ADMISSION = { admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 2, admissionTag: 'dGFn' }
+// The group owner (its identity signs the grant) and the member being added (its identity key is what the resolve served).
+const OWNER = v1.generateIdentity()
+const TARGET = v1.generateIdentity()
+const TARGET_PUB = b64std(v1.serializeIdentityPublic(TARGET.pub))
+const G = '9a000000-0000-4000-8000-0000000000a1'
+const U = '9a000000-0000-4000-8000-0000000000b1'
+/** The group's key per epoch, as this test holds it; the data layer gets a fresh copy (it zeroes what it opened). */
+const GROUP_KEYS = new Map([[2, v1.randomBytes(32)], [3, v1.randomBytes(32)]])
+let heldEpoch = 2
+const openGroup = () => {
+  const key = GROUP_KEYS.get(heldEpoch)!.slice()
+  return openedScope({ scopeId: G, kind: ScopeKind.Group, key, epochs: { current: heldEpoch, keys: new Map([[heldEpoch, key]]) } })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(admissionFor).mockResolvedValue(ADMISSION)
+  heldEpoch = 2
+  vi.mocked(openScopeById).mockImplementation(async () => openGroup())
+  vi.mocked(identityPrivate).mockImplementation(() => ({ kemSeed: OWNER.priv.kemSeed.slice(), sign: OWNER.priv.sign.slice() }))
+  vi.mocked(checkAndPin).mockResolvedValue('firstUse')
 })
 
-describe('addGroupMember (cr-0086)', () => {
-  it('posts the username to the scope members endpoint and returns the grant-less directory row', async () => {
-    // The added member comes back awaiting access — the key is delivered later by grant-delivery, not here.
-    const row: ScopeMember = { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false }
-    const { addGroupMember: addGroupMemberFn } = stubApi(scopesApi, { addGroupMember: row })
+describe('addGroupMember (cr-0086) — the add carries the grant (ADR 0111 decision 4)', () => {
+  const row: ScopeMember = { userId: U, username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: TARGET_PUB }
 
-    const result = await addGroupMember('g1', 'partner', 'u1')
+  it('wraps the group\'s current key to the resolved identity, signed by the owner, and posts it with the add', async () => {
+    const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
 
-    // The admission is tagged for the resolved target (ADR 0020 move 6) and rides the add.
-    expect(admissionFor).toHaveBeenCalledWith('g1', 'u1')
-    expect(addGroupMemberFn).toHaveBeenCalledWith({ scopeId: 'g1', addGroupMemberRequest: { username: 'partner', sealedNameKey: undefined, ...ADMISSION } })
-    expect(result).toEqual(row)
-    expect(result.hasGrant).toBe(false)
+    expect(await addGroupMember(G, 'partner', U, TARGET_PUB, 'bmFtZWtleQ==')).toEqual(row)
+
+    const body = vi.mocked(add).mock.calls[0][0].addGroupMemberRequest
+    expect(body).toMatchObject({ username: 'partner', sealedNameKey: 'bmFtZWtleQ==', epoch: 2 })
+    // The member opens the group's epoch-2 key with its OWN identity — it holds the key from the add on.
+    const opened = v1.openAs(grantContext(G, 2), v1.hybridSecret(TARGET.priv), fromB64std(body.wrappedGrant))
+    expect(Array.from(opened)).toEqual(Array.from(GROUP_KEYS.get(2)!))
+    // Signed by the owner over exactly this grant: this group, kind GROUP, epoch 2, this recipient…
+    const to = { userId: U, identityPublicKeyB64: TARGET_PUB }
+    expect(grantSignatureVerifies(OWNER.pub.sign, { scopeId: G, kind: 'GROUP', epoch: 2 }, to, body.wrappedGrant, body.grantSignature)).toBe(true)
+    // …control: not as another kind, nor under another key.
+    expect(grantSignatureVerifies(OWNER.pub.sign, { scopeId: G, kind: 'TENANT', epoch: 2 }, to, body.wrappedGrant, body.grantSignature)).toBe(false)
+    expect(grantSignatureVerifies(TARGET.pub.sign, { scopeId: G, kind: 'GROUP', epoch: 2 }, to, body.wrappedGrant, body.grantSignature)).toBe(false)
+    // And it names the key it is wrapped to: SHA-256 of the target's bundle.
+    expect(body.recipientIdentityDigest).toBe(b64std(v1.sha256Digest(fromB64std(TARGET_PUB))))
+    expect(checkAndPin).toHaveBeenCalledWith(U, TARGET_PUB)
+  })
+
+  it('refuses a target whose identity key CHANGED since it was pinned — nothing is opened or sent', async () => {
+    const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
+    vi.mocked(checkAndPin).mockResolvedValue('changed')
+
+    await expect(addGroupMember(G, 'partner', U, TARGET_PUB)).rejects.toBeInstanceOf(IdentityChangedError)
+    expect(add).not.toHaveBeenCalled()
+    expect(openScopeById).not.toHaveBeenCalled()
+  })
+
+  it('control: a key that matches its pin is added', async () => {
+    const { addGroupMember: add } = stubApi(scopesApi, { addGroupMember: row })
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+
+    await addGroupMember(G, 'partner', U, TARGET_PUB)
+    expect(add).toHaveBeenCalledTimes(1)
+  })
+
+  it('rebuilds once on 409 stale_epoch — against the epoch a rotation left behind it', async () => {
+    const add = vi.fn<ScopesApi['addGroupMember']>()
+      .mockImplementationOnce(async () => {
+        heldEpoch = 3 // the rotation's re-grant, visible to the re-open
+        throw httpError(409, 'stale_epoch')
+      })
+      .mockResolvedValueOnce(row)
+    fakeApi(scopesApi, { addGroupMember: add })
+
+    await addGroupMember(G, 'partner', U, TARGET_PUB)
+
+    expect(add.mock.calls.map((c) => c[0].addGroupMemberRequest.epoch)).toEqual([2, 3])
+    const retry = add.mock.calls[1][0].addGroupMemberRequest
+    expect(Array.from(v1.openAs(grantContext(G, 3), v1.hybridSecret(TARGET.priv), fromB64std(retry.wrappedGrant)))).toEqual(Array.from(GROUP_KEYS.get(3)!))
   })
 })
 
 describe('setMemberRole (cr-0088)', () => {
   it('promotes a member by patching the member endpoint with the role', async () => {
     const { setMemberRole: setRole } = stubApi(scopesApi, {
-      setMemberRole: { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
+      setMemberRole: { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=' },
     })
 
     const result = await setMemberRole('g1', 'u1', SetMemberRoleRequestRoleEnum.Owner)
@@ -99,8 +167,8 @@ describe('removeTenantMember (cr-0091)', () => {
 describe('listScopeMembers', () => {
   it('reads a scope’s member directory by id (operator-blind operational metadata only)', async () => {
     const rows: ScopeMember[] = [
-      { userId: 'o', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
-      { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false },
+      { userId: 'o', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'cGs=' },
+      { userId: 'u1', username: 'partner', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGs=' },
     ]
     const { listScopeMembers: listFn } = stubApi(scopesApi, { listScopeMembers: rows })
 

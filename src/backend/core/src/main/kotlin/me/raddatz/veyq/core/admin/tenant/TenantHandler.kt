@@ -17,7 +17,9 @@ import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.membership.AccessMode.READ
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.ScopeAccess
@@ -32,6 +34,9 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Duration
 import java.time.Instant
+
+/** How far a member invite's signed expiry may lie from the server's own lifetime (clock skew, the client's work). */
+private val EXPIRY_TOLERANCE: Duration = Duration.ofMinutes(1)
 
 /** Result of a create-tenant attempt. `delivery` reports how the invite reached the owner (cr-email-invite-send-hardening). */
 sealed interface CreateTenantOutcome {
@@ -135,8 +140,15 @@ sealed interface MemberInviteOutcome {
     data object NotOwner : MemberInviteOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object NotActive : MemberInviteOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
     data object AlreadyMember : MemberInviteOutcome, HttpFailure by Failures.alreadyMember
-    /** The admission was tagged at an epoch that is no longer the tenant's current one (ADR 0020 move 6). */
+    /** The invite's grant is of an epoch that is no longer the tenant's current one (ADR 0111 decision 2). */
     data object StaleEpoch : MemberInviteOutcome, HttpFailure by Failures.staleEpoch
+    /** The client-minted invite id is taken. */
+    data object IdTaken : MemberInviteOutcome, HttpFailure by Failures.idTaken
+    /** The grant's `recipientIdentityDigest` is not the invite key's. */
+    data object RecipientKeyNotCurrent : MemberInviteOutcome, HttpFailure by Failures.recipientKeyNotCurrent
+    /** `expiresAt` is not the server's invite lifetime from now, within a minute; or the owner's signature over the
+     *  invite key does not verify under the caller's identity key. */
+    data object BadExpiry : MemberInviteOutcome, HttpFailure by Failures.invalidRequest
 
     /** The tenant cannot send mail, and a member invite has no other channel (ADR 0055 §2) — nothing is minted. */
     data object MailUnavailable : MemberInviteOutcome, HttpFailure by Failures.mailUnavailable
@@ -145,6 +157,23 @@ sealed interface MemberInviteOutcome {
      *  Slice-local code (only this slice mints invites), so it is written inline rather than in [Failures]. */
     data object SendFailed : MemberInviteOutcome, HttpFailure by httpFailure("mail_send_failed", FailureStatus.SERVICE_UNAVAILABLE)
 }
+
+/**
+ * A member invite as the owner's client built it (ADR 0111 decisions 1-2): the email, the invite key, the owner's
+ * signature over it, a grant of the tenant's current epoch to it (naming the key it is wrapped to), the expiry the owner
+ * signed, and the link's sealed part (standard base64), which is mailed and forgotten.
+ */
+data class MemberInviteInput(
+    val email: String,
+    val inviteId: String,
+    val invitePublicKey: String,
+    val inviteKeySignature: String,
+    val expiresAt: Instant,
+    val sealedLink: String,
+    val epoch: Int,
+    val grant: SignedGrant,
+    val recipientIdentityDigest: String,
+)
 
 /** Result of listing a tenant's pending member invites (cr-0082). */
 sealed interface MemberInvitesOutcome {
@@ -163,6 +192,11 @@ sealed interface ReissueOutcome {
     data object NotFound : ReissueOutcome, HttpFailure by Failures.tenantNotFound        // no such tenant
     data object NotOwner : ReissueOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object InviteNotFound : ReissueOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)  // no such pending invite for this tenant
+    /** The body's email is not the reissued invite's, or `expiresAt` is off the server's invite lifetime. */
+    data object InvalidRequest : ReissueOutcome, HttpFailure by Failures.invalidRequest
+    data object StaleEpoch : ReissueOutcome, HttpFailure by Failures.staleEpoch
+    data object IdTaken : ReissueOutcome, HttpFailure by Failures.idTaken
+    data object RecipientKeyNotCurrent : ReissueOutcome, HttpFailure by Failures.recipientKeyNotCurrent
 
     /** No sendable mailer ⇒ nothing minted, and the outstanding invite still stands (ADR 0055 §2). */
     data object MailUnavailable : ReissueOutcome, HttpFailure by Failures.mailUnavailable
@@ -459,22 +493,28 @@ class TenantHandler(
     }
 
     /**
-     * A tenant **owner** invites a person (by email) into the ACTIVE tenant as a MEMBER (cr-0077 / ADR 0020).
-     * Admission is owner-gated (the caller must hold the tenant's OWNER membership); the invitee onboards via
-     * the same cold-birth accept flow with the invite's MEMBER role. The scope key is delivered afterward by a
-     * key-holder (cr-0076) — this only mints the admission token, and stores the admission tag the owner's client
-     * computed under the tenant's epoch key (ADR 0020 move 6): opaque here, verified by every key-holder before it
-     * wraps. A session without the vault can mint an invite, but not a tag that verifies.
+     * A tenant **owner** invites a person (by email) into the ACTIVE tenant as a MEMBER (cr-0077, ADR 0111 decisions
+     * 1-2). Owner-gated (the caller must hold the tenant's OWNER membership); the invitee onboards via the same accept
+     * flow with the invite's MEMBER role. The invite is a **placeholder member**: it stores the invite key the owner's
+     * client minted and signed, and the grant of the tenant's current epoch wrapped to it — so the newcomer grants
+     * itself at accept and nobody waits for a key-holder. The link's sealed part is appended to the mailed link and
+     * kept nowhere; the code that opens it never reaches the server.
      */
-    fun inviteMember(callerId: String, tenantId: String, email: String, admission: Admission): MemberInviteOutcome = commitThenSend {
+    fun inviteMember(callerId: String, tenantId: String, input: MemberInviteInput): MemberInviteOutcome = commitThenSend {
         access.check(callerId, tenantId, WRITE)
             .refusal(MemberInviteOutcome.NotFound, MemberInviteOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotFound)
         if (!store.isOwner(callerId, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotOwner)
         if (tenant.status != TenantEntity.ACTIVE) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotActive)
-        val normalizedEmail = normalizeEmail(email)
+        val normalizedEmail = normalizeEmail(input.email)
         val existing = accounts.findByEmail(normalizedEmail)
         if (existing != null && store.belongsToTenant(existing.id, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.AlreadyMember)
+        if (!expiryIsTheLifetime(input.expiresAt)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
+        if (!signedByCaller(callerId, tenantId, input)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
+        if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {
+            return@commitThenSend MintResult.Rejected(MemberInviteOutcome.RecipientKeyNotCurrent)
+        }
+        val fragmentTail = linkTail(input.sealedLink) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
         // Mail is the only channel for a member invite (ADR 0055 §2), so ask *before* minting: an invitation that
         // cannot be delivered is a live secret with no recipient, and there is no copy-link to hand it to.
         if (!mailer.canSend(tenant.id)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.MailUnavailable)
@@ -482,10 +522,13 @@ class TenantHandler(
         inviteRateLimiter.check(tenantId, normalizedEmail)?.let { return@commitThenSend MintResult.Rejected(MemberInviteOutcome.RateLimited(it)) }
 
         val token = Tokens.random()
-        val expiresAt = Instant.now().plus(inviteTtl)
-        val inviteId = store.mintMemberInvite(tenantId, normalizedEmail, Tokens.hash(token), expiresAt, admission, checkEpoch = true)
-            ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.StaleEpoch)
-        MintResult.ToSend(tenant.id, tenant.domain, normalizedEmail, token, expiresAt) { delivery ->
+        val expiresAt = input.expiresAt
+        val inviteId = when (val minted = store.mintMemberInvite(tenantId, normalizedEmail, Tokens.hash(token), expiresAt, inviteKey(callerId, input))) {
+            is MintMemberInvite.Minted -> minted.inviteId
+            MintMemberInvite.StaleEpoch -> return@commitThenSend MintResult.Rejected(MemberInviteOutcome.StaleEpoch)
+            MintMemberInvite.IdTaken -> return@commitThenSend MintResult.Rejected(MemberInviteOutcome.IdTaken)
+        }
+        MintResult.ToSend(tenant.id, tenant.domain, normalizedEmail, "$token.$fragmentTail", expiresAt) { delivery ->
             if (delivery != DeliveryResult.SENT) {
                 revokeUndelivered(inviteId)
                 MemberInviteOutcome.SendFailed
@@ -517,6 +560,39 @@ class TenantHandler(
         store.revokeInvite(inviteId)
     }
 
+    /** Whether the invite key carries the caller's own `invite-key` signature, under the identity key the server holds for
+     *  them — so a session without the owner's unlocked vault mints no invite (an honest server's check, ADR 0111). An
+     *  expiry with a fraction of a second is no signed one. */
+    private fun signedByCaller(callerId: String, tenantId: String, input: MemberInviteInput): Boolean =
+        input.expiresAt.nano == 0 && InviteAcceptProof.inviteKeyVerifies(
+            VeyqUser.findById(callerId)?.identityPublicKey, tenantId, input.inviteId, input.invitePublicKey,
+            input.expiresAt.epochSecond, input.inviteKeySignature,
+        )
+
+    /** The owner signed the expiry, so the server takes the client's — but only within a minute of its own lifetime. */
+    private fun expiryIsTheLifetime(expiresAt: Instant): Boolean =
+        Duration.between(Instant.now().plus(inviteTtl), expiresAt).abs() <= EXPIRY_TOLERANCE
+
+    /** The stored key of a member invite: the caller is its signer and its first granter, with the identity key their
+     *  account holds now — the key the client signed with. */
+    private fun inviteKey(callerId: String, input: MemberInviteInput): MemberInviteKey = MemberInviteKey(
+        inviteId = input.inviteId,
+        invitePublicKey = input.invitePublicKey,
+        inviteKeySignature = input.inviteKeySignature,
+        signerUserId = callerId,
+        signerIdentityPublicKey = VeyqUser.findById(callerId)?.identityPublicKey ?: "",
+        epoch = input.epoch,
+        grant = input.grant,
+    )
+
+    /** The sealed part as the link's fragment carries it — base64url, unpadded, after the token and a `.` — or null for
+     *  a value that is no base64. Opaque here: the server never learns what it seals. */
+    private fun linkTail(sealedLinkB64: String): String? = try {
+        java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(java.util.Base64.getDecoder().decode(sealedLinkB64))
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
     /** List a tenant's pending member invites — owner-gated (cr-0082). */
     @Transactional
     fun listMemberInvites(callerId: String, tenantId: String): MemberInvitesOutcome {
@@ -527,30 +603,38 @@ class TenantHandler(
         return MemberInvitesOutcome.Listed(store.listPendingMemberInvites(tenantId))
     }
 
-    /** Re-issue a pending member invite: supersede it + mint a fresh secret for the same email (cr-0082). */
-    fun reissueMemberInvite(callerId: String, tenantId: String, inviteId: String): ReissueOutcome = commitThenSend {
+    /** Re-issue a pending member invite: supersede it (its key and grant go) and mint the new invite the owner's
+     *  client built for the same email — a new key, grant, link and code (cr-0082, ADR 0111). */
+    fun reissueMemberInvite(callerId: String, tenantId: String, inviteId: String, input: MemberInviteInput): ReissueOutcome = commitThenSend {
         access.check(callerId, tenantId, WRITE)
             .refusal(ReissueOutcome.NotFound, ReissueOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.NotFound)
         if (!store.isOwner(callerId, tenantId)) return@commitThenSend MintResult.Rejected(ReissueOutcome.NotOwner)
-        // The tenant rotation's lock, before the invite is read: the fresh invite copies its admission, and a rotation
-        // carries only the invites it reads under this lock. Read before it, a reissue copied the tag a committing
-        // rotation was replacing onto an invite that rotation never saw.
+        // The tenant rotation's lock, before the invite is read: a rotation carries only the invites it reads under
+        // this lock, and the fresh invite's grant must be of the epoch that lock holds.
         store.lockTenantScope(tenantId)
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InviteNotFound)
+        if (normalizeEmail(input.email) != invite.ownerEmail || !expiryIsTheLifetime(input.expiresAt) || !signedByCaller(callerId, tenantId, input)) {
+            return@commitThenSend MintResult.Rejected(ReissueOutcome.InvalidRequest)
+        }
+        if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {
+            return@commitThenSend MintResult.Rejected(ReissueOutcome.RecipientKeyNotCurrent)
+        }
+        val fragmentTail = linkTail(input.sealedLink) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InvalidRequest)
         // Before the supersede, not after: mintMemberInvite kills the outstanding invite as it mints, so refusing
         // later would leave the invitee with nothing on a tenant that never could have sent (ADR 0055 §2).
         if (!mailer.canSend(tenant.id)) return@commitThenSend MintResult.Rejected(ReissueOutcome.MailUnavailable)
         // The reissue loop against one address is the sharpest bombing vector — limit before minting anew.
         inviteRateLimiter.check(tenantId, invite.ownerEmail)?.let { return@commitThenSend MintResult.Rejected(ReissueOutcome.RateLimited(it)) }
         val token = Tokens.random()
-        val expiresAt = Instant.now().plus(inviteTtl)
-        // mintMemberInvite supersedes the current ACTIVE invite for this email (i.e. the one we found) + mints anew,
-        // keeping its admission (ADR 0020 move 6): the owner admitted this person once, a new secret is not a new one.
-        val freshId = store.mintMemberInvite(
-            tenantId, invite.ownerEmail, Tokens.hash(token), expiresAt, invite.admission(), checkEpoch = false,
-        )!!
-        MintResult.ToSend(tenant.id, tenant.domain, invite.ownerEmail, token, expiresAt) { delivery ->
+        val expiresAt = input.expiresAt
+        // mintMemberInvite supersedes the current ACTIVE invite for this email (i.e. the one we found) + mints anew.
+        val freshId = when (val minted = store.mintMemberInvite(tenantId, invite.ownerEmail, Tokens.hash(token), expiresAt, inviteKey(callerId, input))) {
+            is MintMemberInvite.Minted -> minted.inviteId
+            MintMemberInvite.StaleEpoch -> return@commitThenSend MintResult.Rejected(ReissueOutcome.StaleEpoch)
+            MintMemberInvite.IdTaken -> return@commitThenSend MintResult.Rejected(ReissueOutcome.IdTaken)
+        }
+        MintResult.ToSend(tenant.id, tenant.domain, invite.ownerEmail, "$token.$fragmentTail", expiresAt) { delivery ->
             if (delivery != DeliveryResult.SENT) {
                 revokeUndelivered(freshId)
                 ReissueOutcome.SendFailed
@@ -560,7 +644,7 @@ class TenantHandler(
         }
     }
 
-    /** Revoke a pending member invite (soft-terminal, additive-safe) — owner-gated (cr-0082). */
+    /** Revoke a pending member invite (soft-terminal; its key and grant are dropped, ADR 0111) — owner-gated (cr-0082). */
     @Transactional
     fun revokeMemberInvite(callerId: String, tenantId: String, inviteId: String): RevokeMemberInviteOutcome {
         access.check(callerId, tenantId, WRITE)

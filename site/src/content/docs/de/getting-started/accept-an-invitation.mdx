@@ -8,29 +8,41 @@ sources:
 import Screenshot from '../../../../components/Screenshot.astro';
 
 In veyq kommst du, wenn dich jemand einlädt, der einen Bereich besitzt. Die Einladung kommt per E-Mail, auf Deutsch und
-Englisch, mit einem Link, der bis zu dem genannten Zeitpunkt gilt.
+Englisch, mit einem Link, der bis zu dem genannten Zeitpunkt gilt. Die Person, die dich eingeladen hat, gibt dir
+außerdem selbst einen **Code** weiter, per Nachricht oder persönlich: Der Link allein öffnet die Einladung nicht.
+
+## Den Code eingeben
+
+1. Öffne den Link aus der E-Mail. Die Seite **Einladung annehmen** sagt, welchem Bereich du beitreten sollst.
+2. Gib den **Code** ein, den dir die einladende Person weitergegeben hat, und wähle **Weiter**. Groß- und
+   Kleinschreibung, Leerzeichen und der Bindestrich spielen keine Rolle. Hat die Person stattdessen ein Passwort für
+   die Einladung gewählt, fragt die Seite nach dem **Passwort für die Einladung**.
+
+Dein Gerät prüft dann, dass die Einladung wirklich von der Person kommt, die sie geschickt hat, bevor irgendetwas es
+verlässt.
 
 ## Dein Konto anlegen
 
-1. Öffne den Link aus der E-Mail. Die Seite **Einladung annehmen** sagt, welchem Bereich du beitreten sollst.
-2. Gib einen **Benutzernamen** ein. Unter ihm finden dich die anderen in diesem Bereich (Buchstaben, Ziffern, `.`,
+3. Gib einen **Benutzernamen** ein. Unter ihm finden dich die anderen in diesem Bereich (Buchstaben, Ziffern, `.`,
    `_` und `-`), und er darf noch nicht vergeben sein.
-3. Wähle ein **Passwort** mit mindestens 10 Zeichen. Wenn du das Feld verlässt, prüft veyq, ob das Passwort aus
+4. Wenn du magst, ergänze Vorname, Nachname und ein Bild. Nur Mitglieder des Bereichs sehen sie, und du kannst sie
+   später in den Einstellungen ändern.
+5. Wähle ein **Passwort** mit mindestens 10 Zeichen. Wenn du das Feld verlässt, prüft veyq, ob das Passwort aus
    Datenlecks bekannt ist; wenn ja, wähle ein anderes oder setze den Haken bei **Trotzdem verwenden**.
-4. Wähle **Weiter**.
+6. Wähle **Weiter**.
 
 <Screenshot id="getting-started-accept-form" shows="Die Seite Einladung annehmen mit dem Namen des Bereichs, den Feldern Benutzername und Passwort und der Schaltfläche Weiter" />
 
 Deine E-Mail-Adresse ist die, an die die Einladung ging; du tippst sie nicht ein. Wurdest du eingeladen, einen neuen
-Bereich zu **besitzen**, bietet die Seite außerdem Vorname, Nachname und ein Bild an (alles freiwillig und später in
-den Einstellungen änderbar), und die letzte Schaltfläche unten heißt **Annehmen & aktivieren**.
+Bereich zu **besitzen**, gibt es keinen Code einzugeben, und die letzte Schaltfläche unten heißt **Annehmen &
+aktivieren**.
 
 ## Dein Notfall-Kit sichern
 
-5. Wähle **Notfall-Kit herunterladen (PDF)** und bewahre die Datei sicher auf. Was es ist und wo es hingehört:
+7. Wähle **Notfall-Kit herunterladen (PDF)** und bewahre die Datei sicher auf. Was es ist und wo es hingehört:
    [Dein Notfall-Kit](/veyq/de/getting-started/emergency-kit/).
-6. Setze den Haken bei **Ich habe mein Notfall-Kit sicher gespeichert.**
-7. Wähle **Annehmen & beitreten**.
+8. Setze den Haken bei **Ich habe mein Notfall-Kit sicher gespeichert.**
+9. Wähle **Annehmen & beitreten**.
 
 <Screenshot id="getting-started-accept-kit" shows="Der Schritt Notfall-Kit sichern mit der Schaltfläche Notfall-Kit herunterladen (PDF), dem gesetzten Bestätigungshaken und der Schaltfläche Annehmen & beitreten" />
 
@@ -38,18 +50,22 @@ Die Seite sagt dann **Du bist „Familie Beispiel“ beigetreten.**, mit dem Nam
 melde dich mit deiner E-Mail, deinem Passwort und dem Secret Key aus dem gerade gesicherten Kit an:
 [Anmelden](/veyq/de/getting-started/sign-in/).
 
-Vielleicht siehst du zuerst nur **Persönlich**, und der geteilte Bereich ist mit **Wartet auf Zugang** markiert. Der
-Schlüssel zum geteilten Bereich erreicht dich von selbst vom Gerät eines anderen Mitglieds, sobald eines online ist.
-Du musst nichts tun.
+Den geteilten Bereich siehst du sofort: Die Einladung trug seinen Schlüssel, verschlossen unter dem Code, und dein
+Gerät hat ihn beim Beitritt übernommen. Dafür muss niemand sonst online sein.
 
 ## Wenn es nicht klappt
 
-- **Diese Einladung ist nicht mehr gültig.** Sie ist abgelaufen. Bitte die Person, die dich eingeladen hat, um eine
-  neue.
-- **Dieser Einladungslink ist ungültig.** Der Link ist unvollständig oder wurde schon benutzt. Öffne ihn noch einmal
-  aus der E-Mail.
+- **Diese Einladung ist nicht mehr gültig.** Sie ist abgelaufen, wurde zurückgezogen oder erneut gesendet, oder sie
+  wurde schon benutzt. Bitte die Person, die dich eingeladen hat, um eine neue.
+- **Dieser Einladungslink ist ungültig.** Der Link ist unvollständig. Öffne ihn noch einmal aus der E-Mail.
+- **Dieser Code öffnet die Einladung nicht.** Der Code ist vertippt, oder er gehört zu einer anderen Einladung. Prüfe
+  ihn und versuche es noch einmal.
+- **Diese Einladung lässt sich nicht prüfen — bitte um eine neue.** Die Einladung passt nicht zu der Person, die sie
+  geschickt hat, deshalb sendet dein Gerät nichts. Schickt die Person sie erneut, bekommst du einen neuen Link und sie
+  einen neuen Code zum Weitergeben.
 - **Diese E-Mail hat bereits ein Konto — bitte stattdessen anmelden.** Du hast auf diesem Server schon ein veyq-Konto
-  mit dieser Adresse. Die Seite fragt dann nach deinem Passwort und deinem Secret Key statt nach einem neuen Passwort.
+  mit dieser Adresse. Nach dem Code fragt die Seite nach deinem Passwort und deinem Secret Key statt nach einem neuen
+  Passwort.
 
 Dein Passwort und dein Secret Key verlassen dein Gerät nie. veyq macht daraus auf deinem Gerät Schlüssel, und der
 Server bekommt immer nur verschlossene Daten: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

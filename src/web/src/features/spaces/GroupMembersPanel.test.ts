@@ -80,7 +80,7 @@ const stubs = {
 }
 
 const OWNER_ROW: ScopeMember[] = [
-  { userId: 'u-own', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true, pendingConsent: false },
+  { userId: 'u-own', username: 'owner', avatarRevision: 0, role: 'OWNER', identityPublicKey: 'AA==', pendingConsent: false },
 ]
 
 async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me: 'owner' }) {
@@ -147,7 +147,7 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
 })
 
 describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decision 4)', () => {
-  const BOB: ScopeMember = { userId: 'u-bob', username: 'bob', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'Qk9C', hasGrant: true, pendingConsent: false }
+  const BOB: ScopeMember = { userId: 'u-bob', username: 'bob', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'Qk9C', pendingConsent: false }
   const PICKED = [...OWNER_ROW, BOB]
 
   beforeEach(() => {
@@ -246,7 +246,80 @@ describe('GroupMembersPanel — accepting an invitee\'s changed key drains the r
 
     expect(events).toEqual(['pass', 'pin written'])
     expect(acceptKeyChange).toHaveBeenCalledWith('u-c', 'new-key')
-    expect(addGroupMember).toHaveBeenCalledWith('g-1', 'carol', 'u-c', 'c2VhbGVk') // the retried add
+    // The retried add carries the grant's target key — the one the resolve served and the human just accepted.
+    expect(addGroupMember).toHaveBeenCalledWith('g-1', 'carol', 'u-c', 'new-key', 'c2VhbGVk')
+  })
+})
+
+describe('GroupMembersPanel — an add carries the group key to the resolved identity (ADR 0111 decision 4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+    vi.mocked(trustStates).mockResolvedValue({})
+  })
+
+  async function addDave(w: ReturnType<typeof mount>) {
+    await w.find('#group-add-username').setValue('Dave')
+    await w.find('form.group-add-form').trigger('submit')
+    await flushPromises()
+  }
+
+  it('a direct add hands addGroupMember the identity key the resolve served, and no name key', async () => {
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-d', username: 'dave', identityPublicKey: 'ZGF2ZQ==', requiresConsent: false })
+    const w = await mountPanel({ me: 'owner' })
+    await addDave(w)
+    expect(addGroupMember).toHaveBeenCalledTimes(1)
+    expect(addGroupMember).toHaveBeenCalledWith('g-1', 'dave', 'u-d', 'ZGF2ZQ==')
+    expect(wrapGroupNameKeyForInvitee).not.toHaveBeenCalled()
+  })
+
+  it('a consent add hands it the same key beside the wrapped name key', async () => {
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-d', username: 'dave', identityPublicKey: 'ZGF2ZQ==', requiresConsent: true })
+    vi.mocked(wrapGroupNameKeyForInvitee).mockResolvedValue('bmFtZWtleQ==')
+    const w = await mountPanel({ me: 'owner' })
+    await addDave(w)
+    expect(wrapGroupNameKeyForInvitee).toHaveBeenCalledWith('g-1', 'u-d', 'ZGF2ZQ==')
+    expect(addGroupMember).toHaveBeenCalledWith('g-1', 'dave', 'u-d', 'ZGF2ZQ==', 'bmFtZWtleQ==')
+  })
+
+  it('a CHANGED key refused by the grant\'s own pin check is the human path, not a generic failure', async () => {
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-d', username: 'dave', identityPublicKey: 'ZGF2ZQ==', requiresConsent: false })
+    vi.mocked(addGroupMember).mockRejectedValueOnce(new IdentityChangedError('u-d'))
+    const w = await mountPanel({ me: 'owner' })
+    await addDave(w)
+    expect(w.text()).toContain(t('groups.identityChanged'))
+    expect(w.text()).not.toContain(t('groups.addMemberFailed'))
+    expect(button(w, t('groups.acceptKeyChange'))).toBeTruthy()
+  })
+
+  it('control: any other refusal of the add is the generic failure, with no key-change offer', async () => {
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-d', username: 'dave', identityPublicKey: 'ZGF2ZQ==', requiresConsent: false })
+    vi.mocked(addGroupMember).mockRejectedValueOnce(new Error('boom'))
+    const w = await mountPanel({ me: 'owner' })
+    await addDave(w)
+    expect(w.text()).toContain(t('groups.addMemberFailed'))
+    expect(button(w, t('groups.acceptKeyChange'))).toBeFalsy()
+  })
+})
+
+describe('GroupMembersPanel — a member is active or a pending consent proposal, nothing else (ADR 0111)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('badges each row by its consent state alone', async () => {
+    const ROWS: ScopeMember[] = [
+      ...OWNER_ROW,
+      { userId: 'u-p', username: 'pia', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGlh', pendingConsent: true },
+    ]
+    vi.mocked(listScopeMembers).mockResolvedValue(ROWS)
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: 'owner' }))
+    vi.mocked(openGroupIcon).mockResolvedValue(null)
+    vi.mocked(trustStates).mockResolvedValue({})
+    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    const badges = (who: string) =>
+      w.findAll('.member-row').find((r) => r.text().includes(`@${who}`))!.findAll('.veyq-row-meta .veyq-badge').map((b) => b.text())
+    expect(badges('owner')).toEqual([t('members.statusActive')])
+    expect(badges('pia')).toEqual([t('members.statusPendingConsent')])
   })
 })
 

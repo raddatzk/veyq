@@ -20,7 +20,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/account/profile/profile.test.ts, src/features/account/profile/ProfilePanel.test.ts]
   - id: no-grant-username-only
-    text: A member without a tenant grant holds no `K_tenant`, so the name inputs are disabled with a hint saying why, and a save sends the username alone (no sealed name).
+    text: A member whose tenant key does not open on this device (behind or refused) holds no `K_tenant`, so the name inputs are disabled with a hint saying why, and a save sends the username alone (no sealed name).
     coverage:
       web:
         unit: [src/features/account/profile/ProfilePanel.test.ts]

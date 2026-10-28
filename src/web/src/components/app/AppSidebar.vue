@@ -295,11 +295,12 @@ function closeMobileMenu() {
               <TenantAvatar :name="activeTenant.name" :icon="tenantIcon(activeTenant.tenantId)" active />
               <span class="sidebar-tenant-text">
                 <strong>{{ activeTenant.name }}</strong>
-                <!-- Awaiting access: a grant-less member is on this tenant but has no key yet (cr-0077). The
-                     token-less home fell back to Personal (activeSpace.tenantUnavailable); a key-holder delivers
-                     the grant automatically (cr-0076), then this clears on the next entry. -->
+                <!-- The tenant's key is behind (a rotation skipped this member, or it joined through an invite a rotation
+                     declared pending) or its grant was refused: the token-less home fell back to Personal
+                     (activeSpace.tenantUnavailable); the grant delivery brings it current, then this clears on the next
+                     entry (ADR 0024 Decision 6). A new member never waits here: it joins with its grant (ADR 0111). -->
                 <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">
-                  {{ t('members.awaitingAccess') }}
+                  {{ t('members.awaitingCurrentKey') }}
                 </small>
                 <small v-else-if="activeTenant.compromiseRotation" class="sidebar-tenant-awaiting">
                   {{ t('members.compromiseRotationMark') }}
@@ -485,7 +486,7 @@ function closeMobileMenu() {
                 <TenantAvatar :name="tenant.name" :icon="tenantIcon(tenant.tenantId)" active />
                 <span>
                   <strong>{{ tenant.name }}</strong>
-                  <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">{{ t('members.awaitingAccess') }}</small>
+                  <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">{{ t('members.awaitingCurrentKey') }}</small>
                   <small v-else-if="tenant.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small>
                   <small v-else>{{ tenant.domain }}</small>
                 </span>

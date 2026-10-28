@@ -67,10 +67,10 @@ class MembershipStore {
      * case, and a group nobody else has joined behaves identically. Anything else must be rotated by a
      * *different* key-holder (ADR 0060 Decision 4).
      *
-     * A `pendingConsent` proposal is **not** a member: it holds no grant, cannot complete a rotation job, and
-     * is deliberately skipped by grant-delivery until the invitee accepts (ADR 0014 §5). Counting one would
-     * queue a rotation in a scope where nobody can ever claim it, which is a permanent `awaiting access` for
-     * the rotator with no human anywhere who could resolve it.
+     * A `pendingConsent` proposal is **not** a member here: it holds its proposer's grant (ADR 0111 decision 4) but
+     * cannot complete a rotation job, and the group is not listed to it until it accepts (ADR 0014 §5). Counting one
+     * would queue a rotation in a scope where nobody can ever claim it — the rotator left behind for good, with no
+     * human anywhere who could resolve it.
      */
     fun memberCountsByScopeFor(userId: String): Map<String, Long> {
         val mine = MembershipEntity.find("userId = ?1 and pendingConsent = false", userId).list()

@@ -1,8 +1,6 @@
 package me.raddatz.veyq.core.tasks
 
-import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.membership.MembershipEntity
-import me.raddatz.veyq.core.membership.admission
 import me.raddatz.veyq.core.node.rekey.ScopeRekeying
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -17,13 +15,11 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds, and the
- *  membership's admission (ADR 0020 move 6), which the worker verifies under its own epoch key before it wraps. */
+/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds. */
 data class GrantDeliveryTargetView(
     val targetUserId: String,
     val targetMembershipId: String,
     val identityPublicKey: String,
-    val admission: Admission?,
 )
 
 /** A leased job handed back to a worker (a plain view — never a managed entity, so no L1-cache surprises). */
@@ -257,9 +253,10 @@ class TasksStore {
             return CompleteResult.StaleEpoch
         }
         if (markDone(job, userId, sealedResult) != 1) return lostCompletion(job, userId)
-        // Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current — e.g. a
-        // rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is already
-        // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
+        // Deliver onto a membership that is BEHIND (grantedEpoch < current — a rotation skipped it, §E2, or it joined
+        // through an invite a rotation declared pending, ADR 0111 decision 2). Every membership is born with a grant,
+        // so there is no grant-less one to deliver to. Idempotent + first-online-wins: a no-op once the member is
+        // already at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
         // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
         // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
         // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
@@ -270,7 +267,7 @@ class TasksStore {
             MembershipEntity.update(
                 "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6, " +
                     "granterIdentityPublicKey = ?7 " +
-                    "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
+                    "where id = ?3 and scopeId = ?4 and wrappedGrant is not null and grantedEpoch < ?2",
                 grant, epoch, membershipId, job.scopeId, userId, signature, workerKey,
             )
         }
@@ -609,48 +606,23 @@ class TasksStore {
         return JobDeclineEntity.delete("workerId = ?1 and jobId in ?2", workerId, jobIds).toInt()
     }
 
-    /**
-     * Drop every `admission_unverified` decline on the grant-delivery jobs of these memberships — called by a rotation
-     * for each membership whose admission it **re-tagged** (ADR 0020 move 6).
-     *
-     * Such a decline judged one admission under one key: it lasts as long as that admission, not as long as the job.
-     * A re-tag means the rotator verified the old tag under the old epoch and vouched for it under the new one, so a
-     * key-holder's earlier refusal — of that tag, or of a tag its own key could not yet check — no longer describes
-     * anything, and every worker judges again at its next claim. Loosening it is safe because the exclusion was never
-     * the security control: every claim re-runs the admission and the TOFU check, so a re-offer cannot lead to a wrap
-     * a fresh check refuses. What it protects is liveness — a worker never spinning on a job it will refuse again —
-     * which is why it is lifted only where the premise moved. **Narrow in two ways:** only this reason (a decline
-     * about the target's key is the pin's, lifted by [clearDeclinesForTarget] after a human looked), and only
-     * re-tagged memberships (a dropped admission is still unadmitted). A `scope-rotation` job is never matched: its
-     * `resourceRef` is a scope id. The server compares no tag; it only knows that the opaque admission moved.
-     */
-    @Transactional
-    fun liftAdmissionDeclines(membershipIds: Collection<String>): Int {
-        if (membershipIds.isEmpty()) return 0
-        val jobIds = JobEntity.find(
-            "capabilityTag = ?1 and resourceRef in ?2", CapabilityTags.GRANT_DELIVERY, membershipIds,
-        ).list().map { it.id }
-        if (jobIds.isEmpty()) return 0
-        return JobDeclineEntity.delete("reason = ?1 and jobId in ?2", ADMISSION_UNVERIFIED, jobIds).toInt()
-    }
-
     // --- grant-delivery structural origination + dead-letter sweep -------------------------------------------
 
     /**
      * Ensure every **behind** membership in these scopes has a PENDING grant-delivery job (server-structural
      * origination — the server already understands "a role without the current key means deliver it"). A member is
-     * behind when they are grant-less (never delivered) OR **stale** (`grantedEpoch < the scope's currentEpoch` —
-     * e.g. a rotation re-wrap failed for them, §E2; cr-0093). Idempotent: skips memberships that already have a live
-     * (PENDING/LEASED) grant-delivery job. Runs on the pull path (reconcile-on-claim) and from a scheduled backstop.
+     * behind when their grant is older than the scope's epoch (`grantedEpoch < currentEpoch` — a rotation re-wrap
+     * failed or skipped them, §E2, cr-0093, or they joined through an invite a rotation declared pending, ADR 0111
+     * decision 2). A soft `pendingConsent` proposal holds a grant like any member and is brought current too.
+     * Idempotent: skips memberships that already have a live (PENDING/LEASED) grant-delivery job. Runs on the pull
+     * path (reconcile-on-claim) and from a scheduled backstop.
      */
     @Transactional
     fun reconcileGrantDelivery(scopeIds: Set<String>, maxAttempts: Int): Int {
         if (scopeIds.isEmpty()) return 0
         val epochByScope = ScopeEntity.find("id in ?1", scopeIds).list().associate { it.id to it.currentEpoch }
-        // A soft `pendingConsent` proposal (cr-0094) is grant-less but NEVER a delivery target: the consent gate is
-        // "no `K_SC` wrap before the invitee accepts", so it is skipped until Accept clears the flag.
         val pending = MembershipEntity.find("scopeId in ?1", scopeIds).list()
-            .filter { !it.pendingConsent && (it.wrappedGrant == null || it.grantedEpoch < (epochByScope[it.scopeId] ?: 0)) }
+            .filter { it.wrappedGrant != null && it.grantedEpoch < (epochByScope[it.scopeId] ?: 0) }
         var created = 0
         for (m in pending) {
             val live = JobEntity.count(
@@ -673,15 +645,12 @@ class TasksStore {
         return created
     }
 
-    /** The scheduled backstop: reconcile grant-delivery across every scope that has a **behind** membership — one
-     *  that is grant-less, or stale in a rotated scope (`grantedEpoch < currentEpoch`; cr-0093). `reconcileGrantDelivery`
-     *  then filters each scope down to its actually-behind members. */
+    /** The scheduled backstop: reconcile grant-delivery across every rotated scope — only there can a membership be
+     *  behind (`grantedEpoch < currentEpoch`; cr-0093). `reconcileGrantDelivery` then filters each scope down to its
+     *  actually-behind members. */
     @Transactional
-    fun reconcileAllGrantDelivery(maxAttempts: Int): Int {
-        val grantless = MembershipEntity.find("wrappedGrant is null").list().map { it.scopeId }.toSet()
-        val rotated = ScopeEntity.find("currentEpoch > 0").list().map { it.id }.toSet()
-        return reconcileGrantDelivery(grantless + rotated, maxAttempts)
-    }
+    fun reconcileAllGrantDelivery(maxAttempts: Int): Int =
+        reconcileGrantDelivery(ScopeEntity.find("currentEpoch > 0").list().map { it.id }.toSet(), maxAttempts)
 
     /** Lazily dead-letter expired-lease jobs of one tag, on that tag's own eligible scopes, that have exhausted their
      *  attempts (a crashed poison worker). */
@@ -693,11 +662,11 @@ class TasksStore {
         )
     }
 
-    /** Resolve a grant-delivery job's target: the pending member's userId + identity public key. */
+    /** Resolve a grant-delivery job's target: the behind member's userId + identity public key. */
     private fun resolveGrantTarget(membershipId: String?): GrantDeliveryTargetView? {
         val m = membershipId?.let { MembershipEntity.findById(it) } ?: return null
         val user = VeyqUser.findById(m.userId) ?: return null
-        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey, m.admission())
+        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey)
     }
 
     companion object {
@@ -705,12 +674,6 @@ class TasksStore {
          *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. Only this reason
          *  binds `rotateScope` ([isRotationExcluded]) and names a compromise rotation ([compromiseRotations]). */
         const val ROTATION_ORIGINATOR = "rotation_originator"
-
-        /** The `reason` a grant-delivery worker declines with when the target's admission tag does not verify under
-         *  its key (the web's `ADMISSION_UNVERIFIED`). Client-written like any reason; the server reads it only to
-         *  know which declines a re-tag lifts ([liftAdmissionDeclines]) — a worker naming it otherwise only keeps
-         *  itself excluded. */
-        const val ADMISSION_UNVERIFIED = "admission_unverified"
 
         /**
          * Which of several jobs covering one (scope, rotator) is the **newest**: the later `createdAt` (millisecond,

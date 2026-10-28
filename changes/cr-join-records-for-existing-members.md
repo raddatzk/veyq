@@ -18,12 +18,15 @@ owner-rooted anchor at once.
 
 ## Stub: what blocks it
 
-- **Real dependencies.** The join-record format and its writer (`changes/cr-invite-is-a-placeholder-member.md`, planned)
-  and the anchor evaluation with its anomaly display (`changes/cr-trust-records-in-the-tenant.md`, planned). Refining
-  the record's migration variant before the format is built would freeze a guess.
+- **Real dependencies.** The join-record format and its writer are built (ADR 0111 decision 3, 2026-10-28:
+  `src/packages/crypto/src/invite.ts`, `signJoinRecord`/`sealJoinRecord`, the statement `join-record` signed by the
+  invite key and the new identity, field purpose `member-join-record`, column `veyq_tenant_profile.sealed_join_record`,
+  written only at an invite's accept). Its migration variant is signed by an owner instead of an invite key, so it is
+  a second shape of that record; the anchor evaluation with its anomaly display (`changes/cr-trust-records-in-the-tenant.md`,
+  planned) decides what it must hold.
 - **Whether there is anything to migrate.** veyq has no release (`scripts/applied_migrations.sha256`, `release: none`)
-  and every dev database is recreated. If `cr-invite-is-a-placeholder-member` lands before the first release, the only
-  members without a join record are root owners, which ADR 0111 decision 15 and `cr-trust-records-in-the-tenant`
+  and every dev database is recreated. The join record landed before the first release (2026-10-28), so the only
+  members without one are root owners, which ADR 0111 decision 15 and `cr-trust-records-in-the-tenant`
   decision 1 trust on first use — and this CR has nothing to do.
 
 **Recommendation (assistant, 2026-10-27, for owner review):** when `cr-trust-records-in-the-tenant` is done, check

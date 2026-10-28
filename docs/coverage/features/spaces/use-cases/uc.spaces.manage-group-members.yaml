@@ -35,7 +35,7 @@ acceptanceCriteria:
   - id: stale-grant-writes-nothing
     text: >
       A member whose grant is older than the scope's current epoch writes nothing until it is re-granted: the scope
-      reads as awaiting access on their client, and the server refuses a node create tagged with any epoch but the
+      reads as waiting for the current key on their client, and the server refuses a node create tagged with any epoch but the
       current one (409 stale_epoch), as it already did for a rename and an icon (ADR 0024 Decision 6, layer 1).
     coverage:
       backend: { integration: [ScopesSliceTest.aNodeCreateAtAStaleEpochIsRefused] }
@@ -45,7 +45,7 @@ acceptanceCriteria:
       Membership is the first guard on every scope-addressed operation (ADR 0042, cr-0162): a caller who is not a
       member of the group gets 404 scope_not_found — byte-identical to the answer for a group id that does not
       exist — so group ids are not enumerable across the membership boundary. Capability refusals inside the
-      boundary stay 403 (not_key_holder for a grant-less member, not_scope_owner for a non-owner member), which
+      boundary stay 403 (not_key_holder for a member holding no grant, not_scope_owner for a non-owner member), which
       discloses nothing because that caller already knows the group exists.
     coverage:
       backend:
@@ -83,18 +83,6 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
-  - id: rotation-carries-only-verified-admissions
-    # ADR 0020 move 6 / ADR 0024 §4: a rotation verifies each open admission's old tag under E_n, re-tags the ones
-    # that verify under E_{n+1} and drops the rest (whose members it does not re-grant). The server refuses a
-    # rotation that leaves any open admission neither re-tagged nor dropped — one forgotten would never be
-    # delivered to again. It checks presence only; it holds no key.
-    text: A removal's rotation carries forward only admissions whose tag verifies, and re-tags each under the new epoch.
-    coverage:
-      backend:
-        unit: [RotationPolicyTest.refusesARotationThatLeavesAnOpenAdmissionUnTagged, RotationPolicyTest.commitsWhenEveryOpenAdmissionIsReTagged, RotationPolicyTest.anAdmissionTheRotatorDropsCountsAsHandled]
-        integration: [ScopesSliceTest.aRotationThatLeavesAnOpenAdmissionBehindIsRefused, ScopesSliceTest.anAdmissionTheRotatorDropsIsClearedAndNoLongerOpen]
-      web:
-        unit: [src/features/spaces/scopes.test.ts, src/features/account/rotation/rotateKeys.test.ts]
   - id: no-seal-below-the-epoch-floor
     # ADR 0024 Decision 6's second half, the per-device floor (one of ADR 0028 Decision 7's marks). A grant below
     # the highest epoch this device has held opens as the layer-1 *awaiting the current key* state — no read-only

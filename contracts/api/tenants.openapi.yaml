@@ -354,14 +354,16 @@ paths:
         refused with `503 mail_unavailable` **before** anything is minted, and a send that errors leaves no
         invite behind. Distinct from the Server-Owner
         tenant admin above: this is gated on the caller holding the **OWNER membership** of `{tenantId}` (a
-        code check, not the Server-Owner role). The tenant must be ACTIVE. Delivery of the scope key is
-        automatic afterward (any online key-holder wraps `K_SC` to the new member — cr-0076); admission here
-        only creates the invite. **Admission is a key-holder act**
-        ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6): the invite carries the
-        admission tag the owner's client computed under the tenant scope's current epoch key, and no key-holder
-        delivers to the member it admits unless that tag verifies — an owner's session alone, without the unlocked
-        vault, can mint an invite but never one that is delivered to. Operator-blind: only the invite hash, the
-        email (metadata) and the opaque admission are stored.
+        code check, not the Server-Owner role). The tenant must be ACTIVE.
+        **The invite is a placeholder member** ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1-2): the owner's client minted an
+        invite keypair, signed its public half with the owner's identity, and wrapped the tenant scope's **current**
+        epoch key to it. The server stores the public key, the signature, the signer's current identity key and that
+        grant — checked under the tenant scope's row lock to be of the current epoch (`409 stale_epoch`) and addressed
+        to this invite key (`409 recipient_key_not_current`) — and appends `sealedLink` (the invite key's seed, sealed
+        under a code or password the server never sees) to the link it mails, keeping no copy. Every rotation of the
+        tenant re-wraps to the invite or declares it pending (`rotateScope`), and accepting it lets the invitee grant
+        itself: nobody waits for a key-holder to come online. Operator-blind: the invite hash, the email (metadata),
+        the invite's public key and its opaque signature and grant.
       security:
         - bearerAuth: []
       parameters:
@@ -373,9 +375,15 @@ paths:
             schema: { $ref: "#/components/schemas/MemberInviteRequest" }
             example:
               email: partner@example.com
-              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-              admissionEpoch: 0
-              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+              inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+              invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+              inviteKeySignature: c2lnbmF0dXJl
+              expiresAt: 2026-07-11T12:00:00Z
+              sealedLink: c2VhbGVkLWxpbms=
+              epoch: 0
+              wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
       responses:
         "201":
           description: A MEMBER invite was minted and sent.
@@ -388,7 +396,10 @@ paths:
                 inviteExpiresAt: 2026-07-11T12:00:00Z
                 delivery: SENT
         "400":
-          description: The request was malformed (missing/invalid email).
+          description: >
+            The request was malformed (missing/invalid email or invite material), `expiresAt` is not the server's
+            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
+            — a session without the owner's unlocked vault mints no invite — `invalid_request`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -414,7 +425,11 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
         "409":
-          description: The email is already a member of this tenant, the tenant is not ACTIVE, or the admission was tagged at an epoch that is no longer the tenant scope's current one (`stale_epoch` — re-tag and retry).
+          description: >
+            The email is already a member of this tenant (`already_member`), the tenant is not ACTIVE, the invite's
+            grant is of an epoch that is no longer the tenant scope's current one (`stale_epoch` — re-open the scope
+            and rebuild), the invite id is already taken (`id_taken`), or `recipientIdentityDigest` is not SHA-256 of
+            `invitePublicKey` (`recipient_key_not_current`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -439,7 +454,8 @@ paths:
         `email`, its status, and expiry — so the owner can track who has been invited but has not joined yet
         (uc.spaces.manage-member-invites). Consumed/expired/superseded invites are not listed. Gated on the
         caller holding the tenant **OWNER** membership (a code check). Operator-blind: only invite metadata the
-        server already stores — never a plaintext secret.
+        server already stores — never a plaintext secret. What a rotation needs of the open invites — their keys,
+        for any member — is `listOpenInvites`, which carries no email.
       security:
         - bearerAuth: []
       parameters:
@@ -482,19 +498,36 @@ paths:
     post:
       tags: [tenants]
       operationId: reissueMemberInvite
-      summary: Re-issue a pending member invite with a fresh secret + link (owner-gated).
+      summary: Re-issue a pending member invite with a new key, code + link (owner-gated).
       description: >
-        Supersedes the given pending MEMBER invite and mints a **fresh single-use secret** for the same email,
-        emailed to that address (the old link dies) — for when the invitee lost or ignored the first one.
-        Owner-gated. Same email, new secret + expiry, never returned to the caller (ADR 0055). Like the first
-        mint, it needs a sendable mailer and is refused with `503` without one. Note the ordering cost: the
-        outstanding invite is superseded before the new one is minted, so a send that errors leaves the invitee
-        with **no** live invite — the owner retries.
+        Supersedes the given pending MEMBER invite — its key and grant are dropped with it — and mints a **new
+        invite** for the same email from the body, exactly as `inviteTenantMember` takes it: a new invite key, grant,
+        sealed link and code (the body's `email` must be the old invite's, else `400 invalid_request`). Emailed to
+        that address (the old link dies) — for when the invitee lost or ignored the first one, or its code.
+        Owner-gated. Never returned to the caller (ADR 0055). Like the first mint, it needs a sendable mailer and is
+        refused with `503` without one. Note the ordering cost: the outstanding invite is superseded before the new
+        one is minted, so a send that errors leaves the invitee with **no** live invite — the owner retries.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/InviteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberInviteRequest" }
+            example:
+              email: partner@example.com
+              inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+              invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+              inviteKeySignature: c2lnbmF0dXJl
+              expiresAt: 2026-07-11T12:00:00Z
+              sealedLink: c2VhbGVkLWxpbms=
+              epoch: 0
+              wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
       responses:
         "200":
           description: A fresh member invite was minted (the old one superseded).
@@ -506,6 +539,15 @@ paths:
                 inviteStatus: ACTIVE
                 inviteExpiresAt: 2026-07-11T12:00:00Z
                 delivery: SENT
+        "400":
+          description: >
+            The request was malformed, its `email` is not the reissued invite's, `expiresAt` is not the server's
+            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
+            — `invalid_request`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
         "401":
           description: Generic authentication failure.
           content:
@@ -527,6 +569,15 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_not_found }
+        "409":
+          description: >
+            The new invite's grant is of an epoch that is no longer the tenant scope's current one (`stale_epoch`), its
+            id is taken (`id_taken`), or `recipientIdentityDigest` is not SHA-256 of `invitePublicKey`
+            (`recipient_key_not_current`) — nothing was superseded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_epoch }
         "503":
           description: >
             This tenant cannot send mail, so nothing was minted and the previous invite still stands
@@ -536,6 +587,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: mail_unavailable }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/member-invites/{inviteId}:
     delete:
@@ -545,8 +597,10 @@ paths:
       description: >
         Soft-transitions the given pending MEMBER invite to a terminal state, so a later replay of its secret at
         `accept` is rejected (`invite_no_longer_valid`) and the reserved email is freed to re-invite. Owner-gated.
-        **Additive-safe** — it touches no grant and no already-joined member (removing a *member* is a later
-        slice, ADR 0020).
+        The invite's key and its grant are dropped in the same statement, so no rotation carries it any more
+        ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2). The tenant does not rotate (ADR 0025): link and code stay a key to the
+        epochs granted up to the revoke, useful only with a dump of the ciphertext — the residual ADR 0111
+        § Consequences accepts. No already-joined member is touched.
       security:
         - bearerAuth: []
       parameters:
@@ -2013,7 +2067,9 @@ paths:
       summary: Preview a tenant invite from its bootstrap secret.
       description: >
         Returns what the invitee is asked to accept (tenant name, domain, the invited owner email) and
-        whether that email already has an account — so the client picks the sign-in vs. register path.
+        whether that email already has an account — so the client picks the sign-in vs. register path — and, for
+        a MEMBER invite, the invite key, its owner's signature and its grant (`invite`), which the invitee's client
+        checks against the link's sealed part before it trusts any of it (ADR 0111 decision 1).
         Public: gated only by possession of the bootstrap secret (the URL-fragment token), which is matched
         by hash and never echoed back. A replayed superseded/consumed/expired secret is 410.
       requestBody:
@@ -2064,10 +2120,15 @@ paths:
       operationId: acceptTenantInvite
       summary: Accept a tenant invite as an existing user (activate the tenant).
       description: >
-        The signed-in invitee accepts: the client has cold-born the TENANT scope and sealed the first grant
-        to its own identity (opaque ciphertext to the server). The server stores the OWNER membership +
-        grant, flips the tenant ACTIVE, and consumes the invite — atomically. Any authenticated caller may
-        call this; the caller's email must equal the invited owner email, else 403 `not_invited_owner`
+        The signed-in invitee accepts. For an OWNER invite the client has cold-born the TENANT scope and sealed
+        the first grant to its own identity (opaque ciphertext to the server); the server stores the OWNER
+        membership + grant, flips the tenant ACTIVE, and consumes the invite — atomically. For a MEMBER invite
+        the client opened the invite's grant with the link and the code and **grants itself** the epoch
+        (`selfGrant`), proves the invite key (`inviteProof`, verified under the stored invite key — `403
+        invite_proof_invalid`) and writes its join record (`sealedJoinRecord`); the server stores the MEMBER
+        membership **with** that grant, the profile with the join record, and consumes the invite, dropping its
+        key and grant — atomically ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 3). Any authenticated
+        caller may call this; the caller's email must equal the invited email, else 403 `not_invited_owner`
         (a domain check, not the Server-Owner role).
       security:
         - bearerAuth: []
@@ -2100,7 +2161,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is authenticated but is not the invited owner.
+          description: >
+            The caller is authenticated but is not the invited one (`not_invited_owner`), or a MEMBER invite's
+            `inviteProof` does not verify under the stored invite key (`invite_proof_invalid`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2113,8 +2176,10 @@ paths:
               example: { code: invite_not_found }
         "409":
           description: >
-            A conflict — the tenant is already active (`tenant_not_pending`), or the chosen `username` is already
-            taken in this tenant (`username_taken`). The specific case is in the response `code`.
+            A conflict — the tenant is already active (`tenant_not_pending`), the chosen `username` is already
+            taken in this tenant (`username_taken`), the self-grant names an epoch above the tenant scope's current
+            one (`stale_epoch`), or its `recipientIdentityDigest` is not the caller's current identity key
+            (`recipient_key_not_current`). The specific case is in the response `code`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2200,8 +2265,10 @@ paths:
         the device (operator-blind: the server receives only ciphertext + public keys), its **email taken
         from the invite** (not the body, which binds it), and its id minted by the client (`userId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)
         Decision 3 — the optional `sealedName` is sealed bound to (tenant scope, that id)). In one atomic step the
-        server creates the account under that id, stores the OWNER membership + grant, flips the tenant ACTIVE,
-        and consumes the invite. A taken `userId` is `409 id_taken` (never overwritten, not idempotent). Public: gated
+        server creates the account under that id and, for an OWNER invite, stores the OWNER membership + grant and
+        flips the tenant ACTIVE; for a MEMBER invite it stores the MEMBER membership with the self-grant, the
+        profile with the join record, after the invite key's proof verified (as `acceptTenantInvite`). Either way it
+        consumes the invite. A taken `userId` is `409 id_taken` (never overwritten, not idempotent). Public: gated
         by the bootstrap secret. The new user logs in afterward (no session is issued here, mirroring setup).
       requestBody:
         required: true
@@ -2239,6 +2306,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invalid_request }
+        "403":
+          description: A MEMBER invite's `inviteProof` does not verify under the stored invite key (`invite_proof_invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_proof_invalid }
         "404":
           description: No invite matches that secret.
           content:
@@ -2248,8 +2321,10 @@ paths:
         "409":
           description: >
             A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
-            chosen `username` is already taken in this tenant (`username_taken`), or the `userId` is already taken
-            (`id_taken`). The specific case is in `code`.
+            chosen `username` is already taken in this tenant (`username_taken`), the `userId` is already taken
+            (`id_taken`), the self-grant names an epoch above the tenant scope's current one (`stale_epoch`), or its
+            `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`). The
+            specific case is in `code`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2569,8 +2644,8 @@ components:
       type: string
       description: >
         The role the invite grants on acceptance. OWNER cold-births the TENANT scope + seals the first grant
-        (tenant activation, cr-0010); MEMBER joins an already-active tenant grant-less, the key delivered
-        later by a key-holder (cr-0076/cr-0077).
+        (tenant activation, cr-0010); MEMBER joins an already-active tenant through an invite key the owner signed,
+        granting itself the epoch the invite holds (ADR 0111 decisions 1-3).
       enum: [OWNER, MEMBER]
       example: MEMBER
 
@@ -2591,7 +2666,11 @@ components:
 
     MemberInviteRequest:
       type: object
-      required: [email, admissionId, admissionEpoch, admissionTag]
+      description: >
+        A member invite as the owner's client builds it ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1-2): the invite
+        key's public half, the owner's signature over it, a grant of the tenant scope's current epoch to it, and the
+        link's sealed part the server mails and forgets.
+      required: [email, inviteId, invitePublicKey, inviteKeySignature, expiresAt, sealedLink, epoch, wrappedGrant, grantSignature, recipientIdentityDigest]
       properties:
         email:
           x-veyq-visibility: pii
@@ -2604,35 +2683,90 @@ components:
           maxLength: 254
           example: partner@example.com
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
-        admissionId:
+        inviteId:
           x-veyq-visibility: id
           type: string
           format: uuid
           description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the invite, tagged under the tenant scope's current epoch key with no user id (the invitee has no account yet). A reissued invite keeps it, and accepting copies it onto the new membership; a tag stated at an epoch that is no longer the tenant's current one is `409 stale_epoch`.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+            The client-minted UUIDv4 id of the invite (ADR 0072 Decision 3) — bound into the owner's `invite-key`
+            signature, the link's seal, and the grant's signature as its recipient. Taken ⇒ `409 id_taken`.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        admissionEpoch:
+        invitePublicKey:
+          type: string
+          description: >
+            The invite key's public bundle (X-Wing encapsulation key + Ed25519 key, `serializeIdentityPublic`), derived
+            by the owner's client from a seed only the link carries. Opaque base64 the server stores and serves.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aW52aXRlLXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        inviteKeySignature:
+          type: string
+          description: >
+            The inviting owner's Ed25519 identity signature over `encode(invite-key: tenantId, inviteId,
+            sha256(invitePublicKey), expiresAt in Unix seconds)`. The server verifies it under the caller's stored
+            identity key before it mints (`400 invalid_request`) — so a session without the owner's unlocked vault mints
+            no invite — and stores it beside that key; the invitee checks it against the fingerprint inside the link's seal.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            The invite's expiry, in whole seconds — the owner signs it. The server takes it only within one minute of
+            its own invite lifetime from now (`veyq.tenant.invite.ttl`), else `400 invalid_request`, and stores it as
+            the invite's expiry.
+          example: 2026-07-11T12:00:00Z
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        sealedLink:
+          type: string
+          description: >
+            The link's sealed part: `mode ‖ kdfParams ‖ seal(invite-link: tenantId, inviteId)` of the invite key's seed,
+            the owner's fingerprint hash and account, under `Argon2id(code or password, salt)`. The server appends its
+            base64url form to the mailed link's fragment after the token (`#<token>.<sealed>`) and keeps no copy; the
+            code never reaches it.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLWxpbms=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
+          description: The tenant scope epoch whose key `wrappedGrant` carries — its current one, checked under its row lock (`409 stale_epoch`).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
-        admissionTag:
+        wrappedGrant:
           type: string
           description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            The epoch key sealed to the invite key (`sealTo(scope-grant: tenantId, epoch)`), opaque base64.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: >
+            The owner's signature over this grant: the `grant` statement (ADR 0028 Decision 6) with kind `TENANT`, the
+            invite id as `recipientUserId` and the invite bundle as the recipient's identity. Opaque base64.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: string
+          description: >
+            SHA-256 of the identity bundle the grant is wrapped to — here `invitePublicKey`. The server compares it
+            with the key it stores for the recipient and refuses another (`409 recipient_key_not_current`): a grant
+            names the key it is wrapped to from birth.
           contentEncoding: base64
           maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     PendingMemberInvite:
@@ -2660,32 +2794,6 @@ components:
           type: string
           format: date-time
           example: 2026-07-11T12:00:00Z
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the invite's, served so a rotation of the tenant scope can verify it and carry it forward (ADR 0024 §4); `null` when it carries none.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-        admissionTag:
-          type: [string, "null"]
-          description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
-          contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
 
     MemberInviteState:
       type: object
@@ -3329,6 +3437,89 @@ components:
             True for an OWNER invite into an ACTIVE tenant (`inviteTenantOwner`): the invitee is already its member and
             accepts with `acceptTenantOwnership` — nothing is born, they become an owner (ADR 0101 decision 9).
           example: false
+        invite:
+          description: >
+            A MEMBER invite's key, its owner's signature and its grant — what the invitee's client checks against the
+            link's sealed part and opens (ADR 0111 decision 1). Null for an OWNER invite, which carries no key.
+          oneOf:
+            - $ref: "#/components/schemas/ServedMemberInvite"
+            - type: "null"
+
+    ServedMemberInvite:
+      type: object
+      description: >
+        A member invite as its invitee reads it. Every byte is the server's word until the invitee's client checked it:
+        the invite key must be the one the link's seed derives, the signer's key must hash to the fingerprint inside the
+        link's seal, and the signature must verify under it.
+      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+        invitePublicKey:
+          type: string
+          description: The invite key's public bundle, as the owner's client posted it.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aW52aXRlLXB1YmxpYy1rZXk=
+        inviteKeySignature:
+          type: string
+          description: The inviting owner's `invite-key` signature over it.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: The invite's expiry, as the owner signed it.
+          example: 2026-07-11T12:00:00Z
+        signerUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The inviting owner.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        signerIdentityPublicKey:
+          type: string
+          description: The inviting owner's identity public bundle as it was when they signed (kept, so a later rotation of theirs does not void the invite).
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+        wrappedGrant:
+          type: string
+          description: The invite's grant — the tenant scope's epoch key at `grantedEpoch`, sealed to the invite key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+        grantedEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The epoch the invite's grant carries: the tenant's current one, or an older one if a rotation declared the
+            invite pending — its newcomer then joins behind and is brought current by the grant delivery.
+          minimum: 0
+          example: 0
+        grantSignature:
+          type: string
+          description: The granter's `grant` signature (recipient = the invite id and the invite bundle).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        granterUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Who wrapped that grant — the inviting owner, or the member whose rotation re-wrapped it.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        granterIdentityPublicKey:
+          type: string
+          description: The granter's identity public bundle as it signed.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
 
     AcceptOwnershipRequest:
       type: object
@@ -3374,8 +3565,8 @@ components:
           description: >
             The scope root key sealed to the caller's own identity public key. **Required for an OWNER invite**
             (the invitee cold-births the TENANT scope and seals the first grant) — opaque base64 the server
-            stores verbatim. **Omitted for a MEMBER invite**: a member joins grant-less and the key is
-            delivered later by a key-holder (cr-0076). The server enforces this per the invite's role.
+            stores verbatim. **Omitted for a MEMBER invite**, which carries `selfGrant` instead. The server
+            enforces this per the invite's role.
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
@@ -3391,41 +3582,45 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
+        selfGrant:
           description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the owner's own tenant membership, self-tagged at the cold birth under `E_0` (epoch 0, no user id) so a later rotation has a tag to carry forward. Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
-        admissionTag:
+            **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the
+            invite's grant, sealed to its own identity and signed by it (ADR 0111 decision 3). The server stores it as
+            the membership's grant (granter = the newcomer) — of the tenant's current epoch, or older when a rotation
+            declared the invite pending (the membership is then behind, and the grant delivery brings it current).
+          oneOf:
+            - $ref: "#/components/schemas/InviteSelfGrant"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        inviteProof:
           type: [string, "null"]
           description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            **Required for a MEMBER invite.** The invite key's Ed25519 signature over `encode(invite-accept: inviteId,
+            userId, sha256(identity bundle))`, verified under the stored invite key (`403 invite_proof_invalid`): an
+            honest server refuses a redeem by token alone.
           contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedJoinRecord:
+          type: [string, "null"]
+          description: >
+            **Required for a MEMBER invite.** The newcomer's join record (ADR 0111 decisions 3 and 12) — its identity
+            and Secret-Key proof public key, the owner-signed invite it came through, signed by the invite key and by
+            the new identity — sealed under the tenant key (field `member-join-record`, bound to the tenant scope and
+            the new account). Stored in the profile, served to members on `ScopeMember.sealedJoinRecord`, written
+            only here.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLWpvaW4tcmVjb3Jk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >
             OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
-            op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
-            (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
-            profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
+            op stores (ADR 0023). Submitted **at the join** — the invitee holds `K_tenant` at accept, from the cold
+            birth or the invite's grant; omitted ⇒ username-only, the name added/edited later in the profile.
+            Stored verbatim; the server never decrypts it.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
@@ -3435,13 +3630,52 @@ components:
           description: >
             OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
-            the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
-            `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
-            or null = no picture.
+            the join, where the invitee holds `K_tenant` (from the cold birth or the invite's grant); stored verbatim
+            with `avatarRevision` 1. Omitted or null = no picture.
           contentEncoding: base64
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    InviteSelfGrant:
+      type: object
+      description: >
+        The newcomer's grant to itself (ADR 0111 decision 3): the epoch key it opened from its invite's grant, sealed to
+        its own identity and signed by it — the `grant` statement with kind `TENANT` and its own account as recipient.
+      required: [wrappedGrant, grantSignature, epoch, recipientIdentityDigest]
+      properties:
+        wrappedGrant:
+          type: string
+          description: >
+            The epoch key sealed to the newcomer's identity (`sealTo(scope-grant: tenantId, epoch)`).
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: The newcomer's own identity signature over that grant.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The epoch it carries — the invite grant's. Above the tenant's current epoch is `409 stale_epoch`; below it
+            is taken (a pending invite) and leaves the membership behind.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        recipientIdentityDigest:
+          type: string
+          description: SHA-256 of the newcomer's identity bundle — compared with the account's key (`409 recipient_key_not_current`).
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MemberAvatar:
       type: object
@@ -3528,9 +3762,8 @@ components:
           type: [string, "null"]
           description: >
             The scope root key sealed to the new account's identity public key. **Required for an OWNER
-            invite** (cold-births the TENANT scope); **omitted for a MEMBER invite** (the member joins
-            grant-less; a key-holder delivers the key later, cr-0076). Opaque base64; enforced per the invite's
-            role.
+            invite** (cold-births the TENANT scope); **omitted for a MEMBER invite**, which carries `selfGrant`
+            instead. Opaque base64; enforced per the invite's role.
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
@@ -3546,41 +3779,45 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        admissionId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
+        selfGrant:
           description: >
-            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
-            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the owner's own tenant membership, self-tagged at the cold birth under `E_0` (epoch 0, no user id) so a later rotation has a tag to carry forward. Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite.
-          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
-        admissionEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
-            a tag made before a rotation does not admit (ADR 0020 move 6).
-          minimum: 0
-          example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
-        admissionTag:
+            **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the
+            invite's grant, sealed to its own identity and signed by it (ADR 0111 decision 3). The server stores it as
+            the membership's grant (granter = the newcomer) — of the tenant's current epoch, or older when a rotation
+            declared the invite pending (the membership is then behind, and the grant delivery brings it current).
+          oneOf:
+            - $ref: "#/components/schemas/InviteSelfGrant"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        inviteProof:
           type: [string, "null"]
           description: >
-            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
-            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
-            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
-            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+            **Required for a MEMBER invite.** The invite key's Ed25519 signature over `encode(invite-accept: inviteId,
+            userId, sha256(identity bundle))`, verified under the stored invite key (`403 invite_proof_invalid`): an
+            honest server refuses a redeem by token alone.
           contentEncoding: base64
-          maxLength: 64
-          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedJoinRecord:
+          type: [string, "null"]
+          description: >
+            **Required for a MEMBER invite.** The newcomer's join record (ADR 0111 decisions 3 and 12) — its identity
+            and Secret-Key proof public key, the owner-signed invite it came through, signed by the invite key and by
+            the new identity — sealed under the tenant key (field `member-join-record`, bound to the tenant scope and
+            the new account). Stored in the profile, served to members on `ScopeMember.sealedJoinRecord`, written
+            only here.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLWpvaW4tcmVjb3Jk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >
             OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
-            op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
-            (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
-            profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
+            op stores (ADR 0023). Submitted **at the join** — the invitee holds `K_tenant` at accept, from the cold
+            birth or the invite's grant; omitted ⇒ username-only, the name added/edited later in the profile.
+            Stored verbatim; the server never decrypts it.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
@@ -3590,9 +3827,8 @@ components:
           description: >
             OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
             `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
-            the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
-            `avatarRevision` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
-            or null = no picture.
+            the join, where the invitee holds `K_tenant` (from the cold birth or the invite's grant); stored verbatim
+            with `avatarRevision` 1. Omitted or null = no picture.
           contentEncoding: base64
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==

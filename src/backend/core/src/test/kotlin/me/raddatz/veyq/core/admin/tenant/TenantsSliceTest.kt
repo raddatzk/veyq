@@ -1,6 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -253,7 +253,7 @@ class TenantsSliceTest {
         val userId = UUID.randomUUID().toString()
         ensureUser(userId, invitedEmail, "MEMBER")
         return given().header("Authorization", bearer(userId))
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
             .`when`().post("/api/tenants/accept")
     }
 

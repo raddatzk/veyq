@@ -5,7 +5,7 @@
 // no other spec reads:
 //
 //   1. the Server Owner creates the tenant for a fresh owner, who sets the space's mail to the run's relay and invites a
-//      fresh member by mail; the owner's device delivers the space's key;
+//      fresh member by mail with a code; the member joins holding the space's key (ADR 0111);
 //   2. the owner keeps a Depot file in a folder of the shared space (beside a subfolder) and a Memory at its root; the
 //      member keeps a Depot file in a folder of their personal space;
 //   3. the owner switches Depot off in Settings → Capabilities: the confirmation shows the catalog's `whenOff`, the owner's
@@ -270,6 +270,8 @@ test(
     await invite.getByLabel('Email address').fill(fresh.email)
     await invite.getByRole('button', { name: 'Send invite' }).click()
     await expect(invite.getByText(`Invitation sent to ${fresh.email}.`)).toBeVisible({ timeout: 30_000 })
+    // The code is shown once, here, and travels outside veyq (ADR 0111 decision 1): never in the mail, never on the wire.
+    const code = recordTyped((await invite.getByTestId('invite-code').textContent())!.trim())
     await invite.getByRole('button', { name: 'Done' }).click()
 
     const [mail] = await awaitMails(fresh.email, new RegExp(`^You're invited to ${escape(domain())} `))
@@ -278,6 +280,9 @@ test(
     const tab = member.page
     await tab.goto(link!)
     await expect(tab.getByText(`You have been invited to join “${TENANT}” (${domain()}).`)).toBeVisible({ timeout: 60_000 })
+    // The link alone opens nothing: the code opens its sealed part, and the client checks the invite before anything else.
+    await tab.getByRole('textbox', { name: 'Code', exact: true }).fill(code)
+    await tab.getByRole('button', { name: 'Continue' }).click()
     await tab.getByLabel('Username').fill(handles.member)
     await tab.locator('#join-password').fill(recordTyped(fresh.password))
     await tab.getByRole('button', { name: 'Continue' }).click()
@@ -292,12 +297,10 @@ test(
     await submitSignIn(tab, accountMember)
     await expect(tab.locator('.profile-button')).toBeVisible({ timeout: 60_000 })
 
-    // Each entry into the space runs the owner's delivery at once; the member's row turns Active once it took.
-    await expect(async () => {
-      await openSettings('Members')
-      await expect(page.locator('.member-row').filter({ hasText: `@${handles.member}` }).locator('.veyq-badge').first())
-        .toHaveText('Active', { timeout: 10_000 })
-    }).toPass({ timeout: 90_000, intervals: [2_000] })
+    // The member granted itself the space's key at its accept (ADR 0111): its row is Active at once, no delivery waited for.
+    await openSettings('Members')
+    await expect(page.locator('.member-row').filter({ hasText: `@${handles.member}` }).locator('.veyq-badge').first())
+      .toHaveText('Active', { timeout: 30_000 })
   },
 )
 

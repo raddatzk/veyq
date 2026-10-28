@@ -10,7 +10,7 @@ import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.WrapData
-import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.persistence.createOrConflict
@@ -34,16 +34,39 @@ data class NewAccount(
 
 /**
  * What an OWNER accept brings for the tenant's cold birth: the first grant with the owner's self-signature over it
- * (ADR 0028 Decision 6), and the admission the owner self-tagged under `E_0` (ADR 0020 move 6). All or nothing —
- * a birth missing any part is no birth, and the accept answers it as a missing grant.
+ * (ADR 0028 Decision 6). All or nothing — a birth missing a part is no birth, and the accept answers it as a missing
+ * grant.
  */
-data class OwnerBirth(val grant: SignedGrant, val admission: Admission) {
+data class OwnerBirth(val grant: SignedGrant) {
     companion object {
-        fun of(grant: String?, signature: String?, admissionId: java.util.UUID?, admissionEpoch: Int?, admissionTag: String?): OwnerBirth? =
-            if (grant == null || signature == null || admissionId == null || admissionEpoch == null || admissionTag == null) null
-            else OwnerBirth(SignedGrant(grant, signature), Admission(admissionId.toString(), admissionEpoch, admissionTag))
+        fun of(grant: String?, signature: String?): OwnerBirth? =
+            if (grant == null || signature == null) null else OwnerBirth(SignedGrant(grant, signature))
     }
 }
+
+/**
+ * What a MEMBER accept brings (ADR 0111 decision 3): the grant the newcomer gave itself from its invite's grant — at
+ * [epoch], naming the key it is wrapped to — the invite key's proof that its holder redeems it for this account and
+ * key, and the join record sealed under the tenant key. All or nothing, like [OwnerBirth].
+ */
+data class MemberJoin(
+    val selfGrant: SignedGrant,
+    val epoch: Int,
+    val recipientIdentityDigest: String,
+    val inviteProof: String,
+    val sealedJoinRecord: String,
+) {
+    companion object {
+        fun of(
+            wrappedGrant: String?, signature: String?, epoch: Int?, digest: String?, inviteProof: String?, sealedJoinRecord: String?,
+        ): MemberJoin? =
+            if (wrappedGrant == null || signature == null || epoch == null || digest == null || inviteProof == null || sealedJoinRecord == null) null
+            else MemberJoin(SignedGrant(wrappedGrant, signature), epoch, digest, inviteProof, sealedJoinRecord)
+    }
+}
+
+/** Why a MEMBER join was refused before anything was written, or null when it may go ahead. */
+private enum class JoinRefusal { MISSING, PROOF_INVALID, RECIPIENT_KEY_NOT_CURRENT, STALE_EPOCH }
 
 sealed interface PreviewOutcome {
     data class Found(
@@ -55,6 +78,8 @@ sealed interface PreviewOutcome {
         val role: String,
         /** An OWNER invite into an ACTIVE tenant (ADR 0101 decision 9): accepted by [TenantAcceptHandler.acceptOwnership]. */
         val handover: Boolean,
+        /** A MEMBER invite's key, signature and grant (ADR 0111 decision 1) — the invitee checks them against its link. */
+        val invite: TenantInviteEntity?,
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
@@ -68,6 +93,9 @@ sealed interface AcceptOutcome {
     data object AlreadyActive : AcceptOutcome, HttpFailure by httpFailure("tenant_not_pending", FailureStatus.CONFLICT)
     data object MissingGrant : AcceptOutcome, HttpFailure by Failures.invalidRequest
     data object UsernameTaken : AcceptOutcome, HttpFailure by Failures.usernameTaken
+    data object InviteProofInvalid : AcceptOutcome, HttpFailure by httpFailure("invite_proof_invalid", FailureStatus.FORBIDDEN)
+    data object RecipientKeyNotCurrent : AcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
+    data object StaleEpoch : AcceptOutcome, HttpFailure by Failures.staleEpoch
 }
 
 /** Result of a member accepting an owner invite into an ACTIVE tenant (`acceptTenantOwnership`, ADR 0101 decision 9). */
@@ -87,6 +115,9 @@ sealed interface RegisterAcceptOutcome {
     data object MissingGrant : RegisterAcceptOutcome, HttpFailure by Failures.invalidRequest
     data object UsernameTaken : RegisterAcceptOutcome, HttpFailure by Failures.usernameTaken
     data object IdTaken : RegisterAcceptOutcome, HttpFailure by Failures.idTaken
+    data object InviteProofInvalid : RegisterAcceptOutcome, HttpFailure by httpFailure("invite_proof_invalid", FailureStatus.FORBIDDEN)
+    data object RecipientKeyNotCurrent : RegisterAcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
+    data object StaleEpoch : RegisterAcceptOutcome, HttpFailure by Failures.staleEpoch
 }
 
 /**
@@ -122,6 +153,7 @@ class TenantAcceptHandler(
             hasAccount = accounts.findByEmail(invite.ownerEmail) != null,
             role = invite.role,
             handover = invite.role == TenantInviteEntity.OWNER && tenant.status == TenantEntity.ACTIVE,
+            invite = invite.takeIf { it.role == TenantInviteEntity.MEMBER && it.invitePublicKey != null },
         )
     }
 
@@ -149,16 +181,18 @@ class TenantAcceptHandler(
 
     /** Existing-user accept: the caller (resolved from the session) must be the invited person. Role-branched
      *  (cr-0077): an OWNER accept cold-activates the tenant (grant required); a MEMBER accept joins the ACTIVE
-     *  tenant grant-less (no grant), the key delivered later by a key-holder (cr-0076). */
+     *  tenant with the grant it gave itself, after its invite key's proof verified (ADR 0111 decision 3). */
     fun accept(
-        userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?, sealedAvatar: String?,
+        userId: String, bootstrapSecret: String, birth: OwnerBirth?, join: MemberJoin?, username: String, sealedName: String?,
+        sealedAvatar: String?,
     ): AcceptOutcome =
         createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) AcceptOutcome.UsernameTaken else null }) {
-            acceptOnce(userId, bootstrapSecret, birth, username, sealedName, sealedAvatar)
+            acceptOnce(userId, bootstrapSecret, birth, join, username, sealedName, sealedAvatar)
         }
 
     private fun acceptOnce(
-        userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?, sealedAvatar: String?,
+        userId: String, bootstrapSecret: String, birth: OwnerBirth?, join: MemberJoin?, username: String, sealedName: String?,
+        sealedAvatar: String?,
     ): AcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return AcceptOutcome.NotFound
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
@@ -169,22 +203,33 @@ class TenantAcceptHandler(
 
         return if (invite.role == TenantInviteEntity.MEMBER) {
             if (!access.isTenantLive(tenant.id)) return AcceptOutcome.NoLongerValid
-            // The rotation's lock first, so the admission copied below is one no in-flight rotation is replacing.
-            store.lockTenantScope(tenant.id)
+            // The rotation's lock first, so the invite read below is one no in-flight rotation is re-granting, and the
+            // self-grant's epoch is judged against the epoch as committed now.
+            val current = store.lockTenantScope(tenant.id) ?: return AcceptOutcome.NotFound
+            store.refreshInvite(invite)
+            if (!isLive(invite)) return AcceptOutcome.NoLongerValid
+            when (refusal(join, invite, userId, caller.identityPublicKey, current)) {
+                JoinRefusal.MISSING -> return AcceptOutcome.MissingGrant
+                JoinRefusal.PROOF_INVALID -> return AcceptOutcome.InviteProofInvalid
+                JoinRefusal.RECIPIENT_KEY_NOT_CURRENT -> return AcceptOutcome.RecipientKeyNotCurrent
+                JoinRefusal.STALE_EPOCH -> return AcceptOutcome.StaleEpoch
+                null -> Unit
+            }
+            val j = join!!
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
-            val admission = store.currentAdmission(invite)
-            // A member joins an ACTIVE tenant grant-less; if already a member, spending the invite is all there is
-            // (their tenant profile already exists — the username is only chosen on a fresh join).
+            // If already a member, spending the invite is all there is (their tenant profile already exists — the
+            // username is only chosen on a fresh join).
             if (store.belongsToTenant(userId, tenant.id)) {
                 // nothing to join
             } else if (profiles.find(userId, tenant.id) != null) {
                 // A member removed from the tenant and invited back: the profile outlived the removal, so they
-                // rejoin under the username they had rather than being handed a second one.
-                store.joinAsMember(tenant.id, userId, admission)
+                // rejoin under the username they had rather than being handed a second one — with a new join record.
+                store.joinAsMember(tenant.id, userId, j.selfGrant, j.epoch)
+                profiles.setJoinRecord(userId, tenant.id, j.sealedJoinRecord)
             } else {
                 if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
-                store.joinAsMember(tenant.id, userId, admission)
-                profiles.create(userId, tenant.id, username, sealedName)
+                store.joinAsMember(tenant.id, userId, j.selfGrant, j.epoch)
+                profiles.create(userId, tenant.id, username, sealedName, sealedAvatar, j.sealedJoinRecord)
             }
             // A member invite only ever travels by mail (ADR 0055 §2), so redeeming it proves the mailbox — keyed on
             // the invite's ROLE, never on a delivery value (ADR 0074 Decision 2). Every MEMBER sub-branch above.
@@ -196,27 +241,27 @@ class TenantAcceptHandler(
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
             if (tenant.status != TenantEntity.PENDING) return unspend(AcceptOutcome.AlreadyActive)
             if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
-            store.activate(tenant.id, userId, b.grant, b.admission)
+            store.activate(tenant.id, userId, b.grant)
             // Owner cold-birth: the caller holds K_tenant here, so an optional sealed name may ride the accept (cr-0106),
-            // and so may the picture (ADR 0084 decision 7) - which a MEMBER branch above never stores: it holds no key yet.
+            // and so may the picture (ADR 0084 decision 7).
             profiles.create(userId, tenant.id, username, sealedName, sealedAvatar)
             AcceptOutcome.Activated(tenant.id)
         }
     }
 
     /** Register-and-accept: the invited email has no account yet — born cold here (email from the invite).
-     *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins grant-less. */
+     *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins with its self-grant. */
     fun registerAndAccept(
-        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
-        sealedAvatar: String?,
+        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
+        sealedName: String?, sealedAvatar: String?,
     ): RegisterAcceptOutcome =
         createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
-            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, username, sealedName, sealedAvatar)
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, sealedName, sealedAvatar)
         }
 
     private fun registerAndAcceptOnce(
-        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
-        sealedAvatar: String?,
+        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
+        sealedName: String?, sealedAvatar: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
@@ -225,8 +270,20 @@ class TenantAcceptHandler(
 
         val member = invite.role == TenantInviteEntity.MEMBER
         if (!member && birth == null) return RegisterAcceptOutcome.MissingGrant
-        // A MEMBER takes the rotation's lock first, as in [accept]; then the spend, before anything is born.
-        if (member) store.lockTenantScope(tenant.id)
+        // A MEMBER takes the rotation's lock first and checks its join under it, as in [accept]; then the spend, before
+        // anything is born.
+        if (member) {
+            val current = store.lockTenantScope(tenant.id) ?: return RegisterAcceptOutcome.NotFound
+            store.refreshInvite(invite)
+            if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
+            when (refusal(join, invite, userId, account.identityPublicKey, current)) {
+                JoinRefusal.MISSING -> return RegisterAcceptOutcome.MissingGrant
+                JoinRefusal.PROOF_INVALID -> return RegisterAcceptOutcome.InviteProofInvalid
+                JoinRefusal.RECIPIENT_KEY_NOT_CURRENT -> return RegisterAcceptOutcome.RecipientKeyNotCurrent
+                JoinRefusal.STALE_EPOCH -> return RegisterAcceptOutcome.StaleEpoch
+                null -> Unit
+            }
+        }
         if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
         // An owner invite into an ACTIVE tenant goes to a member (ADR 0101 decision 9), never to a new account: a tenant
@@ -249,19 +306,34 @@ class TenantAcceptHandler(
             wraps = account.wraps,
         )
         if (member) {
-            store.joinAsMember(tenant.id, userId, store.currentAdmission(invite))
+            store.joinAsMember(tenant.id, userId, join!!.selfGrant, join.epoch)
             // Mail-only by construction (ADR 0055 §2): the redeemed token is the mailbox proof (ADR 0074 Decision 2).
             // The OWNER branch is the copy-link and stamps nothing.
             VeyqUser.findById(userId)!!.confirmAddress(invite.ownerEmail)
         } else {
-            store.activate(tenant.id, userId, birth!!.grant, birth.admission)
+            store.activate(tenant.id, userId, birth!!.grant)
         }
-        // The per-tenant identity: the plaintext handle, plus the optional sealed real name when the invitee
-        // already holds K_tenant at accept (owner cold-birth / grant-sealed accept — ADR 0023); a grant-less
-        // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).
-        // The picture rides only the OWNER branch (ADR 0084 decision 7): a MEMBER invitee holds no K_tenant yet.
-        profiles.create(userId, tenant.id, username, sealedName, sealedAvatar.takeIf { !member })
+        // The per-tenant identity: the plaintext handle, plus what the joiner sealed under K_tenant, which it holds at
+        // accept either way (ADR 0023, ADR 0111 decision 3) — the optional name and picture (ADR 0084 decision 7) and a
+        // member's join record. The server stores the blobs verbatim (blind).
+        profiles.create(userId, tenant.id, username, sealedName, sealedAvatar, if (member) join?.sealedJoinRecord else null)
         return RegisterAcceptOutcome.Activated(tenant.id, userId)
+    }
+
+    /**
+     * What a MEMBER join must hold before anything is written (ADR 0111 decision 3), read under the tenant scope's lock:
+     * all its parts; the invite key's proof that this account and identity redeem it, verified under the invite key the
+     * server stores (the operator could mint its own invite, but an honest server refuses a redeem by token alone); a
+     * self-grant addressed to [identityPublicKey], the account's key; and an epoch no later than the tenant's [current]
+     * one — an earlier one is a pending invite's, and leaves the membership behind for the grant delivery.
+     */
+    private fun refusal(join: MemberJoin?, invite: TenantInviteEntity, userId: String, identityPublicKey: String?, current: Int): JoinRefusal? {
+        val j = join ?: return JoinRefusal.MISSING
+        val key = identityPublicKey ?: return JoinRefusal.RECIPIENT_KEY_NOT_CURRENT
+        if (!InviteAcceptProof.verify(invite.invitePublicKey, invite.id, userId, key, j.inviteProof)) return JoinRefusal.PROOF_INVALID
+        if (!InviteAcceptProof.digestMatches(key, j.recipientIdentityDigest)) return JoinRefusal.RECIPIENT_KEY_NOT_CURRENT
+        if (j.epoch > current) return JoinRefusal.STALE_EPOCH
+        return null
     }
 
     /**

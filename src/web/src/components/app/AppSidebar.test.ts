@@ -106,15 +106,17 @@ describe('AppSidebar space list', () => {
     expect(wrapper.get('.sidebar-tenant-space-link').classes()).not.toContain('router-link-active')
   })
 
-  it('surfaces "awaiting access" on the active tenant when the caller holds no grant yet (cr-0077)', async () => {
-    activeSpace.tenantUnavailable = true // a grant-less member fell back to Personal
+  it('marks the active tenant as waiting for its current key when the caller\'s grant does not open (behind or refused)', async () => {
+    // A rotation skipped this member, or its grant was refused: the home fell back to Personal (ADR 0024 Decision 6).
+    // A new member never shows this — it joins holding the tenant key (ADR 0111).
+    activeSpace.tenantUnavailable = true
     const wrapper = await mountAt('')
     const awaiting = wrapper.find('.sidebar-tenant-awaiting')
     expect(awaiting.exists()).toBe(true)
-    expect(awaiting.text()).toContain(t('members.awaitingAccess'))
+    expect(awaiting.text()).toContain(t('members.awaitingCurrentKey'))
   })
 
-  it('shows the domain (no awaiting badge) once the grant is delivered', async () => {
+  it('shows the domain (no waiting mark) once the grant is current', async () => {
     activeSpace.tenantUnavailable = false
     const wrapper = await mountAt('')
     expect(wrapper.find('.sidebar-tenant-awaiting').exists()).toBe(false)

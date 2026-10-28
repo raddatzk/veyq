@@ -215,6 +215,14 @@ export const kekRecovery = (recoveryCode: Uint8Array, salt: Uint8Array, params: 
   argon2id(recoveryCode, salt, params)
 
 /**
+ * A member invite link's KEK (ADR 0111 decision 1, ./invite.ts): `Argon2id(secret, salt)`, the secret the UTF-8 of the
+ * normalised generated code or of the password the owner chose (`inviteLinkSecret`). The operator holds the sealed
+ * link it protects and can guess offline, which is why it is stretched like a password. Pinned by `#invite_link`.
+ */
+export const kekInviteLink = (secret: Uint8Array, salt: Uint8Array, params: ArgonParams = ARGON): Uint8Array =>
+  argon2id(secret, salt, params)
+
+/**
  * DEVICE-wrap KEK (uc.account.trust-device): `Argon2id(deviceFactor + password)`. Same construction as
  * kekPasswordSecret — factor first, password second — but the device-bound factor (the HMAC of a
  * non-extractable WebCrypto key, computed by the platform glue) replaces the cold Secret Key, so a trusted
@@ -388,30 +396,6 @@ export const eraseAccountAttestationStatement = (s: { userId: string; nonce: Uin
 export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)
 
 export const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n))
-
-// ── Admission tag (ADR 0020 move 6) ─────────────────────────────────────────────────────────────────────
-// An owner's SESSION proves a password, not a key. So every membership that is to receive a grant carries a tag
-// only a holder of the scope's current epoch key can compute, and no client wraps a scope key to anyone whose tag
-// does not verify. `HMAC-SHA256(HKDF(E_epoch, salt = "", info = "veyq/v1/admission-tag"), statement)`, the
-// statement being the canonical `admission-tag` encoding. A MAC, not a signature: it needs no trust root, and any
-// key-holder computing it is no stronger than what a key-holder can already do with the key itself.
-
-/** What an admission tag binds: the scope, the epoch whose key made it, the client-minted admission id, and the
- *  target's account for a group add (`null` for a tenant invite — the invitee has no account yet). */
-export type Admission = { scopeId: string; epoch: number; admissionId: string; userId: string | null }
-
-const ADMISSION_TAG_INFO = utf8('veyq/v1/admission-tag')
-
-/** The admission tag under the epoch key `epochKey`, which must be the key of `a.epoch`. */
-export function admissionTag(epochKey: Uint8Array, a: Admission): Uint8Array {
-  const key = hkdf(sha256, epochKey, new Uint8Array(0), ADMISSION_TAG_INFO, 32)
-  return hmac(sha256, key, encodeStatement({ purpose: 'admission-tag', ...a }))
-}
-
-/** Whether `tag` is the admission tag of `a` under `epochKey`. Constant-time over the tag bytes. The CALLER decides
- *  which epoch key it holds — a worker passes its own current one, so a tag made before a rotation does not admit. */
-export const admissionTagVerifies = (epochKey: Uint8Array, a: Admission, tag: Uint8Array): boolean =>
-  macEquals(admissionTag(epochKey, a), tag)
 
 /** Constant-time over the expected MAC's bytes; a MAC of any other length is refused first. */
 function macEquals(expected: Uint8Array, mac: Uint8Array): boolean {
@@ -604,16 +588,20 @@ export const grantStatement = (g: GrantStatementInput): Extract<StatementContext
   wrappedGrantDigest: sha256(g.wrappedGrant),
 })
 
-/** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`). Only a typed statement can
- *  be signed, so this key never signs bytes whose meaning it does not name. Deterministic, so the vectors pin it. */
-export const identitySign = (signPrivateKey: Uint8Array, statement: Extract<StatementContext, { purpose: 'grant' }>): Uint8Array =>
+/** The statements an identity-shaped key signs: a grant, an invite's key, an invite's redeem, a join record. */
+export type IdentityStatement = Extract<StatementContext, { purpose: 'grant' | 'invite-key' | 'invite-accept' | 'join-record' }>
+
+/** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`) — an account's or an invite
+ *  key's (./invite.ts). Only a typed statement can be signed, so this key never signs bytes whose meaning it does not
+ *  name. Deterministic, so the vectors pin it. */
+export const identitySign = (signPrivateKey: Uint8Array, statement: IdentityStatement): Uint8Array =>
   ed25519.sign(encodeStatement(statement), signPrivateKey)
 
 /** Verify an identity signature over a typed statement. False — never a throw — for a malformed key or signature:
  *  both come from the server, and a refusal is the answer either way. */
 export function identityVerify(
   signPublicKey: Uint8Array,
-  statement: Extract<StatementContext, { purpose: 'grant' }>,
+  statement: IdentityStatement,
   signature: Uint8Array,
 ): boolean {
   try {

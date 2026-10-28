@@ -45,8 +45,9 @@ A group reuses the personal scope's machinery — client-driven birth, the hybri
    many — but **this enabler only mints the owner's self-grant**; other members' grants are the member-add slice
    ([uc.spaces.add-group-member](../use-cases/uc.spaces.add-group-member.md)), which reuses the shared
    grant-distribution primitive ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) — wrap
-   `K_SC` to an existing tenant member's identity, picked by username; the GroupOwner admits per
-   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md), any group member delivers).
+   `K_SC` to an existing tenant member's identity, picked by username; the GroupOwner adds per
+   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) and wraps the key with the add,
+   [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 4).
 3. **Explicit creation (not auto-birth).** A personal scope auto-births after unlock; a group is created on a
    deliberate user action ("new group" + a name).
 
@@ -59,8 +60,7 @@ A group reuses the personal scope's machinery — client-driven birth, the hybri
 2. The client **generates** the group's scope id and a random scope key `K_SC` (= the birth epoch `E_0`), derives
    `K_name_0 = HKDF(E_0, "group-name-key")`, **seals the name** under `K_name_0` (`encryptedName`), and seals
    `K_SC` to its **own** identity public key (purpose `scope-grant`), both bound to that scope id
-   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); it signs the grant with its identity key and
-   tags its own membership ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6).
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); it signs the grant with its identity key.
 3. `POST /api/scopes/groups { scopeId, encryptedName, wrappedGrant }` → the server creates the `kind=GROUP`
    scope under that id in the Host's tenant + the caller's self-membership (`role=OWNER`), returns
    `{ scopeId, kind:GROUP }`.

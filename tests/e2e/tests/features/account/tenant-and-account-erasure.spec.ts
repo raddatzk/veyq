@@ -241,6 +241,8 @@ test(
     await invite.getByLabel('Email address').fill(accountB.email)
     await invite.getByRole('button', { name: 'Send invite' }).click()
     await expect(invite.getByText(`Invitation sent to ${accountB.email}.`)).toBeVisible({ timeout: 30_000 })
+    // The code is shown once, here, and travels outside veyq (ADR 0111 decision 1): never in the mail, never on the wire.
+    const code = recordTyped((await invite.getByTestId('invite-code').textContent())!.trim())
     await invite.getByRole('button', { name: 'Done' }).click()
 
     // B opens the link from the mail on its own device: an existing account, so a sign-in on the invite page.
@@ -251,6 +253,9 @@ test(
     const tab = bob.page
     await tab.goto(link!)
     await expect(tab.getByText(`You have been invited to join “E2E Erase” (${eraseDomain()}).`)).toBeVisible({ timeout: 60_000 })
+    // The link alone opens nothing: the code opens its sealed part, and the client checks the invite before anything else.
+    await tab.getByRole('textbox', { name: 'Code', exact: true }).fill(code)
+    await tab.getByRole('button', { name: 'Continue' }).click()
     await tab.getByLabel('Username').fill(handles.bInErase)
     await tab.locator('#signin-password').fill(recordTyped(accountB.password))
     await tab.locator('#signin-secret-key').fill(recordTyped(accountB.secretKey))

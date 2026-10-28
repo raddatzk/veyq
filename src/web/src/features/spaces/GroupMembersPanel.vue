@@ -1,21 +1,20 @@
 <script setup lang="ts">
 // uc.spaces.add-group-member (web, cr-0086) — the "Members" rubric of the GROUP settings (re-homed into the
-// settings hub, ADR 0022). Lists the group's members (username + role + granted/awaiting-access) and, for the
+// settings hub, ADR 0022). Lists the group's members (username + role + active/pending consent) and, for the
 // group OWNER, adds an existing tenant member by username (inline). Markup mirrors TenantMembersPanel. Operator-
-// blind: only operational metadata (usernames/roles/grant-present) is shown; the add records a grant-less
-// membership, the key is delivered later by grant-delivery (cr-0076), no crypto here. Real names stay `@username`
+// blind: only operational metadata (usernames/roles) is shown; the add wraps the group's current key to the target's
+// pinned identity key on this device (ADR 0111 decision 4, `addGroupMember`), so the member holds it from the add on.
+// Real names stay `@username`
 // — they're sealed under K_tenant, which a group owner needn't hold (the active key here is the group's K_SC).
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
-import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
 import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
-import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById, revokeScopeShares } from './scopes'
-import { zeroEpochKeys } from './epochs'
+import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, revokeScopeShares } from './scopes'
 import { IdentityChangedError } from '../account/identityPins'
 import { acceptChangedKey } from './acceptChangedKey'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
@@ -90,7 +89,7 @@ const purgeDay = computed(() => (purgeAfter.value ? purgeAfter.value.toLocaleDat
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The Group load body derives ownership from
 // the directory (the group role isn't the tenant role — match my per-tenant username) and reads the lifecycle
 // (pending-deletion) state alongside the roster.
-const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     addError.value = ''
     if (!props.scopeId) throw new Error('no-scope')
@@ -106,12 +105,6 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     if (iconBytes) groupIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else groupIcon.clear()
     return { rows, isOwner: !!me && rows.some((m) => m.username === me.username && m.role === 'OWNER') }
-  }, async () => {
-    // The group's current epoch key, opened for this read and zeroed after it — the key its admissions are tagged under.
-    const opened = props.scopeId ? await openScopeById(props.scopeId) : null
-    return opened
-      ? { scopeId: opened.scopeId, kind: opened.kind, key: opened.key, epoch: opened.epochs.current, release: () => zeroEpochKeys(opened.epochs) }
-      : null
   })
 watch(() => props.scopeId, () => reload())
 
@@ -120,10 +113,11 @@ const canAdd = computed(() => username.value.trim().length >= 2 && !adding.value
 
 // Add a member (cr-0086) — with the consent opt-in (cr-0096). First resolve the username (records nothing): if
 // the target asked to be consulted, derive this group's name-key `K_name` and wrap it to their identity
-// (`group-name-key` context), and submit a **proposal** (a soft pendingConsent add grant-delivery skips until they
-// accept). Handing the key — not a name copy — lets them open the SAME canonical name; a modified owner cannot show
-// a divergent one. Otherwise it is the ordinary direct-add. The directory then reloads (newcomer = awaiting access,
-// or a pending proposal — owner-visible only).
+// (`group-name-key` context), and submit a **proposal** (a soft pendingConsent add, listed to them once they accept).
+// Handing the key — not a name copy — lets them open the SAME canonical name; a modified owner cannot show a divergent
+// one. Otherwise it is the ordinary direct-add. Either way the add carries a grant of the group's current key to the
+// target's identity key, gated by the same pin check (ADR 0111 decision 4). The directory then reloads (the newcomer
+// active, or a pending proposal — owner-visible only).
 async function submit() {
   if (!canAdd.value || !props.scopeId) return
   addError.value = ''
@@ -133,21 +127,21 @@ async function submit() {
   try {
     candidate = await resolveGroupMember(props.scopeId, uname)
     if (candidate.requiresConsent) {
-      // Wrap the group's name-key to the invitee so they open the canonical name — K_SC stays gated until they
-      // accept. This is the invite's first wrap to the invitee's identity, so it is TOFU-gated (cr-0098): a
-      // CHANGED key throws IdentityChangedError below rather than silently sealing to a possibly-substituted key.
+      // Wrap the group's name-key to the invitee so they open the canonical name — the group is listed to them once
+      // they accept. This wrap to the invitee's identity is TOFU-gated (cr-0098): a CHANGED key throws
+      // IdentityChangedError below rather than silently sealing to a possibly-substituted key.
       const sealedNameKey = await wrapGroupNameKeyForInvitee(props.scopeId, candidate.userId, candidate.identityPublicKey)
       if (!sealedNameKey) throw new Error('cannot open the group to seal the invite name-key')
-      await addGroupMember(props.scopeId, uname, candidate.userId, sealedNameKey)
+      await addGroupMember(props.scopeId, uname, candidate.userId, candidate.identityPublicKey, sealedNameKey)
       toast.success(t('groups.invitationSent'))
     } else {
-      await addGroupMember(props.scopeId, uname, candidate.userId)
+      // The grant's wrap is gated the same way: a CHANGED key throws IdentityChangedError, nothing is sent.
+      await addGroupMember(props.scopeId, uname, candidate.userId, candidate.identityPublicKey)
     }
     username.value = ''
     pendingKeyChange.value = null
-    members.value = await listScopeMembers(props.scopeId) // refresh — awaiting access, or the pending proposal
+    members.value = await listScopeMembers(props.scopeId) // refresh — the new member, or the pending proposal
     await refreshTrust()
-    await refreshAdmission()
   } catch (e) {
     if (e instanceof IdentityChangedError && candidate) {
       // The invitee's security key changed since we last pinned it (a legitimate rotation, or an operator MITM).
@@ -195,7 +189,8 @@ async function acceptChangedKeyAndRetry() {
 }
 
 // Rescind a pending consent proposal (cr-0094) — owner withdraws before acceptance. The one delete without a
-// rotation: a soft proposal was never keyed (the server refuses the bare delete for anyone else).
+// rotation of its own: the proposal held the group's key (ADR 0111 decision 4), so the server queues the group's
+// rotation for the next online owner, as a decline does (it refuses the bare delete for anyone else).
 async function rescind(m: ScopeMember) {
   actionError.value = ''
   try {
@@ -506,17 +501,13 @@ async function onRestore() {
               <strong class="veyq-row-title">@{{ m.username }}</strong>
               <span class="veyq-row-subtitle">{{ m.role }}</span>
               <div class="veyq-row-meta">
-                <span class="veyq-badge" :class="m.pendingConsent ? 'muted' : m.hasGrant ? 'success' : 'warning'">
-                  {{ m.pendingConsent ? t('members.statusPendingConsent') : m.hasGrant ? t('members.statusActive') : t('members.statusAwaiting') }}
+                <span class="veyq-badge" :class="m.pendingConsent ? 'muted' : 'success'">
+                  {{ m.pendingConsent ? t('members.statusPendingConsent') : t('members.statusActive') }}
                 </span>
                 <!-- Identity trust (ADR 0028 Decision 3): "Verified" after a compare on the member's profile, "Key changed"
                      when the directory key differs from the pin (a rotation or an operator substitution) - louder for a
                      verified contact. -->
                 <MemberTrustBadge :trust="trust[m.userId]" />
-                <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
-                <span v-if="unadmitted[m.userId]" class="veyq-badge changed">
-                  <VeyqIcon name="exclamation-triangle" />{{ t('members.badgeNotAdmitted') }}
-                </span>
               </div>
             </div>
             <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
@@ -554,7 +545,8 @@ async function onRestore() {
               />
             </div>
             <!-- A pending consent proposal (cr-0094): the only owner action is to rescind (withdraw). No promote/
-                 demote/remove — they are not yet a real member, and nothing was keyed, so rescind never rotates. -->
+                 demote/remove — they are not yet a real member; the proposal held the key, so the server queues the
+                 group's rotation on a rescind (ADR 0111 decision 4). -->
             <div v-else-if="isOwner && m.pendingConsent" class="management-actions">
               <VeyqButton
                 :label="t('groups.rescind')"

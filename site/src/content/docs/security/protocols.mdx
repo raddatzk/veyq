@@ -13,7 +13,7 @@ sources:
 import Mermaid from '../../../components/Mermaid.astro';
 
 This page walks through every protocol in which veyq creates, moves, or replaces key material: account birth and
-login, device linking, member admission, sharing, rotation and revocation, and recovery. Each section names its
+login, device linking, inviting a member, sharing, rotation and revocation, and recovery. Each section names its
 participants, gives the steps in prose and as one sequence diagram, and then states what the server learns, what it
 cannot do, and what remains open. Byte formats are not restated here. They live in the conformance-pinned suite
 [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts) and its vectors
@@ -215,35 +215,83 @@ Key it holds ([ADR 0058](https://github.com/raddatzk/veyq/blob/main/docs/decisio
 The remedy that works going forward is rotation (section 5), and it needs the Secret Key, which a linked device
 never received. See [Known limitations](/veyq/security/known-limitations/).
 
-## 3. Admitting a member, TOFU and safety numbers
+## 3. Inviting a member, TOFU and safety numbers
 
-**Purpose.** Give another person a shared scope's key without the server ever holding it, and without letting the
-server invent a member or substitute a key unnoticed
-([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
+**Purpose.** Give a new person a shared scope's key without the server ever holding it, without making them wait for
+another member's device, and without letting the server swap a key unnoticed
+([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 1–5, [ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
 [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)).
+An invite is a **placeholder member**: it holds a key the owner signed and a grant wrapped to that key, and the
+invitee replaces it with its own identity.
 
-**Participants.** The owner who admits, the invitee, any existing key-holder (every member of the scope holds its
-key), and the server.
+**Participants.** The inviting owner, the invitee, any member of the scope (every member holds its key), and the
+server.
 
-**Steps.**
+**Steps (a member invite into a tenant).**
 
-1. **Admission.** From an unlocked vault, the owner mints a member invite. It carries an **admission tag**: an
-   HMAC under a key derived from the scope's current epoch key, over the scope id, that epoch and a client-minted
-   admission id (for a group add, also the target's user id). Only a holder of the epoch key can compute it. The
-   server mails the single-use invite and stores the invite secret only as a hash.
-2. **Registration.** The invitee's identity is born on their device (section 1) and its public key published. They
-   become a member **without a grant**, shown as *awaiting access*.
-3. **Delivery, automatic.** The next key-holder to come online reads the scope's member directory, sees the pending
-   member with their identity public key, and checks the admission tag under its **own** current epoch key. It runs
-   the **TOFU gate** on the member's key: a first-seen key is pinned and used; a key that differs from the pin is
-   **not** wrapped to. The automated worker declines the job back to the server, and a human reviews the change in
-   the UI. If both checks pass, it seals the epoch key to the member's identity public key and **signs the grant**
-   with its identity key. The signature covers the scope id, the scope kind, the epoch, the recipient's user id, a
-   digest of the recipient's identity key and a digest of the grant ciphertext. The first key-holder wins; the rest
-   find the grant present and do nothing.
-4. **Opening.** The new member's client runs the same TOFU gate on the **granter's** key (pins a first-seen one,
-   refuses a changed one), verifies the signature, and only then opens the grant.
-5. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
+1. **The invite key.** From an unlocked vault, the owner's client draws a 32-byte seed and derives from it an
+   **invite key**, shaped like an identity (an X-Wing encryption key and an Ed25519 signing key). The owner signs the
+   `invite-key` statement — the tenant id, the invite id, SHA-256 of the invite key's public bundle and the expiry —
+   with its identity key, and seals a grant of the tenant's **current** epoch key to the invite key, signed like any
+   grant, with the invite id as its recipient.
+2. **The link and the code.** The client draws a **code** (10 Crockford base32 characters, 50 bits), or takes a
+   password the owner types (at least 10 characters). From it and a fresh 16-byte salt it derives a key with Argon2id
+   at the production profile, and seals under that key — purpose `invite-link`, bound to the tenant and the invite —
+   the seed, a hash of the owner's identity fingerprint and the owner's account id. The link is
+   `https://<domain>/tenant/accept#<token>.<sealed>`: `token` is the server's single-use invite secret, `sealed` the
+   mode, the KDF parameters and the seal. The owner's screen shows the code once, and the owner passes it on outside
+   veyq. **The seal is mandatory**: the server mails the link (mail is the only channel), so an unsealed link would
+   hand the invite to the operator.
+3. **What the server keeps.** The invite public key, the owner's signature, the owner's identity key as it signed,
+   the grant and the expiry, on the invite row. Before it mints (or re-sends), it verifies the owner's signature over
+   the invite key under the identity key it stores for the caller (`400 invalid_request` otherwise), so a session
+   without the owner's unlocked vault, such as one from a phished password, mints no invite. It checks that the grant
+   is of the tenant's current epoch under the tenant's lock (`409 stale_epoch`), that the grant names the invite key
+   (`409 recipient_key_not_current`), and that the signed expiry matches its own invite lifetime within a minute, in
+   whole seconds. It mails the link with the sealed part appended
+   and keeps no copy of that part; the invite secret is stored only as a hash. Accepting, revoking, re-sending or
+   expiring the invite clears its key, signature and grant in the same statement; re-sending is a new invite with a
+   new key, link and code.
+4. **Every rotation carries every open invite.** The client that rotates the tenant reads the open invites (keys,
+   signatures, signers; never an address). It re-grants the new epoch to each one whose owner signature verifies
+   under the signer's key and whose signer passes its pin check, and declares any other one pending. The server
+   refuses a rotation that leaves an open invite out (`409 rotation_incomplete`). A pending invite still redeems: its
+   newcomer joins one epoch behind and is brought current by grant delivery (step 9).
+5. **The invitee checks before it trusts.** On the link's page the invitee types the code. Its client opens the seal
+   (a wrong code does not open it), derives the invite key from the seed and requires it to equal the key the server
+   serves, requires the served owner key to hash to the fingerprint inside the seal, and verifies the owner's
+   signature under that key. It then verifies the invite grant's signature: a grant the owner wrapped only under that
+   checked key; one a later rotation re-wrapped names another member as its granter, whom the newcomer has nothing to
+   anchor yet and trusts on first use. Any mismatch stops the accept with *This invitation can’t be checked*, before
+   anything is sent.
+6. **The invitee grants itself.** It registers (its identity is born on its device, section 1) or signs in with
+   password and Secret Key. Its client opens the invite grant with the invite key, seals that epoch key to its own
+   identity (a self-grant naming the digest of that identity), and signs an `invite-accept` proof with the invite key
+   over the invite, its account and its identity's digest. The server verifies the proof under the stored invite key
+   (`403 invite_proof_invalid`), writes the membership **with** the self-grant, and consumes the invite. The newcomer
+   holds the tenant key from this moment; no other member has to be online.
+7. **The join record.** In the same request the client writes a **join record** into its tenant profile: its
+   identity public key, its Secret-Key proof public key and the owner-signed invite it came through, signed over the
+   `join-record` statement by the invite key **and** by the new identity, and sealed as the field
+   `member-join-record`, bound to the tenant and the member, under the tenant epoch key the invite grant carried. The
+   chain owner → invite → newcomer is one neither the operator nor a holder of the tenant key can forge while the
+   owner is not compromised. **Nothing reads the record to decide anything yet.** The tenant's first owner, its trust
+   root, has none.
+8. **Adding a member to a group.** The person already has an identity, so no invite key is needed: the group owner's
+   client runs the pin check on the key the server serves for that username and seals the group's current epoch to it
+   as it adds them. With consent on, the proposal holds that grant, and the server hands it out only once the target
+   accepts; a decline, or the owner withdrawing the proposal, queues a rotation of the group, since the key was
+   already wrapped to them.
+9. **Grant delivery, for a member who fell behind.** A member a rotation left out, or the newcomer of a pending
+   invite, holds a grant below the current epoch. Any online key-holder reads that member's identity key and runs the
+   **TOFU gate**: a first-seen key is pinned and used; a key that differs from the pin is **not** wrapped to, and the
+   automated worker declines the job back to the server for a human to review in the UI. Otherwise it seals the
+   current epoch key to the member and **signs the grant**. The signature covers the scope id, the scope kind, the
+   epoch, the recipient's user id, a digest of the recipient's identity key and a digest of the grant ciphertext.
+10. **Opening.** A member's client runs the same TOFU gate on the **granter's** key (pins a first-seen one, refuses a
+   changed one), verifies the signature, and only then opens the grant.
+11. **Verification (optional, built).** Each member's profile shows their own **safety number**, a digest of their
    identity public key shown as 6×5 digits, and a QR code of it. Another member scans that code or compares the
    digits aloud. On a match the pin becomes *verified* (an unpinned member is pinned at that moment with the compared
    key), and member lists show the mark. A *verified* contact whose key later changes is flagged as such. Accepting
@@ -261,31 +309,32 @@ sequenceDiagram
   actor O as Owner
   participant S as Server
   participant I as Invitee client
-  participant K as Any key-holder
-  O->>O: admission tag = HMAC under epoch-derived key<br>over scope, epoch, admission id
-  O->>S: mint invite (email, role, admission id, tag)
-  S-->>I: invite by mail (server keeps only its hash)
-  I->>S: register (identity public key) and accept<br>member without grant
-  K->>S: read member directory
-  S-->>K: pending member, identity public key, admission tag
-  K->>K: tag verifies under own current epoch?<br>TOFU: pin first-seen key, refuse a changed one
-  K->>S: grant = epoch key sealed to member, signed by K
-  I->>S: fetch own grant
-  S-->>I: grant and granter signature
-  I->>I: TOFU-pin granter, verify signature, open grant
-  I-->>K: out of band: compare safety numbers (QR or digits)
+  O->>O: seed to invite key, sign invite-key statement,<br>grant current epoch to the invite key
+  O->>O: seal seed and owner fingerprint<br>under Argon2id(code, salt)
+  O->>S: invite (email, invite key, signature, grant, sealed part)
+  S->>S: signed by the caller's key? epoch current?<br>grant names the invite key? expiry matches the lifetime?
+  S-->>I: link #token.sealed by mail (no copy of the sealed part kept)
+  O-->>I: out of band: the code
+  I->>S: preview (token)
+  S-->>I: invite key, owner key and signature, grant
+  I->>I: open seal with the code, derived key = served key,<br>owner key hashes to sealed fingerprint, signatures verify
+  I->>I: open grant, self-grant to own identity,<br>join record signed by invite key and identity
+  I->>S: accept: self-grant, invite-accept proof, sealed join record
+  S->>S: verify proof under stored invite key,<br>membership with grant, clear invite key and grant
+  I-->>O: out of band: compare safety numbers (QR or digits)
 `} />
 
-**What the server learns.** Invite metadata (recipient address, role, send time), the admission tag, identity public
-keys, which memberships hold a grant, signed grant ciphertext, and when a worker declines a delivery. It never
-sees a scope key, a pin, or who verified whom. The trust graph stays on the clients.
+**What the server learns.** Invite metadata (recipient address, role, send time, expiry), the invite public key, the
+owner's signature and identity key, the invite's grant ciphertext, identity public keys, each membership's granted
+epoch, the sealed join records, and when a worker declines a delivery. It holds the link's sealed part while it mails
+it. It never sees the code, a scope key, a pin, or who verified whom.
 
 **What it cannot do.**
 
-- **Get a scope's key by admitting an account of its own** through an owner's session or on its own. Every wrap to
-  another member needs an admission tag that only a holder of the current epoch key computes, and every key-holder's
-  client checks it before wrapping. A session without the vault, like the operator, can create a membership but
-  not a tag ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) move 6).
+- **Open an invite it mailed** without the code. It holds the whole link, so it can guess offline — against 50 bits,
+  with one Argon2id derivation per guess. A password the owner chooses instead is only as strong as that password.
+- **Swap the invite key or the owner in a mailed link.** The invitee derives the invite key from the seed and finds
+  the owner's fingerprint inside the seal, so a key or an owner the server substitutes fails the check.
 - **Plant a scope key of its own choosing** in a personal-scope grant, or under a granter the recipient has already
   pinned (Decision 6).
 - **Swap a key silently after first contact.** A client that pinned a contact sees the change. The UI shows a
@@ -295,13 +344,24 @@ sees a scope key, a pin, or who verified whom. The trust graph stays on the clie
 **Residual.**
 
 - **TOFU's first-use gap.** If the operator substitutes a key before anyone pinned the real one, nothing looks
-  wrong until the two people compare safety numbers. That covers a genuine tenant invite redeemed with the operator's
-  key (a tenant invite cannot name a key, because the invitee has none yet), a shared grant signed by a granter
-  identity the operator fabricated (pinned on first sight), and a device with no trust-state mark yet.
+  wrong until the two people compare safety numbers. That covers a group add or a grant delivery to a substituted
+  key, a shared grant signed by a granter identity the operator fabricated (pinned on first sight; a rotator's
+  re-grant of an open invite is one), and a device with no trust-state mark yet. A newcomer who registers through an
+  invite has no pin store before its account exists, so it pins the inviting owner only on a later contact.
+- **A member the operator invents.** A key-holder's client wraps to every member the server lists, behind the TOFU
+  gate alone: a rotation re-grants them, and grant delivery brings a membership with a grant behind the current
+  epoch up to date. An operator that writes a membership of its own therefore gets the current key on first use. The
+  join records every accept now writes are the anchor meant to close this; nothing checks them yet. This is the operator's door only: before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
+- **A revoked or expired invite keeps what it was granted.** The tenant does not rotate on removal
+  ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)),
+  so a link and its code still open the epochs up to the revoke — useful only with a dump of the ciphertext. A
+  revoked group proposal rotates the group.
+- **An owner who rotated their identity after inviting.** A rotation's re-grant of that owner's own invite no longer
+  verifies under the key the link anchors, so the invitee is told to ask for a new invite.
+- **Who counts as an owner is the server's word.** Roles are not signed; a member the server presents as an owner
+  could, with the operator's help, root an invite of its own choosing.
 - **A worker's refusal is per key-holder, not a global veto.** A key-holder who never saw the contact has no
   conflicting pin and accepts the new key.
-- **A departing member colluding with the operator** can tag a sockpuppet under the epoch they still hold before
-  their removal ([ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md) § Consequences).
 - **Strict mode** (verified-before-share as a hard gate) is **not built**, and its shape is still open. **Key
   Transparency** is not built.
 
@@ -435,9 +495,10 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
 
 1. The owner's client reads the member list **before** the removal and the current epoch `E(n)`.
 2. It mints `E(n+1)` and the chain link, which wraps `E(n)` under `E(n+1)`.
-3. For every member it read, **except** the one being removed, it verifies that member's admission tag under `E(n)`,
-   re-tags it under `E(n+1)`, runs the TOFU gate, and seals and signs a grant of `E(n+1)`.
-4. It sends the removal, the chain link, the grants and the re-tags in **one request**. The server deletes the
+3. For every member it read, **except** the one being removed, it runs the TOFU gate and seals and signs a grant of
+   `E(n+1)`; a pending consent proposal is re-granted like a member. In a tenant it also re-grants or declares every
+   open invite (section 3).
+4. It sends the removal, the chain link and the grants in **one request**. The server deletes the
    membership and commits epoch `n+1` in one transaction, and only if it is exactly the current epoch plus one.
    Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
 5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
@@ -465,11 +526,11 @@ sequenceDiagram
   participant S as Server
   participant M as Remaining member
   participant D as Removed member
-  R->>S: read members, keys, tags, current epoch E(n)
+  R->>S: read members, keys, current epoch E(n)
   S-->>R: member list (read before the removal)
   R->>R: mint E(n+1), chain link = E(n) wrapped under E(n+1)
-  R->>R: for each member except D: verify tag under E(n),<br>re-tag under E(n+1), TOFU gate, seal and sign grant
-  R->>S: one request: remove D, chain link, grants, re-tags, epoch n+1
+  R->>R: for each member except D: TOFU gate, seal and sign grant
+  R->>S: one request: remove D, chain link, grants, epoch n+1
   S->>S: one transaction: delete D membership, commit epoch n+1<br>only if current + 1, else stale_epoch
   D->>S: any request on the scope
   S-->>D: refused (layer 1)
@@ -510,7 +571,7 @@ only under the Master Key.
 
 **What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node and
 its moving to the current epoch as the re-key reaches it, rewritten ciphertext in rows it already held, the
-grant-present and granted-epoch markers, the rotation jobs and their status, and the new directory value after an
+granted-epoch markers, the rotation jobs and their status, and the new directory value after an
 account rotation. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
 
 **What it cannot do.**

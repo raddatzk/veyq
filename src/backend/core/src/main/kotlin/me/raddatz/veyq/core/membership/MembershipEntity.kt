@@ -39,21 +39,22 @@ class MembershipEntity : PanacheEntityBase {
     @Column(name = "role", nullable = false, length = 16)
     lateinit var role: String
 
-    /** The scope key sealed to this member's identity public key — opaque ciphertext the server never opens.
-     *  **Nullable**: a *pending* member (cr-0076) holds a role but no grant yet until a key-holder delivers one
-     *  (grant-delivery job); a grant-less membership is the "hollow" state ADR 0007 blesses. */
+    /** The scope key sealed to this member's identity public key — opaque ciphertext the server never opens. Every
+     *  membership is born with one (ADR 0111 decisions 3-4: a tenant newcomer grants itself from its invite, a group
+     *  add carries the owner's wrap); the column stays nullable for the scope rows written before a key exists. */
     @Column(name = "wrapped_grant")
     var wrappedGrant: String? = null
 
     /** The scope epoch this membership's `wrappedGrant` wraps (ADR 0024, cr-0088). `< scope.currentEpoch` means the
-     *  grant is **stale** (a rotation hasn't re-granted this member yet) — grant-delivery re-grants them. */
+     *  grant is **behind** (a rotation hasn't re-granted this member yet, or they joined through an invite a rotation
+     *  declared pending) — grant-delivery re-grants them. */
     @Column(name = "granted_epoch", nullable = false)
     var grantedEpoch: Int = 0
 
     /** A **soft consent proposal** the target has not yet accepted (uc.spaces.consent-group-add, cr-0094, ADR 0014
-     *  §5). While true this is a grant-less membership grant-delivery **skips** — `K_SC` is gated **before** the
-     *  wrap — until the invitee accepts (clears the flag) or declines (deletes the row). Default false = an
-     *  ordinary membership (the pre-consent behaviour). */
+     *  §5). It holds the grant the proposing owner wrapped (ADR 0111 decision 4); the group is not listed to the
+     *  target until they accept (clears the flag) or decline (deletes the row and queues the group's rotation).
+     *  Default false = an ordinary membership. */
     @Column(name = "pending_consent", nullable = false)
     var pendingConsent: Boolean = false
 
@@ -70,22 +71,9 @@ class MembershipEntity : PanacheEntityBase {
     @Column(name = "added_by", columnDefinition = "uuid")
     var addedBy: String? = null
 
-    /** The admission (ADR 0020 move 6): a client-minted id, the epoch whose key computed [admissionTag], and the tag —
-     *  an HMAC only a holder of that epoch key can compute. Opaque to the server, which stores, relays and never
-     *  verifies it; every client verifies it before wrapping a scope key to this member. Null = never admitted by a
-     *  key-holder (or dropped by a rotation whose rotator could not verify it) — no honest client delivers to it. */
-    @Column(name = "admission_id", columnDefinition = "uuid")
-    var admissionId: String? = null
-
-    @Column(name = "admission_epoch")
-    var admissionEpoch: Int? = null
-
-    @Column(name = "admission_tag")
-    var admissionTag: String? = null
-
     /** Who posted [wrappedGrant], and their Ed25519 identity signature over it (ADR 0028 Decision 6). Written with
      *  every grant — the granter is always the authenticated caller of the write — and never verified here: the
-     *  recipient checks it before it uses the key. Null for a grant-less membership. */
+     *  recipient checks it before it uses the key. */
     @Column(name = "granter_user_id", columnDefinition = "uuid")
     var granterUserId: String? = null
 

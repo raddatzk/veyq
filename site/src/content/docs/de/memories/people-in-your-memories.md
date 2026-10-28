@@ -39,9 +39,9 @@ eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
   (**Profil bearbeiten**) kannst du ein Bild wählen und den Ausschnitt festlegen. Es erscheint dann statt deines
   Buchstabens überall, wo du im Bereich vorkommst: in der Kopfzeile einer Erinnerung, in der Liste der Personen, in der
   Mitgliederliste und in deinem Profil. Du kannst es jederzeit entfernen, dann kehrt der Buchstabe zurück. In den Profilen
-  anderer gibt es nichts zu bearbeiten – ihr Bild ändert nur die Person selbst. Bist du einem Bereich als Mitglied
-  beigetreten, bietet ein kleiner Hinweis nach dem ersten Entsperren an, Name und Bild zu ergänzen; „Jetzt nicht“ blendet
-  ihn dauerhaft aus. (Gehört dir der Bereich, kannst du schon beim Annehmen der Einladung ein Bild wählen.)
+  anderer gibt es nichts zu bearbeiten – ihr Bild ändert nur die Person selbst. Schon beim Annehmen der Einladung kannst
+  du ein Bild wählen. Hast du dort Name und Bild übersprungen, bietet ein kleiner Hinweis nach dem ersten Entsperren an,
+  sie zu ergänzen; „Jetzt nicht“ blendet ihn dauerhaft aus.
 
 Für Namen gilt überall dieselbe Regel: der **echte Name**, wenn die Person ihn angegeben hat, sonst ihr **Benutzername**.
 

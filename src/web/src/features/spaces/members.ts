@@ -1,11 +1,17 @@
-// uc.spaces.add-member (web, cr-0077) — the member-management data layer for a tenant OWNER. Admission
-// (inviting by email) is tenant-owner-gated; the member directory (pubkeys + grant status) is any key-holder's.
-// Operator-blind: the server holds only invite metadata + already-stored operational metadata (pubkeys/roles/
-// grant-present) — never a scope key. The actual key DELIVERY runs as a grant-delivery job (cr-0076), not here.
+// uc.spaces.add-member (web, cr-0077) — the member-management data layer for a tenant OWNER. Inviting by email is
+// tenant-owner-gated; the member directory (pubkeys) is any key-holder's. Operator-blind: the server holds invite
+// metadata, the invite's public key and opaque grants, and already-stored operational metadata (pubkeys/roles) —
+// never a scope key. Every grant here names the key it is wrapped to and is signed by its granter (ADR 0111).
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
-import { admissionFor } from './scopes'
+import { openScopeById } from './scopes'
+import { buildMemberInvite, type InviteSecret } from './memberInvite'
+import { recipientIdentityDigest, sealGrant } from './grant'
+import { writeKey, zeroEpochKeys } from './epochs'
+import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { identityPrivate } from '../../app/vault'
+import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { SetTenantMemberRoleRequestRoleEnum, type MemberInviteState, type PendingMemberInvite } from '../../api/generated/tenants'
 import { SetMemberRoleRequestRoleEnum, type ScopeMember, type ResolvedGroupCandidate, type GroupInvitation } from '../../api/generated/scopes'
 
@@ -17,15 +23,28 @@ export { SetTenantMemberRoleRequestRoleEnum } from '../../api/generated/tenants'
 // signal the invite dialogs branch on so the owner always knows whether the mail actually went out.
 export { DeliveryResult } from '../../api/generated/tenants'
 
+export type { InviteSecret } from './memberInvite'
+
 /**
- * Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). The invite
- * carries an admission tag made under the tenant's current epoch key (ADR 0020 move 6), so this needs the unlocked
- * vault and a tenant grant: an owner's session alone can reach the endpoint but cannot make an invite anyone
- * delivers to.
+ * Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). The invite is a
+ * placeholder member (ADR 0111 decisions 1-2, {@link buildMemberInvite}): it needs the unlocked vault and the tenant's
+ * key. A `409 stale_epoch` — a rotation landed while it was built — is rebuilt once against the new epoch.
  */
-export async function inviteMember(tenantId: string, email: string): Promise<MemberInviteState> {
-  const admission = await admissionFor(tenantId, null)
-  return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest: { email, ...admission } }))
+export async function inviteMember(tenantId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+  return onceMoreIfStale(async () => {
+    const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest }))
+  })
+}
+
+/** Run [call], and run it once more when it was built on an epoch a rotation left (`409 stale_epoch`). */
+async function onceMoreIfStale<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (e) {
+    if (await isCodedError(e, HttpStatus.conflict, 'stale_epoch')) return call()
+    throw e
+  }
 }
 
 /** List the tenant's pending member invites (invited-but-not-joined) — owner-gated (uc.spaces.manage-member-invites). */
@@ -33,17 +52,21 @@ export function listMemberInvites(tenantId: string): Promise<PendingMemberInvite
   return withRefresh(() => tenantsApi().listMemberInvites({ tenantId }))
 }
 
-/** Re-issue a pending member invite: supersede the old secret + mint a fresh copyable link — owner-gated. */
-export function reissueMemberInvite(tenantId: string, inviteId: string): Promise<MemberInviteState> {
-  return withRefresh(() => tenantsApi().reissueMemberInvite({ tenantId, inviteId }))
+/** Re-issue a pending member invite: supersede it (its key and grant go) and mail a new one to the same [email] — a new
+ *  invite key, grant, link and code ({@link buildMemberInvite}) — owner-gated. */
+export function reissueMemberInvite(tenantId: string, inviteId: string, email: string, secret: InviteSecret): Promise<MemberInviteState> {
+  return onceMoreIfStale(async () => {
+    const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
+    return withRefresh(() => tenantsApi().reissueMemberInvite({ tenantId, inviteId, memberInviteRequest }))
+  })
 }
 
-/** Revoke a pending member invite (soft-terminal; its secret no longer accepts) — owner-gated. */
+/** Revoke a pending member invite (soft-terminal; its secret no longer accepts, its key and grant are dropped) — owner-gated. */
 export function revokeMemberInvite(tenantId: string, inviteId: string): Promise<void> {
   return withRefresh(() => tenantsApi().revokeMemberInvite({ tenantId, inviteId }))
 }
 
-/** List a scope's members with their identity pubkeys + grant status (the directory) — key-holder only. */
+/** List a scope's members with their identity pubkeys (the directory) — key-holder only. */
 export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
   return withRefresh(() => scopesApi().listScopeMembers({ scopeId }))
 }
@@ -76,21 +99,41 @@ export function setTenantMemberRole(tenantId: string, userId: string, role: SetT
 /**
  * Add an existing tenant member to a **group** by username (uc.spaces.add-group-member, cr-0086) — owner-gated
  * (`403 not_scope_owner`), tenant-scoped resolve (`404 member_not_found`), idempotency (`409 already_member`).
- * Records a grant-less membership; the key is delivered later by grant-delivery (cr-0076), not here. Returns the
- * new member's directory row (`hasGrant=false`, awaiting access).
+ * **A group needs no invite key** (ADR 0111 decision 4): the target has an account, so the owner's client wraps the
+ * group's current epoch key to the identity key [targetIdentityPublicKeyB64] the resolve served — after the pin check
+ * passed it, as the name-key's wrap is gated ({@link ./scopes#wrapGroupNameKeyForInvitee}); a CHANGED key throws
+ * {@link IdentityChangedError} and nothing is sent. The member holds the key from the add on.
  *
  * Consent (cr-0096): when the target has "ask before adding me to groups" on, pass `sealedNameKey` (the group's
- * derived name-key `K_name` wrapped to their identity, see {@link ./scopes#wrapGroupNameKeyForInvitee}) — the add
- * becomes a soft `pendingConsent` proposal grant-delivery skips until they accept. Omitting it for a consent-on
- * target is rejected `400 consent_required` (resolve first to learn whether it is required).
+ * derived name-key `K_name` wrapped to their identity) — the add becomes a soft `pendingConsent` proposal holding the
+ * same grant, and the group is listed to them once they accept. Omitting it for a consent-on target is rejected
+ * `400 consent_required` (resolve first to learn whether it is required).
  */
 export async function addGroupMember(
-  scopeId: string, username: string, targetUserId: string, sealedNameKey?: string,
+  scopeId: string, username: string, targetUserId: string, targetIdentityPublicKeyB64: string, sealedNameKey?: string,
 ): Promise<ScopeMember> {
-  // Admission is a key-holder act (ADR 0020 move 6): the tag binds the resolved target's account, under the
-  // group's current epoch key — the same for a consent proposal, which is delivered to only once accepted.
-  const admission = await admissionFor(scopeId, targetUserId)
-  return withRefresh(() => scopesApi().addGroupMember({ scopeId, addGroupMemberRequest: { username, sealedNameKey, ...admission } }))
+  if ((await checkAndPin(targetUserId, targetIdentityPublicKeyB64)) === 'changed') throw new IdentityChangedError(targetUserId)
+  return onceMoreIfStale(async () => {
+    const opened = await openScopeById(scopeId)
+    if (!opened) throw new Error('cannot open the group to add — the vault is locked or no grant is held')
+    const priv = identityPrivate()
+    try {
+      if (!priv) throw new Error('vault is locked — cannot add')
+      const epoch = opened.epochs.current
+      const grant = sealGrant(
+        writeKey(opened.epochs), { scopeId, kind: 'GROUP', epoch },
+        { userId: targetUserId, identityPublicKeyB64: targetIdentityPublicKeyB64 }, priv.sign,
+      )
+      const addGroupMemberRequest = {
+        username, sealedNameKey, epoch, ...grant, recipientIdentityDigest: recipientIdentityDigest(targetIdentityPublicKeyB64),
+      }
+      return await withRefresh(() => scopesApi().addGroupMember({ scopeId, addGroupMemberRequest }))
+    } finally {
+      priv?.kemSeed.fill(0)
+      priv?.sign.fill(0)
+      zeroEpochKeys(opened.epochs)
+    }
+  })
 }
 
 /**
@@ -108,12 +151,12 @@ export function listMyGroupInvitations(): Promise<GroupInvitation[]> {
   return withRefresh(() => scopesApi().listMyGroupInvitations())
 }
 
-/** Accept a group-consent proposal (cr-0094) — become a grant-less member; grant-delivery then wraps `K_SC`. */
+/** Accept a group-consent proposal (cr-0094) — become a member; the proposal already holds the group's key (ADR 0111). */
 export function acceptGroupInvitation(scopeId: string): Promise<void> {
   return withRefresh(() => scopesApi().acceptGroupInvitation({ scopeId }))
 }
 
-/** Decline a group-consent proposal (cr-0094) — a silent drop; nothing was wrapped, no rotation. Idempotent. */
+/** Decline a group-consent proposal (cr-0094) — a silent drop; the proposal held the key, so the group rotates. Idempotent. */
 export function declineGroupInvitation(scopeId: string): Promise<void> {
   return withRefresh(() => scopesApi().declineGroupInvitation({ scopeId }))
 }
@@ -128,8 +171,8 @@ export function setMemberRole(scopeId: string, userId: string, role: SetMemberRo
 }
 
 /**
- * Rescind a pending consent proposal (uc.spaces.consent-group-add) — owner-gated (`403 not_scope_owner`). A
- * proposal was never keyed, so nothing rotates. Any other member is removed only by the removal-rotation
+ * Rescind a pending consent proposal (uc.spaces.consent-group-add) — owner-gated (`403 not_scope_owner`). Any other
+ * member is removed only by the removal-rotation
  * (`rotateGroupForRemoval`, ADR 0024 Decision 4); the server refuses this delete for them
  * (`409 removal_requires_rotation`), so a removal can never end without its rotation.
  */

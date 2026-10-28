@@ -70,6 +70,17 @@ class TestMailbox(private val port: Int) : AutoCloseable {
             ?: error("mail to $recipient carries no #fragment token:\n$body")
     }
 
+    /**
+     * Wait for a message to [recipient] and return its link's whole URL fragment — for a member invite
+     * `<token>.<sealed link, base64url>` (ADR 0111 decision 1), which [awaitToken] reads only up to the dot.
+     */
+    fun awaitFragment(recipient: String, timeoutMs: Long = 5_000): String {
+        val body = awaitBody(recipient, timeoutMs).replace(SOFT_BREAK, "")
+        // A sentence's full stop may follow the link; a base64url part never ends in one.
+        return WHOLE_FRAGMENT.find(body)?.groupValues?.get(1)?.trimEnd('.')
+            ?: error("mail to $recipient carries no #fragment:\n$body")
+    }
+
     /** The plain-text body of the (first) message to [recipient]. */
     fun awaitBody(recipient: String, timeoutMs: Long = 5_000): String {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
@@ -102,5 +113,8 @@ class TestMailbox(private val port: Int) : AutoCloseable {
         /** A URL fragment of base64url characters — `Tokens.random()` yields 32 bytes unpadded, i.e. 43 of them.
          *  The `{40,}` floor is what makes a still-truncated match fail here instead of at the accept endpoint. */
         val FRAGMENT = Regex("""#([A-Za-z0-9_-]{40,})""")
+
+        /** A fragment of base64url characters and dots, to the end of the link. */
+        val WHOLE_FRAGMENT = Regex("""#([A-Za-z0-9_.-]{40,})""")
     }
 }

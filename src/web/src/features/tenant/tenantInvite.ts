@@ -4,11 +4,13 @@
 // business loading the admin app. Thin facade over the generated tenants client: views depend on this typed
 // surface, never on the generator runtime.
 import { tenantsApi } from '../../api/client'
-import type { InvitePreview, TenantActivated, TenantActivatedWithUser } from '../../api/generated/tenants'
+import type { InvitePreview, InviteSelfGrant, ServedMemberInvite, TenantActivated, TenantActivatedWithUser } from '../../api/generated/tenants'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
+import * as invite from '@veyq/crypto/invite'
+import { inviteLinkKekAsync } from '@veyq/crypto/argonWorker'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
-import { sealGrant, tagAdmission } from '../spaces/grant'
+import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../spaces/grant'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'
@@ -19,15 +21,17 @@ export function previewInvite(bootstrapSecret: string): Promise<InvitePreview> {
 }
 
 /** Accept as an existing (signed-in) user, choosing a `username` for this tenant (ADR 0023). An OWNER invite
- *  carries the cold birth; a MEMBER invite omits it (grant-less; a key-holder delivers the key, cr-0076). */
+ *  carries the cold birth; a MEMBER invite carries its join ({@link buildMemberJoin}): the self-grant, the invite key's
+ *  proof and the sealed join record (ADR 0111 decision 3). */
 export function acceptInvite(
   bootstrapSecret: string,
   username: string,
   birth?: TenantBirth,
   sealedName?: string,
   sealedAvatar?: string,
+  join?: MemberJoin,
 ): Promise<TenantActivated> {
-  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, sealedName, sealedAvatar } })
+  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, ...join, sealedName, sealedAvatar } })
 }
 
 /** Accept an owner invite into an ACTIVE tenant whose member the signed-in caller already is (`InvitePreview.handover`,
@@ -38,11 +42,10 @@ export function acceptOwnership(bootstrapSecret: string): Promise<void> {
 }
 
 /** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
- *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join
- *  (owner cold-birth only — a grant-less member seals it later via the profile op, ADR 0023); `sealedAvatar` the
- *  OPTIONAL profile picture sealed alongside it under the same key (ADR 0084 decision 7; owner path only - a MEMBER invite's
- *  body is not read for it). `grant` is set for
- *  an OWNER invite (cold-births the TENANT scope) and omitted for a MEMBER invite (grant-less join). */
+ *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join (ADR 0023)
+ *  and `sealedAvatar` the OPTIONAL profile picture sealed alongside it (ADR 0084 decision 7) — every joiner holds
+ *  `K_tenant` here, from the cold birth or its invite's grant. `birth` is set for an OWNER invite (cold-births the
+ *  TENANT scope), `join` for a MEMBER invite (ADR 0111 decision 3). */
 export function registerAndAccept(
   bootstrapSecret: string,
   userId: string,
@@ -51,6 +54,7 @@ export function registerAndAccept(
   birth?: TenantBirth,
   sealedName?: string,
   sealedAvatar?: string,
+  join?: MemberJoin,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
@@ -66,21 +70,18 @@ export function registerAndAccept(
         secretKeyProofPublicKey: material.secretKeyProofPublicKey,
       },
       ...birth,
+      ...join,
       sealedName,
       sealedAvatar,
     },
   })
 }
 
-/** What an OWNER accept carries for the tenant's cold birth: the first grant, the owner's self-signature over it
- *  (ADR 0028 Decision 6), and the owner's own admission self-tagged under `E_0` (ADR 0020 move 6) so the tenant's
- *  first rotation has a tag to carry forward. */
+/** What an OWNER accept carries for the tenant's cold birth: the first grant and the owner's self-signature over it
+ *  (ADR 0028 Decision 6). The first owner is the tenant's trust root (ADR 0111 decision 3): no join record. */
 export type TenantBirth = {
   grant: string
   grantSignature: string
-  admissionId: string
-  admissionEpoch: number
-  admissionTag: string
 }
 
 /** The owner an OWNER accept births the tenant for: their account id and their identity (the signing half signs the
@@ -89,10 +90,9 @@ export type TenantOwner = { userId: string; identity: { pub: v1.Identity['pub'];
 
 /**
  * Cold-birth the TENANT scope: mint a fresh scope root key (`K_tenant`), and return **both** the birth (the key
- * sealed to the owner's own identity and signed by it, plus the owner's self-tagged admission — opaque to the
- * server) **and the key itself**, so the owner can immediately seal their real name under it at join (cr-0106).
- * The key never leaves the device; only the sealed grant, its signature, the tag + (optional) sealed name cross
- * the API.
+ * sealed to the owner's own identity and signed by it — opaque to the server) **and the key itself**, so the owner can
+ * immediately seal their real name under it at join (cr-0106). The key never leaves the device; only the sealed grant,
+ * its signature + (optional) sealed name cross the API.
  */
 export function bornTenantScope(owner: TenantOwner, tenantId: string): { birth: TenantBirth; scopeRootKey: Uint8Array } {
   const scopeRootKey = v1.randomBytes(32)
@@ -100,11 +100,161 @@ export function bornTenantScope(owner: TenantOwner, tenantId: string): { birth: 
   const scope = { scopeId: tenantId, kind: 'TENANT', epoch: 0 } as const
   const to = { userId: owner.userId, identityPublicKeyB64: b64std(v1.serializeIdentityPublic(owner.identity.pub)) }
   const signed = sealGrant(scopeRootKey, scope, to, owner.identity.priv.sign)
-  const admission = tagAdmission(scopeRootKey, scope, 0, null)
-  return { birth: { grant: signed.wrappedGrant, grantSignature: signed.grantSignature, ...admission }, scopeRootKey }
+  return { birth: { grant: signed.wrappedGrant, grantSignature: signed.grantSignature }, scopeRootKey }
 }
 
 /** Just the birth from a fresh tenant-scope birth (for callers that don't seal a name). */
 export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
   return bornTenantScope(owner, tenantId).birth
+}
+
+// ── A member invite: the invitee's half (ADR 0111 decisions 1 and 3) ──────────────────────────────────────────
+
+/** A MEMBER accept's join: the self-grant, the invite key's proof and the sealed join record, as the wire carries them. */
+export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string }
+
+/** The code (or password) does not open the link's sealed part — mistyped, or another invite's link. */
+export class InviteCodeWrong extends Error {
+  constructor() {
+    super('invite_code_wrong')
+    this.name = 'InviteCodeWrong'
+  }
+}
+
+export { InviteCheckFailed } from '@veyq/crypto/invite'
+
+/** A member invite the invitee's client opened and checked: the invite key, the tenant key its grant carries (at
+ *  [grantedEpoch]) and the served facts the checks vouched for. Transient: zero it with {@link forgetMemberInvite}. */
+export type OpenedMemberInvite = {
+  tenantId: string
+  served: ServedMemberInvite
+  inviteKey: v1.Identity
+  epochKey: Uint8Array
+  grantedEpoch: number
+  /** The member whose rotation re-wrapped the invite's grant, when it is not the inviting owner — trusted on first use. */
+  foreignGranter: { userId: string; identityPublicKey: string } | null
+}
+
+/** How the link's sealed part asks to be opened — a generated code or a password — or null for a part that is no
+ *  sealed invite (the link is then not one this client can check). */
+export function inviteLinkMode(sealedPart: string): invite.InviteLinkMode | null {
+  try {
+    return invite.parseSealedInviteLink(sealedPart).mode
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Open and check a member invite before anything is sent (ADR 0111 decisions 1 and 3): open the link's
+ * sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then {@link invite.checkInvite}
+ * — the key the seed derives must be the served one, the served signer must hash to the fingerprint inside the seal and
+ * the owner's signature must verify under it ({@link invite.InviteCheckFailed} otherwise) — then verify the invite
+ * grant's signature (the signer's checked key when the signer granted it, else the served granter key) and open it with
+ * the invite key. Nothing the result relies on comes from the server unchecked.
+ */
+export async function openMemberInvite(tenantId: string, served: ServedMemberInvite, sealedPart: string, typed: string): Promise<OpenedMemberInvite> {
+  let link: invite.SealedInviteLink
+  try {
+    link = invite.parseSealedInviteLink(sealedPart)
+  } catch {
+    throw new invite.InviteCheckFailed('key_mismatch')
+  }
+  const secret = invite.inviteLinkSecret(link.mode, typed)
+  if (!secret) throw new InviteCodeWrong()
+  const kek = await inviteLinkKekAsync(secret, link.salt, link.params)
+  let payload: invite.InviteLinkPayload
+  try {
+    payload = invite.openInviteLink({ tenantId, inviteId: served.inviteId }, kek, link)
+  } catch {
+    throw new InviteCodeWrong()
+  } finally {
+    kek.fill(0)
+    secret.fill(0)
+  }
+  const servedInvite: invite.ServedInvite = {
+    tenantId,
+    inviteId: served.inviteId,
+    invitePublicKey: fromB64std(served.invitePublicKey),
+    inviteKeySignature: fromB64std(served.inviteKeySignature),
+    expiresAt: Math.floor(served.expiresAt.getTime() / 1000),
+    signerUserId: served.signerUserId,
+    signerIdentityPublicKey: fromB64std(served.signerIdentityPublicKey),
+  }
+  let inviteKey: v1.Identity
+  try {
+    inviteKey = invite.checkInvite(payload, servedInvite)
+  } finally {
+    payload.seed.fill(0)
+  }
+  // A grant the inviting owner wrapped verifies under the key the link anchored — the checked signer key, never a second
+  // served copy of it: the same account under another key is refused. One a rotation re-wrapped names another member
+  // as its granter, whom the newcomer cannot anchor yet: that key is trusted on first use, as every member trusts a
+  // foreign granter (ADR 0028 Decision 6), and handed back so a client with a pin store pins it (`foreignGranter`).
+  const ownersGrant = served.granterUserId === served.signerUserId
+  if (ownersGrant && served.granterIdentityPublicKey !== served.signerIdentityPublicKey) throw new invite.InviteCheckFailed('bad_signature')
+  const granterKey = ownersGrant ? served.signerIdentityPublicKey : served.granterIdentityPublicKey
+  let granterSign: Uint8Array
+  try {
+    granterSign = v1.deserializeIdentityPublic(fromB64std(granterKey)).sign
+  } catch {
+    throw new invite.InviteCheckFailed('bad_signature')
+  }
+  const grantScope = { scopeId: tenantId, kind: 'TENANT', epoch: served.grantedEpoch } as const
+  const recipient = { userId: served.inviteId, identityPublicKeyB64: served.invitePublicKey }
+  if (!grantSignatureVerifies(granterSign, grantScope, recipient, served.wrappedGrant, served.grantSignature)) {
+    throw new invite.InviteCheckFailed('bad_signature')
+  }
+  const epochKey = v1.openAs(grantContext(tenantId, served.grantedEpoch), v1.hybridSecret(inviteKey.priv), fromB64std(served.wrappedGrant))
+  return {
+    tenantId, served, inviteKey, epochKey, grantedEpoch: served.grantedEpoch,
+    foreignGranter: ownersGrant ? null : { userId: served.granterUserId, identityPublicKey: served.granterIdentityPublicKey },
+  }
+}
+
+/** Zero an opened invite's private parts. */
+export function forgetMemberInvite(opened: OpenedMemberInvite): void {
+  opened.epochKey.fill(0)
+  opened.inviteKey.priv.kemSeed.fill(0)
+  opened.inviteKey.priv.sign.fill(0)
+}
+
+/** The newcomer as its join needs it: the account id, its identity, and its Secret-Key proof public key (raw bytes). */
+export type Newcomer = {
+  userId: string
+  identity: { pub: v1.Identity['pub']; priv: { sign: Uint8Array } }
+  secretKeyProofPublicKey: Uint8Array
+}
+
+/**
+ * The newcomer grants itself and writes its join record (ADR 0111 decision 3): the invite grant's epoch key sealed to
+ * its own identity and signed by it; the invite key's proof over (invite, account, identity) that the server checks;
+ * and the join record — identity and Secret-Key proof key, the owner-signed invite it came through — signed by the
+ * invite key and by the new identity, sealed under the tenant key as the field `member-join-record`.
+ */
+export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer): MemberJoin {
+  const { tenantId, served, inviteKey, epochKey, grantedEpoch } = opened
+  const identityPublicKey = v1.serializeIdentityPublic(newcomer.identity.pub)
+  const identityB64 = b64std(identityPublicKey)
+  const signed = sealGrant(
+    epochKey, { scopeId: tenantId, kind: 'TENANT', epoch: grantedEpoch },
+    { userId: newcomer.userId, identityPublicKeyB64: identityB64 }, newcomer.identity.priv.sign,
+  )
+  const inviteProof = invite.signInviteAccept(inviteKey.priv.sign, { inviteId: served.inviteId, userId: newcomer.userId, identityPublicKey })
+  const address = { tenantId, userId: newcomer.userId }
+  const record = invite.signJoinRecord(address, {
+    identityPublicKey,
+    secretKeyProofPublicKey: newcomer.secretKeyProofPublicKey,
+    inviteId: served.inviteId,
+    invitePublicKey: fromB64std(served.invitePublicKey),
+    inviteKeySignature: fromB64std(served.inviteKeySignature),
+    inviteExpiresAt: Math.floor(served.expiresAt.getTime() / 1000),
+    signerUserId: served.signerUserId,
+    signerIdentityPublicKey: fromB64std(served.signerIdentityPublicKey),
+  }, inviteKey.priv.sign, newcomer.identity.priv.sign)
+  return {
+    selfGrant: { ...signed, epoch: grantedEpoch, recipientIdentityDigest: recipientIdentityDigest(identityB64) },
+    inviteProof: b64std(inviteProof),
+    sealedJoinRecord: b64std(invite.sealJoinRecord(epochKey, address, record)),
+  }
 }

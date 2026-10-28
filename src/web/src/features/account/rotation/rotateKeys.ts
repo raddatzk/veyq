@@ -6,10 +6,10 @@
 // **It is forward secrecy, not repair.** What the old identity already read stays read. Nothing in this file —
 // and nothing in the surface above it — may suggest otherwise.
 //
-// **What this file does NOT do: re-admit the caller to a shared scope.** The server queues a `scope-rotation`
-// job per shared scope for another *owner* of it, and re-admission runs through that human's changed-key
+// **What this file does NOT do: re-grant the caller a shared scope.** The server queues a `scope-rotation`
+// job per shared scope for another *owner* of it, and the re-grant runs through that human's changed-key
 // review (ADR 0060 Decision 4). A rotator who could drive their own re-grant would let an attacker holding the
-// old identity re-admit only themselves, which turns the exclusion into the takeover's final step.
+// old identity re-grant only themselves, which turns the exclusion into the takeover's final step.
 import { rekeyScope } from '../../../core/node/rekey/rekeyScope'
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
@@ -330,8 +330,7 @@ async function rekeyAlone(scopeId: string, identity: v1.Identity): Promise<boole
     if (members.length !== 1) return false
     const mine = b64std(v1.serializeIdentityPublic(identity.pub))
     // Signed by the NEW identity (ADR 0028 Decision 6): the vault still holds the old one, which is what opens the
-    // current grant — but the grant this writes is opened later under the new one, so it must verify there. The
-    // caller's own admission is carried forward like any other (ADR 0020 move 6).
+    // current grant — but the grant this writes is opened later under the new one, so it must verify there.
     await commitRotation(scopeId, members, { userId: members[0].userId, identityPublicKeyB64: mine, signPrivateKey: identity.priv.sign })
     return true
   } catch {

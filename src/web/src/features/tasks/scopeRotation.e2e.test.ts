@@ -3,7 +3,7 @@
 // session token + unlocks that actor's vault):
 //   A = tenant OWNER (server owner + tenant owner) — the remover; NOT a key-holder of the group.
 //   B = group key-holder (owns group G, holds K_SC).
-//   C = co-sharer of G (a key-holder after grant-delivery) — the removed member.
+//   C = co-sharer of G (a key-holder from the add on: the add carries the grant, ADR 0111) — the removed member.
 //
 // Flow: A removes C from the tenant → the cascade cuts C's co-shared G membership and originates a
 // SCOPE_ROTATION job (A can't rotate G — A holds no key there). A/removed-C cannot claim it; B (the remaining
@@ -21,15 +21,14 @@
 // Or let `python3 scripts/run_web_e2e.py` do all of that, which is what CI runs.
 import { beforeAll, describe, it, expect } from 'vitest'
 import { tasksApi } from '../../api/client'
-import { addGroupMember, listScopeMembers, removeTenantMember, setMemberRole, SetMemberRoleRequestRoleEnum } from '../spaces/members'
+import { addGroupMember, listScopeMembers, removeTenantMember, resolveGroupMember, setMemberRole, SetMemberRoleRequestRoleEnum } from '../spaces/members'
 import { rotateKeys } from '../account/rotation/rotateKeys'
 import { login } from '../account/login/login'
 import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
 import { listTree } from '../../core/node/tree'
 import { createMemory } from '../memories/memoryNodes'
-import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
+import { become, birthInstance, mkActor, onboardMember, type Actor } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
-import { runGrantDeliveryWorker } from './grantDeliveryWorker'
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION } from './capabilityTags'
 import { registry } from '../../core/applications/registry'
@@ -49,6 +48,13 @@ beforeAll(() => {
   if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: rekeyMemoryContent })
 })
 
+/** Add [who] to the group as the members panel does (ADR 0111 decision 4): resolve, then wrap the group's current key
+ *  to the identity key the resolve served — the member holds it from the add on, no grant delivery behind it. */
+async function addToGroup(scopeId: string, who: Actor): Promise<void> {
+  const candidate = await resolveGroupMember(scopeId, who.username)
+  await addGroupMember(scopeId, who.username, candidate.userId, candidate.identityPublicKey)
+}
+
 async function claimRotation() {
   return (await tasksApi().claimTask({ claimRequest: { capabilityTags: [SCOPE_ROTATION] } })) ?? null
 }
@@ -58,20 +64,19 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     // --- A: cold-birth the server owner, then create + accept the tenant as its OWNER ---
     const { owner: A, tenant, salt } = await birthInstance('E2E Rotation')
 
-    // --- B, C: onboard as tenant MEMBERS (grant-less cold-birth accept via an owner-minted invite) ---
+    // --- B, C: onboard as tenant MEMBERS (a code invite each, accepted with the self-grant, ADR 0111) ---
     const B = await onboardMember(tenant.tenantId, mkActor('b'), salt)
     const C = await onboardMember(tenant.tenantId, mkActor('c'), salt)
 
-    // --- B: create group G, add C, deliver K_SC to C (real foreign wrap) so C is a genuine co-holder ---
+    // --- B: create group G and add C — the add wraps K_SC (E_0) to C's identity, so C is a genuine co-holder ---
     await become(B)
     const gG = await createGroup('Shared G')
-    await addGroupMember(gG, C.username, C.userId!)
+    await addToGroup(gG, C)
     const openedB = await openScopeById(gG)
     expect(openedB, 'B opens its own group').toBeTruthy()
-    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedB!.key, epoch: openedB!.epochs.current }) // wraps K_SC (E_0) to C's identity
-    const before = await listScopeMembers(gG)
-    expect(before.find((x) => x.userId === C.userId)?.hasGrant, 'C is a co-holder before removal').toBe(true)
     expect((await listMyScopes()).find((s) => s.id === gG)?.currentEpoch, 'G starts at epoch 0').toBe(0)
+    await become(C)
+    expect(await openScopeById(gG), 'C is a co-holder before removal: it opens G with the grant the add carried').toBeTruthy()
 
     // --- A: remove C from the tenant → cascade cuts C's co-shared G membership + queues SCOPE_ROTATION for G ---
     await become(A)
@@ -107,16 +112,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     const openedForWrite = await openScopeById(gG)
     await createMemory(gG, openedForWrite!.epochs, 'Post-rotation memo')
 
-    // Onboard D and add them to the ALREADY-ROTATED group; grant-delivery wraps the current key E_1 to D.
+    // Onboard D and add them to the ALREADY-ROTATED group; the add wraps the current key E_1 to D.
     await become(A)
     const D = await onboardMember(tenant.tenantId, mkActor('d'), salt)
     await become(B)
-    await addGroupMember(gG, D.username, D.userId!)
-    const openedForDelivery = await openScopeById(gG)
-    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedForDelivery!.key, epoch: openedForDelivery!.epochs.current })
+    await addToGroup(gG, D)
 
-    // D must be recorded at the CURRENT epoch (not 0) and therefore read the post-rotation memo. Before cr-0093,
-    // complete left grantedEpoch=0, so D's client peeled E_1 as E_0 and listTree would fail on the epoch-1 node.
+    // D must be recorded at the CURRENT epoch (not 0) and therefore read the post-rotation memo. Before cr-0093, a
+    // grant's write left grantedEpoch=0, so D's client peeled E_1 as E_0 and listTree would fail on the epoch-1 node.
     await become(D)
     expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'D granted at the current epoch').toBe(1)
     const openedD = await openScopeById(gG)
@@ -145,16 +148,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     await createMemory(gG, current!.epochs, 'Sealed under E_2')
 
     // --- inbox #233: a grant outlives its granter's account rotation (ADR 0028 § What is still open) ---
-    // B delivers E's grant in G and makes E a co-owner, then rotates their account keys (ADR 0060). E's grant is
+    // B adds E to G (the add carries E's grant) and makes E a co-owner, then rotates their account keys (ADR 0060). E's grant is
     // signed by B's OLD identity, so E — the owner who must complete the covering rotation — can open G only while
     // the server serves the key that signed it. Served B's new key, E's worker failed the job on every attempt
     // (`cannot open scope to rotate`) and G stayed at the epoch B's old identity holds.
     await become(A)
     const E = await onboardMember(tenant.tenantId, mkActor('e'), salt)
     await become(B)
-    await addGroupMember(gG, E.username, E.userId!)
-    const openedForE = await openScopeById(gG)
-    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedForE!.key, epoch: openedForE!.epochs.current })
+    await addToGroup(gG, E)
     await setMemberRole(gG, E.userId!, SetMemberRoleRequestRoleEnum.Owner)
     await become(E)
     expect(await openScopeById(gG), 'E opens the grant B signed, pinning B\'s key').toBeTruthy()

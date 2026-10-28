@@ -13,7 +13,9 @@ import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.TenantRoots
-import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.membership.TestInviteKey
+import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.tenant.ResolvedTenant
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -72,9 +74,9 @@ class EmailConfirmationSliceTest {
         // A member invite only ever arrives by mail (ADR 0055 §2), so redeeming it is the proof.
         val tenantId = seedTenant(owner = seedUser())
         val email = fresh("member-reg")
-        val secret = memberInvite(tenantId, email)
+        val (secret, key) = memberInvite(tenantId, email)
         val userId = UUID.randomUUID().toString()
-        given().contentType(ContentType.JSON).body(registerBody(secret, userId, grant = false))
+        given().contentType(ContentType.JSON).body(registerBody(secret, userId, grant = false, key = key))
             .`when`().post("/api/tenants/accept/register").then().statusCode(201)
         assertTrue(confirmed(userId), "a redeemed MEMBER invite proves the mailbox")
 
@@ -101,9 +103,9 @@ class EmailConfirmationSliceTest {
             QuarkusTransaction.requiringNew().run { TenantRoots.join(id, tenantId) }
         }
         for (userId in listOf(freshJoin, rejoin, already)) {
-            val secret = memberInvite(tenantId, emailOf(userId))
+            val (secret, key) = memberInvite(tenantId, emailOf(userId))
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"bootstrapSecret":"$secret","username":"${handle("acc")}"}""")
+                .body("""{"bootstrapSecret":"$secret","username":"${handle("acc")}",${TestGrants.memberJoinJson(key, key.inviteId, userId, IDENTITY)}}""")
                 .`when`().post("/api/tenants/accept").then().statusCode(200)
             assertTrue(confirmed(userId), "a sign-in MEMBER accept proves the mailbox")
         }
@@ -112,7 +114,7 @@ class EmailConfirmationSliceTest {
         val owner = seedUser(email = fresh("owner-acc"))
         val ownerSecret = pendingTenant(emailOf(owner))
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$ownerSecret","username":"${handle("own")}","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .body("""{"bootstrapSecret":"$ownerSecret","username":"${handle("own")}","grant":"AQ==",${TestGrants.SIGNATURE_JSON}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assertFalse(confirmed(owner), "an OWNER sign-in accept is not a mailbox proof")
     }
@@ -394,13 +396,15 @@ class EmailConfirmationSliceTest {
         return ResolvedTenant(id, domain)
     }
 
-    /** A MEMBER invite to [email] on [tenantId]; returns its secret. */
-    private fun memberInvite(tenantId: String, email: String): String {
+    /** A MEMBER invite to [email] on [tenantId], signed by its owner; returns its secret and its invite key. */
+    private fun memberInvite(tenantId: String, email: String): Pair<String, TestInviteKey> {
         val secret = Tokens.random()
+        val key = TestInviteKey()
         QuarkusTransaction.requiringNew().run {
-            tenantStore.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS), TestAdmission.admission(), checkEpoch = false)
+            val owner = MembershipEntity.find("scopeId = ?1 and role = ?2", tenantId, MembershipEntity.OWNER).firstResult()!!.userId
+            tenantStore.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS), key.stored(owner))
         }
-        return secret
+        return secret to key
     }
 
     /** A PENDING tenant whose bootstrap OWNER invite goes to [ownerEmail]; returns its secret. */
@@ -430,13 +434,14 @@ class EmailConfirmationSliceTest {
         return id
     }
 
-    /** A register-and-accept body; an OWNER birth ([grant]) also carries the first grant and its admission. */
-    private fun registerBody(secret: String, userId: String, grant: Boolean): String {
-        val birth = if (grant) ""","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}""" else ""
+    /** A register-and-accept body; an OWNER birth ([grant]) also carries the first grant, a MEMBER's its join under [key]. */
+    private fun registerBody(secret: String, userId: String, grant: Boolean, key: TestInviteKey? = null): String {
+        val birth = if (grant) ""","grant":"AQ==",${TestGrants.SIGNATURE_JSON}"""
+        else key?.let { ",${TestGrants.memberJoinJson(it, it.inviteId, userId, IDENTITY)}" } ?: ""
         return """
             {"bootstrapSecret":"$secret","userId":"$userId","username":"${handle("reg")}",
              "account":{"suiteId":"v1",
-               "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
+               "identityPublicKey":"$IDENTITY",
                "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
                "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
                "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
@@ -445,6 +450,9 @@ class EmailConfirmationSliceTest {
     }
 
     private companion object {
+        /** The identity bundle every account here holds — the fixture's, and the one a register births. */
+        val IDENTITY: String = me.raddatz.veyq.core.testing.TestFixtures.IDENTITY_PUBLIC_KEY
+
         /** `veyq.ratelimit.email-confirmation.per-account-max-requests`. */
         const val PER_ACCOUNT_MAX = 3
 

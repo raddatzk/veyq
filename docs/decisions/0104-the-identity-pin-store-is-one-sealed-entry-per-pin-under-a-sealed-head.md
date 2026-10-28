@@ -20,7 +20,7 @@ capped by the contract at 1,048,576 base64 characters (M). A pin holds the conta
 base64 inside JSON, then base64 again around the seal — and costs **2,361 bytes** of the cap (M: 444 pins seal to
 exactly the 1,048,484 the volume measurement read in `veyq_identity_pins`). So the 445th member a key-holder admits is
 refused with `400 invalid_request`, the grant-delivery worker cannot wrap `K_tenant` to anyone after that, and the error
-is swallowed (`grantDeliveryPolling.ts`, M): the member stays *awaiting access* with no sign why (inbox #491). The
+was swallowed (`grantDeliveryPolling.ts`, M): the member stayed *awaiting access* with no sign why (inbox #491). The
 instance run for a club, an organisation or a company stops at about 445 members per key-holder. Every pin
 written today also re-uploads the whole store — 1 MiB per new member at the cap.
 

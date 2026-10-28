@@ -67,8 +67,9 @@ and marks them *verified*; a changed key is a notice a human reviews, and the au
 changed key. Nothing refuses to share with a member nobody has verified.
 
 **Gap it would close.** The goal stated in its use-case: *an unverified member is never silently trusted with a
-share*. With it on, the grant-delivery worker would skip unverified members (they stay *awaiting access*) and a
-changed key would be a hard block on every path, the UI's included, until a human verifies the member again.
+share*. With it on, no client would wrap a key to an unverified member (in a group add, a rotation's re-grant or a
+grant delivery), and a changed key would be a hard block on every path, the UI's included, until a human verifies
+the member again.
 
 **Design state.** Decided in principle, not built, and **not buildable as specified: its shape is open.** A
 per-account toggle cannot protect a shared scope, because any co-member can key an unverified identity regardless of

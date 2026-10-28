@@ -9,7 +9,11 @@ import java.util.UUID
  * reads. **Never the picture's bytes** (ADR 0084): [avatarRevision] is `0` when there is no picture, else the
  * profile's stored counter.
  */
-data class ProfileView(val userId: String, val username: String, val sealedName: String?, val avatarRevision: Int)
+data class ProfileView(
+    val userId: String, val username: String, val sealedName: String?, val avatarRevision: Int,
+    /** The member's sealed join record (ADR 0111 decisions 3 and 12), null for the tenant's first owner. */
+    val sealedJoinRecord: String? = null,
+)
 
 /**
  * Persistence for the per-`(user, tenant)` identity profile (cr-0083, ADR 0023). Operator-blind: `username` is a
@@ -35,12 +39,16 @@ class TenantProfileStore {
         TenantProfileEntity.find("tenantId = ?1 and username = ?2", tenantId, norm(username)).firstResult()?.userId
 
     /**
-     * Create the member's tenant profile (username set now; the sealed name is written later via the profile op).
-     * [sealedAvatar] rides only the OWNER join, where the invitee holds `K_tenant` at accept (ADR 0084 decision 7):
-     * it is stored with revision 1, so a directory read at once shows it.
+     * Create the member's tenant profile at the join: the username, and what the joiner sealed under `K_tenant`, which
+     * every joiner holds at accept (the owner's cold birth, a member's self-grant, ADR 0111 decision 3) — the optional
+     * name and picture (ADR 0084 decision 7: stored with revision 1, so a directory read at once shows it) and a
+     * member's join record (null for the tenant's first owner).
      */
     @Transactional
-    fun create(userId: String, tenantId: String, username: String, sealedName: String? = null, sealedAvatar: String? = null): String {
+    fun create(
+        userId: String, tenantId: String, username: String, sealedName: String? = null, sealedAvatar: String? = null,
+        sealedJoinRecord: String? = null,
+    ): String {
         val id = UUID.randomUUID().toString()
         TenantProfileEntity().apply {
             this.id = id
@@ -50,8 +58,16 @@ class TenantProfileStore {
             this.sealedName = sealedName
             this.sealedAvatar = sealedAvatar
             this.avatarRevision = if (sealedAvatar != null) 1 else 0
+            this.sealedJoinRecord = sealedJoinRecord
         }.persist()
         return id
+    }
+
+    /** A returning member's new join record (ADR 0111 decision 3): their profile outlived a removal, and the invite
+     *  that brought them back is a new join. The only writer of the column besides [create]; the profile op never is. */
+    @Transactional
+    fun setJoinRecord(userId: String, tenantId: String, sealedJoinRecord: String) {
+        TenantProfileEntity.update("sealedJoinRecord = ?1 where userId = ?2 and tenantId = ?3", sealedJoinRecord, userId, tenantId)
     }
 
     /** Update the caller's profile in a tenant — change the username and/or the sealed name (each optional). */
@@ -88,16 +104,16 @@ class TenantProfileStore {
         ) > 0
 
     /**
-     * The identity (username + sealed name + picture revision) for every member of a tenant, keyed by userId — for the
-     * directory. A projection, so a picture's ~11 KB is never read into the directory (ADR 0084): the database
+     * The identity (username + sealed name + picture revision + sealed join record) for every member of a tenant, keyed
+     * by userId — for the directory. A projection, so a picture's ~11 KB is never read into the directory (ADR 0084): the database
      * answers `0` for a null picture and the counter otherwise.
      */
     fun byUserInTenant(tenantId: String): Map<String, ProfileView> =
         TenantProfileEntity.getEntityManager().createQuery(
             "select p.userId, p.username, p.sealedName, " +
-                "case when p.sealedAvatar is null then 0 else p.avatarRevision end " +
+                "case when p.sealedAvatar is null then 0 else p.avatarRevision end, p.sealedJoinRecord " +
                 "from TenantProfileEntity p where p.tenantId = ?1",
             Array<Any?>::class.java,
         ).setParameter(1, tenantId).resultList
-            .associate { r -> r[0] as String to ProfileView(r[0] as String, r[1] as String, r[2] as String?, (r[3] as Number).toInt()) }
+            .associate { r -> r[0] as String to ProfileView(r[0] as String, r[1] as String, r[2] as String?, (r[3] as Number).toInt(), r[4] as String?) }
 }

@@ -30,9 +30,9 @@
 
 - **E1 — username taken in this tenant:** `409 username_taken`. The panel says the name is taken and nothing is
   saved: not the handle, the name or the preference. The same handle may be free in another tenant.
-- **E2 — no grant yet** (an *awaiting access* member): there is no `K_tenant` on the device, so the name fields
-  are disabled and a hint says why. The username alone can still be saved. Once the grant lands, the name can be
-  set here ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md) E2).
+- **E2 — the tenant key does not open here** (a member *waiting for the current key*, whose grant is behind or
+  refused): there is no `K_tenant` on the device, so the name fields are disabled and a hint says why. The username
+  alone can still be saved. Once the current grant lands, the name can be set here ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md) E2).
 - **A1 — remove your real name:** empty both name fields and save. An empty name is sealed, and the directory
   shows only `@username` from then on.
 - **E3 — the profile does not load:** the panel shows a load error instead of the form. A refused session ends

@@ -5,13 +5,10 @@
 // rotation (re-granting the fresh epoch key to every remaining member, cr-0089) — so the helper + its AAD/KDF
 // context live here, dependency-free of the scope data layer (breaks the scopes ⇄ worker import cycle).
 //
-// Two more pieces of the same act live here, pure, because every producer and every checker needs them:
-//   - the **grant signature** (ADR 0028 Decision 6): every grant is signed by its granter's identity key, and the
-//     recipient opens it only if the signature verifies — a seal needs only the recipient's public key, so without
-//     it the server could plant a scope key of its own choosing;
-//   - the **admission tag** (ADR 0020 move 6): no client wraps a scope key to anyone but itself unless that member's
-//     admission carries a tag only a holder of the scope's current epoch key can compute — an owner's session proves
-//     a password, not a key.
+// Two more pieces of the same act live here, pure, because every producer and every checker needs them: the **grant
+// signature** (ADR 0028 Decision 6) — every grant is signed by its granter's identity key, and the recipient opens it
+// only if the signature verifies, since a seal needs only the recipient's public key and the server could otherwise
+// plant a scope key of its own choosing — and the **recipient digest** a grant names its key by (ADR 0111).
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -71,46 +68,7 @@ export function grantSignatureVerifies(
   }
 }
 
-/** An admission as the wire carries it (a membership's, an invite's or a delivery target's) — each part nullable,
- *  because a membership admitted before admissions existed, or dropped by a rotation, carries none. */
-export type WireAdmission = { admissionId?: string | null; admissionEpoch?: number | null; admissionTag?: string | null }
-
-/** What a tag binds for a membership of this kind: a TENANT admission is made for an invitee who has no account
- *  yet, so it never binds one; every other admission (a group add, a group's creator) binds its target account. */
-export const admissionTarget = (kind: v1.ScopeKind, userId: string): string | null => (kind === 'TENANT' ? null : userId)
-
-/** Tag an admission under the epoch key of `epoch` → the three wire fields. The admission id is minted here
- *  (UUIDv4, ADR 0072 Decision 3) unless one is carried forward (a rotation re-tags the same admission). */
-export function tagAdmission(
-  epochKey: Uint8Array, scope: { scopeId: string; kind: v1.ScopeKind }, epoch: number, targetUserId: string | null,
-  admissionId: string = crypto.randomUUID(),
-): { admissionId: string; admissionEpoch: number; admissionTag: string } {
-  const userId = scope.kind === 'TENANT' ? null : targetUserId
-  const tag = v1.admissionTag(epochKey, { scopeId: scope.scopeId, epoch, admissionId, userId })
-  return { admissionId, admissionEpoch: epoch, admissionTag: b64std(tag) }
-}
-
-/**
- * Whether a membership's admission verifies under the key a key-holder holds for `epoch` — the check every client
- * runs before it wraps a scope key to anyone but itself. The admission must be stated at exactly `epoch` (a tag made
- * before a rotation does not admit: its key is one a removed member may hold) and its tag must be the MAC of this
- * scope, epoch, admission id and — for a non-tenant scope — this target account. A missing part does not verify.
- */
-export function admissionVerifies(
-  epochKey: Uint8Array, epoch: number, scope: { scopeId: string; kind: v1.ScopeKind }, targetUserId: string, a: WireAdmission,
-): boolean {
-  // Stated at exactly the holder's epoch — a missing epoch is not it either.
-  if (a.admissionEpoch !== epoch) return false
-  try {
-    // No separate null check on purpose: a missing id is no canonical UUID (the statement encoder refuses it) and a
-    // missing tag decodes to nothing (it throws), so both land in the catch — the same refusal as a malformed one
-    // from the server, never a crash. A guard in front would only restate these two refusals.
-    return v1.admissionTagVerifies(
-      epochKey,
-      { scopeId: scope.scopeId, epoch, admissionId: a.admissionId as string, userId: admissionTarget(scope.kind, targetUserId) },
-      fromB64std(a.admissionTag as string),
-    )
-  } catch {
-    return false
-  }
-}
+/** SHA-256 of the DECODED identity bundle a grant is sealed to (base64) — the grant's `recipientIdentityDigest`, which the
+ *  server compares with the key it stores for the recipient (ADR 0111: a grant names the key it is wrapped to). */
+export const recipientIdentityDigest = (identityPublicKeyB64: string): string =>
+  b64std(v1.sha256Digest(fromB64std(identityPublicKeyB64)))

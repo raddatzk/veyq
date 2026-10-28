@@ -45,7 +45,8 @@ import { login } from '../src/features/account/login/login'
 import { unlockMasterKey } from '../src/features/account/unlock/unlock'
 import { createGroup, ensurePersonalScope, openScope, openScopeById, type OpenedScope } from '../src/features/spaces/scopes'
 import { inviteMember } from '../src/features/spaces/members'
-import { registerAndAccept } from '../src/features/tenant/tenantInvite'
+import { memberInviteFragment, registerThroughMemberInvite } from '../src/test/memberJoin'
+import { generateInviteCode } from '@veyq/crypto/invite'
 import { createMemory } from '../src/features/memories/memoryNodes'
 import { addCopiedMedia } from '../src/features/memories/media'
 import { createBucket } from '../src/features/memories/mediaBuckets'
@@ -97,15 +98,17 @@ async function personalScope(): Promise<OpenedScope> {
   return scope
 }
 
-/** Onboard the peer as a member is onboarded: the owner's invite, its token read out of the mailbox, a cold accept. */
+/** Onboard the peer as a member is onboarded: the owner's invite with a code, its link read out of the mailbox, a cold
+ *  accept that opens the invite with the code and grants the peer the tenant key (ADR 0111 decision 3). */
 async function onboardPeer(tenantId: string, peer: Account, salt: Uint8Array): Promise<string> {
   const built = await buildAccount(peer.email, peer.password, salt)
   peer.secretKey = built.emergencyKit.secretKey
   const cursor = await mailCursor(peer.email)
-  await inviteMember(tenantId, peer.email)
-  const link = (await waitForMail(peer.email, { after: cursor })).match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
-  if (!link) throw new Error(`no invite link in the mail to the peer`)
-  const accepted = await registerAndAccept(link[1], crypto.randomUUID(), 'fuzzpeer', built.material)
+  const code = generateInviteCode()
+  await inviteMember(tenantId, peer.email, { mode: 'code', code })
+  const fragment = memberInviteFragment(await waitForMail(peer.email, { after: cursor }))
+  if (!fragment) throw new Error(`no member invite link in the mail to the peer`)
+  const accepted = await registerThroughMemberInvite(fragment, code, 'fuzzpeer', built)
   return accepted.userId
 }
 

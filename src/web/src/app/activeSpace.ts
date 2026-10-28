@@ -98,9 +98,10 @@ export function activeEpochKeys(): EpochKeys | null {
  * can't be resolved from the Host (404), or `error` otherwise. Requires an unlocked vault (the identity opens the
  * grant).
  *
- * **No client birth of the tenant scope** (ADR 0006): the token-less home is *open-only*. When the caller holds
- * no `TENANT` grant (tenant member-invite is unbuilt), it **falls back to Personal** and flags the tenant
- * unavailable (ADR 0019, en.spaces.tenant-scope E1) — never a `POST`. A `@<slug|id>` group is resolved against the
+ * **No client birth of the tenant scope** (ADR 0006): the token-less home is *open-only*. When the caller's `TENANT`
+ * grant does not open — it is behind the scope's epoch, or refused (ADR 0024 Decision 6, ADR 0028 Decision 6) — it
+ * **falls back to Personal** and flags the tenant unavailable (ADR 0019, en.spaces.tenant-scope E1) — never a `POST`.
+ * A new member is never here: every membership is born with its grant (ADR 0111). A `@<slug|id>` group is resolved against the
  * caller's own scope list (readable slug, or opaque id for a legacy/collision link — en.spaces.group-scope,
  * cr-0032/0120); an unresolvable one falls back to Personal too. Only Personal auto-births.
  */
@@ -159,9 +160,10 @@ export async function enterScope(token: string): Promise<void> {
     // attention badge reflects it. Not awaited — the badge updates whenever it resolves; scope entry never blocks
     // on it, and a failure just leaves the count at 0 (fail-quiet in refreshMyInvitations).
     void refreshMyInvitations()
-    // As a key-holder, keep delivering the scope key to any pending member (cr-0076/cr-0077, first-online-wins):
-    // deliver on entry and then poll in the background so "awaiting access" closes without a re-entry (cr-0079).
-    // A shared TENANT/GROUP scope may have grant-less members; Personal never does, so it just stops any poll.
+    // As a key-holder, keep delivering the scope key to any member whose grant is behind (cr-0076, first-online-wins):
+    // deliver on entry and then poll in the background so the wait for the current key closes without a re-entry
+    // (cr-0079). A shared TENANT/GROUP scope may have members a rotation skipped; Personal never does, so it just stops
+    // any poll.
     if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, opened.kind, activeWriteKey)
     else stopGrantDeliveryPolling()
     // Also drain any queued scope-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — an owner

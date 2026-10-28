@@ -50,7 +50,7 @@ describe('InviteMemberDialog over the real Dialog', () => {
     ;(document.body.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await flushPromises()
 
-    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com')
+    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com', { mode: 'code', code: expect.any(String) })
     expect(refreshing.value).toBe(true)
     expect(document.body.textContent).toContain(t('members.inviteSentTo', { email: 'partner@example.com' }))
     expect(document.body.querySelector('form')).toBeNull()

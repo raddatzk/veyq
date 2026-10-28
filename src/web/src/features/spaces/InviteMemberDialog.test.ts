@@ -15,8 +15,14 @@ vi.mock('./members', () => ({
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import { inviteMember, memberError } from './members'
 import { realI18n, t } from '../../test/i18n'
+import { formatInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
+import { MIN_PASSWORD_LENGTH } from '../../shared/passwordPolicy'
 
 const stubs = {
+  VeyqPassword: {
+    props: ['modelValue'],
+    template: '<input class="pw" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
   VeyqInput: {
     props: ['modelValue'],
@@ -48,12 +54,55 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com')
+    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com', { mode: 'code', code: expect.any(String) })
     expect(wrapper.emitted('invited')).toHaveLength(1)
     // The dialog stays open and confirms the address — and offers NO link, because it holds no secret to offer.
     expect(wrapper.emitted('update:visible')).toBeUndefined()
     expect(wrapper.text()).toContain(t('members.inviteSentTo', { email: 'partner@example.com' }))
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
+  })
+
+  it('seals the invite under a fresh code and shows exactly that code once, to pass on outside veyq (ADR 0111 decision 1)', async () => {
+    const wrapper = mountDialog()
+    await wrapper.find('input').setValue('partner@example.com')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    const secret = vi.mocked(inviteMember).mock.calls[0][2]
+    expect(secret.mode).toBe('code')
+    const code = (secret as { code: string }).code
+    // A real code: ten Crockford characters, and the one the dialog shows (grouped) — not a second one.
+    expect(normalizeInviteCode(code)).toBe(code)
+    expect(wrapper.get('[data-testid="invite-code"]').text()).toBe(formatInviteCode(code))
+    expect(wrapper.text()).toContain(t('members.inviteCodeNote'))
+    // A second invite draws a new code: the code is per invite, never reused.
+    await wrapper.setProps({ visible: false })
+    await wrapper.setProps({ visible: true })
+    await wrapper.find('input').setValue('other@example.com')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    expect((vi.mocked(inviteMember).mock.calls[1][2] as { code: string }).code).not.toBe(code)
+  })
+
+  it('takes a password the owner chooses instead — at least the policy floor — and then shows no code', async () => {
+    const wrapper = mountDialog()
+    await wrapper.find('input').setValue('partner@example.com')
+    await wrapper.findAll('button').find((b) => b.text() === t('members.inviteUsePassword'))!.trigger('click')
+    const pw = wrapper.get('input.pw')
+    await pw.setValue('x'.repeat(MIN_PASSWORD_LENGTH - 1))
+    const submit = wrapper.findAll('button').find((b) => b.text() === t('members.inviteSubmit'))!
+    expect(submit.attributes('disabled')).toBeDefined() // below the floor: nothing to send
+    await pw.setValue('x'.repeat(MIN_PASSWORD_LENGTH))
+    expect(submit.attributes('disabled')).toBeUndefined()
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(inviteMember).toHaveBeenCalledWith('t-1', 'partner@example.com', { mode: 'password', password: 'x'.repeat(MIN_PASSWORD_LENGTH) })
+    expect(wrapper.find('[data-testid="invite-code"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(t('members.inviteSentPasswordIntro'))
   })
 
   it('closes on Done from the confirmation view', async () => {
