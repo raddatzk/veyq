@@ -447,7 +447,7 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 /**
  * Seal the two metadata tiers under `K_node` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
- * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
+ * + GPS; and what an import restores, a corrected capture time and a place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
  * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
  */
 async function sealMetadata(
@@ -459,21 +459,24 @@ async function sealMetadata(
   /** The geometry the tier derivation already measured, when it had it — an image always does. Absent for a
    *  video or an underivable source, and only then is a probe (its own decode) worth paying for. */
   knownDims: Dimensions | null = null,
+  /** What an import restores beside the bytes ([RestoredMediaFacts]), sealed into the listed tier with the rest. */
+  restored: RestoredMediaFacts = {},
 ): Promise<{ wrappedMeta: string | null; wrappedExif: string | null }> {
   const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
   const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, source.lastModified)
+  const placeName = cleanStr(restored.placeName)
   const metaTier: MediaMeta = {
     v: 1,
     w: dims?.w,
     h: dims?.h,
     capturedAt,
+    capturedAtOverride: finiteNum(restored.capturedAtOverride),
     capturedAtSource,
     gpsLat: meta.gpsLat,
     gpsLng: meta.gpsLng,
+    placeName: placeName === undefined ? undefined : clampPlaceName(placeName),
   }
-  const hasMeta =
-    metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
-    metaTier.gpsLng !== undefined
+  const hasMeta = metaHasContent(metaTier)
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
   const wrappedExif = meta.exif ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), meta.exif) : null
   return { wrappedMeta, wrappedExif }
@@ -568,7 +571,18 @@ export type AddMediaOptions = {
    *  every wrap and seal of the medium is under that node's key (ADR 0109 point 6). Every production caller states it
    *  ([UploadTarget.nodeEpoch], the import); absent it is 0, the epoch of a scope never rotated — a suite's fake scope. */
   nodeEpoch?: number
+  /** What an import restores that the bytes cannot carry ([RestoredMediaFacts]); absent for every other upload. */
+  restored?: RestoredMediaFacts
 }
+
+/**
+ * What an import of a download restores of a medium beside its original (uc.platform.export-import): a capture time the
+ * member CORRECTED (`capturedAtOverride`) and a place name the bytes do not carry. Both are sealed into the listed tier
+ * at birth, in the one completion that adds the medium and under the key it lands under — so a rotation and re-key that
+ * lands while the import runs cannot leave them to a second write opening a tier the re-key re-sealed (inbox #700), as a
+ * copy seals every fact at birth ([addCopiedMedia]). The name is clamped as a backfill clamps it ([clampPlaceName]).
+ */
+export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string }
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
@@ -629,7 +643,7 @@ export async function uploadMediaVia(
   const stored = opts.storedOriginal?.(sha256, sealedByteSize(typed.blob.size)) ?? null
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
-  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions)
+  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions, opts.restored)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order.
   return uploadSealedMedia(scopeId, memoryKey, mediaId, {

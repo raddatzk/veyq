@@ -285,8 +285,8 @@ export function useMemoryView(): MemoryView {
 }
 
 /** How a member's media-meta write under `nodeId` of the active scope `scopeId` meets an epoch refusal: the device floor
- *  before each attempt, the pull of the node's path and the re-read of its key (ADR 0111 decision 11) — the lightbox's
- *  edit and an import's second pass alike. */
+ *  before each attempt, the pull of the node's path and the re-read of its key (ADR 0111 decision 11): the lightbox's
+ *  edit and the place backfill. */
 export function memberMediaMetaOptions(scopeId: string, nodeId: string): MediaMetaWriteOptions {
   return {
     atFloor: (epoch) => assertActiveScopeFloor(scopeId, { id: nodeId, epoch }),

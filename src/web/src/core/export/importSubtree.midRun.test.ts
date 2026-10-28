@@ -24,6 +24,7 @@ vi.mock('../../app/activeSpace', async () => {
 vi.mock('../../api/client', async (orig) => ({ ...(await orig<object>()), contentApi: vi.fn() }))
 vi.mock('../../features/expenses/api', async (orig) => ({ ...(await orig<object>()), expensesApi: vi.fn() }))
 vi.mock('../../features/depot/api', async (orig) => ({ ...(await orig<object>()), filesApi: vi.fn() }))
+vi.mock('../../features/memories/api', async (orig) => ({ ...(await orig<object>()), mediaApi: vi.fn() }))
 vi.mock('../node/rekey/rekeyScope', async (orig) => ({ ...(await orig<object>()), pullRekeyPath: vi.fn() }))
 vi.mock('../node/rekey/floor', async (orig) => ({ ...(await orig<object>()), nodeKeyForWrite: vi.fn() }))
 vi.mock('../node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn(async () => {}) }))
@@ -35,6 +36,9 @@ import { replaySubtrees, ImportFailed, type ReplayItem } from './importSubtree'
 import { contentApi } from '../../api/client'
 import { expensesApi } from '../../features/expenses/api'
 import { filesApi } from '../../features/depot/api'
+import { mediaApi } from '../../features/memories/api'
+import type { MediaApi, MediaListPage } from '../../api/generated/media'
+import { b64std } from '@veyq/crypto/base64'
 import { fakeApi } from '../../test/apiMock'
 import type { ContentApi, CreateNodeRequest, NodeSummary } from '../../api/generated/content'
 import type { ExpensesApi, PotReceipt } from '../../api/generated/expenses'
@@ -317,6 +321,34 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     const file = one(FILE_KIND)
     expect(pull).toHaveBeenCalledWith([file])
     expect(files.completeFile.mock.calls.map((c) => c[0].fileCompleteRequest.nodeEpoch)).toEqual([0, 1])
+  })
+
+  it('a download\'s corrected capture time and place name land with the medium: a re-key right after the last medium leaves nothing to open under the old key (inbox #700)', async () => {
+    // the server's media rows: each tier as the server holds it, re-sealed under the node's key by any re-key since
+    const served: { nodeId: string; mediaId: string; tier: object }[] = []
+    vi.mocked(addMedia).mockImplementation(async (_s, nodeId, _k, _src, _d, opts) => {
+      gate(nodeId, opts!.nodeEpoch!)
+      const mediaId = crypto.randomUUID()
+      served.push({ nodeId, mediaId, tier: { v: 1, capturedAt: 1, ...opts!.restored } })
+      rotate([PARENT, nodeId]) // another member's device rotates and re-keys the Memory right after its last medium landed
+      return { blobId: crypto.randomUUID(), mediaId }
+    })
+    const metaCtx = (mediaId: string) => ({ purpose: 'media-meta', scopeId: SCOPE, mediaId }) as const
+    const media = fakeApi(mediaApi, {
+      listNodeMedia: vi.fn<MediaApi['listNodeMedia']>(async ({ nodeId }) => ({
+        media: served.filter((m) => m.nodeId === nodeId).map((m) => ({
+          mediaId: m.mediaId, blobId: crypto.randomUUID(), chunkCount: 1, byteSize: 64, wrappedBlobKey: 'k', metaRevision: 1, updatedAt: new Date(),
+          wrappedMeta: b64std(v1.sealField(metaCtx(m.mediaId), keyOf(nodeId), new TextEncoder().encode(JSON.stringify(m.tier)))),
+        })),
+        mediaRevision: 1, deleteRevision: 0,
+      }) as unknown as MediaListPage),
+      updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>(),
+    })
+    const corrected = '2023-11-14T22:15:00.000Z'
+    await replay(memory([{ ...photo(1), capturedAt: corrected, capturedAtCorrected: true, location: { place: 'Trastevere' } }]))
+    expect(mediaWrites(addMedia).map((w) => w.epoch)).toEqual([0])
+    expect(vi.mocked(addMedia).mock.calls[0]![5]!.restored).toEqual({ capturedAtOverride: Date.parse(corrected), placeName: 'Trastevere' })
+    expect([media.listNodeMedia, media.updateMediaMeta].map((f) => f.mock.calls.length), 'nothing re-read, nothing re-sealed after the medium').toEqual([0, 0])
   })
 
   it('below a drop box (an owner\'s to re-key) the run\'s next medium waits - and lands once an owner\'s device re-keyed the Memory', async () => {
