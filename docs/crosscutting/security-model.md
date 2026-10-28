@@ -569,24 +569,27 @@ is what that defense buys against the operator, and what it leaves.
   record, so a non-owner without one is a membership only the server can have made, and no member's client wraps to
   it. What is left of the operator's class: the server's role list decides who is an owner, so a membership it writes
   as an owner is a root, trusted on first use; the tenant scope's own grant from another member, and a grant in a
-  tenant this device cannot read, are judged by the pin alone; and a join record signed by an owner's retired key still
-  anchors, so a thief holding that key could with the operator mint one after the owner's rotation
+  tenant this device cannot read, are judged by the pin alone. A join record an owner's retired key signed counts only
+  with that owner's endorsement by their current key, which their securing writes for every record it rooted
   ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  § What stays open). An honest server verifies a member invite's owner signature under the caller's identity key
+  decision 21), so a thief holding the retired key mints nothing that anchors after the rotation. An honest server verifies a member invite's owner signature under the caller's identity key
   before it mints, so an owner's **session** without the vault mints no invite; and the operator, who mails the
   invite link, holds no code to open it.
 - **The pin store and the who-trusts-whom graph stay the client's.** The pin store is sealed under the Master Key at
   opaque keyed ids; the server sees how many pins an account holds, which the grant rows already let it count
   ([ADR 0104](../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)). A
   verification's content is sealed under the tenant key, but its row is addressed in the clear, so the server learns
-  **who verified whom, in which tenant, and when** — never what was confirmed. A device refuses a pin store or device
+  **who verified whom, in which tenant, and when** — never what was confirmed. Decided, not an oversight: the server
+  authenticates every write, so it knows the verifier whatever the row is keyed by, and a compare's two writes arrive
+  seconds apart, so an opaque subject would hide little (ADR 0111 § Consequences). A device refuses a pin store or device
   register served older than it has held (ADR 0028 Decision 7).
 - **The first-use gap (honest), now narrow:** if the operator substitutes Bob's key *before* Alice ever
   pinned the real one — and re-wraps genuine content too — nothing looks wrong until the two **compare safety
   numbers and chain codes** on their profiles or **Key Transparency** exists (the eventual end-state). Inside a tenant
   that is left for root owners, and for a member the server presents as an owner, since roles are the server's word;
-  everyone else is anchored by a join record an owner rooted. Outside a shared tenant — the invite accept's foreign
-  granter, the moderation delivery — the pin alone decides. **Withholding** a step is seen only by a device that saw a
+  everyone else is anchored by a join record an owner rooted. A newcomer anchors its inviting owner through the
+  key-chain head sealed into the link and the epoch it is handed through the owner's own grant beside it (ADR 0111
+  decision 19). Outside a shared tenant — the moderation delivery — the pin alone decides. **Withholding** a step is seen only by a device that saw a
   newer one, or by two people comparing chain codes.
 - **First-online-wins is a per-key-holder honesty measure (keyed on the declining account, so its other
   devices are excluded too), not a global veto:** a key-holder that cannot anchor Bob's served key declines, but a
@@ -637,8 +640,8 @@ operator lacks can.
 | An active operator … | Today | Closed by |
 |---|---|---|
 | reads content already stored | **Cannot** — it holds no key | — |
-| gets a scope's key by admitting an account of its own | **Cannot** as a member: a key-holder's rotation re-grant, a delivery to a member who is behind or a group add wraps only to a member whose join record an anchored owner's invite key signed, and a non-owner without one is an anomaly. **Can** as an owner — the server's role list decides who is one, and an owner with no join record is a root, trusted on first use — and with a stolen retired owner key, which still signs a join record that anchors (ADR 0111 § What stays open). A stolen owner **password** cannot (honest server): the server mints a member invite only when its key carries the caller's own owner signature under the identity key it stores (`TenantHandler.signedByCaller`), which a session without the vault cannot make, and the invitee checks that signature against the fingerprint sealed in the link, whose code the operator that mails it never sees. The admission tag that closed this row is gone ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 5, 2026-10-28) | [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 12 and 15 (the join record as the anchor) for a member; signed roles and removals for an owner, not designed (the membership protocol ADR 0020 declined) |
-| plants a scope key of its own choosing in a grant | **Cannot** in the personal scope — its grant opens only if it is self-signed under the vault's own key, and the signed kind stops a group's grant posing as it — nor under a granter the recipient has already pinned, nor in a group of the active tenant under a granter without an owner-rooted join record. **Can** under a granter identity it fabricates where the pin alone decides — the tenant scope's own grant, a grant outside the active tenant — which the recipient pins on first use (below) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 |
+| gets a scope's key by admitting an account of its own | **Cannot** as a member: a key-holder's rotation re-grant, a delivery to a member who is behind or a group add wraps only to a member whose join record an anchored owner's invite key signed, and a non-owner without one is an anomaly. **Can** as an owner — the server's role list decides who is one, and an owner with no join record is a root, trusted on first use. **Cannot** with a stolen retired owner key: a join record that key signs counts only with the owner's endorsement by their current key, which their securing writes for every record it rooted (ADR 0111 decision 21). A stolen owner **password** cannot (honest server): the server mints a member invite only when its key carries the caller's own owner signature under the identity key it stores (`TenantHandler.signedByCaller`), which a session without the vault cannot make, and the invitee checks that signature under the owner's chain walked from the head sealed in the link, whose code the operator that mails it never sees. The admission tag that closed this row is gone ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 5, 2026-10-28) | [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 12 and 15 (the join record as the anchor) for a member; signed roles and removals for an owner, not designed (the membership protocol ADR 0020 declined) |
+| plants a scope key of its own choosing in a grant | **Cannot** in the personal scope — its grant opens only if it is self-signed under the vault's own key, and the signed kind stops a group's grant posing as it — nor under a granter the recipient has already pinned, nor in a group of the active tenant under a granter without an owner-rooted join record, nor in a newcomer's invite — whatever a rotation carried must peel down to the inviting owner's own grant, which the operator cannot link to (ADR 0111 decision 19). **Can** under a granter identity it fabricates where the pin alone decides — the tenant scope's own grant, a grant outside the active tenant — which the recipient pins on first use (below) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 |
 | installs an identity of its own on an account | **Can** — it writes the directory itself. Through the API a session or a password no longer suffices: rotation, change-password and recovery need a signature of the Secret-Key proof key ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2), which binds every caller but the operator | Key Transparency ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) (g)); until then a member who pinned the account's key-chain head — and in a tenant every member, where the account joined with a join record — sees an anomaly and wraps nothing to it, because a new identity is reached only by a step signed by the old identity and the old Secret-Key proof key ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2) |
 | serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Cannot** — every seal binds its purpose and the object it is stored as, and a client opens it only at the address it asked for; what remains is *which authentic version* it is served — held only where a device keeps a mark, the two rows below — and, among one node's item marks, *which entry is the caller's own* (below) | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | links a device of its own while the user links theirs | **Cannot** — the QR carries a secret the relay never receives, and both relayed values carry a MAC under the channel key it derives: the trusted device seals only to an answer whose MAC verifies, the new device opens only an envelope whose MAC does. What remains is an attacker who also reads the QR (below) | [ADR 0059](../decisions/0059-device-linking.md) §11 |
@@ -654,13 +657,16 @@ operator lacks can.
 - a key substituted before anyone pinned it, between members who never compared safety numbers (TOFU's first-use
   gap, ADR 0028) — inside a tenant only a root owner's or a member's the server presents as an owner — which also
   covers a device with no trust-state mark yet (Decision 7), a shared grant signed by a granter identity the operator
-  fabricated where the pin alone decides (ADR 0028 Decision 6), and an invite grant a rotation re-wrapped, whose
-  rotator the newcomer trusts on first use (ADR 0111 § What stays open);
-- who counts as an owner, which is the server's word, and a join record signed by an owner's retired key, which still
-  anchors — so a thief holding that key could with the operator mint one after the owner's rotation (ADR 0111
-  § What stays open);
-- who verified whom in a tenant, and when: a verification's content is sealed, its address is not (ADR 0111
-  § Consequences);
+  fabricated where the pin alone decides (ADR 0028 Decision 6) — a member's device does not check that a new tenant
+  epoch links to the key it held before (inbox #650) — and, for a newcomer whose invite a rotation by someone other
+  than its owner carried, a party who held the owner's anchor epoch (a member, a former member, a thief of a member's
+  device) planting a later one with the operator (ADR 0111 § What stays open);
+- who counts as an owner, which is the server's word (ADR 0111 § What stays open);
+- an owner's securing step withheld from a new account: a thief of the owner's retired key, with the operator, passes
+  that newcomer's invite check under the retired key; the newcomer's join record then names that key without an
+  endorsement, so every co-member reads it as an anomaly (ADR 0111 § What stays open);
+- who verified whom in a tenant, and when: a verification's content is sealed, its address is not — decided, since
+  the server authenticates the writer anyway (ADR 0111 § Consequences);
 - a genuine tenant invite redeemed with the operator's key, which needs the code the operator guesses offline against
   50 bits behind Argon2id, or a password the owner chose ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 1);
 - a revoked or expired tenant invite: its link and code still open the epochs it was granted, useful with a dump of
@@ -669,7 +675,9 @@ operator lacks can.
   know only the server's member list (ADR 0024 § Guarantee);
 - an attacker who both reads a pairing QR and runs the relay (ADR 0059 §11);
 - the members a moderator seals a statement's facts to (`getModerationStatementRecipients`), whose keys the client
-  seals to without the anchor check every other wrap takes (inbox #570);
+  seals to unchecked: the moderation surface holds no pin store and may share no tenant with them, so there is nothing
+  to anchor them by. An operator that substitutes a key reads that statement's facts text, beside the kind, target,
+  ground and provision it reads anyway (ADR 0111 § What stays open);
 - item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)),
   so a former member can read a set written after their removal. Which entry is the caller's own is proven by a
   self-tag only their client computes (ADR 0068 §9), but the operator can still serve the caller an older genuine
