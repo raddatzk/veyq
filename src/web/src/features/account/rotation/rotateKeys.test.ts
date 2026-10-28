@@ -67,6 +67,15 @@ vi.mock('../../../app/vault', () => ({
   isUnlocked: vi.fn(() => vault.mk !== null),
 }))
 vi.mock('../../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
+// This tab's session vault (`sessionStorage`): what the swap carries it to is asserted below; its sealing is its own suite.
+const sessionVault = vi.hoisted(() => ({ carried: [] as Uint8Array[] }))
+vi.mock('../rememberMe/sessionVault', () => ({
+  carrySessionVault: vi.fn(async (mk: Uint8Array) => {
+    sessionVault.carried.push(mk.slice()) // the caller zeroes its copy once the rotation returns
+  }),
+  clearSessionVault: vi.fn(async () => undefined),
+  loadSessionVault: vi.fn(async () => null),
+}))
 vi.mock('../../memories/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // The re-key after a scope's rotation (ADR 0109) is `rekeyScope`'s own suite; here it always finishes.
@@ -89,7 +98,8 @@ vi.mock('@veyq/crypto/argonWorker', async () => {
   }
 })
 
-import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused, STAGE_CHUNK } from './rotateKeys'
+import { mintSecretKey, rotateKeys, RotationOutcomeUnknown, RotationRefused, STAGE_CHUNK, unreadableOnThisDevice } from './rotateKeys'
+import { readRotationPlan } from './finishRotation'
 import {
   accountApi,
   accountDeviceRegisterApi,
@@ -100,6 +110,7 @@ import {
   tasksApi,
 } from '../../../api/client'
 import { clearVault, identityPrivate, setUnlocked } from '../../../app/vault'
+import { carrySessionVault, clearSessionVault } from '../rememberMe/sessionVault'
 import { setAccount } from '../../../app/account'
 import { forgetVerifiedPins, getPin } from '../identityPins'
 import { readRegisterView } from '../deviceRegister'
@@ -945,6 +956,17 @@ describe('securing the account loses no space (inbox #556)', () => {
     expect(srv.regrant.has(SCOPE_ELSEWHERE)).toBe(false)
   })
 
+  it('the entry’s dry run names exactly the scope the stage declares, and writes nothing (decision 11)', async () => {
+    const unreadable = heldScope(SCOPE_ELSEWHERE, 'GROUP', { tenantId: 't2', active: false })
+    unreadable.members.get(ME)!.grant.grantSignature = b64std(v1.randomBytes(64))
+    const srv = fakeServer({ scopes: [...ordinaryScopes(), unreadable] })
+    expect(await unreadableOnThisDevice(await readRotationPlan())).toEqual([SCOPE_ELSEWHERE])
+    expect(srv.openRotationStage).not.toHaveBeenCalled()
+    expect(srv.rotateAccountKeys).not.toHaveBeenCalled()
+    const result = await rotate()
+    expect(result.unreadableScopeIds).toEqual([SCOPE_ELSEWHERE]) // the stage, judging by the same rule, agrees
+  })
+
   it('the old identity never reaches the vault, and every copy of it this rotation took is zeroed', async () => {
     fakeServer({ scopes: ordinaryScopes() })
     await rotate()
@@ -1149,6 +1171,48 @@ describe('what securing the account leaves behind', () => {
     expect(b64std(seen![0])).toBe(b64std(MK))
     expect(b64std(seen![1])).toBe(b64std(vault.mk!))
     expect(swappedBefore).toBe(true)
+  })
+
+  // The CR's invariant holds in the browser too: no retired private material is kept. This tab's session vault sealed
+  // the Master Key the publish retired, so a reload would have restored it (phase 4's finding). Bite: drop the carry
+  // from the swap → the first case is red.
+  it('re-seals this tab’s session vault under the PUBLISHED Master Key, right after the vault swapped', async () => {
+    sessionVault.carried = []
+    fakeServer({ scopes: ordinaryScopes() })
+    await rotate()
+    expect(carrySessionVault).toHaveBeenCalledTimes(1)
+    expect(b64std(sessionVault.carried[0])).toBe(b64std(vault.mk!))
+    expect(b64std(sessionVault.carried[0])).not.toBe(b64std(MK))
+    expect(vi.mocked(carrySessionVault).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(setUnlocked).mock.invocationCallOrder[0])
+  })
+
+  it('a retry that finds the publish committed carries the session vault to the key it re-opened', async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes(), abandonAfterPublish: true })
+    await rotate()
+    srv.reconnect()
+    vault.mk = MK.slice()
+    vault.priv = oldPriv()
+    sessionVault.carried = []
+    vi.mocked(carrySessionVault).mockClear()
+    await expect(rotateKeys(PASSWORD, NEXT.secretKeyB64, { secretKeyB64: mintSecretKey() })).resolves.toMatchObject({ outcome: 'resumed' })
+    expect(carrySessionVault).toHaveBeenCalledTimes(1)
+    expect(b64std(sessionVault.carried[0])).toBe(b64std(vault.mk!))
+    expect(b64std(sessionVault.carried[0])).not.toBe(b64std(MK))
+  })
+
+  it('an unknown outcome drops the session vault with the vault — neither key is kept for a reload', async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes(), rotateFails: fetchFailed() })
+    srv.failReread()
+    await expect(rotate()).rejects.toBeInstanceOf(RotationOutcomeUnknown)
+    expect(clearSessionVault).toHaveBeenCalled()
+    expect(carrySessionVault).not.toHaveBeenCalled()
+  })
+
+  it('control: a rotation refused before any write leaves the session vault alone', async () => {
+    fakeServer({ scopes: ordinaryScopes() })
+    await expect(rotateKeys(PASSWORD, b64std(v1.randomBytes(32)), { secretKeyB64: mintSecretKey() })).rejects.toBeInstanceOf(RotationRefused)
+    expect(carrySessionVault).not.toHaveBeenCalled()
+    expect(clearSessionVault).not.toHaveBeenCalled()
   })
 
   it('does not fail a published rotation because the favorites or the item marks could not be carried across', async () => {

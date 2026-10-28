@@ -21,7 +21,7 @@ import { accountApi, accountRotationApi, loginApi } from '../../../api/client'
 import type { RotationPlanScope, RotationScopeState, StagedSelfGrant } from '../../../api/generated/account'
 import { account } from '../../../app/account'
 import { withRefresh } from '../../../app/sessionRefresh'
-import { clearVault, identityPrivate, setUnlocked } from '../../../app/vault'
+import { clearVault, identityPrivate, masterKey, setUnlocked } from '../../../app/vault'
 import { registry } from '../../../core/applications/registry'
 import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
 import { decodeHttpError, HttpStatus, isCodedError, isHttpStatus } from '../../../shared/httpError'
@@ -33,6 +33,7 @@ import { registerDocument } from '../deviceRegister'
 import { fetchKeyChain, linkOf, pinStoreDocument, type PinStoreWrite } from '../identityPins'
 import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
 import { unlockMasterKey } from '../unlock/unlock'
+import { carrySessionVault, clearSessionVault } from '../rememberMe/sessionVault'
 import { finishRotation, readRotationPlan } from './finishRotation'
 
 const ARGON = v1.ARGON
@@ -286,7 +287,10 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
         )
         if (outcome === 'committed') break
         if (outcome === 'notCommitted') throw e
+        // Neither identity can be held with certainty — nor can this tab's session vault, which seals the Master Key
+        // that may just have been retired: a reload must not restore it. Both go; the person unlocks again.
         clearVault()
+        await clearSessionVault()
         throw new RotationOutcomeUnknown(e)
       }
     }
@@ -294,6 +298,9 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     // Committed. The vault takes the published identity NOW — before the re-seals and the finish, so every later step
     // opens the self-grants the publish wrote, and nothing after this line can put the old identity back.
     setUnlocked(newMasterKey.slice(), { kemSeed: identity.priv.kemSeed.slice(), sign: identity.priv.sign.slice() }, 'cold')
+    // This tab's session vault sealed the retired Master Key: re-sealed under the published one, so a reload neither
+    // restores a retired key nor finds one cached (the CR's invariant holds in the browser too).
+    await carrySessionVault(newMasterKey)
     await afterCommit(oldMasterKey, newMasterKey, sealed, stage.planScopeIds())
     const states = await finishRotation().catch((): RotationScopeState[] => [])
     return { outcome: 'published', states, unreadableScopeIds: stage.unreadableIds() }
@@ -423,11 +430,8 @@ class SelfGrantStage {
    * current epoch, whose key is not the one the self-grant must carry.
    */
   private async selfGrant(row: RotationPlanScope): Promise<StagedSelfGrant | null> {
-    let key: Uint8Array
-    try {
-      key = await openPlanGrantKey(row)
-    } catch (e) {
-      if (!isUnreadableGrant(e)) throw e
+    const key = await openOrDeclare(row)
+    if (!key) {
       this.unreadable.add(row.scopeId)
       return null
     }
@@ -445,6 +449,36 @@ class SelfGrantStage {
       key.fill(0)
     }
   }
+}
+
+/**
+ * The one rule both the stage and the ceremony's entry judge a plan row by: the row's current epoch key as this device
+ * opens it with the vault's identity ({@link openPlanGrantKey}), or null when this device refuses the grant — the scope
+ * is then declared unreadable, never dropped. Any other failure (a read that did not answer) is rethrown.
+ */
+async function openOrDeclare(row: RotationPlanScope): Promise<Uint8Array | null> {
+  try {
+    return await openPlanGrantKey(row)
+  } catch (e) {
+    if (isUnreadableGrant(e)) return null
+    throw e
+  }
+}
+
+/**
+ * The scopes of `plan` this device cannot open (decision 3), judged exactly as the stage will judge them — a dry run for
+ * the ceremony's entry (decision 11), which lists them before any field as "this device can't open it, so it is
+ * already closed to you". Nothing is staged or kept: each key opened is zeroed at once. Needs an unlocked vault; a
+ * failure that says nothing about a grant rejects, and the entry then lists none rather than guessing.
+ */
+export async function unreadableOnThisDevice(plan: RotationPlanScope[]): Promise<string[]> {
+  const unreadable: string[] = []
+  for (const row of plan) {
+    const key = await openOrDeclare(row)
+    if (key) key.fill(0)
+    else unreadable.push(row.scopeId)
+  }
+  return unreadable
 }
 
 /**
@@ -505,6 +539,14 @@ function opensTo(mk: Uint8Array, wrapped: string, bundle: Uint8Array): boolean {
  */
 async function resumeCommitted(password: string, secretKeyB64: string): Promise<RotationResult> {
   await unlockMasterKey(password, secretKeyB64, { noteDevice: false })
+  const published = masterKey()
+  if (published) {
+    try {
+      await carrySessionVault(published) // the session vault sealed the retired key, as after a publish
+    } finally {
+      published.fill(0)
+    }
+  }
   const states = await finishRotation().catch((): RotationScopeState[] => [])
   return { outcome: 'resumed', states, unreadableScopeIds: [] }
 }
