@@ -21,6 +21,7 @@
   erased in every scope of the tenant, with everything that hangs off it. The erasure is in the erasure ledger, its
   blobs are on the store reclaim, and every moderation hold keeps its copy. Core folders, scope keys and memberships
   stay.
+- **Enabler:** [en.platform.capability-register](../enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

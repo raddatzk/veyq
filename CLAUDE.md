@@ -28,14 +28,14 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md) stages 2 and 3), all below. Not to be
   confused with a surface's own `src/` (`src/web/src`, a Gradle module's `src/main`).
 - `src/backend/` + `src/web/` — the two user-facing surfaces. A CR's phase order is
-  **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
+  **contracts → backend → web**. **Built** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **The backend is split** —
   Gradle modules `:core` (`src/backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`src/backend/apps/memories`,
   `me.raddatz.veyq.memories`), composed by the root `src/backend/` into one fast-jar; the direction is the build's and
   `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `src/web/src/features/memories` is
-  the application (each application's directory is `features/<owner>`, derived by the web guard), reached through a build-time registry. ADR 0079's
-  Consequences say what is still open, and [`docs/apps/`](docs/apps/README.md) maps what belongs where.
+  the application (each application's directory is `features/<owner>`, derived by the web guard), reached through a build-time registry.
+  [`docs/apps/`](docs/apps/README.md) maps what belongs where and what is still open.
 - `src/admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
   localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,

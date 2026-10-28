@@ -209,7 +209,7 @@ files and drop boxes) and offers the presentations grid, list and map in the lev
 the three, `memoryViews.ts`), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is); the top-bar tray and
 the sidebar pins are ordered lists, today unused by Memories (the sidebar's Favorites section is core's; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
-batches with every other application's). What core still knows of Memories, and what is open on both sides,
-[ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences lists.
+batches with every other application's). How core and an application meet, on both sides, is
+[Applications](README.md#how-core-and-an-application-meet).
 
 - End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)

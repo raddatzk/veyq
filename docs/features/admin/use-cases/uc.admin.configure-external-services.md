@@ -13,6 +13,7 @@
   has an address and its register entry (`memories.map`, `memories.places`, `core.breached-password`,
   `expenses.exchange-rates`) is on; every client reads the address from the capabilities it holds (a link guest the
   exchange rates' from its Pot read), and the Content Security Policy the backend serves names its origin only then. Nothing a member stored changes.
+- **Enabler:** [en.platform.capability-register](../../platform/enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

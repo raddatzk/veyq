@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-07-08
 - Model: [Applications](../apps/README.md)
-- Replaced in part: § 2, § 3, § 5 by ADR 0088 (built)
+- Replaced in part: § 2, § 4, § 5 by ADR 0088 (built)
 
 ## Context
 
@@ -24,8 +24,9 @@ The previous implementation had a **thin** server-advertised `CapabilityRegistry
 never-built** target-picture design (a `major.build` hard gate + an append-only capability manifest + a
 deprecation lifecycle). The fresh state already has the **seams**: the pre-auth `GET /api/setup` response
 advertises `suites: ["v1"]` (crypto-suite negotiation the owner-registration picks from) and, at the time,
-`directTransport` (a runtime-detected capability the client degraded on — since removed, §5) — but there is **no version field and no generic
-capability manifest**. Worker↔queue capability tags (`CapabilityTags`, ADR 0021) already realize the
+`directTransport` (a runtime-detected capability the client degraded on, since removed: a byte-path store is a hard
+instance requirement, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md)) — but there was **no version field
+and no generic capability manifest**. Worker↔queue capability tags (`CapabilityTags`, ADR 0021) already realize the
 operator-blind "worker advertises what it can do" direction.
 
 This ADR decides the **lean core** of a client-facing capability-negotiation layer. The full lifecycle
@@ -55,22 +56,10 @@ response and a client-side gate that reads them.
 
 ### 2. `capabilities` — the register of what this server serves
 
-- Ids are **paths in a tree**, `core.<x>` or `<application>.<x>`. The register, its two switching levels
-  (operator, tenant owner), inheritance along the path and what makes an entry switchable are
-  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s. **Built today:** seven
-  `core.*` entries (§5), the first cut of the tree (ADR 0088 decision 10).
-- **Source of truth** is the catalog `contracts/platform/capabilities.json`, codegen'd into a backend registry
-  **and** each client's constants, so ids can never silently diverge across surfaces. Each catalog entry also
-  carries a `serves: [uc.…]` back-ref to the use-case(s) it gates (catalog-only, validated — see §6); it is
-  **not** put on the wire. From V1 on the catalog is **append-only**: an id is never removed or repurposed, except
-  that a presence id may retire at a train (ADR 0088 decision 9).
-- **Two deliveries.** The pre-auth `/api/setup` advertises the **instance** level, for what matters before login.
-  After login the server delivers the **effective** set for the tenant. The client only reads it and never
-  computes it (ADR 0088 decision 3).
-- **Wire shape** `[{ id, …values }]`: each entry carries the requirement values in effect on it (ADR 0088 decision
-  8), one optional property per requirement of the catalog, which was additive and cost no major. The deprecation lifecycle (`state`, `sunsetAt`, `supersededBy`) stays deferred: a
-  removal under [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) is marked `deprecated: true` in its contract
-  and needs no manifest state.
+Replaced by [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) (the ids as a tree,
+the two levels, the two deliveries, the wire shape `[{ id, …values }]`); the catalog `contracts/platform/capabilities.json`
+is the one list, and [en.platform.capability-register](../features/platform/enablers/en.platform.capability-register.md)
+the mechanism.
 
 ### 3. Capability ≠ permission (the load-bearing distinction)
 
@@ -86,55 +75,16 @@ response and a client-side gate that reads them.
 
 ### 4. Turning a capability off — advertised **and** enforced
 
-An operator disables a capability **instance-wide**: in `admin-web` or its CLI, through the Admin API, without a
-restart ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 12).
-This is built: admin-web's Server → Capabilities panel and `veyq-admin capabilities off <id>` call
-`PUT /api/instance/capabilities/{capabilityId}`, the state is a row in the database (`veyq_capability_switch`), and the
-next request reads it. There is no configuration property for it (the `veyq.capabilities.disabled` list is gone). A
-disabled capability is then:
-
-- **Omitted from the manifest** → every client **hides** the feature (soft, graceful — the ShareDialog simply
-  doesn't offer the role).
-- **Enforced at its endpoint** → the manifest is a UX hint, but the **authority is the server**. The endpoint
-  that would exercise the capability rejects with `422 capability_disabled` — **every** such endpoint: a path that
-  brings the capability back into use (re-activating a disabled share) exercises it as much as the one that
-  first creates it. A client that ignores the manifest (or is stale) still cannot use a disabled capability.
-
-Both are required: the manifest alone is only UX; the endpoint gate alone gives a broken-looking UI. Together
-they are honest and safe. A device switch also acts on what exists: the key material withholds the switched-off wraps
-without deleting them (ADR 0088 decision 5). A tenant owner switches a `+` entry off for their tenant the same way,
-from the tenant settings in `src/web/`, with the same gate answering `422` for that tenant's content (ADR 0088 decisions 2,
-5 and 12): the entry leaves the tenant's set every member reads after sign-in, and the pre-auth manifest stays the
-instance level.
+Who switches where is [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s
+(decision 12). What stays this ADR's is that a capability switched off is both **omitted from the manifest**, so every
+client hides the feature, and **enforced at its endpoint**: every endpoint that would exercise it, a path that brings it
+back into use included, answers `422 capability_disabled`. The manifest alone is only UX, and a stale or hostile client
+ignores it; the endpoint gate alone gives a broken-looking UI. Together they are honest and safe.
 
 ### 5. The built entries
 
-The catalog holds the capabilities whose features exist **and** that an operator has a plausible reason to switch off.
-Two computation sources feed the same active manifest: an operator **disabled set** (policy, stored in the database, §4) and,
-separately, an infra **preflight** (runtime). These seven are what is built (`contracts/platform/capabilities.json`, whose
-`description` per entry is the reference for what off does); a child is switched off by its own id or by its parent's,
-the AND along the path being the server's (ADR 0088 decision 2):
-
-| id | `serves` (use-cases) | disabled ⇒ |
-|---|---|---|
-| `core.public-shares` | share-public-viewer | Share affordance hidden; `createShare`, re-activating and re-issuing a READ link → `422`, and by the AND those of the two children below; every existing link answers guests `404` like an unknown one |
-| `core.public-shares.contribute` | share-contributor | the READ_WRITE role is not offered; the same three operations on a READ_WRITE link, and changing a READ link into one, → `422`; an existing READ_WRITE link answers guests `404` |
-| `core.public-shares.drop-box` | share-uploader | the uploader option and the drop-box node are not offered; WRITE_ONLY links and creating a drop-box node → `422`; an existing WRITE_ONLY link answers guests `404` |
-| `core.group-space` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | group creation hidden; `createGroup` → `422` (an existing group stays usable) |
-| `core.remember-device` | trust-device, remember-this-device | enrolling a DEVICE wrap → `422`, and by the AND a passwordless one |
-| `core.remember-device.passwordless` | remember-this-device | the "remember this device" toggle hidden; enrolling a DEVICE_KEY wrap → `422` |
-| `core.device-linking` | onboard-device | "sign in with code" and the Settings entry hidden; every `/api/pairing/*` endpoint → `422` |
-
-**Sharing is the worked end-to-end proof** (manifest → client soft-gate → server `422`). A share switch also reaches
-existing links at once (ADR 0088 decision 5): core's guest gate answers a link of a switched-off role exactly as an
-unknown one, on every guest endpoint, and serves it again once the switch is back on.
-
-The **infra-detected** category (a capability computed by a preflight, not a policy toggle, with no operator
-off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag has been
-**removed** — a byte-path store became a hard instance requirement ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md)),
-so there is nothing to soft-gate. No infra-detected capability exists now: derivatives, once named as the example,
-are part of the base function and never switchable (ADR 0088 § Not in the register). The source stays available
-for a future one.
+Replaced by [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) § The register; what
+is built is the catalog, and what each entry's off does is its `whenOff` there.
 
 ### 6. Capability grain — a coarser projection over use-cases, cross-referenced to them
 
@@ -147,18 +97,17 @@ different **projections** and must not be collapsed 1:1:
   and a client would sensibly gate a whole feature-surface on — a **per-instance, versioned, client-facing** wire
   token.
 
-The mapping is therefore **many-to-many**, not identity — the entries show it: three share ids over three sharing
-use-cases, while `core.group-space` and `core.remember-device` each fold **two to five** use-cases into one switch. Always-on core use-cases (e.g. creating a Memory) get **no** capability; runtime/ops signals (e.g. a
+The mapping is therefore **many-to-many**, not identity: a share id per link role, while `core.group-space` folds
+several group use-cases into one switch. Always-on core use-cases (e.g. creating a Memory) get **no** capability; runtime/ops signals (e.g. a
 future `server.auto-updates`) would be capabilities with **no** single use-case.
 
 Two rules follow, so the catalog stays honest instead of being invented in parallel:
 
 - **A capability entry declares the use-case(s) it gates** — a `serves: [uc.…]` back-ref in the catalog
-  `contracts/platform/capabilities.json` (**catalog-only metadata**; the wire manifest stays `[{ id }]` — a
-  client needs the ids, not the use-case links). This is the **same wiring model** `validate_feature_wiring`
-  already enforces between use-cases/enablers and features. A validator (an extension of that one, or a sibling)
-  checks every capability's `serves` resolves to a **real** use-case (the doc exists) — so a catalog entry can't
-  be a typo or drift from the graph. Because the catalog is **append-only**, an id may be *reserved* ahead of its
+  `contracts/platform/capabilities.json` (**catalog-only metadata**, never on the wire — a client needs the ids, not
+  the use-case links). This is the **same wiring model** `validate_feature_wiring` enforces between use-cases/enablers
+  and features: `validate_capabilities.py` checks every capability's `serves` resolves to a **real**, built use-case —
+  so a catalog entry can't be a typo or drift from the graph. Because the catalog is **append-only**, an id may be *reserved* ahead of its
   first advertisement; a capability is **advertised active** only once its use-case(s) are actually **built** and
   the operator hasn't disabled it. (So an entry for a feature still being built is valid in the catalog,
   advertised as that feature finishes.)
@@ -181,7 +130,7 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
   **audience filtering** (`ALL_USERS` vs `SERVER_OWNER`); **client device self-capabilities** (NPU/WebCodecs,
   a separate direction); migrating `suites` into the unified manifest.
 - **Not a permission system.** This ADR deliberately does not touch per-scope/role authorization — it only adds
-  the instance-wide discovery + version layer above it. Conflating the two is the main modeling risk, called out
+  the discovery + version layer above it. Conflating the two is the main modeling risk, called out
   in §3.
 - **The catalog is wired to the use-case index, not a parallel list.** Because every capability `serves` real,
   built use-cases (§6, validated), the catalog can't grow orphan entries or outlive the behavior it gates — the

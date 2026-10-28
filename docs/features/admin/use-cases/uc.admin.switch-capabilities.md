@@ -10,6 +10,7 @@
   ([uc.admin.admin-channel](uc.admin.admin-channel.md)).
 - **Postconditions (success):** The instance holds the set of entries switched off. Every client's manifest
   and every server gate follow it without a restart. Nothing a member stored is deleted.
+- **Enabler:** [en.platform.capability-register](../../platform/enablers/en.platform.capability-register.md) (the register, its two levels and what "off" does).
 
 ## Main flow
 

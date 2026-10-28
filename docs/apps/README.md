@@ -5,11 +5,16 @@ on it ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-app
 the rejected alternatives). German: *Anwendung*. Never "plugin", and never "app": an app is an installable native client
 ([ADR 0086](../decisions/0086-one-word-per-meaning.md), which also names the second application **Depot**).
 
+This page is the current picture of the platform: what core owns, what an application owns, how the two meet in the
+build, on the wire and in the web client, and which guards hold the line. The capability register an application is
+switched by has its own mechanism doc, [en.platform.capability-register](../features/platform/enablers/en.platform.capability-register.md).
+
 **What the platform is.** veyq is a platform for sealed, shareable objects. The core provides:
 - **who**: tenants, central users, groups and personal scopes, memberships, invitations, keys, devices;
 - **what**: nodes as a tree inside a scope, with parents, order, trash and a content key per node, and a member's
   private **favorites** of any node (a sealed set per user and scope, the heart on every row and header); and
-  *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota;
+  *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota, among them
+  a node's **cover**;
 - **with whom**: links with `READ`, `READ_WRITE` or `WRITE_ONLY` access, with password, expiry and consent;
 - **out and in**: a member - or a `READ` / `READ_WRITE` share guest - **downloads** any node and everything under it as a
   plaintext ZIP that unpacks as the tree, and a member imports such a ZIP (or the same download unpacked) again
@@ -20,12 +25,11 @@ the rejected alternatives). German: *Anwendung*. Never "plugin", and never "app"
   the downloading session's own source), `contentSchema` (its application id and content version, so an import lists what
   it cannot read), `validateContent` (its fields against the contract, before anything is written) and `downloadsAsFile`
   (a kind that IS one file - Depot's - downloads as itself and is one file in a ZIP) - so no application imports another;
-- **in the background**: tasks, rate limits, the admin channel and operator-blindness.
+- **in the background**: tasks, rate limits, the admin channel, the capability register and operator-blindness.
 
 An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
-structure, attachments and guests, and the user interface. Attachments are core's (`veyq_node_attachment`); what a
-verified upload becomes is still each application's (`UploadCompletion`) — Depot's is one attachment, Memories' its
-media tables. What is built and what is open: the ADR's Consequences.
+structure, attachments and guests, and the user interface. What a verified upload becomes is each application's
+(`UploadCompletion`): Depot's is one attachment, Memories' its media tables.
 
 **Rules** (each is argued in the ADR, not here):
 
@@ -33,18 +37,21 @@ media tables. What is built and what is open: the ADR's Consequences.
 - **Depends on core, never the reverse, never on another application.** Cross-application references are generic
   core object references (scope id + node id) only.
 - **Claims its URL route slug once.** A node of an application is addressed `#<path>/<slug>/<name>` in the URL
-  fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md), amended 2026-10-11): the application
-  claims its slug in the web registry (a second claim throws; a platform word is refused), or declares explicitly
-  that it has none — Depot is the one that does. The slug is reserved among folder names.
+  fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md)): the application claims its slug in the web
+  registry (`claimRouteSlug`; a second claim throws; a platform word is refused), or declares that it has none
+  (`claimNoRouteSegment`) — Depot is the one that does. A claimed slug is reserved among folder and file names, which
+  are numbered around it (`memories-2`).
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant
   owner for their tenant, may switch an application or one of its functions off through the capability register
   ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A function
   off: none of it new. The application off: read-only — every write of it refused, every read, download and removal
-  kept ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,
-  [uc.platform.switch-application-off](../features/platform/use-cases/uc.platform.switch-application-off.md)). A new
-  application takes part by: its own entry in `contracts/platform/capabilities.json`, its name as the id
+  kept — and, left off past the instance's window, erased in that tenant
+  ([uc.platform.switch-application-off](../features/platform/use-cases/uc.platform.switch-application-off.md),
+  [uc.platform.erase-switched-off-application](../features/platform/use-cases/uc.platform.erase-switched-off-application.md);
+  the mechanism: [en.platform.capability-register](../features/platform/enablers/en.platform.capability-register.md)).
+  A new application takes part by: its own entry in `contracts/platform/capabilities.json`, its name as the id
   (`validate_capabilities.py` is red without one); its kinds' `NodeKindRules.applicationOf` and its member roles'
   `MemberBlobRoles.application`, so core refuses its node writes by kind; each of its write handlers calling
   `ApplicationSwitch.requireWritable` right after its gate (`ApplicationSwitchSweepTest` is red on a write operation that
@@ -56,29 +63,179 @@ media tables. What is built and what is open: the ADR's Consequences.
   the build is configured, so `./gradlew check` runs no task at all (`./gradlew help` shows it at refine). On the web,
   its `generate:api` line in `src/web/package.json`, its directory in `OWNERS`, its kinds in `KIND` and its i18n
   namespace in `I18N_NAMESPACES` (`scripts/validate_web_core_imports_no_applications.py`, which derives every
-  application's client from that script) land together with a catalog for the namespace, or that guard is red
-  (cr-expenses-ledger).
+  application's client from that script) land together with a catalog for the namespace, or that guard is red.
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
-  and a blob's key is sealed bound to its node and its application's role token — so Depot needed no new seal purpose
-  and no HKDF context (ADR 0079 Decision 9). Memories' existing keys are the exemption.
+  and a blob's key is sealed bound to its node and its application's role token — so no application so far needed a
+  seal purpose or an HKDF context of its own (ADR 0079 decision 9). Memories' existing keys are the exemption.
 - **Every concept doc lists the metadata its kinds make operator-visible** (the platform adds only the node
   `kind`, [security-model](../crosscutting/security-model.md)).
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`src/web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend `:apps:memories` (`me.raddatz.veyq.memories`), contract `contracts/api/memories/`, web `src/web/src/features/memories`. |
+| [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
+| [Expenses](expenses.md) | Built ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link; receipts (images and PDFs, Expenses' own blob arm); the day's exchange rates (the ECB's euro reference rates, fetched by the device once a day with the date alone, the tenant's switch reaching a link guest through its Pot read). |
 | [Inventory](inventory.md) | Concept only. |
-| [Expenses](expenses.md) | Built, on the V1 line (owner 2026-10-23): [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`, depending on `:core` only), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link. Receipts are built (`cr-expenses-receipts`): images and PDFs with an entry, Expenses' own blob arm. The day's exchange rates are built (`cr-expenses-exchange-rates`): the ECB's euro reference rates, fetched by the device once a day with the date alone, the tenant's switch reaching a link guest through its Pot read. |
-| [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
+
+## How core and an application meet
+
+### The build
+
+- **Backend modules.** Core and each application are Gradle modules below `src/backend/`: `:core` (`src/backend/core`)
+  and `:apps:<application>` (`src/backend/apps/<application>`). The test helpers they share are `:core`'s
+  `java-test-fixtures` source set, on no runtime classpath. The root `src/backend/` holds no main code; it composes the
+  modules into the one fast-jar, each module's jar `lib/main/me.raddatz.veyq.<module>.jar`. The direction is the
+  build's: `:core` has no edge to an application, so a core file importing one does not compile.
+- **Named for the owner.** The platform's classes are `me.raddatz.veyq.core.<feature>`, an application's
+  `me.raddatz.veyq.<application>.<feature>`, the generated API `me.raddatz.veyq.core.generated` /
+  `me.raddatz.veyq.<application>.generated`. Core's specs sit in `contracts/api/` (`_common.openapi.yaml`, where every
+  shared schema is defined once, is core's), an application's in `contracts/api/<application>/`. The build derives the
+  owner from that place, never from a list: a directory below `contracts/api/` holding a spec is the module
+  `:apps:<directory>`; a spec in a directory with no such module, or nested deeper, fails the build while it configures.
+- **Contracts by owner.** A core spec describes what core does: where a value's meaning belongs to an application (a
+  node's sealed payload, a blob role, a kind), its description says whose it is and names no application's plaintext,
+  operation or key. An operation whose behaviour is an application's lives in that application's directory even when
+  its path sits under a core route (`/api/shares/{shareId}/media` is Memories').
+- **Migrations and configuration.** Each module owns its migrations under one global version scheme
+  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, [src/backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations): a core
+  migration names no application table, an application's references only core's and its own. Core's schema and config
+  name no application concept: an application's configuration keys are its own `@ConfigMapping` (Memories'
+  `veyq.media.*`, `MemoriesMediaConfig`), whose `@WithDefault`s are their only defaults, since SmallRye refuses a
+  `veyq.*` key no mapping claims and a line in core's base config would fail core's boot without that application.
+
+### The seams core asks
+
+Core reaches application code only through interfaces each application implements, collected by CDI; the list is
+`ModuleCompositionTest.seams()` (the root's test, which pins the composed sets). They fall into four groups:
+
+- **Erasure and accounts** — `ScopeEraser`, `NodeSubtreeEraser` (phase-ordered), `MembershipEraser` (one user loses
+  access to one scope; nothing of the scope is erased), `AccountEraser`, `GuestIdentityUsage`.
+- **Kinds and uploads** — `NodeKindRules` (where a node of the kind may live, whether it takes a cover, which
+  application owns it; core answers for `FOLDER`), `UploadCompletion` (what a verified upload becomes; its item is
+  generic — an `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values core carries to
+  the one implementation that accepts the kind), `UploadAdmission` (what a link's guests contributed to the
+  application's own rows, for the per-link limit; core sums open sessions and attachments itself), `MemberBlobRoles`
+  (which blob roles a member's upload start may carry: a union, since a member's start names no node),
+  `NodeRekeyParticipant` (the application's rows sealed under a node's key, when that key is replaced).
+- **Links and guests** — `ShareRoots` (which roles a node of the kind may be the root of a link with),
+  `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core allows them
+  in a `FOLDER`, Memories none in a Memory or chapter), `WriteOnlyGuestKinds` (what a `WRITE_ONLY` guest may create in
+  its identity folder: Depot's `FILE` in its drop box), `GuestCreatableKinds` (which kinds a `READ_WRITE` guest may
+  create inside a `FOLDER` besides a folder: Depot's `FILE`; a kind two applications declare is created by nobody and
+  fails startup), `ShareGuestWrites` (what "write" means on the application's node, asked for the kind written into),
+  `SharedSubtreeContributor`, `GuestPlaceholders`.
+- **Moderation** — `ReportableItems` (where an application's item lies, for a report's reach) and
+  `HoldSnapshotContributor` (copies the application's rows into a hold).
+
+**They fail closed.** A role no application declares opens no member upload (`400 invalid_request`, before any quota
+is reserved); a kind no application (or two) claims takes no uploads (`illegal_target`), is placed nowhere
+(`illegal_structure`), is shared by no one, takes no guest tree operation, lets a link's guest create nothing
+(`illegal_scope`); a link whose usage no single application measures is refused (`share_not_contributable`).
+`:core`'s test application is core with no application at all, and `CoreAloneSliceTest` pins what that means: every
+seam holds exactly core's own implementations and every refusal above holds. Hand-written core code names the node
+kind `FOLDER` only.
+
+### Nodes, payloads, attachments and covers
+
+- **Node kinds are open.** The node `kind` is an open, bounded token on the wire (`NodeKind`,
+  `^[A-Z][A-Z0-9_]{0,15}$`); core names `FOLDER` only and each application brings its kinds and their rules
+  (`NodeKindRules`, the web registry). The backend carries a kind as a string and checks a request's shape at the
+  boundary (400); the web types it as a string with core's one `FOLDER` constant. No compiler lists the kinds: the
+  registry's fail-closed answer, its tests and the kind guards carry what a closed enum's exhaustiveness did.
+  `PublicShare.rootKind` is the root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served
+  no node, learns this one structural fact) and omitted on a locked response and while the root is in the trash.
+- **The payload slot and the content key are core's.** Every node has one sealed, versioned payload (`wrappedMeta`,
+  `metaRevision`) that core stores, compare-and-sets ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md))
+  and lists with the tree, and never opens; its plaintext format is the kind's application's. `wrappedContentKey` is
+  every node's content key, chained so a link's guest derives every descendant's key (ADR 0080).
+- **Attachments are core's.** `veyq_node_attachment` holds one blob per node slot, the slot being the application's
+  role token, written only by `AttachmentStore` (`attach`, `detach`); its foreign keys (scope, node, blob, guest
+  identity) do not cascade, so a row goes only through core's erasers. `BlobRole` is an open token like `NodeKind`;
+  core stores and compares it and names none of an application's. `validate_blob_reference_arity` pins the `veyq_blob`
+  arms.
+- **A cover is a node feature, core's.** Any node whose kind opts in (`NodeKindRules.takesCover`: core's `FOLDER`,
+  Depot's drop box, Memories' two kinds) carries one uploaded image in its own `COVER` slot, written by core's
+  `setNodeCover` / `removeNodeCover` together with the re-sealed `wrappedMeta` that names it, in one transaction. The web
+  half (`core/node/cover/`) serves every kind; a cover is set only by an upload in core's dialog, and an application adds
+  only what is its own (Memories' `cover.findStored`: an upload equal to a gallery photo shares that medium's stored
+  PREVIEW, [ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5). A stored reference of any other
+  source reads as no cover. Residual, accepted: a shared cover row names the medium's PREVIEW blob, so the operator can
+  tell which medium is the cover.
+- **The drop key is core's link mechanism.** A `WRITE_ONLY` link's drop key pair: the public half sealed under the
+  link's `K_share` on the share row, the private half the root node's (`veyq_node.sealed_drop_private_key`), sealed under
+  its content key and set once by core inside the share creation (409 `drop_key_exists` / `drop_key_missing`). Depot's
+  drop box and Memories' uploader links both seal to it.
+- **A record list inside a node is core's primitive**:
+  [How an application publishes a revisioned list](#how-an-application-publishes-a-revisioned-list).
+
+### Links and guest operations
+
+A link grants one of three access modes, `ShareRole`'s wire values `READ`, `READ_WRITE`, `WRITE_ONLY`; core enforces the
+mode, and the kind's application decides which roles its nodes may be shared with (`ShareRoots`). Core owns the public
+link and its guest gate (`ShareGuestGate`: active link, password, the mode's capability, the guest identity's token,
+the per-link upload budget), exposed as a service an application calls before its own guest read or write. Core's
+share contract keeps only kind-neutral guest operations: resolve (the link and the shared nodes, their names and keys,
+no application data), terms, blob transport and download, guest identity, and the tree operations
+(`createShareNode`, `updateShareNode`). An application serves its rows and writes on its own route under the share,
+checks that the node it writes into is its own kind, and carries its rows' privacy rules with it (Memories'
+`listShareMedia` nulls every identity id but the uploader's own, [ADR 0030](../decisions/0030-contributor-public-share.md)
+point 8).
+
+### The web client
+
+- **Import direction, not modules.** `src/web/src/features/<owner>` is an application's directory, named for its owner;
+  no core file imports one except the composition root `src/web/src/applications.ts`. The shell asks a build-time
+  registry (`src/web/src/core/applications/registry.ts`) what to render for a node kind, which slot an application
+  fills, which page a `WRITE_ONLY` link shows, and what runs when a scope is entered or reset and when the Master Key
+  rotates (that hook is required: a rotation refuses to start without it).
+- **Core draws the level.** The folder level view is core's (`core/node/LevelView.vue`): one list of the folders and
+  every kind's rows, each from its application's row factory (below), and the presentations it switches between (core's
+  grid and list, an application's own such as Memories' map) in core's toolbar. A folder's create, every node's rename,
+  move (`core/node/MoveNodeDialog.vue`, mirroring the server's `NodeKindRules` through each kind's `placement`) and a
+  `FOLDER`'s share dialog are core's; an application's create and share dialogs ride on its kinds. The top-bar upload
+  status is core's and lists every application's uploads.
+- **One view per kind, for a member and a share guest alike.** A kind's `detail` and its row factory receive `access`
+  (a member of the unlocked scope, or a guest of a link) and `tree` (the member's decrypted scope tree or the guest's
+  opened subtree, every navigation through its `linkTo`, so a guest keeps its `#k=` fragment); core mounts them in both
+  modes (`core/access.ts`, `core/sharing/guestAccess.ts`, `core/sharing/ShareTreePage.vue`). What a view offers is its
+  application's **rights function**: pure and fail-closed — every right false unless granted, an unknown mode, role or
+  kind grants nothing — the role matrix of ADR 0080 decision 6 in code, written down in `docs/apps/<application>.md`;
+  core has its own for `FOLDER`. A right holds only where the matrix allows it **and** the session's data source
+  (`features/<owner>/source.ts`, the member's or the guest's, fixed at mount) implements the operation. Member-only
+  state — pins under the Master Key, item marks, a node's sealed meta, the scope's member list — is granted to no
+  guest role. The one guest-only page is a `WRITE_ONLY` link's drop (`claimShareBody`), whose guest holds no key; the
+  guest shell (password and terms gates, one naming flow with "Not you?", the curator's note, the role badge) is core's.
+- **Strings and styles follow the directories.** Each application's i18n namespaces are its own catalog,
+  `features/<owner>/i18n.ts`, which the composition root's data-only half (`src/web/src/applicationMessages.ts`) adds to
+  core's one vue-i18n instance at build time, write-once; core's catalog holds core's alone. An application's global
+  classes are its own stylesheet, imported by its `register.ts` and so loaded before core's `style.css`: a rule of it
+  that styles a core class's element compounds with that class and wins by specificity, never by source order.
+
+### Guards
+
+- **Backend:** core → application is the compiler's (no edge). `validate_backend_module_graph.py` holds what Gradle
+  allows: no application depends on another, no package is declared in two modules, and every module is included,
+  indexed (an unindexed module boots green with its routes answering 404 and its seams missing), copied by the
+  Dockerfile and named. Inside core, `validate_kernel_imports_no_slices.py` keeps the kernel → slice rule and the
+  node-kind rule (core names no application's kind or blob role), which no import check can see.
+- **Web:** `validate_web_core_imports_no_applications.py`: core imports no application's directory or a client
+  generated from its specs (derived from `generate:api`), discovers no code by glob, names no application's node kinds
+  and reads no application's i18n namespace; no application imports another or reads another's namespace; each catalog
+  sits with its owner. `validate_web_share_bodies_are_drop_pages.py` keeps `ShareBody` meaning a claimed drop page. The
+  guest-mode mounts through the real shell (`ShareView.memory.test.ts`, `MemoryDetail.guest.test.ts`,
+  `DropBoxDetail.guest.test.ts`, `FolderShareGuest.test.ts`) assert that a guest's page reads nothing of the member's
+  world.
+- **Both kind rules read literals**, from lists a new application extends by hand: a kind missing there is guarded by
+  nothing.
 
 ## How an application publishes a revisioned list
 
-A list of **records** inside a node (Memories' media; later Expenses' entries, Inventory's items) that an open view
-keeps live uses the platform's primitive ([ADR 0033](../decisions/0033-live-media-updates-revision-polling.md), inbox
-#410): a per-node revision, a conditional GET, a keyset delta and a delete-gated id set. Core owns the counters
-(`veyq_node_items_revision`), the bump, the conditional read and the client loop; the application owns its records
-and one query. The steps:
+A list of **records** inside a node (Memories' media, Expenses' entries, later Inventory's items) that an open view
+keeps live uses the platform's primitive ([ADR 0033](../decisions/0033-live-media-updates-revision-polling.md)): a
+per-node revision, a conditional GET, a keyset delta and a delete-gated id set. Core owns the counters
+(`veyq_node_items_revision`, erased with the node), the bump, the conditional read and the client loop; the application
+owns its records and one query. The steps:
 
 1. **Give each record a position and an id.** The position (an `INT`, Memories' `veyq_media.item_position`) is the
    revision core's bump returned for the record's last change, stamped by every writer that moves the record to the end
@@ -115,10 +272,10 @@ The scope's *node list* is not this: it has its own revision ([ADR 0081](../deci
 ## How an application shows facts in a level's rows and tiles
 
 Core draws every row (a list item) and tile of a folder level, and of the profile page's Memories list, from the
-`LevelRow` its application's `list.rows` factory answers per node (`src/web/src/core/node/levelRow.ts`; ADR 0079 Decision 5,
-inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "Memory", "File") followed by the node's
-**details** (`details`, inbox #418) - the facts only the application can read: Memories' **date and place**, Depot's
-**size and modified time**, a drop box's people count. The hook:
+`LevelRow` its application's `list.rows` factory answers per node (`src/web/src/core/node/levelRow.ts`). Under the title
+sits **one meta line**: the kind's noun (`meta`: "Memory", "File") followed by the node's **details** (`details`) - the
+facts only the application can read: Memories' **date and place**, Depot's **size and modified time**, a drop box's
+people count. The hook:
 
 1. **Answer `details` in the row**: an ordered list of `{ id, text }`, already translated and formatted for the reader's
    locale. The application owns what the facts are, where they are read (the node's unsealed meta, Depot's blob listing)
@@ -137,7 +294,14 @@ The layout is core's and shared by every kind: a list row's visual is a 4.5 x 3 
 tile a 16:9 cover over text, and the same item component is drawn on the profile page, whose rows/tiles switch is the level's
 own (`ViewModeToggle` over the per-user `useViewMode` preference). A map is not part of this hook: it is an application's own
 presentation (`presentation(mode)` beside `row`, named in its kinds' `list.views`), and the profile page offers Memories'
-map the same way the level does, the same component over the person's Memories that have a place ([inbox #417](../inbox.md)).
+map the same way the level does, the same component over the person's Memories that have a place.
+
+## Decided, not built
+
+- **The capability register's open entries and requirements** (ADR 0088):
+  [en.platform.capability-register § Decided, not built](../features/platform/enablers/en.platform.capability-register.md#decided-not-built).
+- **Place names** ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)): a group's per-space consent and the
+  tenant language for shared names.
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.
 
