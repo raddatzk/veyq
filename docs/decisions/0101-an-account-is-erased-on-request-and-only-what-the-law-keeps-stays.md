@@ -1,15 +1,15 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
-- Status: Accepted 2026-10-18 for its duty, **built**, the erasure ledger of decision 8 with it
-  (cr-backup-erasure-and-retention, ADR 0056 decision 8). That an account and an active tenant can be erased is
-  not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided or built disagree,
-  the duty decides (owner rule, `CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were owner
-  questions in `cr-account-erasure`, answered 2026-10-18 (Q16, Q17, Q19 as recommended; Q18 and Q20 as decisions 9
-  and 10 now say).
+- Status: Accepted
+- Built: yes
 - Date: 2026-10-18
+- Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
 
-Provenance: **(M)** measured in this worktree with the command or line named; **(A)** the legal audit of 2026-10-18
-(research, not legal advice; the GDPR articles it cites were read in their primary text).
+Provenance: **(M)** measured with the command or line named when this was decided; **(A)** the legal audit behind it
+(research, not legal advice; the GDPR articles it cites were read in their primary text). That an account and an active
+tenant can be erased is not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided
+or built disagree, the duty decides (`CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were the owner's
+choices among the shapes.
 
 ## Context
 
@@ -27,9 +27,11 @@ Provenance: **(M)** measured in this worktree with the command or line named; **
 - **An active tenant cannot be deleted.** `revokeTenant` deletes a `PENDING` tenant only
   (`contracts/api/tenants.openapi.yaml:705`, `TenantHandler.kt:243-252`, `TenantStore.deleteTenant` touches invites and
   the row); suspension "preserves everything" ([ADR 0066](0066-tenant-suspension.md)) (M).
-- **A tenant has one owner in practice.** An owner invite exists only while the tenant is `PENDING`, a member invite
-  is `MEMBER` only (`inviteTenantMember`), and a role change is for groups only (`ScopesHandler.kt:497`), so the last
-  owner of an active tenant cannot hand it on (M). `RemovalPolicy` refuses the last owner (`last_owner`).
+- **A tenant had one owner in practice.** The model allows several owners at every level
+  ([ADR 0007](0007-membership-role-grant-relation.md)), but an owner invite existed only while the tenant was `PENDING`,
+  a member invite is `MEMBER` only (`inviteTenantMember`), and a role change was for groups only, so the last owner of
+  an active tenant could not hand it on (M). `RemovalPolicy` refuses the last owner (`last_owner`). Decision 9 adds the
+  tenant's "make owner" and the Server Owner's owner invite to a member.
 - **The law** (A): erasure "without undue delay" (Art. 17(1)); the controller facilitates it (Art. 12(2)) and acts
   within one month (Art. 12(3)); erasure does not reach what is needed for a legal obligation or for legal claims
   (Art. 17(3)(b), (e)), and a hold is a restriction of processing (Art. 18, ADR 0093 § 4). The Server Owner is the
@@ -116,7 +118,7 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
   (Art. 12(2)). The tenant then has no owner; admin-web shows it so, and the Server Owner invites a new owner into the
   active tenant (an owner invite, as setup mints one) or deletes it. The owner invite goes to **one of the tenant's
   members**: the operator can admit nobody into a tenant's key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move
-  6), so an owner it brought in from outside would wait forever for a key no member could vouch for; the member accepts
+  3), so an owner it brought in from outside would wait forever for a key no member could vouch for; the member accepts
   it and becomes an owner, nothing is born and no key moves.
 - **The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down and a
   removal are ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): with them
