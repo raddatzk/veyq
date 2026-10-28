@@ -68,14 +68,7 @@ vi.mock('../../../app/vault', () => ({
 }))
 vi.mock('../../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
 // This tab's session vault (`sessionStorage`): what the swap carries it to is asserted below; its sealing is its own suite.
-const sessionVault = vi.hoisted(() => ({ carried: [] as Uint8Array[] }))
-vi.mock('../rememberMe/sessionVault', () => ({
-  carrySessionVault: vi.fn(async (mk: Uint8Array) => {
-    sessionVault.carried.push(mk.slice()) // the caller zeroes its copy once the rotation returns
-  }),
-  clearSessionVault: vi.fn(async () => undefined),
-  loadSessionVault: vi.fn(async () => null),
-}))
+vi.mock('../rememberMe/sessionVault', () => ({ carrySessionVault: vi.fn(), clearSessionVault: vi.fn(), loadSessionVault: vi.fn() }))
 vi.mock('../../memories/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // The re-key after a scope's rotation (ADR 0109) is `rekeyScope`'s own suite; here it always finishes.
@@ -1176,13 +1169,19 @@ describe('what securing the account leaves behind', () => {
   // The CR's invariant holds in the browser too: no retired private material is kept. This tab's session vault sealed
   // the Master Key the publish retired, so a reload would have restored it (phase 4's finding). Bite: drop the carry
   // from the swap → the first case is red.
+  /** What each carry was handed — copied, because the rotation zeroes its own key once it returns. */
+  const carried: Uint8Array[] = []
+  beforeEach(() => {
+    carried.length = 0
+    vi.mocked(carrySessionVault).mockImplementation(async (mk) => void carried.push(mk.slice()))
+  })
+
   it('re-seals this tab’s session vault under the PUBLISHED Master Key, right after the vault swapped', async () => {
-    sessionVault.carried = []
     fakeServer({ scopes: ordinaryScopes() })
     await rotate()
     expect(carrySessionVault).toHaveBeenCalledTimes(1)
-    expect(b64std(sessionVault.carried[0])).toBe(b64std(vault.mk!))
-    expect(b64std(sessionVault.carried[0])).not.toBe(b64std(MK))
+    expect(b64std(carried[0])).toBe(b64std(vault.mk!))
+    expect(b64std(carried[0])).not.toBe(b64std(MK))
     expect(vi.mocked(carrySessionVault).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(setUnlocked).mock.invocationCallOrder[0])
   })
 
@@ -1192,12 +1191,11 @@ describe('what securing the account leaves behind', () => {
     srv.reconnect()
     vault.mk = MK.slice()
     vault.priv = oldPriv()
-    sessionVault.carried = []
     vi.mocked(carrySessionVault).mockClear()
     await expect(rotateKeys(PASSWORD, NEXT.secretKeyB64, { secretKeyB64: mintSecretKey() })).resolves.toMatchObject({ outcome: 'resumed' })
     expect(carrySessionVault).toHaveBeenCalledTimes(1)
-    expect(b64std(sessionVault.carried[0])).toBe(b64std(vault.mk!))
-    expect(b64std(sessionVault.carried[0])).not.toBe(b64std(MK))
+    expect(b64std(carried[0])).toBe(b64std(vault.mk!))
+    expect(b64std(carried[0])).not.toBe(b64std(MK))
   })
 
   it('an unknown outcome drops the session vault with the vault — neither key is kept for a reload', async () => {

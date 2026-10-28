@@ -101,9 +101,15 @@ describe('web message catalog — copy says what the code does (#248)', () => {
 
   for (const locale of SUPPORTED_LOCALES) {
     it(`${locale}: a credential change asks other devices for the password and the Secret Key, or to be added again`, () => {
-      for (const [group, key] of [['rotation', 'factSignsOut'], ['changePassword', 'doneNote']]) {
+      // Securing the account replaces the Secret Key (cr-secure-the-account decision 7): its devices come back with the
+      // NEW Emergency Kit, which carries it — so that copy names the kit, never the old Secret Key.
+      const credential: [string, string, RegExp][] = [
+        ['rotation', 'factSignsOut', /new Emergency Kit|neuen Notfall-Kit/],
+        ['changePassword', 'doneNote', /Secret Key/],
+      ]
+      for (const [group, key, names] of credential) {
         const text = copy(locale, group, key)
-        expect(text, `${group}.${key}`).toContain('Secret Key')
+        expect(text, `${group}.${key}`).toMatch(names)
         expect(text, `${group}.${key}`).toContain(copy(locale, 'pairing', 'navTitle')) // the other way back in
       }
     })
