@@ -101,6 +101,9 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     // symUnwrap with the real literal throws (AEAD tag), so these lines red.
     expect(b64std(raw.symUnwrap(KEK_PW, fromB64std(pw.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
     expect(b64std(raw.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
+    // ...and the Master Key handed back is the one both wraps hold: a new account's trust marks are keyed by it before
+    // the vault ever unlocks it (ADR 0111 decision 23, the accept's held key).
+    expect(b64std(built.masterKey)).toBe(b64std(masterKey))
   })
 
   it('binds the identity-private wrap to the AAD literal "identity-priv"', async () => {

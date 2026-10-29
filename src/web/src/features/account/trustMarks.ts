@@ -304,13 +304,13 @@ export function heldEpochKey(scopeId: string): Promise<HeldEpochKey | null> {
   return withVaultKey(async (mk) => (await readStored(mk)).held[scopeId] ?? null, null)
 }
 
-/** This device now holds `key`, epoch `epoch` of `scopeId` — a grant it opened, or a rotation it made: the floor rises to
- *  it and, when it is newer than the held one, it becomes the key a later epoch must link down to. One transaction. */
-export function holdEpochKey(scopeId: string, epoch: number, key: Uint8Array): Promise<void> {
-  return withVaultKey(
-    (mk) => raiseMarks(mk, { epochs: { [scopeId]: epoch }, held: { [scopeId]: { epoch, commitment: epochKeyCommitment(key) } } }),
-    undefined,
-  )
+/** This device now holds `key`, epoch `epoch` of `scopeId` — a grant it opened, a rotation it made, or the tenant key an
+ *  accept checked or born (`views/TenantJoinView.vue`): the floor rises to it and, when it is newer than the held one, it
+ *  becomes the key a later epoch must link down to. One transaction. Under the vault's Master Key, or under
+ *  `accountKey` where the vault holds none yet — a new account's, at the accept that registers it; the caller owns it. */
+export function holdEpochKey(scopeId: string, epoch: number, key: Uint8Array, accountKey?: Uint8Array): Promise<void> {
+  const raise: MarksRaise = { epochs: { [scopeId]: epoch }, held: { [scopeId]: { epoch, commitment: epochKeyCommitment(key) } } }
+  return accountKey ? raiseMarks(accountKey, raise) : withVaultKey((mk) => raiseMarks(mk, raise), undefined)
 }
 
 /** The i18n key that names a refusal on the nearest existing notice: pins under `verify`, the register under

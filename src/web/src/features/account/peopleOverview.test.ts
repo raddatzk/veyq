@@ -10,7 +10,7 @@ import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import * as verification from '@veyq/crypto/verification'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { fakePinServer, pinOf, sealPinStore } from '../../test/pinStore'
+import { fakePinServer, pinOf, pinsOn, sealPinStore } from '../../test/pinStore'
 import { bundleB64, chainKeys, fakeKeyChains, genesis, headOf, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
 import { fakeApi } from '../../test/apiMock'
 
@@ -310,5 +310,70 @@ describe('what one overview reads (inbox #710)', () => {
     expect(members.map((m) => reads(m.userId))).toEqual(members.map(() => 1))
     await loadPeopleOverview(T, ME)
     expect(pins.getIdentityPins).toHaveBeenCalledTimes(2) // nothing kept across overviews
+  })
+})
+
+// Inbox #741: one overview stores the pins of its first contacts in one write at its end - also when it ends in a throw
+// midway, so what it pinned is kept.
+describe('what one overview writes (inbox #741)', () => {
+  /** A root owner, an owner S who joined through the root's invite, and `n` members who joined through S's. */
+  function tenantOf(n: number) {
+    const root = born(OWNER)
+    const signer = born(VERIFIER)
+    const members = Array.from({ length: n }, (_, i) => born(`0e000000-0000-4000-8000-0000000004${String(i).padStart(2, '0')}`))
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(signer, root)),
+      ...members.map((m) => row(m, 'MEMBER', joinedThrough(m, signer))),
+    ]
+    return { root, signer, members }
+  }
+
+  it('cold, at 50 members: every first contact pinned by one write', async () => {
+    const { root, signer, members } = tenantOf(50)
+    const pins = fakePinServer()
+    const listVerifications = serveVerifications([])
+    const { people } = await loadPeopleOverview(T, ME)
+    expect(people.every((p) => p.state === 'unverified' && p.isNew)).toBe(true) // the same answers
+    expect(Object.keys(pinsOn(MK, pins.state)).sort()).toEqual([root, signer, ...members].map((p) => p.userId).sort())
+    const counts = {
+      pinHead: pins.getIdentityPins.mock.calls.length,
+      pinList: pins.listIdentityPinEntries.mock.calls.length,
+      pinWrite: pins.writeIdentityPins.mock.calls.length,
+      chains: chains.getKeyChain.mock.calls.length,
+      tenant: vi.mocked(listScopeMembers).mock.calls.length + listVerifications.mock.calls.length,
+    }
+    // 52 first contacts: one write where each wrote its own - 109 requests before (52 writes), 58 now
+    expect(counts).toEqual({ pinHead: 1, pinList: 1, pinWrite: 1, chains: 53, tenant: 2 })
+  })
+
+  it('a pass that ends in a throw midway still writes what it pinned before it', async () => {
+    const { root, signer, members } = tenantOf(4)
+    const pins = fakePinServer()
+    const real = chains.getKeyChain.getMockImplementation()!
+    chains.getKeyChain.mockImplementation(async (r) => {
+      if (r.userId === members[2].userId) throw new TrustStateRefused('trust_state_unreadable', 'pins')
+      return real(r)
+    })
+    await expect(loadPeopleOverview(T, ME)).rejects.toBeInstanceOf(TrustStateRefused)
+    expect(pins.writeIdentityPins).toHaveBeenCalledTimes(1)
+    expect(Object.keys(pinsOn(MK, pins.state)).sort()).toEqual([root, signer, members[0], members[1]].map((p) => p.userId).sort())
+  })
+
+  it('a store the pass\'s write re-reads after a 409 and this device refuses is said, as at any read (control: one it opens)', async () => {
+    tenantOf(2)
+    const pins = fakePinServer()
+    pins.racedBy(sealPinStore(v1.randomBytes(32), {}, 1)) // another key's store: it does not open here
+    await expect(loadPeopleOverview(T, ME)).rejects.toBeInstanceOf(TrustStateRefused)
+    const ok = fakePinServer()
+    ok.racedBy(sealPinStore(MK, {}, 1))
+    expect((await loadPeopleOverview(T, ME)).people).toHaveLength(4)
+  })
+
+  it('...the same pass\'s write failing for a request leaves the pins unwritten, and the overview stands', async () => {
+    tenantOf(2)
+    const pins = fakePinServer()
+    pins.writeIdentityPins.mockRejectedValueOnce(new Error('offline'))
+    expect((await loadPeopleOverview(T, ME)).people.map((p) => p.state)).toEqual(['unverified', 'unverified', 'unverified', 'unverified'])
+    expect(pins.state.entries.size).toBe(0)
   })
 })

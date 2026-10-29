@@ -95,7 +95,7 @@ beforeEach(() => {
     scopeRootKey: BORN_KEY,
   })
   vi.mocked(buildAccount).mockResolvedValue({
-    identity: {}, material: {}, emergencyKit: { secretKey: 'SK' },
+    identity: {}, masterKey: new Uint8Array(32), material: {}, emergencyKit: { secretKey: 'SK' },
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
   vi.mocked(sealName).mockReturnValue('SEALED-NAME')
   vi.mocked(sealAvatar).mockReturnValue('SEALED-AVATAR')

@@ -12,6 +12,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
 import { recipientIdentityDigest, sealGrant } from '../spaces/grant'
 import { anchorChainKey, anchorServedChain, getPin, linkOf } from '../account/identityPins'
+import { holdEpochKey } from '../account/trustMarks'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
 
 export type { InvitePreview } from '../../api/generated/tenants'
@@ -276,15 +277,28 @@ export async function memberInviteAnchored(opened: OpenedMemberInvite): Promise<
  * has a pin store, and [send] goes once more with it. Once: a second refusal is the caller's. [send] builds everything it
  * seals under the tenant key from the invite it is handed. An invite re-opened here is zeroed before this returns;
  * [opened] stays the caller's to forget.
+ *
+ * **The accepted key is held** (ADR 0111 decision 23, inbox #740): once the server took the accept, the tenant key the
+ * checks vouched for - of the invite actually sent, the re-checked one after a `409` - becomes the key this device holds
+ * for the tenant, so its first open takes no epoch that does not link down to it. Without it the device would hold
+ * nothing until that open and take the first grant served as it comes. Under the vault's Master Key, or under
+ * [accountKey] for a new account the accept registers (the vault holds none yet). Nothing is held for an accept that
+ * failed.
  */
 export async function acceptCheckedInvite<T>(
   opened: OpenedMemberInvite,
   send: (opened: OpenedMemberInvite) => Promise<T>,
   reread: () => Promise<ServedMemberInvite | null | undefined>,
   anchored?: (opened: OpenedMemberInvite) => Promise<boolean>,
+  accountKey?: Uint8Array,
 ): Promise<T> {
+  const sendAndHold = async (checked: OpenedMemberInvite): Promise<T> => {
+    const accepted = await send(checked)
+    await holdEpochKey(checked.tenantId, checked.grantedEpoch, checked.epochKey, accountKey)
+    return accepted
+  }
   try {
-    return await send(opened)
+    return await sendAndHold(opened)
   } catch (e) {
     if (!(await isCodedError(e, HttpStatus.conflict, 'invite_changed'))) throw e
   }
@@ -293,7 +307,7 @@ export async function acceptCheckedInvite<T>(
   const again = checkMemberInvite(opened.tenantId, served, opened.link)
   try {
     if (anchored && !(await anchored(again))) throw new invite.InviteCheckFailed('signer_chain_mismatch')
-    return await send(again)
+    return await sendAndHold(again)
   } finally {
     forgetMemberInvite(again)
   }

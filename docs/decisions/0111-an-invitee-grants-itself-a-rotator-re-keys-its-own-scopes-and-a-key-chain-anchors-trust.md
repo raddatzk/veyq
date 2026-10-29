@@ -373,14 +373,22 @@ Facts the design rests on, read in the code:
     with `peelEpochKey`). Otherwise it is refused as `epoch_unlinked`: the key inside is never used, the scope reads as
     awaiting the current key, and a securing's plan declares it unreadable (decision 6). The operator never held the
     key the link must end at, so no link it makes ends there.
-    - **What becomes the held key:** every grant the device opens and every epoch it commits itself. The second is what
-      stops the party a removal-rotation excludes: they held the old epoch and, with the operator, could link a key of
-      their own down to it, but the remover's device holds the epoch it minted.
+    - **What becomes the held key:** every grant the device opens, every epoch it commits itself, and the tenant key an
+      accept checked or minted. The second is what stops the party a removal-rotation excludes: they held the old epoch
+      and, with the operator, could link a key of their own down to it, but the remover's device holds the epoch it minted.
+    - **The accept holds what it checked.** Once the server took a member's accept, the device holds the carried epoch
+      key the checks of decision 19 vouched for — the re-checked invite's after `409 invite_changed` (`acceptCheckedInvite`,
+      `src/web/src/features/tenant/tenantInvite.ts`); an owner's accept holds the key its birth minted, at epoch 0
+      (`views/TenantJoinView.vue`). Without it the accepting device held nothing until its first open of the tenant and
+      took whatever grant was served there as a first grant: an operator could raise the epoch around a key of its choosing
+      under a granter it fabricated (inbox #740). A new account holds under the Master Key its birth hands back
+      (`BuiltAccount.masterKey`), since no vault holds one before its first sign-in; a refused accept holds nothing.
     - **Every scope kind, in the one place a grant is opened** (`openOwnGrant`), not only the tenant's: a group's
       granter is anchored in its tenant, but a tenant member outside the group could otherwise, with the operator, plant
       a group's next epoch.
-    - **The legitimate cases pass.** A device holding nothing yet takes its first grant as it comes (a newcomer's was
-      vouched for by the invite's anchor, decision 19); a member pending across several epochs peels through every link
+    - **The legitimate cases pass.** The accepting device's first open finds the self-grant of the key it holds, or a
+      later epoch linked down to it; a device holding nothing yet — another device of the account — takes its first
+      grant as it comes; a member pending across several epochs peels through every link
       in between; a securing's self-grant carries the very key the device held; a grant below the held epoch is no new
       epoch, and the floor is its check.
     - **Local and never synced, like the floor, and not carried by pairing.** The envelope that carries the marks is
@@ -506,8 +514,8 @@ Facts the design rests on, read in the code:
   an owner is the server's word (below), so a member the server presents as an owner roots keys; a root owner is
   trusted on first use; the tenant scope's own grant from another member is judged by the pin alone, because the
   standings are read with the key that grant carries — a later epoch must link down to the key the device held
-  (decision 23), so what stays is a device that holds no key of the scope yet (a new or newly linked device, or a
-  newcomer between its accept and its first open) and a party that holds the device's key (a member, or a member
+  (decision 23), so what stays is a device that holds no key of the scope yet (a new or newly linked device; the device
+  that accepted holds the key it checked or minted from the accept on) and a party that holds the device's key (a member, or a member
   removed while the tenant has not re-keyed since, ADR 0025), who with the operator can plant a linked next epoch; and
   a grant in a tenant this device cannot read — a group grant outside the active tenant, read while staging a
   rotation — falls back to the pin. A wrap where the tenant cannot be read fails closed instead.

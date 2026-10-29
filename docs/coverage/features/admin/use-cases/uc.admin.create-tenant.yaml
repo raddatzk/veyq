@@ -78,11 +78,18 @@ acceptanceCriteria:
     text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.
     coverage:
       backend: { integration: [TenantAcceptSliceTest.registerAndAcceptActivatesTenant] }
-      # web: manual browser smoke only (cr-0010 phase 4, DB-verified); no automated harness yet → see gaps.web
   - id: activate-by-signin
     text: An existing owner signs in and accepts, activating the tenant with the cold-born grant.
     coverage:
       backend: { integration: [TenantAcceptSliceTest.existingUserAcceptActivatesTenant] }
+  - id: the-accept-holds-the-born-key
+    # ADR 0111 decision 23 (inbox #740): without it the owner's device held nothing until its first open of the tenant
+    # and took any grant served there as a first grant. Bites, each red: no hold on the register, the sign-in or the
+    # one-click path, the register holding under the vault instead of the born Master Key, the hold at epoch 1.
+    text: Once the server took an owner's accept, the device holds the tenant key the birth minted, at epoch 0 — under the vault's Master Key on a sign-in or one-click accept, under the Master Key the new account's birth hands back on a register (then wiped) — so the owner's first open takes no later epoch that does not link down to it. A refused accept holds nothing.
+    coverage:
+      web:
+        unit: [src/views/TenantJoinView.ownerHold.test.ts]
   - id: preview-invite
     text: Previewing a valid bootstrap secret returns the tenant + whether the invited email has an account.
     coverage:
@@ -122,17 +129,6 @@ gaps:
     `src/views/AdminConsoleView.test.ts`, `cli.test.ts` (the console's root gate is the Server-Owner probe over
     the same backend 403; `web`'s `SettingsHubView.test.ts` no longer touches tenants); `change-domain` ←
     `TenantDetailPanel.test.ts`, `cli.test.ts`.
-  web: >-
-    Not "not applicable": web carries Act 2 — the invited owner accepts at `/tenant/accept` (`TenantJoinView`,
-    through `src/features/tenant/tenantInvite.ts`) — while Act 1 is the Server Owner's and lives on `admin-web`
-    (ADR 0065), the gap above. No web suite proves any sentence here. Every criterion is a server observable
-    (activation with the cold-born grant, 404/401/403/409/410), and the view's suites mock the facade and stop
-    before accept — the password-floor suite says so in as many words: `TenantJoinView.fragment.test.ts` pins
-    the fragment strip and missing-vs-invalid, `TenantJoinView.passwordPolicy.test.ts` the floor's
-    register-only reach, and the two cited elsewhere pin the kit import (`uc.account.unlock`) and the facade's
-    request shaping (`uc.spaces.add-member`). The web e2e bootstrap does drive the existing-owner accept against
-    a live backend (`src/test/e2eBootstrap.ts`), but as setup in a harness, not in a test file this model can
-    cite. What would close this gap is a view test that carries a join through to the accept call.
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`, `tests/e2e/tests/setup/first-run.setup.ts`)
     drives `activate-by-signin`, `create-pending-tenant`, `invite-link-handoff` in Chromium against the release

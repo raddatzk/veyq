@@ -466,12 +466,22 @@ export type MemberBadge = 'anomaly' | 'verified' | 'new' | 'unverified'
 
 /**
  * The badges of a tenant's member list, in one read of the tenant and one listing of its verifications, as one pass
- * ({@link PinPass}: one read of the pin store). Each member is anchored as a wrap would anchor them (sequentially: the pin
- * store's writes must not race); a member whose check failed for another reason than the key (a request) gets no badge.
- * `selfUserId` gets none.
+ * ({@link PinPass}: one read of the pin store, one write of the pins it took, at its end). Each member is anchored as a
+ * wrap would anchor them, one after another; a member whose check failed for another reason than the key (a request) gets
+ * no badge. `selfUserId` gets none.
  */
 export async function tenantBadges(tenantId: string, selfUserId?: string): Promise<Record<string, MemberBadge>> {
-  const view = await loadTenantView(tenantId, openScopeById, { pins: new PinPass() })
+  const pass = new PinPass()
+  try {
+    return await badgesIn(await loadTenantView(tenantId, openScopeById, { pins: pass }), selfUserId)
+  } finally {
+    // The pass's pins in one write (inbox #741), also after a failure midway. A write that fails leaves them unwritten,
+    // as a check's own failed write did: the badges stand, and the next pass pins again.
+    await pass.flush().catch(() => undefined)
+  }
+}
+
+async function badgesIn(view: TenantView, selfUserId: string | undefined): Promise<Record<string, MemberBadge>> {
   const out: Record<string, MemberBadge> = {}
   const anchored: ScopeMember[] = []
   const pins = new Map<string, Pin | null>()
