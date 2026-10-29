@@ -39,7 +39,7 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s an
   declares — its hand-written main Kotlin (the `package` lines) and its generated API — is declared by that project
   alone. The generated packages are **derived**, as `buildSrc` derives them, never read from a list: a project whose
   build file calls `veyqOpenApi { generateOwnSpecs() }` owns the specs its path names (`:core` the top level of
-  `contracts/api/`, `:apps:<app>` the directory `contracts/api/<app>/`) and generates into the package root spelled
+  `contracts/api/`, `:apps:<application>` the directory `contracts/api/<application>/`) and generates into the package root spelled
   once in `SpecSets.kt` as the template `"…$owner.generated"` (`packageRootOf`), with `.api`/`.model` below it. The
   template must be spelled exactly once and no package root may be spelled for one owner there (a literal
   `"me.raddatz.veyq.<x>.generated"`): a hand-kept owner list is what this replaced, and it would refuse every new
@@ -440,7 +440,7 @@ def strip_comments(text: str) -> str:
 
 
 def owner_of(project: str) -> str | None:
-    """The spec owner a project's path names, as `SpecSets.ownerOf` derives it: `:core` → core, `:apps:<app>` → `<app>`."""
+    """The spec owner a project's path names, as `SpecSets.ownerOf` derives it: `:core` → core, `:apps:<application>` → `<application>`."""
     if project == CORE:
         return "core"
     return project.split(":")[-1] if APPLICATION.match(project) else None
@@ -458,7 +458,7 @@ def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
                       f"generation moved, re-point this rule.")
     for literal in sorted(set(LITERAL_PACKAGE_ROOT.findall(text))):
         errors.append(f"(d) {rel(SPEC_SETS)} spells the package root {literal} for one owner — an owner is derived from "
-                      f"its directory (`contracts/api/<app>/` → `:apps:<app>`), never listed; a list refuses every "
+                      f"its directory (`contracts/api/<application>/` → `:apps:<application>`), never listed; a list refuses every "
                       f"application it does not name.")
     projects = backend_tree.gradle_projects()
     generating = set()
@@ -470,7 +470,7 @@ def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
         owner = owner_of(p)
         if owner is None:
             errors.append(f"(d) {rel(f)} generates specs, but {p} owns none: only {CORE} (the top level of "
-                          f"contracts/api) and :apps:<app> (contracts/api/<app>/) do.")
+                          f"contracts/api) and :apps:<application> (contracts/api/<application>/) do.")
             continue
         generating.add(p)
         if len(templates) == 1:

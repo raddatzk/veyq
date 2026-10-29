@@ -153,7 +153,7 @@ sequenceDiagram
   read names one, so a visitor learns
   neither a name nor which uploads came from one person. A link plus a database dump still opens the names, as it
   opens the photos: accepted in [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8.
-- **Direct-append; moderation is later.** A contributed photo is live immediately — good for a shared album, but
+- **Direct-append; moderation is later.** A contributed photo is live immediately — good for a shared Memory, but
   spam is visible until the curator deletes it or revokes the link. Review-before-publish is a deferred slice.
 - **Attribution is self-asserted.** Anyone with the link can name themselves anything; the contributor token binds
   *their* subsequent uploads to *that* identity but does not authenticate the person (accountless, operator-blind).

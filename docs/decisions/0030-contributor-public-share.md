@@ -95,7 +95,7 @@ identity and a share-scoped upload path. How each is built is the model,
   capability token. One identity per contributor is the hook (name → identity → bucket) and the home of the token.
 - **Reuse the member media endpoints with a relaxed membership gate.** Rejected — a parallel authorization path keyed
   on share state keeps the operator-blind guarantee auditable.
-- **Contributions land in a review area first.** Not chosen: the product decision is direct-append (a shared album
+- **Contributions land in a review area first.** Not chosen: the product decision is direct-append (a shared Memory
   everyone adds to); review-before-publish would need its own pending state and review UI.
 - **The write-only drop-box in this decision.** Split out: it needs a `canView` gate and its own trust model —
   [ADR 0031](0031-uploader-public-share.md).

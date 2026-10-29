@@ -64,7 +64,7 @@ password, nothing is readable" holds at the access-control layer.
   the Memory carries that key, so such a copy would hand this password to another link's holder with a dump.
 
 **All roles.** The gate sits in front of every guest endpoint, so it protects a READ greeting page, a
-READ_WRITE album, and a WRITE_ONLY drop-box alike.
+READ_WRITE Memory, and a WRITE_ONLY drop-box alike.
 
 ## Operator-blindness & threat model — stated honestly
 

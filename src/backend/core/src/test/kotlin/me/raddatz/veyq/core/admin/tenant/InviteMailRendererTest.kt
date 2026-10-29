@@ -40,7 +40,7 @@ class InviteMailRendererTest {
         // The exact vectors ADR 0049 forbids veyq from injecting: scope/group/memory names, member lists, names.
         assertEquals(setOf("scope"), renderer.unknownTags("Welcome to {{scope}}, accept {{link}}"))
         assertEquals(setOf("member", "realName"), renderer.unknownTags("{{member}} ({{realName}}) invited you to {{domain}}"))
-        assertEquals(setOf("groupName"), renderer.unknownTags("Album {{groupName}}"))
+        assertEquals(setOf("groupName"), renderer.unknownTags("Memories of {{groupName}}"))
     }
 
     @Test

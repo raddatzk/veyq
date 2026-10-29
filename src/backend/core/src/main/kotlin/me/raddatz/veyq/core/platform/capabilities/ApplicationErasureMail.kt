@@ -95,7 +95,7 @@ class ApplicationErasureMail(private val mailer: InstanceNoticeMailer) {
         private fun title(application: String) = CapabilityTexts.BY_ID.getValue(application).title
 
         fun notice(row: ApplicationErasureEntity, space: String): Outgoing {
-            val app = title(row.application)
+            val name = title(row.application)
             val day = DATE.format(row.dueAt)
             val byOperator = row.switchedBy == SwitchLevel.INSTANCE.name
             val whoEn = if (byOperator) "The operator of this veyq instance" else "The owner of the space"
@@ -103,36 +103,36 @@ class ApplicationErasureMail(private val mailer: InstanceNoticeMailer) {
             val onlyEn = if (byOperator) " Only the operator can switch it back on." else ""
             val onlyDe = if (byOperator) " Wieder einschalten kann es nur die Betreiberseite." else ""
             val body = """
-                |$whoEn switched ${app.en} off in the space "$space". Everything in it can still be opened and downloaded
-                |until $day; then it is erased, unless ${app.en} is switched on again before. Download what you want to
+                |$whoEn switched ${name.en} off in the space "$space". Everything in it can still be opened and downloaded
+                |until $day; then it is erased, unless ${name.en} is switched on again before. Download what you want to
                 |keep.$onlyEn
                 |
                 |—
                 |
-                |$whoDe hat ${app.de} im Bereich „$space“ abgeschaltet. Alles darin lässt sich bis zum $day öffnen und
-                |herunterladen; dann wird es gelöscht, wenn ${app.de} nicht vorher wieder eingeschaltet wird. Lade
+                |$whoDe hat ${name.de} im Bereich „$space“ abgeschaltet. Alles darin lässt sich bis zum $day öffnen und
+                |herunterladen; dann wird es gelöscht, wenn ${name.de} nicht vorher wieder eingeschaltet wird. Lade
                 |herunter, was du behalten willst.$onlyDe
             """.trimMargin()
             return Outgoing(
-                "veyq: ${app.en} is switched off in a space you belong to / ${app.de} ist in einem Bereich abgeschaltet, dem du angehörst",
+                "veyq: ${name.en} is switched off in a space you belong to / ${name.de} ist in einem Bereich abgeschaltet, dem du angehörst",
                 body, emptyList(),
             )
         }
 
         fun reminder(row: ApplicationErasureEntity, space: String): Outgoing {
-            val app = title(row.application)
+            val name = title(row.application)
             val day = DATE.format(row.dueAt)
             val body = """
-                |${app.en} is still switched off in the space "$space". On $day everything in it is erased. Download what
+                |${name.en} is still switched off in the space "$space". On $day everything in it is erased. Download what
                 |you want to keep before then.
                 |
                 |—
                 |
-                |${app.de} ist im Bereich „$space“ weiter abgeschaltet. Am $day wird alles darin gelöscht. Lade vorher
+                |${name.de} ist im Bereich „$space“ weiter abgeschaltet. Am $day wird alles darin gelöscht. Lade vorher
                 |herunter, was du behalten willst.
             """.trimMargin()
             return Outgoing(
-                "veyq: ${app.en} in \"$space\" is erased on $day / ${app.de} in „$space“ wird am $day gelöscht",
+                "veyq: ${name.en} in \"$space\" is erased on $day / ${name.de} in „$space“ wird am $day gelöscht",
                 body, emptyList(),
             )
         }

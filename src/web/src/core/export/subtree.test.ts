@@ -26,7 +26,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const FILE = 'T_FILE'
-const ALBUM = 'T_ALBUM'
+const COLLECTION = 'T_COLLECTION'
 const ODD = 'T_ODD'
 const BOX = 'T_BOX'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
@@ -60,8 +60,8 @@ const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
 })
 
 const contents = new Map<string, Uint8Array>([['f1', text('first file')], ['f2', text('second')], ['f3', text('third, in the subfolder')]])
-/** An album's files: hostile names, two that differ only in case. */
-const albumFiles: [string, string][] = [['IMG.jpg', 'upper'], ['img.JPG', 'lower'], ['../escape', 'dots'], ['CON.txt', 'device']]
+/** A collection's files: hostile names, two that differ only in case. */
+const collectionFiles: [string, string][] = [['IMG.jpg', 'upper'], ['img.JPG', 'lower'], ['../escape', 'dots'], ['CON.txt', 'device']]
 const imported: { name: string; parent: string | null; bytes: string; kind: string }[] = []
 let failOn: string | null = null
 
@@ -93,13 +93,13 @@ beforeEach(() => {
       },
     })
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 },
+      kind: COLLECTION, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
-        const files = albumFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
-        return { type: 't.album', schema: 1, files }
+        const files = collectionFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
+        return { type: 't.collection', schema: 1, files }
       },
       async importContent(ctx) {
-        const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, ALBUM, ctx.name)
+        const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, COLLECTION, ctx.name)
         const bodies = []
         for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await textOf(await ctx.payload(ref, 'x')))
         imported[imported.length - 1].bytes = bodies.join(',')
@@ -160,7 +160,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
       node('r', null, 'FOLDER', 'Trip: 2025'),
       node('c1', 'r', 'FOLDER', 'con', 0),
       node('c2', 'r', 'FOLDER', 'CON', 1),
-      node('al', 'r', ALBUM, 'a/b. ', 2),
+      node('al', 'r', COLLECTION, 'a/b. ', 2),
       node('dot', 'r', 'FOLDER', '..', 3),
       node('long', 'r', 'FOLDER', 'x'.repeat(300), 4),
     ]
@@ -184,8 +184,8 @@ describe('download (format version 2: the archive reads as the tree)', () => {
     })
     // every directory node is a directory entry, every payload an entry in its node's directory
     for (const p of paths.values()) expect(names).toContain(`${p}/`)
-    const album = manifest.root.children!.find((c) => c.kind === ALBUM)!
-    expect((album.content!.files as ManifestPayload[]).map((f) => f.path)).toEqual(names.filter((n) => n.startsWith('Trip_ 2025/a_b/') && !n.endsWith('/')))
+    const collection = manifest.root.children!.find((c) => c.kind === COLLECTION)!
+    expect((collection.content!.files as ManifestPayload[]).map((f) => f.path)).toEqual(names.filter((n) => n.startsWith('Trip_ 2025/a_b/') && !n.endsWith('/')))
   })
 
   it('a node named like the manifest directory does not take it', async () => {
@@ -199,7 +199,7 @@ describe('download (format version 2: the archive reads as the tree)', () => {
     ['folders, files and a node left out', nodes, 'a'],
     ['an empty folder', [node('e', null, 'FOLDER', 'Leer')], 'e'],
     ['hostile and non-ASCII names', [
-      node('r', null, 'FOLDER', 'Grüße: 日本 😀'), node('al', 'r', ALBUM, 'Fotos é'), node('c', 'r', 'FOLDER', 'CON'), node('f1', 'r', FILE, 'naïve.txt'),
+      node('r', null, 'FOLDER', 'Grüße: 日本 😀'), node('al', 'r', COLLECTION, 'Fotos é'), node('c', 'r', 'FOLDER', 'CON'), node('f1', 'r', FILE, 'naïve.txt'),
     ], 'r'],
   ])('announces the archive\'s exact length before writing it: %s', async (_label, tree, rootId) => {
     const prepared = await prepareExport({ access, tree: sourceOf(tree), rootId, appVersion: 'test', now: () => new Date('2026-10-13T10:00:00Z') })

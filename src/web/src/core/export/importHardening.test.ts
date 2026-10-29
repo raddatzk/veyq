@@ -28,7 +28,7 @@ import { contentDigest } from '../blob/sharedBlob'
 import { digestHere } from '../blob/digest'
 
 const FILE = 'H_FILE'
-const ALBUM = 'H_ALBUM'
+const COLLECTION = 'H_COLLECTION'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const text = (s: string) => new TextEncoder().encode(s)
 /** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
@@ -57,13 +57,13 @@ beforeAll(() => {
     },
   })
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
+    kind: COLLECTION, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
     async exportContent(ctx) {
       const files = ['IMG.jpg', 'img.JPG'].map((n) => ctx.addPayload(n, { size: n.length, mediaType: 'image/jpeg', chunks: async function* () { yield text(n) } }))
-      return { type: 'h.album', schema: 1, files }
+      return { type: 'h.collection', schema: 1, files }
     },
     async importContent(ctx) {
-      const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, ALBUM, ctx.name)
+      const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, COLLECTION, ctx.name)
       const bodies: string[] = []
       for (const ref of ctx.node.content!.files as ManifestPayload[]) bodies.push(await textOf(await ctx.payload(ref, 'x')))
       created[created.length - 1].bytes = bodies.join(',')
@@ -111,7 +111,7 @@ const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
 const TREE = [
   node('r', null, 'FOLDER', 'Trip: 2025'),
   node('f', 'r', FILE, 'notes.txt', 0),
-  node('a', 'r', ALBUM, 'Lisbon', 1),
+  node('a', 'r', COLLECTION, 'Lisbon', 1),
   node('s', 'a', 'FOLDER', 'Day 1', 0),
   node('g', 's', FILE, 'Café.txt', 0),
 ]
@@ -163,7 +163,7 @@ describe('reading both layouts and both inputs', () => {
     await attempt(zipOf(bytes))
     const fromZip = [...created]
     expect(fromZip.map((c) => [c.kind, c.name, c.bytes])).toEqual([
-      ['FOLDER', 'Trip: 2025', ''], [FILE, 'notes.txt', 'bytes of notes.txt'], [ALBUM, 'Lisbon', 'IMG.jpg,img.JPG'], ['FOLDER', 'Day 1', ''],
+      ['FOLDER', 'Trip: 2025', ''], [FILE, 'notes.txt', 'bytes of notes.txt'], [COLLECTION, 'Lisbon', 'IMG.jpg,img.JPG'], ['FOLDER', 'Day 1', ''],
       [FILE, 'Café.txt', 'bytes of Café.txt'],
     ])
     for (const nfd of [false, true]) { // the second time, a file system that decomposes names
@@ -306,9 +306,9 @@ describe('the hardened reader refuses, before anything is written', () => {
 
   describe('paths', () => {
     // each case keeps every OTHER check satisfied, so the one named is the one that refuses
-    const album = (path: string, files: string[]) =>
-      ({ id: 'n7', kind: ALBUM, name: 'Album', path, content: { type: 'h.album', schema: 1, files: files.map((f) => ({ path: f, size: 1, mediaType: 'image/jpeg' })) } })
-    it('a payload path with an upward segment', async () => refused(await crafted(folder([album('Home/x', ['Home/x/..'])])), 'unsafe_path', /unsafe payload path/))
+    const collection = (path: string, files: string[]) =>
+      ({ id: 'n7', kind: COLLECTION, name: 'Collection', path, content: { type: 'h.collection', schema: 1, files: files.map((f) => ({ path: f, size: 1, mediaType: 'image/jpeg' })) } })
+    it('a payload path with an upward segment', async () => refused(await crafted(folder([collection('Home/x', ['Home/x/..'])])), 'unsafe_path', /unsafe payload path/))
     it('a node reaching into .veyq/', async () => refused(await crafted({ ...folder(), name: '.veyq', path: '.veyq' }), 'unsafe_path', /unsafe node path/))
     it('a payload that is not its node\'s', async () =>
       refused(await crafted(folder([{ ...fileNode('Home/a.txt'), content: fileNode('Home/b.txt').content }]), { 'Home/b.txt': 'x' }), 'unsafe_path', /unsafe payload path/))

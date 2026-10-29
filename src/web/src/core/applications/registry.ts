@@ -732,7 +732,7 @@ export function createRegistry(): Registry {
       const slug = routes.get(kind)
       // A kind nobody claimed shares the unprefixed namespace with the application that has no segment, so its names are
       // numbered among that application's (two nodes never build one URL).
-      return { slug: slug ?? null, group: slug ? `app:${slug}` : 'none' }
+      return { slug: slug ?? null, group: slug ? `application:${slug}` : 'none' }
     },
     routeSlugs: () => [...slugs],
     placementAllows(kind, parentKind) {

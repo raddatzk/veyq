@@ -220,7 +220,7 @@ def application_clients(pairs: list[tuple[str, str]], web: pathlib.Path,
                              "this guard cannot tell its importers")
         owned.setdefault(owner, []).append(pathlib.PurePosixPath(out_path.relative_to(src).as_posix()))
     if not owned and any(api_dir.glob("*/*.openapi.yaml")):
-        raise ParseError(f"no `{GENERATE_SCRIPT}` step reads a spec under {'/'.join(CONTRACTS_API)}/<app>/, where "
+        raise ParseError(f"no `{GENERATE_SCRIPT}` step reads a spec under {'/'.join(CONTRACTS_API)}/<application>/, where "
                          "applications hold specs — the parse found nothing, or the applications' clients moved")
     return owned
 
