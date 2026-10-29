@@ -18,7 +18,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * A moderator's review of a case's Pot revisions and receipts (uc.moderation.review-a-case, CR decision 7): every
+ * A moderator's review of a case's Pot revisions and receipts (uc.moderation.review-a-case, ADR 0108 decision 6): every
  * revision and every receipt (with its held blob row) the case's hold copied, read from the snapshot only — so it answers after the revisions, the Pot or the space were deleted
  * (a participant's erasure included: what a hold copied stays until the hold ends, ADR 0093 § 4). The guest's shape plus
  * the Pot, never a writer. Behind core's `ModerationProofGate`, found by this resource's path under `/api/moderation`.

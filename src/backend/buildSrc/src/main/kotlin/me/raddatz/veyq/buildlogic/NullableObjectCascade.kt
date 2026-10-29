@@ -9,7 +9,7 @@ import java.io.File
  * `ServerOwnerStatementInputFactsForLog`) and loses the property's vendor extensions with it, so the contract's
  * `@field:jakarta.validation.Valid` never reached the field and validation never descended into the object: every bound
  * of a moderation note, a statement's facts and deferral, a Server Owner's statement — eleven properties — went
- * unenforced (the API fuzzing's first run accepted a `sealedFacts` past its `maxLength`; cr-api-fuzzing, Q5).
+ * unenforced (the API fuzzing's first run accepted a `sealedFacts` past its `maxLength`; ADR 0091 decision 9).
  * `validate_request_bounds.py` reads the contract, where the annotation is written, so it could not see the loss.
  *
  * Like [ModelCascade] a pass over the generator's OUTPUT, not a copied template, and it **fails the build** when a

@@ -1,5 +1,4 @@
-// An authority's order and the report to an authority, in a browser (cr-authority-orders-and-art18-reports phase 4's
-// browser pass; uc.moderation.authority-order, uc.moderation.report-to-an-authority; ADR 0093 §§ 12-13, ADR 0099 § 6).
+// An authority's order and the report to an authority, in a browser (uc.moderation.authority-order, uc.moderation.report-to-an-authority; ADR 0093 §§ 12-13, ADR 0099 § 6).
 // The tenant owner keeps two Memories, each shared by a link — the first one a contribute link, through which a guest
 // names itself and adds a photo; then
 //

@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test
  * Each race holds one side's commit back ([whileUncommitted]) and runs the other inside that window. Each has a
  * control: the same write with nothing overlapping lands.
  *
- * **Split from `NodeTreeRaceSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `NodeTreeRaceSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `NodeTreeRaceSliceTest` in `:apps:memories`. The bodies moved verbatim,
  * but for `MemoriesNodeKinds.MEMORY` (a Memories class `:core` cannot import) spelled as its wire literal `"MEMORY"`.
  */

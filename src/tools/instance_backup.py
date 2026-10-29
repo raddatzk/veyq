@@ -2159,7 +2159,7 @@ def release_order(release: str | None) -> tuple[int, int, int] | None:
 def read_record(root: Path) -> dict | None:
     """The gate's record, `state.json` on the backup volume — or None when there is none. A record that is not
     readable JSON FAILS, naming the file: "absent" means *capture and move on*, which would silently skip the
-    downgrade refusal (cr-kubernetes-backup-gate decision 7)."""
+    downgrade refusal (ADR 0098 decision 2)."""
     path = root / STATE_NAME
     if not path.exists():
         return None
@@ -2306,7 +2306,7 @@ def gate_refusal(record: dict | None, target: str, major_entry: str | None, root
 
 
 def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> Store | None:
-    """The store the gate lists, from what the app itself reads (cr-kubernetes-backup-gate decision 5, O2): the bundled
+    """The store the gate lists, from what the app itself reads (ADR 0098 decision 4): the bundled
     store's hint, or — for a store of the operator's own, whose secret key is sealed under the KEK the gate never
     reads — the Secret `backup.store.existingSecret` names, held against the plaintext of the setting in use."""
     if not args.rclone_binary:
@@ -2350,8 +2350,8 @@ def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> S
 
 
 def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int:
-    """ADR 0098 decisions 2, 3, 5 and 7, in the order cr-kubernetes-backup-gate decision 8 fixes (and the self-test
-    pins): the inputs; (1) the record; (2) a database holding no data — record the target, pass; (3) the target and
+    """ADR 0098 decisions 2, 3, 5 and 7, in the order the self-test pins:
+    the inputs; (1) the record; (2) a database holding no data — record the target, pass; (3) the target and
     the request the record's — pass; (4) the refusals, writing nothing; (5) capture into `captures/<UTC>.partial/`,
     verify it, rename; (6) move the record; (7) prune."""
     env = os.environ if env is None else env

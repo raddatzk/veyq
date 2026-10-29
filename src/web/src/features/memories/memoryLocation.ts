@@ -9,7 +9,7 @@
 //
 // A location is **never auto-created from GPS presence** — it is a deliberate per-Memory "set location" choice.
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
-// UI layer (cr-0069 phase 2), reusing `computeMedoid` here.
+// UI layer (uc.memory.place), reusing `computeMedoid` here.
 import type { MediaItem } from './media'
 import { openedMeta } from './openedListing'
 import { editField, unsealNodeMeta } from '../../core/node/nodeMeta'

@@ -37,7 +37,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * A moderator's review of a case (uc.moderation.review-a-case steps 3-5; decision 6 of cr-moderation-review-and-measures):
+ * A moderator's review of a case (uc.moderation.review-a-case steps 3-5; ADR 0093 § 3):
  * the held snapshot in the guest viewer's own shapes, read **from `veyq_hold_row` only** — never through the guest gate,
  * a link's budget or its password — so it answers after the share, the node or the space were deleted, and for content a
  * measure blocks (a block never hides evidence from the moderator). Behind `ModerationProofGate`: the `MODERATOR` role and

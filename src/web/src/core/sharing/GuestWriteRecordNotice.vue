@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The guest-write record's first-layer notice (ADR 0093 § 10, en.moderation.guest-write-record): wherever a link's guest
 // can write, before its first write — the naming step, the line that says whose session the device holds, the drop
-// pages (Q13 of cr-guest-write-record). Two sentences: what is kept and for how long, with the N the resolve served
+// pages (ADR 0093 § 10). Two sentences: what is kept and for how long, with the N the resolve served
 // (`PublicShare.guestWriteRecordDays`, the N current at the write), and the right to object (GDPR Art. 21) as a sentence
 // of its own (Art. 21(4)). `days` null — a READ link, where nothing is recorded, or a locked answer — renders nothing;
 // the record has no switch (ADR 0093 § 10), so a writing link's unlocked answer always carries N.

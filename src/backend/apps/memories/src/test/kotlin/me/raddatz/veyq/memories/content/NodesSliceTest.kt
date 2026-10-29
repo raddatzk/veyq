@@ -29,7 +29,7 @@ import me.raddatz.veyq.core.content.NodesStore
  * (non-member 404); rename + delete-subtree; operator-blind (the server stores only the ciphertext the
  * client sent). UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `NodesCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `NodesCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class NodesSliceTest {

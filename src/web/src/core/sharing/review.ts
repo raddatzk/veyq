@@ -1,4 +1,4 @@
-// A moderator's review of a case (uc.moderation.review-a-case steps 3-5; decision 6 of cr-moderation-review-and-measures):
+// A moderator's review of a case (uc.moderation.review-a-case steps 3-5; ADR 0093 § 3):
 // the share viewer renders the held snapshot with the GUEST viewer, and only its data source changes. While a review is
 // active, every guest read the views make — a blob's chunk URLs (`shareChunkUrls`), an application's listing under the
 // link (Memories' `listShareMedia`, Depot's `listShareFiles`) — goes to the moderation reads instead (`/api/moderation/

@@ -301,7 +301,7 @@ describe('Depot rows', () => {
     })
   })
 
-  // inbox #424 / cr-download-is-the-export Decision 6: "Upload folder…" picks a DIRECTORY; core screens it (a download
+  // inbox #424 / ADR 0082 decision 7: "Upload folder…" picks a DIRECTORY; core screens it (a download
   // unpacked is the member's import), anything else is uploaded as its tree - after the quota preflight, the folders first.
   describe('the level action "depot.uploadFolder"', () => {
     /** Depot of a picked directory, as `<input webkitdirectory>` hands them: each `webkitRelativePath` is `<dir>/<path>`. */

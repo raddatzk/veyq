@@ -35,7 +35,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopesStore
  * ciphertext the client sent). Seeds use UUID-unique domains/emails so the JVM-lived H2 mem DB (shared across
  * test classes) can't bleed state.
  *
- * **Split from `ScopesSliceTest`** (cr-platform-gradle-modules step 8a): these methods need Memories in the application at runtime, so they live in
+ * **Split from `ScopesSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods need Memories in the application at runtime, so they live in
  * `:apps:memories`; the rest of the class is `ScopesSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest

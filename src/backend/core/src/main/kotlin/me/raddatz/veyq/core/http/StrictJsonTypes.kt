@@ -31,7 +31,7 @@ import java.util.UUID
  * Jackson's default coerces a scalar into the declared type: a number into a string field (`12345678` became the
  * capability tag `"12345678"`), `0` into a date-time (1970-01-01, then a domain refusal), an integer into a boolean or an
  * enum, a string into a number, `""` into an absent id. Every one is a request the contract forbids, answered past the boundary — the API
- * fuzzing's first run found about fifty (cr-api-fuzzing, owner decision Q5). The generated clients never send one, so
+ * fuzzing's first run found about fifty (ADR 0091 decision 9). The generated clients never send one, so
  * refusing them changes nothing a client does. `MalformedRequestSliceTest` holds each mechanism.
  *
  * Like [NullElementsRefused] it is the mapper's default, so a JSON read that is no request is held to it too — the same

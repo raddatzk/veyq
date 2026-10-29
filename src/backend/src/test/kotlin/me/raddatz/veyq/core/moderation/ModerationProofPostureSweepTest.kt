@@ -34,7 +34,7 @@ import java.util.UUID
  * never from a list of their operations. A moderation operation is every operation of a generated interface rooted under
  * `/api/moderation` ([ModerationProofGate.moderationApiOf]): the moderation spec's `ModerationApi`, and the review reads
  * other specs serve there (core's `CaseReviewApi`, Memories' `CaseMediaApi`, Depot's `CaseFilesApi` —
- * cr-moderation-review-and-measures decision 6), which the gate finds by that path because core may not name them:
+ * ADR 0093 § 3), which the gate finds by that path because core may not name them:
  *
  *  1. every operation is either key-proved (it declares the proof header, [ModerationProofGate.proofOperationsOf]) or —
  *     `ModerationApi`'s only — named in [ModerationProofGate.WITHOUT_PROOF] with its reason; never both, never neither,

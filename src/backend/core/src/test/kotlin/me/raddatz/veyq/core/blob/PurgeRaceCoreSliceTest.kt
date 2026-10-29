@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test
  * Each race holds one side's commit back ([whileUncommitted]) and runs the other inside that window. Each has a
  * control: with nothing overlapping, the purge still erases what is due.
  *
- * **Split from `PurgeRaceSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `PurgeRaceSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `PurgeRaceSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

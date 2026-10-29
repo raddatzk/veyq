@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test
  * Runs on [FakePresigningBlobStore] (the same profile as [MediaBudgetBranchSliceTest], so the two share one app
  * boot): the in-memory store cannot presign, and a window is nothing but presigned URLs.
  *
- * **Split from `UploadWindowSliceTest`** (cr-platform-gradle-modules step 8a): these methods need Memories in the application at runtime, so they live in
+ * **Split from `UploadWindowSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods need Memories in the application at runtime, so they live in
  * `:apps:memories`; the rest of the class is `UploadWindowSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest

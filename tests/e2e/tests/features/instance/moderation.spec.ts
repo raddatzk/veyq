@@ -1,5 +1,4 @@
-// Moderators and the moderation key, in a browser (cr-moderators-and-the-moderation-key phase 6's browser pass;
-// ADR 0099, uc.moderation.appoint-moderators, uc.moderation.serve-as-moderator). A second account is born the only way
+// Moderators and the moderation key, in a browser (ADR 0099, uc.moderation.appoint-moderators, uc.moderation.serve-as-moderator). A second account is born the only way
 // accounts are born — a tenant invite, here a second tenant whose owner it becomes — and then:
 //
 //   1. the Server Owner finds moderation on since first-run setup (epoch 1 sealed to their own account) and appoints it;

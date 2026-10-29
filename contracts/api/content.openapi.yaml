@@ -612,7 +612,7 @@ paths:
     post:
       tags: [rekey]
       operationId: stageNodeRekey
-      summary: Stage one batch of a node's re-sealed core fields under a re-key id (CR decision 1).
+      summary: Stage one batch of a node's re-sealed core fields under a re-key id (ADR 0109 point 2).
       description: >
         A node with more fields than one request carries (a folder of many children, a link with many guests) sends
         them here first, up to 256 of each kind per call, under a re-key id the client mints; `commitNodeRekey` swaps

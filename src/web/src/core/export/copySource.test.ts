@@ -1,5 +1,5 @@
 // @vitest-environment node
-// A copy's payload (cr-copy-node Decision 3, `copySource.ts`): the original read BY FRAME on demand, sliced the way the
+// A copy's payload (ADR 0082 decision 11, `copySource.ts`): the original read BY FRAME on demand, sliced the way the
 // upload pump slices it, never held whole; every frame checked against the size the walk declared (Decision 2).
 import { describe, it, expect, vi } from 'vitest'
 import { framedPayload, framesFor, framesOfBytes } from './copySource'

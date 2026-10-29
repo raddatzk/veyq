@@ -1,4 +1,4 @@
-// The instance privacy notice in a browser (cr-instance-privacy-notice phase 3's browser pass; ADR 0035 decision 8,
+// The instance privacy notice in a browser (ADR 0035 decision 8,
 // uc.admin.privacy-notice), in its one form on every instance (ADR 0093 § 14), with the guest-write record's passage
 // and the values first-run setup published: the provider, the authority and one recipient whose country was left open.
 //

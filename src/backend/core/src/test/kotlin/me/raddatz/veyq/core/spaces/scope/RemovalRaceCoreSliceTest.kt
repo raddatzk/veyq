@@ -45,7 +45,7 @@ import org.junit.jupiter.api.Test
  * hold (`whileUncommitted`'s `beforeCommit`). The accept must wait on the scope lock the removal holds and then find no
  * proposal; without that lock it committed inside the hold and outlived the deletes.
  *
- * **Split from `RemovalRaceSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `RemovalRaceSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `RemovalRaceSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

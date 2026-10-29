@@ -117,7 +117,7 @@ object MediaRekeyRows {
 }
 
 /**
- * The Memories half of a node's re-key (ADR 0109 point 2, CR decision 2): the listing a re-keyer reads and the staging
+ * The Memories half of a node's re-key (ADR 0109 point 2): the listing a re-keyer reads and the staging
  * it writes through, under core's re-key rights ([RekeyHandler]) — any member with the current grant, not excluded (an owner on an owner-only node).
  */
 @ApplicationScoped

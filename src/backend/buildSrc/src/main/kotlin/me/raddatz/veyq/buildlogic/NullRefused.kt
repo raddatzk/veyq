@@ -7,7 +7,7 @@ import java.io.File
  * A JSON `null` binds only to a property whose contract allows one. The `kotlin` generator types every optional
  * property nullable (`val x: T? = null`), so Jackson bound an explicit `null` where the contract's type has none —
  * `"overContent": null`, `"sealedName": null`, a `kdfParams` of `null` — and the request went on as if the field were
- * absent (the API fuzzing's first run, cr-api-fuzzing Q5). This pass gives each optional property whose schema allows
+ * absent (the API fuzzing's first run, ADR 0091 decision 9). This pass gives each optional property whose schema allows
  * no `null` (its type, a `oneOf`/`anyOf` branch, the scalar component it `$ref`s; read by
  * [SpecSets.nonNullableOptionals]) core's `NullRefusing` deserializer: an explicit `null` is refused while binding
  * (`InvalidNullException`, a `MismatchedInputException`, so core's mapper answers `400 invalid_request`), an ABSENT

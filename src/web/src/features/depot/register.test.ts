@@ -96,12 +96,12 @@ describe('registerDepot', () => {
       createEntry: { label: 'depot.dropBox.create', icon: 'inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
-      // downloaded as a directory of its guests' folders, imported as a plain folder (cr-download-is-the-export Decision 7)
+      // downloaded as a directory of its guests' folders, imported as a plain folder (ADR 0082 decision 4)
       exportContent: exportDropBox,
       contentSchema: { application: 'depot', version: 1 },
       validateContent: validateDropBoxContent,
       importsAsFolder: true,
-      // a copy makes it a plain folder too: its dialog names what stays behind (cr-copy-node Decision 4)
+      // a copy makes it a plain folder too: its dialog names what stays behind (uc.platform.copy-node step 3)
       copyLosses: ['depot.dropBox.copyLoss'],
       rekeyContent: nothingOfItsOwnToRekey,
     })

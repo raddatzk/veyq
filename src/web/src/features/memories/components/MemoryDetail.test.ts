@@ -659,7 +659,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   })
 
   it('self-heals a pre-armed AUTO location (no derived) to the media medoid on open', async () => {
-    // an `auto` location pre-armed at creation carries a name but no position yet (cr-0069 phase 3)
+    // an `auto` location pre-armed at creation carries a name but no position yet (uc.memory.place)
     const memoryKey = v1.randomBytes(32)
     const pending: MemoryLocation = { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' }
     const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: pending })

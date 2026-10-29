@@ -25,12 +25,12 @@ data class RenderedSection(
 )
 
 /**
- * Renders [OperatorSectionText] (ADR 0035 decision 6, decision 3 of cr-operator-section-of-the-terms). Pure: the values
+ * Renders [OperatorSectionText] (ADR 0035 decision 6). Pure: the values
  * come in, markdown goes out.
  *
  * - There is one form on every instance (ADR 0093 § 14): every passage renders, the `record` one apart as [RenderedSection.record]
  *   — the record is kept wherever a guest may write (§ 10), so its pointer is always there. The record's information itself
- *   is the privacy notice's ([PrivacyNoticeRenderer], Q27 of cr-instance-privacy-notice).
+ *   is the privacy notice's ([PrivacyNoticeRenderer], ADR 0035 decision 8).
  * - The placeholder rules are the ones both fixed texts share ([FixedTextLines]): a line naming an empty value is
  *   dropped where it is optional, and otherwise shows the visible gap.
  */

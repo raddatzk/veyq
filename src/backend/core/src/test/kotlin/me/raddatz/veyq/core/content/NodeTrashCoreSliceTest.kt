@@ -41,7 +41,7 @@ import org.junit.jupiter.api.Test
  * its own transaction, [StoreReclaimSweep] is the only thing that deletes objects, so the purge case drives both.
  * UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
  *
- * **Split from `NodeTrashSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `NodeTrashSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `NodeTrashSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

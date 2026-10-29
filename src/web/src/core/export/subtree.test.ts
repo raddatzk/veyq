@@ -296,7 +296,7 @@ describe('import', () => {
   })
 })
 
-// cr-download-is-the-export Decision 7: a kind that imports as a plain folder, and the paths that follow the shown names.
+// ADR 0082 decision 4: a kind that imports as a plain folder, and the paths that follow the shown names.
 describe('a kind that imports as a folder, and the shown names', () => {
   const boxTree = [
     node('box', null, BOX, 'Inbox'),

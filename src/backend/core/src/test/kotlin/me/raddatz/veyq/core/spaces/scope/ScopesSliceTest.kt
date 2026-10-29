@@ -54,7 +54,7 @@ import org.junit.jupiter.api.Test
  * ciphertext the client sent). Seeds use UUID-unique domains/emails so the JVM-lived H2 mem DB (shared across
  * test classes) can't bleed state.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that need Memories in the application at runtime are `ScopesMemoriesSliceTest` in `:apps:memories`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that need Memories in the application at runtime are `ScopesMemoriesSliceTest` in `:apps:memories`.
  */
 @QuarkusTest
 class ScopesSliceTest {

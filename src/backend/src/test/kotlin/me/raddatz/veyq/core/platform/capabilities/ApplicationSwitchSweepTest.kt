@@ -25,7 +25,7 @@ import org.junit.jupiter.api.function.Executable
 import java.util.UUID
 
 /**
- * **The completeness proof of an application switch** (uc.platform.switch-application-off, CR decision 3): every write
+ * **The completeness proof of an application switch** (uc.platform.switch-application-off): every write
  * operation of every application — derived from its generated API package ([GeneratedApiOperations]), never listed —
  * either answers `422 capability_disabled` while its application is off for the tenant, or is on the reasoned
  * [exempt] list. A new operation nobody classified is red here on the day its spec lands.

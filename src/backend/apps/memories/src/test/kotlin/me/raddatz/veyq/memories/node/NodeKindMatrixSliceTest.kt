@@ -16,7 +16,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 /**
  * The whole placement matrix of the node tree — every child kind under every parent slot, for a create and for a
  * move — against the rule as core's `NodesHandler` held it before `NodeKindRules` moved the `MEMORY`/`CHAPTER` arms
- * into Memories (cr-platform-gradle-modules step 4). The oracle is that function itself ([before]), copied, so the
+ * into Memories (ADR 0079 decision 3). The oracle is that function itself ([before]), copied, so the
  * expectation is derived from the old code rather than restated from memory; the kinds are spelled as the wire spells
  * them, string literals, so this file compiles and was green on the tree before the move and is green after it. With
  * Memories' rules present the runtime must answer exactly what the single core function answered.

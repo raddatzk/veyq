@@ -1,4 +1,4 @@
-// "Upload folder…" (inbox #424, cr-download-is-the-export Decision 6): a picked or dropped directory that is no veyq download is
+// "Upload folder…" (inbox #424, ADR 0082 decision 7): a picked or dropped directory that is no veyq download is
 // uploaded AS ITS TREE - a `FOLDER` per directory, a `FILE` per file - under the folder on screen. Depot's level action, because
 // the tree is folders and files (core never names `FILE`, ADR 0079); the folders are core's kind, created through core's own
 // create (a member's `createContentNode`, a guest's `createShareNodeAsGuest`) behind the session's upload door

@@ -34,7 +34,7 @@ class ContentView internal constructor(
 }
 
 /**
- * The reads every path that honours a measure asks (ADR 0093 § 6, decisions 2-4 of cr-moderation-review-and-measures):
+ * The reads every path that honours a measure asks (ADR 0093 § 6):
  * a link blocked ([shareBlocked], the guest gate's `OPERATOR_BLOCKED` stop), a guest identity blocked
  * ([identityBlocked]), an account's sign-in blocked ([signInBlocked]), a reporter barred ([reporterBarred]), and content
  * ([contentView], [blobBlocked]). A measure is in force while its row's `active_key` is set; every read here asks that,

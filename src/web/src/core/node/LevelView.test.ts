@@ -574,7 +574,7 @@ describe('LevelView: the "New" menu', () => {
 
   it('lists core\'s folder entry and the registry\'s entries by order, and each choice acts: create by kind, an action by its handler', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    // no import entry (cr-download-is-the-export Decision 6): an upload recognises a download itself
+    // no import entry (ADR 0082 decision 7): an upload recognises a download itself
     expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename')])
     await chooseNew(w, t('node.anItem'))
     await chooseNew(w, t('node.rename'))

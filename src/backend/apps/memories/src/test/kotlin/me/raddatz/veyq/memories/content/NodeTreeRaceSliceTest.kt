@@ -40,7 +40,7 @@ import me.raddatz.veyq.core.content.UpdateNodeOutcome
  * Each race holds one side's commit back ([whileUncommitted]) and runs the other inside that window. Each has a
  * control: the same write with nothing overlapping lands.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `NodeTreeRaceCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `NodeTreeRaceCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class NodeTreeRaceSliceTest {

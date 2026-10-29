@@ -83,7 +83,7 @@ export function readUpgradeRecord(): UpgradeRecord {
   return raw as UpgradeRecord
 }
 
-/** What the reader saw, beside the record: the orchestrator's summary names it (Decision 5 of cr-upgrade-proof). */
+/** What the reader saw, beside the record: the orchestrator's summary names it. */
 export function writeUpgradeReading(reading: { configSecretState: string; items?: number }): void {
   writeFileSync(join(groupDir(), 'upgrade-reading.json'), JSON.stringify(reading, null, 2))
 }

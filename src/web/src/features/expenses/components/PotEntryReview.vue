@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A moderator's review of a reported Pot entry (uc.moderation.review-a-case, CR decision 7) — Expenses' half of core's
+// A moderator's review of a reported Pot entry (uc.moderation.review-a-case, ADR 0108 decision 6) — Expenses' half of core's
 // item review (`registry.claimItemReview`). The report share hands over each revision's `K_rev` (role `ENTRY_REVISION`,
 // `../report.ts`), not the Pot's key, so the entry is drawn on its own: the held revisions from the review's own listing
 // (`listCasePotRevisions`, key-proved), each opened with whichever handed key its address takes (a seal binds its address,

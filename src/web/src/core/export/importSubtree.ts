@@ -157,7 +157,7 @@ function skipReason(n: ManifestNode, manifest: Manifest): { application: string;
 /** How a dry run reads its manifest. */
 export type PlanOptions = {
   /** The manifest came from outside (a download, decision 10): each kind checks its content. Default true; a copy's
-   *  manifest is the member's own tree as the walk read it, so nothing is checked (cr-copy-node Decision 2). */
+   *  manifest is the member's own tree as the walk read it, so nothing is checked (uc.platform.copy-node step 4). */
   untrusted?: boolean
   /** A further reason to leave a node out (a copy's: a kind that cannot take a payload read by frame). */
   leaveOut?: (n: ManifestNode) => SkipReason | null

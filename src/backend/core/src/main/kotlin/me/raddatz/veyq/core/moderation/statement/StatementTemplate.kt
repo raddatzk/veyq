@@ -22,7 +22,7 @@ data class Passage(val id: String, val condition: String?, val text: Texts)
  * The clear fields one statement is rendered from (ADR 0049): the template's own texts for the clear enums, the
  * [provision] the moderator or the Server Owner named, the instance [contact] (null renders as the template's gap).
  * [mailFacts] is set only for a Server
- * Owner's step — their own words, which its mail carries (owner decision Q24 of cr-statement-legal-gaps); a moderator's
+ * Owner's step — their own words, which its mail carries (ADR 0093 § 7); a moderator's
  * measure's facts never reach a mail.
  */
 data class StatementFields(
@@ -39,7 +39,7 @@ data class StatementFields(
 )
 
 /**
- * The statement of reasons' one template (ADR 0093 § 7, decision 1 of cr-statement-of-reasons-and-objection), pinned from
+ * The statement of reasons' one template (ADR 0093 § 7), pinned from
  * `contracts/moderation/statement-of-reasons.json` — src/web/ pins the same file (`features/moderation/statement/template.ts`)
  * and `StatementTemplateConformanceTest` holds these literals equal to it, so the mail and the placeholder cannot drift.
  * The server renders it for the mail ([renderMail]); a moderator's measure's facts never go into a mail: their passage

@@ -1,4 +1,4 @@
-// Reporting in a browser (cr-report-and-hold phase 6's browser pass; uc.moderation.report, ADR 0093 §§ 1-2, 4). The tenant
+// Reporting in a browser (uc.moderation.report, ADR 0093 §§ 1-2, 4). The tenant
 // owner keeps a folder with a file in it and shares it with a view-only link; then
 //
 //   1. the owner selects the folder and reports it with core's dialog — a threat to life, so the moderators are mailed at

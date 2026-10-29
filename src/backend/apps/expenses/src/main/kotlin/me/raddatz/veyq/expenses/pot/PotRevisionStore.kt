@@ -16,7 +16,7 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** The four lengths a sealed body may have (ADR 0108 decision 4, CR decision 5): one per size class of padded plaintext. */
+/** The four lengths a sealed body may have (ADR 0108 decision 4): one per size class of padded plaintext. */
 object PotBodies {
     /** Base64 length of the sealed body → its padded plaintext size class in bytes. */
     private val CLASSES = mapOf(744 to 512, 2792 to 2048, 10984 to 8192, 21908 to 16384)

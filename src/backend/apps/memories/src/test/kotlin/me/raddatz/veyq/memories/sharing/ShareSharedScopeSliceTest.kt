@@ -49,7 +49,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
  * untouched — deactivation is the honest-server revocation layer. Distinct domains keep the JVM-lived H2 mem DB
  * from bleeding state between tests.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `ShareSharedScopeCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `ShareSharedScopeCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class ShareSharedScopeSliceTest {

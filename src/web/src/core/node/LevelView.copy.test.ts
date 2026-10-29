@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// "Copy to…" on the level (uc.platform.copy-node, cr-copy-node phases 1 and 2) against a STUBBED registry (as
+// "Copy to…" on the level (uc.platform.copy-node) against a STUBBED registry (as
 // `LevelView.test.ts`): core's own action in every copyable row's menu, in the folder's header beside the move, and in the
 // selection's bar, handing the host the nodes to copy (`copyNodes`) - for a member whose keys are open, never for a share
 // guest of any role. Every control is clicked for real; the dialog is the host's (`CopyNodesDialog`).

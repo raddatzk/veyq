@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * Two appends to one Pot at once (CR decision 1, `PotRevisionStore`'s lock order: the records' rows sorted, then the
+ * Two appends to one Pot at once (ADR 0108 decision 3, `PotRevisionStore`'s lock order: the records' rows sorted, then the
  * node row, then the item-revision row). The first holds its batch uncommitted ([whileUncommitted]); the second, over
  * the same records, must answer what a replay of it would get — `409 stale_revision` naming each record's latest — and
  * never the `500` of a deadlock or of the unique index the compare-and-set backs (developer-styleguide § 12, the insert

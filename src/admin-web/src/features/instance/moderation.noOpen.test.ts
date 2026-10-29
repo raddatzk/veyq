@@ -1,6 +1,5 @@
 // @vitest-environment node
-// admin-web mints the instance moderation key and never opens it (ADR 0099 § 3: "It never opens a grant"; CR
-// cr-moderators-and-the-moderation-key phase 5). It cannot open one by construction, and this is the construction:
+// admin-web mints the instance moderation key and never opens it (ADR 0099 § 3: "It never opens a grant"). It cannot open one by construction, and this is the construction:
 // the minting facade and every file of the CLI import no function from `@veyq/crypto` that opens a seal or holds a
 // private key, and no namespace (`import * as v1`) through which such a function could be reached by name.
 //

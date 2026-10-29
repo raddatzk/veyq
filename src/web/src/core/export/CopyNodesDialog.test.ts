@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Core's copy dialog (uc.platform.copy-node, cr-copy-node Decisions 1, 4, 5) over the REAL registry (Memories and Depot,
+// Core's copy dialog (uc.platform.copy-node) over the REAL registry (Memories and Depot,
 // filled by `src/test/setup.ts`), the real `VeyqDialog` and the move's real browser, every step a DOM click. The walk and
 // the replay are `prepareCopy`'s (mocked here: `copySubtree.test.ts` and `copy.wire.test.ts` pin them). What this pins: the
 // browser for a copy allows the nodes' own place and blocks them and their inside; the summary says what is created, its

@@ -56,7 +56,7 @@ const headContext = (revision: number) => ({ purpose: 'identity-pins', revision 
 const entryContext = (pinId: Uint8Array) => ({ purpose: 'identity-pin', pinId }) as const
 
 /** The head's plaintext version (v1.json#identity_pin). There is no other: the single-blob store had no read path kept
- *  (owner decision Q3 of cr-identity-pins-per-entry — veyq was not live), so anything else does not open. */
+ *  (ADR 0104 decision 7 — veyq was not live), so anything else does not open. */
 const HEAD_VERSION = 2
 
 /** Every entry's plaintext is padded with spaces to exactly this many bytes, so any two contacts seal to one length

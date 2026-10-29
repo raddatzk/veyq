@@ -79,7 +79,7 @@ class SharingResource(
     private val orderNotices: GuestOrderNotices,
     /** The client a guest write records (ADR 0093 § 10, ADR 0094): resolved once per write, handed down to it. */
     private val client: RequestClient,
-    /** What a guest page discloses before the first write (ADR 0093 § 10, decision 6 of cr-guest-write-record). */
+    /** What a guest page discloses before the first write (ADR 0093 § 10). */
     private val guestWriteRecords: GuestWriteRecords,
 ) : SharingApi {
 

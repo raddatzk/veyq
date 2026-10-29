@@ -1,4 +1,4 @@
-// "Upload folder…" (inbox #424, cr-download-is-the-export Decision 6): the PLAN of a picked directory - its tree of folders and
+// "Upload folder…" (inbox #424, ADR 0082 decision 7): the PLAN of a picked directory - its tree of folders and
 // files, every name through core's `archiveName` and numbered where a sibling's slug (folded by its own kind) or a level's
 // existing sibling holds it - the folders' CREATION through a session's tree door, top-down, before any file job exists, and
 // the TAKE-BACK of the folders a settled upload left holding nothing.

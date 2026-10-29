@@ -8,7 +8,7 @@
 // Both hooks are told it is a copy (`purpose: 'copy'`), so a kind may hand over what an archive never carries and its import
 // then needs no decode (Memories: each medium's existing tiers and sealed facts, ADR 0082 decision 11).
 //
-// What the archive path checks and this one does not (cr-copy-node Decision 2): the input is the member's own decrypted tree,
+// What the archive path checks and this one does not (uc.platform.copy-node step 4): the input is the member's own decrypted tree,
 // not untrusted bytes, so no manifest schema, no caps, no checksums and no kind's content check. What it does check: each
 // payload's frames against the size the walk declared (`framedPayload`).
 //

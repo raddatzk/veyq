@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test
  * untouched — deactivation is the honest-server revocation layer. Distinct domains keep the JVM-lived H2 mem DB
  * from bleeding state between tests.
  *
- * **Split from `ShareSharedScopeSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `ShareSharedScopeSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `ShareSharedScopeSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

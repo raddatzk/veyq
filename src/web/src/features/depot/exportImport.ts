@@ -5,7 +5,7 @@
 // job the "Upload files" action runs (`fileUploadJob`), so a replayed file is sealed under the new node's key like any upload,
 // and a node whose upload fails is trashed by the job's own `abandon`.
 //
-// A drop box downloads like any other container (cr-download-is-the-export Decision 7): a directory, its guests' folders as
+// A drop box downloads like any other container (ADR 0082 decision 4): a directory, its guests' folders as
 // directories under the names the detail shows them by, their files inside - its content names only what it was
 // (`depot.drop-box`), no payload. It IMPORTS as a plain folder (`importsAsFolder` on its descriptor): a drop key, its guests'
 // identities and its links cannot be rebuilt from a download, so nothing tries.
@@ -58,7 +58,7 @@ export const exportFile: ExportContentHook = async (ctx) => {
     mediaType: meta?.type || 'application/octet-stream',
     modifiedAt: typeof meta?.modifiedAt === 'number' ? meta.modifiedAt : undefined,
     chunks: () => iterateBlob(provider, { signal: ctx.signal }),
-    // the same bytes by frame, for a copy (cr-copy-node Decision 3): the job below reads its payload only by frame-sized
+    // the same bytes by frame, for a copy (ADR 0082 decision 11): the job below reads its payload only by frame-sized
     // slices (the upload pump), so the kind declares `importStreams`
     frames: { frameSize: CHUNK_SIZE, chunkCount: provider.chunkCount, getPlaintextChunk: (i) => provider.getPlaintextChunk(i) },
   })

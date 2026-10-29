@@ -64,7 +64,7 @@ data class RenderedNotice(
 )
 
 /**
- * Renders [PrivacyNoticeText] (ADR 0035 decision 8, cr-instance-privacy-notice decision 2) in its one form (ADR 0093
+ * Renders [PrivacyNoticeText] (ADR 0035 decision 8) in its one form (ADR 0093
  * § 14). Pure: the values and which capabilities are active on the host come in, markdown passages go out.
  *
  * - A passage renders exactly while its conditions hold ([NoticeConditions]): a passage bound to a switch is there

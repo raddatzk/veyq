@@ -28,7 +28,7 @@ import me.raddatz.veyq.core.blob.UploadOpener
  * over the real registration; the dispatch is pinned with forged acceptors that record what they were offered and
  * answer a code no real one does, each negative beside a positive control on the same node.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `UploadCompletionPartitionCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `UploadCompletionPartitionCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class UploadCompletionPartitionSliceTest {

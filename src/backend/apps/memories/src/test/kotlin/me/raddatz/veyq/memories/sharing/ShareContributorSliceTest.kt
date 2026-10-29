@@ -29,7 +29,7 @@ import me.raddatz.veyq.core.sharing.ShareWriteProof
  * path (`403`); a **bad token** is rejected (`403`); **revoke** stops contributions (`404`); operator-blindness
  * (the sealed name + wrap round-trip, the server stores only ciphertext + opaque ids).
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `ShareContributorCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `ShareContributorCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class ShareContributorSliceTest {

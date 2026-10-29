@@ -1,4 +1,4 @@
-// The statement of reasons' one template (ADR 0093 § 7, decision 1 of cr-statement-of-reasons-and-objection), pinned from
+// The statement of reasons' one template (ADR 0093 § 7), pinned from
 // `contracts/moderation/statement-of-reasons.json`: the backend pins the same file for the mail
 // (`core/moderation/statement/StatementTemplate.kt`), and `template.test.ts` here and its conformance test there hold
 // both copies equal to it, so the placeholder and the mail render one text. It names the host, never the moderator.

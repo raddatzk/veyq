@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Core's copy dialog (uc.platform.copy-node, cr-copy-node Decisions 1, 4, 5): "Copy to…" for one node or a level's selection,
+// Core's copy dialog (uc.platform.copy-node): "Copy to…" for one node or a level's selection,
 // a member flow. It is the move's folder browser (`MoveBrowser`, the copy intent: the nodes' own place is allowed - the copy is
 // named `Name (2)` there - the nodes themselves and anything inside them are not) above the import's summary: opened, it
 // walks what is copied at once (`prepareCopy`: listings only, no payload read) and says, before anything is written, what

@@ -66,7 +66,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
- * The erasure ledger (ADR 0056 decision 8, cr-backup-erasure-and-retention phase 2): every hard erasure writes its line in
+ * The erasure ledger (ADR 0056 decision 8): every hard erasure writes its line in
  * its own transaction, the sweep carries it into the file, and the start erases again what a restore brought back — the
  * shape a restore produces is made here by **writing the erased rows back** with their ids, as a dump taken before the
  * erasure would. Every re-application has a control: the same start leaves a row nobody erased alone.

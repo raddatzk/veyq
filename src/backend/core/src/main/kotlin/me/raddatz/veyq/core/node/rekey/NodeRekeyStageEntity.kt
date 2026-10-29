@@ -10,7 +10,7 @@ import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 /**
- * One staged value of a node's re-key (ADR 0109 point 2, CR decision 1): a ciphertext the commit of [rekeyId] swaps
+ * One staged value of a node's re-key (ADR 0109 point 2): a ciphertext the commit of [rekeyId] swaps
  * into the row [itemId] names, in the column [field] names, of the owner [part] (`core`, or an application's name).
  * [revision] is the row's revision as the re-keyer read it, where the row has one (a child's placement revision, a
  * medium's meta revision). Nothing serves or reads a staged value but the commit; a stage no commit took is deleted

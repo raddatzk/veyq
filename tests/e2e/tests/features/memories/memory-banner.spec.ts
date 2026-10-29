@@ -1,5 +1,4 @@
-// A Memory's banner in a real browser (uc.memory.banner, ADR 0102): the browser pass cr-memory-banner's phase 4 names,
-// with cr-cover-banner-upload-only-and-dedup's: the banner is set only by a file picked in its dialog, has no
+// A Memory's banner in a real browser (uc.memory.banner, ADR 0102): the banner is set only by a file picked in its dialog, has no
 // description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
 //
 // The owner creates a Memory and adds a landscape image, a portrait image and a video to it, then:

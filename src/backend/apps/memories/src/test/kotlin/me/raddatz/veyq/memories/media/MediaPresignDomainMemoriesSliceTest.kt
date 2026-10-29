@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test
  * [FakePresigningBlobStore] echoes the domain it was handed into the URL's host, so the assertions read the
  * value the store actually received rather than a proxy for it.
  *
- * **Split from `MediaPresignDomainSliceTest`** (cr-platform-gradle-modules step 8a): these methods need Memories in the application at runtime, so they live in
+ * **Split from `MediaPresignDomainSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods need Memories in the application at runtime, so they live in
  * `:apps:memories`; the rest of the class is `MediaPresignDomainSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest

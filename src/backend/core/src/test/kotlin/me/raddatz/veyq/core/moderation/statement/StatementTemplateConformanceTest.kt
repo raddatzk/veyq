@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * Conformance pin (decision 1 of cr-statement-of-reasons-and-objection): the statement's texts the backend renders for the
+ * Conformance pin (ADR 0093 § 7): the statement's texts the backend renders for the
  * mail equal `contracts/moderation/statement-of-reasons.json`, every one of them — src/web/'s `template.test.ts` holds its own
  * copy to the same file, so the mail and the placeholder render one template. There is one form (ADR 0093 § 14): a file
  * that marks a passage `full` again fails here, since no passage carries the marker.

@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test
  * (too much). The fixture's content lives in scope B and every probe starts into scope A, so a term that is counted
  * is counted across the tenant's scopes, not only in the scope being uploaded into.
  *
- * **Split from `TenantStorageQuotaSliceTest`** (cr-platform-gradle-modules step 8a): these methods need Memories in the application at runtime, so they live in
+ * **Split from `TenantStorageQuotaSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods need Memories in the application at runtime, so they live in
  * `:apps:memories`; the rest of the class is `TenantStorageQuotaSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest

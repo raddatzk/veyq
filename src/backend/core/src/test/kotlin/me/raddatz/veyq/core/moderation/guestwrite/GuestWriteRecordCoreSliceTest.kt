@@ -284,7 +284,7 @@ class GuestWriteRecordCoreSliceTest {
         assertEquals(1, seen(newer).size, "control: younger than the new N, it stays")
     }
 
-    // --- no operating mode, no switch (ADR 0093 §§ 10, 14; cr-operating-mode-retires decision 6) -----------------------
+    // --- no operating mode, no switch (ADR 0093 §§ 10, 14) -----------------------
 
     /**
      * An instance set up with no mode and no operator value (`restore` leaves none): every fixed text renders whole, an
