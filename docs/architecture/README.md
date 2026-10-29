@@ -338,7 +338,13 @@ time. So the next file's on-device stage now runs while the current file is on t
 ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md) step 3; inbox #220): 10.8 s (10.6–11.5) against
 17.6–19.2 s at throttle 1 and 13.4 s (13.3–13.5) against 19.9–20.3 s at throttle 4, beside two passes of the tree
 before, with every next file's digest inside the previous file's upload stage. What bounds it now is the upload stage
-itself, about 190 ms a file, with the frame worker busy 6.4 s of the 10.8 s. The method,
+itself, about 190 ms a file, with the frame worker busy 6.4 s of the 10.8 s. On the server side the first reading's
+two statement counts that grew with the data now stay fixed (inbox #537, 2026-10-29): opening the 1,000-photo Chapter
+sent about 116 SQL statements a request because the thumbnails' `blob-downloads-batch` read its blob row and the space's
+content blocks once per id it named (12 + 2 per id, 524 for a batch of 256), and the member list read each member's
+account on its own (1,012 SELECTs at 1,000 members). Both now read a batch once: in the backend's own count the
+Chapter's three requests send 17, 13 and 14 statements and the member list 19, whatever the Chapter or the group
+holds, and `BlobDownloadQueryCountSliceTest` and `MemberListQueryCountSliceTest` turn red when either grows again. The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 

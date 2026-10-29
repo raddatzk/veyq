@@ -100,9 +100,11 @@ member list's one query per member and missing ETag (458 SELECTs, 42 ms at 445);
 while a phone uploads — the CAX run should watch the app there first.
 
 **For this CR's run.**
-- *Two N+1 shapes are decided here* (inbox #537): opening a 1,000-photo Chapter sends ≈ 116 SQL statements a request,
-  and `GET /api/scopes/{id}/members` at 1,000 members 1,012 SELECTs. Locally both meet their targets; on the CAX a
-  round trip costs more, so this run's server leg says whether either needs a fix.
+- *The two N+1 shapes are fixed before this run* (inbox #537, 2026-10-29): opening a 1,000-photo Chapter sent ≈ 116 SQL
+  statements a request (the thumbnails' `blob-downloads-batch`, 12 + 2 per id) and `GET /api/scopes/{id}/members` at
+  1,000 members 1,012 SELECTs; each now reads its batch once — 13–17 statements per request and 19 for the member list
+  in the backend's own count, held by `BlobDownloadQueryCountSliceTest` and `MemberListQueryCountSliceTest`. This run's
+  server leg reads the fixed server: its statements per request on MariaDB are the check that the constant held there.
 - *The app's memory while a phone uploads is not its heap*: the profile's upload of 50 photos on the local production
   recipe (2026-10-24, JFR) peaked at 171 MB of Java heap of a 616 MB maximum and 609 MB resident, with the JVM's own
   CPU at 0.3 % on average. What fills the container at 1,000 photos stays this run's to watch.
