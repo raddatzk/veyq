@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Expenses' registration (ADR 0079, ADR 0108): the Pot kind with its page, its create dialog and "New Pot" entry (a
 // member's only), its READ / READ_WRITE share dialog, its re-key, download and import, its review of a reported entry, and
-// its application entry, which the switch reads. A Pot's row in a folder names its base currency (CR decision 8), opened
+// its application entry, which the switch reads. A Pot's row in a folder names its base currency (docs/apps/expenses.md), opened
 // under the Pot's own key — and nothing where that key does not open it.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

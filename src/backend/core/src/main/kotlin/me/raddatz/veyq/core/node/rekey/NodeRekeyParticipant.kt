@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.node.rekey
 
 /**
- * An application's part of a node's re-key (ADR 0109 point 2, CR decision 2): the fields it stores sealed under a node's
+ * An application's part of a node's re-key (ADR 0109 point 2): the fields it stores sealed under a node's
  * key — Memories' media meta, EXIF, original and derivative `K_blob` wraps and bucket names. Core owns the commit's
  * transaction and its order and calls every participant inside it; core names no application's table (ADR 0079).
  *

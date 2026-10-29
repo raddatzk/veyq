@@ -21,7 +21,7 @@
 # the instance — it publishes nothing and changes no operator service — and sits behind a profile, so `up` never
 # starts it.
 #
-# What the internet gives a real instance and a run has to give itself (found in cr-stack-e2e phase 2): the store
+# What the internet gives a real instance and a run has to give itself (found when the stack was built): the store
 # check uploads a test object through the PUBLIC origin the backend signs for (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`,
 # `https://<domain>`), from inside the app container — so the app must resolve its own domain to Traefik (public DNS
 # and the host's hairpin, on a real host) and trust the certificate Traefik serves there (a public CA's, on a real
@@ -138,7 +138,7 @@ services:
     volumes:
       - ${VEYQ_E2E_APP_TRUSTSTORE:?set by scripts/run_stack_e2e.py}:/pebble/truststore.p12:ro
 
-  # Lane L1's browser (ADR 0090 decision 3, cr-stack-e2e phase 2): Playwright in its official image, on the run's
+  # Lane L1's browser (ADR 0090 decision 3): Playwright in its official image, on the run's
   # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
   # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
   # `up` from starting it. The image's Playwright version is tests/e2e/package.json's exact pin (the orchestrator refuses a

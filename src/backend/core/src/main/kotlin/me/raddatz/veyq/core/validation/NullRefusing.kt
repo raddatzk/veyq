@@ -18,7 +18,7 @@ import com.fasterxml.jackson.databind.exc.InvalidNullException
  * it refused the absent property too. `getAbsentValue` is what tells the two apart.
  *
  * The refusal is an `InvalidNullException` (a `MismatchedInputException`), which core's mapper answers with the
- * contract's `400 invalid_request` (cr-api-fuzzing Q5).
+ * contract's `400 invalid_request` (ADR 0091 decision 9).
  */
 class NullRefusing(
     private val delegate: JsonDeserializer<Any>? = null,

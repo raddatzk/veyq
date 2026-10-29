@@ -47,7 +47,7 @@ data class Reapplied(
 )
 
 /**
- * Re-applies the erasure ledger at start (ADR 0056 decision 8, decision 5 of cr-backup-erasure-and-retention): every
+ * Re-applies the erasure ledger at start (ADR 0056 decision 8): every
  * listed object whose row exists is erased through its kind's own eraser — the one that erased it the first time — so a
  * restore of a capture older than an erasure does not bring it back; per item the last block or lift line wins; a case
  * the database lacks comes back as a stub, and one it holds moves on to the state its last line names; a hold that ended

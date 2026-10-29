@@ -258,7 +258,7 @@ describe('the overviews', () => {
   })
 
   it('list the people in join order, whichever entry names them first (an import mints new entry ids)', () => {
-    // The lane L1 pass (cr-expenses-ledger step 7): an imported Pot listed "deleted people" first, the original last —
+    // The lane L1 pass: an imported Pot listed "deleted people" first, the original last —
     // the rows followed the first entry, by id, that named each person. The museum alone: Cleo pays, so she comes first.
     const museum = trip.entries.find((e) => e.body.title === 'Museum')!
     const one = buildLedger(potOf(trip, [museum]), base)

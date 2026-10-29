@@ -10,7 +10,7 @@
 //    request carrying anything more (a currency, a `base=`) is foreign like any other.
 //
 // What a page TRIED counts, not only what reached the network: the page's own Content-Security-Policy refuses most
-// foreign requests inside the renderer, before any route sees them (measured in cr-stack-e2e phase 2 — an injected
+// foreign requests inside the renderer, before any route sees them (measured when the lane was built — an injected
 // `fetch('https://example.org/')` on admin-web never reached the route and the run stayed green). A refusal is the
 // policy working, and still a finding here: the page wanted something that is not the instance. So every CSP
 // violation a page reports is recorded beside the aborted requests.

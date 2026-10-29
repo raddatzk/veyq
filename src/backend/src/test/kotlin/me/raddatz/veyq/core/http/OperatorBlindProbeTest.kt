@@ -426,7 +426,7 @@ class OperatorBlindProbeTest {
             // an order names a share by id across the instance; the rest act on a case, which outlives its space
             "enterModerationOrder", "listModerationOrders", "deferModerationStatement", "recordModerationHandover",
             "getModerationCaseExport",
-            // the review reads (cr-moderation-review-and-measures decision 6): a case's held snapshot, read from the hold —
+            // the review reads (ADR 0093 § 3): a case's held snapshot, read from the hold —
             // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
             "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles", "listCasePotRevisions",
         )

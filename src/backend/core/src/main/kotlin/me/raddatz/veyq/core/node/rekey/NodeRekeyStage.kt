@@ -7,7 +7,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * The staged parts of a node's re-key (CR decision 1): a node with more fields than one request carries — a folder of
+ * The staged parts of a node's re-key (ADR 0109 point 2): a node with more fields than one request carries — a folder of
  * many children, a Memory of many photos, a link with many guests — sends them here first, at most the contracts'
  * caps per call, and `commitNodeRekey` swaps them in in one transaction. Core's own parts (children, attachment blobs,
  * shares, identities) and each application's ([NodeRekeyParticipant.part]) share the table, keyed by the client-minted

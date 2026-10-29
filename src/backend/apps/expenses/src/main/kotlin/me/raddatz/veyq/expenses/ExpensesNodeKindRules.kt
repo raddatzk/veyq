@@ -38,7 +38,7 @@ class ExpensesNodeKindRules : NodeKindRules {
 }
 
 /**
- * Which share roles a Pot takes (ADR 0108 decision 2, CR decision 6): `READ` (see the ledger) and `READ_WRITE` (and
+ * Which share roles a Pot takes (ADR 0108 decision 2, uc.expenses.share-pot): `READ` (see the ledger) and `READ_WRITE` (and
  * append revisions to it). **Never `WRITE_ONLY`**: a write-only guest reads nothing, so it has no balance to write
  * against and no heads to name — `illegal_scope`, fail closed.
  */

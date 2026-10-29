@@ -22,7 +22,7 @@ import { clearModerationKeys, currentModerationKey } from './moderationKeys'
 import { ModerationBundleMismatch, unlockModeration } from './unlockModeration'
 
 /**
- * The moderation surface's unlock (cr-moderators-and-the-moderation-key decision 7, ADR 0099 §§ 3, 6) with the real
+ * The moderation surface's unlock (ADR 0099 §§ 3, 6) with the real
  * vault and the real crypto: it opens only the moderation grants, refuses a published bundle that is not the opened
  * key's, delivers after the pin check, and leaves the vault EMPTY — Master Key and identity private key gone — having
  * called no client but the moderation one (every other factory throws and is recorded, `guardedClients`).

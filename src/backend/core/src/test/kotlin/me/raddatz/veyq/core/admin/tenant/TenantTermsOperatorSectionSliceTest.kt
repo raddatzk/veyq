@@ -154,7 +154,7 @@ class TenantTermsOperatorSectionSliceTest {
 
     @Test
     fun theRecordsPointerIsAlwaysServedAndReopensNoGate() {
-        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice); the section keeps a
+        // The record's Art. 13 information is the privacy notice's (ADR 0035 decision 8); the section keeps a
         // pointer, always there since the record is kept wherever a guest may write (ADR 0093 § 10).
         val (tenantId, member) = acceptedMember("terms-op-record.example.com")
         val r = read(member, tenantId)

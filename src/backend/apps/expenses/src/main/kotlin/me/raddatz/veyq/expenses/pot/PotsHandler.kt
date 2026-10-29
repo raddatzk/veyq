@@ -129,7 +129,7 @@ class PotsHandler(
         }
     }
 
-    /** A member's batch of revisions (CR decision 1). */
+    /** A member's batch of revisions (ADR 0108 decision 3). */
     fun append(userId: String, scopeId: String, nodeId: String, nodeEpoch: Int, writes: List<RevisionWrite>): PotWriteOutcome {
         if (!PotRequests.valid(writes)) return PotWriteOutcome.Invalid
         access.check(userId, scopeId, WRITE)
@@ -141,7 +141,7 @@ class PotsHandler(
     }
 
     /**
-     * A member's erasure of a participant's record (CR decision 4). Not asked of the application switch: an erasure is a
+     * A member's erasure of a participant's record (ADR 0108 decision 3). Not asked of the application switch: an erasure is a
      * removal, which an application off never refuses (uc.platform.switch-application-off E2) — a participant's name
      * goes when a member says so.
      */

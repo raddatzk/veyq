@@ -1,5 +1,5 @@
 // Expenses' part of the unified level list (inbox #407, ADR 0079): the ROW DATA of a folder level's Pots, which core draws.
-// A Pot's row names its base currency as its one detail (CR decision 8, docs/apps/README.md § How an application shows
+// A Pot's row names its base currency as its one detail (docs/apps/README.md § How an application shows
 // facts), read from its sealed meta under the Pot's own key — no total, which would need every Pot's revisions read to
 // draw a folder. The actions are `./rights.ts`' answer for THAT Pot: rename and move for a member who may write, nothing
 // for a guest; the heart and the download are core's row actions; a selection deletes through core's `deleteNode`.

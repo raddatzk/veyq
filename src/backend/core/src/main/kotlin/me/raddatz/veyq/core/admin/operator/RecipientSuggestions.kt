@@ -14,10 +14,10 @@ import java.net.URI
 data class RecipientSuggestion(val kind: RecipientKind, val host: String)
 
 /**
- * The recipients the instance itself knows of (cr-instance-privacy-notice decision 3): an external object store's host
+ * The recipients the instance itself knows of (ADR 0035 decision 8, uc.admin.privacy-notice): an external object store's host
  * (browsers fetch from it, so its provider sees their addresses) and the instance mail relay's host. The bundled store
  * runs on the operator's own host and is no recipient of its own; a space's mail relay is its owner's, named generically
- * by the notice (decision 4), so it is never suggested.
+ * by the notice, so it is never suggested.
  */
 @ApplicationScoped
 class RecipientSuggestions(

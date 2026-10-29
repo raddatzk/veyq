@@ -1,4 +1,4 @@
-// The application's half of a node's re-key (ADR 0109 point 2, CR decision 2): what a kind registers so that every field
+// The application's half of a node's re-key (ADR 0109 point 2): what a kind registers so that every field
 // it stores sealed under a node's key moves to the node's new key. Core re-seals the node's own entry, its children's
 // entries, its meta (and core's cover inside it), its attachment wraps, its links and its drop key; a kind adds what only
 // it knows — its fields inside the node's meta (Memories' banner wraps) and its own rows (Memories' media, buckets),

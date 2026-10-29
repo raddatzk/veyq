@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * Memories' part of a node's re-key (ADR 0109 point 2, CR decision 2): `listMediaRekey` serves, and Memories' participant
+ * Memories' part of a node's re-key (ADR 0109 point 2): `listMediaRekey` serves, and Memories' participant
  * in core's `commitNodeRekey` rewrites, every field of a Memory sealed under its key — each medium's meta and EXIF, the
  * `K_blob` wrap of its original and of each derivative, a trashed medium's too, and every named bucket. A `WRITE_ONLY`
  * guest's medium and its primary bucket are under the guest's own `K_up` (point 5): neither listed, nor required, nor

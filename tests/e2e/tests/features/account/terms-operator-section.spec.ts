@@ -3,7 +3,7 @@
 //
 //   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section and,
 //      at the record's anchor, its pointer to the privacy notice, which holds the record's
-//      information and its right to object (DSA Art. 14(1); ADR 0035 decision 8, Q27 of cr-instance-privacy-notice).
+//      information and its right to object (DSA Art. 14(1); ADR 0035 decision 8).
 //   2. The space's owner publishes terms of their own: the Terms panel shows the section read-only below them, and the
 //      owner, like every member, is then asked to agree — to the space's text and the section after it.
 //   3. A guest opening a link of the space meets the same two at the link's terms gate, and after accepting, the link.

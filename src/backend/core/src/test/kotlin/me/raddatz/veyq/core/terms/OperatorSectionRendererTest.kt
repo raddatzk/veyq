@@ -87,7 +87,7 @@ class OperatorSectionRendererTest {
 
     @Test
     fun theRecordsPointerIsAlwaysThereAndSetApart() {
-        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice): the section keeps
+        // The record's Art. 13 information is the privacy notice's (ADR 0035 decision 8): the section keeps
         // a pointer, always (the record is kept wherever a guest may write, ADR 0093 § 10), and never inside the text.
         val r = render()
         assertTrue(r.record.en.contains("privacy notice of this instance") && r.record.de.contains("Datenschutzerklärung dieser Instanz"))

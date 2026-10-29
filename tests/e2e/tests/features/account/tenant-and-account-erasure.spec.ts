@@ -1,4 +1,4 @@
-// Erasing an account and deleting a tenant, in a browser (cr-account-erasure phase 4's browser pass; ADR 0101,
+// Erasing an account and deleting a tenant, in a browser (ADR 0101,
 // uc.account.erase-account, uc.admin.delete-tenant). Two accounts are born the only way accounts are born — a tenant
 // invite each, as moderation.spec.ts births its deputy: A owns "E2E Erase", B owns "E2E Keep". Then:
 //

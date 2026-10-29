@@ -223,7 +223,7 @@ paths:
     post:
       tags: [media]
       operationId: stageMediaRekey
-      summary: Stage one batch of a node's re-sealed Memories fields under a core re-key id (CR decision 1).
+      summary: Stage one batch of a node's re-sealed Memories fields under a core re-key id (ADR 0109 point 2).
       description: >
         Up to 256 media and 256 buckets per call, each value re-sealed under the node's NEW key: a medium's
         `wrappedMeta` and `wrappedExif` (bound as before, its `metaRevision` + 1 for the meta), and every `K_blob` of it

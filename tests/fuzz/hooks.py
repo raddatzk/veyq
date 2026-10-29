@@ -5,7 +5,7 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
 - **`refusal_by_location`** — a request the contract does not allow is refused the way veyq refuses: a malformed query,
   header or body with the contract's `400 ErrorResponse{code: invalid_request}`; a malformed path segment with `400` or
   `404` (a path id that is no UUID matches no route — `IdBoundarySliceTest`; a patterned segment may reach bean
-  validation, and neither answer leaks anything, owner decision Q1 of cr-api-fuzzing). Which part a negative case
+  validation, and neither answer leaks anything, ADR 0091 decision 9). Which part a negative case
   negated is Schemathesis' own record (`case.meta.components`). The status half reuses the built-in
   `negative_data_rejection` with that per-location status set, so its exclusions — a "negation" that is valid once
   serialized, an additional property on a parameter — are the tool's, not a second copy here.

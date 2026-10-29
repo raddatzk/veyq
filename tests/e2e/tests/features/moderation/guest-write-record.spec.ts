@@ -1,5 +1,4 @@
-// The guest-write record through the release's own Traefik (ADR 0093 § 10, ADR 0094 § For the moderation CR; the
-// stack scenario cr-guest-write-record's phase 4 asks for). The record has no switch, so a link guests may add
+// The guest-write record through the release's own Traefik (ADR 0093 § 10, ADR 0094 § For the moderation CR). The record has no switch, so a link guests may add
 // through records with the default N = 7. The tenant owner shares a folder with a link guests may add through, and
 // signs out of the browser; then a guest opens the link and creates a folder at its first write.
 //

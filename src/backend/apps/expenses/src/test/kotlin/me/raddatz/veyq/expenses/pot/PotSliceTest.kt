@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * A Pot's revisions (ADR 0108 decisions 3-6, CR decisions 1-6), each negative anchored on its status and code beside a
+ * A Pot's revisions (ADR 0108 decisions 2-6), each negative anchored on its status and code beside a
  * positive control on the same predicate: the append is all or none on its records' latest revisions; only a member's
  * erasure removes a revision, and only its record's earlier ones; a Pot is shared `READ` or `READ_WRITE`, never
  * `WRITE_ONLY`; a guest reads every revision but no writer, and each revision it appends is one guest write; switched

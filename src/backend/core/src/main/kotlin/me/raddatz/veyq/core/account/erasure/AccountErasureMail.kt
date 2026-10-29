@@ -13,7 +13,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * The one mail an erasure request sends (ADR 0101 decision 2, CR decision 6): to the account's address, through the
+ * The one mail an erasure request sends (ADR 0101 decision 2): to the account's address, through the
  * instance mail (ADR 0097 decision 3), **after** the request committed and while the address still exists — that the
  * erasure was requested, when it completes, that only the Server Owner can stop it until then, and what stays. A
  * stolen session that erases an account is so seen by its owner. A mail that did not go out is retried by the purge's

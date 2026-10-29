@@ -219,7 +219,7 @@ describe('PotDetail for a member', () => {
   })
 
   it('a save on an entry the live poll changed under the open editor is stale too, never written over theirs', async () => {
-    // The lane L1 pass (cr-expenses-ledger step 3): the poll brought Ben's version in while Anna's editor showed the one
+    // The lane L1 pass: the poll brought Ben's version in while Anna's editor showed the one
     // before, so a write sealed on the latest HELD revision would land as n + 2 and drop Ben's change unseen.
     const w = mountPot()
     await flushPromises()
@@ -349,7 +349,7 @@ describe('PotDetail for a member', () => {
   })
 
   it('a removed person appears nowhere, not even as a deleted one; a deleted one is still counted (control)', async () => {
-    // The lane L1 pass (cr-expenses-ledger step 6): after Cleo was deleted and an unnamed person removed, the People
+    // The lane L1 pass: after Cleo was deleted and an unnamed person removed, the People
     // tab said "2 deleted people" — the removed one counted, though nothing shows them anywhere else.
     const DAN = '0e000000-0000-4000-8000-000000000004'
     server.current.append([{ entryId: DAN, content: person('Dan', 4) }])

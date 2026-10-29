@@ -9,7 +9,7 @@
 //   - the instance is the restored one (`setupRequired` false), and the owner signs in the app's own way (password +
 //     Emergency Kit Secret Key, unwrapped against the RESTORED server's key material);
 //   - FIRST, before any content: the candidate reports `configSecretState: OK` - the key that came with the backup is
-//     the one the restored rows were sealed for (Decision 4 of cr-upgrade-proof); written for the run's summary too;
+//     the one the restored rows were sealed for; written for the run's summary too;
 //   - Memories: the Memory's name, date, place and cover (its uploaded image and crop), every photo's bytes, the chapter's;
 //   - Depot: the folder's name, each file's name, sealed type and modified time, size and bytes;
 //   - the drop box: its name, each guest's folder (named after the guest) and the guest's files, as above;

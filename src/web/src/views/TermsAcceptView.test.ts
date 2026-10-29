@@ -107,7 +107,7 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
     expect(body.indexOf('Be kind.')).toBeGreaterThanOrEqual(0)
     expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Be kind.'))
     expect(w.find('#guest-write-record').text()).toContain('In the privacy notice.')
-    // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice): linked, not repeated.
+    // The record's Art. 13 information is the privacy notice's (ADR 0035 decision 8): linked, not repeated.
     expect(w.find('#guest-write-record a').attributes('href')).toBe('/privacy#guest-write-record')
   })
 

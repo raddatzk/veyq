@@ -197,7 +197,7 @@ test(
   },
   async ({ browser }) => {
     // The invited owner's browser, not the Server Owner's: a context of its own, confined the same way. Only the
-    // preview is opened — accepting is the Memory round trip's (cr-stack-e2e phase 3).
+    // preview is opened — accepting is the Memory round trip's.
     const invitee = await browser.newContext()
     const confined = await confineToInstance(invitee)
     const tab = await invitee.newPage()

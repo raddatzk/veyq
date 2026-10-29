@@ -19,7 +19,7 @@ import com.fasterxml.jackson.databind.JsonDeserializer
 open class TrimmingStringDeserializer : JsonDeserializer<String>() {
     /** A JSON string only: anything else is a value of the wrong type, refused as one (`MismatchedInputException`,
      *  `400 invalid_request`). It used to read any scalar as its text and an object or array as `""` — so `false` became
-     *  the user name "false" and `{}` an empty one (the API fuzzing's first run, cr-api-fuzzing Q5). */
+     *  the user name "false" and `{}` an empty one (the API fuzzing's first run, ADR 0091 decision 9). */
     override fun deserialize(parser: JsonParser, context: DeserializationContext): String =
         if (parser.hasToken(JsonToken.VALUE_STRING)) parser.text.trim()
         else context.handleUnexpectedToken(String::class.java, parser) as String

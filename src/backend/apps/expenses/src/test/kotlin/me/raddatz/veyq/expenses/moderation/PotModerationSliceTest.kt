@@ -32,7 +32,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * A Pot's entry as a reported item (uc.moderation.report, CR decision 7): the report reaches the whole entry, its hold
+ * A Pot's entry as a reported item (uc.moderation.report, ADR 0108 decision 6): the report reaches the whole entry, its hold
  * copies every revision of it and nothing of another entry, and what the hold copied outlives the participant's erasure
  * and the Pot's purge — the moderator's review reads it from the snapshot, without a writer.
  */

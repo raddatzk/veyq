@@ -237,7 +237,7 @@ class RekeyCoreSliceTest {
         assertEquals(1, row(w.root).epoch)
     }
 
-    /** CR decision 2, fail closed: a row sealed under the node's key with no staged value refuses the whole commit —
+    /** ADR 0109 point 2, fail closed: a row sealed under the node's key with no staged value refuses the whole commit —
      *  nothing written — and the same commit lands once it is staged. */
     @Test
     fun aCommitMissingAStagedPartWritesNothing() {
@@ -378,7 +378,7 @@ class RekeyCoreSliceTest {
         }
     }
 
-    /** CR decision 4: an owner's scope row reads `rekeying` while a node lags, derived (a member's row:
+    /** ADR 0109 point 1: an owner's scope row reads `rekeying` while a node lags, derived (a member's row:
      *  [aMembersScopeRowReadsRekeyingWhileANodeLags]). */
     @Test
     fun anOwnersScopeRowReadsRekeyingWhileANodeLags() {

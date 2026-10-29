@@ -1,4 +1,4 @@
-// The moderation surface's unlock (ADR 0099 §§ 3, 6, cr-moderators-and-the-moderation-key decision 7,
+// The moderation surface's unlock (ADR 0099 §§ 3, 6,
 // uc.moderation.serve-as-moderator steps 4-6). The vault is opened ONLY to open the moderation grants:
 //
 //   1. sign in if this page holds no session of this account, and open the vault with the password AND the Secret Key —

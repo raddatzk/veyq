@@ -3,7 +3,7 @@
 // tenant taken offline (the tenant's page, `veyq-admin tenant suspend`). Both doors build it here, so the rules hold for
 // the UI and the CLI alike:
 //   - the facts go in the clear, for the mail to the blocked member or the tenant's owners — they cannot sign in to open
-//     a sealed copy (owner decision Q24 of cr-statement-legal-gaps); the server mails them once and keeps them only
+//     a sealed copy (ADR 0093 § 7); the server mails them once and keeps them only
 //     sealed;
 //   - that log copy is sealed HERE to the moderation key's PUBLIC half (`moderation-step-facts` [epoch, statementId]),
 //     bound to the statement id this client mints — admin-web holds no private half and opens nothing

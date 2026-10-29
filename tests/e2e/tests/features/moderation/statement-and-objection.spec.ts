@@ -1,5 +1,4 @@
-// The statement of reasons and the objection, in a browser (cr-statement-of-reasons-and-objection phase 3's browser pass;
-// uc.moderation.object-to-a-measure, ADR 0093 § 7, ADR 0099 § 5). The tenant owner keeps a Memory with a photo and
+// The statement of reasons and the objection, in a browser (uc.moderation.object-to-a-measure, ADR 0093 § 7, ADR 0099 § 5). The tenant owner keeps a Memory with a photo and
 // shares it; a guest reports the photo and leaves an address; then
 //
 //   1. the Server Owner — a moderator — blocks the photo with the facts of its statement; the measure shows whom the

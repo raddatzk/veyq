@@ -1,5 +1,4 @@
-// A Server Owner's own step over content carries a statement of reasons, in a browser (cr-statement-legal-gaps' browser
-// pass; uc.moderation.object-to-a-measure A7, ADR 0093 § 7, DSA Art. 17(1)(d)). A member is born the only way accounts
+// A Server Owner's own step over content carries a statement of reasons, in a browser (uc.moderation.object-to-a-measure A7, ADR 0093 § 7, DSA Art. 17(1)(d)). A member is born the only way accounts
 // are born — a tenant invite — keeps a Memory with a photo there and shares it; then
 //
 //   1. a guest reports the photo;

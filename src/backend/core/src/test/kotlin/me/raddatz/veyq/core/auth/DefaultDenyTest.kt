@@ -8,7 +8,7 @@ import jakarta.ws.rs.core.Response
 import org.junit.jupiter.api.Test
 
 /**
- * Proves default-deny is actually active (cr-0012 phase 3): a JAX-RS endpoint with **no** security annotation
+ * Proves default-deny is actually active (ADR 0008): a JAX-RS endpoint with **no** security annotation
  * is denied, not served. The probe lives in test scope only, so it never ships — its sole purpose is to fail
  * the day someone disables `quarkus.security.jaxrs.deny-unannotated-endpoints` or it silently stops working.
  */

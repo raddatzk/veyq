@@ -444,7 +444,7 @@ components:
         The statement of reasons a Server Owner's own step over content carries (ADR 0093 § 7; DSA Art. 17(1)(c), (d)) —
         entered with the step, in the one template. It goes by instance mail to the
         member whose sign-in is blocked, or to each owner of the tenant taken offline, **with the facts**: they cannot
-        sign in to open a sealed copy (owner decisions Q24-Q25 of cr-statement-legal-gaps). The server mails the facts
+        sign in to open a sealed copy (ADR 0093 § 7). The server mails the facts
         once, after the step committed, and keeps them only as `factsForLog`, sealed; the objection goes to the instance contact.
         The step's answer reports whom that mail reached (`StatementDelivery`); a recipient it did not reach is not mailed
         again, so the Server Owner tells them through the contact, with the words their own client still holds.
@@ -465,7 +465,7 @@ components:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
             The Server Owner's own words, mailed in the clear to the member whose sign-in they block or to the owners of
-            the tenant they take offline (ADR 0093 § 7, owner decision Q24 of cr-statement-legal-gaps): a blocked member
+            the tenant they take offline (ADR 0093 § 7): a blocked member
             cannot sign in to open a sealed copy, and the mail is the statement's only channel. A consented disclosure by
             its author (ADR 0049 decision 2); the server stores only the sealed copy beside it.
           type: [string, "null"]

@@ -1,5 +1,4 @@
-// Reviewing a case and taking a measure, in a browser (cr-moderation-review-and-measures phase 5's browser pass;
-// uc.moderation.review-a-case, uc.moderation.take-a-measure, ADR 0093 §§ 3, 5-6, ADR 0099 § 6). The tenant owner keeps a
+// Reviewing a case and taking a measure, in a browser (uc.moderation.review-a-case, uc.moderation.take-a-measure, ADR 0093 §§ 3, 5-6, ADR 0099 § 6). The tenant owner keeps a
 // Memory with a photo and shares it read-only; then
 //
 //   1. a guest of the link opens the photo and reports it;

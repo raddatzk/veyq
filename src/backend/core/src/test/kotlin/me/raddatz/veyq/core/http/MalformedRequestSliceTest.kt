@@ -112,7 +112,7 @@ class MalformedRequestSliceTest {
         assertRefused(post("/api/scopes/${UUID.randomUUID()}/blob-uploads-batch", """{"items":[null]}"""), "items")
     }
 
-    // --- a JSON value of the wrong type (StrictJsonTypes; the API fuzzing's first run, cr-api-fuzzing Q5) ---------
+    // --- a JSON value of the wrong type (StrictJsonTypes; the API fuzzing's first run, ADR 0091 decision 9) ---------
 
     /** Jackson coerced a number into a string field: `12345678` became the capability tag `"12345678"`. */
     @Test

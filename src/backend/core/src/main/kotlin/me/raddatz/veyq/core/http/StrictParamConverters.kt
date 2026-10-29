@@ -17,7 +17,7 @@ import java.util.UUID
  * Without these the framework converted leniently or refused with the wrong status: a query parameter it could not
  * convert answered an empty `404` (JAX-RS' rule for a query parameter), `java.util.UUID.fromString` accepts
  * `1-1-1-1-1` and versions the id columns refuse ([StorableUuid]), `Boolean.valueOf` reads `revokeLinks=5` as `false`, and an integer took a `+` — the API fuzzing's first
- * run (cr-api-fuzzing, owner decision Q5). A converter that throws a `WebApplicationException` has it propagated as it
+ * run (ADR 0091 decision 9). A converter that throws a `WebApplicationException` has it propagated as it
  * is, so the refusal is the status the contract declares. `MalformedRequestSliceTest` holds the query half.
  *
  * **Where a value came from is read off the request, not off the parameter.** The framework hands a converter the
