@@ -63,15 +63,24 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * the gallery thumbnail's size ([TIER_SPECS] `THUMBNAIL`) by the deriver — the media Worker, the decode freed once the
  * small JPEG is encoded — ONE at a time, so a large pick never decodes many at once (inbox #558). Now the renderer stays at
  * 0.49-0.53 GiB through the same upload, its peak 0.61-0.67 GiB against 1.11-1.18 GiB, in the same time (0.44-0.46 GiB
- * with no preview at all). A photo the deriver cannot read falls back to the file itself, as before. A video keeps its
- * derived poster.
+ * with no preview at all). A photo the deriver cannot read falls back to the file itself, as before.
+ *
+ * **A video's poster joins the same queue** (inbox #786): its first frame, drawn at the thumbnail tier's size by
+ * `deriveVideoPoster`, for a tile near the viewport, one decode at a time with the photos. It used to be derived for
+ * every picked video at once, at the lightbox's 2048 px: picking 20 clips of 1080p (profile S2v, 2026-10-29) kept 34-41
+ * `<video>` players alive and 18-20 of them decoding at once, the renderer peaking at 1.51-1.78 GiB within 0.5-2.4 s of
+ * the pick against 0.94-0.96 GiB with no tile poster, and the main thread's 20 large encodes cost the upload 3.5 s at
+ * throttle 4. Now 2 decode at once (this queue's and the upload's own), the peak is 1.09-1.12 GiB, the upload takes
+ * 8.3-8.8 s (12.4-12.5 s at throttle 4) against 8.7-9.1 s (14.3-14.7 s), and a tile whose file is uploaded before its
+ * turn shows the listed thumbnail without a poster of its own. A video the browser cannot decode stays icon-only.
+ * The probe below still reads every picked video's size at once, a `<video>` each that loads only its metadata.
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
   const deriver = createBrowserDeriver()
-  // `url` is null for a video until its first-frame poster is derived: an <img> can't decode raw video bytes, so a
-  // video's preview is a locally-derived poster (badge drawn over it, #105) — matching the persisted tile. A photo's
-  // is null until its tile-sized preview is drawn; `drawn` says it was asked of the deriver (it may still be on its way).
+  // `url` is null until the tile's picture is drawn: a photo's tile-sized preview, or — an <img> can't decode raw video
+  // bytes — a video's tile-sized first-frame poster (badge drawn over it, #105), matching the persisted tile; it stays
+  // null for a video the browser cannot decode. `drawn` says it was asked of the deriver (it may still be on its way).
   type Preview = { url: string | null; aspectRatio: number; donated: boolean; capturedAt?: number; drawn: boolean }
   const previews = reactive(new Map<string, Preview>())
   /** The tiles each grid (owner) has mounted, as upload file ids, nearest to its viewport's centre first. */
@@ -114,11 +123,10 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
       }
       for (const f of files) {
         if (previews.has(f.id)) continue
-        const isVideo = f.mediaType.startsWith('video/')
-        // no source yet: a photo's is drawn once its tile is near the viewport ([drawNext]), a video's poster follows
+        // no picture yet: a photo's preview and a video's poster are drawn once its tile is near the viewport ([drawNext])
         previews.set(f.id, {
           url: null,
-          drawn: isVideo,
+          drawn: false,
           aspectRatio: galleryDisplayAspectRatio(undefined, undefined),
           donated: false,
           // The fallback half of the capture-time rule, available synchronously — so the tile has a place in
@@ -126,7 +134,7 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
           // probe below returns.
           capturedAt: captureTimeOf(undefined, f.file.lastModified).capturedAt,
         })
-        void probePreview(f, isVideo)
+        void probePreview(f)
       }
       drawNext()
     },
@@ -140,22 +148,28 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
     drawNext()
   }
 
-  /** Draw the first wanted photo's preview not drawn yet, unless one is being drawn: one decode at a time. */
+  /** Draw the first wanted tile's picture not drawn yet — a photo's preview or a video's poster — unless one is being
+   *  drawn: one decode at a time, photos and videos in the one queue. */
   function drawNext() {
     if (drawing || disposed) return
     const files = new Map(optimisticFiles.value.map((f) => [f.id, f]))
     const id = [...new Set([...wanted.values()].flat())].find((w) => files.has(w) && previews.get(w)?.drawn === false)
     if (id === undefined) return
-    const file = files.get(id)!.file
+    const { file, mediaType } = files.get(id)!
     previews.set(id, { ...previews.get(id)!, drawn: true })
     drawing = true
-    deriver
-      .deriveImage(file, TIER_SPECS.THUMBNAIL)
-      .then(
-        ({ bytes }) => URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' })),
-        () => URL.createObjectURL(file), // a photo the deriver cannot read: the file itself, as an <img> may still show it
-      )
+    const jpeg = (bytes: Uint8Array) => URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' }))
+    const picture: Promise<string | null> = mediaType.startsWith('video/')
+      ? // an <img> can't decode video bytes: a video's picture is its first frame, at the thumbnail's size; a video the
+        // browser cannot decode stays icon-only (no url), as its listed tile does
+        deriver.deriveVideoPoster(file, TIER_SPECS.THUMBNAIL).then(jpeg, () => null)
+      : deriver.deriveImage(file, TIER_SPECS.THUMBNAIL).then(
+          ({ bytes }) => jpeg(bytes),
+          () => URL.createObjectURL(file), // a photo the deriver cannot read: the file itself, as an <img> may still show it
+        )
+    picture
       .then((url) => {
+        if (url === null) return
         const p = previews.get(id)
         if (p && !disposed) previews.set(id, { ...p, url })
         else URL.revokeObjectURL(url) // its tile left, or the view did, while it was drawn
@@ -166,23 +180,18 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
       })
   }
 
-  async function probePreview(f: UploadFile, isVideo: boolean) {
+  async function probePreview(f: UploadFile) {
     try {
-      // The capture-time key is refined to the EXIF date here, in the same pass that refines the aspect ratio
-      // and derives a video poster — one read of the picked file, before it is queued onto the wire.
+      // The capture-time key is refined to the EXIF date here, in the same pass that refines the aspect ratio — one
+      // read of the picked file's head, before it is queued onto the wire. No picture is drawn here: that is [drawNext]'s.
       const { capturedAt } = await readCaptureTime(f.file, f.mediaType, f.file.lastModified)
       const withDate = previews.get(f.id)
       if (withDate) previews.set(f.id, { ...withDate, capturedAt })
       const dims = await deriver.probeDimensions?.(f.file, f.mediaType)
       const withDims = previews.get(f.id)
       if (withDims && dims) previews.set(f.id, { ...withDims, aspectRatio: galleryDisplayAspectRatio(dims.w, dims.h) })
-      if (!isVideo) return
-      // derive the first-frame poster so a video shows a picture + a play badge, not a bare icon (#105)
-      const poster = await deriver.deriveVideoPoster(f.file)
-      const p = previews.get(f.id)
-      if (p) previews.set(f.id, { ...p, url: URL.createObjectURL(new Blob([poster as BlobPart], { type: 'image/jpeg' })) })
     } catch {
-      // best-effort: keep the fallback aspect ratio; a video with no derivable poster stays icon-only
+      // best-effort: keep the fallback aspect ratio
     }
   }
 

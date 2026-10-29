@@ -94,6 +94,11 @@ export interface Window {
    * which of them refuse the run.
    */
   failedRequests: string[]
+  /**
+   * Every read of an object URL (`blob:`) of the window that did not finish, as `METHOD url errorText`: the page reading
+   * a file it holds, no request leaving it — a media element cancels its read when its source is dropped. Not judged.
+   */
+  cancelledBlobReads: string[]
   /** Every answer of the window with a status of 400 or more, as `METHOD origin+path status` — judged by the driver too. */
   httpErrors: string[]
   /**
@@ -105,6 +110,117 @@ export interface Window {
   metrics: Record<string, number>
   /** The browser's resident memory around and in the window ({@link sampleMemory}, inbox #558); null where no `/proc`. */
   memory: MemoryReading | null
+  /** The page's media players in the window ({@link recordMediaPlayers}, inbox #786); only where the scenario asks. */
+  media?: MediaReading
+  /** What the scenario reads of its own in the window (`profiled`'s `extra`), as it is. */
+  extra?: Record<string, unknown>
+}
+
+/** One media player of the window: when it was made, first played and destroyed (window ms; absent: not in the window). */
+interface MediaPlayer {
+  createdAtMs?: number
+  playedAtMs?: number
+  pausedAtMs?: number
+  destroyedAtMs?: number
+}
+
+/**
+ * The page's media players in the window, from CDP's `Media` domain (inbox #786): every `<video>` element that is given a
+ * source makes one (a `WebMediaPlayer`, its demuxer and decoders), whether or not it is ever attached to the document, and
+ * it lives until the element drops its source or is collected. `maxLive` is the most alive at once; `maxPlaying` the most
+ * between their first `play` and their `pause` (or end) at once, i.e. decoding frames. Times are window ms, the media
+ * log's own clock tied to the page's by the earliest delivery of any batch (`clockSlackMs`: how late that batch arrived
+ * at most, so a time may be early by up to that much — never the order, which is the log's own).
+ */
+export interface MediaReading {
+  players: MediaPlayer[]
+  created: number
+  maxLive: number
+  maxLiveAtMs: number
+  maxPlaying: number
+  maxPlayingAtMs: number
+  clockSlackMs: number
+}
+
+/**
+ * Starts recording the page's media players (CDP `Media.enable`); the returned function stops listening and returns the
+ * reading with times relative to `t0` (epoch ms). Players made before the start are not counted.
+ */
+export async function recordMediaPlayers(cdp: CDPSession): Promise<{ start: (t0: number) => void; stop: () => Promise<MediaReading> }> {
+  const players = new Map<string, { created?: number; played?: number; paused?: number; destroyed?: number }>()
+  /** Per batch: when it arrived (epoch ms) and its latest event (the log's clock, seconds). */
+  const deliveries: { at: number; latest: number }[] = []
+  let recording = false
+  const onEvents = (e: { playerId: string; events: { timestamp: number; value: string }[] }) => {
+    if (!recording) return
+    let latest = -Infinity
+    const p = players.get(e.playerId) ?? {}
+    for (const ev of e.events) {
+      let name: string | undefined
+      try {
+        name = (JSON.parse(ev.value) as { event?: string }).event
+      } catch {
+        continue
+      }
+      latest = Math.max(latest, ev.timestamp)
+      if (name === 'kWebMediaPlayerCreated') p.created ??= ev.timestamp
+      else if (name === 'kPlay') p.played ??= ev.timestamp
+      else if (name === 'kPause') p.paused ??= ev.timestamp
+      else if (name === 'kWebMediaPlayerDestroyed') p.destroyed ??= ev.timestamp
+    }
+    players.set(e.playerId, p)
+    if (latest > -Infinity) deliveries.push({ at: Date.now(), latest })
+  }
+  cdp.on('Media.playerEventsAdded', onEvents)
+  await cdp.send('Media.enable')
+  let t0 = Date.now()
+  return {
+    start(windowStart: number) {
+      t0 = windowStart
+      recording = true
+    },
+    async stop() {
+      // the log delivers in batches; one more beat lets the window's last ones arrive
+      await new Promise((r) => setTimeout(r, 1_500))
+      recording = false
+      cdp.off('Media.playerEventsAdded', onEvents)
+      await cdp.send('Media.disable')
+      const end = Date.now() - t0
+      // the log's clock (s) onto the window's (ms): the tightest offset any batch allows (each arrived after its events)
+      const offsets = deliveries.map((d) => d.at - t0 - d.latest * 1000)
+      const offset = offsets.length ? Math.min(...offsets) : 0
+      const slack = offsets.length ? Math.max(...offsets) - offset : 0
+      const ms = (s?: number) => (s === undefined ? undefined : Math.round(s * 1000 + offset))
+      const list = [...players.values()]
+        .filter((p) => p.created !== undefined)
+        .map((p) => ({ createdAtMs: ms(p.created), playedAtMs: ms(p.played), pausedAtMs: ms(p.paused), destroyedAtMs: ms(p.destroyed) }))
+      const most = (from: (p: MediaPlayer) => number | undefined, to: (p: MediaPlayer) => number | undefined) => {
+        const edges = list.flatMap((p) => {
+          const a = from(p)
+          if (a === undefined) return []
+          return [[a, 1], [to(p) ?? end, -1]] as [number, number][]
+        }).sort((x, y) => x[0] - y[0] || x[1] - y[1])
+        let now = 0
+        let best = { n: 0, at: 0 }
+        for (const [at, d] of edges) {
+          now += d
+          if (now > best.n) best = { n: now, at }
+        }
+        return best
+      }
+      const live = most((p) => p.createdAtMs, (p) => p.destroyedAtMs)
+      const playing = most((p) => p.playedAtMs, (p) => p.pausedAtMs ?? p.destroyedAtMs)
+      return {
+        players: list,
+        created: list.length,
+        maxLive: live.n,
+        maxLiveAtMs: live.at,
+        maxPlaying: playing.n,
+        maxPlayingAtMs: playing.at,
+        clockSlackMs: Math.round(slack),
+      }
+    },
+  }
 }
 
 /** Chromium's processes by their `--type`: the page's renderer (its workers are its threads), the GPU process, the rest. */
@@ -208,13 +324,29 @@ export const WINDOW_MARKS = { start: 'veyq-profile-window-start', end: 'veyq-pro
  * With the spec's `cpuProfile: false` the profiler is left out and no `.cpuprofile` is written; the trace and the throttle
  * are the same. Everything the operation needs typed is typed BEFORE this is called, so no keystroke is inside the window.
  */
-export async function profiled(browser: Browser, page: Page, cdp: CDPSession, operation: () => Promise<void>): Promise<Window> {
+export async function profiled(
+  browser: Browser,
+  page: Page,
+  cdp: CDPSession,
+  operation: () => Promise<void>,
+  options: {
+    /** Record the page's media players ({@link recordMediaPlayers}) into the window's `media`. */
+    media?: boolean
+    /** Read after the operation, before the window is written: the scenario's own reading, into `extra`. */
+    extra?: () => Promise<Record<string, unknown>>
+  } = {},
+): Promise<Window> {
   const { scenario, run, throttle, stem, cpuProfile = true } = spec()
   const failed: string[] = []
   const httpErrors: string[] = []
+  const blobReads: string[] = []
   page.on('requestfailed', (r) => {
     const url = new URL(r.url())
-    failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
+    // A `blob:` URL is the page reading a file it already holds (an object URL), never a request that leaves it: a
+    // `<video>` that has what it needed of a clip cancels the rest of its read when its source is dropped (S2v: two per
+    // clip, inbox #786). Recorded apart, never judged as a failed request.
+    if (url.protocol === 'blob:') blobReads.push(`${r.method()} ${r.url()} ${r.failure()?.errorText ?? ''}`)
+    else failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
   })
   page.on('response', (r) => {
     if (r.status() < 400) return
@@ -240,18 +372,22 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   if (cpuProfile) await cdp.send('Profiler.start')
 
   const metricsBefore = (await cdp.send('Performance.getMetrics')).metrics
+  const players = options.media ? await recordMediaPlayers(cdp) : null
   const resident = sampleMemory()
   const startedAt = Date.now()
   resident.start(startedAt)
+  players?.start(startedAt)
   const t0 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.start)
   await operation()
   const t1 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.end)
   const endedAt = Date.now()
   const memory = resident.stop()
   const { metrics } = await cdp.send('Performance.getMetrics')
+  const extra = options.extra ? await options.extra() : undefined
 
   const profile = cpuProfile ? (await cdp.send('Profiler.stop')).profile : null
   await browser.stopTracing()
+  const media = players ? await players.stop() : undefined
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
   if (profile) writeFileSync(`${OUT}/${stem}.cpuprofile`, JSON.stringify(profile))
 
@@ -283,10 +419,13 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     apiRequests,
     storeRequests,
     failedRequests: failed,
+    cancelledBlobReads: blobReads,
     httpErrors,
     metricsBefore: Object.fromEntries(metricsBefore.map((m) => [m.name, m.value])),
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
     memory,
+    ...(media ? { media } : {}),
+    ...(extra ? { extra } : {}),
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))
   return window

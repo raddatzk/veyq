@@ -20,7 +20,8 @@
    the Memory key. The TopBar **uploads** button shows a spinner + an active-file count badge, **and** the picked
    photos appear **immediately as tiles in that Memory's gallery grid** — with a **local preview** (the user's
    own image, before it is sealed, never uploaded in the clear: a photo drawn on the device at the gallery thumbnail's
-   size, one at a time, for the tiles near the viewport first, inbox #785) and a per-tile progress /
+   size, or a video's first frame at the same size, one at a time, for the tiles near the viewport first, inbox #785 and
+   #786) and a per-tile progress /
    error(+retry) state (cr-0074). A tile appears **at its capture-time place**, not at the front: the sort key is
    derived on device before sealing, from the same rule the sealed tier will carry, so the tile is already where
    it will stay. [uc.memory.gallery](uc.memory.gallery.md) owns that ordering rule.
@@ -106,6 +107,21 @@
   (`src/web/src/features/memories/useOptimisticTiles.ts`): 0.49–0.53 GiB, peak 0.61–0.67 GiB, in the same 10.4–11.6 s
   (13.0–13.4 s at throttle 4). The price is that a tile's picture arrives a moment after the tile (about 0.2 s per
   tile while the batch is being prepared: 12 of the 24 mounted tiles had theirs 2.5 s after the pick).
+- **A video's tile picture is drawn in the same queue.** A picked video's tile used to get its first frame at once, at
+  the lightbox's 2048 px: every picked video opened a `<video>` decoder in the same moment. Read in the profile's S2v
+  (20 clips of 1080p, H.264 at 16 Mbit/s, 6 s, 12.5 MB each, three runs each without the CPU profiler, 2026-10-29),
+  with the page's media players counted (CDP's `Media` domain): 34–41 players alive and 18–20 decoding at once, the
+  renderer peaking at 1.51–1.72 GiB at throttle 1 (1.75–1.78 GiB at 4) within a second of the pick (2.4 s at 4) and
+  holding a median of 1.02–1.08 GiB, the upload taking 8.7–9.1 s (14.3–14.7 s). A build whose tiles drew no poster
+  peaked at 0.94–0.96 GiB in 8.1–8.3 s (10.8–10.9 s): the posters cost the renderer 0.6–0.8 GiB at the pick and the
+  upload 3.5–3.9 s at throttle 4, the 20 large frames being drawn and encoded on the page's main thread. Now a video's
+  first frame is drawn at the thumbnail tier's size, in the photos' queue — near the viewport, one at a time
+  (`src/web/src/features/memories/useOptimisticTiles.ts`): 2 players decode at once (the tile's and the upload's own),
+  the peak is the upload's own at its end, 1.09–1.12 GiB, the median 0.84–0.89 GiB, and the upload takes 8.3–8.8 s
+  (12.4–12.5 s). The pictures come one after another: the first 0.3 s after the pick (0.6 s at throttle 4, against
+  0.7–0.9 s and 2.8–3.3 s before), the twelfth at 1.5–1.6 s (3.9 s, against 1.1 s and 4.1–4.6 s), and a tile whose
+  file is uploaded before its turn shows the listed thumbnail with no poster of its own (3 of 20 at throttle 1, 5 at
+  4). Every picked video's size is still read at once (a `<video>` each that loads its metadata, inbox #793).
 
 ## User impact
 
