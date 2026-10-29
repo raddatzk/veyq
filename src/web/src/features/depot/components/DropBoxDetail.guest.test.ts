@@ -134,7 +134,7 @@ function expectNoWriteControl(w: Body) {
 }
 
 describe("a drop box inside a folder share is the member's detail, read-only (inbox #380, #401 S3)", () => {
-  // cr-download-is-the-export Decision 7: a READ or READ_WRITE guest of a folder link above a drop box downloads it as a ZIP,
+  // ADR 0082 decision 4: a READ or READ_WRITE guest of a folder link above a drop box downloads it as a ZIP,
   // as a member does - core's action in the drop box's header, core's dialog over the guest's own tree.
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the drop box's header offers Download; a real click opens core's download of THIS drop box`, async () => {

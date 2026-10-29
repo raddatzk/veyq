@@ -1,5 +1,5 @@
 // @vitest-environment node
-// A drop box downloads and imports as a plain folder (cr-download-is-the-export Decision 7): through core's REAL walker, writer,
+// A drop box downloads and imports as a plain folder (ADR 0082 decision 4): through core's REAL walker, writer,
 // reader and import with Depot's REAL registration (its hooks, its `importsAsFolder`), the drop box is a directory, each guest's
 // folder a directory under the name the drop box shows it by (a repeated name numbered in creation order, as the detail does),
 // the files inside; the manifest keeps the kind it was. The import creates the drop box and the guests' folders as plain

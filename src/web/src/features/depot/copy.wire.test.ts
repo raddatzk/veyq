@@ -1,4 +1,4 @@
-// A copy on the wire (uc.platform.copy-node, cr-copy-node phase 1): a folder holding a file copied to the scope root through
+// A copy on the wire (uc.platform.copy-node): a folder holding a file copied to the scope root through
 // core's `prepareCopy` and Depot's real hooks (`exportFile` / `importFile`, `fileUploadJob`), every request recorded at
 // `fetch` - the JSON the real generated clients serialize and the frames the real pump PUTs - against a fake control plane
 // and store that serve the ORIGINAL as a member's client reads it (its listing, its presigned chunks, sealed under its own

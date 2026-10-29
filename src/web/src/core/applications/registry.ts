@@ -223,14 +223,14 @@ export interface KindDescriptor {
   /** A node of this kind IS one file (Depot's file): Download saves it as itself through the application's own action, so core
    *  offers no ZIP download for it, and inside an archive it is that one file at the node's path, not a directory. */
   downloadsAsFile?: boolean
-  /** A node of this kind is imported as a plain `FOLDER` (Depot's drop box, cr-download-is-the-export Decision 7): what makes it
+  /** A node of this kind is imported as a plain `FOLDER` (Depot's drop box, ADR 0082 decision 4): what makes it
    *  this kind - a drop key, guests' identities, links - cannot be rebuilt from a download, so the import creates a folder of
    *  the node's name and its children under it, and needs no `importContent`. Its content is still checked
    *  (`validateContent`) and still names its application and version (`contentSchema`); the manifest keeps the kind it was. */
   importsAsFolder?: boolean
   /** This kind's `importContent`, in a copy (`ImportNodeContext.purpose`), reads each payload only by
    *  `slice(...).arrayBuffer()` - as the upload pump does - so a copy (ADR 0082 decision 11) can hand it the original read by
-   *  frame, never held whole (cr-copy-node Decision 3); a kind whose import decodes its bytes (Memories' tiers) hands over in
+   *  frame, never held whole (ADR 0082 decision 11); a kind whose import decodes its bytes (Memories' tiers) hands over in
    *  a copy's walk what it would otherwise decode for, and decodes nothing in the copy's import. Absent: a
    *  copy leaves a node of this kind out, with its subtree, and names it before anything is written - fail closed, so a kind
    *  whose import needs its bytes as a real `Blob` (to decode them) is never handed a file it would have to buffer. */

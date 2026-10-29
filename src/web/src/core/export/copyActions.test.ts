@@ -1,4 +1,4 @@
-// "Copy to…" as core's action (uc.platform.copy-node, cr-copy-node Decisions 1 and 5): a member flow, for every kind this build
+// "Copy to…" as core's action (uc.platform.copy-node): a member flow, for every kind this build
 // copies, placed beside the application's "Move to…".
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registry } from '../applications/registry'

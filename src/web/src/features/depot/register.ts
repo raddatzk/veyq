@@ -128,7 +128,7 @@ export function registerDepot(registry: Registry): void {
     },
     shareDialog: DropBoxShareDialog,
     placement: DEPOT_PLACEMENT,
-    // Downloaded as a directory of its guests' folders; imported as a plain folder (cr-download-is-the-export Decision 7).
+    // Downloaded as a directory of its guests' folders; imported as a plain folder (ADR 0082 decision 4).
     exportContent: exportDropBox,
     contentSchema: DEPOT_CONTENT_SCHEMA,
     validateContent: validateDropBoxContent,

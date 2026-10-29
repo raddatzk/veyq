@@ -310,7 +310,7 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
   })
 })
 
-// inbox #424 / cr-download-is-the-export Decision 6: a READ_WRITE guest gets "Upload folder…" as a member does (share view =
+// inbox #424 / ADR 0082 decision 7: a READ_WRITE guest gets "Upload folder…" as a member does (share view =
 // member view) - named first, the folders created as the guest, a `.veyq/` directory uploaded as files like any other; a guest
 // never imports, and asks no quota preflight (a member's question; the link has its own limit).
 describe('a contributor uploads a folder', () => {
