@@ -23,13 +23,17 @@
    error(+retry) state (cr-0074). A tile appears **at its capture-time place**, not at the front: the sort key is
    derived on device before sealing, from the same rule the sealed tier will carry, so the tile is already where
    it will stay. [uc.memory.gallery](uc.memory.gallery.md) owns that ordering rule.
-3. The queue uploads **one file at a time**: each file is sealed on-device (with its
+3. The queue puts **one file at a time on the wire**: each file is sealed on-device (with its
    [derivatives](../enablers/en.memory.derivatives.md)) and sent **direct-to-store**, then attached to the
    Memory node — the seal → start → PUT → attach choreography is
-   [en.memory.media](../enablers/en.memory.media.md)'s. Per-file + per-list **progress** advance as it uploads.
+   [en.memory.media](../enablers/en.memory.media.md)'s. While one file is on the wire, the **next** file runs its
+   on-device stage — its type, its digest, its tiers and its EXIF read, which touch no key and send nothing — so it is
+   ready when the wire is free (inbox #220). Only one file is prepared ahead, and every key use, seal and request of a
+   file still follows the previous file's completion. Per-file + per-list **progress** advance as it uploads.
    **Each tile names the stage its file is actually in** — *queued*, *preparing*, *uploading* — because they are
    three different waits and in two of them no byte has left the device yet. A tile that said *"uploading"*
-   while the device was still decoding is what made a large batch read as hung.
+   while the device was still decoding is what made a large batch read as hung. A file prepared ahead says
+   *preparing* until its first byte is sent, never back to *queued*.
 4. Opening the uploads popup shows **one list per destination** (owner decision 2026-10-14): every batch enqueued
    for the same target (the batch's `key`) whose list is still open is drawn as ONE list, under one title, with ONE
    progress bar over all its files. A batch enqueued later for that target joins the open list and the bar recomputes
@@ -78,7 +82,9 @@
   filename reaches the server in the clear.
 - **The tray is global + non-blocking.** Uploads continue while the user browses other Memories; the queue is a
   module singleton, the popup lives in the app shell.
-- **Sequential, not parallel.** One file at a time keeps the byte budget simple. Within a file the chunks
+- **One file on the wire, one prepared ahead.** One file at a time on the wire keeps the byte budget simple; the next
+  file's on-device stage overlaps it because each stage is mostly worker and wire time, about as long as the other
+  (inbox #220's reading). Depth 1 keeps one original decoded at a time and one tier set waiting. Within a file the chunks
   stream — read, sealed and sent a few at a time — so a large video costs the device a few frames of memory,
   not the file twice, and its size is bounded by the server's ceiling rather than by how fast the uplink is
   ([en.memory.media](../enablers/en.memory.media.md)).

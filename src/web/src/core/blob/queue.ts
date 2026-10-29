@@ -7,7 +7,8 @@
 // not get from the caller for display.
 //
 // Rules, carried over unchanged from the queue Memories had (cr-0058, cr-0105, cr-0111, ADR 0073 §6): SEQUENTIAL
-// (one job at a time, batches in enqueue order), fraction-based progress (no speed/ETA), one automatic retry on a
+// (one job's `run` at a time, batches in enqueue order — the next job's optional `prepare` runs one ahead while the
+// running job is on the wire, inbox #220), fraction-based progress (no speed/ETA), one automatic retry on a
 // transient failure, explicit retry on a hard failure — except a refusal no retry can help (`quota_exceeded`), which
 // fails at once and offers none, as does a refusal the job itself declares final (`isFinal`). An abort (the item's signal, or an `AbortError`) settles `cancelled`, never `failed`.
 import { reactive, computed } from 'vue'
@@ -47,6 +48,14 @@ export type UploadJob<R = unknown, X extends object = object> = {
    * again. Core's own [QUOTA_EXCEEDED] needs no declaration here.
    */
   isFinal?(error: string): boolean
+  /**
+   * The job's on-device stage, run AHEAD while the job before it is on the wire (inbox #220): the queue calls it once,
+   * when the running job reports its first progress, for the one next job that has it, with that job's own `signal` —
+   * the one its `run` gets later. The job keeps what it prepared (memoized in its own closure) and its `run` awaits the
+   * same work; the queue holds nothing of it and ignores how it settles. It sends nothing and writes nothing — no
+   * request, no key, no seal — so `abandon` never has anything of it to undo, and the wire still carries one job at a time.
+   */
+  prepare?(ctx: { signal: AbortSignal }): Promise<void>
 }
 
 /** A job in the queue, with its state. `X` is the application's own fields from the job's `extra`. */
@@ -117,13 +126,33 @@ const batches = reactive<AnyBatch[]>([])
 const jobs = new Map<string, UploadJob<unknown, object>>()
 let seq = 0
 let running = false
+/** The one item prepared ahead (inbox #220): `preparing`, its `prepare` called, its `run` not yet started. */
+let ahead: AnyItem | null = null
 
-function nextQueued(): AnyItem | null {
+/** The first item in batch order that `accept`s; by default the next one to run — queued, or the one prepared ahead. */
+function nextQueued(accept: (f: AnyItem) => boolean = (f) => f.status === 'queued' || f === ahead): AnyItem | null {
   for (const batch of batches.slice().sort((a, b) => a.seq - b.seq)) {
-    const item = batch.files.find((f) => f.status === 'queued')
+    const item = batch.files.find(accept)
     if (item) return item
   }
   return null
+}
+
+/** Start the next job's on-device stage while the running one is on the wire — one ahead, and only a job that has one. */
+function prepareAhead(): void {
+  if (ahead) return
+  const item = nextQueued((f) => f.status === 'queued' && jobs.get(f.id)?.prepare !== undefined)
+  const job = item && jobs.get(item.id)
+  if (!item || !job?.prepare) return
+  ahead = item
+  item.status = 'preparing' // and it stays so until its first progress: a tile never goes back to queued
+  item.progress = 0
+  try {
+    // How it settles is the job's: its `run` awaits the same work and meets any failure there.
+    void job.prepare({ signal: item.controller.signal }).catch(() => {})
+  } catch {
+    /* a prepare that throws at once fails nothing here; its run prepares again */
+  }
 }
 
 function finalize(batch: AnyBatch): void {
@@ -138,13 +167,17 @@ async function runOne(item: AnyItem): Promise<void> {
   const batch = batches.find((b) => b.files.includes(item))
   const job = jobs.get(item.id)
   if (!batch || !job) return
+  if (item === ahead) ahead = null // its run starts now, on what it prepared
   item.status = 'preparing' // pre-network phase; flips to 'uploading' on the first progress
   item.progress = 0
   item.attempts += 1
   try {
     const result = await job.run({
       onProgress: (p) => {
-        if (item.status === 'preparing') item.status = 'uploading' // first progress → the network phase began
+        if (item.status === 'preparing') {
+          item.status = 'uploading' // first progress → the network phase began
+          prepareAhead() // ... and this job's own on-device stage is over: the next one's may start
+        }
         item.progress = p
       },
       signal: item.controller.signal,
@@ -235,7 +268,15 @@ export function cancelFile(fileId: string): void {
   for (const batch of batches) {
     const item = batch.files.find((f) => f.id === fileId)
     if (!item) continue
-    if (item.status === 'queued') {
+    if (item === ahead) {
+      // prepared ahead, not yet the runner's: settled at once rather than after the job on the wire. Nothing is
+      // prepared in its place until the next job reaches the wire, so a cancel-all starts no decode it then cancels.
+      ahead = null
+      item.status = 'cancelled'
+      item.controller.abort()
+      const job = jobs.get(item.id)
+      if (job) void abandon(job)
+    } else if (item.status === 'queued') {
       item.status = 'cancelled'
       const job = jobs.get(item.id)
       if (job) void abandon(job) // a re-queued retry may have left something of its earlier run
@@ -302,6 +343,7 @@ export function clearUploads(): void {
   batches.length = 0
   jobs.clear()
   running = false
+  ahead = null
 }
 
 /** Reactive view for the UI: the un-acknowledged batches + a count of still-active items. */

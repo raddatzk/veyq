@@ -8,9 +8,10 @@
 //
 // Media specifics: `preparing` is the pre-network phase (derive poster/dimensions, read the metadata — sealing is
 // not part of it, the file is read and sealed one frame at a time as it is sent), and it flips to `uploading` on
-// media.ts's `onProgress?.(0)` right before the chunk PUTs. Operator-blind is entirely `addMedia`'s concern.
+// media.ts's `onProgress?.(0)` right before the chunk PUTs. That pre-network phase is each job's `prepare`, so the queue
+// runs the next file's while the current one is on the wire (inbox #220). Operator-blind is entirely `addMedia`'s concern.
 import { computed } from 'vue'
-import { addMedia, type AddMediaSource, type AddMediaOptions } from './media'
+import { addMedia, createBrowserDeriver, prepareMedia, type AddMediaSource, type AddMediaOptions, type PreparedMedia } from './media'
 import { bannerOriginalOf } from './storedMatch'
 import { retryWhileRekeying } from '../../shared/rekeyRetry'
 import {
@@ -211,14 +212,29 @@ export function enqueueUploads(
       }, { pull: target.pull, signal: o.signal })
     })
   return enqueueJobs<MediaUploadResult, MediaFileFields, { target: UploadTarget }>(
-    selections.map((s) => ({
-      name: s.file.name,
-      sizeBytes: s.file.size,
-      extra: { mediaType: s.mediaType, file: s.file },
+    selections.map((s) => {
       // the File itself, never its bytes: the pump reads and seals it a frame at a time (ADR 0013 Consequences)
-      run: ({ onProgress, signal }) =>
-        upload({ blob: s.file, mediaType: s.mediaType, lastModified: s.file.lastModified, name: s.file.name }, { onProgress, signal }),
-    })),
+      const source: AddMediaSource = { blob: s.file, mediaType: s.mediaType, lastModified: s.file.lastModified, name: s.file.name }
+      // The file's on-device stage (`prepareMedia`: type, digest, tiers, metadata read — no key, no request), memoized:
+      // the queue starts it while the file before is on the wire (inbox #220), and `run` awaits the same work. Each
+      // attempt that ends drops it — a done one frees its tiers, a failed one is prepared again by its retry.
+      let prepared: Promise<PreparedMedia> | null = null
+      const prepare = (signal: AbortSignal) => (prepared ??= prepareMedia(source, createBrowserDeriver(), signal))
+      return {
+        name: s.file.name,
+        sizeBytes: s.file.size,
+        extra: { mediaType: s.mediaType, file: s.file },
+        prepare: async ({ signal }) => { await prepare(signal) },
+        // the device floor, the key reads and every seal run inside `upload`, after the prepare: it uses no key
+        run: async ({ onProgress, signal }) => {
+          try {
+            return await upload(source, { onProgress, signal, prepared: await prepare(signal) })
+          } finally {
+            prepared = null
+          }
+        },
+      }
+    }),
     {
       label: opts.label,
       key: batchKey(target),

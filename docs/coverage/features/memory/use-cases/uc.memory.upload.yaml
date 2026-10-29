@@ -250,6 +250,27 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memories/media.test.ts]
+  - id: next-file-prepared-while-one-is-on-the-wire
+    text: >-
+      While one file is on the wire, the next file runs its on-device stage — its type, its digest beside its tiers and
+      its metadata read, which use no key and send nothing — and the upload of that file uses the result instead of
+      running the stage again (inbox #220). One file is prepared ahead at most, from the running file's first progress
+      on; one file at a time is uploaded, so every key use, seal and request of a file still follows the previous file's
+      completion, after the device floor. A file prepared ahead says preparing until its first byte is sent; cancelling it
+      settles it cancelled at once; a failed attempt drops what it prepared and its retry prepares again.
+    coverage:
+      web:
+        unit:
+          - src/core/blob/queue.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/media.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          Gated on both sides in the queue (B's prepare starts on A's first progress and A ends only once it did) and in
+          Memories' adapter, bitten seven ways (prepare at the start, no depth bound, no overlap, a cancel that waits, an
+          upload that ignores the result, a result kept across a failed attempt, a run that drops it). What it moves in a
+          browser is a local timing reading (scripts/profile_attribute.py on S2), no coverage.
   - id: optimistic-in-grid-tiles
     text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, at the place the gallery's ONE ordering rule gives it (uc.memory.gallery#date-sorted-grid owns that rule; this criterion does not restate it) — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once. A tile names the stage its file is ACTUALLY in — queued, preparing or uploading are three different waits and in two of them no byte has left the device — visibly and in BOTH aria-labels (the container's and the progress zone's), which fail independently.
     coverage:

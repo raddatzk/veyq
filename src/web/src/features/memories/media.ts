@@ -444,26 +444,36 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
   }
 }
 
+/** What the metadata tiers are sealed from, read on the device before any key is used: the geometry and the EXIF read. */
+type MetadataRead = { dims: Dimensions | null } & Awaited<ReturnType<typeof readExif>>
+
 /**
- * Seal the two metadata tiers under `K_node` (best-effort, operator-blind): the always-listed **metadata** tier
+ * Read what the two metadata tiers carry — key-free, sending nothing, so it is part of a file's on-device stage
+ * ([prepareMedia]). `knownDims` is the geometry the tier derivation already measured, when it had it — an image always
+ * does; absent for a video or an underivable source, and only then is a probe (its own decode) worth paying for.
+ */
+async function readMetadata(source: AddMediaSource, deriver: MediaDeriver, knownDims: Dimensions | null): Promise<MetadataRead> {
+  const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
+  return { dims, ...meta }
+}
+
+/**
+ * Seal the two metadata tiers under `K_node` (best-effort, operator-blind) from what [readMetadata] read: the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
  * + GPS; and what an import restores, a corrected capture time and a place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
  * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
  */
-async function sealMetadata(
-  source: AddMediaSource,
-  deriver: MediaDeriver,
+function sealMetadata(
+  meta: MetadataRead,
+  lastModified: number | undefined,
   memoryKey: Uint8Array,
   /** The media the tiers belong to — both are sealed bound to it (ADR 0072). */
   media: { scopeId: string; mediaId: string },
-  /** The geometry the tier derivation already measured, when it had it — an image always does. Absent for a
-   *  video or an underivable source, and only then is a probe (its own decode) worth paying for. */
-  knownDims: Dimensions | null = null,
   /** What an import restores beside the bytes ([RestoredMediaFacts]), sealed into the listed tier with the rest. */
   restored: RestoredMediaFacts = {},
-): Promise<{ wrappedMeta: string | null; wrappedExif: string | null }> {
-  const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
-  const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, source.lastModified)
+): { wrappedMeta: string | null; wrappedExif: string | null } {
+  const dims = meta.dims
+  const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, lastModified)
   const placeName = cleanStr(restored.placeName)
   const metaTier: MediaMeta = {
     v: 1,
@@ -573,6 +583,41 @@ export type AddMediaOptions = {
   nodeEpoch?: number
   /** What an import restores that the bytes cannot carry ([RestoredMediaFacts]); absent for every other upload. */
   restored?: RestoredMediaFacts
+  /** The source's on-device stage, already run ([prepareMedia]) — by the upload queue while the file before it was on
+   *  the wire (inbox #220). Absent, [uploadMediaVia] runs it itself. It must be of the same source. */
+  prepared?: PreparedMedia
+}
+
+/**
+ * A file's ON-DEVICE stage (inbox #220): its type, its digest beside its tiers, and what its metadata tiers will carry.
+ * Key-free and sending nothing — every key use, seal and request of the file stays in [uploadMediaVia], after the
+ * device floor — so the upload queue may run it for the next file while the current one is on the wire.
+ */
+export type PreparedMedia = {
+  /** The source, re-typed by [resolveMediaType]. */
+  source: AddMediaSource
+  sha256: string
+  tiers: Awaited<ReturnType<typeof deriveTiers>>['derivatives']
+  meta: MetadataRead
+}
+
+/**
+ * Run [PreparedMedia]'s stage for `source`. The original's digest (its `blob-meta` `sha256`, read frame by frame in core's
+ * digest worker - or, for an imported download's payload, the one core's check already computed, `contentDigest`, inbox
+ * #555) and its tiers are started TOGETHER (inbox #554): the derivation does not need the digest, and run first and alone
+ * the digest was the upload's critical path while every worker waited. ONE decode of the original: `deriveTiers`
+ * produces both tiers from it and hands back the geometry it already measured, so [readMetadata] has nothing left to
+ * probe for an image. `deriveTiers` never rejects (its catch makes the upload original-only), so only the digest's abort
+ * or a read the browser refuses ends it here; that drops at most one derivation, and nothing is reserved.
+ */
+export async function prepareMedia(source: AddMediaSource, deriver: MediaDeriver, signal?: AbortSignal): Promise<PreparedMedia> {
+  throwIfAborted(signal)
+  const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
+  const [sha256, { derivatives: tiers, dimensions }] = await Promise.all([
+    contentDigest(typed.blob, signal),
+    deriveTiers(typed, deriver),
+  ])
+  return { source: typed, sha256, tiers, meta: await readMetadata(typed, deriver, dimensions) }
 }
 
 /**
@@ -628,22 +673,14 @@ export async function uploadMediaVia(
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
   throwIfAborted(opts.signal)
-  const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
-  // The original's digest (its `blob-meta` `sha256`, read frame by frame in core's digest worker - or, for an imported
-  // download's payload, the one core's check already computed, `contentDigest`, inbox #555) and its tiers, started
-  // TOGETHER (inbox #554): the derivation does not need the digest, and run first and alone the digest was the upload's
-  // critical path while every worker waited. ONE decode of the original: `deriveTiers` produces both tiers from it and
-  // hands back the geometry it already measured, so `sealMetadata` has nothing left to probe for an image.
-  // `deriveTiers` never rejects (its catch makes the upload original-only), so only the digest's abort or a read the
-  // browser refuses ends the upload here; that drops at most one derivation, and nothing is reserved yet.
-  const [sha256, { derivatives: tiers, dimensions }] = await Promise.all([
-    contentDigest(typed.blob, opts.signal),
-    deriveTiers(typed, deriver),
-  ])
+  // The on-device stage: prepared ahead by the upload queue (inbox #220), else run here. Nothing before this line used a
+  // key; everything after it does, so it all runs inside this upload, after the caller's device floor.
+  const { source: typed, sha256, tiers, meta } = opts.prepared ?? await prepareMedia(source, deriver, opts.signal)
+  throwIfAborted(opts.signal)
   const stored = opts.storedOriginal?.(sha256, sealedByteSize(typed.blob.size)) ?? null
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
-  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions, opts.restored)
+  const { wrappedMeta, wrappedExif } = sealMetadata(meta, typed.lastModified, memoryKey, { scopeId, mediaId }, opts.restored)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order.
   return uploadSealedMedia(scopeId, memoryKey, mediaId, {

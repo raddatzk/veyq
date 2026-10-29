@@ -325,9 +325,17 @@ thread about seven times as much per `PUT`); the page keeps the windows, the re-
 (2026-10-28, a machine at load 25–40, three runs each without the CPU profiler, beside two passes of the tree before)
 put the upload at 25.9 s against 29.8–32.2 s at throttle 1 and 37.5 s against 73.4–75.4 s at throttle 4, the pump's
 tasks at 0.5–0.9 s, and the frame worker at 7.7–8.9 s. What held the main thread then was Vue re-laying out the gallery
-on each chunk's progress, 24 % of the upload at throttle 4; a chunk now redraws only its own tile
-([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) § Quality notes), its after-reading still to
-be taken (inbox #220). The method,
+on each chunk's progress; a chunk now redraws only its own tile
+([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) § Quality notes). Read again alone on the
+machine (2026-10-29, a 1-minute load ≤ 4 at each batch's start, 5–8 during the runs with the instance itself), that
+change took the throttle-4 upload from 21.4 s to 20.0 s, and the main thread no longer bounded it at either throttle:
+its tasks held 3.0 s of 18.2 s at throttle 1 and 8.5 s of 20.0 s at 4, while each file's on-device stage (type,
+digest, tiers, EXIF read; 161 ms) and its upload stage (178 ms) ran one after the other, each mostly worker and wire
+time. So the next file's on-device stage now runs while the current file is on the wire, one ahead
+([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md) step 3; inbox #220): 10.8 s (10.6–11.5) against
+17.6–19.2 s at throttle 1 and 13.4 s (13.3–13.5) against 19.9–20.3 s at throttle 4, beside two passes of the tree
+before, with every next file's digest inside the previous file's upload stage. What bounds it now is the upload stage
+itself, about 190 ms a file, with the frame worker busy 6.4 s of the 10.8 s. The method,
 how its files are handled and the reading's limits are published in the Security area,
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
