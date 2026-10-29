@@ -52,13 +52,14 @@ acceptanceCriteria:
     coverage:
       # The slug-uniqueness trap is pinned at the handler, not over HTTP: a freed slug token IS the trashed
       # node's own id, a UUID, which the contract's base64 Pattern rejects at the boundary — so no HTTP client
-      # can reach the collision, and only a handler-level caller can. Teaching that read the predicate turns the
-      # clean rejection into a RollbackException, which is what the injection produced.
+      # can reach the collision (the test pins that 400 too), and only a handler-level caller can, in the scope
+      # root's slot and a folder's. Teaching that read the predicate turns the clean rejection into a
+      # RollbackException, which is what the injection produced (re-bitten 2026-10-29, inbox #777).
       # The traversal trap is observable only against the PURGE: if the delete skipped already-trashed
       # descendants they would keep an older marker, age out first, and be erased while the folder around them
       # still sits restorable in the trash.
       backend:
-        integration: [NodeTrashSliceTest.slugTakenStillSeesTrashedRowsSoTheDatabaseNeverThrows, NodeTrashSliceTest.deletingAroundAnAlreadyTrashedSubtreeMakesTheWholeThingAgeOutTogether, ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes]
+        integration: [NodeTrashCoreSliceTest.aTrashRootsFreedTokenIsTakenInItsSlotAndNoClientCanSendIt, NodeTrashSliceTest.deletingAroundAnAlreadyTrashedSubtreeMakesTheWholeThingAgeOutTogether, ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes]
 
   - id: slug-freed-on-delete-and-resupplied-on-restore
     text: "The soft-delete frees the node's slug by replacing slugToken with the node's own id, so the name is immediately reusable — required because UNIQUE(parent_id, slug_token) is a plain index and MariaDB has no filtered indexes. Restore carries a freshly client-computed slugToken; a collision with a node created in the meantime is rejected on the same constraint a create hits, and the client disambiguates."
