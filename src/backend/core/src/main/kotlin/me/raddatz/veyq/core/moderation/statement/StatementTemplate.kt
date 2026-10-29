@@ -45,7 +45,7 @@ data class StatementFields(
  * The server renders it for the mail ([renderMail]); a moderator's measure's facts never go into a mail: their passage
  * becomes "it is in veyq" (`mail.factsInVeyq`). A Server Owner's step's mail carries its facts after that passage. It
  * names the host, never the moderator. [REPORTER_DECISION] is a reporter's redress (DSA Art. 16(5)), rendered after the
- * decision's outcome ([renderRedress]). Every text is a draft until a qualified legal review (ADR 0093 § Legal basis).
+ * decision's outcome ([renderRedress]).
  */
 object StatementTemplate {
     val MEASURES: Map<String, MeasureTexts> = linkedMapOf(

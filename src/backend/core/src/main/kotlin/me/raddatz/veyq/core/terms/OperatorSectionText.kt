@@ -8,12 +8,9 @@ data class SectionPassage(val id: String, val record: Boolean, val lines: List<S
 
 /**
  * The operator section's fixed text, as `contracts/terms/operator-section.json` holds it (its `note` says the rules).
- * [draft] is true until a qualified legal review; while it is, every rendering starts with [draftBanner].
  */
 data class OperatorSectionText(
     val revision: Int,
-    val draft: Boolean,
-    val draftBanner: SectionTexts,
     val gap: SectionTexts,
     val retentionUnit: RetentionUnit,
     val passages: List<SectionPassage>,
@@ -31,8 +28,6 @@ data class OperatorSectionText(
 
         fun parse(root: JsonNode): OperatorSectionText = OperatorSectionText(
             revision = root.required("revision").intValue().also { require(it >= 1) { "the section's revision starts at 1" } },
-            draft = root.required("draft").booleanValue(),
-            draftBanner = SectionTexts.of(root.required("draftBanner")),
             gap = SectionTexts.of(root.required("gap")),
             retentionUnit = RetentionUnit.of(root.required("retentionUnit")),
             passages = root.required("passages").map { p ->

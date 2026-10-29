@@ -36,18 +36,17 @@ acceptanceCriteria:
       # no dedicated test; an anonymous-visitor assertion is the honest remaining thin spot, not a false citation.
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.readOrAcceptByANonMemberIs404] }
   # cr-operator-section-of-the-terms (ADR 0035 decision 6): the fixed operator section after the space's text, and the
-  # gate on the pair (space revision, operator revision; one form since cr-operating-mode-retires). The text is contracts/terms/operator-section.json,
-  # a draft until a qualified legal review.
+  # gate on the pair (space revision, operator revision; one form since cr-operating-mode-retires). The text is contracts/terms/operator-section.json.
   - id: the-operator-section-follows-the-space-terms
     text: >-
       Every member terms read serves, after the space's own text, the fixed operator section veyq ships, rendered with
-      the values the Server Owner set and marked a draft until a legal review; the member gate shows it after the
+      the values the Server Owner set; the member gate shows it after the
       space's text. A space with no terms (revision 0) does not gate, and its members read the section in the space's
       terms panel.
     coverage:
       backend:
         integration: [TenantTermsOperatorSectionSliceTest.aSpaceWithNoTermsServesTheSectionWithoutAGate]
-        unit: [OperatorSectionRendererTest.theJarCarriesTheContractFileUnchanged, OperatorSectionRendererTest.aDraftSaysSoFirstAndOnlyWhileItIsOne, OperatorSectionRendererTest.everyPlaceholderTheFileNamesIsOneTheRendererKnows, OperatorSectionRendererTest.anUnknownPlaceholderIsRefusedRatherThanPrinted]
+        unit: [OperatorSectionRendererTest.theJarCarriesTheContractFileUnchanged, OperatorSectionRendererTest.everyPlaceholderTheFileNamesIsOneTheRendererKnows, OperatorSectionRendererTest.anUnknownPlaceholderIsRefusedRatherThanPrinted]
       web:
         unit: [src/views/TermsAcceptView.test.ts, src/features/tenant/TenantTermsPanel.test.ts]
   - id: the-gate-compares-the-pair

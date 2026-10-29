@@ -57,10 +57,9 @@ data class NoticeValues(
 
 data class RenderedPassage(val id: String, val separate: Boolean, val text: SectionTexts)
 
-/** The notice as one host serves it; [draftBanner] null once the text is reviewed. */
+/** The notice as one host serves it. */
 data class RenderedNotice(
     val revision: Int,
-    val draftBanner: SectionTexts?,
     val passages: List<RenderedPassage>,
 )
 
@@ -87,11 +86,7 @@ object PrivacyNoticeRenderer {
             val de = renderPassage(text, p, values, en = false)
             if (en.isEmpty() && de.isEmpty()) null else RenderedPassage(p.id, p.separate, SectionTexts(en = en, de = de))
         }
-        return RenderedNotice(
-            revision = text.revision,
-            draftBanner = text.draftBanner.takeIf { text.draft },
-            passages = passages,
-        )
+        return RenderedNotice(revision = text.revision, passages = passages)
     }
 
     /** How the notice names a service at [url]: its known name with the host, or the host alone; null for no host. */

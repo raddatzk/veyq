@@ -37,19 +37,19 @@ data class RenderedSection(
 object OperatorSectionRenderer {
 
     fun render(text: OperatorSectionText, values: SectionValues): RenderedSection {
-        fun part(record: Boolean, banner: Boolean): SectionTexts {
+        fun part(record: Boolean): SectionTexts {
             val passages = text.passages.filter { it.record == record }
             check(passages.isNotEmpty()) { "the operator section has no ${if (record) "record" else "main"} passage" }
             return SectionTexts(
-                en = renderLang(text, passages, values, en = true, banner = banner && text.draft),
-                de = renderLang(text, passages, values, en = false, banner = banner && text.draft),
+                en = renderLang(text, passages, values, en = true),
+                de = renderLang(text, passages, values, en = false),
             )
         }
-        return RenderedSection(text.revision, part(record = false, banner = true), part(record = true, banner = false))
+        return RenderedSection(text.revision, part(record = false), part(record = true))
     }
 
     private fun renderLang(
-        text: OperatorSectionText, passages: List<SectionPassage>, values: SectionValues, en: Boolean, banner: Boolean,
+        text: OperatorSectionText, passages: List<SectionPassage>, values: SectionValues, en: Boolean,
     ): String {
         val blocks = passages.map { p ->
             p.lines.flatMap { line ->
@@ -58,8 +58,7 @@ object OperatorSectionRenderer {
                 } ?: emptyList()
             }.joinToString("\n").trim()
         }.filter { it.isNotEmpty() }
-        val body = blocks.joinToString("\n\n")
-        return if (banner) text.draftBanner.pick(en) + "\n\n" + body else body
+        return blocks.joinToString("\n\n")
     }
 
     private fun value(name: String, v: SectionValues, text: OperatorSectionText, en: Boolean): String? = when (name) {
