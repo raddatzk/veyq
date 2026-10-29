@@ -42,7 +42,9 @@ import {
   IdentityMovedError,
   IdentityUnanchoredError,
   linkOf,
+  PinPass,
   type Anchor,
+  type ChainKeyAnchor,
   type Pin,
   type ServedIdentity,
   type Standing,
@@ -98,8 +100,16 @@ function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs
  *    the sealed record as stored, and that key must be anchored in this tenant ({@link anchorIdentity} with this view).
  *    An owner's securing endorses every record it rooted (`rotateKeys`), so its members stay; a record a thief signs with
  *    the retired key afterwards never carries an endorsement by the key the thief lacks.
+ *
+ * **Each signer is judged once per view** (inbox #710): the owner who invited thirty members anchors their key once, not
+ * thirty times — the same answer, since a view's standings are memoised for its life anyway; a check that failed for a
+ * request is not kept, so the next member's asks again. With `pins`, a pass ({@link PinPass}), every check judged with
+ * this view reads the pin store through it — one read for the whole member list. A view kept beyond one pass (the grant
+ * checks' {@link cachedTenantView}) carries none.
  */
-export async function loadTenantView(tenantId: string, open: TenantOpener = openScopeById): Promise<TenantView> {
+export async function loadTenantView(
+  tenantId: string, open: TenantOpener = openScopeById, opts: { pins?: PinPass } = {},
+): Promise<TenantView> {
   let opened: OpenedScope | null = null
   let rows: ScopeMember[] = []
   try {
@@ -109,7 +119,7 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
     opened = null
   }
   const members = new Map(rows.map((m) => [m.userId, m]))
-  if (!opened) return { tenantId, members, available: false, standing: async () => UNAVAILABLE }
+  if (!opened) return { tenantId, members, available: false, standing: async () => UNAVAILABLE, pins: opts.pins }
   const records = new Map<string, invite.JoinRecord | null>()
   try {
     for (const m of rows) {
@@ -120,10 +130,23 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
   }
   const memo = new Map<string, Promise<Standing>>()
   const visiting = new Set<string>()
+  /** `f`'s answer per key, for the view's life — but a failure is forgotten, so a later ask tries again. */
+  const once = <T>(cache: Map<string, Promise<T>>, key: string, f: () => Promise<T>): Promise<T> => {
+    let p = cache.get(key)
+    if (!p) {
+      p = f()
+      cache.set(key, p)
+      p.catch(() => cache.delete(key))
+    }
+    return p
+  }
+  const signerKeys = new Map<string, Promise<ChainKeyAnchor>>()
+  const signersServed = new Map<string, Promise<Anchor>>()
   const view: TenantView = {
     tenantId,
     members,
     available: true,
+    pins: opts.pins,
     standing(userId) {
       let s = memo.get(userId)
       if (!s) {
@@ -147,7 +170,9 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
     visiting.add(userId)
     try {
       const signerKey = b64std(record.signerIdentityPublicKey)
-      const judged = await anchorChainKey(record.signerUserId, signerKey, { tenant: view })
+      const judged = await once(signerKeys, `${record.signerUserId} ${signerKey}`, () =>
+        anchorChainKey(record.signerUserId, signerKey, { tenant: view }),
+      )
       if (judged.anchor === 'anomaly') return UNANCHORED
       if ((judged.retired || signerKey !== signer.identityPublicKey) && !(await endorsedBySigner(m, signer))) return UNANCHORED
     } finally {
@@ -172,7 +197,8 @@ export async function loadTenantView(tenantId: string, open: TenantOpener = open
       return false
     }
     if (!verifies) return false
-    return (await anchorIdentity(signer.userId, servedOf(signer), { tenant: view })) !== 'anomaly'
+    const anchor = await once(signersServed, signer.userId, () => anchorIdentity(signer.userId, servedOf(signer), { tenant: view }))
+    return anchor !== 'anomaly'
   }
   return view
 }
@@ -439,12 +465,13 @@ async function verifiedByIn(view: TenantView, subjects: readonly ScopeMember[]):
 export type MemberBadge = 'anomaly' | 'verified' | 'new' | 'unverified'
 
 /**
- * The badges of a tenant's member list, in one read of the tenant and one listing of its verifications. Each member is
- * anchored as a wrap would anchor them (sequentially: the pin store's writes must not race); a member whose check failed
- * for another reason than the key (a request) gets no badge. `selfUserId` gets none.
+ * The badges of a tenant's member list, in one read of the tenant and one listing of its verifications, as one pass
+ * ({@link PinPass}: one read of the pin store). Each member is anchored as a wrap would anchor them (sequentially: the pin
+ * store's writes must not race); a member whose check failed for another reason than the key (a request) gets no badge.
+ * `selfUserId` gets none.
  */
 export async function tenantBadges(tenantId: string, selfUserId?: string): Promise<Record<string, MemberBadge>> {
-  const view = await loadTenantView(tenantId)
+  const view = await loadTenantView(tenantId, openScopeById, { pins: new PinPass() })
   const out: Record<string, MemberBadge> = {}
   const anchored: ScopeMember[] = []
   const pins = new Map<string, Pin | null>()
@@ -459,7 +486,7 @@ export async function tenantBadges(tenantId: string, selfUserId?: string): Promi
       continue
     }
     anchored.push(m)
-    pins.set(m.userId, await getPin(m.userId).catch(() => null))
+    pins.set(m.userId, await getPin(m.userId, view.pins).catch(() => null))
   }
   const verified = await verifiedByIn(view, anchored)
   for (const m of anchored) {

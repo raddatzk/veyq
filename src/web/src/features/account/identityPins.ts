@@ -132,11 +132,39 @@ export type Standing =
   | { kind: 'unanchored' }
   | { kind: 'unavailable' }
 
-/** One tenant's standings, read once and asked per person (`tenantTrust.ts` § `loadTenantStandings`). */
+/** One tenant's standings, read once and asked per person (`tenantTrust.ts` § `loadTenantView`). `pins` is the pass the
+ *  read belongs to, when it is one ({@link PinPass}): every check judged with these standings reads the pin store
+ *  through it. */
 export interface TenantStandings {
   tenantId: string
   standing(userId: string): Promise<Standing>
+  pins?: PinPass
 }
+
+/**
+ * One pass of anchor checks over many people — a member list, Who's who (inbox #710): the pin store is read on the pass's
+ * first check and not again, and every write a check of the pass makes moves the pass on to the store it wrote (or, after
+ * a `409 stale_revision`, to the one it re-read). It lives as long as its caller keeps it — one call — so nothing a pass
+ * read reaches the next one: each pass starts from the server's head, through this device's marks, as a single check does.
+ * Without a pass every check reads the store itself.
+ */
+export class PinPass {
+  private held: OpenedStore | null = null
+
+  /** The store as this pass last read or wrote it — read on first use. A copy: a check's changes reach it only by a write. */
+  async read(): Promise<OpenedStore> {
+    if (!this.held) this.held = await loadStore()
+    return copyOf(this.held)
+  }
+
+  /** A write of this pass landed, or its re-base re-read the store: the pass continues from `store`. */
+  moved(store: OpenedStore): void {
+    this.held = copyOf(store)
+  }
+}
+
+/** The store a check reads: its pass's, or a fresh read. */
+const storeOf = (pass: PinPass | undefined): Promise<OpenedStore> => (pass ? pass.read() : loadStore())
 
 /**
  * Thrown by a **UI-path** wrap site (the group add, its name key) when the contact's served key is an
@@ -387,7 +415,7 @@ const samePin = (a: Pin | undefined, b: Pin | undefined): boolean =>
  * and the same digest check as a read. A change that changes nothing writes nothing. A write that lands raises the mark
  * to the revision it stored, and the session keeps the store it wrote as verified.
  */
-async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): Promise<void> {
+async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void, pass?: PinPass): Promise<void> {
   let store = base
   for (let attempt = 0; ; attempt++) {
     const next: PinMap = { ...store.pins }
@@ -415,11 +443,14 @@ async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): 
         }),
       )
       await raiseMarks(mk, { pins: store.revision + 1 })
-      remember(indexKey, { revision: store.revision + 1, pins: next, entries }, setDigest(entries))
+      const written = { revision: store.revision + 1, pins: next, entries }
+      remember(indexKey, written, setDigest(entries))
+      pass?.moved(written)
       return
     } catch (e) {
       if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleRevision(e))) {
         store = await loadStore() // re-base on the server's current store, then re-apply + retry
+        pass?.moved(store)
         continue
       }
       throw e
@@ -636,7 +667,8 @@ export async function anchorIdentity(
 ): Promise<Anchor> {
   const standing = opts.tenant ? await opts.tenant.standing(userId) : null
   if (standing && (standing.kind === 'unanchored' || standing.kind === 'unavailable')) return 'anomaly'
-  const store = await loadStore()
+  const pass = opts.tenant?.pins
+  const store = await storeOf(pass)
   const pin = store.pins[userId]
   const servedFingerprint = fingerprintOrNull(served.identityPublicKey)
   if (servedFingerprint === null) return 'anomaly'
@@ -645,7 +677,7 @@ export async function anchorIdentity(
     if (!chain) return 'anomaly'
     const reading = readJoinedChain(pin, userId, chain, standing)
     if (!endsAt(reading, served)) return 'anomaly'
-    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
     return reading.anchor
   }
   if (pin && pin.head === served.keyChainHead) return pin.fingerprint === servedFingerprint ? 'match' : 'anomaly'
@@ -653,7 +685,7 @@ export async function anchorIdentity(
   if (!chain) return 'anomaly'
   const reading = readChain(pin, userId, chain)
   if (!endsAt(reading, served)) return 'anomaly'
-  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
   return reading.anchor
 }
 
@@ -681,7 +713,8 @@ export async function anchorChainKey(
   const unanchored: ChainKeyAnchor = { anchor: 'anomaly', retired: false }
   const standing = opts.tenant ? await opts.tenant.standing(userId) : null
   if (standing?.kind === 'unanchored') return unanchored
-  const store = await loadStore()
+  const pass = opts.tenant?.pins
+  const store = await storeOf(pass)
   const pin = store.pins[userId]
   const fingerprint = fingerprintOrNull(identityPublicKeyB64)
   if (fingerprint === null) return unanchored
@@ -692,7 +725,7 @@ export async function anchorChainKey(
     if (reading.anchor === 'anomaly') return unanchored
     const at = reading.fingerprints.lastIndexOf(fingerprint)
     if (at < reading.joinedAt) return unanchored
-    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
     return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
   }
   if (pin && pin.fingerprint === fingerprint) return { anchor: 'match', retired: false }
@@ -702,7 +735,7 @@ export async function anchorChainKey(
   if (reading.anchor === 'anomaly') return unanchored
   const at = reading.fingerprints.lastIndexOf(fingerprint)
   if (at < 0) return unanchored
-  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading))
+  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
   return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
 }
 
@@ -749,9 +782,10 @@ export const pinStoreDocument: AccountDocumentStore<PinMap, PinStoreWrite> = {
   },
 }
 
-/** Read a contact's current pin (or null), for a UI surface that shows trust state. No write. */
-export async function getPin(userId: string): Promise<Pin | null> {
-  const store = await loadStore()
+/** Read a contact's current pin (or null), for a UI surface that shows trust state — through `pass` when the read is part
+ *  of one ({@link PinPass}). No write. */
+export async function getPin(userId: string, pass?: PinPass): Promise<Pin | null> {
+  const store = await storeOf(pass)
   return store.pins[userId] ?? null
 }
 

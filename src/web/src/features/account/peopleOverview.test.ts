@@ -270,3 +270,28 @@ describe('the order', () => {
     expect(ordered.map((x) => x.userId)).toEqual(['bob', 'zed', 'anna', 'cleo'])
   })
 })
+
+// Inbox #710: one overview reads the pin store's head once and judges each join record's signer once, however many
+// members the tenant has; a second overview reads afresh.
+describe('what one overview reads (inbox #710)', () => {
+  it('the pin head once, the signer\'s chain once as a signer (and once as a member), each member\'s once', async () => {
+    const root = born(OWNER)
+    const signer = born(VERIFIER)
+    const members = Array.from({ length: 8 }, (_, i) => born(`0e000000-0000-4000-8000-0000000002${String(i).padStart(2, '0')}`))
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(signer, root)),
+      ...members.map((m) => row(m, 'MEMBER', joinedThrough(m, signer))),
+    ]
+    const pins = fakePinServer()
+    const reads = (userId: string) => chains.getKeyChain.mock.calls.filter(([r]) => r.userId === userId).length
+    const { people } = await loadPeopleOverview(T, ME)
+    expect(people.map((p) => p.state)).toEqual(people.map(() => 'unverified')) // everyone anchored
+    expect(people.every((p) => p.isNew)).toBe(true)
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(1)
+    expect(reads(signer.userId)).toBe(2)
+    expect(reads(root.userId)).toBe(1)
+    expect(members.map((m) => reads(m.userId))).toEqual(members.map(() => 1))
+    await loadPeopleOverview(T, ME)
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(2) // nothing kept across overviews
+  })
+})

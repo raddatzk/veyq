@@ -24,7 +24,9 @@ vi.mock('../spaces/scopes', () => ({ openScopeById: vi.fn(), listMyScopes: vi.fn
 vi.mock('../spaces/grantTrust', () => ({ me: vi.fn() }))
 
 import {
+  cachedTenantView,
   collectMyVerifications,
+  forgetTenantViews,
   countVerifications,
   loadTenantView,
   personInTenant,
@@ -568,5 +570,92 @@ describe('the profile\'s read moves the pin as every anchor check does', () => {
     const srv = fakePinServer()
     await personInTenant(T, JOINER)
     expect(pinsOn(MK, srv.state)[JOINER]).toMatchObject({ head: headOf(joiner.chain), index: 0, replaced: false })
+  })
+})
+
+// Inbox #710: one pass over a member list reads the pin store's head once and judges each join record's signer once,
+// whatever the number of members; nothing is kept across passes.
+describe('what one pass over a member list reads (inbox #710)', () => {
+  /** A root owner R, an owner S who joined through R's invite, and `n` members who joined through S's. */
+  function tenantOf(n: number) {
+    const root = born(OWNER)
+    const signer = born(SIGNER)
+    const members = Array.from({ length: n }, (_, i) => born(`0e000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`))
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(signer, root)),
+      ...members.map((m) => row(m, 'MEMBER', joinedThrough(m, signer))),
+    ]
+    return { root, signer, members }
+  }
+  const chainReads = (userId: string) => chains.getKeyChain.mock.calls.filter(([r]) => r.userId === userId).length
+
+  it('the members list: the pin head once, the signer\'s chain once as a signer (and once as a member), each member\'s once', async () => {
+    const { root, signer, members } = tenantOf(8)
+    const pins = fakePinServer()
+    const badges = await tenantBadges(T, ME)
+    // the semantics first: everyone anchored, first seen by this very pass
+    expect(badges).toEqual(Object.fromEntries([root, signer, ...members].map((p) => [p.userId, 'new'])))
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(1)
+    expect(chainReads(signer.userId)).toBe(2)
+    expect(chainReads(root.userId)).toBe(1)
+    expect(members.map((m) => chainReads(m.userId))).toEqual(members.map(() => 1))
+  })
+
+  it('an owner who secured the account after inviting: their retired key and their endorsing key are each checked once', async () => {
+    const root = born(OWNER)
+    const before = born(SIGNER)
+    const members = Array.from({ length: 4 }, (_, i) => born(`0e000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`))
+    const records = members.map((m) => joinedThrough(m, before)) // signed with the key the owner retired since
+    const signer = rotated(before)
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(before, root)),
+      ...members.map((m, i) => row(m, 'MEMBER', records[i], { endorsed: { signerUserId: SIGNER, by: keysOf(signer).identity } })),
+    ]
+    fakePinServer()
+    const badges = await tenantBadges(T, ME)
+    expect(members.map((m) => badges[m.userId])).toEqual(members.map(() => 'new')) // anchored through the endorsement
+    expect(chainReads(SIGNER)).toBe(3) // as a member, as the records' signer, as their endorser - once each
+  })
+
+  it('a second pass reads the head again — nothing is kept across passes', async () => {
+    tenantOf(3)
+    const pins = fakePinServer()
+    await tenantBadges(T, ME)
+    await tenantBadges(T, ME)
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(2)
+  })
+
+  it('a signer check that failed for a request is asked again for the next member - never kept as the pass\'s answer', async () => {
+    const { signer, members } = tenantOf(2)
+    fakePinServer()
+    let signerReads = 0
+    const real = chains.getKeyChain.getMockImplementation()!
+    chains.getKeyChain.mockImplementation(async (r) => {
+      // the 2nd read of the signer's chain is the first member's signer check: it fails, as a request may
+      if (r.userId === signer.userId && ++signerReads === 2) throw new Error('offline')
+      return real(r)
+    })
+    const badges = await tenantBadges(T, ME)
+    expect(badges[members[0].userId]).toBeUndefined() // its check failed: no badge, never a false anomaly
+    expect(badges[members[1].userId]).toBe('new') // the next member's signer check asked again, and anchored
+  })
+
+  it('the grant checks\' view, kept for a minute, is no pass: each check through it reads the pin store itself', async () => {
+    const { root } = tenantOf(0)
+    const pins = fakePinServer()
+    forgetTenantViews()
+    const view = await cachedTenantView(T)
+    await anchorIdentity(root.userId, servedOf(root), { tenant: view })
+    await anchorIdentity(root.userId, servedOf(root), { tenant: view })
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(2)
+  })
+
+  it('a pin another device moved between two passes is what the second pass judges against', async () => {
+    const { members } = tenantOf(1)
+    const pins = fakePinServer()
+    expect((await tenantBadges(T, ME))[members[0].userId]).toBe('new')
+    // another device of this account pinned the member long ago at a head the chain does not hold: an anomaly now
+    pins.become(sealPinStore(MK, { ...pinsOn(MK, pins.state), [members[0].userId]: pinOf(bundleB64(keysOf(born(STRANGER))), 1, headOf(born(STRANGER).chain), { index: 3 }) }, pins.state.revision + 1))
+    expect((await tenantBadges(T, ME))[members[0].userId]).toBe('anomaly')
   })
 })

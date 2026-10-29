@@ -13,16 +13,15 @@
 // (held with the count fed every member, too: the test's bite of both layers is the one that goes red); that only the
 // anchored are counted at all is the cost's choice, not the gate.
 //
-// Cost (measured at 50 members: fewer requests than the members list's `tenantBadges`, inbox #710 holds the rest): the
-// anchor checks run one after another, as `tenantBadges` runs them (the pin store's
-// writes must not race); the pin store is then read ONCE for every pin; the verifications are listed once; a key chain is
-// read for the rotation date only when the anchored head is not the chain's first (a pin at index 0 is a genesis: nothing
-// rotated), a few at a time.
+// Cost: one pass (`PinPass`, inbox #710) — the pin store's head is read once for every anchor check and every pin, and each
+// join record's signer is judged once (`loadTenantView`); the anchor checks run one after another, as `tenantBadges` runs
+// them (the pin store's writes must not race); the verifications are listed once; a key chain is read for the rotation
+// date only when the anchored head is not the chain's first (a pin at index 0 is a genesis: nothing rotated), a few at a
+// time.
 import type { ScopeMember } from '../../api/generated/scopes'
-import { masterKey } from '../../app/vault'
 import { openScopeById } from '../spaces/scopes'
 import { zeroEpochKeys } from '../spaces/epochs'
-import { anchorIdentity, fetchKeyChain, pinStoreDocument, type Pin } from './identityPins'
+import { anchorIdentity, fetchKeyChain, getPin, PinPass, type Pin } from './identityPins'
 import { countVerifications, listAllVerifications, loadTenantView, NEW_FOR_MS, type TenantView } from './tenantTrust'
 import { TrustStateRefused } from './trustMarks'
 
@@ -54,17 +53,6 @@ export interface PeopleOverview {
 
 /** How many key chains are read at once for the rotation dates. */
 const CHAIN_READS_AT_ONCE = 4
-
-/** Every pin, in one read of the store. Throws `TrustStateRefused` for a store this device refuses. */
-async function readPins(): Promise<Record<string, Pin>> {
-  const mk = masterKey()
-  if (!mk) throw new Error('the overview requires an unlocked vault')
-  try {
-    return await pinStoreDocument.open(mk, await pinStoreDocument.fetch())
-  } finally {
-    mk.fill(0)
-  }
-}
 
 /** The counting verifications of `anchored` (subject id → verifier ids), read with the tenant's epoch keys, zeroed after.
  *  Empty when the tenant does not open or a read fails: a *verified* falls away, nothing else does. */
@@ -114,7 +102,7 @@ async function inBatches<T, R>(items: readonly T[], n: number, f: (item: T) => P
  * way to start the list over - and nothing else for one member's failed check.
  */
 export async function loadPeopleOverview(tenantId: string, selfUserId: string, now: number = Date.now()): Promise<PeopleOverview> {
-  const view = await loadTenantView(tenantId)
+  const view = await loadTenantView(tenantId, openScopeById, { pins: new PinPass() })
   if (!view.available) return { available: false, people: [] }
   const listed = [...view.members.values()].filter((m) => m.userId !== selfUserId && !m.pendingConsent)
 
@@ -129,7 +117,11 @@ export async function loadPeopleOverview(tenantId: string, selfUserId: string, n
     }
   }
   const anchored = listed.filter((m) => state.get(m.userId) === 'anchored')
-  const pins = anchored.length ? await readPins() : {}
+  const pins: Record<string, Pin> = {}
+  for (const m of anchored) {
+    const pin = await getPin(m.userId, view.pins)
+    if (pin) pins[m.userId] = pin
+  }
   const counted = await countedFor(view, anchored)
   // A pin AT the served head with index 0 is the chain's genesis: nothing rotated, nothing to read.
   const rotations = await inBatches(anchored, CHAIN_READS_AT_ONCE, async (m) => {
