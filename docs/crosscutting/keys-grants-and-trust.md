@@ -439,8 +439,10 @@ register, and an **epoch floor** per scope beside a commitment to the newest **e
 served below its mark, or one that does not open, is refused (`trust_state_rolled_back`, `trust_state_unreadable`),
 never read as empty; the floor is what limits a grant signed by a retired key to the epochs from before its granter's
 rotation ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7), and the held key what a
-later epoch must link down to (ADR 0111 decision 23). Every grant the device opens and every epoch it commits becomes
-the held key; pairing carries the floors to a linked device, not the held keys.
+later epoch must link down to (ADR 0111 decision 23). Every grant the device opens, every epoch it commits, and the
+tenant key an accept checked or minted becomes the held key — the last so the accepting device's first open of the
+tenant takes no epoch that does not link down to what the accept vouched for; a new account holds it under the Master
+Key its birth hands back, before any vault holds one. Pairing carries the floors to a linked device, not the held keys.
 
 There is no Key Transparency log; a hash-chained key chain with one head per account, shown in the compare, is what
 such a log would commit to without a format change (ADR 0111 decision 17).

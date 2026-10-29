@@ -119,7 +119,8 @@ The same gap covers further cases:
   offline; a weak password the owner chose instead falls faster.
 - **A shared-scope grant signed by a granter identity the operator fabricated**, where the pin alone decides: the
   tenant scope's own grant, and a group's grant outside the active tenant — in a device's first grant of that scope:
-  a later epoch must link down to the key the device held, which the operator never held. That first grant pins the
+  a later epoch must link down to the key the device held, which the operator never held, and the device that accepted
+  an invite holds the key it checked there from the accept on. That first grant pins the
   granter on first use, so an operator that fabricates both the granter and the key is not detected on the spot —
   only by the next verification of that granter's safety number. Someone who holds the device's key (a member, or one
   removed while the tenant has not re-keyed since) can, with the operator, still plant a linked next epoch. In the active tenant a group grant from a granter without an

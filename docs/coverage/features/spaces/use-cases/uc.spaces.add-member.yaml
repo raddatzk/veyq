@@ -124,6 +124,16 @@ acceptanceCriteria:
       web:
         unit: [src/features/tenant/tenantInvite.test.ts, src/views/TenantJoinView.member.test.ts]
         e2e: [src/features/spaces/memberInvite.e2e.test.ts]
+  - id: the-accept-holds-the-key-it-checked
+    # ADR 0111 decision 23 (inbox #740). Measured red on the untouched tree (tenantInvite.firstOpen.test.ts): after a
+    # checked accept, the first open of the tenant opened an epoch-2 grant under an operator's key and a fabricated,
+    # first-seen granter, as it did one at the checked epoch under another key. Bites, each red: no hold, the new
+    # account's Master Key dropped (in the accept and in the view), the first invite held after a re-check, the hold
+    # before the send, the trust marks ignoring the given key, the born Master Key left unwiped.
+    text: Once the server took a member's accept, the device holds the tenant key the checks vouched for, at the invite's epoch — the re-checked invite's after `409 invite_changed` — under the vault's Master Key, or for a new account under the Master Key its birth hands back, which is then wiped. Its first open of the tenant then opens the self-grant and a later epoch linked down to that key, and refuses any other (`epoch_unlinked`). A refused accept holds nothing.
+    coverage:
+      web:
+        unit: [src/features/tenant/tenantInvite.firstOpen.test.ts, src/views/TenantJoinView.member.test.ts]
   - id: self-grant-and-join-record
     # ADR 0111 decision 3: the accept is a grant writer (TenantStore.joinAsMember). The join record is written once,
     # at accept (veyq_tenant_profile.sealed_join_record); uc.spaces.verify-identity covers its reading as the anchor.
