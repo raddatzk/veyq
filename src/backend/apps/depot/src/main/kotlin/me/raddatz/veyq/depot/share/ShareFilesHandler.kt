@@ -48,7 +48,7 @@ sealed interface ShareFileCompleteOutcome {
 }
 
 /**
- * Depot's guest operations on a share link (cr-files-application F2; tag `share-files` of `files/files.openapi.yaml`):
+ * Depot's guest operations on a share link (cr-files-application F2; tag `share-files` of `depot/files.openapi.yaml`):
  * list the files of the shared subtree with their blobs, and complete a `READ_WRITE` guest's upload into a file below
  * the root. Each passes core's guest gate first ([ShareGuestGate.viewGate] / [ShareGuestGate.writeGate], ADR 0079 § Application guest
  * operations), as Memories' `ShareMediaHandler` does.

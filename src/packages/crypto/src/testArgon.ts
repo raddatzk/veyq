@@ -21,10 +21,10 @@
 //    a hung promise or a missing mock. A global bump buys these few tests headroom by spending every other
 //    test's fastest failure signal.
 //
-// What is never lightened, and why that costs no coverage: `shared/crypto/v1.conformance.test.ts` pins the
+// What is never lightened, and why that costs no coverage: `v1.conformance.test.ts` pins the
 // derivations against `contracts/crypto/vectors/v1.json` at the params the VECTORS carry, including an explicit
-// production-params case — that is its whole job. And `shared/crypto/v1.ts` grows no test affordance at all: it
-// is conformance-pinned and sits in the Stryker mutation scope, the same argument `src/test/canaries.ts` makes
+// production-params case — that is its whole job. And `v1.ts` grows no test affordance at all: it
+// is conformance-pinned and sits in the Stryker mutation scope, the same argument `src/web/src/test/canaries.ts` makes
 // for staying out of the crypto primitive.
 import type { ArgonParams } from './v1'
 

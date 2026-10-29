@@ -7,7 +7,7 @@ import { TEST_ARGON } from './testArgon'
 // In the test env there is no Worker global, so the async wrappers take the synchronous fallback. These
 // assert the fallback is byte-identical to the conformance-pinned suite (the worker runs the SAME v1 code).
 //
-// Both sides are given TEST_ARGON explicitly (see src/test/argon.ts) — the assertion is byte-IDENTITY between
+// Both sides are given TEST_ARGON explicitly (see testArgon.ts) — the assertion is byte-IDENTITY between
 // two code paths, which holds at any cost params, and the params are the wrapper's own pass-through argument.
 // It also closes a gap the production-params version had: a wrapper that dropped `params` on the way to the
 // fallback would still match when both sides silently defaulted to v1.ARGON. Here it would not.

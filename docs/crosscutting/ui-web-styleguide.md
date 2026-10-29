@@ -213,9 +213,9 @@ or a one-off `1rem` label sitting in them.
   |---|---|
   | `core/node/components/DeleteNodeDialog.vue` | busy (gates `closable`/`close-on-escape`) + inline error; folder-vs-Memory header variant |
   | `account/trustDevice/DeviceTrustControl.vue` | busy + inline error |
-  | `memory/components/MemoryDetail.vue` (trash purge) | a data payload (the ids) + busy + pluralised body; **no** inline error |
+  | `memories/components/MemoryDetail.vue` (trash purge) | a data payload (the ids) + busy + pluralised body; **no** inline error |
   | `account/rotation/KeyRotationPanel.vue` | busy + inline error, both shared with the form it gates |
-  | `memory/components/MemoryBuckets.vue` (delete bucket) | a **form** — type-the-name — + saving state + an inline error field |
+  | `memories/components/MemoryBuckets.vue` (delete bucket) | a **form** — type-the-name — + saving state + an inline error field |
 
   **They are deliberately not merged into a mutation-owning `ConfirmDialog` variant**, and the table is the
   argument: they share no contract. One has no inline error at all, one carries a payload and pluralised copy,
