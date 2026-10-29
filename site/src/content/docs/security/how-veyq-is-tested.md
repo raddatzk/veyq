@@ -128,6 +128,13 @@ per scenario at CPU throttle 1 and 4):
   stayed was the tiles themselves: each showed the whole photo, and without them the renderer held 0.44–0.46 GiB. A tile
   near the screen now shows its photo shrunk to the thumbnail's size, one at a time, and the renderer stays at
   0.49–0.53 GiB, in the same time.
+- **Uploading 20 videos** (1080p, 6 s each, about as many bytes as the 50 photos), read since 2026-10-29, also counts
+  the video players the page opens. Picking them opened one player for every tile's still picture at once, each drawing
+  its first frame at the full preview size: 18–20 decoding together, the renderer at up to 1.51–1.78 GiB against
+  0.94–0.96 GiB without those pictures, and the upload 14.3–14.7 s at throttle 4 against 10.8–10.9 s. A video's tile
+  now gets its picture in the photos' queue, thumbnail-sized and one at a time: 2 players decode at once, the renderer
+  reaches 1.09–1.12 GiB, and the upload takes 8.3–8.8 s at throttle 1 and 12.4–12.5 s at throttle 4 (8.7–9.1 s and
+  14.3–14.7 s before), three runs each.
 - **Importing a download** of the same 50 photos, a fourth path read since 2026-10-29, took 20.2 s at throttle 1 and
   35.1 s at throttle 4. Before each photo was sent, the page itself checked it against the download's list of
   checksums: 4.0 s of its main thread at throttle 1, about 17 s at throttle 4. That check now runs in the worker that
@@ -177,7 +184,7 @@ Its stages start together; only lane L1 waits for another stage, the image build
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release | 15 min, an estimate | 3.5 min, run directly (2026-10-15) |
 | Stack lanes L2, L3 | no job | — | — |
 | Pentests | no job, by design: run by hand on a developer machine | — | — |
-| Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29) |
+| Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29); the video upload's six runs, 5 min each, before, without the tiles' posters and after (2026-10-29) |
 
 Per commit in CI, the longest of these paths is *estimated* at 20–25 minutes (ADR 0091); the first CI run replaces the
 estimate. Two other workflows check the repository without being a stage: CodeQL's static analysis (`codeql.yml`) and

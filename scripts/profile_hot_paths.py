@@ -49,9 +49,9 @@ harness, which `cr-volume-measurement-cax` deletes.
     whose empty body the page never read as `ERR_ABORTED` — a product defect, fixed in the client — so an abort is a
     finding, not noise. Whether a deliberate abort (a superseded listing the page cancels) may ever pass is the owner's
     call; `ABORTED_REFUSES` is the one place it is taken. A read of an object URL (`blob:`) is no request: it is the page
-    reading a file it holds, and a `<video>` whose source is dropped once its poster frame is drawn cancels the rest of
-    its read on purpose (S2v's first reading, inbox #786: one per poster). The page records those apart
-    (`cancelledBlobReads`), and nothing judges them.
+    reading a file it holds, and a `<video>` that has what it needed of a clip (its first frame, its size) cancels the
+    rest of its read when its source is dropped (S2v, inbox #786: 40 in every run, two per clip, the same with the upload
+    tiles' posters left out). The page records those apart (`cancelledBlobReads`), and nothing judges them.
   - **The recording's own control** (the bite, every run): after the runs the app stops (JFR dumps on exit) and the
     recording must contain neither the canary nor any secret of the instance's `.env`; then the app is recreated with
     the same recording minus the two `#enabled=false` and stopped again, and THAT recording must contain the canary.

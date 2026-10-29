@@ -343,8 +343,8 @@ export async function profiled(
   page.on('requestfailed', (r) => {
     const url = new URL(r.url())
     // A `blob:` URL is the page reading a file it already holds (an object URL), never a request that leaves it: a
-    // `<video>` whose source is dropped once its poster frame is drawn cancels the rest of its read, on purpose, to free
-    // its decoder (inbox #786). Recorded apart, never judged as a failed request.
+    // `<video>` that has what it needed of a clip cancels the rest of its read when its source is dropped (S2v: two per
+    // clip, inbox #786). Recorded apart, never judged as a failed request.
     if (url.protocol === 'blob:') blobReads.push(`${r.method()} ${r.url()} ${r.failure()?.errorText ?? ''}`)
     else failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
   })

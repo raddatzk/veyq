@@ -347,7 +347,12 @@ the upload. A tile now reads the size its file's header names (`src/web/src/shar
 batch's peak is the upload's own, 1.14–1.27 GiB. The 1.0–1.1 GiB the renderer then held through the upload was the
 tiles' previews, each the picked photo decoded whole (0.44–0.46 GiB with none, inbox #785); a tile near the viewport
 now shows its photo drawn at the thumbnail's size, one at a time, and the renderer stays at 0.49–0.53 GiB in the same
-time ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md) § Quality notes; 2026-10-29). A fourth path,
+time. The same upload of 20 clips of 1080p (S2v, inbox #786; the window counts the page's media players too) opened
+18–20 video decoders at once, one per tile's poster at the lightbox's 2048 px, and the renderer peaked at 1.51–1.78 GiB
+against 0.94–0.96 GiB without those posters, which also cost the upload 3.5 s of main thread at throttle 4; a video's
+first frame now joins the photos' queue at the thumbnail's size, 2 decoders run at once, the peak is 1.09–1.12 GiB and
+the upload takes 12.4 s against 14.5 s at throttle 4 ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
+§ Quality notes; 2026-10-29). A fourth path,
 an import of a download of the same 50 photos (S4, inbox #557), spent 3.5 s
 of its main thread on each payload's SHA-256 and 0.5 s on its CRC-32 at throttle 1 (14.6 s and 1.9 s at 4); that check
 now runs in the digest worker, one payload ahead of the upload, and the import takes 15.8 s against 20.2 s and 17.2 s
