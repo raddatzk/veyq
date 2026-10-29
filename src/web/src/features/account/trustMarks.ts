@@ -23,6 +23,14 @@
 // is again the no-mark case; a write that does not land leaves the mark lower, which is only ever safer for the
 // server and never locks anything. The refusals are the other half: they are decided here, and never degrade.
 //
+// **Beside each floor, the key it stands for** (ADR 0111 decision 23). A floor is a number, and a number does not tell a
+// later epoch that links to the key this device held from one an operator planted. So the device also keeps, per scope, a
+// commitment to the newest epoch key it held ({@link holdEpochKey}), and a grant for a later epoch opens only if its chain
+// peels down to that key (`spaces/scopes.ts`). A commitment is a labelled one-way derivation of a random 32-byte key: it
+// says nothing about the key, so it is no secret either. It is never carried by pairing ({@link readMarks} leaves it
+// out): the envelope that carries the marks is capped, and a linked device starts without commitments - the named
+// no-mark case of a device unlocked afresh.
+//
 // **Marks only rise, with one exception, and it is a person's.** A refused document's way back is the reset the
 // user confirms (ADR 0028 Decision 7): it writes the empty document and SETS the mark to the revision it wrote
 // ({@link setMark}). No other path lowers a mark, and no server response reaches that one.
@@ -41,8 +49,15 @@ export type AccountDocument = 'pins' | 'register'
 /** Everything this device remembers for one account. `epochs` is keyed by scope id. */
 export type TrustMarks = { pins: number; register: number; epochs: Record<string, number> }
 
-/** A partial raise — each value is merged as a maximum, never as an assignment. */
-export type MarksRaise = { pins?: number; register?: number; epochs?: Record<string, number> }
+/** The newest epoch key this device held of one scope, as a commitment ({@link epochKeyCommitment}) at its epoch. */
+export type HeldEpochKey = { epoch: number; commitment: string }
+
+/** A partial raise — each value is merged as a maximum, never as an assignment; a held key by its epoch. */
+export type MarksRaise = { pins?: number; register?: number; epochs?: Record<string, number>; held?: Record<string, HeldEpochKey> }
+
+/** The record as it is stored: the marks and, per scope, the newest epoch key held. Only {@link readMarks}' callers see
+ *  the marks alone. */
+type StoredMarks = TrustMarks & { held: Record<string, HeldEpochKey> }
 
 /**
  * Why a sealed account document was refused (ADR 0028 Decision 7):
@@ -59,7 +74,9 @@ export class TrustStateRefused extends Error {
   }
 }
 
-const EMPTY = (): TrustMarks => ({ pins: 0, register: 0, epochs: {} })
+const EMPTY = (): StoredMarks => ({ pins: 0, register: 0, epochs: {}, held: {} })
+const COMMITMENT_INFO = v1.utf8('veyq/v1/epoch-key-commitment')
+const COMMITMENT = /^[A-Za-z0-9+/]{22}==$/
 
 /** The account's slot: a one-way, labelled derivation of its Master Key (see file header). */
 function slotOf(mk: Uint8Array): string {
@@ -68,22 +85,33 @@ function slotOf(mk: Uint8Array): string {
 
 const isMark = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
 
+const isHeld = (h: unknown): h is HeldEpochKey => {
+  const v = h as Partial<HeldEpochKey> | null
+  return !!v && typeof v === 'object' && isMark(v.epoch) && typeof v.commitment === 'string' && COMMITMENT.test(v.commitment)
+}
+
 /** A stored record read back defensively: anything that is not a mark counts as no mark. */
-function normalize(raw: unknown): TrustMarks {
+function normalize(raw: unknown): StoredMarks {
   const out = EMPTY()
   if (!raw || typeof raw !== 'object') return out
-  const r = raw as Partial<Record<keyof TrustMarks, unknown>>
+  const r = raw as Partial<Record<keyof StoredMarks, unknown>>
   if (isMark(r.pins)) out.pins = r.pins
   if (isMark(r.register)) out.register = r.register
   if (r.epochs && typeof r.epochs === 'object') {
     for (const [scopeId, e] of Object.entries(r.epochs as Record<string, unknown>)) if (isMark(e)) out.epochs[scopeId] = e
   }
+  if (r.held && typeof r.held === 'object') {
+    for (const [scopeId, h] of Object.entries(r.held as Record<string, unknown>)) {
+      if (isHeld(h)) out.held[scopeId] = { epoch: h.epoch, commitment: h.commitment }
+    }
+  }
   return out
 }
 
-/** `base` raised by `raise`, each value as a maximum. */
-function merged(base: TrustMarks, raise: MarksRaise): TrustMarks {
-  const out: TrustMarks = { pins: base.pins, register: base.register, epochs: { ...base.epochs } }
+/** `base` raised by `raise`, each value as a maximum; a held key only by a higher epoch (at the same epoch the first one
+ *  stays: the check before every hold has compared the two). */
+function merged(base: StoredMarks, raise: MarksRaise): StoredMarks {
+  const out: StoredMarks = { pins: base.pins, register: base.register, epochs: { ...base.epochs }, held: { ...base.held } }
   if (isMark(raise.pins)) out.pins = Math.max(out.pins, raise.pins)
   if (isMark(raise.register)) out.register = Math.max(out.register, raise.register)
   // An epoch-0 floor refuses nothing, so it is never stored: the marks of a device's unrotated scopes would only
@@ -91,19 +119,29 @@ function merged(base: TrustMarks, raise: MarksRaise): TrustMarks {
   for (const [scopeId, e] of Object.entries(raise.epochs ?? {})) {
     if (isMark(e) && e > 0) out.epochs[scopeId] = Math.max(out.epochs[scopeId] ?? 0, e)
   }
+  for (const [scopeId, h] of Object.entries(raise.held ?? {})) {
+    if (isHeld(h) && (out.held[scopeId] === undefined || h.epoch > out.held[scopeId].epoch)) out.held[scopeId] = { ...h }
+  }
   return out
 }
 
 const hasStore = (): boolean => typeof indexedDB !== 'undefined'
 
-/** The marks this device holds for the account whose Master Key is `mk` — none when it holds none. */
-export async function readMarks(mk: Uint8Array): Promise<TrustMarks> {
+/** The whole stored record of the account whose Master Key is `mk` — empty when it holds none. */
+async function readStored(mk: Uint8Array): Promise<StoredMarks> {
   if (!hasStore()) return EMPTY()
   try {
     return normalize(await idbRun<unknown>(DB, STORE, 'readonly', (s) => s.get(slotOf(mk))))
   } catch {
     return EMPTY()
   }
+}
+
+/** The marks this device holds for the account whose Master Key is `mk` — none when it holds none. Without the held
+ *  keys: this is what pairing carries (file header). */
+export async function readMarks(mk: Uint8Array): Promise<TrustMarks> {
+  const { pins, register, epochs } = await readStored(mk)
+  return { pins, register, epochs }
 }
 
 /**
@@ -171,7 +209,7 @@ export async function forgetMarks(mk: Uint8Array): Promise<void> {
 
 /** An account-key rotation moves the account to a new slot; the rotating device carries what it held across. */
 export async function carryMarks(fromMk: Uint8Array, toMk: Uint8Array): Promise<void> {
-  await raiseMarks(toMk, await readMarks(fromMk))
+  await raiseMarks(toMk, await readStored(fromMk))
 }
 
 /**
@@ -250,9 +288,29 @@ export function epochFloor(scopeId: string): Promise<number> {
   return withVaultKey(async (mk) => (await readMarks(mk)).epochs[scopeId] ?? 0, 0)
 }
 
-/** This device now holds `epoch` of `scopeId` — a grant it opened, or a rotation it made. */
+/** This device now holds `epoch` of `scopeId` — the floor alone; {@link holdEpochKey} is what a grant or a rotation
+ *  records. */
 export function raiseEpochFloor(scopeId: string, epoch: number): Promise<void> {
   return withVaultKey((mk) => raiseMarks(mk, { epochs: { [scopeId]: epoch } }), undefined)
+}
+
+/** The commitment to an epoch key a device keeps (file header): 16 bytes of a labelled HKDF of the key, base64. */
+export function epochKeyCommitment(key: Uint8Array): string {
+  return b64std(v1.hkdfSha256(key, new Uint8Array(0), COMMITMENT_INFO, 16))
+}
+
+/** The newest epoch key this device held of `scopeId`, as a commitment — null when it held none (or is locked). */
+export function heldEpochKey(scopeId: string): Promise<HeldEpochKey | null> {
+  return withVaultKey(async (mk) => (await readStored(mk)).held[scopeId] ?? null, null)
+}
+
+/** This device now holds `key`, epoch `epoch` of `scopeId` — a grant it opened, or a rotation it made: the floor rises to
+ *  it and, when it is newer than the held one, it becomes the key a later epoch must link down to. One transaction. */
+export function holdEpochKey(scopeId: string, epoch: number, key: Uint8Array): Promise<void> {
+  return withVaultKey(
+    (mk) => raiseMarks(mk, { epochs: { [scopeId]: epoch }, held: { [scopeId]: { epoch, commitment: epochKeyCommitment(key) } } }),
+    undefined,
+  )
 }
 
 /** The i18n key that names a refusal on the nearest existing notice: pins under `verify`, the register under

@@ -11,8 +11,11 @@ import { cachedTenantView } from '../account/tenantTrust'
 import { epochFloor } from '../account/trustMarks'
 import { grantSignatureVerifies, type GrantScope } from './grant'
 
-/** Why a grant was not opened. The key inside is never used; the scope does not open (it waits for a current grant). */
-export type GrantRefusal = 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_unanchored' | 'granter_key_retired'
+/** Why a grant was not opened. The key inside is never used; the scope does not open (it waits for a current grant).
+ *  `epoch_unlinked` is decided where the grant is opened and held (`scopes.ts` § `requireLinkToHeld`, ADR 0111 decision
+ *  23): its epoch chain does not reach the key this device held. */
+export type GrantRefusal =
+  | 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_unanchored' | 'granter_key_retired' | 'epoch_unlinked'
 
 export class GrantRefused extends Error {
   constructor(readonly scopeId: string, readonly reason: GrantRefusal) {
@@ -75,7 +78,8 @@ export type GrantRow = {
  *   verify, is `granter_key_unanchored`, and a joined granter's key must sit on their chain at or after the step the
  *   record names. The TENANT scope's own grant is judged by the pin alone: its standings are read with the very key it
  *   carries, and a tenant whose directory this device cannot read (another tenant than the active one) falls back to
- *   the pin as well — every new epoch from another member still has to link to the one this device holds.
+ *   the pin as well. What ties a new epoch to the key this device held is not the granter but the epoch chain, checked
+ *   where the grant is opened and held (`scopes.ts` § `requireLinkToHeld`, ADR 0111 decision 23).
  */
 export async function verifyOwnGrant(
   scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me, tenantId?: string,
