@@ -111,12 +111,15 @@ decision 10). The server stores the signature and does not verify it, except on 
 [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6): the signature must verify — for
 the personal scope only under the account's **own** key, so the server cannot plant a personal scope key; for a shared
 scope under a granter key the trust check anchors ([§ Trust](#trust-who-is-who)) — for a group from the granter's
-standing in its tenant, for the tenant scope's own grant by the pin alone — and a key the granter has since retired
+standing in its tenant, not in the group, for the tenant scope's own grant by the pin alone — and a key the granter has since retired
 only at an epoch at or below this device's floor for the scope. Then, where the grant is opened (`openOwnGrant`,
 `scopes.ts`), a grant at or above the epoch whose key this device holds must peel down through the served epoch links to
 exactly that key, so a key the operator chose under a granter it fabricated is refused: it never held the key the link
 must end at (ADR 0111 decision 23). Refusals: `unsigned`, `not_self_signed`, `bad_signature`, `granter_key_unanchored`,
-`granter_key_retired`, `epoch_unlinked`.
+`granter_key_retired`, `epoch_unlinked`. So a device that holds no key of a group yet — a newcomer's after a consent
+accept, a new or linked device — opens a first grant from any member the tenant anchors, in the group or not: a residual
+with no gain over a group of that member's own, since who is in a group is the server's word (ADR 0111 § What stays
+open).
 
 ### A member invite is a placeholder member
 
@@ -190,7 +193,8 @@ A group target already has an identity in the tenant, so the group owner's clien
 tenant ([§ Trust](#trust-who-is-who)) and wraps the group's current epoch to it (`addGroupMember`,
 `src/web/src/features/spaces/members.ts`), with the group's name key (`wrapGroupNameKeyForInvitee`). An anomaly refuses
 the add (`IdentityUnanchoredError`). The server writes a **consent proposal** — a member row with `pendingConsent`,
-which access treats as no member yet — holding that grant from the add on; consenting changes nothing about keys. A
+which access treats as no member yet — holding that grant from the add on; consenting changes nothing about keys and
+holds nothing on the invitee's device, whose first open of the group takes the grant served then. A
 decline, or the owner's rescind, deletes the row and **queues the group's rotation**, since the target held the key.
 Groups have no invites.
 

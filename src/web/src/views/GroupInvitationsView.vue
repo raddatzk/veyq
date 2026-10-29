@@ -3,7 +3,8 @@
 // caller's pending consent proposals in the active tenant; each carries the group's **name-key `K_name` wrapped to
 // the caller's own identity** + the scope's **canonical `encryptedName`** it opens (both combined on-device here to
 // the group-consistent name) + who added them — so a modified owner cannot show a divergent name. The invitee
-// decides: Accept (→ grant-delivery wraps K_SC the usual way) or Decline (a silent drop — nothing was ever wrapped).
+// decides: Accept (the proposal already holds the group's grant, ADR 0111 decision 4) or Decline (a silent drop that
+// queues the group's rotation, since the proposal held the key).
 // Operator-blind: the server only ever held an opaque wrapped name-key + the already-stored name ciphertext + the
 // membership row, never K_SC, the name-key it can use, or the name.
 import { computed, ref } from 'vue'

@@ -191,7 +191,9 @@ export function listMyGroupInvitations(): Promise<GroupInvitation[]> {
   return withRefresh(() => scopesApi().listMyGroupInvitations())
 }
 
-/** Accept a group-consent proposal (cr-0094) — become a member; the proposal already holds the group's key (ADR 0111). */
+/** Accept a group-consent proposal (cr-0094) — become a member; the proposal already holds the group's key (ADR 0111).
+ *  It opens no grant, so this device holds no key of the group after it: the first open takes the grant served then,
+ *  from any granter the tenant anchors (ADR 0111 § What stays open, inbox #750). */
 export function acceptGroupInvitation(scopeId: string): Promise<void> {
   return withRefresh(() => scopesApi().acceptGroupInvitation({ scopeId }))
 }
