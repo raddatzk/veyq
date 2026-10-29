@@ -5,7 +5,7 @@ A READING, never a check: nothing it records can turn red because the product go
 claim (ADR 0040). Run by hand on one quiet machine; no CI job runs it. What it can refuse is a run whose files would be
 unsafe or meaningless — a busy machine, a profile file holding a secret, a recording whose secret filter is unarmed.
 
-    profile_hot_paths.py --app IMG --admin IMG [--scenario s1,s2,s3,crypto] [--runs 3] [--throttles 1,4] [--keep] [--ignore-load]
+    profile_hot_paths.py --app IMG --admin IMG [--scenario s1,s2,s2v,s3,s4,crypto] [--runs 3] [--throttles 1,4] [--keep] [--ignore-load]
                          [--no-cpu-profile]
 
 **What it profiles on.** A throwaway instance of the PRODUCTION recipe booted from the two candidate images, exactly as
@@ -76,6 +76,11 @@ readings share its seed):
   - `s1` unlock: a new device signs in and opens the space (`s1-unlock.profile.ts`).
   - `s2` upload: 50 phone-sized photos into one Chapter, a fresh Memory per run (`s2-upload.profile.ts`); the window's
     store requests are the wire (#261).
+  - `s2v` upload of videos: S2 with 20 phone-like clips (`s2v-upload.profile.ts`, inbox #786). Its window also records
+    the page's media players (`media` in `<stem>.window.json`, from CDP's `Media` domain: when each `<video>`'s player
+    was made, first played and destroyed, and the most alive and the most playing at once) — every `<video>` the client
+    makes for a poster or a probe is one, so these are the decoders it opened — and when the gallery's upload tiles
+    showed a picture (`tilePictures`).
   - `s3` open a 1,000-photo Chapter (`s3-open-chapter.profile.ts`), seeded once before its first run by
     `s3-seed.profile.ts` through the browser, unprofiled.
   - `s4` import: a download of a Memory of 50 photos of S2's kind imported into a fresh folder per run
@@ -86,7 +91,8 @@ readings share its seed):
   class's `VmRSS` before the window, its peak inside it and when, sampled every 20 ms from `/proc` by the test's own
   process, inbox #558): what a decoded picture holds is no JS heap, so the trace's counters never see it.
   The photos S2, S3 and S4 upload are synthetic: ffmpeg's `testsrc2` with temporal noise, rendered on this host into the run
-  directory's `fixtures/` before the first run (`render_photos`), so ffmpeg must be on the PATH for those two.
+  directory's `fixtures/` before the first run (`render_photos`), and so are S2v's clips (`render_clips`), so ffmpeg
+  must be on the PATH for those.
 """
 from __future__ import annotations
 
@@ -114,12 +120,18 @@ import run_stack_e2e as stack  # noqa: E402 - lane L1's own stages, so the insta
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES = ROOT / ".run" / "profiles"
 PROFILE_CONFIG = (repo_layout.E2E_DIR / "profile" / "playwright.config.ts").relative_to(repo_layout.E2E_DIR)
-SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "s4": "s4-import", "crypto": "crypto-aead"}
+SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s2v": "s2v-upload", "s3": "s3-open-chapter", "s4": "s4-import",
+             "crypto": "crypto-aead"}
 # What a scenario needs on the instance before its first run, run once and never profiled.
 SEEDS = {"s3": "s3-seed", "s4": "s4-seed"}
 # The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, 5.2 MB each, measured),
 # S3's smaller, since S3 reads the grid's thumbnails and not the originals; S4 imports a download of S2's kind of photos.
 PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4), "s4": (50, "4032x3024", 2)}
+# The synthetic clips per scenario (inbox #786): how many, their frame size, frame rate, seconds and video bit rate — S2v's
+# a phone's default recording (1080p at 30 frames a second, H.264 High at 16 Mbit/s with AAC sound, what a phone records
+# when it is not set to HEVC), 6 s each, so 20 of them are about S2's bytes (250 MB against 260 MB) and the wire costs
+# the two about the same. H.264, because the browser the profile drives (Playwright's Chromium) decodes it and not HEVC.
+CLIPS = {"s2v": (20, "1920x1080", 30, 6, "16M")}
 LOAD_LIMIT = 3.0
 IDLE_SECS = 20
 # Where the app writes its recording: a bind mount of the run directory's `jfr/`, since the recipe's /tmp is a tmpfs
@@ -279,6 +291,28 @@ def render_photos(workdir: Path, scenario: str) -> int:
     return sum(f.stat().st_size for f in rendered)
 
 
+def render_clips(workdir: Path, scenario: str) -> int:
+    """The scenario's synthetic clips in `fixtures/<scenario>/` of the run directory: ffmpeg's `testsrc2` with temporal
+    noise and a tone, each clip with its own noise seed and pitch so no two are alike (the upload deduplicates identical
+    content), H.264 High with AAC in an MP4 whose index is at its front (`+faststart`, as a phone writes it), without
+    metadata. Returns the bytes rendered."""
+    count, size, rate, secs, bitrate = CLIPS[scenario]
+    target = workdir / "fixtures" / scenario
+    target.mkdir(parents=True, exist_ok=True)
+    for n in range(1, count + 1):
+        sh(["ffmpeg", "-v", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={size}:rate={rate},noise=alls=12:allf=t:all_seed={n}",
+            "-f", "lavfi", "-i", f"sine=frequency={220 + 20 * n}:sample_rate=48000",
+            "-t", str(secs), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-b:v", bitrate,
+            "-maxrate", bitrate, "-bufsize", "32M", "-g", str(rate), "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact",
+            str(target / f"{scenario}-{n:04d}.mp4")])
+    rendered = sorted(target.glob("*.mp4"))
+    if len(rendered) != count:
+        raise Refused(f"ffmpeg rendered {len(rendered)} clips for {scenario}, not {count}")
+    return sum(f.stat().st_size for f in rendered)
+
+
 def seed_run(compose: list[str], workdir: Path, scenario: str) -> None:
     """The scenario's seed, once, unprofiled: the same browser leg with the seed's spec file."""
     seed = SEEDS[scenario]
@@ -429,6 +463,8 @@ def main() -> int:
         before = stack.host_snapshot()
         for scenario in (s for s in args.scenario if s in PHOTOS):
             say(f"{scenario}: {render_photos(workdir, scenario) / 1048576:,.0f} MiB of synthetic photos rendered")
+        for scenario in (s for s in args.scenario if s in CLIPS):
+            say(f"{scenario}: {render_clips(workdir, scenario) / 1048576:,.0f} MiB of synthetic clips rendered")
         stack.ports_free()
         stack.browser_pins()
         stack.browser_image()
@@ -482,6 +518,8 @@ def main() -> int:
                         + (f"; renderer RSS {memory['before']['renderer'] / 1024:,.0f} -> peak "
                            f"{memory['peak']['renderer']['kB'] / 1024:,.0f} MiB at {memory['peak']['renderer']['atMs']} ms"
                            if memory else "")
+                        + (f"; {window['media']['maxLive']} media player(s) alive at once, "
+                           f"{window['media']['maxPlaying']} playing" if window.get("media") else "")
                         + (f"; {len(aborted)} aborted request(s), recorded ({ABORTED})" if aborted else ""))
         (workdir / "server.json").write_text(json.dumps(server, indent=2), encoding="utf-8")
 
