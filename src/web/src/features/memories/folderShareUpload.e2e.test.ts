@@ -4,7 +4,7 @@
 // (`addSharePhoto`'s `nodeId`) and seals under the target's key from the chain.
 //
 // Two actors on one instance, serialized (the `chapterShare.e2e` / `folderShareGuest.e2e` shape):
-//   A          = curator: server owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a chapter
+//   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a chapter
 //                and a photo of A's).
 //   anonymous  = guests with NO session — every call goes through `publicSharesApi()` or `publicShareMediaApi()`.
 //

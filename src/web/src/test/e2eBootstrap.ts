@@ -150,7 +150,7 @@ export async function become(a: Actor): Promise<void> {
 }
 
 export type BirthedInstance = {
-  /** The server owner, who is also the tenant's owner — signed in and unlocked when this resolves. */
+  /** The Server Owner, who is also the tenant's owner — signed in and unlocked when this resolves. */
   owner: Actor
   /** `tenantId` for member invites; `bootstrapSecret` is already spent on the owner's own accept. */
   tenant: Awaited<ReturnType<typeof createTenant>>
@@ -159,7 +159,7 @@ export type BirthedInstance = {
 }
 
 /**
- * Cold-birth a fresh instance: assert it IS fresh, mint the server owner, create the tenant, accept it as that
+ * Cold-birth a fresh instance: assert it IS fresh, mint the Server Owner, create the tenant, accept it as that
  * owner and point the tenant's mail at Mailpit. Leaves `session`/vault unlocked as the owner.
  *
  * The freshness assertion is load-bearing, not defensive: a suite that silently ran against a warm instance

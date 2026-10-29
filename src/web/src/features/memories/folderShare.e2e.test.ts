@@ -3,7 +3,7 @@
 // READ_WRITE operations are 5b.4.
 //
 // Two actors on one instance, serialized (the `chapterShare.e2e` shape):
-//   A          = curator: server owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a photo)
+//   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a photo)
 //                and a subfolder, and a Memory beside the folder that the link must not reach.
 //   anonymous  = a guest with NO session — the resolve goes through `publicSharesApi()` (core's link), which carries
 //                no bearer.

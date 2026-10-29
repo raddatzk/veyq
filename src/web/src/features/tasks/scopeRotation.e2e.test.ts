@@ -1,7 +1,7 @@
 // cr-0092 live e2e (VEYQ_E2E=1): the async group-key-rotation backstop, end-to-end against a REAL backend +
 // MariaDB with REAL crypto — no mocks. Three actors on one instance (serialized: each `become()` swaps the
 // session token + unlocks that actor's vault):
-//   A = tenant OWNER (server owner + tenant owner) — the remover; NOT a key-holder of the group.
+//   A = tenant OWNER (Server Owner + tenant owner) — the remover; NOT a key-holder of the group.
 //   B = group key-holder (owns group G, holds K_SC).
 //   C = co-sharer of G (a key-holder from the add on: the add carries the grant, ADR 0111) — the removed member.
 //
@@ -83,7 +83,7 @@ async function claimRotation() {
 
 describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, real crypto)', () => {
   it('a tenant-member removal queues a rotation a remaining owner completes; A/ex-member cannot', async () => {
-    // --- A: cold-birth the server owner, then create + accept the tenant as its OWNER ---
+    // --- A: cold-birth the Server Owner, then create + accept the tenant as its OWNER ---
     const { owner: A, tenant, salt } = await birthInstance('E2E Rotation')
 
     // --- B, C: onboard as tenant MEMBERS (a code invite each, accepted with the self-grant, ADR 0111) ---
