@@ -309,8 +309,11 @@ run on the client. If a target is ever needed, it becomes an ADR — not a line 
 three hot paths, unlock, an upload of 50 phone-sized photos and opening a 1,000-photo Chapter, on both sides: Chromium's
 CPU profile of the main thread and a trace of every thread, three runs each at CPU throttle 1 and 4, and the server
 under JFR with its environment and system-property events off, beside the SQL statements per request. Nothing it
-records can turn red; a hotspot it finds becomes an inbox row with its number. Its first reading (2026-10-23/24) bore out
-the sentence above: the server's JVM averaged under 1 % CPU, unlock waits on the Argon2id worker by design, and the
+records can turn red; a hotspot it finds becomes an inbox row with its number. What its reader can refuse is a reading
+of the main thread it cannot stand behind: the trace's tasks must account for the thread's CPU time as the operating
+system counts it, and may outlast their own CPU time only as far as on a quiet machine (the ranges and why they are
+two angles, not one ratio, are `scripts/profile_attribute.py`'s docstring; inbox #770). Its first reading
+(2026-10-23/24) bore out the load model above: the server's JVM averaged under 1 % CPU, unlock waits on the Argon2id worker by design, and the
 client's largest avoidable cost was sealing an upload's blobs in pure JS on the main thread: 12.4 s of the main thread's
 24 s in the 41 s upload at throttle 1. Those chunk frames are now sealed and opened in core's frame worker
 (`src/web/src/core/blob/frames.worker.ts`), on the same `@noble` code (ADR 0017 decision 1). Its after-reading

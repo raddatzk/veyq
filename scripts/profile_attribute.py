@@ -39,29 +39,44 @@ interval below is cut to them. Every number is of the page's renderer, never of 
     N+1's digest ran inside file N's upload stage (the overlap's existence measure).
 
 **Its controls** (each prints PASS or FAIL; one FAIL exits 1):
-  - At throttle 1, M and the window's `ThreadTime` delta (`metrics` − `metricsBefore`, the main thread's CPU time) agree
-    within 10 %: two angles, the trace's task intervals (wall clock) against the operating system's count of the
-    thread's CPU time; it also fails a reading on a machine so busy that the thread waited for a core inside its tasks.
-    Under a throttle the ratio is printed, never gated: there `ThreadTime` exceeded M by 11–12 % in every run
-    (2026-10-28, ×0.894–0.895 at throttle 4 against ×1.026–1.035 at 1), CPU time the throttle itself spends outside the
-    page's tasks. Not `TaskDuration`: it counted 7.9 s where the trace's tasks held 14.5 s and `ThreadTime` 14.1 s (S2
-    at throttle 1, 2026-10-28) — it leaves out task types the trace shows, among them the workers' messages to the page.
-    Gated on an unprofiled run only: the CPU profiler's sampler costs the main thread CPU time outside its tasks, which
-    stayed inside 10 % while M was 15 s and failed it once M fell to 3 s (2026-10-29, inbox #220: ×0.853 profiled against
-    ×1.030–1.079 unprofiled on the same tree, about 0.55 s over 18.8 s); a profiled run's ratio is printed.
-    **Its agreement depends on the window's length** (inbox #770): the trace's tasks run ×1.31–1.51 longer than their
-    own CPU time (their `tdur`), and the thread spends 43–51 ms of CPU per second of window outside them; the two only
-    cancelled near W ≈ 18 s. With #220's overlap the same M fell into a window of 11 s and two of three runs read
-    ×1.122 and ×1.207 (2026-10-29) while their tasks' wall-to-CPU ratio matched the tree before (×1.35–1.51 against
-    ×1.31–1.49): a FAIL there is a short window, not a starved machine.
+  - **M is what the thread did** (inbox #770): two angles, each within 10 % ([TASK_AGREEMENT]) of what honest runs read
+    on this machine. M is wall time; the trace also carries each task's CPU time on its thread's clock (`tdur`), and the
+    window's `ThreadTime` delta (`metrics` − `metricsBefore`) is the operating system's count of the thread's CPU time.
+      - *Wall against CPU*: M against its tasks' own CPU time ([task_cpu]) reads ×1.31–1.51 ([TASK_WALL_PER_CPU]) — a
+        task's wall time also holds the thread's waits inside it, which keep it from other work, so M is busy time, not
+        CPU time. Above the range the thread waited for a core inside its tasks, and M overstates the page's work.
+      - *CPU accounted*: `ThreadTime` against the tasks' CPU time plus 43–51 ms per second of window
+        ([CPU_OUTSIDE_TASKS_MS_PER_S]), the CPU the thread spends outside its tasks. Above it, the thread spent CPU in
+        tasks the reader does not count (a task type [TASKS] does not name, a window cut wrong) and M misses work;
+        below it, the trace's tasks claim more CPU than the thread spent.
+    Not M against `ThreadTime` within 10 %, the control before: it compared wall with CPU time, and the two effects
+    above (×1.31–1.51 inside the tasks, a rate per second outside them) cancel only near W ≈ 18 s, so the same work in
+    #220's 11-s windows read ×1.122 and ×1.207 and failed on a quiet machine (2026-10-29). Now each angle compares like
+    with like, and the part that grows with the window is a rate. The ranges are those of #220's six unprofiled
+    throttle-1 runs (W 11–19 s, 2026-10-29); six fresh ones on this machine (an Apple M4 Pro, macOS, Chromium 156,
+    a 1-minute load of 2.98 and 2.99 at each batch's start) read ×1.32–1.45 and 43–45 ms/s on the tree before #220
+    (W 17.6–19.5 s) and ×1.33–1.46 and 50–51 ms/s on the tree after it (W 10.3–11.8 s), all inside, where the old
+    ratio failed two of the six (×1.118, ×1.155). The rate is not quite constant — about 0.2 s at the window's edges plus 33 ms/s fits all six —
+    which the tolerance absorbs for windows of about 5–40 s; a reading far outside that measures the two parts first,
+    as another machine measures its own ranges. Planted into those six traces, each inconsistency failed its own
+    angle and only it: every fourth task dropped read 71–103 ms/s outside the tasks; every task's wall time stretched by
+    40 % read ×1.66–1.89.
+    Gated at throttle 1 on an unprofiled run only; otherwise both are printed. A throttle spends the thread's CPU time
+    outside the page's tasks (`ThreadTime` exceeded M by 11–12 % at throttle 4, 2026-10-28), and so does the CPU
+    profiler's sampler, about 0.55 s over 18.8 s (2026-10-29, inbox #220). Not `TaskDuration`: it counted 7.9 s where
+    the trace's tasks held 14.5 s and `ThreadTime` 14.1 s (S2 at throttle 1, 2026-10-28) — it leaves out task types the
+    trace shows, among them the workers' messages to the page.
   - `other` stays under 15 % of the sampled script, or the buckets decide nothing and [RULES] needs extending.
   - The frame worker is busy at least [FRAME_WORKER_MIN_S]: the 50 photos' frames are sealed there (5.1–5.6 s,
     2026-10-27 and -28), so a reading whose frames went back to the page, or that named another thread the frame
     worker, is red. A floor, not a range: the worker's time grows with the load and with what else it is given.
   - On a tree that runs one file at a time, no file's digest lies inside the previous file's upload stage; read with
     `--expect-overlap` it is the reverse, at least [OVERLAP_MIN] of the pairs.
-  - `--selftest`: a synthetic trace and source map with known samples, read through the same functions. Bitten by
-    moving one source path to another bucket in [RULES] (its own assertion goes red).
+  - `--selftest`: a synthetic trace and source map with known samples, read through the same functions, and the
+    CPU-time control on known numbers: an honest 11-s and 18-s window pass, a missing quarter of the tasks, a starved
+    thread and a trace without `tdur` fail, a profiled or throttled run is not gated. Bitten by moving one source path
+    to another bucket in [RULES], and by each of: a nested task counted twice, an edge task counted whole, no CPU outside
+    the tasks (the old model), either angle dropped, a 30 % tolerance, a profiled run gated (each turns it red).
 """
 from __future__ import annotations
 
@@ -80,6 +95,10 @@ COMPLETE = re.compile(r"^/api/scopes/[^/]+/media-batch$")
 TASKS = ("RunTask", "ThreadControllerImpl::RunTask")
 FRAME_WORKER_MIN_S = 5.0
 TASK_AGREEMENT = 0.10
+# What an honest unprofiled throttle-1 run read on this one machine (module docstring, *Its controls*): the main thread's
+# tasks' wall time per second of their own CPU time, and the thread's CPU time outside its tasks, ms per second of window.
+TASK_WALL_PER_CPU = (1.31, 1.51)
+CPU_OUTSIDE_TASKS_MS_PER_S = (43.0, 51.0)
 OTHER_MAX = 0.15
 OVERLAP_MIN = 45 / 49
 # A pair's digest counts as inside the previous file's upload stage from this much digest-worker time on (ms): a
@@ -268,6 +287,9 @@ class Trace:
         # Where Chromium posted each task from (`src_func`, e.g. `PostMessageToWorkerObject`): what a task's own time,
         # which no event names, was spent on.
         self.origins: dict[tuple[tuple[int, int], float, str], str] = {}
+        # Each task's CPU time on its own thread's clock (`tdur`, µs), keyed like `origins`: what the task cost the
+        # thread, against its wall time (`dur`), which also holds the time the thread waited inside it.
+        self.cpu: dict[tuple[tuple[int, int], float, str], float] = {}
 
     def add(self, e: dict) -> None:
         ph, name = e.get("ph"), e.get("name", "")
@@ -277,6 +299,8 @@ class Trace:
         elif ph == "X" and "dur" in e:
             self.events.setdefault(key, []).append((float(e["ts"]), float(e["dur"]), name))
             if name in TASKS:
+                if "tdur" in e:
+                    self.cpu[(key, float(e["ts"]), name)] = float(e["tdur"])
                 args = e.get("args") or {}
                 origin = (args.get("task") or args).get("src_func")
                 if origin:
@@ -348,6 +372,25 @@ def inside(spans: list[tuple[float, float]], a: float, b: float) -> float:
 
 def tasks(trace: Trace, thread: tuple[int, int]) -> list[tuple[float, float]]:
     return union([(ts, ts + d) for ts, d, n in trace.events.get(thread, ()) if n in TASKS])
+
+
+def task_cpu(trace: Trace, thread: tuple[int, int], a: float, b: float) -> float | None:
+    """The CPU time (`tdur`) of the thread's top-level tasks inside [a, b] (µs), or None when the trace carries no
+    `tdur`. A task nested in another (`RunTask` inside `ThreadControllerImpl::RunTask`) is its parent's, never counted
+    twice; a task cut by an edge counts by the share of its wall time inside; a task without `tdur` counts nothing, so
+    the CPU-time control sees it as a gap."""
+    if not any(k[0] == thread for k in trace.cpu):
+        return None
+    cpu = 0.0
+    end = float("-inf")
+    for ts, d, n in sorted((e for e in trace.events.get(thread, ()) if e[2] in TASKS), key=lambda e: (e[0], -e[1])):
+        if ts + d <= end:
+            continue
+        end = ts + d
+        clipped = max(0.0, min(ts + d, b) - max(ts, a))
+        if clipped and d:
+            cpu += trace.cpu.get((thread, ts, n), 0.0) * clipped / d
+    return cpu
 
 
 def by_kind(trace: Trace, thread: tuple[int, int], a: float, b: float) -> tuple[dict[str, float], dict[str, float]]:
@@ -553,6 +596,7 @@ def read_run(trace: Trace, window: dict, maps: Maps) -> dict:
 
     before, after = window.get("metricsBefore"), window.get("metrics")
     thread_delta = (after["ThreadTime"] - before["ThreadTime"]) * 1e6 if before and after else None
+    cpu_us = task_cpu(trace, main, t0, t1)
 
     named = {k: v for k, v in buckets.items()}
     top = max(named, key=named.get)
@@ -574,20 +618,39 @@ def read_run(trace: Trace, window: dict, maps: Maps) -> dict:
         "storeRequests": store,
         "digestInsidePreviousUpload": overlapped,
         "threadTimeDelta": ms(thread_delta) if thread_delta is not None else None,
+        "taskCpu": ms(cpu_us) if cpu_us is not None else None,
         "cpuProfile": window.get("cpuProfile", True),
     }
+
+
+def cpu_controls(stem: str, run: dict) -> list[tuple[str, bool]]:
+    """The two angles on M (module docstring, *Its controls*): its tasks' wall time against their own CPU time, and
+    their CPU time, plus the measured CPU outside them per second of window, against the thread's `ThreadTime`."""
+    cpu, thread, m, w_s = run.get("taskCpu"), run["threadTimeDelta"], run["M"], run["W"] / 1000.0
+    if not cpu:
+        return [(f"{stem}: the trace carries no CPU time (`tdur`) of the main thread's tasks — M cannot be checked", False)]
+    lo, hi = TASK_WALL_PER_CPU[0] / (1 + TASK_AGREEMENT), TASK_WALL_PER_CPU[1] * (1 + TASK_AGREEMENT)
+    ratio = m / cpu
+    wall = (f"{stem}: M {m:.0f} ms against its tasks' own CPU time, {cpu:.0f} ms (×{ratio:.3f}; ×{TASK_WALL_PER_CPU[0]}–"
+            f"{TASK_WALL_PER_CPU[1]} measured, within {TASK_AGREEMENT:.0%}: ×{lo:.2f}–{hi:.2f})", lo <= ratio <= hi)
+    low, high = (cpu + rate * w_s for rate in CPU_OUTSIDE_TASKS_MS_PER_S)
+    outside = (thread - cpu) / w_s
+    accounted = (f"{stem}: the main thread's CPU time, {thread:.0f} ms, against its tasks' {cpu:.0f} ms plus "
+                 f"{CPU_OUTSIDE_TASKS_MS_PER_S[0]:.0f}–{CPU_OUTSIDE_TASKS_MS_PER_S[1]:.0f} ms a second of the {w_s:.1f}-s "
+                 f"window outside them, {low:.0f}–{high:.0f} ms (read: {outside:.0f} ms/s; within {TASK_AGREEMENT:.0%})",
+                 low / (1 + TASK_AGREEMENT) <= thread <= high * (1 + TASK_AGREEMENT))
+    return [wall, accounted]
 
 
 def controls(stem: str, run: dict, expect_overlap: bool) -> list[tuple[str, bool]]:
     out = []
     if run["threadTimeDelta"] is not None:
-        ratio = run["M"] / run["threadTimeDelta"] if run["threadTimeDelta"] else 0.0
-        text = f"{stem}: M {run['M']:.0f} ms against the main thread's CPU time, {run['threadTimeDelta']:.0f} ms (×{ratio:.3f}"
         if re.search(r"-t1-", stem) and not run.get("cpuProfile", True):
-            out.append((f"{text}, within {TASK_AGREEMENT:.0%})", abs(ratio - 1.0) <= TASK_AGREEMENT))
+            out += cpu_controls(stem, run)
         else:
             why = "with the CPU profiler" if run.get("cpuProfile", True) else "under a throttle"
-            print(f"INFO {text}; {why}, not gated)")
+            for text, _ in cpu_controls(stem, run):
+                print(f"INFO {text}; {why}, not gated")
     if run["otherShare"] is not None:
         out.append((f"{stem}: other is {run['otherShare']:.1%} of the sampled script (under {OTHER_MAX:.0%})",
                     run["otherShare"] < OTHER_MAX))
@@ -723,18 +786,54 @@ def selftest() -> int:
             failures.append(f"kinds read as {kinds}, expected {expect_kinds}")
         if inside(tasks(trace, main), 1000, 21000) != 10000.0:
             failures.append("M is not the task's 10 ms")
+    checks = len(cases) + 7
+
+    # The tasks' CPU time: a task nested in another counts once, one cut by the window's edge by its share inside, one
+    # without `tdur` not at all; a trace without any `tdur` reads None.
+    thread = (1, 1)
+    timed = Trace()
+    for e in [{"ph": "X", "name": "ThreadControllerImpl::RunTask", "pid": 1, "tid": 1, "ts": 0, "dur": 1000, "tdur": 600},
+              {"ph": "X", "name": "RunTask", "pid": 1, "tid": 1, "ts": 100, "dur": 500, "tdur": 400},
+              {"ph": "X", "name": "RunTask", "pid": 1, "tid": 1, "ts": 2000, "dur": 1000, "tdur": 500},
+              {"ph": "X", "name": "RunTask", "pid": 1, "tid": 1, "ts": 2100, "dur": 100}]:
+        timed.add(e)
+    if task_cpu(timed, thread, 0, 2500) != 850.0:
+        failures.append(f"the tasks' CPU time read {task_cpu(timed, thread, 0, 2500)} µs, expected 600 + 500 / 2 = 850")
+    untimed = Trace()
+    untimed.add({"ph": "X", "name": "RunTask", "pid": 1, "tid": 1, "ts": 0, "dur": 1000})
+    if task_cpu(untimed, thread, 0, 2500) is not None:
+        failures.append("a trace without `tdur` read a CPU time")
+    checks += 2
+
+    # The CPU-time control (inbox #770), gated on an unprofiled throttle-1 run. Honest: tasks ×1.43 of their CPU time and
+    # 47 ms/s outside them, in an 11-s and an 18-s window — the old M-against-ThreadTime ratio read ×1.146 (red) and
+    # ×1.018 (green) for the same work; both must pass now. Then three inconsistencies, each failing its own angle.
+    run = {"otherShare": 0.01, "workers": {"frames.worker-x": 6000.0}, "files": 2, "digestInsidePreviousUpload": 0,
+           "cpuProfile": False}
+    cases_cpu = [
+        ("an honest 11-s window", {"W": 11000.0, "M": 3000.0, "taskCpu": 2100.0, "threadTimeDelta": 2617.0}, [True, True]),
+        ("an honest 18-s window", {"W": 18000.0, "M": 3000.0, "taskCpu": 2100.0, "threadTimeDelta": 2946.0}, [True, True]),
+        # A quarter of the tasks unread (a task type the reader does not name): M and its CPU time shrink alike, the
+        # thread's CPU time does not.
+        ("a quarter of the tasks missing", {"W": 11000.0, "M": 2250.0, "taskCpu": 1575.0, "threadTimeDelta": 2617.0},
+         [True, False]),
+        # A thread that waited for a core inside its tasks: their wall time grows, their CPU time does not.
+        ("a starved thread", {"W": 11000.0, "M": 3990.0, "taskCpu": 2100.0, "threadTimeDelta": 2617.0}, [False, True]),
+        ("a trace without `tdur`", {"W": 11000.0, "M": 3000.0, "taskCpu": None, "threadTimeDelta": 2617.0}, [False]),
+    ]
+    for name, numbers, expected in cases_cpu:
+        got = [ok for text, ok in controls("s2-t1-r1", {**run, **numbers}, False) if "CPU time" in text]
+        if got != expected:
+            failures.append(f"{name}: the CPU-time control read {got}, expected {expected}")
+    # A profiled run's sampler and a throttle both spend the thread's CPU time outside its tasks: printed, never gated.
+    starved = {**run, **cases_cpu[3][1]}
+    for stem, profiled in (("s2-t1-r1", True), ("s2-t4-r1", False)):
+        if any("CPU time" in text for text, _ in controls(stem, {**starved, "cpuProfile": profiled}, False)):
+            failures.append(f"{stem} {'profiled' if profiled else 'unprofiled'} was gated by the CPU-time control")
+    checks += len(cases_cpu) + 2
     for f in failures:
         print(f"FAIL {f}")
-    # The CPU-time angle is gated on an unprofiled run at throttle 1 only: a profiled run's sampler costs the main thread
-    # CPU time outside its tasks (×0.853 on 2026-10-29), so the same ratio there is printed, not failed.
-    starved = {"M": 850.0, "threadTimeDelta": 1000.0, "otherShare": 0.01, "workers": {"frames.worker-x": 6000.0},
-               "files": 2, "digestInsidePreviousUpload": 0}
-    gated = [ok for text, ok in controls("s2-t1-r1", {**starved, "cpuProfile": False}, False) if "CPU time" in text]
-    if gated != [False]:
-        failures.append(f"an unprofiled throttle-1 run at ×0.85 was not failed by the CPU-time control: {gated}")
-    if any("CPU time" in text for text, _ in controls("s2-t1-r1", {**starved, "cpuProfile": True}, False)):
-        failures.append("a profiled run was gated by the CPU-time control")
-    print(f"selftest: {len(cases) + 7 - len(failures)} of {len(cases) + 7} checks hold")
+    print(f"selftest: {checks - len(failures)} of {checks} checks hold")
     return 1 if failures else 0
 
 
