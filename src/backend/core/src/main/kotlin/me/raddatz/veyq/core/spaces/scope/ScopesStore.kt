@@ -688,9 +688,13 @@ class ScopesStore(
         val tenantId = scope.tenantId
         val profileByUser = profiles.byUserInTenant(tenantId)
         val memberships = MembershipEntity.find("scopeId", scopeId).list()
-        val heads = keyChain.heads(memberships.map { it.userId })
+        val userIds = memberships.map { it.userId }
+        // Every member's account in one read, never one `findById` per member (inbox #537): 1,000 members were 1,017
+        // statements, now a constant. `MemberListQueryCountSliceTest`.
+        val users = if (userIds.isEmpty()) emptyMap() else VeyqUser.list("id in ?1", userIds.toSet()).associateBy { it.id }
+        val heads = keyChain.heads(userIds)
         return memberships.mapNotNull { m ->
-            VeyqUser.findById(m.userId)?.let { u ->
+            users[m.userId]?.let { u ->
                 val p = profileByUser[m.userId]
                 ScopeMemberRow(
                     m.userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role,
