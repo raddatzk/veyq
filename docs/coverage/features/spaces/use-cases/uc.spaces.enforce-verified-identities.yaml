@@ -68,3 +68,16 @@ gaps:
     (`fingerprint.chain_code`), each vector from an independent Python implementation. `packages/crypto`'s job has never
     executed, so ADR 0040 admits none of its suites; on the first run whose log shows them executed, the suite goes under
     `a-verification-is-the-verifiers-own-signed-row` and `show-my-safety-number`.
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/account/safety-number-qr.spec.ts`, inbox #491's last proof) drives
+    `show-my-safety-number`, `safety-number-verify` and `verified-by-counts-for-every-member` in Chromium against the
+    release candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion. The scan
+    needs a camera, so the scanning member's browser is launched with Chromium's file-backed fake camera
+    (`--use-file-for-fake-video-capture`), which plays a video made from the screenshot of the QR the other member's own
+    profile renders, pixel for pixel - the app's own decode (jsQR) and compare decide. A QR of a different identity (the
+    scanning member's own `veyqid:2` code) is refused as different keys and writes nothing: the member's other device
+    still reads "Not verified" on the profile and in Who's who; the owner's own QR marks them verified, read back there as
+    "Verified" and "Verified by you.". Bitten: with `compareScan` answering `match` for every `veyqid:2` code, the refusal
+    test is red on the verification it then wrote (2026-10-29). Green only in local runs of `scripts/run_stack_e2e.py`, and
+    ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed. A pass with a real phone's camera
+    stays welcome but is no longer owed.

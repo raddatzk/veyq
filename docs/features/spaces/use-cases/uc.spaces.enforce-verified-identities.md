@@ -19,7 +19,11 @@
   not required: the anchor check pins a member seen for the first time.
 - **Status:** **built** — crypto, contracts, backend and web; clicked in a real browser (2026-10-28, three members:
   two compared, the third saw *verified by*, which fell away when the verified member secured their account; the
-  overview of main flow 5 on 2026-10-28, three members, one verification, one rotation, and again at 50 members).
+  overview of main flow 5 on 2026-10-28, three members, one verification, one rotation, and again at 50 members). The
+  **scan** is proven by a camera in a browser (lane L1, 2026-10-29, inbox #491): Chromium's file-backed fake camera
+  shows the scanner the QR the other member's own profile renders — a match verifies, another identity's code is refused
+  and writes nothing ([coverage](../../../coverage/features/spaces/use-cases/uc.spaces.enforce-verified-identities.yaml)
+  `gaps.stack`). A pass with a real phone's camera stays welcome but is no longer owed.
 - **Postconditions (success):** the caller's signed verification of the target's current head sits in the caller's
   own row in the tenant; every member's client that anchors both counts it, so the profile reads *Verified* and
   *Verified by {names}.*, and the tenant's and groups' member lists badge *Verified*. The operator stores the row and
