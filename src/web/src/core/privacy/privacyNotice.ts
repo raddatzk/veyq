@@ -9,7 +9,7 @@ import { publicOperatorApi } from '../../api/client'
 import type { PrivacyNotice } from '../../api/generated/operator'
 
 // The notice as the endpoint serves it: each passage's `id` is its anchor, a `separate` one a right to object (GDPR
-// Art. 21(4)); `draftBanner` is there while the text awaits a qualified legal review.
+// Art. 21(4)).
 export type { PrivacyNotice, PrivacyNoticePassage } from '../../api/generated/operator'
 
 /** The public page of the notice. */

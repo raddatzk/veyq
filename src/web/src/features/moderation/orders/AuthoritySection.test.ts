@@ -49,11 +49,11 @@ describe('AuthoritySection', () => {
     vi.mocked(openReferenceOf).mockReturnValue('BKA ST-2026-0417')
   })
 
-  it('shows the order with its reference opened and its Annex II text, the draft banner first', () => {
+  it('shows the order with its reference opened and its Annex II text, its title first', () => {
     const w = mountSection()
     expect(w.find('.moderation-case-order').text()).toContain('BKA ST-2026-0417')
     const text = (w.find('.moderation-case-order-text').element as HTMLTextAreaElement).value
-    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.draftBanner)
+    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.annexII[0])
     expect(text).toContain('Reference of the removal order: BKA ST-2026-0417')
     expect(text).toContain('Access disabled at: 2026-10-18 07:20:11 UTC')
   })

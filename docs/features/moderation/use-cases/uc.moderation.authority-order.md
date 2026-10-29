@@ -53,7 +53,7 @@
    the guest's notice is held back exactly as the statement is.
 7. **What comes out.** For a removal order, the text for the feedback form (TCO Annex II): the reference, the action
    taken and the block time in UTC to the second. One template, `contracts/moderation/authority-order-forms.json`,
-   rendered by admin-web (and its CLI) and src/web/; a **draft** until a qualified legal review.
+   rendered by admin-web (and its CLI) and src/web/.
 8. **Information handed over** to an authority in answer to an order is an event in the case's log, its reference
    sealed (uc.moderation.report-to-an-authority); it changes no hold of an order's case, whose end the order sets.
 

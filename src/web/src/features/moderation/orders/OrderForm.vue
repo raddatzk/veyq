@@ -4,8 +4,8 @@
 //   - a pasted link leaves as its id alone (`orders.ts`' `parseShareReference`): its fragment is the link's key;
 //   - the reference is sealed in this browser to the moderation key, bound to the order's id;
 //   - a removal order blocks for everyone at once, so the form asks first, naming that;
-//   - what comes out is the server's answer rendered into the Annex text to copy (`orderForms.ts`, a DRAFT until a
-//     qualified legal review, which its banner says); the recorded orders below open their references here.
+//   - what comes out is the server's answer rendered into the Annex text to copy (`orderForms.ts`); the recorded orders
+//     below open their references here.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'

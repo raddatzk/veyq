@@ -737,7 +737,7 @@ components:
         The fixed operator section of the terms (ADR 0035 decision 6), rendered by the server from
         `contracts/terms/operator-section.json` in its one form (ADR 0093 § 14), with the values the Server Owner set
         (an empty one as "not stated by this operator") and the guest-write record's N. Clients show it after the
-        space's own terms and never edit it. Public operational content, never E2EE. Every text is a draft until a qualified legal review, and says so.
+        space's own terms and never edit it. Public operational content, never E2EE.
       required: [revision, text, record]
       properties:
         revision:

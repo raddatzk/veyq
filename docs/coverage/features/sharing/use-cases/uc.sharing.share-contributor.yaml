@@ -245,7 +245,7 @@ acceptanceCriteria:
       The resolve of a link whose guest writes (READ_WRITE, WRITE_ONLY, unlocked) serves N as it stands, and the page shows one sentence with that N and the right to object as a sentence of its own before the
       first write — in the naming dialog, and beside the line that says whose session this device holds. A READ link is
       served none and shows nothing (nothing is recorded).
-      The wording is a draft (ADR 0093 Still open 4, not pursued); the link to the operator section joins with that section.
+      What it leaves open is not pursued (ADR 0093 Still open 4); the link to the operator section joins with that section.
     coverage:
       backend:
         integration: [GuestWriteRecordCoreSliceTest.theResolveServesNToAGuestThatWrites]

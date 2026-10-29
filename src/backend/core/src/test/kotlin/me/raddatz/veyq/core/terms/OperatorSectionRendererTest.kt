@@ -110,13 +110,4 @@ class OperatorSectionRendererTest {
         val r = render(all.copy(providerAddress = "Musterstraße 1\n# 12345 Musterstadt\n- x"))
         assertTrue(r.text.en.contains("Address: Musterstraße 1, # 12345 Musterstadt, - x"), r.text.en)
     }
-
-    @Test
-    fun aDraftSaysSoFirstAndOnlyWhileItIsOne() {
-        assertTrue(text.draft, "the section is a draft until a qualified legal review")
-        val draft = render().text
-        assertTrue(draft.en.startsWith("*Draft:") && draft.de.startsWith("*Entwurf:"))
-        val reviewed = OperatorSectionRenderer.render(text.copy(draft = false), all).text
-        assertTrue(reviewed.en.startsWith("## On this instance"), "control: no banner once reviewed")
-    }
 }

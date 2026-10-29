@@ -467,7 +467,7 @@ server-blind token makes this work without the server ever seeing a name:
   The fixed **instance privacy notice** states the GDPR Art. 13 information for members, reporters and guests — what
   the server keeps in the clear, why, how long, who receives it, the rights — from what the running instance does and
   the operator's published values, public at `/privacy` on every tenant host (decision 8). Both are public operational
-  content, never E2EE content, and both are drafts until a qualified legal review.
+  content, never E2EE content.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

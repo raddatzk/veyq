@@ -89,7 +89,6 @@ internal val OWN_PASSAGE = setOf(CapabilityIds.BREACHED_PASSWORD, CapabilityIds.
 /** The wire form of the notice (`PrivacyNotice` in `operator.openapi.yaml`). */
 fun RenderedNotice.toWire(): PrivacyNotice = PrivacyNotice(
     revision = revision,
-    draftBanner = draftBanner?.toNoticeText(),
     passages = passages.map { PrivacyNoticePassage(id = it.id, separate = it.separate, text = it.text.toNoticeText()) },
 )
 

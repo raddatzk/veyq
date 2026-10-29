@@ -308,13 +308,6 @@ class PrivacyNoticeRendererTest {
     }
 
     @Test
-    fun aDraftSaysSoAndOnlyWhileItIsOne() {
-        assertTrue(text.draft, "the notice is a draft until a qualified legal review")
-        assertTrue(render().draftBanner!!.en.startsWith("*Draft:") && render().draftBanner!!.de.startsWith("*Entwurf:"))
-        assertNull(PrivacyNoticeRenderer.render(text.copy(draft = false), all, everythingOn).draftBanner, "control: no banner once reviewed")
-    }
-
-    @Test
     fun bothRightsToObjectAreSetApartAndNothingElseIs() {
         assertEquals(setOf("guest-write-record-objection", "right-to-object"), render().passages.filter { it.separate }.map { it.id }.toSet())
     }

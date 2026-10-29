@@ -110,7 +110,7 @@ days after the report; whether it may run until the handover past those 90 days 
 whether even the bounded hold is covered (§ 184b(5) StGB) — is open.
 A time-bound link for the police to a hold snapshot is not built and will not be without the police's or a specialist's
 answer: it would be a making-available. The Server Owner's own steps (a member's sign-in, a tenant offline) carry no
-statement yet. The texts of the order forms and the warning are drafts until a qualified legal review.
+statement yet.
 
 **Design state.** Decided: the statement of reasons and the objection in
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

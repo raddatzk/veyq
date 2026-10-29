@@ -2,7 +2,7 @@
 // uc.moderation.authority-order (web) — the moderator's order form above the queue:
 //   - folded until asked for; opening it reads the recorded orders, each reference opened here;
 //   - a removal order asks first, naming that it blocks for everyone; declined, nothing is sent;
-//   - accepted, the block time to the second in UTC and the Annex II text with the reference as typed, draft banner first;
+//   - accepted, the block time to the second in UTC and the Annex II text with the reference as typed, its title first;
 //   - a share not on this instance shows the Annex III draft; an order already recorded is said in words.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -73,14 +73,14 @@ describe('OrderForm', () => {
     expect(enterOrder).not.toHaveBeenCalled()
   })
 
-  it('shows the block time to the second and the Annex II text, the reference as typed, draft banner first', async () => {
+  it('shows the block time to the second and the Annex II text, the reference as typed, its title first', async () => {
     vi.mocked(enterOrder).mockResolvedValue(order())
     const w = await opened()
     await submit(w)
     expect(vi.mocked(enterOrder).mock.calls[0][0]).toMatchObject({ kind: 'REMOVAL', reference: 'BKA ST-2026-0417' })
     expect(w.find('.moderation-order-blocked').text()).toContain('2026-10-18 07:20:11 UTC')
     const text = (w.find('.moderation-order-text').element as HTMLTextAreaElement).value
-    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.draftBanner)
+    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.annexII[0])
     expect(text).toContain('Reference of the removal order: BKA ST-2026-0417')
     await w.find('.moderation-order-case').trigger('click')
     expect(w.emitted('openCase')![0]).toEqual(['case-of-order'])

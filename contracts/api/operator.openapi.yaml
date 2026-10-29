@@ -67,7 +67,7 @@ paths:
         share page and the signed-in shell. The same
         section rides each space's terms (`getTenantTerms`, `getShareTerms`) after the space's own text; only there is
         it accepted. Host-independent: instance-wide like `getOperatorDetails`. Unauthenticated; rate-limited per
-        client address. Every text is a draft until a qualified legal review and says so.
+        client address.
       security: []
       responses:
         "200":
@@ -103,8 +103,7 @@ paths:
         needs no account: src/web/ shows it at `/privacy` on every tenant host, linked from the login page, the share
         page, the signed-in shell, the invite acceptance, the report dialog and a guest's first-write notice, each at
         the passage that concerns it. Information, not consent: nothing accepts it and reading it records nothing.
-        Unauthenticated; rate-limited per client address. Every text is a draft until a qualified legal review and
-        says so.
+        Unauthenticated; rate-limited per client address.
       security: []
       responses:
         "200":
@@ -114,7 +113,6 @@ paths:
               schema: { $ref: "#/components/schemas/PrivacyNotice" }
               example:
                 revision: 4
-                draftBanner: { de: "*Entwurf: …*", en: "*Draft: …*" }
                 passages:
                   - id: account
                     separate: false
@@ -234,12 +232,6 @@ components:
           minimum: 1
           description: The notice's revision — it moves with its text, that is with a veyq release, never with a value.
           example: 1
-        draftBanner:
-          description: >
-            The banner every rendering opens with while the text awaits a qualified legal review; absent once reviewed.
-          oneOf:
-            - $ref: "#/components/schemas/PrivacyNoticeText"
-            - type: "null"
         passages:
           type: array
           description: The passages that apply on this host, in the order the text gives them.

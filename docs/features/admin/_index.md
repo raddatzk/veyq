@@ -102,7 +102,7 @@ handling of reported shares.
 - [Read the instance's privacy notice](use-cases/uc.admin.privacy-notice.md) — **built**
   ([ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13): fixed text with the
   instance's values and the switches on for the host's space, public at `/privacy` on every tenant host and linked
-  wherever data is collected; a draft until a qualified legal review.
+  wherever data is collected.
 - Act on what is reported — **built**, under [Moderation](../moderation/_index.md): the Server Owner's side on admin-web
   is [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md) (the roster and the
   moderation key, [ADR 0099](../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md))

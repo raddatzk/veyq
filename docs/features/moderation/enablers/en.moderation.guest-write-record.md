@@ -13,8 +13,8 @@
   ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8) is built (cr-instance-privacy-notice,
   2026-10-19); a guest's objection (one identity's rows deleted on the admin channel and in the CLI) came with a legal
   audit (2026-10-18), and the guest id a guest names in it is shown in its session line (cr-instance-privacy-notice).
-  The switch and its default per operating mode went with cr-operating-mode-retires (2026-10-21). The notice's
-  wording is a draft (ADR 0093 § Legal basis, Still open 4, not pursued).
+  The switch and its default per operating mode went with cr-operating-mode-retires (2026-10-21). What the notice
+  leaves open is not pursued (ADR 0093 § Legal basis, Still open 4).
 - **Provides:** for every write a link's guest makes that enters it as the last editor of something
   ([en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)), the client address and source port
   the server saw and the time, kept for N days, so a hold can copy them as evidence when the written item is reported.
@@ -114,8 +114,8 @@ it stands; otherwise it carries none (it is in the response's tag, so an open pa
 a change). The guest page shows one first-layer sentence with that N wherever the guest can write, before its first
 write — core's `GuestNaming` in every shape: the naming dialog of a `READ_WRITE` link, the line that says whose session
 the device holds, the drop pages of Memories and Depot — and the right to object (GDPR Art. 21) as a sentence of its
-own. A `READ` guest sees nothing, because nothing is recorded. Its
-wording is a draft; what the port is worth behind further NAT is a question not pursued (ADR 0093 § Legal basis, Still open 4). The full GDPR Art. 13 text — controller and contact,
+own. A `READ` guest sees nothing, because nothing is recorded. What the port is worth behind further NAT is a
+question not pursued (ADR 0093 § Legal basis, Still open 4). The full GDPR Art. 13 text — controller and contact,
 purpose, basis and legitimate interest, the data, N, what a hold keeps, the recipients, the rights and the supervisory
 authority, N + B, with the right to object apart — is the record passage of the instance privacy notice
 ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8, the one home of every Art. 13 passage), there

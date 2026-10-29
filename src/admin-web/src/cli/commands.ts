@@ -390,7 +390,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant suspend': {
     usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
+    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
     flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
     run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
     // `ok` as before, and over content whom the statement's mail reached.
@@ -761,7 +761,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account block': {
     usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
@@ -802,7 +802,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'order remove': {
     usage: 'order remove --share <link|id> --reference <text> [--received-at <ISO time>] [--defer-until <ISO time>] [--lang en|de]',
-    summary: 'Enter a terrorist-content removal order: the link and everything it gives access to are blocked at once, by id, for everyone. Prints the block time and the text for the authority’s feedback form (TCO Annex II), a draft until a lawyer has reviewed it. Only the link’s id is sent — never the key after #.',
+    summary: 'Enter a terrorist-content removal order: the link and everything it gives access to are blocked at once, by id, for everyone. Prints the block time and the text for the authority’s feedback form (TCO Annex II). Only the link’s id is sent — never the key after #.',
     flags: {
       ...ORDER_FLAGS,
       'defer-until': { describe: 'the authority forbids telling the affected until then — at most six weeks ahead', required: false },

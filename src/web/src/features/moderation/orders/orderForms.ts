@@ -1,14 +1,11 @@
 // The answers to an authority's removal order (ADR 0093 § 12, TCO Regulation (EU) 2021/784 Annex II and III;
 // uc.moderation.authority-order) — the moderation surface's copy of `contracts/moderation/authority-order-forms.json`,
 // which `orderForms.test.ts` holds text for text to that file, as admin-web's copy is held to it (nothing but
-// `@veyq/crypto` is shared between the two packages, ADR 0065). A DRAFT until a qualified legal review: while the
-// template says so, every rendering starts with its banner.
+// `@veyq/crypto` is shared between the two packages, ADR 0065).
 
 export const ORDER_FORMS = {
   version: 1,
-  draft: true,
   en: {
-    draftBanner: 'DRAFT — not yet reviewed by a lawyer. Check every line before you send it.',
     annexII: [
       'Feedback following the removal of or disabling of access to terrorist content (Regulation (EU) 2021/784, Article 3(6), Annex II)',
       'Reference of the removal order: {reference}',
@@ -31,7 +28,6 @@ export const ORDER_FORMS = {
     ],
   },
   de: {
-    draftBanner: 'ENTWURF – noch nicht anwaltlich geprüft. Prüfe jede Zeile, bevor du sie sendest.',
     annexII: [
       'Rückmeldung nach Entfernung terroristischer Inhalte oder Sperrung des Zugangs zu ihnen (Verordnung (EU) 2021/784, Artikel 3 Absatz 6, Anhang II)',
       'Aktenzeichen der Entfernungsanordnung: {reference}',
@@ -75,8 +71,7 @@ export function formTime(d: Date): string {
 
 /**
  * Render [form] in [lang]: a line is kept only when every placeholder in it has a value, so a provider or contact the
- * operator has not set leaves its line out rather than printing an empty field. The draft banner leads while the
- * template is a draft.
+ * operator has not set leaves its line out rather than printing an empty field.
  */
 export function renderOrderForm(form: 'annexII' | 'annexIII', lang: OrderFormLang, f: OrderFormFields): string {
   const values: Record<string, string | undefined> = {
@@ -93,5 +88,5 @@ export function renderOrderForm(form: 'annexII' | 'annexIII', lang: OrderFormLan
     if (names.some((n) => values[n] === undefined)) return []
     return [line.replace(/\{(\w+)\}/g, (_, n: string) => values[n]!)]
   })
-  return (ORDER_FORMS.draft ? [ORDER_FORMS[lang].draftBanner, '', ...lines] : lines).join('\n')
+  return lines.join('\n')
 }

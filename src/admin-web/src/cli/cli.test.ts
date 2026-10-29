@@ -1022,7 +1022,7 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
       receivedAt: new Date('2026-10-18T07:12:00Z'), deferStatementUntil: null,
     }))
     expect(r.out).toContain('blocked at 2026-10-18 07:20:11 UTC')
-    expect(r.out).toContain(ORDER_FORMS.en.draftBanner)
+    expect(r.out).toContain(ORDER_FORMS.en.annexII[0])
     expect(r.out).toContain('Reference of the removal order: BKA ST-2026-0417')
   })
 

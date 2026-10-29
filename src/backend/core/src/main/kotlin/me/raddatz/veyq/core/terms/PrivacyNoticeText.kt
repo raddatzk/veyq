@@ -18,13 +18,10 @@ data class NoticeConditions(
 data class NoticePassage(val id: String, val separate: Boolean, val conditions: NoticeConditions, val lines: List<SectionLine>)
 
 /**
- * The privacy notice's fixed text, as `contracts/terms/privacy-notice.json` holds it (ADR 0035 decision 8). [draft] is
- * true until a qualified legal review; while it is, the rendering carries [draftBanner].
+ * The privacy notice's fixed text, as `contracts/terms/privacy-notice.json` holds it (ADR 0035 decision 8).
  */
 data class PrivacyNoticeText(
     val revision: Int,
-    val draft: Boolean,
-    val draftBanner: SectionTexts,
     val gap: SectionTexts,
     val dayUnit: RetentionUnit,
     /** What each [RecipientKind] does, per language; [RecipientKind.OTHER]'s carries [DESCRIPTION], no other one does. */
@@ -59,8 +56,6 @@ data class PrivacyNoticeText(
             require(passages.map { it.id }.toSet().size == passages.size) { "every passage of the notice has its own id" }
             return PrivacyNoticeText(
                 revision = root.required("revision").intValue().also { require(it >= 1) { "the notice's revision starts at 1" } },
-                draft = root.required("draft").booleanValue(),
-                draftBanner = SectionTexts.of(root.required("draftBanner")),
                 gap = SectionTexts.of(root.required("gap")),
                 dayUnit = RetentionUnit.of(root.required("dayUnit")),
                 recipientKinds = recipientKinds(root.required("recipientKinds")),

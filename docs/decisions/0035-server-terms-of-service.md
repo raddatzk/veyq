@@ -147,11 +147,11 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    two pairs it accepted (the current revisions and the previous ones, for a rolled-back release), and its gate asks
    the same question.
 
-   **Gaps against the law, named rather than papered over** (a legal duty wins over what an ADR or the code says). The section's text is a **draft until a qualified legal review** and says so on every
-   rendering. Each gap is a correction owed before the first release, or a question for the qualified review the whole
-   text waits on:
+   **Gaps against the law, named rather than papered over** (a legal duty wins over what an ADR or the code says). The section's text is the text veyq ships, not legally
+   reviewed ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § Legal
+   basis says why). Each gap is a correction owed before the first release, or a question the law leaves open:
    - **A space's own terms are not public before sign-in** (decision 5); whether DSA Art. 14(1) reaches them, as terms
-     the provider's service runs under, is a question for the review.
+     the provider's service runs under, is such a question, not pursued.
 
    What the section says, and the gaps, are the Server Owner's to know: the Run docs'
    [Moderation](../../site/src/content/docs/run/moderation.md) page says so.
@@ -186,8 +186,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    acceptance, and its revision moves only with its text. It is shown on every instance, in one form, an empty value showing as "not stated by this
    operator" and nothing warning (ADR 0093 § 14). Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
    run by default are left open and not pursued (ADR 0093 Still open 6 and 7); the notice names the Server Owner as the
-   controller and states the check as it runs. Its text is a **draft until a qualified legal review** too, and the
-   questions the law leaves open for it are ADR 0093 Still open 6, 7 and 10.
+   controller and states the check as it runs. Its text is not legally reviewed either (ADR 0093 § Legal basis), and
+   the questions the law leaves open for it are ADR 0093 Still open 6, 7 and 10.
 
    The notice is shown on **every instance**, every passage being a fact of the software true on every instance (for a household the exemption only
    makes it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to

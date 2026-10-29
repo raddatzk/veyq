@@ -1,8 +1,8 @@
 // The operator section of the terms in a browser (ADR 0035 decision 6, cr-operator-section-of-the-terms), in its one
 // form on every instance (ADR 0093 § 14), with the pointer to the guest-write record's information:
 //
-//   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section — the
-//      draft banner first, and at the record's anchor its pointer to the privacy notice, which holds the record's
+//   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section and,
+//      at the record's anchor, its pointer to the privacy notice, which holds the record's
 //      information and its right to object (DSA Art. 14(1); ADR 0035 decision 8, Q27 of cr-instance-privacy-notice).
 //   2. The space's owner publishes terms of their own: the Terms panel shows the section read-only below them, and the
 //      owner, like every member, is then asked to agree — to the space's text and the section after it.
@@ -70,7 +70,6 @@ test(
     const terms = await opened
     await expect(terms.getByText('Terms of this instance').first()).toBeVisible({ timeout: 60_000 })
     const section = terms.getByTestId('operator-section')
-    await expect(section.getByText('Draft: this section has not yet been reviewed by a lawyer.')).toBeVisible()
     await expect(section.getByRole('heading', { name: 'On this instance: reports, measures and what is kept' })).toBeVisible()
     await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the one form
     await expect(terms.locator('#guest-write-record')).toContainText('privacy notice of this instance')
@@ -166,8 +165,7 @@ test(
       const german = await context.newPage()
       await german.goto(`${tenantOrigin()}/operator-terms`)
       const section = german.getByTestId('operator-section')
-      await expect(section.getByText('Entwurf: Dieser Abschnitt ist noch nicht anwaltlich geprüft.')).toBeVisible({ timeout: 60_000 })
-      await expect(section.getByRole('heading', { name: 'Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible()
+      await expect(section.getByRole('heading', { name: 'Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible({ timeout: 60_000 })
       await expect(section.getByRole('heading', { name: 'Inhalte melden' })).toBeVisible()
       await expect(section.getByRole('heading', { name: 'Behörden und Kontakt' })).toBeVisible()
       await expect(german.locator('#guest-write-record')).toContainText('Datenschutzerklärung dieser Instanz')

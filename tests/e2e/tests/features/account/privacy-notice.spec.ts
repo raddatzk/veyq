@@ -2,8 +2,8 @@
 // uc.admin.privacy-notice), in its one form on every instance (ADR 0093 § 14), with the guest-write record's passage
 // and the values first-run setup published: the provider, the authority and one recipient whose country was left open.
 //
-//   1. Anyone, without an account, opens **Privacy** from the sign-in page's footer and reads the notice — the draft
-//      banner first, the controller and the recipient the Server Owner named, the record's passage with N, each right
+//   1. Anyone, without an account, opens **Privacy** from the sign-in page's footer and reads the notice — the
+//      controller and the recipient the Server Owner named, the record's passage with N, each right
 //      to object apart, the breached-password check naming the service the instance calls; and in German.
 //   2. A member's report dialog links the notice at the passage on the reporter's contact, beside the field.
 //   3. A guest of a link it may add through is told at its first write, with a link to the record's passage; after the
@@ -72,8 +72,7 @@ test(
     const notice = await opens(context, page, 'Privacy')
     expect(new URL(notice.url()).pathname).toBe('/privacy')
     const body = notice.getByTestId('privacy-notice')
-    await expect(body.getByText('Draft: this privacy notice has not yet been reviewed by a lawyer.')).toBeVisible({ timeout: 60_000 })
-    await expect(notice.locator('#controller')).toContainText('E2E Operator e. V.')
+    await expect(body.locator('#controller')).toContainText('E2E Operator e. V.', { timeout: 60_000 })
     // The recipient first-run named, its open country a visible gap.
     await expect(notice.locator('#recipients')).toContainText('E2E Hosting GmbH: hosts the server (not stated by this operator)')
     await expect(notice.locator('#rights')).toContainText('E2E Datenschutzaufsicht')
@@ -100,8 +99,7 @@ test(
     try {
       const page = await context.newPage()
       await page.goto(`${tenantOrigin()}/privacy`)
-      await expect(page.getByText('Entwurf: Diese Datenschutzerklärung ist noch nicht anwaltlich geprüft.')).toBeVisible({ timeout: 60_000 })
-      await expect(page.getByRole('heading', { name: 'Wer verantwortlich ist' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Wer verantwortlich ist' })).toBeVisible({ timeout: 60_000 })
       // the kind in the page's own language: the German notice carries no English
       await expect(page.locator('#recipients')).toContainText('E2E Hosting GmbH: hostet den Server (von der Betreiberseite nicht angegeben)')
       await expect(page.locator('#guest-write-record')).toContainText('7 Tage nach dem Schreibvorgang')
