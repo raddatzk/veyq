@@ -639,7 +639,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'moderator appoint': {
     usage: 'moderator appoint --address <address>',
-    summary: 'Appoint an existing account as a moderator. It stays PENDING until they accept in the web app’s moderation page; a holder then delivers the key.',
+    summary: 'Appoint an existing account as a moderator. It stays PENDING until they accept in the web client’s moderation page; a holder then delivers the key.',
     flags: { address: { describe: 'the account’s address', required: true } },
     run: (f) => appointModerator(f.address),
     render: (r) => renderRoster(r as InstanceModeration),

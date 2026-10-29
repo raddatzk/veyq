@@ -12,8 +12,9 @@ Kept current as work lands; a map, not a satisfiable record (no CR `satisfies:` 
 
 ## 1. Introduction and Goals
 
-veyq is a **self-hostable, end-to-end-encrypted memory-sharing app**. The product center is the **Memory**
-(nested into **Chapters**); folders only organize. People keep photos, dates, places and journal entries in
+veyq is a **self-hostable, end-to-end-encrypted platform** for sealed, shareable objects; its first application,
+**Memories**, is the product center ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
+the **Memory** (nested into **Chapters**); folders only organize. People keep photos, dates, places and journal entries in
 private spaces and share them deliberately — with a person, a group, or a link.
 
 The three goals that outrank every other quality, in order:
@@ -369,7 +370,7 @@ The words this project uses precisely. Where a term has a tempting synonym, the 
 | **Secret Key** | the user's high-entropy second factor, combined with the password to derive the unlock KEK. **Never reaches the server.** Lives in the Emergency Kit. |
 | **Emergency Kit** | the email + Secret Key, saved when the account is born (server setup or joining a tenant). With the password it opens the account on a new device; alone, after a mailed recovery link, it is the only path back after a forgotten password (there is no separate recovery code). Its format: [en.account.key-model](../features/account/enablers/en.account.key-model.md#the-emergency-kit). |
 | **Epoch** | a generation of a scope's content key. Removing a member rotates the scope forward one epoch. |
-| **K_SC / K_node / K_blob** | scope content key / per-Memory key / per-media key. Each random, each wrapped by the level above — that is what makes every level an independent sharing grain. |
+| **K_SC / K_node / K_blob** | scope content key / per-node key / per-media key. Each random, each wrapped by the level above — that is what makes every level an independent sharing grain. |
 | **Operator-blind** | the server stores and serves only ciphertext + opaque metadata, and *cannot* do otherwise — it holds no content key. The operator is modelled as the adversary. |
 | **Server Owner** | the person who installed the instance. A server role over ciphertext — **not** a reader of content. |
 | **Tenant Owner** | governs one tenant (members, groups, terms). In the common self-hosted case, the same person as the Server Owner — and still not a reader. |

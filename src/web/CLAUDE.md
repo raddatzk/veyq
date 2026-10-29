@@ -158,7 +158,7 @@ here; the server is blind.
   core, never back and never application → application, and `scripts/validate_web_core_imports_no_applications.py`
   (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
   application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an
-  application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/item-favorites`,
+  application's directory `contracts/api/<application>/`, read from `package.json` — today `generated/media`, `generated/item-favorites`,
   `generated/share-media` (Memories), `generated/depot` (Depot) and `generated/expenses` (Expenses); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
@@ -236,8 +236,8 @@ here; the server is blind.
   the return to visible or focus, doubling to 2 min on errors, fenced on stop) - it asks nothing when `cursor()` is null, treats
   `{ notModified: true }` (a `304`) as no work, drops a result for a view that moved on, and lets a failed `fetch` reject so the loop
   backs off; `reconcileItems` merges the keyset delta by id (a known item is patched in place through the application's `patch`, a
-  `skip` keeps an optimistic removal out) and drops what the id set no longer lists; `newestItemsCursor` is the `since` the next poll
-  echoes. An application supplies only its FETCH (its generated client) and its REDUCER: Memories' gallery
+  `skip` keeps an optimistic removal out) and drops what the id set no longer lists; the keyset `cursor` the server answered with the last page
+  read (`readItemPages`) is the `since` the next poll echoes. An application supplies only its FETCH (its generated client) and its REDUCER: Memories' gallery
   (`useMediaGalleryLive`, bound to the loop by `mediaRevisionPolling.ts`) is the first user. Core imports no application.
 
   **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
@@ -248,18 +248,17 @@ here; the server is blind.
   `COVER_SPEC`, sealed as the node's blob; `writeNodeCover`: ONE request that sends the blob step AND the meta - `setNodeCover`,
   `removeNodeCover` or a plain `updateNode`, chosen from the cover being replaced as the server hands it back on a `409`), `coverStore.ts` the
   decrypted covers (a member's singleton cleared by `activeSpace`, a guest page's own through the link's gated presign, keyed on the sealed
-  meta so a replaced or removed cover drops its object URL at once; a source core cannot open - Memories' photo - is the kind's
-  `cover.load`), `rights.ts` the fail-closed `coverRights` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
+  meta so a replaced or removed cover drops its object URL at once), `rights.ts` the fail-closed `coverRights` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
   kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and ONE core action `cover`
   (Set / Change, `image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
   it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
   stored crop, Remove where a cover exists, Save/Cancel; a non-image, empty or over-40-MB file is refused inside it, `pickImage.ts`
   `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, `DropBoxDetail`,
   `MemoryDetailHost`). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
-  one `setNodeCover` write), `keep` (the stored value with only its crop moved), `media` (the application's source) and `remove`. A kind that
-  adds a source says so in its descriptor, `cover.extraSource` (`CoverExtraSource`: `hintKey` - an i18n key of ITS OWN namespace that core
-  resolves without reading it by name -, `seal(id, crop)`, `idOf(cover)`; Memories: `memoryPhotoSource`) and feeds the same dialog through
-  `cover.open(node, { source })` (the lightbox's "Set as cover"); core owns the dialog, the application only adds the source. The level
+  one `setNodeCover` write), `keep` (the stored value with only its crop moved) and `remove`. A cover is set only by an upload in that
+  dialog (the lightbox offers no "Set as cover"); a kind whose nodes already store pictures may add one seam to its descriptor,
+  `cover.findStored` (`KindCover`; Memories: the PREVIEW of a gallery photo whose original equals the picked file), so the cover shares
+  that blob instead of storing it again (ADR 0013 § 5). The level
   resolves every node's cover once and hands it to the row factories (`LevelRowsHost.covers`, `ensureCovers`). Display: the row/tile leading
   visual (`NodeCoverImage`; the Memory's page draws `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
   test), the header's leading slot, the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
@@ -383,7 +382,7 @@ here; the server is blind.
   guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
   application's pure, fail-closed rights function over `access` and `targetOf(tree, node)` — `memoryRights`
   (`features/memories/rights.ts`), `depotRights` (`features/depot/rights.ts`), core's
-  `folderRights` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
+  `folderRights` for the level view; each matrix is its `docs/apps/<application>.md` table — never a `readonly`,
   `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
   so no share button appears whose dialog the host cannot mount.
   **A share view is the member view with a source and rights — never add a guest-only UI** (owner principle

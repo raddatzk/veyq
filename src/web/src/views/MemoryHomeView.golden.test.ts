@@ -4,7 +4,7 @@
 // a core level view, and promises that nobody using Memories sees a difference; every e2e suite is API-level, so this
 // file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
 // it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), core's REAL `LevelView` (since
-// P4b: the overview card and the Folders section), Memories' REAL `MemoriesSection` and `MemoryCard`, core's REAL `ViewModeToggle`, and
+// P4b: the overview card and the Folders section), Memories' REAL rows (`memoryRows`) and `MemoryCard`, core's REAL `ViewModeToggle`, and
 // the layer's buttons, real crypto (every date and pin below is sealed
 // and unsealed for real), and the real i18n catalog. Stubbed: the scope/tree/favourites state (no network), the Leaflet
 // map (no canvas in happy-dom).

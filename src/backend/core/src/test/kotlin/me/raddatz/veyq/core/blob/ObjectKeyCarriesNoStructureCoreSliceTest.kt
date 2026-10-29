@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
  *
  * The operator *runs the object store*: they list the bucket and read every key, without touching the database
  * and without breaking anything. It is the most operator-visible surface veyq has. A key minted as
- * `tenant/{name}/{title}.jpg` would hand them every filename, album title and tenant name **while the content
+ * `tenant/{name}/{title}.jpg` would hand them every filename, Memory title and tenant name **while the content
  * stayed perfectly encrypted and every other test in this repo stayed green** — because no other test looks at
  * the key. That is the whole reason this file exists: the failure is invisible to correctness testing.
  *

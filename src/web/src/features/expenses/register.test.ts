@@ -5,7 +5,7 @@
 // under the Pot's own key — and nothing where that key does not open it.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import { createRegistry, registry as appRegistry, type LevelActionContext } from '../../core/applications/registry'
+import { createRegistry, registry as applicationRegistry, type LevelActionContext } from '../../core/applications/registry'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { ShareRole } from '../../api/generated/sharing'
 import { guestAccessOf, memberAccessOf, treeNode } from '../../test/models'
@@ -40,14 +40,14 @@ describe('registerExpenses', () => {
     })
     expect(r.applicationOf(POT_KIND)).toBe(EXPENSES)
     expect(r.applications()).toEqual([{ id: EXPENSES, name: 'expenses.title' }])
-    expect(r.routeOf(POT_KIND)).toEqual({ slug: 'expenses', group: 'app:expenses' })
+    expect(r.routeOf(POT_KIND)).toEqual({ slug: 'expenses', group: 'application:expenses' })
     expect(r.itemReviews()).toEqual([PotEntryReview])
     expect(r.placementAllows(POT_KIND, FOLDER_KIND)).toBe(true)
     expect(r.placementAllows(POT_KIND, POT_KIND)).toBe(false)
   })
 
-  it('the app\'s registry holds it beside the other applications (the composition root)', () => {
-    expect(appRegistry.applicationOf(POT_KIND)).toBe(EXPENSES)
+  it('the web client\'s registry holds it beside the other applications (the composition root)', () => {
+    expect(applicationRegistry.applicationOf(POT_KIND)).toBe(EXPENSES)
   })
 
   it('"New Pot" is a member\'s, ready once the keys are open — never a guest\'s, nor while Expenses is off', () => {

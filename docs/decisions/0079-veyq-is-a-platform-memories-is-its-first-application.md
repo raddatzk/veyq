@@ -100,7 +100,7 @@ How each of these is built — the modules, the seams core asks, the web registr
   `PublicShare` carries the root's kind, so the share page renders the body the kind's application claimed.
 - **A node's URL carries its application's slug** (the grammar is [ADR 0015](0015-operator-blind-readable-urls.md)'s).
   The path stays in the `#fragment`; each application claims its slug once or declares that it has none. Rejected:
-  history-mode `/<app>/:nodeId` URLs — they put a stable per-node id into the operator's access logs on every hard load
+  history-mode `/<application>/:nodeId` URLs — they put a stable per-node id into the operator's access logs on every hard load
   and need a scope lookup the fragment never did.
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and

@@ -55,20 +55,20 @@ Für Namen gilt überall dieselbe Regel: der **echte Name**, wenn die Person ihn
 ## Warum das sicher ist
 
 - Die Liste der Beteiligten ist **zusammen mit der Erinnerung versiegelt**, wie ihr Datum und ihr Ort. Der Server hält
-  nur den unlesbaren, versiegelten Block – **der Betreiber kann nicht sehen, wer bei welcher Reise dabei war**, und
+  nur den unlesbaren, versiegelten Block – **wer den Server betreibt, kann nicht sehen, wer bei welcher Reise dabei war**, und
   auch nicht, wer oft mit wem zusammen ist. Deshalb gibt es auch keine automatischen „Du wurdest hinzugefügt“-Hinweise
   vom Server: Der Server weiß es nicht.
 - Gespeichert wird pro Person eine anonyme **ID**, nie ein Name. Dein Gerät schlägt die Namen in der Mitgliederliste
   deines Bereichs nach, wenn es sie anzeigt.
 - Eine ehrliche Grenze: Ein Link ist ein Schlüssel zur Erinnerung, und der versiegelte Block, den er liefert, ist derselbe,
-  den Mitglieder benutzen. Die Seite zeigt Link-Besuchern keine Beteiligten, aber wer technisch versiert ist und
+  den Mitglieder benutzen. Die Seite zeigt Gästen eines Links keine Beteiligten, aber wer technisch versiert ist und
   untersucht, was der Link ausliefert, könnte herausfinden, **wie viele** Personen eingetragen sind und ihre anonymen
-  IDs – **nie ihre Namen**, die ein Link-Besucher nicht nachschlagen kann. Würden Beteiligte je mit Namen gespeichert,
+  IDs – **nie ihre Namen**, die ein Gast des Links nicht nachschlagen kann. Würden Beteiligte je mit Namen gespeichert,
   müsste das neu entschieden werden.
 - **Auch dein Bild ist versiegelt.** Es wird auf deinem Gerät mit dem Schlüssel des Bereichs verschlossen, bevor es dein
   Gerät verlässt; der Server speichert nur einen verwürfelten Block von **immer gleicher Größe** – er kann also ein Foto
   nicht von einer Zeichnung unterscheiden und sieht weder das Bild noch seine Größe noch was darauf zu sehen ist. Öffnen
-  können es nur **Mitglieder deines Bereichs**; ein Link-Besucher bekommt es nie und sieht den Buchstaben. Der Betreiber
-  erfährt nur, dass du ein Bild hast und wie oft du es geändert hast. Ein Bild gehört zu einem Bereich – ein anderer
+  können es nur **Mitglieder deines Bereichs**; wer über einen Link kommt, bekommt es nie und sieht den Buchstaben. Wer den
+  Server betreibt, erfährt nur, dass du ein Bild hast und wie oft du es geändert hast. Ein Bild gehört zu einem Bereich – ein anderer
   Bereich, in dem du bist, zeigt sein eigenes (oder den Buchstaben). Wirst du aus einem Bereich entfernt, wird dein Bild
   dort gelöscht.

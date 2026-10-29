@@ -37,7 +37,7 @@ import java.time.temporal.ChronoUnit
 /**
  * A moderator's queue and decisions (uc.moderation.review-a-case, uc.moderation.take-a-measure; ADR 0093 §§ 4-6) with
  * core alone: a member reports a folder, the Server Owner — the first moderator — decides. Each refusal has its control on
- * the same predicate; the content block's byte paths are the applications' tests' (`ContentBlockMemoriesSliceTest`).
+ * the same predicate; the content block's byte paths are the applications' tests' (`ModerationMemoriesSliceTest`).
  */
 @QuarkusTest
 class ModerationCasesSliceTest {

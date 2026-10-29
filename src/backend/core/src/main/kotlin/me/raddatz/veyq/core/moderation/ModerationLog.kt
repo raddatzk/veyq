@@ -36,7 +36,7 @@ enum class ModerationEvent {
  * The moderation log (ADR 0093 § 11, en.moderation.log): append-only, written by its caller's transaction so an event
  * exists exactly when its cause does. Structured fields in the clear; free text only ever as [append]'s `sealedText`,
  * sealed by the client to the moderation key. **Never in a log line** (ADR 0092 § 1): nothing here logs, and no caller
- * logs what it appends — `ModerationLogTest` captures every record while events are written.
+ * logs what it appends — `ModerationLogSliceTest` captures every record while events are written.
  *
  * **Retention.** An event is kept to 31 December of the third year after the later of its own time and the removal of
  * the moderator it concerns. While that moderator is on the roster the date is open (`expires_at` NULL); [closeFor]

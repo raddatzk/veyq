@@ -44,7 +44,7 @@ ZIP-Datei** — und ein solches ZIP wieder hineinladen, in dasselbe veyq oder in
   ihn, und nur dein Gerät packt einen Import aus und verschlüsselt ihn.
 - **Orte in Fotos.** Ein Foto behält im ZIP seine eigenen Standort-Angaben; veyq schreibt deine Originale nicht um.
 - **Ein beschädigtes oder verändertes ZIP wird abgelehnt**, mit dem Grund, bevor etwas angelegt wird.
-- **Nach dem Import gehört alles dir.** Du bist Eigentümer und Hochladender der importierten Dinge. Freigaben, Mitglieder und
+- **Nach dem Import gehört alles dir.** Du besitzt die importierten Dinge und giltst als die Person, die sie hochgeladen hat. Freigaben, Mitglieder und
   der Papierkorb reisen nicht mit. Die an einer Erinnerung genannten Personen stehen als einfache Namen in der Liste, werden
   aber nicht wieder gesetzt.
 - **Große Downloads.** Das ZIP wird direkt auf die Platte geschrieben, die Größe ist also auf einem Computer mit

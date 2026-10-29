@@ -574,7 +574,7 @@ components:
           description: >
             Never a tag the registry (`contracts/tasks/tags/v1.json`) marks `server-structural` or `server-event` — the
             server originates those jobs itself (`400 invalid_request`, the schema's own rule, inbox #507).
-          # The registry's server-originated tags; `TaskTagRegistryContractTest` holds this list to the registry and to
+          # The registry's server-originated tags; `CapabilityTagRegistryTest` holds this list to the registry and to
           # `CapabilityTags.SERVER_ORIGINATED`. The generators ignore `not` (measured on openapi-generator 7.23.0).
           not: { enum: ["02f271ff", "663157d8"] }
           example: "5b1e7c2a"

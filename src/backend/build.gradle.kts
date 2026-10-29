@@ -61,7 +61,7 @@ tasks.withType<Test>().configureEach {
 }
 
 // `OperatorBlindProbeTest` probes every owner's generated API. Which packages those are is `buildSrc`'s own derivation
-// (`SpecSets`: core plus every `contracts/api/<app>/`), handed over here rather than listed in the test, so a new
+// (`SpecSets`: core plus every `contracts/api/<application>/`), handed over here rather than listed in the test, so a new
 // application's operations are in its set the day its spec directory exists (inbox #368). The test also scans its
 // classpath for generated API packages and is red when the two disagree either way. The key stays outside `veyq.`:
 // Quarkus refuses to start on a system property under a config mapping's prefix that maps to nothing (SRCFG00050).

@@ -9,7 +9,7 @@ named volume from the image directory it covers — ownership included — so a 
 a volume that comes up `root:root`, and a path it creates but leaves root-owned is the same failure spelled
 differently.
 
-**The defect that bought it — measured, not reasoned.** `infra/docker-compose.prod.yml` mounts
+**The defect that bought it — measured, not reasoned.** `infra/docker/docker-compose.prod.yml` mounts
 `veyq-traefik-dynamic` at `/etc/traefik/dynamic` for the tenant-ingress projection (ADR 0063). No runtime
 stage created that directory, so on a FIRST-EVER `docker compose up` of the production stack the volume came
 up `root:root 0755`, the app runs as uid 10001, and `TenantIngressProjector.onStartup` died on its first
