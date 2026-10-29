@@ -94,6 +94,11 @@ export interface Window {
    * which of them refuse the run.
    */
   failedRequests: string[]
+  /**
+   * Every read of an object URL (`blob:`) of the window that did not finish, as `METHOD url errorText`: the page reading
+   * a file it holds, no request leaving it — a media element cancels its read when its source is dropped. Not judged.
+   */
+  cancelledBlobReads: string[]
   /** Every answer of the window with a status of 400 or more, as `METHOD origin+path status` — judged by the driver too. */
   httpErrors: string[]
   /**
@@ -334,9 +339,14 @@ export async function profiled(
   const { scenario, run, throttle, stem, cpuProfile = true } = spec()
   const failed: string[] = []
   const httpErrors: string[] = []
+  const blobReads: string[] = []
   page.on('requestfailed', (r) => {
     const url = new URL(r.url())
-    failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
+    // A `blob:` URL is the page reading a file it already holds (an object URL), never a request that leaves it: a
+    // `<video>` whose source is dropped once its poster frame is drawn cancels the rest of its read, on purpose, to free
+    // its decoder (inbox #786). Recorded apart, never judged as a failed request.
+    if (url.protocol === 'blob:') blobReads.push(`${r.method()} ${r.url()} ${r.failure()?.errorText ?? ''}`)
+    else failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
   })
   page.on('response', (r) => {
     if (r.status() < 400) return
@@ -409,6 +419,7 @@ export async function profiled(
     apiRequests,
     storeRequests,
     failedRequests: failed,
+    cancelledBlobReads: blobReads,
     httpErrors,
     metricsBefore: Object.fromEntries(metricsBefore.map((m) => [m.name, m.value])),
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),

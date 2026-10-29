@@ -48,7 +48,10 @@ harness, which `cr-volume-measurement-cax` deletes.
     apart when reading why: the collection run's F7 (S2's store PUTs, a listing GET) was Chromium reporting an answer
     whose empty body the page never read as `ERR_ABORTED` — a product defect, fixed in the client — so an abort is a
     finding, not noise. Whether a deliberate abort (a superseded listing the page cancels) may ever pass is the owner's
-    call; `ABORTED_REFUSES` is the one place it is taken.
+    call; `ABORTED_REFUSES` is the one place it is taken. A read of an object URL (`blob:`) is no request: it is the page
+    reading a file it holds, and a `<video>` whose source is dropped once its poster frame is drawn cancels the rest of
+    its read on purpose (S2v's first reading, inbox #786: one per poster). The page records those apart
+    (`cancelledBlobReads`), and nothing judges them.
   - **The recording's own control** (the bite, every run): after the runs the app stops (JFR dumps on exit) and the
     recording must contain neither the canary nor any secret of the instance's `.env`; then the app is recreated with
     the same recording minus the two `#enabled=false` and stopped again, and THAT recording must contain the canary.
@@ -520,6 +523,8 @@ def main() -> int:
                            if memory else "")
                         + (f"; {window['media']['maxLive']} media player(s) alive at once, "
                            f"{window['media']['maxPlaying']} playing" if window.get("media") else "")
+                        + (f"; {len(window['cancelledBlobReads'])} object-URL read(s) cancelled, not judged"
+                           if window.get("cancelledBlobReads") else "")
                         + (f"; {len(aborted)} aborted request(s), recorded ({ABORTED})" if aborted else ""))
         (workdir / "server.json").write_text(json.dumps(server, indent=2), encoding="utf-8")
 
