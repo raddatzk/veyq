@@ -38,6 +38,7 @@ import { login } from '../features/account/login/login'
 import { withRefresh } from '../app/sessionRefresh'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { identityPrivate, vaultState } from '../app/vault'
+import { holdEpochKey } from '../features/account/trustMarks'
 import { account } from '../app/account'
 import { setupApi } from '../api/client'
 import { PRIVACY_ANCHOR, privacyLink } from '../core/privacy/privacyNotice'
@@ -229,6 +230,14 @@ function sealedAvatarFor(scopeRootKey: Uint8Array, userId: string): string | und
   return avatarBytes.value ? sealAvatar(scopeRootKey, { scopeId: tenantId.value, userId }, avatarBytes.value) : undefined
 }
 
+/** An OWNER's accept went through: this device holds the tenant key its birth minted, at the birth epoch (`bornTenantScope`), so
+ *  the owner's first open takes no later epoch that does not link down to it (ADR 0111 decision 23, inbox #740) - under
+ *  the vault's Master Key, or a new account's [accountKey] (no vault holds it before the first sign-in). A MEMBER's
+ *  checked key is held by {@link acceptCheckedInvite}. */
+function holdBorn(scopeRootKey: Uint8Array, accountKey?: Uint8Array): Promise<void> {
+  return holdEpochKey(tenantId.value, 0, scopeRootKey, accountKey)
+}
+
 /** The unlocked vault's identity as the tenant's birth needs it: the grant is sealed to its public bundle and signed
  *  by its signing half (ADR 0028 Decision 6), under the owner's own account id. */
 function ownerOf(userId: string, priv: { kemSeed: Uint8Array; sign: Uint8Array }): TenantOwner {
@@ -250,16 +259,19 @@ async function finishRegistration() {
     if (isMember.value) {
       // Everything sealed under the tenant key is built from the invite it is handed: a re-check after `409
       // invite_changed` may carry the tenant key at another epoch.
+      // The new account's Master Key keys the held tenant key: no vault holds it before the first sign-in.
       await acceptCheckedInvite(openedInvite!, (opened) => {
         const join = memberJoinFor(opened, userId, acct.identity, fromB64std(acct.material.secretKeyProofPublicKey))
         const key = opened.epochKey
         return registerAndAccept(secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
-      }, rereadInvite)
+      }, rereadInvite, undefined, acct.masterKey)
     } else {
       const born = bornTenantScope({ userId, identity: acct.identity }, tenantId.value)
       const key = born.scopeRootKey
       await registerAndAccept(secret, userId, handle, acct.material, born.birth, sealedNameFor(key, userId), sealedAvatarFor(key, userId))
+      await holdBorn(key, acct.masterKey)
     }
+    acct.masterKey.fill(0)
     finish()
   } catch (e) {
     error.value = await mapError(e)
@@ -308,6 +320,7 @@ async function signInAndAccept() {
       secret, username.value.trim().toLowerCase(), born.birth,
       sealedNameFor(born.scopeRootKey, userId), sealedAvatarFor(born.scopeRootKey, userId),
     )
+    await holdBorn(born.scopeRootKey)
     finish()
   } catch (e) {
     error.value = await mapError(e)
@@ -341,6 +354,7 @@ async function sealAndAccept() {
   const sealedName = sealedNameFor(born.scopeRootKey, userId)
   const sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
   await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar))
+  await holdBorn(born.scopeRootKey)
   password.value = ''
   phase.value = 'done'
 }

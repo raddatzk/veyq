@@ -26,6 +26,9 @@ export type AccountMaterial = {
 export type BuiltAccount = {
   /** The freshly born identity — keep on-device (its public half seals the owner's first scope grant). */
   identity: Identity
+  /** The Master Key the wraps hold — keep on-device: a client that accepts a tenant at the account's birth keys its
+   *  trust marks by it before any vault unlocks it (ADR 0111 decision 23). The caller owns and zeroes it. */
+  masterKey: Uint8Array
   material: AccountMaterial
   emergencyKit: { secretKey: string }
 }
@@ -69,6 +72,7 @@ export async function buildAccount(
 
   return {
     identity: id,
+    masterKey,
     emergencyKit: { secretKey: b64std(secretKey) },
     material: {
       suiteId: 'v1',

@@ -4,7 +4,9 @@
 // the real `tenantInvite` functions before anything is sent, and the accept carries the newcomer's self-grant, the
 // invite key's proof and its join record — opened here with the real crypto. A wrong code is the invitee's to retype; an
 // invite that fails a check is "ask for a new one"; in neither case is anything posted.
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 const route = vi.hoisted(() => ({ hash: '' }))
@@ -19,7 +21,7 @@ vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
 vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn(), sealAvatar: vi.fn(), myUserId: vi.fn() }))
 vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn() }))
-vi.mock('../app/vault', async (o) => ({ ...(await o<typeof import('../app/vault')>()), identityPrivate: vi.fn() }))
+vi.mock('../app/vault', async (o) => ({ ...(await o<typeof import('../app/vault')>()), identityPrivate: vi.fn(), masterKey: vi.fn() }))
 vi.mock('../features/account/identityPins', async (o) => ({
   linkOf: (await o<typeof import('../features/account/identityPins')>()).linkOf,
   anchorServedChain: vi.fn(), anchorChainKey: vi.fn(), getPin: vi.fn(),
@@ -50,7 +52,9 @@ import { tenantsApi, setupApi } from '../api/client'
 import { fakeApi, stubApi } from '../test/apiMock'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { sealAvatar, sealName, myUserId } from '../features/account/profile/profile'
-import { identityPrivate } from '../app/vault'
+import { identityPrivate, masterKey } from '../app/vault'
+import { unlockMasterKey } from '../features/account/unlock/unlock'
+import { epochKeyCommitment, heldEpochKey } from '../features/account/trustMarks'
 import { anchorChainKey, anchorServedChain, getPin } from '../features/account/identityPins'
 import { InviteRole, TenantStatus, type ServedMemberInvite, type TenantsApi } from '../api/generated/tenants'
 import { realI18n, t } from '../test/i18n'
@@ -76,6 +80,9 @@ const stubs = {
 const NEWCOMER = v1.generateIdentity()
 const SECRET_KEY = v1.randomBytes(32)
 const PROOF_PUB = v1.deriveSecretKeyProofKeypair(SECRET_KEY).publicKey
+/** The new account's Master Key as its birth hands it back, and an existing account's as its unlock leaves it in the vault. */
+const BORN_MK = v1.randomBytes(32)
+const VAULT_MK = v1.randomBytes(32)
 
 let f: MemberInviteFixture
 let api: {
@@ -123,6 +130,7 @@ beforeEach(() => {
   stubApi(setupApi, { getSetupStatus: setupStatus() })
   vi.mocked(buildAccount).mockResolvedValue({
     identity: NEWCOMER,
+    masterKey: BORN_MK.slice(),
     material: { secretKeyProofPublicKey: b64std(PROOF_PUB) },
     emergencyKit: { secretKey: b64std(SECRET_KEY) },
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
@@ -131,7 +139,16 @@ beforeEach(() => {
   vi.mocked(anchorServedChain).mockResolvedValue('firstUse')
   vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
   vi.mocked(getPin).mockResolvedValue(null)
+  vi.mocked(masterKey).mockReturnValue(null) // nothing unlocked until a sign-in does
+  vi.mocked(unlockMasterKey).mockResolvedValue(undefined)
+  globalThis.indexedDB = new IDBFactory() // a device that has held nothing yet
 })
+
+/** The tenant key this device holds once the vault holds [mk] (ADR 0111 decision 23). */
+async function heldUnder(mk: Uint8Array) {
+  vi.mocked(masterKey).mockImplementation(() => mk.slice())
+  return heldEpochKey(f.tenantId)
+}
 
 describe('TenantJoinView — a member invite asks for the code first', () => {
   it('shows the code step for a member invite, with the token alone sent to the preview', async () => {
@@ -192,6 +209,8 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     await flushPromises()
     await w.findAll('button').find((b) => b.text() !== 'picker')!.trigger('click')
     await flushPromises()
+    // The accept holds the checked key in IndexedDB, whose requests settle on macrotasks: wait for the done step.
+    await vi.waitFor(() => expect(w.text()).toContain(t('tenant.join.doneNoteMember')))
     return { w, pickerOffered }
   }
 
@@ -217,6 +236,11 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     // The owner key the record names, as the accept states it (ADR 0111 decision 20).
     expect(body.signerIdentityDigest).toBe(recipientIdentityDigest(bundleOf(f.owner)))
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
+    // The checked key is held under the new account's Master Key - no vault held one at the accept - so the first open
+    // after the sign-in takes no epoch that does not link down to it (inbox #740); the birth's copy is wiped.
+    const born = (await vi.mocked(buildAccount).mock.results[0].value) as { masterKey: Uint8Array }
+    expect(born.masterKey.every((b) => b === 0)).toBe(true)
+    expect(await heldUnder(BORN_MK)).toEqual({ epoch: 1, commitment: epochKeyCommitment(f.tenantKey) })
   })
 
   it('409 invite_changed: the owner secured their account meanwhile — re-checked and registered once more, without the code', async () => {
@@ -285,6 +309,19 @@ describe('TenantJoinView — a member invite to an existing account', () => {
     expect(invite.joinRecordVerifies({ tenantId: f.tenantId, userId: ME }, record)).toBe(true)
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_PUB))
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
+  })
+
+  it('holds the checked tenant key under the vault the sign-in unlocked (inbox #740) - and nothing for a refused accept', async () => {
+    vi.mocked(unlockMasterKey).mockImplementation(async () => {
+      vi.mocked(masterKey).mockImplementation(() => VAULT_MK.slice())
+    })
+    await signIn(await mountAt())
+    expect(await heldUnder(VAULT_MK)).toEqual({ epoch: 1, commitment: epochKeyCommitment(f.tenantKey) })
+
+    globalThis.indexedDB = new IDBFactory()
+    api.acceptTenantInvite.mockRejectedValueOnce(httpError(410, 'invite_expired'))
+    await signIn(await mountAt())
+    expect(await heldUnder(VAULT_MK)).toBeNull()
   })
 
   it('409 invite_changed: re-read, re-checked, judged against the pins again, and accepted once more', async () => {
