@@ -9,11 +9,11 @@
 // read the file anyway - can confirm a file by it. What the server learns is which existing blob the new row shares,
 // the accepted residual of ADR 0102 § What the server sees.
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, b64url } from '@veyq/crypto/base64'
+import { b64std, b64url, fromB64url } from '@veyq/crypto/base64'
 import type { BlobMeta } from './meta'
 import { blobKeyContext, unwrapBlobKey, type WrappedBlobKey } from './keys'
 import { digestHere } from './digest'
-import { digestOff } from './digestWorker'
+import { checksumsOff, digestOff } from './digestWorker'
 import type { BlobRef, BlobRole, BlobSource } from './types'
 
 /** Plaintext bytes per frame (the contract's frame size). */
@@ -34,7 +34,8 @@ const remembered = new WeakMap<Blob, string>()
  * object's own and that core's hasher read them: never a claim (a manifest's `sha256`, a stored `blob-meta`), because what
  * is remembered here is sealed into a new blob's `blob-meta`, and a wrong value there silently makes a later cover or banner
  * a row on another stored object (`storedMatch.ts`). So the one caller is core's import check (`importSubtree.ts`
- * `archivePayload`), after the stream ended (a ZIP entry's CRC) and the manifest's `sha256` compared. Keyed by the object:
+ * `archivePayload`), after its pass ({@link payloadChecksums}) ended and a ZIP entry's CRC-32 and the manifest's `sha256`
+ * compared. Keyed by the object:
  * a slice or a re-wrapped copy misses and is read, which fails safe. Throws on anything but 32 bytes.
  */
 export function rememberDigest(file: Blob, sha256: Uint8Array): void {
@@ -56,6 +57,16 @@ export function contentDigest(source: BlobSource, signal?: AbortSignal): Promise
   const known = remembered.get(source)
   if (known === undefined) return digestOff(source, signal)
   return signal?.aborted ? Promise.reject(new DOMException('Upload cancelled', 'AbortError')) : Promise.resolve(known)
+}
+
+/**
+ * An import's payload check over `blob` (inbox #557): the raw 32 bytes of its SHA-256 - what {@link rememberDigest} takes -
+ * and, with `withCrc32` (a ZIP entry), the CRC-32 of the same bytes, from one pass in core's digest worker, else on the
+ * page thread by the same loop. Rejects with an `AbortError` when `signal` aborts.
+ */
+export async function payloadChecksums(blob: Blob, withCrc32: boolean, signal?: AbortSignal): Promise<{ sha256: Uint8Array; crc32?: number }> {
+  const { digest, crc32 } = await checksumsOff(blob, withCrc32, signal)
+  return crc32 === undefined ? { sha256: fromB64url(digest) } : { sha256: fromB64url(digest), crc32 }
 }
 
 /** The wire's `SharedBlob`: in place of an upload id. */

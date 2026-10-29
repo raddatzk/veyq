@@ -20,10 +20,10 @@ acceptanceCriteria:
       web:
         unit: [src/core/export/importHardening.test.ts]
   - id: manifest-is-trusted-for-nothing
-    text: Before anything is written the reader refuses, each with a reason the dialog shows, a manifest that is not the contract's shape (a kind checking its own content), one over a cap (node count, depth, a name or field over its contract maxLength - pinned to the schema), a path that is no safe name, leaves its node or reaches into .veyq/, a payload missing or not its declared size, and a ZIP whose structure does not hold (an offset outside the file, overlapping entries, a declared size that is not the actual one, a ZIP64 field out of range); every payload is checked against its SHA-256 while it streams, and a mismatch trashes what was created.
+    text: Before anything is written the reader refuses, each with a reason the dialog shows, a manifest that is not the contract's shape (a kind checking its own content), one over a cap (node count, depth, a name or field over its contract maxLength - pinned to the schema), a path that is no safe name, leaves its node or reaches into .veyq/, a payload missing or not its declared size, and a ZIP whose structure does not hold (an offset outside the file, overlapping entries, a declared size that is not the actual one, a ZIP64 field out of range); every payload is checked against its SHA-256 (and a ZIP entry against its CRC-32) by one pass over its bytes before its hook gets it - a pass that runs in core's digest worker, the next payload's while the hook holds this one, never two at once, whose refusal is thrown only when that payload is asked for - and a mismatch trashes what was created.
     coverage:
       web:
-        unit: [src/core/export/importHardening.test.ts, src/core/export/subtree.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/features/memories/exportImport.test.ts]
+        unit: [src/core/export/importHardening.test.ts, src/core/export/importAhead.test.ts, src/core/blob/digestWorker.test.ts, src/core/blob/digest.worker.test.ts, src/core/export/subtree.test.ts, src/core/export/ImportSubtreeDialog.test.ts, src/features/memories/exportImport.test.ts]
   - id: unknown-and-newer-reported
     text: The dry run lists, per application, how many nodes this build cannot import and why - an application it does not have, or content newer than it reads; "Import the rest" creates exactly the rest and names what it left out, an archive with nothing importable offers only Cancel, and Cancel writes nothing (no request).
     coverage:

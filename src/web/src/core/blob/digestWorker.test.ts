@@ -2,7 +2,7 @@
 //
 // The digest worker's front door (inbox #554) against a fake Worker, `frameWorker.test.ts`'s pattern: the fake records
 // what is posted (through `structuredClone(msg, { transfer })`, as a real post clones it) and answers with the loop the
-// real worker runs (`digest.ts` `digestHere`) over the `Blob` it was handed; that the real worker answers so is
+// real worker runs (`digest.ts` `checksumsHere`) over the `Blob` it was handed; that the real worker answers so is
 // `digest.worker.test.ts`. Which Worker exists is set per case with `vi.stubGlobal`, and the module is re-imported per
 // case: the Worker, its latch and its warning are module-level. `contentDigest` (`sharedBlob.ts`) is the door every
 // production caller uses, so the cases go through it.
@@ -15,8 +15,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
-import { DIGEST_SLICE, digestHere, type DigestRequest, type DigestResponse } from './digest'
+import { DIGEST_SLICE, checksumsHere, type DigestRequest, type DigestResponse } from './digest'
 import { framedPayload } from '../export/copySource'
+import { crc32 } from '../export/crc32'
 
 vi.mock('../../api/client', () => ({ blobApi: vi.fn(), tokenApi: vi.fn() }))
 
@@ -59,7 +60,7 @@ function stubWorker(mode: Mode = 'real', opts: { hold?: boolean } = {}) {
   /** What the real worker answers (`digest.worker.ts`): the same loop, over the Blob it was handed. */
   async function answer(req: Extract<DigestRequest, { op: 'digest' }>): Promise<DigestResponse> {
     if (mode === 'refuses-read') return { id: req.id, ok: false, kind: 'source', name: 'NotReadableError', message: 'changed on disk' }
-    return { id: req.id, ok: true, digest: await digestHere(req.blob) }
+    return { id: req.id, ok: true, ...(await checksumsHere(req.blob, req.crc32 === true)) }
   }
   vi.stubGlobal('Worker', FakeWorker as unknown as typeof Worker)
   return {
@@ -128,6 +129,33 @@ describe('what crosses: the Blob, and nothing is transferred', () => {
     expect(await door.contentDigest(payload)).toBe(whole(bytes))
     expect(worker.stats.constructed).toBe(0)
     expect(worker.stats.posted).toHaveLength(0)
+  })
+})
+
+describe('an import\'s payload check goes through the same Worker (inbox #557)', () => {
+  it('a ZIP entry\'s check posts crc32: true, reads nothing on the page and answers the raw SHA-256 and the CRC-32', async () => {
+    const worker = stubWorker()
+    const door = await freshDoor()
+    const bytes = random(2 * DIGEST_SLICE + 5)
+    const page = spiedBlob(bytes)
+    const checked = await door.payloadChecksums(page.blob, true)
+    expect(worker.stats.posted).toEqual([expect.objectContaining({ op: 'digest', crc32: true })])
+    expect(page.slice, 'the Worker read it').not.toHaveBeenCalled()
+    expect(checked).toEqual({ sha256: v1.sha256Digest(bytes), crc32: crc32(bytes) })
+  })
+
+  it('control: a directory\'s file asks no CRC-32 and gets none', async () => {
+    const worker = stubWorker()
+    const door = await freshDoor()
+    const bytes = random(DIGEST_SLICE + 1)
+    expect(await door.payloadChecksums(new Blob([bytes as BlobPart]), false)).toEqual({ sha256: v1.sha256Digest(bytes) })
+    expect(worker.stats.posted[0]).not.toHaveProperty('crc32')
+  })
+
+  it('with no Worker the same pass runs on the page, to the same answer', async () => {
+    const door = await freshDoor() // vitest: no Worker global
+    const bytes = random(DIGEST_SLICE + 3)
+    expect(await door.payloadChecksums(new Blob([bytes as BlobPart]), true)).toEqual({ sha256: v1.sha256Digest(bytes), crc32: crc32(bytes) })
   })
 })
 
