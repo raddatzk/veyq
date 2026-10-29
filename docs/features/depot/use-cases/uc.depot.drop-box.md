@@ -60,6 +60,9 @@
   create made in the guest's folder is taken back and erased (`abandonShareNode`), so nothing of it is kept; a guest
   takes back nothing in another guest's folder, nor its folder itself, nor a file that holds content, nor one whose
   name its identity did not write last (ADR 0093 § 8).
+- **E10 — a guest's folder names a slug token another folder of the drop box holds:** refused (`slug_taken`), nothing
+  stored. An honest page never sends one (each identity keys its tokens under its own key); only a crafted request
+  does, e.g. one guest holding two identities (inbox #792).
 
 ## Quality notes
 

@@ -427,7 +427,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: The `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is not the scope's current one (`stale_epoch` — the folder's key is minted at the current epoch, ADR 0109 point 6) — nothing stored.
+          description: The `nodeId` is already taken, in any scope (`id_taken`), another child of the drop box holds the `slugToken` (`slug_taken` — only a crafted request meets it, since each identity keys its tokens under its own `K_up`), or the `epoch` is not the scope's current one (`stale_epoch` — the folder's key is minted at the current epoch, ADR 0109 point 6) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }

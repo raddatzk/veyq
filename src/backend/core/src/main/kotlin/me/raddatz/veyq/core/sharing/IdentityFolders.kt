@@ -22,6 +22,9 @@ sealed interface IdentityFolderOutcome {
     object StaleEpoch : IdentityFolderOutcome
     /** The client-minted node id is taken (in any scope); nothing stored. */
     object IdTaken : IdentityFolderOutcome
+    /** Another child of the root holds the request's slug token; nothing stored. An honest client never meets it (each
+     *  identity's tokens are keyed under its own `K_up`); a crafted request does (inbox #792). */
+    object SlugTaken : IdentityFolderOutcome
 }
 
 /**
@@ -41,6 +44,11 @@ sealed interface IdentityFolderOutcome {
  * **One per identity, under concurrency:** decided under the scope lock (every tree writer's first lock, ADR 0078 READ
  * COMMITTED: a concurrent first call that committed is seen), with `ux_node_parent_identity` as the backstop whose loser
  * answers as its replay — the folder the winner made.
+ *
+ * **Its slug token is checked like any create's** (`NodesStore.slugTaken` in the root's slot, before the insert and again
+ * in the replay, as `NodesHandler.createReplay` does): `ux_node_parent_slug` holds every child of the root, so a token
+ * another child already holds would otherwise die on the flush, and a replay that asks only for this identity's folder
+ * could not explain it — a 500 for what is a `409 slug_taken` (inbox #792, `DropFolderSlugSliceTest`).
  */
 @ApplicationScoped
 class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecords: GuestWriteRecords) {
@@ -59,7 +67,7 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
         require(gated.role == ShareEntity.WRITE_ONLY) { "an identity folder is a WRITE_ONLY guest's" }
         val scopeId = gated.scopeId
         val root = gated.rootNodeId
-        return createOrConflict(conflict = { existing(root, gated.identityId) }) {
+        return createOrConflict(conflict = { existing(root, gated.identityId) ?: lostRace(root, slugToken, nodeId) }) {
             nodes.lockScope(scopeId)
             if (!gated.admitted()) return@createOrConflict IdentityFolderOutcome.NotFound
             if (nodes.findInScope(scopeId, root) == null) return@createOrConflict IdentityFolderOutcome.NotContributable
@@ -68,6 +76,7 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
             // 0080 decision 6's "at or below"): a guest whose page lags a rotation is told to re-resolve the link.
             if (epoch != nodes.currentEpoch(scopeId)) return@createOrConflict IdentityFolderOutcome.StaleEpoch
             if (nodes.idTaken(nodeId)) return@createOrConflict IdentityFolderOutcome.IdTaken
+            if (nodes.slugTaken(root, slugToken)) return@createOrConflict IdentityFolderOutcome.SlugTaken
             nodes.createIdentityFolder(
                 nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, epoch, wrappedContentKey,
                 editor = PrincipalKey.Share(gated.identityId),
@@ -84,6 +93,14 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
         val folder = nodes.identityFolder(root, identityId) ?: return null
         if (folder.deletedAt != null) return IdentityFolderOutcome.NotContributable
         return IdentityFolderOutcome.Folder(folder.id, folder.epoch, folder.placementRevision, folder.wrappedContentKey, created = false)
+    }
+
+    /** A create that died on a unique index other than this identity's own: the slug token in the root's slot, or the id
+     *  (taken in another scope, which the scope lock does not serialise); null when neither explains it. */
+    private fun lostRace(root: String, slugToken: String, nodeId: String): IdentityFolderOutcome? = when {
+        nodes.slugTaken(root, slugToken) -> IdentityFolderOutcome.SlugTaken
+        nodes.idTaken(nodeId) -> IdentityFolderOutcome.IdTaken
+        else -> null
     }
 }
 

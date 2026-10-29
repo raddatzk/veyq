@@ -12,6 +12,10 @@ acceptanceCriteria:
       web:
         unit: [src/features/depot/dropBox.wire.test.ts]
         e2e: [src/features/depot/depotDropBox.e2e.test.ts]
+  - id: a-guest-folders-taken-slug-is-refused
+    text: A guest's folder whose slug token another child of the drop box already holds is refused with 409 slug_taken and stores nothing (E10, inbox #792); the identity that holds the token still gets its own folder back.
+    coverage:
+      backend: { integration: [DropFolderSlugSliceTest.aSecondIdentitysFolderWithATakenSlugTokenIsSlugTaken] }
   - id: a-guest-writes-only-into-its-own-folder
     text: A WRITE_ONLY guest creates and uploads only inside its own identity folder; another guest's folder or file and the space beside the folders are refused, its listing is empty, and a create while a member moves its folder out is refused.
     coverage:

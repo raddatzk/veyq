@@ -26,6 +26,7 @@ sealed interface DropFolderOutcome {
     object RateLimited : DropFolderOutcome, HttpFailure by Failures.rateLimited
     object StaleEpoch : DropFolderOutcome, HttpFailure by Failures.staleEpoch
     object IdTaken : DropFolderOutcome, HttpFailure by Failures.idTaken
+    object SlugTaken : DropFolderOutcome, HttpFailure by Failures.slugTaken
 }
 
 /**
@@ -60,6 +61,7 @@ class DropFolderHandler(
             IdentityFolderOutcome.NotContributable -> DropFolderOutcome.NotContributable
             IdentityFolderOutcome.StaleEpoch -> DropFolderOutcome.StaleEpoch
             IdentityFolderOutcome.IdTaken -> DropFolderOutcome.IdTaken
+            IdentityFolderOutcome.SlugTaken -> DropFolderOutcome.SlugTaken
         }
     }
 }
