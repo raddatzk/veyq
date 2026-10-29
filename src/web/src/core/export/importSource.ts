@@ -37,6 +37,9 @@ export interface ImportSource {
   stream(path: string): AsyncGenerator<Uint8Array>
   /** The file as a lazy, seekable `Blob` (nothing read). */
   blob(path: string, type: string): Blob
+  /** The CRC-32 a ZIP entry's directory records, which a pass over {@link blob}'s bytes must match; undefined for a
+   *  directory's file, which carries none. */
+  crc32(path: string): number | undefined
 }
 
 export function zipSource(zip: ZipArchive): ImportSource {
@@ -46,6 +49,7 @@ export function zipSource(zip: ZipArchive): ImportSource {
     size: (path) => zip.get(path)?.size,
     stream: (path) => zip.stream(path),
     blob: (path, type) => zip.blob(path, type),
+    crc32: (path) => zip.get(path)?.crc32,
   }
 }
 
@@ -67,6 +71,7 @@ export function directorySource(files: readonly DirectoryFile[]): ImportSource {
       for (let at = 0; at < f.size; at += CHUNK) yield new Uint8Array(await f.slice(at, Math.min(at + CHUNK, f.size)).arrayBuffer())
     },
     blob: (path, type) => get(path).slice(0, undefined, type),
+    crc32: () => undefined,
   }
 }
 

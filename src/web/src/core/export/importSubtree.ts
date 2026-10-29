@@ -12,10 +12,9 @@
 // Each payload is verified (its SHA-256 against the manifest, and a ZIP entry's own CRC) by one pass over its bytes BEFORE a
 // kind's hook uploads it, then handed to the hook as a lazy `File` - seekable, as the upload pump needs - whose digest that
 // pass computed is remembered for it (`sharedBlob.ts` `rememberDigest`), so an upload's `blob-meta` `sha256` is not read
-// again (inbox #555). The server offers no
-// multi-node atomicity, so an import is a sequence of ordinary writes; a failure trashes the top-level node it created (its
-// subtree goes with it, ADR 0061) and reports how far it got.
-import * as v1 from '@veyq/crypto/v1'
+// again (inbox #555). That pass runs in core's digest worker, one payload ahead of the hook (`archivePayload`, inbox #557).
+// The server offers no multi-node atomicity, so an import is a sequence of ordinary writes; a failure trashes the
+// top-level node it created (its subtree goes with it, ADR 0061) and reports how far it got.
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { createContentNode, deleteNode, type NodeParent, type TreeNode } from '../node/tree'
@@ -29,7 +28,7 @@ import {
   type Manifest, type ManifestNode, type ManifestPayload,
 } from './manifest'
 import type { PayloadFile } from './hooks'
-import { rememberDigest } from '../blob/sharedBlob'
+import { payloadChecksums, rememberDigest } from '../blob/sharedBlob'
 
 export type OpenedExport = { source: ImportSource; manifest: Manifest }
 
@@ -250,30 +249,68 @@ export const createdKind = (n: { kind: string }): string => {
   return d.supported && d.importsAsFolder ? FOLDER_KIND : n.kind
 }
 
-/** The payload resolver of a download (decision 10): the path checked, the size the manifest says, and its SHA-256 (and a
- *  ZIP entry's CRC) verified by one pass over its bytes BEFORE a hook uploads it, then handed out as a lazy `File` with the
- *  digest that pass computed remembered for it (`rememberDigest`) - the hasher's own bytes, also where the manifest names
- *  no `sha256`, and never the manifest's hex, which is only compared (inbox #555). */
+/** Every payload of the tree, its nodes in the order the replay walks them (`walk`: a node, then its children). */
+const payloadsInWalkOrder = (n: ManifestNode): ManifestPayload[] => [...collectPayloads(n), ...(n.children ?? []).flatMap(payloadsInWalkOrder)]
+
+type Checked = { sha256: Uint8Array; crc32?: number }
+
+/**
+ * The payload resolver of a download (decision 10): the path checked, the size the manifest says, and its SHA-256 (and a
+ * ZIP entry's CRC-32) verified by one pass over its bytes BEFORE a hook uploads it, then handed out as a lazy `File` with
+ * the digest that pass computed remembered for it (`rememberDigest`) - the hasher's own bytes, also where the manifest
+ * names no `sha256`, and never the manifest's hex, which is only compared (inbox #555).
+ *
+ * The pass runs in core's digest worker (`payloadChecksums`), and one payload ahead (inbox #557): once a payload's own
+ * check is done, the check of the payload after it in the walk's order starts, so it runs while the hook uploads this one,
+ * and the hook that asks for it next finds it done or under way. Before, every check ran on the page thread between two
+ * uploads: importing 50 photos of 5.2 MB took 20.2 s, 3.5 s of it the main thread's SHA-256 and 0.5 s its CRC-32 (35.1 s,
+ * 14.6 s and 1.9 s at throttle 4); now it takes 15.8 s (17.2 s), and the worker spends 4.5 s on both (profile S4,
+ * 2026-10-29).
+ * Only ever one ahead, never queued: the worker interleaves two digests slice by slice, so a second one would slow the
+ * one a hook waits for. What is checked ahead is only a result held for its path; a refusal it found is thrown when -
+ * and only if - a hook asks for that payload, after that request's own path and size checks, so what an import refuses
+ * and in which order is unchanged. A hook that asks in another order still gets every payload checked, at worst without
+ * the head start.
+ */
 function archivePayload(opened: OpenedExport, signal?: AbortSignal): PayloadResolver {
   const { source, manifest } = opened
-  return async (ref, fileName) => {
-    if (!(manifest.version === 1 ? isSafePayloadPathV1(ref.path) : isArchivePath(ref.path))) throw new ExportError('unsafe_path', 'unsafe payload path', ref.path)
+  const order = payloadsInWalkOrder(manifest.root)
+  const ahead = new Map<string, Promise<Checked>>()
+  const refusal = (ref: ManifestPayload): ExportError | null => {
+    if (!(manifest.version === 1 ? isSafePayloadPathV1(ref.path) : isArchivePath(ref.path))) return new ExportError('unsafe_path', 'unsafe payload path', ref.path)
     const size = source.size(ref.path)
-    if (size === undefined) throw new ExportError('payload_missing', `the download lacks ${ref.path}`, ref.path)
-    if (size !== ref.size) throw new ExportError('size_mismatch', `${ref.path} is not the size the manifest says`, ref.path)
-    const hasher = v1.sha256Stream()
+    if (size === undefined) return new ExportError('payload_missing', `the download lacks ${ref.path}`, ref.path)
+    if (size !== ref.size) return new ExportError('size_mismatch', `${ref.path} is not the size the manifest says`, ref.path)
+    return null
+  }
+  const check = (ref: ManifestPayload): Promise<Checked> =>
+    payloadChecksums(source.blob(ref.path, ref.mediaType), source.crc32(ref.path) !== undefined, signal)
+  /** The check of the payload after `ref` in the walk's order, started once `ref`'s own is done; a sound one only. */
+  const checkNext = (ref: ManifestPayload) => {
+    const next = order[order.findIndex((p) => p.path === ref.path) + 1]
+    if (!next || ahead.has(next.path) || refusal(next) || signal?.aborted) return
+    const pending = check(next)
+    pending.catch(() => undefined) // held for its request, which rethrows it; nobody may ever ask
+    ahead.set(next.path, pending)
+  }
+  return async (ref, fileName) => {
+    const refused = refusal(ref)
+    if (refused) throw refused
+    const pending = ahead.get(ref.path) ?? check(ref)
+    ahead.delete(ref.path)
+    let checked: Checked
     try {
-      for await (const chunk of source.stream(ref.path)) {
-        if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-        hasher.update(chunk)
-      }
+      checked = await pending
     } catch (e) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException('Import cancelled', 'AbortError')
       throw asExportError(e, ref.path)
     }
-    const digest = hasher.digest()
-    if (ref.sha256 && hex(digest) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
+    const crc = source.crc32(ref.path)
+    if (crc !== undefined && checked.crc32 !== crc) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
+    if (ref.sha256 && hex(checked.sha256) !== ref.sha256) throw new ExportError('checksum', `${ref.path} does not match its checksum`, ref.path)
+    checkNext(ref)
     const file = new File([source.blob(ref.path, ref.mediaType)], fileName, { type: ref.mediaType, lastModified: ref.modifiedAt })
-    rememberDigest(file, digest)
+    rememberDigest(file, checked.sha256)
     return file
   }
 }

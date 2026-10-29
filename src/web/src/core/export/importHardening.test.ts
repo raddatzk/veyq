@@ -6,6 +6,11 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
 vi.mock('../node/tree', async (orig) => ({ ...(await orig<typeof import('../node/tree')>()), createContentNode: vi.fn(), deleteNode: vi.fn() }))
+// The import check's door, passed through and recorded (inbox #557): which payload was handed to it, and when.
+vi.mock('../blob/sharedBlob', async (orig) => {
+  const actual = await orig<typeof import('../blob/sharedBlob')>()
+  return { ...actual, payloadChecksums: vi.fn(actual.payloadChecksums) }
+})
 
 import { readFileSync } from 'node:fs'
 import { registry } from '../applications/registry'
@@ -23,12 +28,13 @@ import { ZipWriter, openZip } from './zip'
 import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
-import { contentDigest } from '../blob/sharedBlob'
+import { contentDigest, payloadChecksums } from '../blob/sharedBlob'
 // on purpose the page-thread loop over the object's own bytes: what it answers is what those bytes hash to
 import { digestHere } from '../blob/digest'
 
 const FILE = 'H_FILE'
 const COLLECTION = 'H_COLLECTION'
+const SERIES = 'H_SERIES'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
 const text = (s: string) => new TextEncoder().encode(s)
 /** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
@@ -457,6 +463,121 @@ describe('the payload check hands the SHA-256 it computed to the upload', () => 
     expect(err.cause).toMatchObject({ code: 'checksum' })
     expect(grabbed, 'no hook received the payload').toEqual([])
     expect(created.map((c) => c.kind)).toEqual(['FOLDER'])
+  })
+})
+
+// --- inbox #557: the check runs in core's digest worker, one payload ahead of the hook ----------------------------------
+
+describe('each payload is checked through the digest worker\'s door, the next one while the hook holds this one', () => {
+  // Five bodies of five lengths, so a check is named by the size of the Blob it was handed.
+  const bodies = ['a', 'bb', 'ccc', 'dddd', 'eeeee']
+  const paths = bodies.map((_, i) => `Home/Series/p${i}.txt`)
+  const ref = (i: number) => ({ path: paths[i], size: bodies[i].length, mediaType: 'text/plain', sha256: sha(bodies[i]) })
+  /** What had been handed to the check (by body length) each time the hook got a payload. */
+  const seen: number[][] = []
+  let asks = bodies.length
+  beforeAll(() => {
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+      kind: SERIES, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
+      async exportContent() {
+        throw new Error('not exported here')
+      },
+      async importContent(ctx) {
+        const made = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, SERIES, ctx.name)
+        for (const r of (ctx.node.content!.files as ManifestPayload[]).slice(0, asks)) {
+          await ctx.payload(r, 'x')
+          seen.push(vi.mocked(payloadChecksums).mock.calls.map(([blob]) => blob.size))
+        }
+        return { nodeId: made.nodeId, nodeKey: made.contentKey }
+      },
+    })
+  })
+  beforeEach(() => {
+    seen.length = 0
+    asks = bodies.length
+    vi.mocked(payloadChecksums).mockClear()
+  })
+  const series = (files: ReturnType<typeof ref>[]) =>
+    folder([{ id: 'n2', kind: SERIES, name: 'Series', path: 'Home/Series', content: { type: 'h.series', schema: 1, files } }])
+  const archiveOf = (files: ReturnType<typeof ref>[]) =>
+    crafted(series(files), Object.fromEntries(bodies.map((b, i) => [paths[i], b])))
+
+  it('the next payload\'s check is under way when the hook gets this one, never more than one ahead, each checked once', async () => {
+    await attempt(zipOf(await archiveOf(bodies.map((_, i) => ref(i)))))
+    expect(seen).toEqual([[1, 2], [1, 2, 3], [1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]])
+    // control: every check asked for the CRC-32 of a ZIP's entry; a directory's file carries none to compare
+    expect(vi.mocked(payloadChecksums).mock.calls.map(([, crc]) => crc)).toEqual([true, true, true, true, true])
+  })
+
+  it('one check at a time: the next starts only once the current one answered (the worker would interleave two)', async () => {
+    const real = vi.mocked(payloadChecksums).getMockImplementation()!
+    const held: (() => void)[] = []
+    let running = 0
+    let most = 0
+    vi.mocked(payloadChecksums).mockImplementation((blob, crc, signal) => {
+      running += 1
+      most = Math.max(most, running)
+      return new Promise((resolve, reject) => held.push(() => {
+        running -= 1
+        real(blob, crc, signal).then(resolve, reject)
+      }))
+    })
+    try {
+      let done = false
+      const imported = attempt(zipOf(await archiveOf(bodies.map((_, i) => ref(i))))).finally(() => (done = true))
+      for (let i = 0; i < 200 && !done; i++) {
+        await new Promise((r) => setTimeout(r, 0))
+        held.shift()?.()
+      }
+      await imported
+      expect(most, 'never two checks outstanding').toBe(1)
+      expect(seen.at(-1)).toEqual([1, 2, 3, 4, 5])
+    } finally {
+      vi.mocked(payloadChecksums).mockImplementation(real)
+    }
+  })
+
+  it('across nodes too, in the order the replay walks them (a node, then its children): every payload checked once', async () => {
+    await attempt(zipOf(await download()))
+    expect(created.map((c) => c.name)).toEqual(['Trip: 2025', 'notes.txt', 'Lisbon', 'Day 1', 'Café.txt'])
+    expect(vi.mocked(payloadChecksums).mock.calls).toHaveLength(4)
+    const dir = await unpacked(await download())
+    vi.mocked(payloadChecksums).mockClear()
+    await attempt(dir)
+    expect(vi.mocked(payloadChecksums).mock.calls.map(([, crc]) => crc), 'a directory\'s files: no CRC').toEqual([false, false, false, false])
+  })
+
+  it('a refusal found ahead is thrown only when the hook asks for that payload, after the payloads before it', async () => {
+    const files = bodies.map((_, i) => ref(i))
+    files[2] = { ...files[2], sha256: sha('not these bytes') }
+    const err = await attempt(zipOf(await archiveOf(files))).catch((e) => e)
+    expect(err.cause).toMatchObject({ code: 'checksum', detail: paths[2] })
+    expect(seen, 'the first two were handed over; the third refused when asked for').toHaveLength(2)
+  })
+
+  // That such a failure is never an unhandled rejection is `importAhead.test.ts`: this spy handles every promise it returns.
+  it('a check ahead that failed refuses nothing until its payload is asked for', async () => {
+    const real = vi.mocked(payloadChecksums).getMockImplementation()!
+    // the second payload's read fails (a file changed on disk), the others' pass
+    vi.mocked(payloadChecksums).mockImplementation((blob, crc, signal) =>
+      blob.size === 2 ? Promise.reject(new DOMException('changed on disk', 'NotReadableError')) : real(blob, crc, signal))
+    try {
+      asks = 1
+      await attempt(zipOf(await archiveOf(bodies.map((_, i) => ref(i)))))
+      expect(seen, 'its check ran ahead and failed; nobody asked').toEqual([[1, 2]])
+      expect(created.map((c) => c.name)).toEqual(['Home', 'Series'])
+
+      // control: asked for, the same failure is the import's
+      fresh()
+      seen.length = 0
+      vi.mocked(payloadChecksums).mockClear()
+      asks = 2
+      const err = await attempt(zipOf(await archiveOf(bodies.map((_, i) => ref(i))))).catch((e) => e)
+      expect(err.cause).toMatchObject({ name: 'NotReadableError' })
+      expect(seen).toEqual([[1, 2]])
+    } finally {
+      vi.mocked(payloadChecksums).mockImplementation(real)
+    }
   })
 })
 

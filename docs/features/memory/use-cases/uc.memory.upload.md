@@ -89,6 +89,15 @@
   not the file twice, and its size is bounded by the server's ceiling rather than by how fast the uplink is
   ([en.memory.media](../enablers/en.memory.media.md)).
 
+- **Picking a batch decodes nothing at once.** A picked photo's tile takes its aspect ratio from the size its file's
+  header names (`src/web/src/shared/image/imageHeader.ts`; for a format it does not read, an image element that is never
+  drawn), never from a decode, so the only decodes are the on-device stage's, one file ahead (inbox #558). Read in the
+  profile's S2 (50 photos of 5.2 MB, 2026-10-29): decoding every picked photo for its size had put the tab's renderer
+  at 2.30–2.79 GiB at throttle 4 within 1.6 s of the pick, against 1.0–1.1 GiB for the rest of the upload; now its peak
+  is the upload's own, 1.14–1.27 GiB. What the renderer holds while the batch uploads, about 0.8 GiB above the tab
+  before the pick, is not yet attributed; the tiles' previews, each the picked file shown whole, are the likely holder
+  (inbox #785).
+
 ## User impact
 
 You add photos and videos to a Memory in the background and can follow or cancel each upload, with everything

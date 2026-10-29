@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
 import { DIGEST_OPS, DIGEST_SLICE, digestHere, type DigestOp, type DigestResponse } from './digest'
+import { crc32 } from '../export/crc32'
 
 let onMessage: ((event: { data: unknown }) => void) | undefined
 const posted: DigestResponse[] = []
@@ -93,6 +94,16 @@ describe('digest.worker answers every op the front door sends', () => {
     expect(reply).toEqual({ id: seq, ok: true, digest: whole(bytes) })
     expect(await digestHere(new Blob([bytes]))).toBe(whole(bytes))
     expect(whole(bytes)).toMatch(/^[A-Za-z0-9_-]{43}$/)
+  })
+
+  it('asked for it (an import\'s ZIP entry, inbox #557), the same pass answers the CRC-32 of the whole too', async () => {
+    const bytes = random(4 * DIGEST_SLICE + 12345)
+    expect(await send({ op: 'digest', blob: new Blob([bytes]), crc32: true })).toEqual({ id: seq, ok: true, digest: whole(bytes), crc32: crc32(bytes) })
+    // control: one byte else, another CRC-32 (a constant or a first-slice-only sum would answer the same)
+    const other = bytes.slice()
+    other[4 * DIGEST_SLICE] ^= 1
+    expect(await send({ op: 'digest', blob: new Blob([other]), crc32: true })).toMatchObject({ crc32: crc32(other) })
+    expect(crc32(other)).not.toBe(crc32(bytes))
   })
 
   it('control for a constant digest: two different inputs of the same size answer different digests', async () => {

@@ -7,6 +7,7 @@
 // unit-testable against a stub; the real Canvas/`<video>` path is exercised by a live browser round-trip.
 import { drawEncoded, type CanvasPort } from './mediaPixels'
 import { deriveImageWorkerFirst } from './mediaDeriveWorker'
+import { imageSizeFromHeader } from './imageHeader'
 
 /**
  * The derivative tiers this stage produces — the role a derivative blob carries, as a literal union of its own: core's
@@ -65,10 +66,11 @@ export interface MediaDeriver {
   /**
    * Probe the source's intrinsic pixel `{w,h}` for the justified grid (cr-0059). Optional + best-effort.
    *
-   * **A decode of its own, so it is for sources nothing else decodes** — the in-flight upload tile (which needs
-   * an aspect ratio before the file's turn in the queue) and videos (whose poster path reports no size). An
-   * image on the upload path must NOT come through here: [deriveTiers] already decodes it once and hands the
-   * geometry back, and re-probing would pay for that decode twice.
+   * **A read of its own, so it is for sources nothing else measures** — the in-flight upload tile (which needs
+   * an aspect ratio before the file's turn in the queue) and videos (whose poster path reports no size). An image's
+   * size is read from its header, never from decoded pixels (`imageSizeWithoutDecode`, inbox #558). An image on the
+   * upload path must NOT come through here: [deriveTiers] decodes it anyway and hands the geometry back, and a probe
+   * would read the file once more for nothing.
    */
   probeDimensions?(source: Blob, mediaType: string): Promise<Dimensions | null>
 }
@@ -108,6 +110,38 @@ async function deriveImageOnPage(
   }
 }
 
+/**
+ * An image's pixel size read without decoding it (inbox #558): from the file's first bytes where it is a JPEG, PNG, GIF
+ * or WebP (`imageHeader.ts`), else - HEIC, AVIF, a header that does not read - as the browser reads it, by
+ * {@link imageSizeFromElement}.
+ */
+async function imageSizeWithoutDecode(source: Blob): Promise<Dimensions | null> {
+  return (await imageSizeFromHeader(source)) ?? imageSizeFromElement(source)
+}
+
+/**
+ * An image's pixel size as the browser reads it from the file's header, EXIF orientation applied (`naturalWidth` follows
+ * `image-orientation: from-image`, as `createImageBitmap`'s default does), by an `<img>` that is never drawn: its `load`
+ * fires once the bytes are in and the header is parsed, and an image element decodes its pixels only to paint them or on
+ * `decode()`, which nothing here calls. It loads the whole file, though, and the browser keeps those bytes until a later
+ * garbage collection, so it is the fallback for the formats `imageHeader.ts` does not read. Null where the header names
+ * no size (an SVG without one); an image the browser cannot read rejects, as a decode would.
+ */
+function imageSizeFromElement(source: Blob): Promise<Dimensions | null> {
+  const url = URL.createObjectURL(source)
+  const img = new Image()
+  return new Promise<Dimensions | null>((resolve, reject) => {
+    img.onload = () => resolve(img.naturalWidth > 0 && img.naturalHeight > 0 ? { w: img.naturalWidth, h: img.naturalHeight } : null)
+    img.onerror = () => reject(new Error('image_probe_failed'))
+    img.src = url
+  }).finally(() => {
+    img.onload = null
+    img.onerror = null
+    img.removeAttribute('src')
+    URL.revokeObjectURL(url)
+  })
+}
+
 /** The real browser deriver — images Worker-first, the `<video>` poster and the dimension probe on the page. */
 export function createBrowserDeriver(): MediaDeriver {
   return {
@@ -145,14 +179,7 @@ export function createBrowserDeriver(): MediaDeriver {
       }
     },
     async probeDimensions(source, mediaType) {
-      if (mediaType.startsWith('image/')) {
-        const bitmap = await createImageBitmap(source)
-        try {
-          return { w: bitmap.width, h: bitmap.height }
-        } finally {
-          bitmap.close()
-        }
-      }
+      if (mediaType.startsWith('image/')) return imageSizeWithoutDecode(source)
       if (mediaType.startsWith('video/')) {
         const url = URL.createObjectURL(source)
         try {

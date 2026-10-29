@@ -1,5 +1,6 @@
 // Page-side front door to core's digest worker (`digest.worker.ts`, inbox #554): a `Blob`'s SHA-256 is read there, off
-// the page's main thread. `sharedBlob.ts` `contentDigest` is the one caller, so no production caller names this module.
+// the page's main thread. `sharedBlob.ts` is the one caller (`contentDigest`, and `payloadChecksums` for an import's
+// payload check, inbox #557), so no production caller names this module.
 // The shape is the other front doors' (`frameWorker.ts`, `shared/image/mediaDeriveWorker.ts`): a lazily created
 // module-level Worker, a `workerUnavailable` latch, a `seq`-keyed map of the digests not yet answered, and a one-time
 // warning when a Worker that existed could not run. The Worker is an optimisation, never a requirement:
@@ -16,12 +17,13 @@
 // What crosses: the `Blob`, by structured clone, which hands the Worker the same bytes and copies none; nothing is
 // transferred, so the page still holds the `Blob` after any post. That is why there is no `ready` handshake as the frame
 // worker has: a Worker that fails to load, or dies mid-digest, leaves the page everything it needs to start again.
-import { digestHere, type DigestRequest, type DigestResponse } from './digest'
+import { checksumsHere, type Checksums, type DigestRequest, type DigestResponse } from './digest'
 
 type Job = {
   blob: Blob
+  withCrc32: boolean
   signal?: AbortSignal
-  resolve: (digest: string) => void
+  resolve: (checksums: Checksums) => void
   reject: (reason: unknown) => void
 }
 
@@ -43,7 +45,7 @@ function warnOnce(): void {
 
 /** Finish `job` on the page thread, from byte 0 of the `Blob` it still holds. */
 function onPage(job: Job): void {
-  digestHere(job.blob, job.signal).then(job.resolve, job.reject)
+  checksumsHere(job.blob, job.withCrc32, job.signal).then(job.resolve, job.reject)
 }
 
 /** Retire the Worker for the rest of the session and finish every outstanding digest on the page thread. */
@@ -74,7 +76,7 @@ function getWorker(): Worker | null {
       const job = jobs.get(msg.id)
       if (!job) return // aborted: nobody waits for it
       jobs.delete(msg.id)
-      if (msg.ok) job.resolve(msg.digest)
+      if (msg.ok) job.resolve(msg.crc32 === undefined ? { digest: msg.digest } : { digest: msg.digest, crc32: msg.crc32 })
       else job.reject(new DOMException(msg.message, msg.name))
     })
     w.addEventListener('error', latch)
@@ -101,12 +103,17 @@ function post(w: Worker, req: DigestRequest): void {
  * page thread by the same loop. Rejects with an `AbortError` at once when `signal` aborts, and with a `DOMException` of
  * the read's own name when the browser refuses to read the file.
  */
-export function digestOff(blob: Blob, signal?: AbortSignal): Promise<string> {
+export async function digestOff(blob: Blob, signal?: AbortSignal): Promise<string> {
+  return (await checksumsOff(blob, false, signal)).digest
+}
+
+/** {@link digestOff}, and with `withCrc32` the CRC-32 of the same bytes from the same pass (an import's ZIP entry, inbox #557). */
+export function checksumsOff(blob: Blob, withCrc32: boolean, signal?: AbortSignal): Promise<Checksums> {
   if (signal?.aborted) return Promise.reject(aborted())
   const w = getWorker()
-  if (!w) return digestHere(blob, signal)
+  if (!w) return checksumsHere(blob, withCrc32, signal)
   const id = (seq += 1)
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<Checksums>((resolve, reject) => {
     // At once, wherever the digest runs: one the Worker holds is cancelled there, and one a latch moved to the page
     // stops at its next slice, its late rejection a no-op on a settled promise.
     const onAbort = () => {
@@ -117,10 +124,11 @@ export function digestOff(blob: Blob, signal?: AbortSignal): Promise<string> {
     const done = () => signal?.removeEventListener('abort', onAbort)
     jobs.set(id, {
       blob,
+      withCrc32,
       signal,
-      resolve: (digest) => {
+      resolve: (checksums) => {
         done()
-        resolve(digest)
+        resolve(checksums)
       },
       reject: (reason) => {
         done()
@@ -128,6 +136,6 @@ export function digestOff(blob: Blob, signal?: AbortSignal): Promise<string> {
       },
     })
     signal?.addEventListener('abort', onAbort, { once: true })
-    post(w, { id, op: 'digest', blob })
+    post(w, withCrc32 ? { id, op: 'digest', blob, crc32: true } : { id, op: 'digest', blob })
   })
 }

@@ -73,6 +73,14 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
 
 - **Operator-blind.** The server sees nothing of an export: the client decrypts, walks and writes. There is no export endpoint. An import is a sequence of ordinary node and blob writes.
 - **No memory wall.** One decrypted chunk window at a time on export; the import reads the ZIP by slice. Checked with a 4.5 GiB entry (ZIP64) against `unzip` and Python's `zipfile`.
+- **The check reads each payload once, off the page, one payload ahead.** A payload's SHA-256 and a ZIP entry's CRC-32
+  are one pass over its bytes in core's digest worker, and the next payload's pass runs while the current one uploads,
+  never two at once (inbox #557). Read in the profile's S4 (`scripts/profile_hot_paths.py`: a download of 50 photos of
+  5.2 MB imported, three runs each without the CPU profiler, 2026-10-29): 15.8 s against 20.2 s at throttle 1 and 17.2 s
+  against 35.1 s at throttle 4. The main thread had spent 3.5 s (14.6 s at throttle 4) on the SHA-256 and 0.5 s (1.9 s)
+  on the CRC-32; its tasks fell from 5.5 s to 1.3 s (21.0 s to 3.3 s), and the worker spends 4.5 s on both. What is
+  left between two uploads is the original's own preparation (its tiers, 154 ms a photo), which the import does not yet
+  overlap with the previous upload as a member's upload does (inbox #784).
 - **Not atomic.** The server has no multi-node transaction; the rollback is best effort and says so when it fails.
 - **Quota, without exposing it.** The preflight is the rule an upload start applies, asked without a lock: the tenant's usage (trash and open uploads included) plus the declared bytes against the quota the Server Owner set; a tenant with no quota fits anything. It answers **yes or no, never a number**, so a member learns no more than a refused upload already tells; because a long run of questions could still be bisected towards the free space, it is rate-limited per member and per tenant (`veyq.ratelimit.storage-fit.*`, default 10 and 60 per minute, `429` with `Retry-After`). It is advisory: another upload may take the room first, and the start stays the one decision.
 

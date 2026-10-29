@@ -9,7 +9,7 @@
 // session — their URLs name the account's objects — so they stay in the run directory under `.run/profiles/`, which git
 // ignores, and the driver checks each for the account's password and Secret Key before it accepts the run.
 import { expect, type Browser, type BrowserContext, type CDPSession, type Page, type Worker as PwWorker } from '@playwright/test'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 export const OUT = process.env.VEYQ_PROFILE_OUT ?? '/out'
 
@@ -103,6 +103,96 @@ export interface Window {
    */
   metricsBefore: Record<string, number>
   metrics: Record<string, number>
+  /** The browser's resident memory around and in the window ({@link sampleMemory}, inbox #558); null where no `/proc`. */
+  memory: MemoryReading | null
+}
+
+/** Chromium's processes by their `--type`: the page's renderer (its workers are its threads), the GPU process, the rest. */
+type ProcessClass = 'renderer' | 'gpu' | 'browser' | 'other'
+
+/**
+ * The resident set (`VmRSS`, kB) of the browser's processes, summed per {@link ProcessClass} and over all: right before the
+ * window (`before`), its largest value inside it and when (`peak`, window ms from t0), and every sample (`series`: window
+ * ms, renderer kB, all kB). Read from `/proc` by the test's own process, which runs in the same container as the browser,
+ * so the page is asked nothing and spends nothing on it. RSS is what the operating system holds for the process — a decoded
+ * bitmap, which the JS heap counters never see, included; a page freed by the allocator but kept may stay in it, so the
+ * peak is what to read, not the end.
+ */
+export interface MemoryReading {
+  intervalMs: number
+  samples: number
+  before: Record<ProcessClass | 'all', number>
+  peak: Record<ProcessClass | 'all', { kB: number; atMs: number }>
+  series: [number, number, number][]
+}
+
+const MEMORY_INTERVAL_MS = 20
+const CLASSES: ProcessClass[] = ['renderer', 'gpu', 'browser', 'other']
+
+/** A process's class from its `/proc/<pid>/cmdline`: NUL-separated arguments, or — for a child the zygote forked, which
+ *  rewrote its title — one string with the arguments separated by spaces. */
+function processClass(cmdline: string): ProcessClass | null {
+  const args = cmdline.split(/[\0 ]/)
+  if (!/chrom|headless_shell/i.test(args[0] ?? '')) return null
+  const type = args.find((a) => a.startsWith('--type='))?.slice('--type='.length)
+  if (type === undefined) return 'browser'
+  if (type === 'renderer') return 'renderer'
+  if (type === 'gpu-process') return 'gpu'
+  return 'other'
+}
+
+/** One reading of every browser process's `VmRSS` (kB) by class, or null where `/proc` cannot be read. */
+function residentNow(): Record<ProcessClass | 'all', number> | null {
+  let pids: string[]
+  try {
+    pids = readdirSync('/proc').filter((p) => /^\d+$/.test(p))
+  } catch {
+    return null
+  }
+  const out = { renderer: 0, gpu: 0, browser: 0, other: 0, all: 0 }
+  for (const pid of pids) {
+    try {
+      const cls = processClass(readFileSync(`/proc/${pid}/cmdline`, 'utf8'))
+      if (!cls) continue
+      const kB = Number(/^VmRSS:\s+(\d+)\s+kB/m.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1] ?? 0)
+      out[cls] += kB
+      out.all += kB
+    } catch {
+      // a process that ended between the listing and the read
+    }
+  }
+  return out
+}
+
+/**
+ * Starts sampling the browser's resident memory every {@link MEMORY_INTERVAL_MS}; the returned function stops it and
+ * returns the reading with times relative to `t0` (epoch ms), or null where `/proc` cannot be read (not Linux).
+ */
+export function sampleMemory(): { start: (t0: number) => void; stop: () => MemoryReading | null } {
+  const before = residentNow()
+  let t0 = Date.now()
+  const series: [number, number, number][] = []
+  const peak = Object.fromEntries([...CLASSES, 'all'].map((c) => [c, { kB: 0, atMs: 0 }])) as MemoryReading['peak']
+  let timer: NodeJS.Timeout | undefined
+  const tick = () => {
+    const now = residentNow()
+    if (!now) return
+    const at = Date.now() - t0
+    series.push([at, now.renderer, now.all])
+    for (const c of [...CLASSES, 'all'] as const) if (now[c] > peak[c].kB) peak[c] = { kB: now[c], atMs: at }
+  }
+  return {
+    start(windowStart: number) {
+      t0 = windowStart
+      if (before) timer = setInterval(tick, MEMORY_INTERVAL_MS)
+    },
+    stop() {
+      if (timer) clearInterval(timer)
+      if (!before) return null
+      tick()
+      return { intervalMs: MEMORY_INTERVAL_MS, samples: series.length, before, peak, series }
+    },
+  }
 }
 
 /**
@@ -150,11 +240,14 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
   if (cpuProfile) await cdp.send('Profiler.start')
 
   const metricsBefore = (await cdp.send('Performance.getMetrics')).metrics
+  const resident = sampleMemory()
   const startedAt = Date.now()
+  resident.start(startedAt)
   const t0 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.start)
   await operation()
   const t1 = await page.evaluate((name) => performance.mark(name).startTime, WINDOW_MARKS.end)
   const endedAt = Date.now()
+  const memory = resident.stop()
   const { metrics } = await cdp.send('Performance.getMetrics')
 
   const profile = cpuProfile ? (await cdp.send('Profiler.stop')).profile : null
@@ -193,6 +286,7 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     httpErrors,
     metricsBefore: Object.fromEntries(metricsBefore.map((m) => [m.name, m.value])),
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
+    memory,
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))
   return window

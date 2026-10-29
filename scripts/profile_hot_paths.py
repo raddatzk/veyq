@@ -78,9 +78,14 @@ readings share its seed):
     store requests are the wire (#261).
   - `s3` open a 1,000-photo Chapter (`s3-open-chapter.profile.ts`), seeded once before its first run by
     `s3-seed.profile.ts` through the browser, unprofiled.
+  - `s4` import: a download of a Memory of 50 photos of S2's kind imported into a fresh folder per run
+    (`s4-import.profile.ts`, inbox #557); `s4-seed.profile.ts` uploads that Memory and saves its ZIP once, unprofiled.
   - `crypto`: the crypto micro-reading, AES-256-GCM through `@noble/ciphers` against WebCrypto over 4 MB and 64 MB
     (`crypto-aead.profile.ts`, its numbers in `<stem>.crypto.json`).
-  The photos S2 and S3 upload are synthetic: ffmpeg's `testsrc2` with temporal noise, rendered on this host into the run
+  Every scenario's window also records the browser's resident memory (`memory` in `<stem>.window.json`: each process
+  class's `VmRSS` before the window, its peak inside it and when, sampled every 20 ms from `/proc` by the test's own
+  process, inbox #558): what a decoded picture holds is no JS heap, so the trace's counters never see it.
+  The photos S2, S3 and S4 upload are synthetic: ffmpeg's `testsrc2` with temporal noise, rendered on this host into the run
   directory's `fixtures/` before the first run (`render_photos`), so ffmpeg must be on the PATH for those two.
 """
 from __future__ import annotations
@@ -109,12 +114,12 @@ import run_stack_e2e as stack  # noqa: E402 - lane L1's own stages, so the insta
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES = ROOT / ".run" / "profiles"
 PROFILE_CONFIG = (repo_layout.E2E_DIR / "profile" / "playwright.config.ts").relative_to(repo_layout.E2E_DIR)
-SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "crypto": "crypto-aead"}
+SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "s4": "s4-import", "crypto": "crypto-aead"}
 # What a scenario needs on the instance before its first run, run once and never profiled.
-SEEDS = {"s3": "s3-seed"}
+SEEDS = {"s3": "s3-seed", "s4": "s4-seed"}
 # The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, 5.2 MB each, measured),
-# S3's smaller, since S3 reads the grid's thumbnails and not the originals.
-PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4)}
+# S3's smaller, since S3 reads the grid's thumbnails and not the originals; S4 imports a download of S2's kind of photos.
+PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4), "s4": (50, "4032x3024", 2)}
 LOAD_LIMIT = 3.0
 IDLE_SECS = 20
 # Where the app writes its recording: a bind mount of the run directory's `jfr/`, since the recipe's /tmp is a tmpfs
@@ -471,8 +476,12 @@ def main() -> int:
                                            "statementsPerRequest": estimate,
                                            "abortedRequests": len(aborted),
                                            "counters": {n: c1[n] - c0[n] for n in STATUS_VARS}})
+                    memory = window.get("memory")
                     say(f"{window['stem']}: {window['operationMs']:.0f} ms, {api} API request(s), {count} statement(s)"
                         + (f" ≈ {estimate:.1f} per request" if estimate is not None else "")
+                        + (f"; renderer RSS {memory['before']['renderer'] / 1024:,.0f} -> peak "
+                           f"{memory['peak']['renderer']['kB'] / 1024:,.0f} MiB at {memory['peak']['renderer']['atMs']} ms"
+                           if memory else "")
                         + (f"; {len(aborted)} aborted request(s), recorded ({ABORTED})" if aborted else ""))
         (workdir / "server.json").write_text(json.dumps(server, indent=2), encoding="utf-8")
 
