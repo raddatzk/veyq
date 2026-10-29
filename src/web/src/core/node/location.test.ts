@@ -2,6 +2,7 @@
 // (The route grammar asks the application registry which kinds carry which segment — `src/test/setup.ts` fills it for a
 // DOM-environment file, as `main.ts` does: Memories claims `memories`, Depot declares no segment.)
 import { describe, it, expect } from 'vitest'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import {
   parseHash,
   buildHash,
@@ -51,8 +52,9 @@ describe('parseHash', () => {
     expect(parseHash('#~me/reisen-2026/memories/rom')).toEqual({ scope: PERSONAL_SCOPE, segments: ['reisen-2026', 'memories', 'rom'], folder: false })
   })
 
-  it('parses the (later) group token, leaving it unresolved', () => {
+  it('parses the group token, and the `%40` form the client wrote before 2026-10-29 (an old bookmark)', () => {
     expect(parseHash('#@familie/sommer')).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
+    expect(parseHash('#%40familie/sommer')).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
   })
 
   it('keeps the trailing slash — it marks the target as a folder — in every scope, and never on the scope root', () => {
@@ -82,29 +84,60 @@ describe('buildHash', () => {
     expect(buildHash(TENANT_SCOPE, ['reisen-2026', 'rom'])).toBe('#reisen-2026/rom')
   })
 
-  it('keeps the leading token for personal / group fragments', () => {
+  it('keeps the leading token for personal / group fragments, unencoded', () => {
     expect(buildHash(PERSONAL_SCOPE, [])).toBe('#~me')
     expect(buildHash(PERSONAL_SCOPE, ['reisen-2026', 'rom'])).toBe('#~me/reisen-2026/rom')
-    // `@` url-encodes to `%40` (unchanged from cr-0031); it decodes back on parse, so the fragment round-trips.
-    expect(buildHash('@familie', ['sommer'])).toBe('#%40familie/sommer')
+    expect(buildHash('~kevin', ['reisen-2026'])).toBe('#~kevin/reisen-2026')
+    expect(buildHash('@familie', [])).toBe('#@familie')
+    expect(buildHash('@familie', ['sommer'])).toBe('#@familie/sommer')
     expect(parseHash(buildHash('@familie', ['sommer']))).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
+  })
+
+  it('encodes a character a token could only carry if typed into the address - never its `~`/`@`', () => {
+    expect(buildHash('@fam ilie', ['sommer'])).toBe('#@fam%20ilie/sommer')
+    expect(parseHash(buildHash('@fam ilie', ['sommer']))).toEqual({ scope: '@fam ilie', segments: ['sommer'], folder: false })
   })
 
   it('emits the trailing slash for a folder, in every scope, and none at the scope root', () => {
     expect(buildHash(TENANT_SCOPE, ['foo', 'memory'], true)).toBe('#foo/memory/')
     expect(buildHash(PERSONAL_SCOPE, ['foo'], true)).toBe('#~me/foo/')
-    expect(buildHash('@familie', ['sommer'], true)).toBe('#%40familie/sommer/')
+    expect(buildHash('@familie', ['sommer'], true)).toBe('#@familie/sommer/')
     expect(buildHash(TENANT_SCOPE, [], true)).toBe('')
     expect(buildHash(PERSONAL_SCOPE, [], true)).toBe('#~me')
   })
 
   it('round-trips with parseHash, the slash included', () => {
-    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '@familie']) {
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '~kevin', '@familie']) {
       for (const folder of [false, true]) {
         const segments = ['reisen-2026', 'memories', 'rom']
         expect(parseHash(buildHash(scope, segments, folder))).toEqual({ scope, segments, folder })
       }
     }
+  })
+})
+
+// Every fragment reaches the address bar through vue-router (`router.push({ hash })`, a RouterLink's `to`), which encodes
+// the hash it is handed once more (`encodeHash` is `encodeURI`) and decodes `route.hash` once. So a `%` that buildHash
+// writes is a `%25` in the URL: until 2026-10-29 a group's `@` went out as `%40` and reached the URL as `#%2540familie/…`
+// (lane L1's node-urls.spec.ts saw it). The written address must read as ADR 0015's grammar, and `route.hash` must come
+// back equal to what buildHash wrote — the host's `stayOn` compares the two and would otherwise rewrite the address.
+describe('a fragment through the router', () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { render: () => null } }] })
+  const cases: [string, string, string[], boolean, string][] = [
+    ['a group root', '@familie-sued', [], false, '#@familie-sued'],
+    ['a folder in a group', '@familie-sued', ['grillfest'], true, '#@familie-sued/grillfest/'],
+    ['a group addressed by its id', '@0f8fad5b-d9cb-469f-a165-70867728950e', ['grillfest'], true, '#@0f8fad5b-d9cb-469f-a165-70867728950e/grillfest/'],
+    ['a folder in the personal space', '~kevin.r_2', ['steuern'], true, '#~kevin.r_2/steuern/'],
+    ['a chapter of a Memory in the tenant', TENANT_SCOPE, ['reisen-2026', 'memories', 'rom', 'erster-tag'], false, '#reisen-2026/memories/rom/erster-tag'],
+    ['a chapter of a Memory in a group', '@familie-sued', ['memories', 'rom', 'erster-tag'], false, '#@familie-sued/memories/rom/erster-tag'],
+  ]
+  it.each(cases)('%s is written readable and read back unchanged', (_, scope, segments, folder, address) => {
+    const hash = buildHash(scope, segments, folder)
+    const written = router.resolve({ name: 'home', hash })
+    expect(written.href).toBe(`/${address}`)
+    const cold = router.resolve(written.href)
+    expect(cold.hash, 'route.hash equals what buildHash wrote').toBe(hash)
+    expect(parseHash(cold.hash)).toEqual({ scope, segments, folder })
   })
 })
 
@@ -449,7 +482,7 @@ describe('the route grammar', () => {
       node('rom', 'Rom', 'b', MEMORY_KIND, 4),
       node('tag', 'Tag', 'rom', CHAPTER_KIND, 5),
     ]
-    expect(hashOf(t, 'deep', '@familie')).toBe('#%40familie/a/b/box/anna/deep/')
+    expect(hashOf(t, 'deep', '@familie')).toBe('#@familie/a/b/box/anna/deep/')
     expect(hashOf(t, 'tag', '~kevin')).toBe('#~kevin/a/b/memories/rom/tag')
     for (const scope of [TENANT_SCOPE, '~kevin', '@familie']) {
       for (const n of t) expect(resolveHash(t, hashOf(t, n.id, scope)), `${n.id} in ${scope}`).toBe(n.id)
