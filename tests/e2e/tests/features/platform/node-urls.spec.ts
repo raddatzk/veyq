@@ -195,11 +195,9 @@ test(
   },
 )
 
-// Fixme (inbox #328): the app writes a group node's address with its `@` encoded twice - `#%2540familie-sued-…/grillfest-…/`,
-// not ADR 0015's `#@…/…/` - since `buildHash` runs the scope token through `encodeURIComponent` and vue-router encodes
-// the `%` of the hash it is handed once more. Red in lane L1 on 2026-10-29 at the folder's address; the group's root
-// (`#@…`, built by the sidebar) passed. Unskip once the product writes the grammar's form.
-test.fixme(
+// The folder's address is the step that was red on 2026-10-29: `buildHash` wrote the group's `@` as `%40`, and vue-router
+// encoded that `%` again, so the address bar read `#%2540familie-sued-…/grillfest-…/` (core/node/location.ts says why).
+test(
   'a group is @ and its name\'s slug: its root and a folder in it, written by a click and opened cold',
   { tag: '@uc.spaces.switch-spaces:switch-space-by-fragment' },
   async () => {

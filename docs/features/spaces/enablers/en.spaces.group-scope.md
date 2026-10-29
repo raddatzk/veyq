@@ -99,8 +99,10 @@ sequenceDiagram
 - **E3 — no tenant context** (no Host / unknown tenant): `404` — every scope lives within a tenant
   ([ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md)).
 - **E4 — duplicate group name:** allowed. Names are not unique; the `@group` URL fragment resolves
-  client-side against the member's decrypted group list (first match wins) — there is **no** server-side group
-  slug ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)).
+  client-side against the member's decrypted group list — there is **no** server-side group slug
+  ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)). A name's slug is the token only while it is
+  unique among the member's groups, else the link carries the scope id; an ambiguous slug opens no group
+  ([ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 
 ## Quality notes
 

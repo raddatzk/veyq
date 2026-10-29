@@ -68,8 +68,10 @@ routes stay history-mode.**
   time-ordered client ids — UUIDv7 — were rejected because a client's clock is forgeable and would leak, inbox #387.)
   The rule is client-side only (nothing stored or sealed); a later-created sibling never moves an earlier path; an
   older sibling that comes back (restored, or moved or renamed in) takes its birth place and shifts the younger
-  ones' segments — deterministic, by design; and a future folder export names its directories by the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
-  first-match, client-side ([ADR 0014](0014-group-scopes-and-governance.md)).
+  ones' segments — deterministic, by design; and a future folder export names its directories by the same rule. Group slugs are **not** server-enforced (no group slug token,
+  [ADR 0014](0014-group-scopes-and-governance.md)), so a group's token is its name's slug only while no other of the
+  member's groups shares it, else its scope id; a slug that two of them share resolves to **no** group, never to
+  whichever comes first — guessing could open the wrong group's content (`openGroupByToken`, `features/spaces/scopes.ts`).
 - **The grammar of a node's path: a folder ends in a slash, an application puts its slug before its nodes,
   Depot has none.** The path stays in the fragment, readable and resolved client-side exactly as above, after the
   scope token (token-less tenant, `~username`, `@group`). What follows the token is:

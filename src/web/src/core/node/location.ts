@@ -80,12 +80,19 @@ export function parseHash(hash: string): ContentLocation {
   return { scope: TENANT_SCOPE, segments: parts, folder: slash }
 }
 
-/** Build the fragment for a scope + path. Tenant is token-less (`#urlaube`, `''` at the root); `~me`/`@` carry their
- *  leading token (`#~me/reisen-2026/memories/rom`). `folder`: the target is a folder, marked by a trailing slash
- *  (`#reisen-2026/`) — meaningless at the scope root, which has no segment to end. */
+/** Build the fragment for a scope + path. Tenant is token-less (`#urlaube`, `''` at the root); `~<username>`/`@<group>`
+ *  carry their leading token (`#~me/reisen-2026/memories/rom`, `#@familie/sommer`). `folder`: the target is a folder,
+ *  marked by a trailing slash (`#reisen-2026/`) — meaningless at the scope root, which has no segment to end.
+ *
+ *  **The scope's `~`/`@` is written as it is, never `%40`.** The fragment reaches the URL through vue-router, which encodes
+ *  the hash it is handed once more (`encodeURI`): an `@` written as `%40` became `#%2540familie/…` in the address bar
+ *  (red in lane L1, 2026-10-29). Everything else goes through `encodeURIComponent`, which leaves the grammar's own
+ *  characters alone — a slug is `[a-z0-9-]`, a username `[A-Za-z0-9_.-]`, a group token a slug or a scope id — and
+ *  escapes only what a hand-typed address could carry, so {@link parseHash} reads every fragment back. */
 export function buildHash(scope: string, segments: string[], folder = false): string {
-  const tokens = scope === TENANT_SCOPE ? segments : [scope, ...segments]
-  return tokens.length ? `#${tokens.map(encodeURIComponent).join('/')}${folder && segments.length > 0 ? '/' : ''}` : ''
+  const parts = segments.map(encodeURIComponent)
+  const tokens = scope === TENANT_SCOPE ? parts : [scope.charAt(0) + encodeURIComponent(scope.slice(1)), ...parts]
+  return tokens.length ? `#${tokens.join('/')}${folder && segments.length > 0 ? '/' : ''}` : ''
 }
 
 /** Sibling order: the server-observed creation instant (`NodeSummary.createdAt`, to the millisecond, ADR 0015), then the

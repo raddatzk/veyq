@@ -2,6 +2,7 @@
 title: "Views, tabs and favorites"
 sources:
   - docs/features/memory/use-cases/uc.memory.browse.md
+  - docs/features/spaces/use-cases/uc.spaces.switch-spaces.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -38,6 +39,9 @@ neither can the server. People you share a link with get no heart.
 ## Addresses you can bookmark
 
 The address of a folder in your browser reads like its path, for example `…/#holidays/2026/`. A folder's address ends
-with a slash. A Memory sits under `/memories/`, for example `…/#holidays/memories/rome`. You can bookmark any of them.
+with a slash. A Memory sits under `/memories/`, for example `…/#holidays/memories/rome`, and a chapter follows its
+Memory: `…/#holidays/memories/rome/first-day`. In your personal space the address starts with `~` and your username, for
+example `…/#~anna/taxes/`; in a group it starts with `@` and the group's name, for example `…/#@family/summer/`. If two
+of your groups have the same name, the address carries a code instead of the name. You can bookmark any of them.
 The readable part comes after the `#`, which a browser never sends to a server, so the names in the address stay on your
 device.

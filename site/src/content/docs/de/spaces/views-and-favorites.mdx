@@ -2,6 +2,7 @@
 title: "Ansichten, Reiter und Favoriten"
 sources:
   - docs/features/memory/use-cases/uc.memory.browse.md
+  - docs/features/spaces/use-cases/uc.spaces.switch-spaces.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -39,5 +40,8 @@ nicht, und der Server auch nicht. Wer nur einen Link hat, bekommt kein Herz.
 
 Die Adresse eines Ordners in deinem Browser liest sich wie sein Pfad, zum Beispiel `…/#holidays/2026/`. Die Adresse eines
 Ordners endet mit einem Schrägstrich. Eine Erinnerung liegt unter `/memories/`, zum Beispiel
-`…/#holidays/memories/rome`. Du kannst jede davon als Lesezeichen speichern. Der lesbare Teil steht hinter dem `#`, den
+`…/#holidays/memories/rome`, und ein Kapitel folgt seiner Erinnerung: `…/#holidays/memories/rome/first-day`. In deinem
+persönlichen Bereich beginnt die Adresse mit `~` und deinem Benutzernamen, zum Beispiel `…/#~anna/taxes/`; in einer
+Gruppe mit `@` und dem Namen der Gruppe, zum Beispiel `…/#@family/summer/`. Haben zwei deiner Gruppen denselben Namen,
+steht statt des Namens eine Kennung in der Adresse. Du kannst jede davon als Lesezeichen speichern. Der lesbare Teil steht hinter dem `#`, den
 ein Browser nie an einen Server schickt; die Namen in der Adresse bleiben also auf deinem Gerät.
