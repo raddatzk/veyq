@@ -129,7 +129,10 @@ per scenario at CPU throttle 1 and 4):
 only; synthetic content; a loopback network through Docker's virtual machine. Chromium's CPU throttle slows the page's
 main thread and never a worker: the Argon2id worker took 5,354 ms at throttle 1 and 5,413 ms at throttle 4 while the
 main thread grew 4.5 times, so a throttle-4 number is a slower main thread, never a slower device. A reading without
-the CPU profiler still records the trace, whose own sampler visits every thread every 0.2 ms. Java Flight Recorder
+the CPU profiler still records the trace, whose own sampler visits every thread every 0.2 ms. A reading checks itself
+before it is used: the page's main-thread tasks in the trace must account for the CPU time the operating system
+counted for that thread, and may take longer than their own CPU time only as much as they did on a quiet machine;
+otherwise the reading is refused. Those ranges are this machine's. Java Flight Recorder
 samples only the server's own process, and the SQL counts are the database's global ones.
 
 ## Where and when each stage runs
