@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test
  * budget_exceeded on an over-cap declaration; non-member 404; unauth 401; operator-blind (the K_blob wrap
  * round-trips verbatim). UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `MediaCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `MediaCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class MediaSliceTest {

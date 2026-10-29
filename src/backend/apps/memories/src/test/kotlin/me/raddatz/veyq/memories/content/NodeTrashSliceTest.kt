@@ -64,7 +64,7 @@ import me.raddatz.veyq.core.content.NodesHandler
  * its own transaction, [StoreReclaimSweep] is the only thing that deletes objects, so the purge case drives both.
  * UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `NodeTrashCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `NodeTrashCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class NodeTrashSliceTest {

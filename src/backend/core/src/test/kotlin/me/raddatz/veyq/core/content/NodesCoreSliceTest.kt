@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test
  * (non-member 404); rename + delete-subtree; operator-blind (the server stores only the ciphertext the
  * client sent). UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
  *
- * **Split from `NodesSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `NodesSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `NodesSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

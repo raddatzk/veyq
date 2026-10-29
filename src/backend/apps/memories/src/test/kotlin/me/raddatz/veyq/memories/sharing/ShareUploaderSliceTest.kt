@@ -55,7 +55,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
  *    ownership check) — a **foreign identity's** media is a `404`, a **bad token** is a `403`, and a **READ**
  *    share rejects the delete (`403`).
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `ShareUploaderCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `ShareUploaderCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class ShareUploaderSliceTest {

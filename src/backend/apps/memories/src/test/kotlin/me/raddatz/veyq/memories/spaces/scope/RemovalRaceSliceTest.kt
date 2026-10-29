@@ -49,7 +49,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopesStore
  * held as its two first writes — the tenant root's lock and the membership's delete, through the store calls
  * `TenantHandler.removeMember` makes. Each race has a control: the same write by a member who stays lands.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `RemovalRaceCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `RemovalRaceCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class RemovalRaceSliceTest {

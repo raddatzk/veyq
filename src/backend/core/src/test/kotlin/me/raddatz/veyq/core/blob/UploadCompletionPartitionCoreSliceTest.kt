@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test
  * over the real registration; the dispatch is pinned with forged acceptors that record what they were offered and
  * answer a code no real one does, each negative beside a positive control on the same node.
  *
- * **Split from `UploadCompletionPartitionSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `UploadCompletionPartitionSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `UploadCompletionPartitionSliceTest` in `:apps:memories`. The bodies moved verbatim,
  * but for `MemoriesNodeKinds.MEMORY` (a Memories class `:core` cannot import) spelled as its wire literal `"MEMORY"`.
  */

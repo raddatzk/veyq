@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test
  * items an earlier part of the batch already committed. Each test ends with a fresh create that succeeds, so a site
  * that refuses everything cannot pass.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `MediaCreateRaceCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `MediaCreateRaceCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class MediaCreateRaceSliceTest {

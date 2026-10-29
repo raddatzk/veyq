@@ -44,7 +44,7 @@ import me.raddatz.veyq.core.sharing.ShareWriteProof
  * the subtree gate passed) vs `404 share_not_found` when it is not — so the two codes distinguish "authorized
  * but no transport" from "not under the share", which is what these hermetic tests assert.
  *
- * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `ShareCoreSliceTest` in `:core`.
+ * **Split** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): the methods that run with core alone are `ShareCoreSliceTest` in `:core`.
  */
 @QuarkusTest
 class ShareSliceTest {

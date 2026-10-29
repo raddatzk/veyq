@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test
  *    ownership check) — a **foreign identity's** media is a `404`, a **bad token** is a `403`, and a **READ**
  *    share rejects the delete (`403`).
  *
- * **Split from `ShareUploaderSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `ShareUploaderSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `ShareUploaderSliceTest` in `:apps:memories`. The bodies moved verbatim,
  * but for `MemoriesNodeKinds.MEMORY` (a Memories class `:core` cannot import) spelled as its wire literal `"MEMORY"`.
  */

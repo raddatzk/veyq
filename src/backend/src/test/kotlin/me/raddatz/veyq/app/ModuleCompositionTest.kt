@@ -53,7 +53,7 @@ import org.junit.jupiter.api.Test
  * application that is missing fails here, not quietly in production.
  *
  * **Why it is worth a test.** A module whose jar is not indexed (no `META-INF/beans.xml`) does not fail the build of
- * the deliverable: measured at cr-platform-gradle-modules step 7, the packaged fast-jar with Memories' `beans.xml`
+ * the deliverable: measured when the module split was built, the packaged fast-jar with Memories' `beans.xml`
  * deleted **boots green**, Flyway still applies the Memories baseline, every Memories route answers 404 and every seam
  * core reaches Memories through is silently empty — an `@All` list shrinks, it does not fail. Since the module split
  * the Memories tests run in `:apps:memories`, where an unindexed Memories jar fails at their own injection points; the
@@ -191,7 +191,7 @@ class ModuleCompositionTest {
         assertEquals("expenses", NodeKindRules.applicationOf(kindRules, pot), "a Pot is switched with Expenses")
         assertTrue(NodeKindRules.parentAllows(kindRules, pot, ParentSlot.Node(NodeEntity.FOLDER)), "control: a Pot in a folder")
         assertFalse(NodeKindRules.parentAllows(kindRules, pot, ParentSlot.Node("MEMORY")), "a Pot in a Memory")
-        // CR decision 6: a Pot is shared to read or to write, never WRITE_ONLY — one answer across every application
+        // ADR 0108 decision 2: a Pot is shared to read or to write, never WRITE_ONLY — one answer across every application
         assertEquals(setOf("READ", "READ_WRITE"), ShareRoots.roles(shareRoots, pot), "a Pot's share roles")
         for (child in kinds) {
             // ADR 0108 decision 3: a Pot's entries are records, never child nodes

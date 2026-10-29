@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
  * path (`403`); a **bad token** is rejected (`403`); **revoke** stops contributions (`404`); operator-blindness
  * (the sealed name + wrap round-trip, the server stores only ciphertext + opaque ids).
  *
- * **Split from `ShareContributorSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `ShareContributorSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `ShareContributorSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

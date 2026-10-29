@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test
  * object is ever written, so `start` alone already exposes it; `media-batch` then proves `veyq_blob` inherits
  * the same bare key from the session rather than deriving a "nicer" one at attach time.
  *
- * **Split from `ObjectKeyCarriesNoStructureSliceTest`** (cr-platform-gradle-modules step 8a): these methods run with core alone, so they live in
+ * **Split from `ObjectKeyCarriesNoStructureSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods run with core alone, so they live in
  * `:core`; the rest of the class is `ObjectKeyCarriesNoStructureSliceTest` in `:apps:memories`. The bodies moved verbatim.
  */
 @QuarkusTest

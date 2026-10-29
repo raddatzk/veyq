@@ -31,7 +31,7 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
  * rule set — core alone, none at all, two claiming one kind — each negative beside a positive control on the same tree.
  * The Memories kinds appear here as the wire spells them, as data a forged or absent application is asked about.
  *
- * **Split from `NodeKindRulesPartitionSliceTest`** (cr-platform-gradle-modules step 8a): these methods need Memories in the application at runtime, so they live in
+ * **Split from `NodeKindRulesPartitionSliceTest`** (`src/backend/CLAUDE.md`: a test lives where what it exercises runs): these methods need Memories in the application at runtime, so they live in
  * `:apps:memories`; the rest of the class is `NodeKindRulesPartitionSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest
