@@ -98,7 +98,7 @@ function forgetUploader() {
 // The session's own tiles (cr-0074): the member gallery's composable, grouped by this link. Nothing is ever listed for
 // an uploader, so every tile is an optimistic one, and a settled one stays as the session's own view.
 const noListedMedia = computed(() => new Set<string>())
-const { optimisticTiles } = useOptimisticTiles(computed(() => shareId), noListedMedia)
+const { optimisticTiles, wantPreviews } = useOptimisticTiles(computed(() => shareId), noListedMedia)
 // Newest first by the capture time each photo is sealed with (the member gallery's comparator, uc.memory.gallery).
 const tiles = computed(() =>
   byCaptureTime(optimisticTiles.value, (o) => o.capturedAt, -1).map((o) => ({ id: o.layoutId, aspectRatio: o.aspectRatio, optimistic: o })),
@@ -221,7 +221,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 
     <!-- warning #3 of 4: the reload empty state — after a reload the session's own view is gone (not a blank grid) -->
     <p v-if="!tiles.length" class="veyq-empty">{{ t('share.uploaderEmpty') }}</p>
-    <MediaGrid v-else :items="tiles" :aria-label="head.name">
+    <MediaGrid v-else :items="tiles" :aria-label="head.name" @window="(ids) => wantPreviews('grid', ids)">
       <template #tile="{ tile, item }">
         <OptimisticTile
           :tile="item.optimistic"

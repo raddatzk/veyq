@@ -272,13 +272,20 @@ acceptanceCriteria:
           upload that ignores the result, a result kept across a failed attempt, a run that drops it). What it moves in a
           browser is a local timing reading (scripts/profile_attribute.py on S2), no coverage.
   - id: optimistic-in-grid-tiles
-    text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, at the place the gallery's ONE ordering rule gives it (uc.memory.gallery#date-sorted-grid owns that rule; this criterion does not restate it) — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once. A tile names the stage its file is ACTUALLY in — queued, preparing or uploading are three different waits and in two of them no byte has left the device — visibly and in BOTH aria-labels (the container's and the progress zone's), which fail independently.
+    text: Picked files appear immediately as tiles in the Memory's gallery grid — a local preview (never uploaded in the clear; a photo drawn at the gallery thumbnail's size, one at a time and only for the tiles the grid mounts near its viewport, nearest first, never the picked file shown whole unless the deriver cannot read it; a video its derived poster, inbox #785) with a per-tile progress ring or failed+retry state, at the place the gallery's ONE ordering rule gives it (uc.memory.gallery#date-sorted-grid owns that rule; this criterion does not restate it) — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once. A tile names the stage its file is ACTUALLY in — queued, preparing or uploading are three different waits and in two of them no byte has left the device — visibly and in BOTH aria-labels (the container's and the progress zone's), which fail independently.
     coverage:
       web:
         unit:
           - src/features/memories/optimisticUpload.test.ts
           - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/useOptimisticTiles.test.ts
           - src/features/memories/components/MemoryDetail.optimistic.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          What the tile-sized preview saves is the renderer's memory while a batch uploads, a local reading (the profile's
+          S2, `scripts/profile_hot_paths.py`), no coverage; the unit tests pin that nothing is drawn before the grid wants
+          it, one draw at a time in the grid's order, the fallback to the file, and every preview revoked.
   - id: pick-time-size-from-the-header
     text: >-
       A picked photo's tile takes its aspect ratio from the size the file's header names, its EXIF orientation applied as

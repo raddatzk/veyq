@@ -1,17 +1,17 @@
 // uc.memory.upload (web, cr-0074 + cr-0101) — the optimistic in-grid upload-tile lifecycle, shared by the
 // internal gallery (MemoryDetail) and the anonymous contributor viewer (ShareView). The global upload queue's
 // still-in-flight files for a given grouping `key` (a Memory node id, or a shareId) render immediately as grid
-// tiles: an instant local preview (a `URL.createObjectURL` of the user's own file — never uploaded in the clear)
+// tiles: a local preview (drawn on the device from the user's own file — never uploaded in the clear)
 // + a per-tile progress / failed-with-retry state, **at their capture-time place in the one grid order**
 // ([uc.memory.gallery](../../../../../docs/features/memory/use-cases/uc.memory.gallery.md)). Each reconciles into
 // the real decrypted thumbnail once its media lists (matched by the `mediaId` the queue records on `done`) — a
 // change of content, never of place, because both sides derive the key from the same `captureTimeOf` rule. The
 // pure selection/merge logic lives in ./optimisticUpload; this composable owns the reactive preview lifecycle.
 import { reactive, computed, watch, onBeforeUnmount, type Ref } from 'vue'
-import { captureTimeOf, createBrowserDeriver, readCaptureTime } from './media'
+import { captureTimeOf, createBrowserDeriver, readCaptureTime, TIER_SPECS } from './media'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useUploadQueue, type UploadFile } from './uploadQueue'
-import { selectOptimisticUploads, optimisticTileId } from './optimisticUpload'
+import { selectOptimisticUploads, optimisticTileId, fileIdOfTile } from './optimisticUpload'
 
 /**
  * The view-model of one optimistic tile — everything the grid + [OptimisticTile] need to render it.
@@ -52,17 +52,32 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
 
 /**
  * Reactive optimistic tiles for a grouping `key` (the Memory node id, or a shareId), reconciled against the
- * currently-listed media ids. Owns the local preview object URLs (mint on appear, revoke on drop / unmount).
+ * currently-listed media ids. Owns the local preview object URLs (mint when drawn, revoke on drop / unmount).
  * `donorPreviewFor` hands a just-listed media's still-live preview to the caller for a seamless thumbnail swap.
+ *
+ * **A photo's preview is tile-sized, and drawn only for a tile near the viewport** (inbox #785, ADR 0105's rule for
+ * thumbnails). Showing the picked file itself made every tile near the viewport a decode of the whole photo — 48.8 MB for
+ * 12 megapixels — held by the renderer for as long as the batch uploaded: 50 photos of 5.2 MB kept the tab's renderer at
+ * 1.03-1.04 GiB against 0.24 GiB before the pick (profile S2, 2026-10-29). Instead the grid announces the tiles it mounts,
+ * nearest to the viewport's centre first ([wantPreviews], `MediaGrid`'s `window`), and each such tile's photo is drawn at
+ * the gallery thumbnail's size ([TIER_SPECS] `THUMBNAIL`) by the deriver — the media Worker, the decode freed once the
+ * small JPEG is encoded — ONE at a time, so a large pick never decodes many at once (inbox #558). Now the renderer stays at
+ * 0.49-0.53 GiB through the same upload, its peak 0.61-0.67 GiB against 1.11-1.18 GiB, in the same time (0.44-0.46 GiB
+ * with no preview at all). A photo the deriver cannot read falls back to the file itself, as before. A video keeps its
+ * derived poster.
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
   const deriver = createBrowserDeriver()
   // `url` is null for a video until its first-frame poster is derived: an <img> can't decode raw video bytes, so a
-  // video's preview is a locally-derived poster (badge drawn over it, #105) — matching the persisted tile. Images
-  // use the raw file blob url directly.
-  type Preview = { url: string | null; aspectRatio: number; donated: boolean; capturedAt?: number }
+  // video's preview is a locally-derived poster (badge drawn over it, #105) — matching the persisted tile. A photo's
+  // is null until its tile-sized preview is drawn; `drawn` says it was asked of the deriver (it may still be on its way).
+  type Preview = { url: string | null; aspectRatio: number; donated: boolean; capturedAt?: number; drawn: boolean }
   const previews = reactive(new Map<string, Preview>())
+  /** The tiles each grid (owner) has mounted, as upload file ids, nearest to its viewport's centre first. */
+  const wanted = new Map<string, readonly string[]>()
+  let drawing = false
+  let disposed = false
 
   const optimisticFiles = computed(() => selectOptimisticUploads(batches.value, key.value, listedMediaIds.value))
   // The same tiles are the same value (inbox #640): `optimisticFiles` re-runs on each stage change, since it reads
@@ -100,9 +115,10 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
       for (const f of files) {
         if (previews.has(f.id)) continue
         const isVideo = f.mediaType.startsWith('video/')
-        // image: the raw file is a valid <img> source; video: no <img>-decodable source yet — a poster follows.
+        // no source yet: a photo's is drawn once its tile is near the viewport ([drawNext]), a video's poster follows
         previews.set(f.id, {
-          url: isVideo ? null : URL.createObjectURL(f.file),
+          url: null,
+          drawn: isVideo,
           aspectRatio: galleryDisplayAspectRatio(undefined, undefined),
           donated: false,
           // The fallback half of the capture-time rule, available synchronously — so the tile has a place in
@@ -112,9 +128,43 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
         })
         void probePreview(f, isVideo)
       }
+      drawNext()
     },
     { immediate: true },
   )
+
+  /** The tiles `owner`'s grid mounts now, by their layout ids, nearest first (`MediaGrid`'s `window`); other ids are
+   *  ignored. Their previews are drawn in that order, the next once the one before it is. */
+  function wantPreviews(owner: string, ids: readonly string[]) {
+    wanted.set(owner, ids.map(fileIdOfTile).filter((id): id is string => id !== null))
+    drawNext()
+  }
+
+  /** Draw the first wanted photo's preview not drawn yet, unless one is being drawn: one decode at a time. */
+  function drawNext() {
+    if (drawing || disposed) return
+    const files = new Map(optimisticFiles.value.map((f) => [f.id, f]))
+    const id = [...new Set([...wanted.values()].flat())].find((w) => files.has(w) && previews.get(w)?.drawn === false)
+    if (id === undefined) return
+    const file = files.get(id)!.file
+    previews.set(id, { ...previews.get(id)!, drawn: true })
+    drawing = true
+    deriver
+      .deriveImage(file, TIER_SPECS.THUMBNAIL)
+      .then(
+        ({ bytes }) => URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' })),
+        () => URL.createObjectURL(file), // a photo the deriver cannot read: the file itself, as an <img> may still show it
+      )
+      .then((url) => {
+        const p = previews.get(id)
+        if (p && !disposed) previews.set(id, { ...p, url })
+        else URL.revokeObjectURL(url) // its tile left, or the view did, while it was drawn
+      })
+      .finally(() => {
+        drawing = false
+        drawNext()
+      })
+  }
 
   async function probePreview(f: UploadFile, isVideo: boolean) {
     try {
@@ -152,9 +202,10 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
   }
 
   onBeforeUnmount(() => {
+    disposed = true
     for (const p of previews.values()) if (!p.donated && p.url) URL.revokeObjectURL(p.url) // donated urls are owned by the caller's thumbs
     previews.clear()
   })
 
-  return { optimisticTiles, donorPreviewFor }
+  return { optimisticTiles, donorPreviewFor, wantPreviews }
 }

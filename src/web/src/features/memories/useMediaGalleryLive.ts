@@ -51,7 +51,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // node (grouping key = the node id) as instant preview tiles, reconciled into the real thumbnail by mediaId.
   // `donorPreviewFor` feeds the thumbnail pipeline the preview to hand off.
   const listedMediaIds = computed(() => new Set(items.value.map((it) => it.mediaId)))
-  const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
+  const { optimisticTiles, donorPreviewFor, wantPreviews } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
   // The gallery thumbnail pipeline (cr-0150) — decrypt-per-tile → object-URL map, the single revoke owner of every
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
   const pipeline = useThumbnailPipeline<MediaItem>({
@@ -413,7 +413,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     pollMedia,
     liftTombstone,
     removeMedia: removeFromGrid,
-    /** The tiles `owner` (a grid, the cover) wants a thumbnail for, nearest first (ADR 0105 decision 2). */
-    wantThumbs: pipeline.want,
+    /** The tiles `owner` (a grid, the cover) wants a thumbnail for, nearest first (ADR 0105 decision 2) - an in-flight
+     *  upload's tile its tile-sized preview (inbox #785). */
+    wantThumbs: (owner: string, ids: readonly string[]) => {
+      pipeline.want(owner, ids)
+      wantPreviews(owner, ids)
+    },
   }
 }

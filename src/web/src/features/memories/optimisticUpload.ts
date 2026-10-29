@@ -12,6 +12,9 @@ import type { MediaItem } from './media'
  *  real media id. */
 export const optimisticTileId = (fileId: string): string => `upload:${fileId}`
 
+/** The upload file an optimistic tile's layout id names, or null for any other tile's id (a listed media's). */
+export const fileIdOfTile = (id: string): string | null => (id.startsWith('upload:') ? id.slice('upload:'.length) : null)
+
 /**
  * The upload files that should render as optimistic tiles for `nodeId`, in enqueue order (batch seq, then file
  * order) — the order they are handed over in, not the order they are drawn in ([byCaptureTime] decides that).
