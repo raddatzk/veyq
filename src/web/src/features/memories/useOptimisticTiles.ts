@@ -73,7 +73,10 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * throttle 4. Now 2 decode at once (this queue's and the upload's own), the peak is 1.09-1.12 GiB, the upload takes
  * 8.3-8.8 s (12.4-12.5 s at throttle 4) against 8.7-9.1 s (14.3-14.7 s), and a tile whose file is uploaded before its
  * turn shows the listed thumbnail without a poster of its own. A video the browser cannot decode stays icon-only.
- * The probe below still reads every picked video's size at once, a `<video>` each that loads only its metadata.
+ * The probe below reads every picked video's size at once, but from its container's header (`videoHeader.ts`, inbox
+ * #793): a `<video>` each that loaded its metadata made 22 players alive at once at the pick, now 2, and the upload took
+ * 12.8-13.5 s at throttle 4 against 12.0-12.3 s now (profile S2v, 2026-10-29). What the renderer holds through the upload above the 0.71-0.72 GiB of a build without tile
+ * posters is these posters' decodes (0.85-0.89 GiB with them drawn but never shown; inbox #795), not the probes.
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
