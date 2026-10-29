@@ -78,3 +78,11 @@ acceptanceCriteria:
         integration: [SharedBlobSliceTest.theObjectSurvivesTheRowThatGoesFirstAndGoesWithTheLast, SharedBlobSliceTest.aCoverRemovedFirstLeavesTheMediumsBytes, SharedBlobSliceTest.aSourceTheNodeDoesNotHoldIsRefusedAndNothingIsWritten, SharedBlobSliceTest.aBlockOnTheMediumReachesTheCoverOnItsObject, SharedBlobSliceTest.quotaCountsAnObjectOnce]
       web:
         unit: [src/core/node/cover/useNodeCover.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts, src/core/blob/sharedBlob.test.ts, src/core/node/cover/coverWrite.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-banner.spec.ts`) drives
+    `equal-upload-shares-a-photos-preview` in Chromium against the release candidate: the gallery's portrait photo
+    uploaded again in the cover dialog sends no `blob-uploads-batch`, and the one cover write (`PUT …/cover`) names that
+    photo's PREVIEW as its `shared.sourceBlobId` under a blob id of its own; the cover then decodes in the header. Green
+    in local runs of the memories leg of `scripts/run_stack_e2e.py`; ADR 0040 admits `stack` refs only once a CI run's
+    log shows the suite executed (no remote yet).
