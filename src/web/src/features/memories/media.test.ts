@@ -14,6 +14,7 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 import {
   addMedia,
+  prepareMedia,
   listMedia,
   listMediaPage,
   listMediaPages,
@@ -569,6 +570,86 @@ describe('addMedia — the digest beside the derivation (inbox #554)', () => {
     await upload
     expect(store.blob.startBlobUploads).toHaveBeenCalledTimes(1)
     expect(store.api.completeMedia).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Inbox #220: the upload queue runs a file's on-device stage (`prepareMedia`) while the file before it is on the wire,
+// and hands the result to the upload. The prepared value is a sentinel here (a digest no file has, tiers no deriver
+// made), so an upload that ran the stage again would show it in what it sends.
+describe('addMedia — a source prepared ahead (inbox #220)', () => {
+  const setUp = () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    return store
+  }
+  const image = () => ({ blob: new Blob([new Uint8Array(20).fill(6) as BlobPart]), mediaType: 'image/png', lastModified: 5 })
+  const SENTINEL = 'ab'.repeat(32)
+
+  it('with `prepared`, derives, digests and reads EXIF nothing again: what it carries is what is uploaded', async () => {
+    const store = setUp()
+    const deriver = stubDeriver()
+    const source = image()
+    const prepared = {
+      source,
+      sha256: SENTINEL,
+      tiers: [{ kind: 'THUMBNAIL' as const, bytes: new Uint8Array([1, 2]) }, { kind: 'PREVIEW' as const, bytes: new Uint8Array([3, 4, 5]) }],
+      meta: { dims: { w: 40, h: 30 }, exif: null },
+    }
+    const digests: string[] = []
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), source, deriver, {
+      prepared, storedOriginal: (sha) => { digests.push(sha); return null },
+    })
+
+    expect(deriver.deriveImage).not.toHaveBeenCalled()
+    expect(exifr.parse).not.toHaveBeenCalled()
+    expect(digests).toEqual([SENTINEL])
+    expect(store.blob.startBlobUploads).toHaveBeenCalledTimes(1)
+    expect(store.api.completeMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('control: without `prepared`, the upload runs the stage itself — two derivations, one EXIF read, the real digest', async () => {
+    setUp()
+    const deriver = stubDeriver()
+    const digests: string[] = []
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), image(), deriver, {
+      storedOriginal: (sha) => { digests.push(sha); return null },
+    })
+
+    expect(deriver.deriveImage).toHaveBeenCalledTimes(2)
+    expect(exifr.parse).toHaveBeenCalledTimes(1)
+    expect(digests).toHaveLength(1)
+    expect(digests[0]).not.toBe(SENTINEL)
+  })
+
+  it('prepareMedia sends nothing: no reserve, no completion, no fetch while it runs; its result uploads like the inline stage', async () => {
+    const store = setUp()
+    const deriver = stubDeriver()
+    const source = image()
+    const prepared = await prepareMedia(source, deriver)
+
+    expect(store.blob.startBlobUploads).not.toHaveBeenCalled()
+    expect(store.api.completeMedia).not.toHaveBeenCalled()
+    expect(store.fetchStub).not.toHaveBeenCalled()
+    expect(prepared.source.mediaType).toBe('image/png')
+    expect(prepared.tiers.map((t) => t.kind)).toEqual(['THUMBNAIL', 'PREVIEW'])
+    expect(prepared.sha256).toMatch(/^[A-Za-z0-9_-]{43}$/) // the SHA-256, base64url as the blob meta carries it
+    expect(deriver.deriveImage).toHaveBeenCalledTimes(2)
+
+    const digests: string[] = []
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), source, deriver, {
+      prepared, storedOriginal: (sha) => { digests.push(sha); return null },
+    })
+    expect(digests).toEqual([prepared.sha256])
+    expect(deriver.deriveImage).toHaveBeenCalledTimes(2) // not a third time
+    expect(store.api.completeMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('prepareMedia honours an abort before it starts', async () => {
+    const ctl = new AbortController()
+    ctl.abort()
+    await expect(prepareMedia(image(), stubDeriver(), ctl.signal)).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
 

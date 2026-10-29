@@ -4,9 +4,9 @@
 // (states, order, retry, quota_exceeded, cancel, remove) are pinned in core/blob/queue.test.ts over a fake runner.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./media', () => ({ addMedia: vi.fn() }))
+vi.mock('./media', () => ({ addMedia: vi.fn(), prepareMedia: vi.fn(), createBrowserDeriver: vi.fn() }))
 
-import { addMedia } from './media'
+import { addMedia, prepareMedia, type PreparedMedia } from './media'
 import { NodeRekeyPendingError } from '../../shared/rekeyRetry'
 import {
   enqueueUploads,
@@ -23,9 +23,13 @@ const TARGET: UploadTarget = { scopeId: 's', nodeId: 'n', memoryKey: new Uint8Ar
 const png = (name = 'photo.png') => new File([new Uint8Array([1, 2, 3])], name, { type: 'image/png', lastModified: 1000 })
 const sel = (file: File) => ({ file, mediaType: file.type || 'application/octet-stream' })
 
+/** What the mocked `prepareMedia` resolves with: a value naming its file, so the test sees which upload got which. */
+const preparedOf = (source: { name?: string }) => ({ source, sha256: `sha-${source.name}`, tiers: [], meta: { dims: null, exif: null } }) as unknown as PreparedMedia
+
 beforeEach(() => {
   clearUploads()
   vi.clearAllMocks()
+  vi.mocked(prepareMedia).mockImplementation(async (source) => preparedOf(source))
 })
 
 describe('uploadQueue — runner', () => {
@@ -155,6 +159,75 @@ describe('uploadQueue — runner', () => {
 
   it('returns null for an empty pick', () => {
     expect(enqueueUploads(TARGET, [], { label: '0' })).toBeNull()
+  })
+})
+
+// Inbox #220: each job's `prepare` is the file's on-device stage, memoized, and the queue starts it for the next file
+// while the current one is on the wire.
+describe('uploadQueue — the next file prepared while one is on the wire (inbox #220)', () => {
+  it("prepares file 2 while file 1 is on the wire, once, and hands each upload its own file's result", async () => {
+    let file1OnWire!: () => void
+    const onWire = new Promise<void>((r) => (file1OnWire = r))
+    let file2Prepared!: () => void
+    const prepared2 = new Promise<void>((r) => (file2Prepared = r))
+    vi.mocked(prepareMedia).mockImplementation(async (source) => {
+      if (source.name === 'b.png') {
+        await onWire // file 2's stage starts only once file 1 reported its first progress ...
+        file2Prepared()
+      }
+      return preparedOf(source)
+    })
+    vi.mocked(addMedia).mockImplementation(async (_s, _n, _k, source, _d, opts) => {
+      opts?.onProgress?.(0)
+      if (source.name === 'a.png') {
+        file1OnWire()
+        await prepared2 // ... and file 1 finishes only once file 2's stage ran: an overlap gated on both sides
+      }
+      return { blobId: 'b', mediaId: `m-${source.name}` }
+    })
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [sel(png('a.png')), sel(png('b.png'))], { label: '2' })
+    const [a, b] = batches.value[0].files
+    await vi.waitFor(() => expect(b.status).toBe('done'))
+
+    expect(a.status).toBe('done')
+    expect(vi.mocked(prepareMedia).mock.calls.map((c) => c[0].name)).toEqual(['a.png', 'b.png'])
+    expect(vi.mocked(addMedia).mock.calls.map((c) => [c[3].name, c[5]?.prepared?.sha256])).toEqual([
+      ['a.png', 'sha-a.png'], ['b.png', 'sha-b.png'],
+    ])
+    // the prepare got the item's own signal, the one its upload gets
+    expect(vi.mocked(prepareMedia).mock.calls[1][2]).toBe(b.controller.signal)
+  })
+
+  it('runs the device floor after the prepare and before the upload seals anything', async () => {
+    const order: string[] = []
+    vi.mocked(prepareMedia).mockImplementation(async (source) => { order.push('prepare'); return preparedOf(source) })
+    vi.mocked(addMedia).mockImplementation(async () => { order.push('upload'); return { blobId: 'b', mediaId: 'm' } })
+    const { batches } = useUploadQueue()
+    enqueueUploads({ ...TARGET, atFloor: () => order.push('floor') }, [sel(png())], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+    expect(order).toEqual(['prepare', 'floor', 'upload'])
+  })
+
+  it('a failed attempt drops its prepared result: the automatic retry prepares again', async () => {
+    vi.mocked(addMedia)
+      .mockRejectedValueOnce(new Error('chunk_put_failed:500'))
+      .mockResolvedValue({ blobId: 'b', mediaId: 'm' })
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [sel(png())], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+    expect(prepareMedia).toHaveBeenCalledTimes(2)
+    expect(addMedia).toHaveBeenCalledTimes(2)
+  })
+
+  it('a prepare that fails fails its upload attempt, which the retry prepares again', async () => {
+    vi.mocked(prepareMedia).mockRejectedValueOnce(new Error('read_failed'))
+    vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'm' })
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [sel(png())], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+    expect(prepareMedia).toHaveBeenCalledTimes(2)
+    expect(addMedia).toHaveBeenCalledOnce()
   })
 })
 
