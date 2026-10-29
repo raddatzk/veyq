@@ -70,6 +70,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { guestAccessFor } from '../../../test/models'
 import { authenticatedCalls } from '../../../test/guestMode'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
+import { UnreadableImage } from '../../../test/unreadableImage'
 import { setViewMode } from '../../../shared/state/useViewMode'
 
 const SCOPE = '88888888-8888-4888-8888-888888888889'
@@ -128,6 +129,7 @@ beforeEach(async () => {
   vi.mocked(addSharePhoto).mockResolvedValue({ blobId: 'b-up', mediaId: 'm-up' })
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  vi.stubGlobal('Image', UnreadableImage)
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE}?node=${MEMORY}${HASH}`)
   await router.isReady()

@@ -279,6 +279,22 @@ acceptanceCriteria:
           - src/features/memories/optimisticUpload.test.ts
           - src/features/memories/uploadQueue.test.ts
           - src/features/memories/components/MemoryDetail.optimistic.test.ts
+  - id: pick-time-size-from-the-header
+    text: >-
+      A picked photo's tile takes its aspect ratio from the size the file's header names, its EXIF orientation applied as
+      the browser draws it — read from its first bytes for a JPEG, PNG, GIF or WebP, else by an image element that is
+      never drawn — and never by decoding the photo, so picking a batch decodes none of it at once (inbox #558).
+    coverage:
+      web:
+        unit:
+          - src/shared/image/imageHeader.test.ts
+          - src/shared/image/mediaDeriver.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          What it saves is the renderer's memory at pick time, a local reading (the profile's S2 records each window's
+          resident memory, `scripts/profile_hot_paths.py`), no coverage. The element's own promise - it parses the
+          header and decodes nothing until painted - is the browser's, read in that profile, not in happy-dom.
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`) drives `seal-and-upload-operator-blind`

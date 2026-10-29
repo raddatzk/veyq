@@ -89,6 +89,7 @@ import { fakeApi, stubApi } from '../test/apiMock'
 import { apiResponse } from '../test/apiResponse'
 import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
+import { UnreadableImage } from '../test/unreadableImage'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
 import { OPERATOR_SECTION } from '../test/models'
 
@@ -144,6 +145,7 @@ beforeEach(async () => {
   vi.mocked(addSharePhoto).mockResolvedValue({ blobId: 'b-up', mediaId: 'm-up' })
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  vi.stubGlobal('Image', UnreadableImage)
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })
   await router.push(`/s/${SHARE}${HASH}`)
   await router.isReady()
