@@ -294,18 +294,27 @@ acceptanceCriteria:
     text: >-
       A picked photo's tile takes its aspect ratio from the size the file's header names, its EXIF orientation applied as
       the browser draws it — read from its first bytes for a JPEG, PNG, GIF or WebP, else by an image element that is
-      never drawn — and never by decoding the photo, so picking a batch decodes none of it at once (inbox #558).
+      never drawn — and never by decoding the photo, so picking a batch decodes none of it at once (inbox #558). A picked
+      video's size, for its tile and for its upload, is read from its container's header the same way — an MP4 or
+      QuickTime file's video track header turned by its matrix as a player shows it, a WebM or Matroska file's Video
+      element — and only where that header does not read by a `<video>` that loads the metadata and lets go of its source
+      once it answered, so picking a batch opens no media player for its sizes (inbox #793).
     coverage:
       web:
         unit:
           - src/shared/image/imageHeader.test.ts
           - src/shared/image/mediaDeriver.test.ts
+          - src/shared/image/videoHeader.test.ts
+          - src/shared/image/mediaDeriver.videoProbe.test.ts
     gaps:
       - surface: web
         reason: >-
-          What it saves is the renderer's memory at pick time, a local reading (the profile's S2 records each window's
-          resident memory, `scripts/profile_hot_paths.py`), no coverage. The element's own promise - it parses the
-          header and decodes nothing until painted - is the browser's, read in that profile, not in happy-dom.
+          What it saves is the renderer's memory at pick time, and for videos the players open at once and the upload's
+          main-thread time, local readings (the profile's S2 and S2v record each window's resident memory and media
+          players, `scripts/profile_hot_paths.py`), no coverage. The element's own promise - it parses the header and
+          decodes nothing until painted - is the browser's, read in that profile, not in happy-dom; so is that a video
+          header's size is the one Chromium reports, checked by hand on ffmpeg's clips (a phone's quarter turn either way,
+          a mirrored one left to the browser, WebM written with unknown sizes, Matroska) on 2026-10-29.
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`) drives `seal-and-upload-operator-blind`

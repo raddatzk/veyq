@@ -8,6 +8,7 @@
 import { drawEncoded, type CanvasPort } from './mediaPixels'
 import { deriveImageWorkerFirst } from './mediaDeriveWorker'
 import { imageSizeFromHeader } from './imageHeader'
+import { videoSizeFromHeader } from './videoHeader'
 
 /**
  * The derivative tiers this stage produces — the role a derivative blob carries, as a literal union of its own: core's
@@ -71,7 +72,9 @@ export interface MediaDeriver {
    *
    * **A read of its own, so it is for sources nothing else measures** — the in-flight upload tile (which needs
    * an aspect ratio before the file's turn in the queue) and videos (whose poster path reports no size). An image's
-   * size is read from its header, never from decoded pixels (`imageSizeWithoutDecode`, inbox #558). An image on the
+   * size is read from its header, never from decoded pixels (`imageSizeWithoutDecode`, inbox #558), and a video's from
+   * its container's header, never by a player (`videoHeader.ts`, inbox #793); a `<video>` that loads the metadata only
+   * where that header does not read, let go of once it has. An image on the
    * upload path must NOT come through here: [deriveTiers] decodes it anyway and hands the geometry back, and a probe
    * would read the file once more for nothing.
    */
@@ -183,21 +186,30 @@ export function createBrowserDeriver(): MediaDeriver {
     },
     async probeDimensions(source, mediaType) {
       if (mediaType.startsWith('image/')) return imageSizeWithoutDecode(source)
-      if (mediaType.startsWith('video/')) {
-        const url = URL.createObjectURL(source)
-        try {
-          const video = document.createElement('video')
-          video.muted = true
-          video.preload = 'metadata'
-          video.src = url
-          await onceEvent(video, 'loadedmetadata') // width/height are known here — Safari never fires `loadeddata` offscreen
-          return { w: video.videoWidth, h: video.videoHeight }
-        } finally {
-          URL.revokeObjectURL(url)
-        }
-      }
+      if (mediaType.startsWith('video/')) return (await videoSizeFromHeader(source)) ?? videoSizeFromElement(source)
       return null
     },
+  }
+}
+
+/**
+ * A video's display size as the browser reads it, by a `<video>` that loads only its metadata: the fallback for a file
+ * whose header `videoHeader.ts` does not read. Its media player is let go once the size is in — its source dropped and
+ * the element reloaded, as [MediaDeriver.deriveVideoPoster] does — and not when the element is collected (inbox #793).
+ */
+async function videoSizeFromElement(source: Blob): Promise<Dimensions | null> {
+  const url = URL.createObjectURL(source)
+  const video = document.createElement('video')
+  try {
+    video.muted = true
+    video.preload = 'metadata'
+    video.src = url
+    await onceEvent(video, 'loadedmetadata') // width/height are known here — Safari never fires `loadeddata` offscreen
+    return { w: video.videoWidth, h: video.videoHeight }
+  } finally {
+    video.removeAttribute('src')
+    video.load()
+    URL.revokeObjectURL(url)
   }
 }
 

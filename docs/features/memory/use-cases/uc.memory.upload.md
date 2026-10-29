@@ -121,7 +121,20 @@
   (12.4–12.5 s). The pictures come one after another: the first 0.3 s after the pick (0.6 s at throttle 4, against
   0.7–0.9 s and 2.8–3.3 s before), the twelfth at 1.5–1.6 s (3.9 s, against 1.1 s and 4.1–4.6 s), and a tile whose
   file is uploaded before its turn shows the listed thumbnail with no poster of its own (3 of 20 at throttle 1, 5 at
-  4). Every picked video's size is still read at once (a `<video>` each that loads its metadata, inbox #793).
+  4).
+- **A picked video's size is read from its container's header.** A tile's aspect ratio and the upload's sealed size used
+  to come from a `<video>` per file that loaded its metadata, every picked one at once and each again at its upload: 40
+  of S2v's 75–77 media players, 22 alive at once at the pick, each living 0.1–0.45 s (median; up to 2.4 s at throttle
+  4). Now `src/web/src/shared/image/videoHeader.ts` reads it from slices of the file, as photos are read (an MP4 or
+  QuickTime file's video `tkhd`, turned by its matrix as a player shows it; a WebM or Matroska file's Video element), and
+  a `<video>` loads the metadata only where that header does not read, let go of once it answered (inbox #793). S2v,
+  three runs each without the CPU profiler, every series started at a 1-minute load of 3.66–3.95 (2026-10-29): 35–37
+  players, 2 alive at once, the upload 12.0–12.3 s at throttle 4 against 12.8–13.5 s (8.1–8.8 s against 8.3–9.1 s at
+  throttle 1, within the runs' spread), the first tile picture 0.5 s after the pick at throttle 4 against 0.6 s.
+  Only dropping the old probe's source once its metadata was in shortened each player's life to 0.05–0.18 s but kept the
+  22 at once and the time (12.5–13.1 s). The renderer's memory is unchanged by either, a median of 0.85–0.89 GiB and a peak of 1.07–1.13 GiB:
+  what it holds above the 0.71–0.72 GiB of a build that draws no tile poster (peak 0.92–0.94 GiB, the upload 10.6–10.8 s
+  at throttle 4) is those posters' decodes, the same 0.85–0.88 GiB when they are drawn and never shown (inbox #795).
 
 ## User impact
 

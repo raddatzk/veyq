@@ -4,7 +4,8 @@
 // from handing the 20 files to the picker to the state where the Chapter counts all 20 and no upload tile is left.
 //
 // Beside S2's readings, its window records the page's media players (`media`, CDP's `Media` domain): each `<video>` the
-// client makes — the upload tile's poster and size probe, the upload's own poster and probe — is one player with its own
+// client makes — the upload tile's poster, the upload's own poster, and a size probe where the file's header does not name
+// its size (inbox #793) — is one player with its own
 // demuxer and decoders, so the most alive at once is the number of decoders the pick opened. And `extra.tilePictures`:
 // how many upload tiles the grid had mounted and how many of them showed a picture, each time that changed (sampled every
 // 100 ms in the page), with the largest picture's edge in pixels — what a tile's poster costs to show.
