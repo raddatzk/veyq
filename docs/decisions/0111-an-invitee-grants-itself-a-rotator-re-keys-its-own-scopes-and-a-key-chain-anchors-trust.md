@@ -360,6 +360,34 @@ Facts the design rests on, read in the code:
     contract and fails on a field without a cap or a total above the server's limit; the pin entry's length is exact
     (296 characters). The pin store stays in the publish: staging it would only matter for a higher cap.
 
+### A new epoch links to the key the device held
+
+23. **A device keeps the newest epoch key it held per scope, as a commitment, and opens a later epoch only through its
+    links.** The epoch floor (ADR 0024 Decision 6) refuses a lower epoch *number*, not an unlinked *key*: an operator
+    can raise a scope's epoch and serve a member a grant at the new one around a key of its choosing — sealed to the
+    member's public key, signed by a granter it fabricated, whom the pin meets for the first time where the pin alone
+    decides (the tenant scope's own grant, § What stays open) — and the member's next write sealed under its key. So beside
+    each floor the device's trust marks (`trustMarks.ts`) keep a commitment to the newest epoch key it held, 16 bytes of
+    a labelled HKDF of it, and every grant the device opens at or above that epoch must peel down through the served
+    links to exactly that key — at the same epoch, be that key (`requireLinkToHeld`, `src/web/src/features/spaces/scopes.ts`,
+    with `peelEpochKey`). Otherwise it is refused as `epoch_unlinked`: the key inside is never used, the scope reads as
+    awaiting the current key, and a securing's plan declares it unreadable (decision 6). The operator never held the
+    key the link must end at, so no link it makes ends there.
+    - **What becomes the held key:** every grant the device opens and every epoch it commits itself. The second is what
+      stops the party a removal-rotation excludes: they held the old epoch and, with the operator, could link a key of
+      their own down to it, but the remover's device holds the epoch it minted.
+    - **Every scope kind, in the one place a grant is opened** (`openOwnGrant`), not only the tenant's: a group's
+      granter is anchored in its tenant, but a tenant member outside the group could otherwise, with the operator, plant
+      a group's next epoch.
+    - **The legitimate cases pass.** A device holding nothing yet takes its first grant as it comes (a newcomer's was
+      vouched for by the invite's anchor, decision 19); a member pending across several epochs peels through every link
+      in between; a securing's self-grant carries the very key the device held; a grant below the held epoch is no new
+      epoch, and the floor is its check.
+    - **Local and never synced, like the floor, and not carried by pairing.** The envelope that carries the marks is
+      capped (8,192 characters) and a commitment per scope would grow it with every space the account is in; a linked
+      device starts without commitments, as a device unlocked afresh starts without marks. A synced commitment in the pin store would reach a
+      new device too, at the cost of one more entry kind there — not taken while the no-mark case stays open anyway.
+
 ### Migration
 
 18. **Not needed: no release shipped before join records existed (2026-10-28).** It would have had an owner's client
@@ -477,8 +505,10 @@ Facts the design rests on, read in the code:
   invite's carry — and the acceptance of a group's grant in the active tenant. **What stays of the operator's class:**
   an owner is the server's word (below), so a member the server presents as an owner roots keys; a root owner is
   trusted on first use; the tenant scope's own grant from another member is judged by the pin alone, because the
-  standings are read with the key that grant carries — and nothing ties that new epoch to the key the device held
-  before it: the floor refuses a lower epoch number, not an unlinked key (inbox #650); and
+  standings are read with the key that grant carries — a later epoch must link down to the key the device held
+  (decision 23), so what stays is a device that holds no key of the scope yet (a new or newly linked device, or a
+  newcomer between its accept and its first open) and a party that holds the device's key (a member, or a member
+  removed while the tenant has not re-keyed since, ADR 0025), who with the operator can plant a linked next epoch; and
   a grant in a tenant this device cannot read — a group grant outside the active tenant, read while staging a
   rotation — falls back to the pin. A wrap where the tenant cannot be read fails closed instead.
 - **A newcomer does not anchor the member whose rotation carried its invite**, and need not: that grant counts by

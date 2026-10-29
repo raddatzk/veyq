@@ -118,9 +118,11 @@ The same gap covers further cases:
 - **A tenant invite guessed open.** The operator holds every mailed link, sealed part included, and can guess the code
   offline; a weak password the owner chose instead falls faster.
 - **A shared-scope grant signed by a granter identity the operator fabricated**, where the pin alone decides: the
-  tenant scope's own grant, and a group's grant outside the active tenant. Its first grant pins the granter on first
-  use, so an operator that fabricates both the granter and the key is not detected on the spot — only by the next
-  verification of that granter's safety number. In the active tenant a group grant from a granter without an
+  tenant scope's own grant, and a group's grant outside the active tenant — in a device's first grant of that scope:
+  a later epoch must link down to the key the device held, which the operator never held. That first grant pins the
+  granter on first use, so an operator that fabricates both the granter and the key is not detected on the spot —
+  only by the next verification of that granter's safety number. Someone who holds the device's key (a member, or one
+  removed while the tenant has not re-keyed since) can, with the operator, still plant a linked next epoch. In the active tenant a group grant from a granter without an
   owner-rooted join record is refused. The signature rules out a grant presented under the identity of someone the
   recipient has already pinned (ADR 0028 Decision 6).
 
@@ -183,7 +185,7 @@ places:
 |---|---|---|
 | Pin store | a store below the highest revision it opened, a missing store once it held one, a store that does not open, an entry withheld, added, rolled back or moved under its head — before every read and every write | ADR 0028 Decision 7, ADR 0104 |
 | Device register | the same rule | ADR 0028 Decision 7 |
-| Per-scope epoch floor | a grant below the highest epoch it has held for that scope; it never seals under a lower one | ADR 0024 Decision 6 |
+| Per-scope epoch floor, and the epoch key it held | a grant below the highest epoch it has held for that scope, and one at or above it whose epoch links do not peel down to the key it held; it never seals under either | ADR 0024 Decision 6, ADR 0111 decision 23 |
 
 The marks are per device, local and never synced (a synced mark is one more thing the server could roll back). They
 are filed under a one-way derivation of the Master Key, not under an id the server names. A device linked by another
