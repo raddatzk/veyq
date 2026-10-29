@@ -185,7 +185,7 @@ veyq-admin account block --address <address> --over-content --ground TERMS_BREAC
 A blocked member cannot sign in to read a statement, so it goes **by the instance mail to the account's address, with
 what you found** in your words; the server keeps those words only sealed to the moderation key, for the log. Their
 objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. A step
-without a case on your own finding says so in the statement. The wording is a draft until a lawyer has reviewed it.
+without a case on your own finding says so in the statement.
 
 ### What the mail reached
 
@@ -340,8 +340,8 @@ the handover still ends it. What an authority's order holds stays held for as lo
 
 ## In an emergency
 
-> **Draft — not legal advice.** This section, the order forms and the warning above are drafts until a qualified legal
-> review ([ADR 0093 § Legal basis](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)).
+> **Not legal advice.** veyq does not have this section, the order forms or the warning above legally reviewed
+> ([ADR 0093 § Legal basis](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)).
 
 - **Acute danger to someone's life or safety: call 110** (the police; 112 for an ambulance or the fire service).
 - **Register with the BKA's reporting portal before you need it** (`u-entrance.bka.de`, registration by mail): it is
@@ -358,7 +358,7 @@ the handover still ends it. What an authority's order holds stays held for as lo
 
 ### Which law reaches your instance
 
-> **Draft — your own assessment, not legal advice** (ADR 0093 § Legal basis, 1).
+> **Your own assessment, not legal advice** (ADR 0093 § Legal basis, 1).
 
 | Who runs it | GDPR | DSA Art. 16–18 (notice, statement, reports) | TCO Regulation (removal orders) |
 |---|---|---|---|
@@ -576,8 +576,9 @@ provider identification.
 **When members and guests are asked again.** A space's owner changing their terms, or a veyq release that changes the
 section's text, asks every member and guest of that space again. Changing a value or N asks nobody.
 
-**It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
-instance, have it checked. A known question, also named in ADR 0035 decision 6: whether a space's own terms must be
+**veyq does not have it legally reviewed**, nor the privacy notice below
+([ADR 0093 § Legal basis](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)): a review for your instance is yours
+to arrange. A known question, also named in ADR 0035 decision 6 and not pursued: whether a space's own terms must be
 public before sign-in.
 
 ## The privacy notice
@@ -610,8 +611,7 @@ It states what **this** instance does, from what it is set to, so keeping it tru
 An empty value reads *not stated by this operator* (the recipients' passage too, while you name none). It is shown on
 every instance — a household may owe no notice, but every passage is still true of your instance.
 
-**It is a draft too**, and says so on every rendering. Questions the law leaves open, which veyq does not pursue and
-the notice answers as veyq is built: whether each space's owner is a joint controller with you for its members' accounts (the
+Questions the law leaves open, which veyq does not pursue and the notice answers as veyq is built: whether each space's owner is a joint controller with you for its members' accounts (the
 notice names you alone), whether the breached-password check and the exchange rates may run by default (the notice
 states each as it runs, its recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
 towards a person a report names. The record of processing, your contracts with processors, a breach and an access

@@ -68,8 +68,7 @@ The mechanism lives in **core** ([ADR 0079](0079-veyq-is-a-platform-memories-is-
 share, report and hold are platform terms, and Depot needs them as much as Memories. Who moderates — moderators the
 Server Owner appoints, sharing one instance moderation key — is
 [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s; §§ 1–3, 6–7 and 11–13
-state what it means here. Every fixed text this ADR adds — the statement and its passages (§ 7), the disclosure
-(§ 10), the order forms (§ 12) and the child-sexual-abuse warning (§ 13) — is a draft until a qualified legal review.
+state what it means here.
 
 ### 1. Every report is a report share plus a hold
 
@@ -356,8 +355,8 @@ range and its no-extension rule (§ 2 there).
   sentence on every guest write page, with N as it stands at the write, linking the record passage of the instance
   privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, the one home of every Art. 13 passage).
   **The right to object (Art. 21) is stated separately** (Art. 21(4)); an objection erases the rows so far without
-  stopping later writes from being recorded. The sentence is a draft like every legal text; the questions it touches
-  (§ Legal basis, Still open 4 and 10) are not pursued.
+  stopping later writes from being recorded. The questions the sentence touches (§ Legal basis, Still open 4 and 10)
+  are not pursued.
 - The table, the writes, the purge, the objection, the disclosure and the operator's own backups are
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md); the period
   beside every other is [cc.privacy.retention](../crosscutting/cc.privacy.retention.md).
@@ -553,8 +552,17 @@ only the DSA gives says *where the DSA reaches this instance* in its own words (
 ## Legal basis
 
 The research behind this ADR — the law, its primary sources and the reading taken — is the
-[legal register](../crosscutting/legal-register.md): research, not legal advice, each answer needing a qualified review before anything ships.
-What it concluded, and where this ADR applies it:
+[legal register](../crosscutting/legal-register.md): research, not legal advice.
+
+**veyq does not have the texts it ships legally reviewed** (owner 2026-10-29): the operator section of the terms and
+the privacy notice ([ADR 0035](0035-server-terms-of-service.md) decisions 6 and 8), the statement of reasons and its
+redress (§ 7), the guest-write disclosure (§ 10), the order forms (§ 12) and the child-sexual-abuse warning (§ 13).
+veyq is software a Server Owner runs, and a host's duties are theirs, not veyq's authors' (Context), so having the
+texts reviewed is not veyq's responsibility for now: a Server Owner may have it done for their instance, and a review
+comes if veyq moves toward a hosted service of its own. So no text says it is a draft or carries a banner; each is
+simply the text veyq ships.
+
+What the register concluded, and where this ADR applies it:
 
 1. **Which law reaches an instance** (L1): a hosting service, not an online platform, while a share has no directory,
    no search and its key in the fragment; whether the DSA reaches an unpaid private instance is uncertain, so § 14
@@ -574,9 +582,9 @@ What it concluded, and where this ADR applies it:
 
 Questions the law leaves open for an operator who runs veyq for a household, a club or a company. **They are not
 pursued (owner 2026-10-28)**: no row tracks them and none holds back a CR or a release. What is built and decided is
-taken to meet them, nothing they name is built on that assumption (no hold past 90 days, no authority link), and every
-legal text stays a draft. They stay named here because code and docs cite them by number, and because an answer that
-differs, should one come, is a legal duty that wins over what is built (`CLAUDE.md`).
+taken to meet them, and nothing they name is built on that assumption (no hold past 90 days, no authority link).
+They stay named here because code and docs cite them by number, and because an answer that differs, should one come,
+is a legal duty that wins over what is built (`CLAUDE.md`).
 
 1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator.
 2. A time-bound authority link to a hold snapshot.

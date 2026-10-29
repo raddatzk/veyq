@@ -6,8 +6,9 @@
   it names, and the questions the law leaves open are listed at the end and not pursued.
 - **Status:** **Research, not legal advice.** The open questions are not pursued (owner 2026-10-28) and are treated as
   [ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-  § Still open says. Where a legal duty and an ADR or the code disagree, the duty wins and the ADR or code is
-  corrected (`CLAUDE.md`).
+  § Still open says, and the texts veyq ships are not legally reviewed (owner 2026-10-29; that ADR's § Legal basis
+  says why). Where a legal duty and an ADR or the code disagree, the duty wins and the ADR or code is corrected
+  (`CLAUDE.md`).
 - **Read by:** the Run area's [Moderation](../../site/src/content/docs/run/moderation.md) and
   [Data protection](../../site/src/content/docs/run/data-protection.md) pages. What the server keeps about a person,
   and for how long, is [cc.privacy.retention](cc.privacy.retention.md).

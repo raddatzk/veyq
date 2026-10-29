@@ -28,8 +28,7 @@
    case, each with the reference sealed to the moderation key (`moderation-note`).
 4. **Child sexual abuse material gets its own flow.** Before a case of that category opens, the surface shows a
    full-page warning — do not download, forward or screenshot; review only as far as needed; block the content; inform
-   the police or the BKA — and the decision panel preselects "Block the content". A human still decides. The warning
-   is a **draft** until a qualified legal review.
+   the police or the BKA — and the decision panel preselects "Block the content". A human still decides.
 5. **On such a case the handover ends the hold** (ADR 0093 § 4, § 184b(5) StGB: keeping the content is exempt only
    while it serves the report). Recording either handover ends the case's hold at once (`HOLD_ENDED`), and a decided case
    with no objection open closes; the hint and the confirmation say so before it is recorded. Without a handover the
