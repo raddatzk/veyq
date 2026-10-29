@@ -478,6 +478,8 @@ describe('what a member sees (ADR 0111 decision 15)', () => {
       rotatedAt: subject.chain.steps[1].createdAt, isNew: true, verifiedBy: [VERIFIER],
     })
     expect(await personInTenant(T, STRANGER)).toMatchObject({ anchor: 'anomaly', head: null, fingerprint: null, verifiedBy: [] })
+    // a chain that is only its genesis is no rotation (control: the subject's one step above)
+    expect((await personInTenant(T, VERIFIER)).rotatedAt).toBeNull()
   })
 
   it('the badges of a member list: anomaly, verified, new, unverified — and none for this account', async () => {

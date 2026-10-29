@@ -11,7 +11,7 @@ import * as invite from '@veyq/crypto/invite'
 import * as verification from '@veyq/crypto/verification'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { fakePinServer, pinOf, sealPinStore } from '../../test/pinStore'
-import { bundleB64, chainKeys, fakeKeyChains, headOf, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
+import { bundleB64, chainKeys, fakeKeyChains, genesis, headOf, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
 import { fakeApi } from '../../test/apiMock'
 
 vi.mock('../../api/client', () => ({ accountIdentityPinsApi: vi.fn(), keyChainApi: vi.fn(), tenantsApi: vi.fn() }))
@@ -252,6 +252,23 @@ describe('a new identity, signed by the previous key', () => {
     const read = chains.getKeyChain.mock.calls.map(([r]) => r.userId)
     expect(read).not.toContain(OWNER)
     expect(read).toContain(SUBJECT)
+    expect(byId(people, SUBJECT)?.rotatedAt).toEqual(moved.chain.steps[1].createdAt)
+  })
+
+  it('a chain that is only its genesis shows none, even when it is read (control: one rotation step shows)', async () => {
+    // Both born yesterday, so a genesis read as a rotation would fall inside the 14 days. The pins say a later step than
+    // the genesis (index 1), so the overview reads both chains for the date: the chain decides, not the pin's index.
+    const plain = { userId: OWNER, chain: genesis(OWNER, chainKeys(), new Date(Date.now() - DAY)) }
+    chains.serve(plain.chain)
+    const moved = rotated(born(SUBJECT), 1)
+    directory = [row(self, 'OWNER'), row(plain, 'OWNER'), row(moved, 'OWNER')]
+    fakePinServer(sealPinStore(MK, {
+      [OWNER]: pinOf(bundleB64(keysOf(plain)), 1, headOf(plain.chain), { index: 1 }),
+      [SUBJECT]: pinOf(bundleB64(keysOf(moved)), 1, headOf(moved.chain), { index: 1 }),
+    }, 1))
+    const { people } = await loadPeopleOverview(T, ME)
+    expect(chains.getKeyChain.mock.calls.map(([r]) => r.userId)).toContain(OWNER) // the genesis chain WAS read
+    expect(byId(people, OWNER)?.rotatedAt).toBeNull()
     expect(byId(people, SUBJECT)?.rotatedAt).toEqual(moved.chain.steps[1].createdAt)
   })
 
