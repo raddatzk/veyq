@@ -112,8 +112,11 @@ decision 10). The server stores the signature and does not verify it, except on 
 the personal scope only under the account's **own** key, so the server cannot plant a personal scope key; for a shared
 scope under a granter key the trust check anchors ([§ Trust](#trust-who-is-who)) — for a group from the granter's
 standing in its tenant, for the tenant scope's own grant by the pin alone — and a key the granter has since retired
-only at an epoch at or below this device's floor for the scope. Refusals: `unsigned`, `not_self_signed`,
-`bad_signature`, `granter_key_unanchored`, `granter_key_retired`.
+only at an epoch at or below this device's floor for the scope. Then, where the grant is opened (`openOwnGrant`,
+`scopes.ts`), a grant at or above the epoch whose key this device holds must peel down through the served epoch links to
+exactly that key, so a key the operator chose under a granter it fabricated is refused: it never held the key the link
+must end at (ADR 0111 decision 23). Refusals: `unsigned`, `not_self_signed`, `bad_signature`, `granter_key_unanchored`,
+`granter_key_retired`, `epoch_unlinked`.
 
 ### A member invite is a placeholder member
 
@@ -432,10 +435,12 @@ so the gate never fires for one, and it never blocks anybody's write.
 The pin store is the device's memory of each contact's newest head, so a served head older than the pinned one is a
 rollback and an anomaly. The device also keeps its own **trust marks**, local and never synced
 (`src/web/src/features/account/trustMarks.ts`): the highest revision it opened of the pin store and of the device
-register, and an **epoch floor** per scope. A store served below its mark, or one that does not open, is refused
-(`trust_state_rolled_back`, `trust_state_unreadable`), never read as empty; the floor is what limits a grant signed by
-a retired key to the epochs from before its granter's rotation ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md)
-Decision 7).
+register, and an **epoch floor** per scope beside a commitment to the newest **epoch key it held** there. A store
+served below its mark, or one that does not open, is refused (`trust_state_rolled_back`, `trust_state_unreadable`),
+never read as empty; the floor is what limits a grant signed by a retired key to the epochs from before its granter's
+rotation ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7), and the held key what a
+later epoch must link down to (ADR 0111 decision 23). Every grant the device opens and every epoch it commits becomes
+the held key; pairing carries the floors to a linked device, not the held keys.
 
 There is no Key Transparency log; a hash-chained key chain with one head per account, shown in the compare, is what
 such a log would commit to without a format change (ADR 0111 decision 17).

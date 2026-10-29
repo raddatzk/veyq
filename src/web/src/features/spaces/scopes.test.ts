@@ -31,7 +31,7 @@ vi.mock('../account/identityPins', () => ({
 // which the anchor checks above must receive — so a wrap or a grant judged outside its tenant is red.
 vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenantView: vi.fn(), tenantViewOfScope: vi.fn() }))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares, openPlanGrantKey, isUnreadableGrant } from './scopes'
 import { ScopeKind, type MyTenant, type OpenInvite, type ScopeEpochLink, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, accountApi } from '../../api/client'
@@ -703,12 +703,13 @@ describe('no device seals under an epoch below the highest it has held for the s
 describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it creates)', () => {
   const stale = () => httpError(409, 'stale_epoch')
 
-  /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. */
+  /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. The epochs
+   *  `prior` names stay (a later epoch of the same chain must link to the one this device held, ADR 0111 decision 23). */
   function holdGroupAt(
     grantedEpoch: number, rotate: Mock<ScopesApi['rotateScope']>, list = vi.fn<ScopesApi['listMyScopes']>(),
-    directory = vi.fn<ScopesApi['listScopeMembers']>(async () => self),
+    directory = vi.fn<ScopesApi['listScopeMembers']>(async () => self), prior: Uint8Array[] = [],
   ): Uint8Array[] {
-    const keys = Array.from({ length: grantedEpoch + 1 }, () => v1.randomBytes(32))
+    const keys = Array.from({ length: grantedEpoch + 1 }, (_, i) => prior[i] ?? v1.randomBytes(32))
     const links: ScopeEpochLink[] = keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(G1, i + 1, k, keys[i]) }))
     const grant = ownGrant(G1, keys[grantedEpoch], grantedEpoch)
     list.mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, grantedEpoch })])
@@ -739,11 +740,11 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
   it('on a first 409 stale_epoch re-opens its grant and commits again, from a FRESH key', async () => {
     // Another rotation committed epoch 1 first and re-granted us: the re-open finds grant 1, so the retry states 2.
     const rotate = vi.fn<ScopesApi['rotateScope']>()
-    holdGroupAt(0, rotate)
+    const held = holdGroupAt(0, rotate)
     let reopened: Uint8Array[] = []
     rotate
       .mockImplementationOnce(async () => {
-        reopened = holdGroupAt(1, rotate) // the winner's re-grant, visible to our re-open
+        reopened = holdGroupAt(1, rotate, undefined, undefined, held) // the winner's re-grant, visible to our re-open
         throw stale()
       })
       .mockResolvedValueOnce({ epoch: 2 })
@@ -1151,5 +1152,150 @@ describe('a grant verifies under the key its granter signed it with, not the gra
     vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
     await expect(commitRotation(G1, self)).rejects.toThrow('cannot open scope to rotate')
     expect(rotateScope).not.toHaveBeenCalled()
+  })
+})
+
+describe('a new epoch is accepted only if its chain links down to the key this device held (inbox #650, ADR 0111 decision 23)', () => {
+  // The operator's lever: it bumps a scope's epoch and serves this member a grant at the new epoch, sealed to the
+  // member's PUBLIC key around a key of its own choosing and signed by a granter it fabricated. For the TENANT scope's
+  // own grant the granter is judged by the pin alone, and a first-seen granter is pinned (TOFU), so the signature check
+  // passes; before #650 the only check against what the device held was the epoch floor - a number - and the member's
+  // next write landed under the operator's key. The link `E_n sealed under E_n+1` is what the operator cannot make: it
+  // never held E_n.
+  const OP = 'f0000000-0000-4000-8000-0000000000f9' // a granter the operator fabricated, met for the first time
+  const operator = { userId: OP, identity: v1.generateIdentity() }
+  const A = 'a0000000-0000-4000-8000-0000000000a9' // an honest co-member who granted the epochs this device held
+  const member = { userId: A, identity: v1.generateIdentity() }
+  type Granter = { userId: string; identity: v1.Identity }
+
+  /** `keys[i]` sealed under `keys[i+1]`: the honest chain links of `scopeId` from epoch 1 up to `keys.length - 1`. */
+  const linksOf = (scopeId: string, keys: Uint8Array[]): ScopeEpochLink[] =>
+    keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(scopeId, i + 1, k, keys[i]) }))
+
+  /** Serve `scopeId` (of `kind`) with our grant at `epoch` wrapping `key`, signed by `granter`, beside `links`; a
+   *  content API that records what is written. */
+  function serve(scopeId: string, kind: 'TENANT' | 'GROUP', key: Uint8Array, epoch: number, links: ScopeEpochLink[], granter: Granter = member) {
+    const tenantId = kind === 'TENANT' ? scopeId : T
+    const list = listing([signed({ id: scopeId, kind, tenantId, wrappedGrant: ownGrant(scopeId, key, epoch), grantedEpoch: epoch }, granter)])
+    const rotateScope = vi.fn<ScopesApi['rotateScope']>(async ({ rotateScopeRequest }) => ({ epoch: rotateScopeRequest.epoch }))
+    const listScopeEpochs = vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue(links)
+    fakeApi(scopesApi, { listMyScopes: list, listScopeEpochs, rotateScope, listScopeMembers: vi.fn<ScopesApi['listScopeMembers']>(async () => []) })
+    const createNode = vi.fn<ContentApi['createNode']>(async ({ createNodeRequest }) => ({ nodeId: createNodeRequest.nodeId }))
+    fakeApi(contentApi, { createNode })
+    return { createNode, rotateScope, listScopeEpochs }
+  }
+  /** Open the scope as the app does, then write into it under the write key it opened (a folder at its root). */
+  async function openAndWrite(scopeId: string) {
+    const opened = await openScopeById(scopeId)
+    if (opened) await createFolder(scopeId, opened.epochs, 'Neu')
+    return opened
+  }
+
+  it('measured on main: a grant for a later TENANT epoch whose chain does not peel down to the held key is refused - nothing is written', async () => {
+    const E = [v1.randomBytes(32)]
+    serve(T, 'TENANT', E[0], 0, [])
+    expect((await openAndWrite(T))?.epochs.current).toBe(0) // this device now holds E_0 of the tenant
+
+    const planted = v1.randomBytes(32) // the operator's key, with no link to E_0 (it never held E_0)
+    const { createNode } = serve(T, 'TENANT', planted, 1, [], operator)
+    expect(await openAndWrite(T)).toBeNull() // the awaiting-access state, as for any refused grant
+    expect(createNode).not.toHaveBeenCalled()
+  })
+
+  it('a link the operator made does not help it: it peels to a key that is not the one held', async () => {
+    serve(T, 'TENANT', v1.randomBytes(32), 0, [])
+    await openAndWrite(T)
+    const planted = v1.randomBytes(32)
+    const { createNode } = serve(T, 'TENANT', planted, 1, [{ epoch: 1, wrappedPrev: linkUnder(T, 1, planted, v1.randomBytes(32)) }], operator)
+    expect(await openAndWrite(T)).toBeNull()
+    expect(createNode).not.toHaveBeenCalled()
+  })
+
+  it('control: the honest next epoch, its link sealing the held E_0, opens - from the same unpinned granter - and writes under it', async () => {
+    const E = [v1.randomBytes(32), v1.randomBytes(32)]
+    serve(T, 'TENANT', E[0], 0, [])
+    await openAndWrite(T)
+    const { createNode } = serve(T, 'TENANT', E[1], 1, linksOf(T, E), operator)
+    expect((await openAndWrite(T))?.epochs.current).toBe(1)
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+  })
+
+  it('at the held epoch itself, another key than the one held is refused (control: the held key opens again)', async () => {
+    const E = [v1.randomBytes(32), v1.randomBytes(32)]
+    serve(T, 'TENANT', E[1], 1, linksOf(T, E))
+    await openAndWrite(T) // holds E_1
+    const { createNode } = serve(T, 'TENANT', v1.randomBytes(32), 1, [], operator) // the operator withholds the links
+    expect(await openAndWrite(T)).toBeNull()
+    expect(createNode).not.toHaveBeenCalled()
+    serve(T, 'TENANT', E[1], 1, linksOf(T, E), operator)
+    expect((await openAndWrite(T))?.epochs.current).toBe(1)
+  })
+
+  it('a member pending across several epochs is brought current: the grant three epochs up peels down to the held key', async () => {
+    const E = Array.from({ length: 4 }, () => v1.randomBytes(32))
+    serve(T, 'TENANT', E[0], 0, [])
+    await openAndWrite(T)
+    const { createNode } = serve(T, 'TENANT', E[3], 3, linksOf(T, E))
+    expect((await openAndWrite(T))?.epochs.current).toBe(3)
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 3 })
+  })
+
+  it('...and one link in between that does not open breaks the chain: refused, not thrown (main threw OpenRefused from the peel)', async () => {
+    const E = Array.from({ length: 4 }, () => v1.randomBytes(32))
+    serve(T, 'TENANT', E[0], 0, [])
+    await openAndWrite(T)
+    const links = linksOf(T, E)
+    links[1] = { epoch: 2, wrappedPrev: linkUnder(T, 2, E[2], v1.randomBytes(32)) }
+    serve(T, 'TENANT', E[3], 3, links)
+    expect(await openAndWrite(T)).toBeNull()
+  })
+
+  it('a device that holds nothing yet takes its first grant as it is (the invite\'s anchor, ADR 0111 decision 19, vouched for it)', async () => {
+    const { createNode } = serve(T, 'TENANT', v1.randomBytes(32), 1, [], operator)
+    expect((await openAndWrite(T))?.epochs.current).toBe(1)
+    expect(createNode).toHaveBeenCalledTimes(1)
+  })
+
+  it('the self-grant of an account\'s securing carries the very key the device held: it opens', async () => {
+    const E = [v1.randomBytes(32), v1.randomBytes(32)]
+    serve(T, 'TENANT', E[1], 1, linksOf(T, E))
+    await openAndWrite(T)
+    // the stage's self-grant: the same epoch's key, granted to this account by itself (ADR 0111 decision 6)
+    serve(T, 'TENANT', E[1], 1, linksOf(T, E), { userId: ME, identity: ID })
+    expect((await openAndWrite(T))?.epochs.current).toBe(1)
+  })
+
+  it('after a removal rotation this device committed, the removed member (who held E_0) cannot plant epoch 1 under a key of its own', async () => {
+    // The removed member R held E_0, so - with the operator - it CAN make a link that opens to E_0 under a key it chose.
+    // What refuses it is that the device holds the E_1 it minted, not merely the floor 1 (control: that E_1 opens).
+    const E0 = v1.randomBytes(32)
+    const { rotateScope } = serve(G1, 'GROUP', E0, 0, [])
+    const self: ScopeMember[] = [{ userId: ME, username: 'me', avatarRevision: 0, role: 'OWNER', identityPublicKey: ID_PUB, keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=', pending: false }]
+    expect(await commitRotation(G1, self)).toBe(1)
+    const { grants, epoch, wrappedPrev } = rotateScope.mock.calls[0][0].rotateScopeRequest
+    const E1 = openOwn(G1, epoch, grants[0].wrappedGrant, ID.priv) // the key this device minted and holds
+    const planted = v1.randomBytes(32)
+    const { createNode } = serve(G1, 'GROUP', planted, 1, [{ epoch: 1, wrappedPrev: linkUnder(G1, 1, planted, E0) }], operator)
+    expect(await openAndWrite(G1)).toBeNull()
+    expect(createNode).not.toHaveBeenCalled()
+    serve(G1, 'GROUP', E1, 1, [{ epoch: 1, wrappedPrev }], member)
+    expect((await openAndWrite(G1))?.epochs.current).toBe(1)
+  })
+
+  it('the account securing\'s plan opens no unlinked grant either: it is declared unreadable, never re-granted', async () => {
+    serve(T, 'TENANT', v1.randomBytes(32), 0, [])
+    await openAndWrite(T)
+    const planted = v1.randomBytes(32)
+    serve(T, 'TENANT', planted, 1, [], operator)
+    const row = signed({ id: T, kind: 'TENANT', tenantId: T, wrappedGrant: ownGrant(T, planted, 1), grantedEpoch: 1 }, operator)
+    const plan = {
+      scopeId: T, kind: row.kind, tenantId: T, currentEpoch: 1, grantedEpoch: 1, wrappedGrant: row.wrappedGrant,
+      granterUserId: row.granterUserId, grantSignature: row.grantSignature, granterIdentityPublicKey: row.granterIdentityPublicKey,
+    }
+    const refused = await openPlanGrantKey(plan).then(() => null, (e: unknown) => e)
+    expect(isUnreadableGrant(refused)).toBe(true)
+    // ...also where the server serves no links at all: a group invitation not yet answered is no member's (404)
+    fakeApi(scopesApi, { listScopeEpochs: vi.fn<ScopesApi['listScopeEpochs']>().mockRejectedValue(httpError(404, 'scope_not_found')) })
+    expect(isUnreadableGrant(await openPlanGrantKey(plan).then(() => null, (e: unknown) => e))).toBe(true)
   })
 })

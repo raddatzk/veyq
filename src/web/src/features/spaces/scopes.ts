@@ -5,7 +5,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isCodedError, HttpStatus } from '../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
 import { slugify } from '../../shared/naming'
 import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
@@ -14,7 +14,7 @@ import * as invite from '@veyq/crypto/invite'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
 import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity, type TenantStandings } from '../account/identityPins'
 import { loadTenantView, tenantViewOfScope, type TenantOpener } from '../account/tenantTrust'
-import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
+import { epochFloor, epochKeyCommitment, heldEpochKey, holdEpochKey } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { rememberGroupName } from './groupNamesSeen'
@@ -245,16 +245,60 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * its granter's signature verifies (ADR 0028 Decision 6, {@link verifyOwnGrant}): the key inside a refused grant is
  * never used — {@link GrantRefused} is thrown before the unwrap, and the scope does not open.
  *
- * A grant that opened raises this device's epoch floor for the scope to the grant's epoch (ADR 0024 Decision 6):
- * the epoch is authentic because the grant is bound to it and signed, so the device now knows it exists.
+ * A grant at or above the epoch this device holds must reach the key it holds (ADR 0111 decision 23,
+ * {@link requireLinkToHeld}), else it is refused as `epoch_unlinked` before the key is used. A grant that opened is then
+ * held: this device's epoch floor for the scope rises to its epoch (ADR 0024 Decision 6) — the epoch is authentic because
+ * the grant is bound to it and signed — and its key becomes the one a later epoch must link down to.
  */
 async function openOwnGrant(
   scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self, scope.tenantId)
   const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
-  await raiseEpochFloor(scope.id, scope.grantedEpoch)
+  try {
+    await requireLinkToHeld(scope, key)
+  } catch (e) {
+    key.fill(0)
+    throw e
+  }
+  await holdEpochKey(scope.id, scope.grantedEpoch, key)
   return key
+}
+
+/**
+ * A new epoch counts only if it links down to the key this device held (ADR 0111 decision 23, inbox #650). The floor
+ * refuses a lower epoch NUMBER; this refuses an unlinked KEY: an operator can bump a scope's epoch and serve a grant at
+ * the new one around a key of its own choosing — sealed to this account's public key, signed by a granter it fabricated
+ * and the pin meets for the first time — but it cannot make the link `E_held` sealed under its key, because it never
+ * held `E_held`. So from the grant's key the served links must peel down to exactly the key this device holds (at the
+ * same epoch: be that key). Throws {@link GrantRefused} `epoch_unlinked` otherwise — the scope then waits for a current
+ * grant, the state every refused grant reads as, and a rotation declares it unreadable.
+ *
+ * Passes with nothing held (a device's first grant of the scope: the invite's anchor vouched for a newcomer's, ADR 0111
+ * decision 19) and for a grant below the held epoch, which is no new epoch: the floor is its check. A member pending
+ * across several epochs peels through every link in between; an account's securing self-grants the very key it held.
+ */
+async function requireLinkToHeld(scope: OwnGrantRow, key: Uint8Array): Promise<void> {
+  const held = await heldEpochKey(scope.id)
+  if (!held || scope.grantedEpoch < held.epoch) return
+  const unlinked = () => new GrantRefused(scope.id, 'epoch_unlinked')
+  let links: invite.ServedEpochLink[] = []
+  if (scope.grantedEpoch > held.epoch) {
+    let served: { epoch: number; wrappedPrev: string }[]
+    try {
+      served = await listScopeEpochs(scope.id)
+    } catch (e) {
+      // No links for a scope this account is not yet a member of (a pending proposal: 404) or holds no grant in (403):
+      // nothing can link. Any other failure says nothing about the key.
+      if (isHttpStatus(e, HttpStatus.notFound) || isHttpStatus(e, HttpStatus.forbidden)) throw unlinked()
+      throw e
+    }
+    links = served.map((l) => ({ epoch: l.epoch, wrappedPrev: fromB64std(l.wrappedPrev) }))
+  }
+  const peeled = invite.peelEpochKey(scope.id, key, scope.grantedEpoch, held.epoch, links)
+  const linked = peeled !== null && epochKeyCommitment(peeled) === held.commitment
+  peeled?.fill(0)
+  if (!linked) throw unlinked()
 }
 
 /** Our grant is older than the scope's current epoch (ADR 0024 Decision 6): a rotation skipped us, or its re-grant
@@ -824,8 +868,9 @@ export async function commitRotation(
       }
       const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest }))
       // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
-      // server took as the next one; a server that later serves the older grant meets the floor.
-      await raiseEpochFloor(scopeId, epoch)
+      // server took as the next one; a server that later serves the older grant meets the floor, and a later epoch must
+      // link down to this key (ADR 0111 decision 23).
+      await holdEpochKey(scopeId, epoch, newKey)
       return rotated.epoch
     } catch (e) {
       // superseded or incomplete — re-read, re-open and rebuild, from a fresh key, a bounded number of times

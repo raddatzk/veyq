@@ -11,7 +11,7 @@ import * as invite from '@veyq/crypto/invite'
 import * as verification from '@veyq/crypto/verification'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { fakePinServer, pinOf, sealPinStore } from '../../test/pinStore'
-import { bundleB64, chainKeys, fakeKeyChains, headOf, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
+import { bundleB64, chainKeys, fakeKeyChains, genesis, headOf, step, type BuiltChain, type ChainKeys } from '../../test/keyChain'
 import { fakeApi } from '../../test/apiMock'
 
 vi.mock('../../api/client', () => ({ accountIdentityPinsApi: vi.fn(), keyChainApi: vi.fn(), tenantsApi: vi.fn() }))
@@ -255,6 +255,23 @@ describe('a new identity, signed by the previous key', () => {
     expect(byId(people, SUBJECT)?.rotatedAt).toEqual(moved.chain.steps[1].createdAt)
   })
 
+  it('a chain that is only its genesis shows none, even when it is read (control: one rotation step shows)', async () => {
+    // Both born yesterday, so a genesis read as a rotation would fall inside the 14 days. The pins say a later step than
+    // the genesis (index 1), so the overview reads both chains for the date: the chain decides, not the pin's index.
+    const plain = { userId: OWNER, chain: genesis(OWNER, chainKeys(), new Date(Date.now() - DAY)) }
+    chains.serve(plain.chain)
+    const moved = rotated(born(SUBJECT), 1)
+    directory = [row(self, 'OWNER'), row(plain, 'OWNER'), row(moved, 'OWNER')]
+    fakePinServer(sealPinStore(MK, {
+      [OWNER]: pinOf(bundleB64(keysOf(plain)), 1, headOf(plain.chain), { index: 1 }),
+      [SUBJECT]: pinOf(bundleB64(keysOf(moved)), 1, headOf(moved.chain), { index: 1 }),
+    }, 1))
+    const { people } = await loadPeopleOverview(T, ME)
+    expect(chains.getKeyChain.mock.calls.map(([r]) => r.userId)).toContain(OWNER) // the genesis chain WAS read
+    expect(byId(people, OWNER)?.rotatedAt).toBeNull()
+    expect(byId(people, SUBJECT)?.rotatedAt).toEqual(moved.chain.steps[1].createdAt)
+  })
+
   it('never for an anomaly', async () => {
     const stranger = rotated(born(STRANGER), 1)
     directory = [row(self, 'OWNER'), row(stranger, 'MEMBER')]
@@ -268,5 +285,30 @@ describe('the order', () => {
       ({ userId, username: userId, state, isNew: false, verifiedBy: [], rotatedAt: null, replaced: false })
     const ordered = orderPeople([p('cleo', 'verified'), p('zed', 'anomaly'), p('anna', 'unverified'), p('bob', 'anomaly')], (x) => x.username)
     expect(ordered.map((x) => x.userId)).toEqual(['bob', 'zed', 'anna', 'cleo'])
+  })
+})
+
+// Inbox #710: one overview reads the pin store's head once and judges each join record's signer once, however many
+// members the tenant has; a second overview reads afresh.
+describe('what one overview reads (inbox #710)', () => {
+  it('the pin head once, the signer\'s chain once as a signer (and once as a member), each member\'s once', async () => {
+    const root = born(OWNER)
+    const signer = born(VERIFIER)
+    const members = Array.from({ length: 8 }, (_, i) => born(`0e000000-0000-4000-8000-0000000002${String(i).padStart(2, '0')}`))
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(signer, root)),
+      ...members.map((m) => row(m, 'MEMBER', joinedThrough(m, signer))),
+    ]
+    const pins = fakePinServer()
+    const reads = (userId: string) => chains.getKeyChain.mock.calls.filter(([r]) => r.userId === userId).length
+    const { people } = await loadPeopleOverview(T, ME)
+    expect(people.map((p) => p.state)).toEqual(people.map(() => 'unverified')) // everyone anchored
+    expect(people.every((p) => p.isNew)).toBe(true)
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(1)
+    expect(reads(signer.userId)).toBe(2)
+    expect(reads(root.userId)).toBe(1)
+    expect(members.map((m) => reads(m.userId))).toEqual(members.map(() => 1))
+    await loadPeopleOverview(T, ME)
+    expect(pins.getIdentityPins).toHaveBeenCalledTimes(2) // nothing kept across overviews
   })
 })

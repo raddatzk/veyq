@@ -557,8 +557,9 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
 4. It sends the removal, the chain link and the grants in **one request**. The server deletes the
    membership and commits epoch `n+1` in one transaction, and only if it is exactly the current epoch plus one.
    Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
-5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
-   its per-scope **epoch floor** and never seals under a lower epoch again, whatever epoch the server reports.
+5. The removed member is refused at once (layer 1). The remaining members open the new grant, only if its epoch link
+   peels down to the key their device held. Each device raises its per-scope **epoch floor**, keeps the new key as the
+   one a later epoch must link down to, and never seals under a lower epoch again, whatever epoch the server reports.
 6. The remover's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
    ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key minted at `n+1`, the node's own entry under its parent's new key (under
    `E(n+1)` at the root), each child's entry, the node's meta, its media's meta and EXIF and every `K_blob` wrap

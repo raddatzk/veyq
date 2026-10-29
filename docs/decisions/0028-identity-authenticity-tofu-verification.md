@@ -149,7 +149,8 @@ by the contact's signed key chain. Key Transparency stays the (out-of-scope) end
      the receiving side.
    - **What it buys on a shared scope, honestly.** Where the pin alone decides, a first grant is a first-use pin of
      its granter, so an operator that fabricates both the granter and the key is not detected on the spot — only by
-     the next compare of that granter's safety number. In the active tenant a fabricated granter has no join record an
+     the next compare of that granter's safety number — in a device's first grant of the scope: a later epoch must
+     link down to the key the device held (ADR 0111 decision 23). In the active tenant a fabricated granter has no join record an
      owner signed and is refused as an anomaly, unless the server presents it as an owner (ADR 0111 § What stays
      open). What the signature rules out everywhere is a grant presented under the identity of someone the recipient
      has already pinned.
