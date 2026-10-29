@@ -30,7 +30,7 @@ vi.mock('../node/rekey/floor', async (orig) => ({ ...(await orig<object>()), nod
 vi.mock('../node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn(async () => {}) }))
 vi.mock('../blob/transport', async (orig) => ({ ...(await orig<object>()), reserveAndPump: vi.fn() }))
 vi.mock('../node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
-vi.mock('../../features/memories/media', async (orig) => ({ ...(await orig<object>()), addMedia: vi.fn(), addCopiedMedia: vi.fn() }))
+vi.mock('../../features/memories/media', async (orig) => ({ ...(await orig<object>()), addMedia: vi.fn(), addCopiedMedia: vi.fn(), prepareMedia: vi.fn() }))
 
 import { replaySubtrees, ImportFailed, type ReplayItem } from './importSubtree'
 import { contentApi } from '../../api/client'
@@ -51,7 +51,7 @@ import { NodeKeyBelowFloorError, nodeKeyForWrite } from '../node/rekey/floor'
 import { NodeRekeyPendingError, StaleNodeEpochError } from '../../shared/rekeyRetry'
 import { reserveAndPump } from '../blob/transport'
 import { uploadCoverImage, writeNodeCover, type UploadedCover, type WriteNodeCoverResult } from '../node/cover/coverWrite'
-import { addCopiedMedia, addMedia } from '../../features/memories/media'
+import { addCopiedMedia, addMedia, prepareMedia, type PreparedMedia } from '../../features/memories/media'
 import { CHAPTER_KIND, MEMORY_KIND } from '../../features/memories/kinds'
 import { CHAPTER_CONTENT, MEMORY_CONTENT } from '../../features/memories/exportImport'
 import { POT_KIND } from '../../features/expenses/kinds'
@@ -113,6 +113,8 @@ let plans: { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKe
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // a download's original goes through its on-device stage before `addMedia` (inbox #784); a byte string of 7s decodes to nothing
+  vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: '', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
   creates.length = 0
   afterCreate = {}
   server = { current: 0, nodes: new Map([[PARENT, { epoch: 0, parentId: null, key: PARENT_KEY, kind: FOLDER_KIND }]]), ownerOnly: new Set() }
@@ -227,6 +229,11 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     expect(writes[3]!.key).toEqual(keyOf(rome))
     expect(server.nodes.get(rome)!.epoch).toBe(1)
     expect(ofKind(MEMORY_KIND)).toHaveLength(1) // the Memory was not created twice
+    // p2 is sealed again, never prepared again: its second write carries the stage its first one had (inbox #784)
+    expect(prepareMedia).toHaveBeenCalledTimes(3)
+    const prepared = vi.mocked(addMedia).mock.calls.map((c) => c[5]!.prepared)
+    expect(prepared[2]).toBe(prepared[1])
+    expect(new Set(prepared).size).toBe(3)
   })
 
   it('a copied Memory\'s medium meets stale_epoch - another member\'s device re-keyed it first - and lands after one pull and re-read', async () => {

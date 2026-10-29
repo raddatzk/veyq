@@ -4,7 +4,7 @@ vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
   listMedia: vi.fn(), listMediaPages: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
   chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(), openBlob: vi.fn(),
-  addCopiedMedia: vi.fn(), tierChunkProviders: vi.fn(), rawMediaMeta: vi.fn(), readByChunk: vi.fn(),
+  addCopiedMedia: vi.fn(), tierChunkProviders: vi.fn(), rawMediaMeta: vi.fn(), readByChunk: vi.fn(), prepareMedia: vi.fn(),
 }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), readShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
@@ -18,7 +18,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
 import {
   addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPages, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
-  rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem,
+  prepareMedia, rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem, type PreparedMedia,
 } from './media'
 import { readShareMedia, openSharedMemory, shareChunkProvider } from './share'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
@@ -223,6 +223,7 @@ describe('importMemoryContent', () => {
     vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
+    vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: 'd', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
     vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
   })
 
@@ -249,6 +250,93 @@ describe('importMemoryContent', () => {
     const uploaded = vi.mocked(addMedia).mock.calls.map((call) => call[3].blob)
     expect(uploaded).toHaveLength(3)
     uploaded.forEach((blob, i) => expect(blob, `medium ${i}`).toBe(returned[i]))
+  })
+
+  describe('the next original is prepared while this one is on the wire (inbox #784)', () => {
+    /** Each `addMedia` reports its first progress, then stays on the wire until the test lets it land (`land`, in order). */
+    function onTheWire() {
+      const land: (() => void)[] = []
+      vi.mocked(addMedia).mockImplementation(async (_s, _n, _k, source, _d, opts) => {
+        opts!.onProgress!(0)
+        await new Promise<void>((r) => land.push(r))
+        return { blobId: 'b', mediaId: source.name! }
+      })
+      return { land }
+    }
+    const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
+
+    it('asks for and prepares the next original once this one reports its first progress, never before, and hands each its own stage', async () => {
+      const { land } = onTheWire()
+      let first!: () => void
+      vi.mocked(addMedia).mockImplementationOnce(async (_s, _n, _k, source, _d, opts) => {
+        await new Promise<void>((r) => (first = r))
+        // its own stage is still running: the next one has not started (one decode at a time)
+        expect(vi.mocked(prepareMedia).mock.calls.map(([s]) => s.name)).toEqual(['a.jpg'])
+        opts!.onProgress!(0)
+        await new Promise<void>((r) => land.push(r))
+        return { blobId: 'b', mediaId: source.name! }
+      })
+      const c = ctx(node())
+      const run = importMemoryContent(MEMORY_KIND)(c)
+      await flush()
+      expect(vi.mocked(c.payload).mock.calls.map(([ref]) => ref.path), 'before the first progress').toEqual(['data/n3/a.jpg'])
+      first()
+      await flush()
+      // a.jpg is on the wire and has not landed: b.jpg is asked for and through its stage
+      expect(vi.mocked(c.payload).mock.calls.map(([ref]) => ref.path)).toEqual(['data/n3/a.jpg', 'data/n3/b.jpg'])
+      expect(vi.mocked(prepareMedia).mock.calls.map(([s]) => s.name)).toEqual(['a.jpg', 'b.jpg'])
+      expect(addMedia).toHaveBeenCalledTimes(1)
+      land.shift()!()
+      await flush()
+      expect(vi.mocked(prepareMedia).mock.calls.map(([s]) => s.name), 'c.jpg ahead of b.jpg on the wire').toEqual(['a.jpg', 'b.jpg', 'c.jpg'])
+      land.shift()!()
+      await flush()
+      land.shift()!()
+      await run
+      expect(prepareMedia).toHaveBeenCalledTimes(3)
+      const calls = vi.mocked(addMedia).mock.calls
+      const stages = await Promise.all(vi.mocked(prepareMedia).mock.results.map((r) => r.value as Promise<PreparedMedia>))
+      calls.forEach((call, i) => {
+        expect(call[3], `medium ${i}: its source is its stage's`).toBe(stages[i].source)
+        expect(call[5]!.prepared, `medium ${i}: its own stage`).toBe(stages[i])
+      })
+    })
+
+    it('a refusal the next payload meets is the import\'s only after this medium landed, and the medium after it is never asked for', async () => {
+      const { land } = onTheWire()
+      const c = ctx(node())
+      const refused = new Error('checksum')
+      vi.mocked(c.payload).mockImplementation(async (ref, name) => {
+        if (ref.path === 'data/n3/b.jpg') throw refused
+        return file(name, 0)
+      })
+      let settled = false
+      const run = importMemoryContent(MEMORY_KIND)(c).finally(() => { settled = true })
+      run.catch(() => undefined)
+      await flush()
+      expect(vi.mocked(c.payload).mock.calls.map(([ref]) => ref.path)).toEqual(['data/n3/a.jpg', 'data/n3/b.jpg'])
+      expect(settled, 'a.jpg is still on the wire: the refusal waits for it').toBe(false)
+      land.shift()!()
+      await expect(run).rejects.toBe(refused)
+      expect(addMedia).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(addMedia).mock.results[0].type).toBe('return')
+      expect(vi.mocked(c.payload).mock.calls.map(([ref]) => ref.path), 'nothing after the refused one').toEqual(['data/n3/a.jpg', 'data/n3/b.jpg'])
+    })
+
+    it('a medium that fails ends the import with its own error; the next one, already prepared, is dropped unawaited', async () => {
+      const c = ctx(node())
+      vi.mocked(addMedia).mockImplementationOnce(async (_s, _n, _k, _src, _d, opts) => {
+        opts!.onProgress!(0)
+        await flush()
+        throw new Error('upload_failed')
+      })
+      vi.mocked(c.payload).mockImplementation(async (ref, name) => {
+        if (ref.path === 'data/n3/b.jpg') throw new Error('checksum')
+        return file(name, 0)
+      })
+      await expect(importMemoryContent(MEMORY_KIND)(c)).rejects.toThrow('upload_failed')
+      expect(addMedia).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('restores a correction as an override and a place name at birth, in the upload of the medium that carries them (inbox #700)', async () => {
