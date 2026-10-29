@@ -161,6 +161,16 @@ sequenceDiagram
   hold a DB connection), so the undo is a compensation rather than a rollback, and the result is request-scoped
   and **never persisted** — no new operator-visible metadata
   ([ADR 0049](../../../decisions/0049-email-delivery-boundary.md)).
+- **What the owner waits for (inbox #566, #631).** The one slow step is the code's Argon2id at the production profile,
+  about 0.8 s, so the dialog mints the code and starts that derivation as it opens, while the owner types the address.
+  Measured live on 2026-10-29 (headless Chrome 156 against a fast-jar, the dev Mailpit as SMTP behind a timing tap, a
+  1-minute load of 3.2–3.6, six invites each way): sent at once, the send took 0.80–0.85 s to the code shown (1.6 s for a
+  session's first, its worker cold), nearly all of it the rest of the derivation; sent three seconds after the dialog
+  opened, 77–117 ms (median 91). Of those, the tenant list, the owner's key chain and the scopes take about 10–15 ms
+  each, one after another (no granter key anchor: the owner's grant is its own), and the POST 34–63 ms on the server,
+  of which about 30 ms are the checks and the mint and 13–17 ms the SMTP session. So the mail hand-off is no share
+  worth moving, and it stays inside the request: its answer is what ADR 0055 § 6 needs to revoke an undelivered
+  invite. A remote SMTP server adds its own round trips to that step, which the dialog's "sending" line names.
 - **Anti-bombing rate limit (cr-email-invite-send-hardening).** Once mail is a real channel, repeated invites to
   one address are **rate-limited** — per-(tenant, recipient) as the primary guard and per-tenant as a volume cap
   (429 + `Retry-After`, no invite minted). It is enforced in the handler on the tenant-owner member paths (the
