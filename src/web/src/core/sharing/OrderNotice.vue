@@ -2,8 +2,7 @@
 // A guest uploader's notice of an authority's removal order (TCO Art. 11, ADR 0093 § 12): on the share page and the
 // drop page, wherever the link or one of the guest's own items answers blocked — asked only when this device holds the
 // guest's session for the link (`loadOrderNotice`), and silent whenever the server has nothing to tell it. It says when
-// the order was received and where to ask for the reasons or a copy of the order (Art. 11(2)); never more. A draft until
-// a qualified legal review (ADR 0093 § Legal basis).
+// the order was received and where to ask for the reasons or a copy of the order (Art. 11(2)); never more.
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'

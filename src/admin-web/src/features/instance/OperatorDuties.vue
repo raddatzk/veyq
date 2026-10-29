@@ -2,8 +2,7 @@
 // uc.admin.operator-details / uc.admin.setup-server — what a Server Owner may owe (ADR 0093 § 14), told as information
 // and never as a choice: nothing here is ticked or chosen, and nothing is refused or warned about over an empty value.
 // The same block at first-run setup and beside the values in Server → Operator, so the two can never say different
-// things. The Run docs' Moderation page says the same at more length. A draft under the same legal review as every text
-// of ADR 0093 (§ Legal basis).
+// things. The Run docs' Moderation page says the same at more length.
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()

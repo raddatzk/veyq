@@ -172,7 +172,7 @@ test(
     test.info().annotations.push({ type: 'moderator: submit → guest 404 (ms)', description: String(took) })
     await expect(page.locator('.moderation-order-blocked')).toContainText(/Blocked at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/, { timeout: 60_000 })
     const annex = page.locator('.moderation-order-text')
-    await expect(annex).toHaveValue(/^DRAFT — not yet reviewed by a lawyer/)
+    await expect(annex).toHaveValue(/^Feedback following the removal of or disabling of access to terrorist content/)
     await expect(annex).toHaveValue(new RegExp(`Reference of the removal order: ${moderatorReference}`))
     await expect(annex).toHaveValue(new RegExp(`identifier ${shareIdOf(links[0])}`))
     // The order's case, for the report below.

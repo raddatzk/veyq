@@ -28,7 +28,6 @@ const rendered = (text: SectionText | null | undefined) => {
   const md = pickSectionText(text, locale.value)
   return md ? renderMarkdown(md) : ''
 }
-const banner = computed(() => rendered(notice.value?.draftBanner))
 const passages = computed(() => (notice.value?.passages ?? []).map((p) => ({ id: p.id, separate: p.separate, html: rendered(p.text) })))
 
 onMounted(async () => {
@@ -59,8 +58,6 @@ onMounted(async () => {
         </p>
       </template>
       <section v-else class="privacy-notice" data-testid="privacy-notice">
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-if="banner" class="markdown-body privacy-notice__banner" v-html="banner"></div>
         <template v-for="p in passages" :key="p.id">
           <!-- eslint-disable-next-line vue/no-v-html -->
           <aside v-if="p.separate" :id="p.id" class="markdown-body privacy-notice__objection" v-html="p.html"></aside>

@@ -1,6 +1,6 @@
 // The Annex texts (uc.moderation.authority-order `the-forms-come-out-to-copy`, web): the moderation surface's copy equals the
 // contract text for text — admin-web's copy is held to the same file — and a rendering names the block to the second in UTC,
-// leaves a line out whose value is missing, and leads with the draft banner while the template is a draft.
+// leaves a line out whose value is missing, and opens with the form's own title.
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -36,9 +36,8 @@ describe('the order forms', () => {
     expect(text).not.toMatch(/\{\w+\}/)
   })
 
-  it('leads with the draft banner while the template is a draft', () => {
-    expect(ORDER_FORMS.draft).toBe(true)
-    expect(renderOrderForm('annexII', 'de', fields).split('\n')[0]).toBe(ORDER_FORMS.de.draftBanner)
+  it('opens with the form\'s own title', () => {
+    expect(renderOrderForm('annexII', 'de', fields).split('\n')[0]).toBe(ORDER_FORMS.de.annexII[0])
   })
 
   it('leaves out a line whose value is not set, and the Annex III draft says the share was not found', () => {

@@ -3,7 +3,7 @@
 // observable the Server Owner depends on within the hour:
 //   - a removal order asks first, naming that it blocks for everyone; declined, nothing is sent;
 //   - accepted, the panel shows the block time to the second in UTC and the Annex II text to copy, the reference as typed
-//     in it, led by the draft banner;
+//     in it, led by the form's title;
 //   - a share the server does not know shows the Annex III draft instead;
 //   - a refusal is said in words (an order already recorded, an unreadable link).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -78,7 +78,7 @@ describe('OrderPanel (uc.moderation.authority-order, admin-web)', () => {
     expect(enterOrder).not.toHaveBeenCalled()
   })
 
-  it('shows the block time to the second and the Annex II text, the reference as typed, led by the draft banner', async () => {
+  it('shows the block time to the second and the Annex II text, the reference as typed, led by the form\'s title', async () => {
     ask.mockResolvedValue(true)
     vi.mocked(enterOrder).mockResolvedValue(order())
     const w = await mountPanel()
@@ -86,7 +86,7 @@ describe('OrderPanel (uc.moderation.authority-order, admin-web)', () => {
     expect(vi.mocked(enterOrder).mock.calls[0][0]).toMatchObject({ kind: 'REMOVAL', reference: 'BKA ST-2026-0417' })
     expect(w.find('.order-blocked').text()).toContain('2026-10-18 07:20:11 UTC')
     const text = (w.find('.textarea').element as HTMLTextAreaElement).value
-    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.draftBanner)
+    expect(text.split('\n')[0]).toBe(ORDER_FORMS.en.annexII[0])
     expect(text).toContain('Reference of the removal order: BKA ST-2026-0417')
     expect(text).toContain('Access disabled at: 2026-10-18 07:20:11 UTC')
   })

@@ -1111,7 +1111,6 @@ const en = {
     },
     csam: {
       title: 'Child sexual abuse material',
-      draft: 'Draft — not yet reviewed by a lawyer.',
       dont: 'Do not download, forward or screenshot anything of this case.',
       review: 'Review only as far as you need to decide.',
       block: 'Block the content: it is proposed as the first step.',
@@ -1943,7 +1942,7 @@ const en = {
     loading: 'Opening this link…',
     unavailable: 'This link isn’t available',
     unavailableHint: 'It may have been switched off, expired, or the link is incomplete. Ask the person who shared it for a fresh link.',
-    // A guest uploader's notice of an authority's removal order (TCO Art. 11, ADR 0093 § 12) — a draft until legal review.
+    // A guest uploader's notice of an authority's removal order (TCO Art. 11, ADR 0093 § 12).
     orderNotice: {
       removed: 'Something you uploaded through this link was removed on an order of an authority, received on {date}.',
       ask: 'For the reasons, or a copy of the order, write to {contact}.',
@@ -1968,7 +1967,7 @@ const en = {
       nameTitle: 'What is your name?',
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
       // the guest-write record's first-layer notice (core/sharing/GuestWriteRecordNotice.vue, ADR 0093 § 10): N as the
-      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. The wording is a draft.
+      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own.
       recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
       recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
       recordMore: 'Who keeps it, why, and your rights',
@@ -3105,7 +3104,6 @@ const de: typeof en = {
     },
     csam: {
       title: 'Darstellungen sexuellen Missbrauchs von Kindern',
-      draft: 'Entwurf – noch nicht anwaltlich geprüft.',
       dont: 'Lade nichts aus diesem Fall herunter, leite nichts weiter und mache keine Bildschirmfotos.',
       review: 'Prüfe nur so weit, wie du es für die Entscheidung brauchst.',
       block: 'Sperre die Inhalte: Das ist als erster Schritt vorgeschlagen.',

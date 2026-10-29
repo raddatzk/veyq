@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The public page of the instance privacy notice (ADR 0035 decision 8, GDPR Art. 13; uc.admin.privacy-notice): read
 // through the PUBLIC client — a guest-mode mount, so any call to an authenticated client is red (inbox #401) — each
-// passage at its anchor, each right to object apart (Art. 21(4)), the draft banner first; the passage a link names is
+// passage at its anchor, each right to object apart (Art. 21(4)); the passage a link names is
 // scrolled into view once rendered; a failed read says so and names the instance contact where it loads.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -24,7 +24,6 @@ const stubs = {
 
 const NOTICE = {
   revision: 1,
-  draftBanner: { en: '*Draft: this privacy notice has not yet been reviewed by a lawyer.*', de: '*Entwurf: …*' },
   passages: [
     { id: 'account', separate: false, text: { en: '## Your account\nThe server keeps your email address.', de: '## Dein Konto\nDer Server speichert deine E-Mail-Adresse.' } },
     { id: 'guest-write-record', separate: false, text: { en: '## Your IP address when you add something as a guest\nKept 7 days.', de: '## Deine IP-Adresse' } },
@@ -46,11 +45,11 @@ describe('PrivacyNoticeView — the instance privacy notice, public', () => {
     route.hash = ''
   })
 
-  it('shows every passage at its anchor without an account, the draft banner first and the right to object apart', async () => {
+  it('shows every passage at its anchor without an account, in order, and the right to object apart', async () => {
     stubApi(publicOperatorApi, { getPrivacyNotice: NOTICE, getOperatorDetails: { contactLanguages: [] } })
     const w = await mountIt()
     const notice = w.find('[data-testid="privacy-notice"]')
-    expect(notice.text().startsWith('Draft: this privacy notice has not yet been reviewed by a lawyer.')).toBe(true)
+    expect(notice.text().startsWith('Your account')).toBe(true)
     expect(w.find('div#account').text()).toContain('The server keeps your email address.')
     expect(w.find('div#guest-write-record').text()).toContain('Kept 7 days.')
     expect(w.find('aside#guest-write-record-objection').text()).toContain('Give your guest id.')

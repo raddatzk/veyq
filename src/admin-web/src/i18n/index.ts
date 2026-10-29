@@ -398,7 +398,7 @@ const en = {
       },
       "statement": {
         "title": "Statement of reasons",
-        "copy": "A step over content goes with a statement to the people it affects — the blocked member, or the tenant’s owners — by the instance mail and with what you found, since they cannot sign in to read it. Objections go to the instance contact. A draft until a lawyer has reviewed it.",
+        "copy": "A step over content goes with a statement to the people it affects — the blocked member, or the tenant’s owners — by the instance mail and with what you found, since they cannot sign in to read it. Objections go to the instance contact.",
         "ground": "Ground",
         "provision": "The law or the clause it relies on",
         "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required.",
@@ -1074,7 +1074,7 @@ const de: typeof en = {
       },
       "statement": {
         "title": "Begründung",
-        "copy": "Ein Schritt, der Inhalte betrifft, geht mit einer Begründung an die Betroffenen — das gesperrte Mitglied oder die Besitzpersonen des Tenants — per Instanz-E-Mail und mit dem, was du festgestellt hast, denn sie können sich nicht anmelden, um sie zu lesen. Widersprüche gehen an den Instanzkontakt. Ein Entwurf, bis er rechtlich geprüft ist.",
+        "copy": "Ein Schritt, der Inhalte betrifft, geht mit einer Begründung an die Betroffenen — das gesperrte Mitglied oder die Besitzpersonen des Tenants — per Instanz-E-Mail und mit dem, was du festgestellt hast, denn sie können sich nicht anmelden, um sie zu lesen. Widersprüche gehen an den Instanzkontakt.",
         "ground": "Grund",
         "provision": "Gesetz oder Klausel, auf die er sich stützt",
         "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich.",

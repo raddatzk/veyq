@@ -114,7 +114,6 @@ describe('ModerationQueue', () => {
     expect(w.find('.case-detail-stub').exists()).toBe(false)
     const warning = w.find('.moderation-csam-warning')
     expect(warning.text()).toContain(t('moderation.csam.dont'))
-    expect(warning.text()).toContain(t('moderation.csam.draft'))
     // Back: nothing opened.
     await w.find('.moderation-csam-back').trigger('click')
     await flushPromises()
