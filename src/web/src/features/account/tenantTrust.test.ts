@@ -661,3 +661,107 @@ describe('what one pass over a member list reads (inbox #710)', () => {
     expect((await tenantBadges(T, ME))[members[0].userId]).toBe('anomaly')
   })
 })
+
+// Inbox #741: a pass over a member list stores the pins of its first contacts in ONE write at its end, not one write per
+// first contact - with the same answers, the same revision guard, nothing pinned for an anomaly, and a concurrent
+// device's pin standing.
+describe('what one pass over a member list writes (inbox #741)', () => {
+  /** A root owner R, an owner S who joined through R's invite, and `n` members who joined through S's. */
+  function tenantOf(n: number) {
+    const root = born(OWNER)
+    const signer = born(SIGNER)
+    const members = Array.from({ length: n }, (_, i) => born(`0e000000-0000-4000-8000-0000000003${String(i).padStart(2, '0')}`))
+    directory = [
+      row(self, 'OWNER'), row(root, 'OWNER'), row(signer, 'OWNER', joinedThrough(signer, root)),
+      ...members.map((m) => row(m, 'MEMBER', joinedThrough(m, signer))),
+    ]
+    return { root, signer, members, everyone: [root, signer, ...members] }
+  }
+  /** Every request the faked server answered: the pin store's, the key chains', the tenant's directory and verifications. */
+  function requestsOf(pins: ReturnType<typeof fakePinServer>, verifications: ReturnType<typeof fakeVerifications>) {
+    const counts = () => ({
+      pinHead: pins.getIdentityPins.mock.calls.length,
+      pinList: pins.listIdentityPinEntries.mock.calls.length,
+      pinWrite: pins.writeIdentityPins.mock.calls.length,
+      chains: chains.getKeyChain.mock.calls.length,
+      tenant: vi.mocked(listScopeMembers).mock.calls.length + verifications.listVerifications.mock.calls.length,
+    })
+    const total = () => Object.values(counts()).reduce((a, b) => a + b, 0)
+    return { counts, total }
+  }
+
+  it('cold, at 50 members: every first contact pinned by one write', async () => {
+    const { everyone } = tenantOf(50)
+    const pins = fakePinServer()
+    const req = requestsOf(pins, fakeVerifications())
+    const badges = await tenantBadges(T, ME)
+    expect(badges).toEqual(Object.fromEntries(everyone.map((p) => [p.userId, 'new']))) // the same answers
+    expect(Object.keys(pinsOn(MK, pins.state)).sort()).toEqual(everyone.map((p) => p.userId).sort()) // all stored
+    // 52 first contacts (50 members, the signer, the root owner): one write where each wrote its own - 109 requests
+    // before (52 writes), 58 now; a key chain per person and the signer's once more as the records' signer
+    expect(req.counts()).toEqual({ pinHead: 1, pinList: 1, pinWrite: 1, chains: 53, tenant: 2 })
+    expect(req.total()).toBe(58)
+  })
+
+  it('control: warm, the same 50 - nothing to pin, nothing written', async () => {
+    tenantOf(50)
+    const pins = fakePinServer()
+    await tenantBadges(T, ME)
+    pins.writeIdentityPins.mockClear()
+    pins.getIdentityPins.mockClear()
+    pins.listIdentityPinEntries.mockClear()
+    chains.getKeyChain.mockClear()
+    vi.mocked(listScopeMembers).mockClear()
+    const req = requestsOf(pins, fakeVerifications())
+    await tenantBadges(T, ME)
+    // the session verified the store at its head: no listing; nothing changed: no write - 55, as before
+    expect(req.counts()).toEqual({ pinHead: 1, pinList: 0, pinWrite: 0, chains: 52, tenant: 2 })
+    expect(req.total()).toBe(55)
+  })
+
+  it('the write is guarded by the revision the pass read: a 409 re-reads, re-applies, and a pin another device wrote meanwhile stands', async () => {
+    const { members, everyone } = tenantOf(3)
+    const pins = fakePinServer()
+    const stranger = born(STRANGER)
+    const theirs = pinOf(bundleB64(keysOf(stranger)), 1, headOf(stranger.chain))
+    // another device of this account pinned the first member (at a key that is not theirs) while this pass ran
+    pins.racedBy(sealPinStore(MK, { [members[0].userId]: theirs }, pins.state.revision + 1))
+    await tenantBadges(T, ME)
+    expect(pins.writeIdentityPins).toHaveBeenCalledTimes(2) // the 409, then the re-applied write
+    const stored = pinsOn(MK, pins.state)
+    expect(stored[members[0].userId]).toEqual(theirs) // first-online-wins: a first sight claims only an empty slot
+    for (const p of everyone.filter((q) => q !== members[0])) expect(stored[p.userId]).toMatchObject({ head: headOf(p.chain) })
+  })
+
+  it('an anomaly is never pinned - in the one write, beside the anchored', async () => {
+    const { members } = tenantOf(2)
+    const outsider = born(STRANGER)
+    directory.push(row(outsider, 'MEMBER')) // a membership the server made: no join record
+    const pins = fakePinServer()
+    const badges = await tenantBadges(T, ME)
+    expect(badges[outsider.userId]).toBe('anomaly')
+    expect(pins.writeIdentityPins).toHaveBeenCalledTimes(1)
+    const stored = pinsOn(MK, pins.state)
+    expect(stored[outsider.userId]).toBeUndefined()
+    expect(stored[members[1].userId]).toBeDefined()
+  })
+
+  it('a pin the pass recorded is what its later checks judge against: the signer, judged three times, is pinned once', async () => {
+    const { signer } = tenantOf(2)
+    const pins = fakePinServer()
+    const badges = await tenantBadges(T, ME)
+    expect(badges[signer.userId]).toBe('new')
+    expect(pins.writeIdentityPins).toHaveBeenCalledTimes(1)
+    expect(pinsOn(MK, pins.state)[signer.userId]).toMatchObject({ head: headOf(signer.chain), index: 0 })
+  })
+
+  it('a pass whose write fails still answers; the next pass pins again', async () => {
+    const { everyone } = tenantOf(2)
+    const pins = fakePinServer()
+    pins.writeIdentityPins.mockRejectedValueOnce(new Error('offline'))
+    expect(await tenantBadges(T, ME)).toEqual(Object.fromEntries(everyone.map((p) => [p.userId, 'new'])))
+    expect(pins.state.entries.size).toBe(0)
+    await tenantBadges(T, ME)
+    expect(Object.keys(pinsOn(MK, pins.state))).toHaveLength(everyone.length)
+  })
+})

@@ -15,7 +15,7 @@
 //
 // Cost: one pass (`PinPass`, inbox #710) — the pin store's head is read once for every anchor check and every pin, and each
 // join record's signer is judged once (`loadTenantView`); the anchor checks run one after another, as `tenantBadges` runs
-// them (the pin store's writes must not race); the verifications are listed once; a key chain is read for the rotation
+// them, and the pins they take are written in one write at the pass's end (inbox #741); the verifications are listed once; a key chain is read for the rotation
 // date only when the anchored head is not the chain's first (a pin at index 0 is a genesis: nothing rotated), a few at a
 // time.
 import type { ScopeMember } from '../../api/generated/scopes'
@@ -102,7 +102,19 @@ async function inBatches<T, R>(items: readonly T[], n: number, f: (item: T) => P
  * way to start the list over - and nothing else for one member's failed check.
  */
 export async function loadPeopleOverview(tenantId: string, selfUserId: string, now: number = Date.now()): Promise<PeopleOverview> {
-  const view = await loadTenantView(tenantId, openScopeById, { pins: new PinPass() })
+  const pass = new PinPass()
+  try {
+    return await overviewOf(await loadTenantView(tenantId, openScopeById, { pins: pass }), selfUserId, now)
+  } finally {
+    // The pass's pins in one write (inbox #741), also after a failure midway. As a check of the pass: a refused store is
+    // the caller's to say, any other failure leaves the pins unwritten - the next pass pins again.
+    await pass.flush().catch((e: unknown) => {
+      if (e instanceof TrustStateRefused) throw e
+    })
+  }
+}
+
+async function overviewOf(view: TenantView, selfUserId: string, now: number): Promise<PeopleOverview> {
   if (!view.available) return { available: false, people: [] }
   const listed = [...view.members.values()].filter((m) => m.userId !== selfUserId && !m.pendingConsent)
 

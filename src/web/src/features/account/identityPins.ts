@@ -143,24 +143,58 @@ export interface TenantStandings {
 
 /**
  * One pass of anchor checks over many people — a member list, Who's who (inbox #710): the pin store is read on the pass's
- * first check and not again, and every write a check of the pass makes moves the pass on to the store it wrote (or, after
- * a `409 stale_revision`, to the one it re-read). It lives as long as its caller keeps it — one call — so nothing a pass
- * read reaches the next one: each pass starts from the server's head, through this device's marks, as a single check does.
- * Without a pass every check reads the store itself.
+ * first check and not again. It lives as long as its caller keeps it — one call — so nothing a pass read reaches the next
+ * one: each pass starts from the server's head, through this device's marks, as a single check does. Without a pass every
+ * check reads the store itself and writes its own pin at once.
+ *
+ * **A pass writes once, at its end** (inbox #741): a check of the pass that pins someone records its change instead of
+ * writing it — the pass reads it back at once, so every later check of the pass judges against it exactly as against a
+ * pin written — and {@link flush} stores every recorded change in one revision-guarded write. On a `409 stale_revision`
+ * that write re-reads the store and re-applies every change in order on top of it, as a single check's write re-applies
+ * its own: a first sight claims only an empty slot and a move replaces only the pin it was judged against, so what a
+ * concurrent device wrote stands. A check that ends in an anomaly records nothing. The caller flushes in a `finally`, so
+ * a pass that fails midway still keeps what it pinned. Only for a pass whose answers are shown, never one that gates a
+ * wrap: a wrap must not seal to a key whose pin is not stored yet.
  */
 export class PinPass {
-  private held: OpenedStore | null = null
+  /** The store as this pass last read or wrote it at the server, or null before the first read. */
+  private base: OpenedStore | null = null
+  /** The checks' changes not written yet, in the order they were made. */
+  private pending: Array<(pins: PinMap) => void> = []
 
-  /** The store as this pass last read or wrote it — read on first use. A copy: a check's changes reach it only by a write. */
+  /** The store as the pass's checks see it — {@link base} with every pending change applied; read on first use. A copy. */
   async read(): Promise<OpenedStore> {
-    if (!this.held) this.held = await loadStore()
-    return copyOf(this.held)
+    if (!this.base) this.base = await loadStore()
+    const pins: PinMap = { ...this.base.pins }
+    for (const apply of this.pending) apply(pins)
+    return { revision: this.base.revision, pins, entries: new Map(this.base.entries) }
+  }
+
+  /** A check's change to the pins: recorded for {@link flush}, seen by the pass's next read. */
+  record(apply: (pins: PinMap) => void): void {
+    this.pending.push(apply)
+  }
+
+  /** Store every recorded change in one write ({@link mutateAndSave}: revision-guarded, re-based and re-applied on a `409
+   *  stale_revision`; changes that change nothing send nothing). Throws what the write throws; the changes are not kept
+   *  for a retry. */
+  async flush(): Promise<void> {
+    if (!this.base || this.pending.length === 0) return
+    const changes = this.pending
+    this.pending = []
+    await mutateAndSave(this.base, (pins) => changes.forEach((apply) => apply(pins)), this)
   }
 
   /** A write of this pass landed, or its re-base re-read the store: the pass continues from `store`. */
   moved(store: OpenedStore): void {
-    this.held = copyOf(store)
+    this.base = copyOf(store)
   }
+}
+
+/** Store a check's change: through its pass ({@link PinPass.record}, written at the pass's end), or at once. */
+async function save(store: OpenedStore, apply: (pins: PinMap) => void, pass: PinPass | undefined): Promise<void> {
+  if (pass) pass.record(apply)
+  else await mutateAndSave(store, apply)
 }
 
 /** The store a check reads: its pass's, or a fresh read. */
@@ -677,7 +711,7 @@ export async function anchorIdentity(
     if (!chain) return 'anomaly'
     const reading = readJoinedChain(pin, userId, chain, standing)
     if (!endsAt(reading, served)) return 'anomaly'
-    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
+    await save(store, (pins) => recordReading(pins, userId, pin, reading), pass)
     return reading.anchor
   }
   if (pin && pin.head === served.keyChainHead) return pin.fingerprint === servedFingerprint ? 'match' : 'anomaly'
@@ -685,7 +719,7 @@ export async function anchorIdentity(
   if (!chain) return 'anomaly'
   const reading = readChain(pin, userId, chain)
   if (!endsAt(reading, served)) return 'anomaly'
-  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
+  await save(store, (pins) => recordReading(pins, userId, pin, reading), pass)
   return reading.anchor
 }
 
@@ -725,7 +759,7 @@ export async function anchorChainKey(
     if (reading.anchor === 'anomaly') return unanchored
     const at = reading.fingerprints.lastIndexOf(fingerprint)
     if (at < reading.joinedAt) return unanchored
-    await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
+    await save(store, (pins) => recordReading(pins, userId, pin, reading), pass)
     return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
   }
   if (pin && pin.fingerprint === fingerprint) return { anchor: 'match', retired: false }
@@ -735,7 +769,7 @@ export async function anchorChainKey(
   if (reading.anchor === 'anomaly') return unanchored
   const at = reading.fingerprints.lastIndexOf(fingerprint)
   if (at < 0) return unanchored
-  await mutateAndSave(store, (pins) => recordReading(pins, userId, pin, reading), pass)
+  await save(store, (pins) => recordReading(pins, userId, pin, reading), pass)
   return { anchor: reading.anchor, retired: at < reading.fingerprints.length - 1 }
 }
 
