@@ -54,8 +54,9 @@ import type { BlobMeta } from '../../core/blob/meta'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 import type { NodeKind } from '../../core/node/kind'
 import {
-  addCopiedMedia, addMedia, effectiveCapturedAt, mediaTypeOf, plaintextSize, rawMediaMeta, readByChunk,
-  tierChunkProviders, type MediaExif, type MediaItem, type ReadByChunk, type RestoredMediaFacts,
+  addCopiedMedia, addMedia, createBrowserDeriver, effectiveCapturedAt, mediaTypeOf, plaintextSize, prepareMedia, rawMediaMeta,
+  readByChunk, tierChunkProviders, type AddMediaSource, type MediaDeriver, type MediaExif, type MediaItem, type PreparedMedia,
+  type ReadByChunk, type RestoredMediaFacts,
 } from './media'
 import { guestMemorySource, memberMemorySource, type MemorySource } from './source'
 import { normalizeDate } from './memoryDate'
@@ -384,16 +385,31 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const copying = ctx.purpose === 'copy'
     const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)
     const total = media.reduce((s, m) => s + bytesOf(m), 0) || 1
+    const deriver = createBrowserDeriver()
+    // A download's next original is asked for and prepared while this one is on the wire (`readyOriginal`, inbox #784).
+    let ahead: Promise<ReadyOriginal> | null = null
     let done = 0
-    for (const medium of media) {
+    for (const [i, medium] of media.entries()) {
       if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
       const before = done
       const size = bytesOf(medium)
+      const ready = copying ? null : (ahead ?? held(readyOriginal(ctx, medium, deriver)))
+      ahead = null
+      const next = copying ? undefined : media[i + 1]
+      const prepareNext = () => {
+        if (next && !ahead && !ctx.signal?.aborted) ahead = held(readyOriginal(ctx, next, deriver))
+      }
       await node.write(async (at) => {
-        const opts = { signal: ctx.signal, nodeEpoch: at.epoch, onProgress: (f: number) => ctx.onProgress?.((before + f * size) / total) }
+        const opts = {
+          signal: ctx.signal, nodeEpoch: at.epoch,
+          onProgress: (f: number) => {
+            prepareNext() // its first progress: this original's own on-device stage is over, it is on the wire
+            ctx.onProgress?.((before + f * size) / total)
+          },
+        }
         return copying
           ? addCopiedMedia(ctx.scopeId, nodeId, at.key, await copiedSource(ctx, medium), opts)
-          : addOriginal(ctx, nodeId, at.key, medium, opts)
+          : addOriginal(ctx, nodeId, at.key, medium, await ready!, opts)
       })
       done += size
     }
@@ -413,16 +429,46 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
   }
 }
 
-/** A download's medium: its original through the ordinary upload, which decodes it to derive the tiers. The payload goes on
- *  as the very object `ctx.payload` returned: core remembered the digest its check computed for that object, so the
- *  upload's `blob-meta` `sha256` costs no second read - a re-wrapped `File` would be hashed again (inbox #555). */
-async function addOriginal(
-  ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
-): Promise<{ mediaId: string }> {
+/** A download's original, asked for and through its on-device stage ([prepareMedia]): its tiers derived from one decode,
+ *  its metadata read, its digest the one core's check computed. Key-free and sending nothing, like the upload queue's
+ *  `prepare` (inbox #220). */
+type ReadyOriginal = { source: AddMediaSource; prepared: PreparedMedia }
+
+/**
+ * Ask for a download's original and run its on-device stage. The import runs it for the NEXT original once the current one
+ * reports its first progress - its own stage over, its bytes on the wire - so the two overlap as a member's upload batch
+ * overlaps them (`uploadQueue.ts`, inbox #220), and never two decodes at once (inbox #784). Before, each original was asked
+ * for and prepared only after the one before it had landed: importing 50 photos of 5.2 MB waited 157-168 ms between two
+ * uploads and took 16.3-17.3 s (17.7-18.4 s at throttle 4); now the wait is 2-9 ms and the import 9.3-9.8 s (10.7-13.3 s),
+ * as long as the plain upload of the same photos (profile S4, 2026-10-29). Asking for the payload early moves nothing in
+ * core's check: the hook still asks in the walk's order, one payload at a time, and core still checks one payload ahead of
+ * the last one asked for (`archivePayload`, inbox #557). A refusal the early request meets is held in its promise and thrown where the loop
+ * reaches that medium, after the one before it landed - the same refusal at the same point as before.
+ *
+ * The payload goes on as the very object `ctx.payload` returned: core remembered the digest its check computed for that
+ * object, so the stage's digest and the upload's `blob-meta` `sha256` cost no second read - a re-wrapped `File` would be
+ * hashed again (inbox #555).
+ */
+async function readyOriginal(ctx: ImportNodeContext, medium: ExportedMedium, deriver: MediaDeriver): Promise<ReadyOriginal> {
   const file = wholePayload(await ctx.payload(medium.file, medium.name ?? 'file'))
-  return addMedia(ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }, undefined, {
-    ...opts, restored: restoredFacts(medium),
-  })
+  const source: AddMediaSource = { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }
+  return { source, prepared: await prepareMedia(source, deriver, ctx.signal) }
+}
+
+/** A promise whose failure is the loop's, met where it awaits it; held here so that a medium the loop never reaches (an
+ *  earlier one failed, the import was cancelled) leaves no unhandled rejection behind. */
+function held<T>(p: Promise<T>): Promise<T> {
+  p.catch(() => undefined)
+  return p
+}
+
+/** A download's medium: its original through the ordinary upload, on the stage [readyOriginal] already ran - the same
+ *  prepared stage again when the write is retried under a node key a rotation replaced. */
+async function addOriginal(
+  ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, ready: ReadyOriginal,
+  opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
+): Promise<{ mediaId: string }> {
+  return addMedia(ctx.scopeId, nodeId, nodeKey, ready.source, undefined, { ...opts, prepared: ready.prepared, restored: restoredFacts(medium) })
 }
 
 /** What a download's medium restores beside its bytes, sealed at birth (`RestoredMediaFacts`, inbox #700): its corrected

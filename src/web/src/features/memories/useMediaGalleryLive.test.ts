@@ -20,7 +20,7 @@ vi.mock('./mediaRevisionPolling', () => ({
 // The optimistic tiles pull from the global upload queue — stub them out (no donations in these cases).
 vi.mock('./useOptimisticTiles', async () => {
   const { computed } = await import('vue')
-  return { useOptimisticTiles: () => ({ optimisticTiles: computed(() => []), donorPreviewFor: () => null }) }
+  return { useOptimisticTiles: () => ({ optimisticTiles: computed(() => []), donorPreviewFor: () => null, wantPreviews: () => {} }) }
 })
 // The undo affordance is now a global toast (cr-0157) + i18n summary: stub the toast so the isolated composable runs and
 // the test can capture the `showUndo({ onUndo })` call to drive the restore (the toast surface lives in App.vue).
