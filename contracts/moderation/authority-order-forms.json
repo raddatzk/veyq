@@ -1,9 +1,7 @@
 {
   "version": 1,
-  "draft": true,
-  "note": "The answers to an authority's removal order (ADR 0093 § 12, TCO Regulation (EU) 2021/784 Art. 3(6)-(8); uc.moderation.authority-order): ONE template, rendered by admin-web and its CLI (src/features/instance/orderForms.ts) and by src/web/'s moderation surface (src/features/moderation/orders/orderForms.ts); each pins these texts and a conformance test in each compares them with this file, so the copies cannot drift. 'draft' is true until a qualified legal review (ADR 0093 § Legal basis: every answer needs one before anything ships); while it is true every rendering starts with the 'draftBanner' line. 'annexII' is the text for the feedback form after a block (TCO Annex II), 'annexIII' the draft for the form that reports an obstacle (TCO Annex III), here: the share could not be found. Lines are joined by a newline; a line is rendered only when every placeholder in it has a value. Placeholders: {reference} (the authority's reference, as the person entering the order typed it — never sent to or stored in the clear by the server), {orderId}, {shareId}, {receivedAt} and {blockedAt} (UTC to the second, 'YYYY-MM-DD HH:MM:SS UTC'), {provider} and {contact} (the operator's provider name and the instance contact, where set). Each takes a clear field or the typed reference, never content.",
+  "note": "The answers to an authority's removal order (ADR 0093 § 12, TCO Regulation (EU) 2021/784 Art. 3(6)-(8); uc.moderation.authority-order): ONE template, rendered by admin-web and its CLI (src/features/instance/orderForms.ts) and by src/web/'s moderation surface (src/features/moderation/orders/orderForms.ts); each pins these texts and a conformance test in each compares them with this file, so the copies cannot drift. 'annexII' is the text for the feedback form after a block (TCO Annex II), 'annexIII' the draft for the form that reports an obstacle (TCO Annex III), here: the share could not be found. Lines are joined by a newline; a line is rendered only when every placeholder in it has a value. Placeholders: {reference} (the authority's reference, as the person entering the order typed it — never sent to or stored in the clear by the server), {orderId}, {shareId}, {receivedAt} and {blockedAt} (UTC to the second, 'YYYY-MM-DD HH:MM:SS UTC'), {provider} and {contact} (the operator's provider name and the instance contact, where set). Each takes a clear field or the typed reference, never content.",
   "en": {
-    "draftBanner": "DRAFT — not yet reviewed by a lawyer. Check every line before you send it.",
     "annexII": [
       "Feedback following the removal of or disabling of access to terrorist content (Regulation (EU) 2021/784, Article 3(6), Annex II)",
       "Reference of the removal order: {reference}",
@@ -26,7 +24,6 @@
     ]
   },
   "de": {
-    "draftBanner": "ENTWURF – noch nicht anwaltlich geprüft. Prüfe jede Zeile, bevor du sie sendest.",
     "annexII": [
       "Rückmeldung nach Entfernung terroristischer Inhalte oder Sperrung des Zugangs zu ihnen (Verordnung (EU) 2021/784, Artikel 3 Absatz 6, Anhang II)",
       "Aktenzeichen der Entfernungsanordnung: {reference}",
