@@ -103,4 +103,5 @@ groups in one click.
   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (groups, sealed names),
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment routing),
   [ADR 0019](../../../decisions/0019-token-less-tenant-home.md) (tenant is the token-less default home)
-- End-user view (docs site): [Your spaces](../../../../site/src/content/docs/spaces/index.mdx)
+- End-user view (docs site): [Your spaces](../../../../site/src/content/docs/spaces/index.mdx); the addresses:
+  [Views, tabs and favorites](../../../../site/src/content/docs/spaces/views-and-favorites.mdx)
