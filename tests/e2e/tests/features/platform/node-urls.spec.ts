@@ -13,7 +13,12 @@
 //     while the folder `Bauplan v1 …` keeps `bauplan-v1-…/`, its slash telling it apart;
 //   - **older address forms**: a folder's address without its slash still opens it when no file has that slug (the form
 //     every folder address had before the slash); a Memory's old address without `memories/` is not kept — it opens the
-//     space's root, the consequence the inbox row and ADR 0015 state.
+//     space's root, the consequence the inbox row and ADR 0015 state;
+//   - **the scope prefixes**: the personal space is `#~<username>` (the owner's own handle, read from Your profile, never
+//     `~me` once it is known) and a folder in it `#~<username>/…/`; a group is `#@<its name's slug>` (unique among the
+//     member's groups) and a folder in it `#@…/…/`;
+//   - **a chapter** extends its Memory's address without repeating the route slug: `#adressbuch-…/memories/rom-im-mai-…/
+//     erster-tag-…`.
 //
 // It starts from the tenant whose owner the round trip activated (the `platform` project). Every value typed is a canary
 // (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts, en).
@@ -21,7 +26,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { createFolder, downloadButton, pickFiles } from '../../../src/depot'
-import { newDevice, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
+import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -32,6 +37,10 @@ const reserved = 'Memories ✦'
 const fileFirst = `Bauplan.v1 ${stamp}`
 const fileSecond = `Bauplan_v1 ${stamp}`
 const folderTwin = `Bauplan v1 ${stamp}`
+const personalFolder = `Steuern ${stamp}`
+const group = `Familie Süd ${stamp}`
+const groupFolder = `Grillfest ${stamp}`
+const chapter = `Erster Tag ${stamp}`
 
 // The addresses, spelled out rather than derived: what the grammar promises, not what slugify happens to return.
 const baseSlug = `adressbuch-der-familie-${stamp}`
@@ -43,6 +52,9 @@ const at = {
   folderTwin: `#${baseSlug}/${twinSlug}/`,
   fileFirst: `#${baseSlug}/${twinSlug}`,
   fileSecond: `#${baseSlug}/${twinSlug}-2`,
+  chapter: `#${baseSlug}/memories/rom-im-mai-${stamp}/erster-tag-${stamp}`,
+  group: `#@familie-sued-${stamp}`,
+  groupFolder: `#@familie-sued-${stamp}/grillfest-${stamp}/`,
 }
 
 let member: Device
@@ -148,5 +160,92 @@ test(
     await expect(page.getByRole('button', { name: base, exact: true })).toBeVisible({ timeout: 60_000 })
     await expect(heading(page, base)).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1, name: memory })).toHaveCount(0)
+  },
+)
+
+test(
+  'the personal space is ~username: its root and a folder in it, written by a click and opened cold',
+  { tag: '@uc.spaces.switch-spaces:switch-space-by-fragment' },
+  async () => {
+    const { page } = member
+    // The owner's handle, as Your profile shows it: the token the grammar promises, not the one the sidebar happens to build.
+    await openSettings(page, 'Your profile')
+    const handle = page.locator('input[name="username"]')
+    await expect(handle).not.toHaveValue('', { timeout: 60_000 })
+    const username = await handle.inputValue()
+    const personal = `#~${username}`
+    const folder = `${personal}/steuern-${stamp}/`
+
+    await page.goto(tenantOrigin())
+    const link = page.locator('a.sidebar-personal-link')
+    // Until the profile is read the link falls back to `~me`; the click is made once it names the owner.
+    await expect(link).toHaveAttribute('href', new RegExp(`#~${username}$`), { timeout: 60_000 })
+    await link.click()
+    await expectAddress(page, personal)
+    await createFolder(page, personalFolder)
+    await expectAddress(page, folder)
+
+    await openAddress(page, personal)
+    // The personal root: its folder listed, which the shared space does not hold.
+    await expect(page.getByRole('button', { name: personalFolder, exact: true })).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, personal)
+    await openAddress(page, folder)
+    await expect(heading(page, personalFolder)).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, folder)
+  },
+)
+
+// Fixme (inbox #328): the app writes a group node's address with its `@` encoded twice - `#%2540familie-sued-…/grillfest-…/`,
+// not ADR 0015's `#@…/…/` - since `buildHash` runs the scope token through `encodeURIComponent` and vue-router encodes
+// the `%` of the hash it is handed once more. Red in lane L1 on 2026-10-29 at the folder's address; the group's root
+// (`#@…`, built by the sidebar) passed. Unskip once the product writes the grammar's form.
+test.fixme(
+  'a group is @ and its name\'s slug: its root and a folder in it, written by a click and opened cold',
+  { tag: '@uc.spaces.switch-spaces:switch-space-by-fragment' },
+  async () => {
+    const { page } = member
+    await page.goto(tenantOrigin())
+    await page.getByRole('button', { name: 'New group', exact: true }).click({ timeout: 60_000 })
+    const create = page.getByRole('dialog', { name: 'New group' })
+    await create.getByLabel('Group name').fill(recordTyped(group))
+    await create.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(create).toBeHidden({ timeout: 30_000 })
+    // Creating a group enters it: the address is its token, the page headed by its name.
+    await expect(page.getByRole('heading', { level: 1, name: group })).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, at.group)
+    await createFolder(page, groupFolder)
+    await expectAddress(page, at.groupFolder)
+
+    await openAddress(page, at.group)
+    await expect(page.getByRole('heading', { level: 1, name: group })).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByRole('button', { name: groupFolder, exact: true })).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, at.group)
+    await openAddress(page, at.groupFolder)
+    await expect(heading(page, groupFolder)).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, at.groupFolder)
+  },
+)
+
+test(
+  'a chapter extends its Memory\'s address, written by a click on its card and opened cold',
+  { tag: '@uc.spaces.switch-spaces:switch-space-by-fragment' },
+  async () => {
+    const { page } = member
+    await openAddress(page, at.memory)
+    await expect(page.getByRole('heading', { level: 1, name: memory })).toBeVisible({ timeout: 60_000 })
+    await page.getByRole('tab', { name: 'Chapters' }).click()
+    await page.getByRole('button', { name: 'Add chapter' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Create a chapter' })
+    await dialog.getByLabel('Name').fill(recordTyped(chapter))
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    await page.locator('.memory-card-main').filter({ hasText: chapter }).click({ timeout: 60_000 })
+    await expect(page.getByRole('heading', { level: 1, name: chapter })).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, at.chapter)
+
+    await openAddress(page, at.chapter)
+    await expect(page.getByRole('heading', { level: 1, name: chapter })).toBeVisible({ timeout: 60_000 })
+    await expectAddress(page, at.chapter)
   },
 )
