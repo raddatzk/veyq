@@ -321,6 +321,216 @@ describe('core upload queue — cancel', () => {
   })
 })
 
+/** A promise and the two hands that settle it. */
+function deferred<T = void>() {
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return { promise, resolve, reject }
+}
+
+/** A job whose `prepare` records its calls (by name) and settles when `gate` does, and whose `run` is given. */
+function preparedJob(name: string, run: Run, calls: string[], gate: Promise<void> = Promise.resolve()):
+UploadJob<string, { tag: string }> & { prepare: (ctx: { signal: AbortSignal }) => Promise<void> } {
+  return {
+    ...job(name, run),
+    prepare: vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+      calls.push(name)
+      await gate
+      if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
+    }),
+  }
+}
+
+// Inbox #220: the next job's on-device stage runs while the current job is on the wire, one job ahead. The queue only
+// CALLS a job's optional `prepare`; the job keeps what it prepared (Memories' memo, `features/memories/uploadQueue.ts`).
+describe('core upload queue — the next job prepared ahead (inbox #220)', () => {
+  it("overlaps: B's prepare runs while A is still on the wire, gated on both sides", async () => {
+    const calls: string[] = []
+    const bPrepared = deferred()
+    const aReported = deferred()
+    const bPrepareStarted = deferred()
+    // A reports its first progress, then resolves only once B's prepare has started; B's prepare resolves only once A
+    // reported progress. A queue that prepared B only after A settled would leave A waiting forever.
+    const a: Run = async ({ onProgress }) => {
+      onProgress(0)
+      aReported.resolve()
+      await bPrepareStarted.promise
+      return 'a'
+    }
+    const b = preparedJob('b', async () => 'b', calls, bPrepared.promise)
+    const prepare = b.prepare
+    b.prepare = async (ctx) => {
+      bPrepareStarted.resolve()
+      await aReported.promise
+      bPrepared.resolve()
+      return prepare(ctx)
+    }
+    const { batches } = useUploadQueue()
+    enqueue([job('a', a), b], { label: '2' })
+    const [ia, ib] = batches.value[0].files
+
+    await vi.waitFor(() => expect(ib.status).toBe('done'))
+    expect(ia.status).toBe('done')
+    expect(calls).toEqual(['b'])
+  })
+
+  it("does not prepare the next job before the running one's first progress, and shows it preparing from then on", async () => {
+    const calls: string[] = []
+    let report!: (p: number) => void
+    const { batches } = useUploadQueue()
+    enqueue([
+      job('a', ({ onProgress }) => { report = onProgress; return new Promise(() => {}) }),
+      preparedJob('b', untilAborted(true), calls, new Promise(() => {})),
+    ], { label: '2' })
+    const [a, b] = batches.value[0].files
+
+    await vi.waitFor(() => expect(a.status).toBe('preparing'))
+    await Promise.resolve()
+    expect(calls).toEqual([]) // A is still in its own on-device stage
+    expect(b.status).toBe('queued')
+    report(0)
+    expect(calls).toEqual(['b'])
+    expect(b.status).toBe('preparing') // never back to queued
+    report(0.5) // later progress prepares nothing more
+    expect(calls).toEqual(['b'])
+  })
+
+  it('prepares one job ahead: C waits for B to be on the wire', async () => {
+    const calls: string[] = []
+    const reports: Record<string, (p: number) => void> = {}
+    const finish: Record<string, () => void> = {}
+    const held = (name: string): Run => ({ onProgress }) => new Promise((resolve) => {
+      reports[name] = onProgress
+      finish[name] = () => resolve(name)
+    })
+    const { batches } = useUploadQueue()
+    enqueue([preparedJob('a', held('a'), calls), preparedJob('b', held('b'), calls), preparedJob('c', held('c'), calls)], { label: '3' })
+    const [, , c] = batches.value[0].files
+
+    await vi.waitFor(() => expect(reports.a).toBeDefined())
+    reports.a(0)
+    expect(calls).toEqual(['b'])
+    expect(c.status).toBe('queued')
+    finish.a()
+    await vi.waitFor(() => expect(reports.b).toBeDefined())
+    expect(calls).toEqual(['b']) // B runs on what it prepared; C is not prepared before B is on the wire
+    reports.b(0)
+    expect(calls).toEqual(['b', 'c'])
+  })
+
+  it('still runs one job at a time, with prepares in the mix', async () => {
+    const calls: string[] = []
+    let inFlight = 0
+    let maxInFlight = 0
+    const tracked: Run = async ({ onProgress }) => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      onProgress(0)
+      await new Promise((r) => setTimeout(r, 1))
+      inFlight -= 1
+      return 'x'
+    }
+    const { batches } = useUploadQueue()
+    enqueue([preparedJob('a', tracked, calls), preparedJob('b', tracked, calls), preparedJob('c', tracked, calls)], { label: '3' })
+    await vi.waitFor(() => expect(batches.value[0].files.every((f) => f.status === 'done')).toBe(true))
+    expect(maxInFlight).toBe(1)
+    expect(calls).toEqual(['b', 'c'])
+  })
+
+  it('cancelling a job prepared ahead settles it cancelled at once, aborts its signal and abandons it once', async () => {
+    const calls: string[] = []
+    const abandon = vi.fn()
+    const later = vi.fn<Run>().mockResolvedValue('never')
+    const { batches } = useUploadQueue()
+    enqueue([job('a', untilAborted(true)), { ...preparedJob('b', later, calls, new Promise(() => {})), abandon }], { label: '2' })
+    const [a, b] = batches.value[0].files
+    await vi.waitFor(() => expect(b.status).toBe('preparing'))
+
+    cancelFile(b.id)
+    expect(b.status).toBe('cancelled') // at once: not left waiting for A to finish
+    expect(b.controller.signal.aborted).toBe(true)
+    expect(abandon).toHaveBeenCalledOnce()
+    expect(a.status).toBe('uploading')
+    cancelFile(a.id)
+    await vi.waitFor(() => expect(a.status).toBe('cancelled'))
+    expect(later).not.toHaveBeenCalled()
+    expect(batches.value[0].finishedAt).not.toBeNull()
+  })
+
+  it('a job prepared ahead and left alone runs, and its prepare ran once in total', async () => {
+    const calls: string[] = []
+    const b = preparedJob('b', async () => 'b', calls)
+    const { batches } = useUploadQueue()
+    enqueue([job('a', async ({ onProgress }) => { onProgress(0); return 'a' }), b], { label: '2' })
+    await vi.waitFor(() => expect(batches.value[0].files[1].status).toBe('done'))
+    expect(b.prepare).toHaveBeenCalledOnce()
+    expect(batches.value[0].files[1].controller.signal.aborted).toBe(false)
+  })
+
+  it("a failure of the running job leaves the prepared one waiting: A's retry first, then B", async () => {
+    const calls: string[] = []
+    const order: string[] = []
+    let attempts = 0
+    const a: Run = async ({ onProgress }) => {
+      attempts += 1
+      order.push(`a${attempts}`)
+      onProgress(0)
+      if (attempts === 1) throw new Error('chunk_put_failed:500')
+      return 'a'
+    }
+    let preparedWhenBRan: string[] = []
+    const { batches } = useUploadQueue()
+    enqueue([
+      job('a', a),
+      preparedJob('b', async ({ onProgress }) => {
+        order.push('b')
+        preparedWhenBRan = [...calls]
+        onProgress(0)
+        return 'b'
+      }, calls),
+      preparedJob('c', async () => 'c', calls),
+    ], { label: '3' })
+    await vi.waitFor(() => expect(batches.value[0].files[2].status).toBe('done'))
+    expect(order).toEqual(['a1', 'a2', 'b'])
+    // A's retry reached the wire with B already ahead, so nothing more was prepared; C only once B was on the wire
+    expect(preparedWhenBRan).toEqual(['b'])
+    expect(calls).toEqual(['b', 'c'])
+  })
+
+  it('a hard failure of the running job leaves the prepared one to run next', async () => {
+    const calls: string[] = []
+    const b = preparedJob('b', async () => 'b', calls)
+    const { batches } = useUploadQueue()
+    enqueue([
+      { ...job('a', async ({ onProgress }) => { onProgress(0); throw new Error('stale_file') }), isFinal: () => true },
+      b,
+    ], { label: '2' })
+    const [a, ib] = batches.value[0].files
+    await vi.waitFor(() => expect(ib.status).toBe('done'))
+    expect(a.status).toBe('failed')
+    expect(b.prepare).toHaveBeenCalledOnce()
+  })
+
+  it('skips a job without prepare for the next one that has it', async () => {
+    const calls: string[] = []
+    let report!: (p: number) => void
+    const plain = vi.fn<Run>().mockResolvedValue('plain')
+    const { batches } = useUploadQueue()
+    enqueue([
+      job('a', ({ onProgress }) => { report = onProgress; return new Promise(() => {}) }),
+      job('plain', plain),
+      preparedJob('c', async () => 'c', calls, new Promise(() => {})),
+    ], { label: '3' })
+    const [, p, c] = batches.value[0].files
+    await vi.waitFor(() => expect(report).toBeDefined())
+    report(0)
+    expect(calls).toEqual(['c'])
+    expect(p.status).toBe('queued') // the job with no prepare is never prepared ahead
+    expect(c.status).toBe('preparing')
+  })
+})
+
 describe('core upload queue — remove, acknowledge, clear', () => {
   it('removeFile drops a settled job and empties an exhausted batch', async () => {
     const { batches } = useUploadQueue()
