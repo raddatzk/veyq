@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test
  * `BlobStore.presignGets` — so the invariant rests on its callers. The per-path tests (`ModerationMemoriesSliceTest`,
  * `ModerationDepotSliceTest`) pin the answers of the callers that exist; this pins the **set**, in the shape of
  * `TreeRevisionBumpsTest`: reading the main sources of every backend project, it fails on the day someone adds a caller of
- * `presignGets(` that neither asks the block before it ([CHECKED]) nor is exempt with its reason ([EXEMPT]).
+ * `presignGets(` that neither asks the block before it ([CHECKED]) nor is exempt with its reason ([EXEMPT]). The block is
+ * asked as `blobBlocked(` for one id or `blockedBlobs(` for a batch (inbox #537: a batch asks once, never once per id).
  *
  * A source scan, not a runtime proof: it cannot see that the check is on the right branch — the slice tests do. Its bite:
  * add an unchecked caller (or drop the `blobBlocked(` from a checked one) → red.
@@ -26,11 +27,12 @@ class PresignGetsHonourContentBlocksTest {
     private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/
 
     private val call = Regex("""\bpresignGets\(""")
+    private val blockCheck = Regex("""\b(?:blobBlocked|blockedBlobs)\(""")
 
-    /** file → the functions that presign a GET, each of which asks `blobBlocked(` before it. */
+    /** file → the functions that presign a GET, each of which asks `blobBlocked(` or `blockedBlobs(` before it. */
     private val checked = mapOf(
         "core/src/main/kotlin/me/raddatz/veyq/core/sharing/SharingHandler.kt" to setOf("resolveBlob"),
-        "core/src/main/kotlin/me/raddatz/veyq/core/blob/BlobUploadHandler.kt" to setOf("downloadOne"),
+        "core/src/main/kotlin/me/raddatz/veyq/core/blob/BlobUploadHandler.kt" to setOf("download"),
     )
 
     /** Files that call `presignGets(` and ask no block, each with why. */
@@ -47,8 +49,8 @@ class PresignGetsHonourContentBlocksTest {
             for (name in names) {
                 val body = functions[name] ?: error("$file has no function `$name` — renamed? update this list")
                 val presign = call.find(body)?.range?.first ?: error("$file: `$name` presigns nothing — update this list")
-                val check = body.indexOf("blobBlocked(")
-                assertTrue(check in 0 until presign, "$file: `$name` presigns a GET without asking ModerationBlocks.blobBlocked first")
+                val check = blockCheck.find(body)?.range?.first ?: -1
+                assertTrue(check in 0 until presign, "$file: `$name` presigns a GET without asking ModerationBlocks.blobBlocked/blockedBlobs first")
             }
         }
     }

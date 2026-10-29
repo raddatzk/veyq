@@ -121,8 +121,10 @@ per scenario at CPU throttle 1 and 4):
   next photo is now prepared while the current one is sent, never touching a key or the network before its turn: 10.8 s
   against 17.6–19.2 s at throttle 1 and 13.4 s against 19.9–20.3 s at throttle 4, three runs each beside two passes of
   the version before, and in every run each next photo's digest ran while the previous photo was being sent.
-- **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
-  about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
+- **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s. Its three requests sent
+  about 116 SQL statements each, because the request for the thumbnails' download addresses read the database twice
+  for every photo it named. It now reads each batch once, so the three send 13 to 17 statements however many photos
+  the Chapter holds (counted by the backend's tests, which fail if the number grows with the photos again).
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.
 
 **Its limits.** One machine, which Microsoft Defender kept busy during several runs (each reading is marked); Chromium

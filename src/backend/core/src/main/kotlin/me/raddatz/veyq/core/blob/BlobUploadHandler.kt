@@ -291,16 +291,22 @@ class BlobUploadHandler(
     fun download(userId: String, scopeId: String, blobIds: List<String>, domain: String?): DownloadOutcome {
         access.check(userId, scopeId, READ)
             .refusal(DownloadOutcome.NoScope, DownloadOutcome.Suspended)?.let { return it }
-        return DownloadOutcome.Results(blobIds.map { downloadOne(scopeId, it, domain) })
-    }
-
-    private fun downloadOne(scopeId: String, blobId: String, domain: String?): DownloadItemResult {
-        val blob = store.findBlob(scopeId, blobId)
-            ?: return DownloadItemResult(presignedGets = null, error = "upload_not_found")
+        // The batch's rows and its content blocks are each read once, never once per id (inbox #537): a gallery's thumbnail
+        // batch of 256 ids read row by row was 2 SELECTs per id, 524 for the request. `BlobDownloadQueryCountSliceTest`.
+        val found = store.findBlobs(scopeId, blobIds)
         // A content block refuses the bytes to a member too (uc.moderation.take-a-measure): the per-item form of a 451.
-        if (blocks.blobBlocked(scopeId, blobId)) return DownloadItemResult(presignedGets = null, error = Failures.blockedByOperator.code)
-        val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain)
-            ?: return DownloadItemResult(presignedGets = null, error = "store_unavailable")
-        return DownloadItemResult(presignedGets = gets, error = null)
+        val blocked = blocks.blockedBlobs(scopeId, found.keys)
+        return DownloadOutcome.Results(
+            blobIds.map { blobId ->
+                val blob = found[blobId]
+                when {
+                    blob == null -> DownloadItemResult(presignedGets = null, error = "upload_not_found")
+                    blobId in blocked -> DownloadItemResult(presignedGets = null, error = Failures.blockedByOperator.code)
+                    else -> blobStore.presignGets(blob.storageKey, blob.chunkCount, domain)
+                        ?.let { DownloadItemResult(presignedGets = it, error = null) }
+                        ?: DownloadItemResult(presignedGets = null, error = "store_unavailable")
+                }
+            },
+        )
     }
 }

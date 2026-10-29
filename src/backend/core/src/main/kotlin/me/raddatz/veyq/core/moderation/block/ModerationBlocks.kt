@@ -108,13 +108,30 @@ class ModerationBlocks(
      * then hangs on the object ([ContentView.heldKeys], owner 2026-10-19) until the object's last row goes or a moderator
      * lifts it.
      */
-    fun blobBlocked(scopeId: String, blobId: String): Boolean {
+    fun blobBlocked(scopeId: String, blobId: String): Boolean = blobId in blockedBlobs(scopeId, listOf(blobId))
+
+    /**
+     * [blobBlocked] for a batch: the ids of [blobIds] whose byte read is refused. Its reads do not grow with the batch
+     * (inbox #537): the space's blocks once, then - only in a space that has one - the asked rows' objects in one read and
+     * what each block reaches once, every asked id tested against those sets. Asked per id, a member's
+     * `blob-downloads-batch` of 256 thumbnails was 256 reads of the blocks, and in a blocked space 256 walks of each arm.
+     */
+    fun blockedBlobs(scopeId: String, blobIds: Collection<String>): Set<String> {
+        if (blobIds.isEmpty()) return emptySet()
         val view = contentView(scopeId)
-        if (view.isEmpty) return false
-        if (view.heldKeys.isNotEmpty() && blobs.findBlob(scopeId, blobId)?.storageKey in view.heldKeys) return true
-        val rows = blobs.rowsOnSameObject(scopeId, blobId) + blobId
-        if (view.nodeIds.isNotEmpty() && arms.any { arm -> arm.authorizedBlobIds(scopeId, view.nodeIds.toList()).any { it in rows } }) return true
-        return view.itemIds.any { itemId -> items.any { item -> item.blobIdsOf(itemId).any { it in rows } } }
+        if (view.isEmpty) return emptySet()
+        val objects = blobs.rowsOnSameObject(scopeId, blobIds)
+        val underNodes = if (view.nodeIds.isEmpty()) emptySet() else {
+            val nodeIds = view.nodeIds.toList()
+            arms.flatMapTo(HashSet()) { arm -> arm.authorizedBlobIds(scopeId, nodeIds) }
+        }
+        val onItems = view.itemIds.flatMapTo(HashSet()) { itemId -> items.flatMap { item -> item.blobIdsOf(itemId) } }
+        return blobIds.filterTo(LinkedHashSet()) { blobId ->
+            val obj = objects[blobId]
+            if (obj != null && obj.storageKey in view.heldKeys) return@filterTo true
+            val rows = obj?.rowIds.orEmpty() + blobId
+            rows.any { it in underNodes || it in onItems }
+        }
     }
 
     /** [roots] and every node below them in [scopeId], trashed ones included (the tree by parent, breadth first). */

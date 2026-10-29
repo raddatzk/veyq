@@ -110,6 +110,14 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
     fun findBlob(scopeId: String, blobId: String): BlobEntity? =
         BlobEntity.findById(blobId)?.takeIf { it.scopeId == scopeId }
 
+    /** [findBlob] for a batch, in one read (inbox #537): the rows of [blobIds] in [scopeId], by id; an id that names no
+     *  row of the scope is absent. A `blob-downloads-batch` of 256 ids read row by row was 256 SELECTs. */
+    fun findBlobs(scopeId: String, blobIds: Collection<String>): Map<String, BlobEntity> {
+        val ids = blobIds.toSet()
+        if (ids.isEmpty()) return emptyMap()
+        return BlobEntity.list("id in ?1 and scopeId = ?2", ids, scopeId).associateBy { it.id }
+    }
+
     /**
      * A new row on the stored object of [source] (ADR 0013 § 5, the contract's `SharedBlob`):
      * the client's own id, `K_blob` wrap and `blob-meta` - so it opens bound to its own owner and role (ADR 0072) - and
@@ -131,18 +139,25 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
         return spec.blobId
     }
 
-    /** Every row of [scopeId] on the same stored object as [blobId] - itself included; empty for an unknown id. A shared
-     *  object never crosses a scope ([SharedBlobs.persist] takes its source in the scope it writes). What a content block
-     *  asks ([me.raddatz.veyq.core.moderation.block.ModerationBlocks.blobBlocked]): a block reaches the object. */
-    fun rowsOnSameObject(scopeId: String, blobId: String): Set<String> =
-        BlobEntity.getEntityManager()
+    /** For each of [blobIds] that names a row of [scopeId]: its stored object's storage key and every row of the scope on
+     *  that object - itself included; an unknown id is absent. A shared object never crosses a scope ([SharedBlobs.persist]
+     *  takes its source in the scope it writes). What a content block asks
+     *  ([me.raddatz.veyq.core.moderation.block.ModerationBlocks.blockedBlobs]): a block reaches the object. */
+    fun rowsOnSameObject(scopeId: String, blobIds: Collection<String>): Map<String, SameObjectRows> {
+        val ids = blobIds.toSet()
+        if (ids.isEmpty()) return emptyMap()
+        // One read for the batch (inbox #537): each asked row, its object's storage key and every row on that object.
+        return BlobEntity.getEntityManager()
             .createQuery(
-                "select b2.id from BlobEntity b1, BlobEntity b2 where b1.id = ?1 and b1.scopeId = ?2 " +
+                "select b1.id, b1.storageKey, b2.id from BlobEntity b1, BlobEntity b2 where b1.id in ?1 and b1.scopeId = ?2 " +
                     "and b2.storageKey = b1.storageKey and b2.scopeId = b1.scopeId",
-                String::class.java,
+                Array<Any>::class.java,
             )
-            .setParameter(1, blobId).setParameter(2, scopeId)
-            .resultList.toSet()
+            .setParameter(1, ids).setParameter(2, scopeId)
+            .resultList
+            .groupBy { it[0] as String }
+            .mapValues { (_, rows) -> SameObjectRows(rows.first()[1] as String, rows.mapTo(HashSet()) { it[2] as String }) }
+    }
 
     /**
      * Delete a blob row by id (if present), in the caller's transaction, and put its store objects on the reclaim list
@@ -192,3 +207,7 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
     fun decodeManifest(s: String?): List<Long>? =
         s?.trim()?.removeSurrounding("[", "]")?.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim().toLong() }
 }
+
+/** One blob row's stored object as a content block reads it ([BlobUploadStore.rowsOnSameObject]): its storage key, and
+ *  every row of the scope on it, the asked row included. */
+data class SameObjectRows(val storageKey: String, val rowIds: Set<String>)
