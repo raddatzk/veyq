@@ -49,6 +49,11 @@ interval below is cut to them. Every number is of the page's renderer, never of 
     Gated on an unprofiled run only: the CPU profiler's sampler costs the main thread CPU time outside its tasks, which
     stayed inside 10 % while M was 15 s and failed it once M fell to 3 s (2026-10-29, inbox #220: ×0.853 profiled against
     ×1.030–1.079 unprofiled on the same tree, about 0.55 s over 18.8 s); a profiled run's ratio is printed.
+    **Its agreement depends on the window's length** (inbox #770): the trace's tasks run ×1.31–1.51 longer than their
+    own CPU time (their `tdur`), and the thread spends 43–51 ms of CPU per second of window outside them; the two only
+    cancelled near W ≈ 18 s. With #220's overlap the same M fell into a window of 11 s and two of three runs read
+    ×1.122 and ×1.207 (2026-10-29) while their tasks' wall-to-CPU ratio matched the tree before (×1.35–1.51 against
+    ×1.31–1.49): a FAIL there is a short window, not a starved machine.
   - `other` stays under 15 % of the sampled script, or the buckets decide nothing and [RULES] needs extending.
   - The frame worker is busy at least [FRAME_WORKER_MIN_S]: the 50 photos' frames are sealed there (5.1–5.6 s,
     2026-10-27 and -28), so a reading whose frames went back to the page, or that named another thread the frame

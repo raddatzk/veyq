@@ -225,7 +225,7 @@ export function enqueueUploads(
         sizeBytes: s.file.size,
         extra: { mediaType: s.mediaType, file: s.file },
         prepare: async ({ signal }) => { await prepare(signal) },
-        // the device floor and every seal run inside `upload`, after the prepare (decision 3 of #220's CR)
+        // the device floor, the key reads and every seal run inside `upload`, after the prepare: it uses no key
         run: async ({ onProgress, signal }) => {
           try {
             return await upload(source, { onProgress, signal, prepared: await prepare(signal) })

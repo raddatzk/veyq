@@ -114,8 +114,13 @@ per scenario at CPU throttle 1 and 4):
   seventh of what the same bytes cost as an array. On a machine at load 25 to 40, three runs each without the profiler
   beside two passes of the version before: 25.9 s against 29.8–32.2 s at throttle 1, and 37.5 s against 73.4–75.4 s at
   throttle 4. What held the main thread then was the gallery laid out again on each chunk's progress, about a quarter of
-  the upload at throttle 4. A chunk now redraws only its own tile, which a unit test proves by counting the layouts;
-  the upload has not been timed again since.
+  the upload at throttle 4. A chunk now redraws only its own tile, which a unit test proves by counting the layouts.
+  Read on 2026-10-29 with nothing else running on the machine, that took the upload at throttle 4 from 21.4 s to 20.0 s,
+  and the main thread was busy only 3.0 s of 18.2 s at throttle 1: each photo was prepared (its type, its digest, its
+  smaller versions, its EXIF read) and then sent, one after the other, both mostly in workers and on the network. The
+  next photo is now prepared while the current one is sent, never touching a key or the network before its turn: 10.8 s
+  against 17.6–19.2 s at throttle 1 and 13.4 s against 19.9–20.3 s at throttle 4, three runs each beside two passes of
+  the version before, and in every run each next photo's digest ran while the previous photo was being sent.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s; its three requests send
   about 116 SQL statements each, which is tracked for the measurement on a small ARM server.
 - **The server** spent under 1 % CPU on average across each recording, and its heap stayed under 180 MB.

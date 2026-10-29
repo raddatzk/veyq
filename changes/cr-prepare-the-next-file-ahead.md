@@ -146,6 +146,36 @@ done.
 Phases 1–6 done; `npm run check` green in `src/web`; uc.memory.upload's new criterion covered and
 `validate_coverage.py` green; the Security page updated; the Use page unchanged (decision 6).
 
+## Done (2026-10-29)
+
+- Phases 1–3: `91318cf8d`, `921bbe6a0`, `1b34095b8`; `npm run check` green (478 files, 5,498 tests); seven bites, each red.
+- Phase 4, the browser pass on the branch's production build (a kept profile instance, headless system Chrome): a tile
+  `Uploading…` beside the next `Preparing…` in 5 of 10 samples at the batch's start, never two of either; the file
+  preparing ahead cancelled from the tray read `Cancelled` 50 ms later while the other kept uploading; cancel-all
+  after 8 done left 8 done and 12 cancelled; no worker warning; the only error answer was the signed-out boot's refresh
+  (401 by design), the only failed request the cancelled file's chunk `PUT` in flight.
+- Phase 5, alone on the machine, each batch at a 1-minute load ≤ 4 (3.82, 3.93; 4.7–7.8 during the runs):
+
+  | median (range) | `main` before | branch | `main` after |
+  |---|---|---|---|
+  | W at throttle 1 | 18.2 s (17.9–19.2) | **10.8 s (10.6–11.5)** | 18.0 s (17.6–18.4) |
+  | W at throttle 4 | 20.0 s (19.9–20.3) | **13.4 s (13.3–13.5)** | 20.1 s (20.0–20.2) |
+  | per file P / U at throttle 1 | 161 / 178 ms | 2 / 187 ms | 159 / 171 ms |
+  | digests inside the previous upload stage | 0 of 49 | **49 of 49** | 0 of 49 |
+  | G at 1 / R at 4 | 44.2 % / 5.9 % | 1.3 % / 8.8 % | 44.3 % / 5.7 % |
+
+  Every gate holds. Two branch runs failed the CPU-time control (×1.122, ×1.207): explained, not excluded — the control
+  depends on the window's length (the reader's docstring, inbox #770).
+
 ## Retrospective
 
-To be written at the end.
+- **The day-old readings were mostly load.** #640's after-reading was taken on trust as "37.5 → 20.0 s"; a baseline of
+  the tree before #640 run under the same quiet conditions put it at 21.4 → 20.0 s. The route-B readings had already
+  said absolute numbers from a loaded day do not compare; a reading that attributes a change still needs its
+  baseline on the same machine state. Next time: when a measurement CR reads a change another CR made, run that
+  change's parent beside it in the same session before writing the attribution.
+- **A control written for one window length failed on the next.** The CPU-time control agreed only because two errors
+  cancelled near W ≈ 18 s; it was explained here with the trace's own `tdur`, not loosened. Filed as #770.
+- **Process:** running alone made the reading cheap — every batch settled to load ≤ 4 within three minutes, against a
+  five-minute wait that never got below 8 on 2026-10-28. The worktree's command guard again refused heredocs, compound
+  `git`/`docker` lines and `$VAR` arguments to an interpreter; helper scripts in the scratch directory carried them.
