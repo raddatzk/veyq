@@ -16,9 +16,10 @@
 // folder; `…/a-b/x` always reads `a-b` as a folder (a file has no children) — see {@link resolveSlugPath}.
 //
 // The leading token selects the scope (ADR 0015 + ADR 0019): its **absence** is the shared **tenant** scope
-// (the token-less default home — `/`, `#urlaube`), `~me` is the personal scope, and the `@group` form is
-// reserved for the (later) groups slice — parsed, but only tenant/personal resolve today. `slugify` emits only
-// `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and thus never collides with a scope token.
+// (the token-less default home — `/`, `#urlaube`), `~<username>` (or `~me`) is the personal scope, and `@<group>` a
+// group: its name's slug when no other of the member's groups shares it, else its scope id (`openGroupByToken`,
+// `features/spaces/scopes.ts`). `slugify` emits only `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and
+// thus never collides with a scope token.
 //
 // **A person (ADR 0083, 2026-10-13):** `#people/<userId>` is a member's profile page, not a place in the tree. It is
 // token-less (a profile spans the scopes the viewer is in), and `people` is the platform's word at a scope root: a

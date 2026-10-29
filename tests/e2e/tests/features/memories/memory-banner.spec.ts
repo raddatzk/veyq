@@ -3,6 +3,8 @@
 // description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
 //
 // The owner creates a Memory and adds a landscape image, a portrait image and a video to it, then:
+//  - uploads the gallery's portrait photo again as the Memory's COVER: nothing is uploaded, and the cover write names the
+//    photo's PREVIEW as the stored object it shares (uc.memory.cover `equal-upload-shares-a-photos-preview`);
 //  - sets a landscape image as the banner from a file, moves the point that stays in view, and reads the frame at a wide
 //    and at a phone width (3:1 and 16:9, never taller than 35 % of the viewport); scrolls, and the tab row sticks under the
 //    top bar while the banner scrolls away;
@@ -127,6 +129,57 @@ test('a Memory with a landscape photo, a portrait photo and a video', { tag: ['@
   await (await chooser).setFiles(files)
   await expect(page.getByText('3 items', { exact: true })).toBeVisible({ timeout: 90_000 })
 })
+
+test(
+  'the gallery\'s portrait photo, uploaded again as the cover, shares its preview: nothing uploaded, the write names it',
+  { tag: ['@uc.memory.cover:equal-upload-shares-a-photos-preview'] },
+  async () => {
+    const { page } = member
+    // The gallery as the server lists it: the portrait's medium is the one whose original's sealed size is the PNG's -
+    // its bytes plus a 12-byte nonce and a 16-byte tag per 256 KiB frame (`@veyq/crypto` v1, `sealedByteSize`).
+    const listing = page.waitForResponse((r) => /\/nodes\/[^/]+\/media$/.test(new URL(r.url()).pathname) && r.status() === 200)
+    await page.goto(tenantOrigin())
+    await page.getByRole('button', { name: memoryName, exact: true }).click({ timeout: 60_000 })
+    type Ref = { blobId: string; byteSize: number }
+    const media = ((await (await listing).json()) as { media: (Ref & { derivatives: (Ref & { kind: string })[] })[] }).media
+    const sealed = portrait.buffer.length + Math.max(1, Math.ceil(portrait.buffer.length / 262_144)) * 28
+    const photos = media.filter((m) => m.byteSize === sealed)
+    expect(photos, 'the portrait\'s medium, by its sealed size').toHaveLength(1)
+    const preview = photos[0].derivatives.find((d) => d.kind === 'PREVIEW')
+    expect(preview, 'the portrait has a PREVIEW').toBeTruthy()
+
+    const uploads: string[] = []
+    const writes: string[] = []
+    const on = (r: Request) => {
+      const path = new URL(r.url()).pathname
+      if (r.method() === 'POST' && path.endsWith('/blob-uploads-batch')) uploads.push(r.postData() ?? '')
+      if (r.method() === 'PUT' && path.endsWith('/cover')) writes.push(r.postData() ?? '')
+    }
+    page.on('request', on)
+    await page.getByRole('button', { name: 'Set cover', exact: true }).first().click({ timeout: 60_000 })
+    const dialog = page.getByRole('dialog', { name: 'Cover' })
+    const chooser = page.waitForEvent('filechooser')
+    await dialog.getByRole('button', { name: 'Choose an image' }).click()
+    await (await chooser).setFiles(portrait)
+    await expect(dialog.locator('.veyq-cropper img')).toBeVisible({ timeout: 30_000 })
+    await dialog.getByRole('button', { name: 'Save cover', exact: true }).click()
+    await expect(dialog).toBeHidden({ timeout: 60_000 })
+    const cover = page.getByRole('button', { name: 'Change cover', exact: true }).locator('img').first()
+    await expect(cover).toHaveAttribute('alt', memoryName, { timeout: 60_000 })
+    await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
+      message: 'the cover decoded',
+      timeout: 60_000,
+    }).toBe(true)
+    page.off('request', on)
+
+    expect(uploads, 'nothing uploaded: the photo\'s preview is already stored').toEqual([])
+    expect(writes, 'one cover write').toHaveLength(1)
+    const body = JSON.parse(writes[0]) as { uploadId?: string; shared?: { sourceBlobId: string; blobId: string } }
+    expect(body.uploadId, 'no upload named').toBeUndefined()
+    expect(body.shared?.sourceBlobId, 'the cover is a row on the portrait\'s PREVIEW object').toBe(preview!.blobId)
+    expect(body.shared?.blobId, 'a row of its own').not.toBe(preview!.blobId)
+  },
+)
 
 test(
   'an uploaded landscape image fills the frame around its point at a wide and a phone width, and the tab row sticks',
