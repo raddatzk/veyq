@@ -61,8 +61,11 @@ export interface MediaDeriver {
     source: Blob,
     opts: { maxEdge: number; quality: number; mimeType?: string; background?: string },
   ): Promise<{ bytes: Uint8Array; source: Dimensions | null }>
-  /** Decode a video's first frame to a JPEG poster (used for both the thumbnail and the preview tier). */
-  deriveVideoPoster(source: Blob): Promise<Uint8Array>
+  /**
+   * Decode a video's first frame to a JPEG poster, at the PREVIEW tier's size unless `opts` names another (the upload
+   * stores the one poster as both its thumbnail and its preview tier; an upload tile asks for the thumbnail's, inbox #786).
+   */
+  deriveVideoPoster(source: Blob, opts?: { maxEdge: number; quality: number }): Promise<Uint8Array>
   /**
    * Probe the source's intrinsic pixel `{w,h}` for the justified grid (cr-0059). Optional + best-effort.
    *
@@ -151,7 +154,7 @@ export function createBrowserDeriver(): MediaDeriver {
     deriveImage(source, opts) {
       return deriveImageWorkerFirst(source, opts, () => deriveImageOnPage(source, opts))
     },
-    async deriveVideoPoster(source) {
+    async deriveVideoPoster(source, { maxEdge, quality } = TIER_SPECS.PREVIEW) {
       const url = URL.createObjectURL(source)
       const video = document.createElement('video')
       try {
@@ -170,8 +173,8 @@ export function createBrowserDeriver(): MediaDeriver {
         void video.play().catch(() => {}) // prime the decode pipeline; never awaited
         await firstPresentedFrame(video)
         video.pause()
-        // the poster is encoded at the preview tier and reused for the (smaller) thumbnail tier as-is
-        return drawEncoded(PAGE_PORT, video, video.videoWidth, video.videoHeight, TIER_SPECS.PREVIEW.maxEdge, TIER_SPECS.PREVIEW.quality)
+        // the upload's poster is encoded at the preview tier and reused for the (smaller) thumbnail tier as-is
+        return drawEncoded(PAGE_PORT, video, video.videoWidth, video.videoHeight, maxEdge, quality)
       } finally {
         video.removeAttribute('src')
         video.load() // detach the source so Safari releases the decoder/buffers promptly

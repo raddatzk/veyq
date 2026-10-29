@@ -194,3 +194,133 @@ describe('useOptimisticTiles — a photo is previewed tile-sized, near the viewp
     expect(minted.size, 'nothing minted is left unrevoked').toBe(0)
   })
 })
+
+describe("useOptimisticTiles — a video's poster joins the photos' queue: near the viewport, one at a time, tile-sized (inbox #786)", () => {
+  /** Every object URL minted and not revoked, with the blob it shows. */
+  const minted = new Map<string, Blob>()
+  /** What was asked of the deriver, in order — photos and videos in one list — each settled by the test. */
+  const asked: { kind: 'image' | 'poster'; name: string; maxEdge: number | undefined; release: () => void; fail: () => void }[] = []
+  const POSTER = new Uint8Array([0xff, 0xd8, 7])
+  const deriveImage = vi.fn((file: Blob, { maxEdge }: { maxEdge: number; quality: number }) =>
+    new Promise<{ bytes: Uint8Array; source: null }>((resolve, reject) => {
+      asked.push({ kind: 'image', name: (file as File).name, maxEdge, release: () => resolve({ bytes: new Uint8Array([0xff, 0xd8, 1]), source: null }), fail: () => reject(new Error('source')) })
+    }))
+  const deriveVideoPoster = vi.fn((file: Blob, opts?: { maxEdge: number; quality: number }) =>
+    new Promise<Uint8Array>((resolve, reject) => {
+      asked.push({ kind: 'poster', name: (file as File).name, maxEdge: opts?.maxEdge, release: () => resolve(POSTER), fail: () => reject(new Error('video_frame_timeout')) })
+    }))
+  const probeDimensions = vi.fn(async () => ({ w: 1920, h: 1080 }))
+
+  beforeEach(() => {
+    minted.clear()
+    asked.length = 0
+    deriveImage.mockClear()
+    deriveVideoPoster.mockClear()
+    probeDimensions.mockClear()
+    let n = 0
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      const url = `blob:test/${++n}`
+      minted.set(url, b as Blob)
+      return url
+    })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => void minted.delete(url))
+    vi.mocked(createBrowserDeriver).mockImplementation(() => ({ deriveImage, deriveVideoPoster, probeDimensions }))
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  function videoFile(id: string) {
+    return {
+      ...uploadFile(id), name: `${id}.mp4`, mediaType: 'video/mp4',
+      file: new File([new Uint8Array([0, 0, 0, 0x18])], `${id}.mp4`, { type: 'video/mp4', lastModified: 1 }),
+    }
+  }
+
+  /** Three videos and one photo picked; the composable mounted. */
+  function picked() {
+    let api!: ReturnType<typeof useOptimisticTiles>
+    const C = defineComponent({
+      setup() {
+        api = useOptimisticTiles(computed(() => KEY), computed(() => new Set<string>()))
+        return () => h('div')
+      },
+    })
+    const files = [videoFile('v1'), videoFile('v2'), videoFile('v3'), uploadFile('p1')]
+    hoisted.batches.push({ id: 'b0', label: '4', target: { scopeId: 's', nodeId: KEY }, files, seq: 0, finishedAt: null, acknowledged: false })
+    const wrapper = mount(C)
+    const tile = (id: string) => api.optimisticTiles.value.find((t) => t.fileId === id)
+    return { wrapper, want: (ids: string[]) => api.wantPreviews('gallery', ids), url: (id: string) => tile(id)!.url, tile }
+  }
+
+  it('a pick decodes no video before its tile is near the viewport, then its first frame at the thumbnail\'s size', async () => {
+    const { want, url, tile } = picked()
+    await flushPromises()
+    expect(deriveVideoPoster, 'no tile announced: no decoder opened').not.toHaveBeenCalled()
+    // the probe's own work is unchanged: every picked video's size is read at once, for its tile's place
+    expect(probeDimensions).toHaveBeenCalledTimes(4)
+    expect(tile('v1')!.aspectRatio).toBe(galleryDisplayAspectRatio(1920, 1080))
+    expect(['v1', 'v2', 'v3'].map(url)).toEqual([null, null, null])
+
+    want(['upload:v2'])
+    await flushPromises()
+    expect(asked.map((a) => [a.kind, a.name, a.maxEdge])).toEqual([['poster', 'v2.mp4', 512]])
+    asked[0].release()
+    await flushPromises()
+    const shown = minted.get(url('v2')!)!
+    expect(shown.type).toBe('image/jpeg')
+    expect(new Uint8Array(await shown.arrayBuffer())).toEqual(POSTER)
+    expect([url('v1'), url('v3')]).toEqual([null, null])
+  })
+
+  it('photos and videos are drawn one at a time, in the order the grid wants them', async () => {
+    const { want } = picked()
+    await flushPromises()
+    want(['upload:v3', 'upload:p1', 'upload:v1'])
+    await flushPromises()
+    expect(asked.map((a) => a.name), 'one decode at a time, a photo waits for the video before it').toEqual(['v3.mp4'])
+    want(['upload:p1', 'upload:v1', 'upload:v3']) // the grid scrolls and announces again while v3's poster is drawn
+    await flushPromises()
+    expect(asked.map((a) => a.name), 'a new window opens no second decoder').toEqual(['v3.mp4'])
+    want(['upload:v3', 'upload:p1', 'upload:v1'])
+    await flushPromises()
+    asked[0].release()
+    await flushPromises()
+    expect(asked.map((a) => [a.kind, a.name])).toEqual([['poster', 'v3.mp4'], ['image', 'p1.jpg']])
+    asked[1].release()
+    await flushPromises()
+    expect(asked.map((a) => a.name)).toEqual(['v3.mp4', 'p1.jpg', 'v1.mp4'])
+    asked[2].release()
+    await flushPromises()
+    expect(asked, 'v2 was never wanted').toHaveLength(3)
+  })
+
+  it('a video the browser cannot decode stays icon-only - never the file - and the queue goes on', async () => {
+    const { want, url } = picked()
+    await flushPromises()
+    want(['upload:v1', 'upload:v2'])
+    await flushPromises()
+    asked[0].fail()
+    await flushPromises()
+    expect(url('v1'), 'no picture: the tile keeps its icon').toBeNull()
+    expect([...minted.values()].filter((b) => b instanceof File), 'no picked file is shown').toEqual([])
+    expect(asked.map((a) => a.name), 'the failure released the queue').toEqual(['v1.mp4', 'v2.mp4'])
+  })
+
+  it("a poster is freed when its tile leaves: one finished after it left is revoked, one shown is revoked as it goes", async () => {
+    const { want, url } = picked()
+    await flushPromises()
+    want(['upload:v1', 'upload:v2'])
+    await flushPromises()
+    asked[0].release()
+    await flushPromises()
+    const shownV1 = url('v1')!
+    expect(minted.has(shownV1)).toBe(true)
+    // v1 is cancelled while v2's poster is being drawn: both tiles leave the grid
+    fileAt(0).status = 'cancelled' // through the queue's reactive item, as the queue writes it
+    fileAt(1).status = 'cancelled'
+    await flushPromises()
+    expect(minted.has(shownV1), 'the shown poster is revoked with its tile').toBe(false)
+    asked[1].release()
+    await flushPromises()
+    expect(minted.size, 'the poster finished after its tile left is not kept').toBe(0)
+  })
+})
