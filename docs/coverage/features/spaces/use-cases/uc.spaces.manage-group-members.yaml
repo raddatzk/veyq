@@ -49,7 +49,7 @@ acceptanceCriteria:
       discloses nothing because that caller already knows the group exists.
     coverage:
       backend:
-        integration: [ScopesSliceTest.listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCapability, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
+        integration: [ScopesSliceTest.listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCheck, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
   - id: remove-rotates-forward
     text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member reads pre-removal content but never post-removal content (even against a malicious operator). The client mints the epoch, chain-links the old one, and re-grants the survivors (cr-0089).
     coverage:

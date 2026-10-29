@@ -45,7 +45,7 @@ object GeneratedApiOperations {
     /**
      * One generated API package per owner — never listed here (a hand list let a new application's operations go
      * unprobed until someone remembered it, inbox #368). The build hands over `buildSrc`'s own derivation from
-     * `contracts/api/` (`SpecSets`: core plus every `<app>/`, root `build.gradle.kts`), and the classpath is read
+     * `contracts/api/` (`SpecSets`: core plus every `<application>/`, root `build.gradle.kts`), and the classpath is read
      * against it both ways: a derived package that yields no interface (its module not composed, a package renamed)
      * is red, and so is a generated API package on the classpath the derivation does not name — its operations would
      * otherwise pass unclassified.

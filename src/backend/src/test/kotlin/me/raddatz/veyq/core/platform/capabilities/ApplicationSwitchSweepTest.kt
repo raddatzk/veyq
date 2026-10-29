@@ -182,11 +182,11 @@ class ApplicationSwitchSweepTest {
 
     @Test
     fun everyWriteOfEveryApplicationIsGatedOrExemptWithAReason() {
-        val byApp = applicationOperations()
-        val ids = byApp.values.flatten().map { it.id }.toSet()
+        val byApplication = applicationOperations()
+        val ids = byApplication.values.flatten().map { it.id }.toSet()
         assertAll(
-            Executable { assertTrue(byApp.keys.containsAll(listOf(CapabilityIds.MEMORIES, CapabilityIds.DEPOT, CapabilityIds.EXPENSES)), "the applications were derived: ${byApp.keys}") },
-            Executable { assertTrue(byApp.keys.all { it in CapabilityIds.ADVERTISED }, "every application has its own register entry: ${byApp.keys}") },
+            Executable { assertTrue(byApplication.keys.containsAll(listOf(CapabilityIds.MEMORIES, CapabilityIds.DEPOT, CapabilityIds.EXPENSES)), "the applications were derived: ${byApplication.keys}") },
+            Executable { assertTrue(byApplication.keys.all { it in CapabilityIds.ADVERTISED }, "every application has its own register entry: ${byApplication.keys}") },
             Executable {
                 assertTrue((ids - calls.keys).isEmpty(), "unclassified writes — have the application's handler ask ApplicationSwitch.requireWritable and probe it here, or exempt it with its reason: ${(ids - calls.keys).sorted()}")
             },
@@ -194,7 +194,7 @@ class ApplicationSwitchSweepTest {
             Executable { assertTrue((exempt.keys - calls.keys).isEmpty(), "an exemption needs its probe too: ${(exempt.keys - calls.keys).sorted()}") },
         )
         // A probe must fire the route its label names.
-        val routes = byApp.values.flatten().associateBy { it.id }
+        val routes = byApplication.values.flatten().associateBy { it.id }
         val dummy = ScopeAccessWorld.Space(SOME_ID, "d.example.com", SOME_ID, SOME_ID, SOME_ID, SOME_ID)
         val link = GuestTreeShare.Link("s", "t")
         calls.forEach { (id, call) ->
@@ -207,10 +207,10 @@ class ApplicationSwitchSweepTest {
 
     @TestFactory
     fun eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen(): List<DynamicTest> =
-        applicationOperations().flatMap { (app, ops) -> ops.map { app to it.id } }.filter { (_, id) -> id in calls }.sortedBy { it.second }
-            .map { (app, id) -> DynamicTest.dynamicTest("$app: $id") { probe(app, id) } }
+        applicationOperations().flatMap { (application, ops) -> ops.map { application to it.id } }.filter { (_, id) -> id in calls }.sortedBy { it.second }
+            .map { (application, id) -> DynamicTest.dynamicTest("$application: $id") { probe(application, id) } }
 
-    private fun probe(app: String, id: String) {
+    private fun probe(application: String, id: String) {
         val w = ScopeAccessWorld().build()
         val s = w.live
         val ctx = Ctx(
@@ -221,7 +221,7 @@ class ApplicationSwitchSweepTest {
         if (id == "restoreMedia" || id == "purgeMedia") {
             given().header("Authorization", bearer(s.ownerId)).`when`().delete("/api/scopes/${s.scopeId}/media/${s.mediaId}").then().statusCode(204)
         }
-        val off = TenantCapabilitySwitchFixtures.with(s.tenantId, app) { fire(w, s, calls.getValue(id)(ctx)).answer() }
+        val off = TenantCapabilitySwitchFixtures.with(s.tenantId, application) { fire(w, s, calls.getValue(id)(ctx)).answer() }
         val on = fire(w, s, calls.getValue(id)(ctx)).answer()
         if (id in exempt) {
             assertAll(
@@ -232,7 +232,7 @@ class ApplicationSwitchSweepTest {
         } else {
             assertAll(
                 id,
-                Executable { assertEquals(REFUSED, off, "[off] $id writes into $app while it is switched off") },
+                Executable { assertEquals(REFUSED, off, "[off] $id writes into $application while it is switched off") },
                 Executable { assertTrue(on != REFUSED && on.first != 400, "[on] $id answered $on — the refusal above proves nothing while the control is refused too") },
             )
         }

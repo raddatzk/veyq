@@ -6,7 +6,7 @@
 // no other device online, nobody running a grant delivery — and that the join record it wrote comes back on the
 // member listing, opens under the tenant key and verifies.
 //
-// Actors: A = tenant owner (server owner too); B = invited by A with a code; R = an invite A revokes. Every negative
+// Actors: A = tenant owner (Server Owner too); B = invited by A with a code; R = an invite A revokes. Every negative
 // has its control on the same predicate. Run against a FRESH instance — `python3 scripts/run_web_e2e.py <this file>`.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

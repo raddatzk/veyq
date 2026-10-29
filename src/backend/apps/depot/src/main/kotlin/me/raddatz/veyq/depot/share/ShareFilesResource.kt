@@ -19,7 +19,7 @@ import jakarta.ws.rs.core.Response
 import java.util.UUID
 
 /**
- * HTTP adapter for a guest's files on a share link (tag `share-files` of `files/files.openapi.yaml`,
+ * HTTP adapter for a guest's files on a share link (tag `share-files` of `depot/files.openapi.yaml`,
  * cr-files-application F2).
  * Implements the generated [ShareFilesApi], whose root `/api/shares/{shareId}/files` is longer than core's `sharing`
  * root `/api/shares`, so RESTEasy routes these paths here and every other share route to core. Thin (ADR 0001) —

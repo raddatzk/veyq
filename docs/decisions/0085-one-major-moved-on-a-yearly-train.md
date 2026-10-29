@@ -112,7 +112,7 @@ database migrations. They answer other questions and stay independent of the maj
 - **What it costs:** one adapter and one older server image in the client's test matrix per major inside the
   window. Every major is a signed image (ADR 0057), so the older images exist. The job does not exist yet.
 - **One platform major, not one per application.** With a two-year window a removal in one application costs the
-  others an alias, not a lockout. A major per application would multiply the window logic for every app and gain
+  others an alias, not a lockout. A major per application would multiply the window logic for every application and gain
   nothing a user can notice.
 
 ## Alternatives considered

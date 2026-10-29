@@ -146,7 +146,7 @@ class ShareGuestGate(
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWriteGate.NotContributable
         // A guest uploader a moderator blocked: its token is refused as an unknown one (decision 4 of
         // cr-moderation-review-and-measures). Its link is blocked with it, so [activeShare] refuses first in practice;
-        // this holds the identity on its own (`ModerationBlocksSliceTest`).
+        // this holds the identity on its own (`ModerationMeasuresSliceTest`).
         if (blocks.identityBlocked(identity.id)) return ShareWriteGate.NotContributable
         if (spendUploadBudget && !rateLimiter.allowUpload(shareId)) return ShareWriteGate.RateLimited
         // The root's kind picks the application that writes; a root that is gone has none (not contributable).

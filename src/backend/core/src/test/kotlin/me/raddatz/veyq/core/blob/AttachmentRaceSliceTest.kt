@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * [AttachmentStore.attach] overlapping the writes it must serialize with (cr-files-application P3-S4), in the shape of
- * `NodeCoverSliceTest`'s cover races (inbox #308/#310): [whileUncommitted] holds one writer's commit back after its
+ * the cover races of inbox #308/#310: [whileUncommitted] holds one writer's commit back after its
  * locks are taken and runs the other inside that window, so the order is forced and one round already shows a defect.
  * `scripts/run_backend_races_on_mariadb.py` runs this class on the pinned MariaDB too (ADR 0078: H2 alone proved
  * nothing about overlap).

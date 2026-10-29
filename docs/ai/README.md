@@ -486,6 +486,8 @@ this section only points at it (rule 2) — assembling this picture by hand each
   [ADR 0026](../decisions/0026-client-trust-tiers.md) is the worked example: it does not narrate which tiers it
   once listed; it says a stronger unlock method is **not** a client-integrity answer, and why — the wrong turn
   someone will otherwise take again. The date is noise; the trap is state. Where nothing binds, let it go.
+- **Fix a nit in a file you touch for another reason** — a word against [ADR 0086](../decisions/0086-one-word-per-meaning.md), a
+  role named against the glossary, a comment pointing at what is gone — in the same change, never as a row of its own (inbox #78).
 - **Reuse the existing UI — never invent new UI.** The built product is the design source: `src/web/` is whole, so
   the nearest built screen answers almost every question. The rule and its details live once, in
   [`../crosscutting/ui-web-styleguide.md`](../crosscutting/ui-web-styleguide.md) § Reuse first — not here.

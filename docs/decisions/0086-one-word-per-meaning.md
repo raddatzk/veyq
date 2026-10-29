@@ -53,7 +53,7 @@ client, and they live in the database baseline, so a rename would cost a migrati
 ([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 1).
 
 Where the name *Files* sits today decides what moves, and the test is Memories' precedent: the application's id
-names its directories, module, package, i18n namespace and app-prefixed seams (`MemoriesNodeKinds`), while its API
+names its directories, module, package, i18n namespace and application-prefixed seams (`MemoriesNodeKinds`), while its API
 is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
 - **Moves to `depot`:** `contracts/api/files/` and the Gradle module `:apps:files` with its package
   `me.raddatz.veyq.files` (one commit — the build derives each from the other), `src/web/src/features/files`, the

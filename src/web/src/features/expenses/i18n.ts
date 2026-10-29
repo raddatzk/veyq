@@ -356,7 +356,7 @@ const de: typeof en = {
       invalid: 'Dieser Eintrag geht nicht auf und zählt deshalb nirgends. Korrigiert gespeichert zählt er wieder.',
       stale: 'Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen.',
       saveFailed: 'Die Änderung wurde nicht gespeichert. Bitte versuche es erneut.',
-      blocked: 'Vom Betreiber gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert.',
+      blocked: 'Von der Betreiberseite gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert.',
       problem: {
         title: 'Gib dem Eintrag einen Titel.',
         date: 'Wähle ein Datum.',

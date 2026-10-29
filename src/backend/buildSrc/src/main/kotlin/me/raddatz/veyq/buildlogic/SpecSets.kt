@@ -8,8 +8,8 @@ import java.io.File
 
 // Spec-first generation (ADR 0079). A spec's owner is where it sits, never a list: core's specs are the top level
 // (`contracts/api/*.openapi.yaml`) and generate in `:core` into `me.raddatz.veyq.core.generated.{api,model}`; an
-// application's sit in a directory named for it (`contracts/api/<app>/*.openapi.yaml`) and generate in its module
-// `:apps:<app>` into `me.raddatz.veyq.<app>.generated.{api,model}` (`packageRootOf`). Specs $ref shared components from
+// application's sit in a directory named for it (`contracts/api/<application>/*.openapi.yaml`) and generate in its module
+// `:apps:<application>` into `me.raddatz.veyq.<application>.generated.{api,model}` (`packageRootOf`). Specs $ref shared components from
 // `_common.openapi.yaml` (ADR 0038), which is core's: openapi-generator resolves the external ref in place, so no
 // bundling or committed artifact is needed. Core generates every `_common` schema a core spec names; an application's
 // set maps every `_common` schema to core's class (`schemaMappings`), so a shared schema has ONE generated type, core's —
@@ -24,7 +24,7 @@ class SpecSet(val owner: String, val specs: List<File>, val packageRoot: String,
 
 /**
  * Every owner's spec set, derived from `contracts/api` (`contractsDir`) and the application modules the settings
- * include (`applicationModules`: the `<app>` of every `:apps:<app>`).
+ * include (`applicationModules`: the `<application>` of every `:apps:<application>`).
  */
 class SpecSets(val contractsDir: File, private val applicationModules: Set<String>) {
     val commonSpec: File = contractsDir.resolve(COMMON_SPEC)
@@ -60,7 +60,7 @@ class SpecSets(val contractsDir: File, private val applicationModules: Set<Strin
             val dirs = path.split('/').dropLast(1)
             when {
                 dirs.isEmpty() -> null
-                dirs.size > 1 -> "$path: nested deeper than one directory — a spec is core's (the top level) or an application's (`<app>/`)"
+                dirs.size > 1 -> "$path: nested deeper than one directory — a spec is core's (the top level) or an application's (`<application>/`)"
                 else -> applicationNameProblem(dirs[0])?.let { "$path: `${dirs[0]}/` $it" }
                     ?: if (dirs[0] !in applicationModules) {
                         "$path: `${dirs[0]}/` is no application — the settings include no `:apps:${dirs[0]}`, so its specs would generate nothing"
@@ -82,16 +82,16 @@ class SpecSets(val contractsDir: File, private val applicationModules: Set<Strin
         /** The generated package root of `owner` — the one place it is spelled (validate_backend_module_graph.py rule (d) reads it). */
         fun packageRootOf(owner: String) = "me.raddatz.veyq.$owner.generated"
 
-        /** The owner a Gradle project generates: `:core` → core, `:apps:<app>` → `<app>`; any other project generates none. */
+        /** The owner a Gradle project generates: `:core` → core, `:apps:<application>` → `<application>`; any other project generates none. */
         fun ownerOf(projectPath: String): String {
             if (projectPath == ":$coreOwner") return coreOwner
-            val app = APPLICATION_PATH.matchEntire(projectPath)?.groupValues?.get(1)
-                ?: throw GradleException("$projectPath generates no spec set: only `:$coreOwner` and an application `:apps:<app>` own specs")
-            applicationNameProblem(app)?.let { throw GradleException("$projectPath generates no spec set: `$app` $it") }
-            return app
+            val application = APPLICATION_PATH.matchEntire(projectPath)?.groupValues?.get(1)
+                ?: throw GradleException("$projectPath generates no spec set: only `:$coreOwner` and an application `:apps:<application>` own specs")
+            applicationNameProblem(application)?.let { throw GradleException("$projectPath generates no spec set: `$application` $it") }
+            return application
         }
 
-        /** The application names the settings include: the `<app>` of every `:apps:<app>` project path. */
+        /** The application names the settings include: the `<application>` of every `:apps:<application>` project path. */
         fun applicationModules(projectPaths: Iterable<String>): Set<String> =
             projectPaths.mapNotNull { APPLICATION_PATH.matchEntire(it)?.groupValues?.get(1) }.toSet()
 

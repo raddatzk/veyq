@@ -2,7 +2,7 @@
 // against a REAL backend + MariaDB + the bundled store, with REAL crypto.
 //
 // Two actors on one instance, serialized (the `shareContributor.e2e` shape):
-//   A          = curator: server owner + tenant owner (from `birthInstance`), mints the shares, reads them back.
+//   A          = curator: Server Owner + tenant owner (from `birthInstance`), mints the shares, reads them back.
 //   anonymous  = an uploader with NO session — every call goes through `publicSharesApi()` (core's link) or
 //                `publicShareMediaApi()` (Memories' guest media), which carry no bearer.
 //

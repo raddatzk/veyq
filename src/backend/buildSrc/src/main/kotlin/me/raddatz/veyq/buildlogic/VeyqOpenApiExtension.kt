@@ -12,7 +12,7 @@ import javax.inject.Inject
 
 /**
  * `veyqOpenApi { generateOwnSpecs() }` — generates the spec set the project owns by its path (`SpecSets.ownerOf`:
- * `:core` → the specs at the top level of `contracts/api/`, `:apps:<app>` → those in `contracts/api/<app>/`) and
+ * `:core` → the specs at the top level of `contracts/api/`, `:apps:<application>` → those in `contracts/api/<application>/`) and
  * registers its tasks:
  * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `src/backend/` runs
  * every owner's) and, for core, `generateAdminChannelOperations`, `generateCapabilityRegister` (the capability ids and
@@ -53,13 +53,13 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
                 // A module the settings include whose build never calls `generateOwnSpecs()` would leave its directory's
                 // specs generating nothing: the stray check above cannot see that, since the module exists.
                 project.gradle.projectsEvaluated {
-                    val ungenerated = sets.applications.filter { app ->
-                        project.rootProject.findProject(":apps:$app")?.extensions?.findByType<VeyqOpenApiExtension>()?.owner != app
+                    val ungenerated = sets.applications.filter { application ->
+                        project.rootProject.findProject(":apps:$application")?.extensions?.findByType<VeyqOpenApiExtension>()?.owner != application
                     }
                     if (ungenerated.isNotEmpty()) {
                         throw GradleException(
                             ungenerated.joinToString { "contracts/api/$it/" } + ": specs no module generates — apply " +
-                                "`veyq.openapi` and call `veyqOpenApi { generateOwnSpecs() }` in `:apps:<app>`",
+                                "`veyq.openapi` and call `veyqOpenApi { generateOwnSpecs() }` in `:apps:<application>`",
                         )
                     }
                 }

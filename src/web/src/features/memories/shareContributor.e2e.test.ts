@@ -2,7 +2,7 @@
 // READ_WRITE share, end-to-end against a REAL backend + MariaDB + the bundled Garage store, with REAL crypto.
 //
 // Two actors on one instance, serialized (the `scopeRotation.e2e` shape):
-//   A          = curator: server owner + tenant owner (from `birthInstance`), mints the share, reads it back.
+//   A          = curator: Server Owner + tenant owner (from `birthInstance`), mints the share, reads it back.
 //   anonymous  = a contributor with NO session — every call goes through `publicSharesApi()` (core's link) or
 //                `publicShareMediaApi()` (Memories' guest media, `features/memories/api.ts`), which carry no bearer
 //                token by construction (both built on `publicParams()`), so the anonymous path stays anonymous even

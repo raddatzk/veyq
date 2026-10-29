@@ -138,8 +138,8 @@ class ApplicationErasureStore(config: VeyqConfig) {
 
     /** [tenantId]'s named days, in register order. */
     fun days(tenantId: String): List<ApplicationErasureDay> {
-        val byApp = ApplicationErasureEntity.list("tenantId", tenantId).associateBy { it.application }
-        return APPLICATIONS.mapNotNull { app -> byApp[app]?.let { ApplicationErasureDay(app, it.dueAt) } }
+        val byApplication = ApplicationErasureEntity.list("tenantId", tenantId).associateBy { it.application }
+        return APPLICATIONS.mapNotNull { application -> byApplication[application]?.let { ApplicationErasureDay(application, it.dueAt) } }
     }
 
     companion object {

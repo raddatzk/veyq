@@ -25,7 +25,9 @@ export async function buildCreateServerOwnerRequest(
   password: string,
   instanceSalt: Uint8Array,
 ): Promise<{ request: PreparedServerOwner; emergencyKit: EmergencyKit }> {
-  const { material, emergencyKit } = await buildAccount(email, password, instanceSalt)
+  const { material, emergencyKit, masterKey } = await buildAccount(email, password, instanceSalt)
+  // The setup accepts no tenant, so it keys no trust mark (ADR 0111 decision 23): the Master Key is not needed here.
+  masterKey.fill(0)
   // The Server-Owner account carries no display name — identity is a per-tenant username (ADR 0023), and a
   // Server Owner who is not (yet) a tenant member is identified by email alone.
   const request: PreparedServerOwner = {

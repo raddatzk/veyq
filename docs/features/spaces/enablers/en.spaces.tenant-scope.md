@@ -24,7 +24,7 @@
 - **Preconditions:** An **authenticated, unlocked** member of the active tenant (the identity **private**
   bundle is in the vault, so the client can open a grant); the tenant resolved from the request `Host`; a
   `kind=TENANT` scope for which the caller **holds a grant** is returned by `GET /api/scopes`.
-- **Postconditions (success):** The client holds the **opened tenant scope key** in memory (the `ScopeVault`)
+- **Postconditions (success):** The client holds the **opened tenant scope key** in memory (the active space's epoch keys, `src/web/src/app/activeSpace.ts`)
   and the shell's active space is the tenant; its Memory tree can be browsed like any scope. The server never
   saw the scope key.
 

@@ -106,7 +106,7 @@ export class ExportError extends Error {
 }
 
 const ID = /^[A-Za-z0-9_-]+$/
-const APP_ID = /^[a-z][a-z0-9-]{0,63}$/
+const APPLICATION_ID = /^[a-z][a-z0-9-]{0,63}$/
 const CONTENT_TYPE = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/
 const PATH_V1 = /^data\/[A-Za-z0-9_-]+\/[^/\\]+$/
 const SHA = /^[0-9a-f]{64}$/
@@ -156,13 +156,13 @@ function checkPayload(v: unknown, version: number, nodePath: string | undefined,
 function checkApplications(v: unknown): Map<string, number> {
   if (!Array.isArray(v)) return bad('applications is not a list')
   if (v.length > LIMITS.applications) return fail('too_large', 'too many applications')
-  const apps = new Map<string, number>()
+  const applications = new Map<string, number>()
   for (const a of v) {
-    if (!isObject(a) || typeof a.id !== 'string' || !APP_ID.test(a.id) || !isCount(a.contentSchema)) return bad('bad application entry')
-    if (apps.has(a.id)) return bad(`application listed twice: ${a.id}`)
-    apps.set(a.id, a.contentSchema)
+    if (!isObject(a) || typeof a.id !== 'string' || !APPLICATION_ID.test(a.id) || !isCount(a.contentSchema)) return bad('bad application entry')
+    if (applications.has(a.id)) return bad(`application listed twice: ${a.id}`)
+    applications.set(a.id, a.contentSchema)
   }
-  return apps
+  return applications
 }
 
 /**
@@ -176,7 +176,7 @@ export function parseManifest(json: unknown): Manifest {
   if (version > MANIFEST_VERSION) return fail('newer_version', `version ${version} is newer than this build reads`)
   text(json.exportedAt, LIMITS.appVersion, 'exportedAt', undefined, 1)
   text(json.appVersion, LIMITS.appVersion, 'appVersion')
-  const apps = version >= 2 ? checkApplications(json.applications) : null
+  const applications = version >= 2 ? checkApplications(json.applications) : null
   const ids = new Set<string>()
   let count = 0
   const walk = (n: unknown, depth: number, parentPath: string | null): void => {
@@ -201,7 +201,7 @@ export function parseManifest(json: unknown): Manifest {
       const type = text(n.content.type, LIMITS.contentType, `${n.id} content type`, name, 1)
       if (!CONTENT_TYPE.test(type)) return bad(`${n.id}: bad content type`, name)
       if (n.content.schema !== undefined && !isCount(n.content.schema)) return bad(`${n.id}: bad content schema`, name)
-      if (apps && !apps.has(applicationOf(type))) return bad(`${n.id}: application ${applicationOf(type)} is not listed`, name)
+      if (applications && !applications.has(applicationOf(type))) return bad(`${n.id}: application ${applicationOf(type)} is not listed`, name)
       for (const p of collectPayloadsOf(n.content)) checkPayload(p, version, path, name)
     }
     if (n.children !== undefined) {

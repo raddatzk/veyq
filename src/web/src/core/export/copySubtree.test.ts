@@ -29,7 +29,7 @@ import type { ManifestPayload } from './manifest'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const FILE = 'C_FILE' // a Depot-like file: its import reads the payload by frame (`importStreams`)
-const ALBUM = 'C_ALBUM' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
+const COLLECTION = 'C_COLLECTION' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
 const BOX = 'C_BOX' // a drop-box-like container: copied as a plain folder
 const RAW = 'C_RAW' // takes a payload by frame, but its export cannot be read by frame
 const FRAME = 4
@@ -100,15 +100,15 @@ beforeAll(() => {
     },
   })
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.albumLoss'],
+    kind: COLLECTION, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.collectionLoss'],
     async exportContent(ctx) {
       const bytes = contents.get('pic')!
       // its payload CAN be read by frame: only its import's need for whole payloads keeps it out of a copy
       const file = ctx.addPayload('pic.jpg', { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes }, frames: framesOfBytes(bytes) })
-      return { type: 'c.album', schema: 1, files: [file] }
+      return { type: 'c.collection', schema: 1, files: [file] }
     },
     importContent: async () => {
-      throw new Error('an album is never handed a copy')
+      throw new Error('a collection is never handed a copy')
     },
   })
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
@@ -144,12 +144,12 @@ beforeEach(() => {
 })
 
 // Reisen/ ─ doc.txt (5 frames)          Archiv/
-//         ─ Lissabon (ALBUM)
+//         ─ Lissabon (COLLECTION)
 //         ─ Postfach (BOX) ─ Anna/ ─ drop.txt
 //         ─ leer.txt (an empty file), halb.txt (an upload that never finished), roh.bin (no frames)
 const NODES = [
   node('reisen', null, FOLDER_KIND, 'Reisen'), node('archiv', null, FOLDER_KIND, 'Archiv', 1),
-  node('doc', 'reisen', FILE, 'doc.txt', 0), node('album', 'reisen', ALBUM, 'Lissabon', 1), node('box', 'reisen', BOX, 'Postfach', 2),
+  node('doc', 'reisen', FILE, 'doc.txt', 0), node('collection', 'reisen', COLLECTION, 'Lissabon', 1), node('box', 'reisen', BOX, 'Postfach', 2),
   node('anna', 'box', FOLDER_KIND, 'Anna'), node('g1', 'anna', FILE, 'drop.txt'),
   node('empty', 'reisen', FILE, 'leer.txt', 3), node('unfinished', 'reisen', FILE, 'halb.txt', 4), node('raw', 'reisen', RAW, 'roh.bin', 5),
 ]
@@ -164,7 +164,7 @@ describe('prepareCopy: the plan, before anything is written', () => {
     expect(prepared.bytes).toBe(contents.get('doc')!.length + contents.get('g1')!.length)
     expect(prepared.leftOut).toEqual([
       { name: 'halb.txt', kind: FILE, reason: 'nothing_to_export' },
-      { name: 'Lissabon', kind: ALBUM, reason: 'not_copyable' },
+      { name: 'Lissabon', kind: COLLECTION, reason: 'not_copyable' },
       { name: 'roh.bin', kind: RAW, reason: 'not_copyable' },
     ])
     expect(prepared.kinds.sort()).toEqual([BOX, FILE, FOLDER_KIND].sort())
@@ -202,9 +202,9 @@ describe('run: the replay under the destination', () => {
   })
 
   it('several nodes are one copy: each under the destination in order, each name freed among its siblings', async () => {
-    const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'empty', 'album'], appVersion: 'test' })
+    const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'empty', 'collection'], appVersion: 'test' })
     expect(prepared.nodes).toBe(2)
-    expect(prepared.leftOut).toEqual([{ name: 'Lissabon', kind: ALBUM, reason: 'not_copyable' }])
+    expect(prepared.leftOut).toEqual([{ name: 'Lissabon', kind: COLLECTION, reason: 'not_copyable' }])
     const result = await prepared.run(target({ id: 'reisen', key: new Uint8Array(32), epoch: 1 }))
     expect(result.nodeIds).toEqual(['new1', 'new2'])
     expect(created.map((c) => [c.name, c.parent])).toEqual([['doc.txt (2)', 'reisen'], ['leer.txt (2)', 'reisen']])
@@ -229,7 +229,7 @@ describe('run: the replay under the destination', () => {
   })
 
   it('a copy of nothing copyable writes nothing', async () => {
-    const prepared = await prepareCopy({ access, tree, rootIds: ['album'], appVersion: 'test' })
+    const prepared = await prepareCopy({ access, tree, rootIds: ['collection'], appVersion: 'test' })
     expect(prepared.nodes).toBe(0)
     await expect(prepared.run(target(null))).rejects.toMatchObject({ code: 'nothing_to_import' })
     expect(createContentNode).not.toHaveBeenCalled()

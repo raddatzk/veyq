@@ -72,7 +72,7 @@ Memory, an expense and a file side by side).
    accident. Moving and renaming what is already there are unchanged. Inside an application's container (a Memory),
    that application decides. Reading needs no server decision (reading is holding keys, and the keys flow down the tree).
    **`READ_WRITE` is interpreted by each application for its kinds** (what a contributor may do in a Memory, in a
-   file tree, in an Expenses Pot), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
+   file tree, in an Expenses Pot), written down as a small role matrix in its `docs/apps/<application>.md`; **a kind with no
    declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write
    rights by accident. A `READ_WRITE` share on a folder gives a contributor's rights in every Memory or chapter below it (owner, 2026-10-07: the role is
    inherited as the share allows; the share root's kind no longer decides who writes, the target node's kind does):
@@ -211,7 +211,7 @@ its own reasons).
   below it. A filter by kind exists only for writes (a drop-style share, or an application's policy), so a
   Memory that must stay hidden from a folder's guests is not placed under that folder. A per-kind read filter would
   need the share-time fan-out wrap rejected below.
-- **Each application documents a role matrix** for `READ_WRITE` in its `docs/apps/<app>.md`; Memories first.
+- **Each application documents a role matrix** for `READ_WRITE` in its `docs/apps/<application>.md`; Memories first.
 - **One guard changes its rule:** `validate_write_concurrency.py` accepts one counter-shaped field per operation
   (`:153-171`); `updateNode` now has two (`metaRevision`, `placementRevision`), so `x-veyq-concurrency` becomes a list
   of declarations with a conflict code each.

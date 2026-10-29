@@ -2069,7 +2069,7 @@ const de: typeof en = {
     importedLeftOut: '„{name}“ importiert. Weggelassen: {names}',
     uploadAsFile: 'Als Datei hochladen',
     importSummary: '{nodes} Einträge, {size}, werden zu „{target}“ hinzugefügt.',
-    importNotice: 'Du wirst Eigentümer von allem Importierten. Freigaben, Mitglieder und der Papierkorb sind nicht Teil eines Downloads.',
+    importNotice: 'Alles Importierte gehört dann dir. Freigaben, Mitglieder und der Papierkorb sind nicht Teil eines Downloads.',
     importSkipped: 'Weggelassen, weil diese Version sie nicht importieren kann:',
     importSubmit: 'Importieren',
     importing: 'Importiere… {done} von {total} Einträgen',

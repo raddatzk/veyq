@@ -4,7 +4,7 @@
 // guest's upload into a Memory below the folder (5a.5), which this suite does not touch.
 //
 // Two actors on one instance, serialized (the `folderShare.e2e` shape):
-//   A          = curator: server owner + tenant owner (from `birthInstance`); a folder holding two subfolders, a Memory
+//   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding two subfolders, a Memory
 //                (with a photo and a chapter) in the first one.
 //   anonymous  = a guest with NO session: every call goes through `publicSharesApi()`, which carries no bearer.
 //

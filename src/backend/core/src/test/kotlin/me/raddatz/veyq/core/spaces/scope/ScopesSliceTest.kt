@@ -355,7 +355,7 @@ class ScopesSliceTest {
     }
 
     @Test
-    fun listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCapability() {
+    fun listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCheck() {
         // The path cr-0162 fixed, and the reason the leak survived: it had no test at all. Three actors, three
         // answers — a stranger must not be able to tell the real group from an invented id (ADR 0042).
         val (owner, domain) = seedMember()

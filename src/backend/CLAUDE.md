@@ -135,7 +135,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   Kotlin models + JAX-RS interfaces per owner, in the module that owns them. **The owner is derived from the
   directory, never listed** (`buildSrc`'s `SpecSets`, inbox #344): the top level is `:core`'s
   (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`, package `me.raddatz.veyq.core.generated`),
-  `contracts/api/<app>/` is `:apps:<app>`'s (`:apps:memories:openApiGenerateMemories` →
+  `contracts/api/<application>/` is `:apps:<application>`'s (`:apps:memories:openApiGenerateMemories` →
   `apps/memories/build/generated/openapi/memories/`, package `me.raddatz.veyq.memories.generated`); `openApiGenerateSpecs`
   from `src/backend/` runs every owner's. A module opts in with `veyqOpenApi { generateOwnSpecs() }`, which reads its
   owner from its project path — so a new application's specs need only their directory and the module. The build
