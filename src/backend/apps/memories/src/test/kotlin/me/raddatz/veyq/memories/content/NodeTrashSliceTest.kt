@@ -21,7 +21,6 @@ import me.raddatz.veyq.core.blobstore.ageReclaimRowsPastThePresignBound
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
-import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -39,9 +38,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodeSubtreePurge
-import me.raddatz.veyq.core.content.NodesHandler
 
 /**
  * Slice tests for the node trash (uc.memory.delete-node, ADR 0061): a delete soft-deletes the whole subtree, the
@@ -53,7 +50,7 @@ import me.raddatz.veyq.core.content.NodesHandler
  * - the slug is freed by the **write** (`slug_token := the node's own id`), because `ux_node_parent_slug` is a
  *   plain unique index spanning trashed rows and MariaDB has no filtered index;
  * - `slugTaken` therefore must **keep seeing** trashed rows, or validation passes and the database rejects the
- *   insert afterwards — a clean 409 turned into a 500;
+ *   insert afterwards — a clean 409 turned into a 500 (pinned with core alone, in `NodeTrashCoreSliceTest`);
  * - the delete's own traversal must **reach already-trashed descendants** and re-stamp them, or the inner rows
  *   age out first and the purge erases a Memory inside a folder still sitting restorable in the trash;
  * - the cover blob is reclaimed by the **purge**, not by the delete, or a restore hands back a Memory whose
@@ -68,9 +65,6 @@ import me.raddatz.veyq.core.content.NodesHandler
  */
 @QuarkusTest
 class NodeTrashSliceTest {
-
-    @Inject
-    lateinit var handler: NodesHandler
 
     @Inject
     lateinit var purge: NodeSubtreePurge
@@ -206,31 +200,7 @@ class NodeTrashSliceTest {
             .then().statusCode(200).body("media.mediaId", hasItem(mediaId))
     }
 
-    // --- 4. slugTaken must NOT learn the predicate ---
-
-    /**
-     * The trap, pinned at the handler rather than over HTTP. `ux_node_parent_slug` spans trashed rows, and a
-     * freed slug token IS the trashed node's own id — a UUID, which the contract's base64 `Pattern` rejects at
-     * the boundary, so no HTTP client can reach the collision. A handler-level caller can, and that is exactly
-     * the path a future "tidy up the reads" change would break: teach `slugTaken` the `deletedAt is null`
-     * predicate and this stops being a clean `SlugTaken` and becomes a constraint violation at flush — a 500.
-     */
-    @Test
-    fun slugTakenStillSeesTrashedRowsSoTheDatabaseNeverThrows() {
-        val (userId, scopeId) = seedMemberScope()
-        val trashed = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"dHJhcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        given().header("Authorization", bearer(userId))
-            .`when`().delete("/api/scopes/$scopeId/nodes/$trashed").then().statusCode(204)
-
-        // the freed token is the trashed node's own id; creating a sibling that claims it must be REJECTED,
-        // cleanly, by validation — not accepted and then thrown out by the unique index.
-        val outcome = handler.create(
-            userId, scopeId, UUID.randomUUID().toString(), null, MemoriesNodeKinds.MEMORY, "bTI=", trashed, 0, 0, "aw==", null, null,
-        )
-        assertTrue(outcome is CreateNodeOutcome.SlugTaken) {
-            "a slug already held by a TRASHED sibling must be a clean rejection; got $outcome"
-        }
-    }
+    // --- 4. slugTaken must NOT learn the predicate: core alone, `NodeTrashCoreSliceTest` ---
 
     // --- 5. the delete's traversal must reach already-trashed descendants ---
 

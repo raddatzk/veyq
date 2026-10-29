@@ -131,7 +131,9 @@ class NodesStore(private val gate: NodeEpochGate) {
      * filtered index), so adding `deletedAt is null` here would let validation pass and the database reject
      * the insert on flush afterwards — a clean 409 turned into a 500. A trash root holds its own id as its
      * token, which is outside the contract's base64 token alphabet, so nothing a client can send collides with
-     * it through the API; a handler-level caller can (no test pins that yet, inbox #777).
+     * it through the API (a 400 at the boundary); a handler-level caller can, and must get `slug_taken`, never the
+     * commit's `RollbackException` — `NodeTrashCoreSliceTest.aTrashRootsFreedTokenIsTakenInItsSlotAndNoClientCanSendIt`
+     * pins both, in the scope root's slot and a folder's.
      */
     fun slugTaken(parentSlot: String, slugToken: String, exceptNodeId: String? = null): Boolean =
         // Two statements, never `id <> ''` as "no exception": `id` is a UUID column (inbox #387), and an empty string
