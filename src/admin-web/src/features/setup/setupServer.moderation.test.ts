@@ -17,6 +17,7 @@ describe('setup mints moderation epoch 1 (uc.moderation.appoint-moderators)', ()
   it('seals M_1 to the identity born in the same request, and the bundle is that key’s', async () => {
     vi.mocked(buildAccount).mockResolvedValue({
       identity: born,
+      masterKey: new Uint8Array(32),
       emergencyKit: { secretKey: 'c2VjcmV0' },
       material: {
         suiteId: 'v1',
