@@ -102,14 +102,19 @@ acceptanceCriteria:
     # removal-rotation. Eleven bites (the check dropped, the same epoch skipped, the peel not compared, no hold at open or
     # at commit, a floor without the key, a 404 rethrown, any epoch replacing the held key, the record dropping it,
     # the carry without it, pairing carrying it) each turned a test red.
+    # Inbox #750 measured the first grant of a GROUP on real keys (groupFirstGrant.test.ts): it opens from any granter
+    # the tenant anchors, in the group or not - the residual ADR 0111 § What stays open names; a granter the tenant does
+    # not anchor and a plant on a device that held the key stay refused (each turned red by dropping its check), and a
+    # device-local refusal of a first group grant turned every honest control red.
     text: >
       A grant for an epoch at or above the newest one whose key this device holds for a scope opens only if the served
       epoch links peel down from it to exactly that key; otherwise it is refused (epoch_unlinked), nothing is written
       under it, and a securing's plan declares the scope unreadable. A first grant, a member pending across several
-      epochs, a securing's self-grant and an epoch the device committed itself all open.
+      epochs, a securing's self-grant and an epoch the device committed itself all open; a group's first grant opens from
+      any granter the tenant anchors.
     coverage:
       web:
-        unit: [src/features/spaces/scopes.test.ts, src/features/account/trustMarks.test.ts]
+        unit: [src/features/spaces/scopes.test.ts, src/features/account/trustMarks.test.ts, src/features/spaces/groupFirstGrant.test.ts]
   - id: owner-turns-off-every-link
     text: A group owner turns off every enabled public share of the group with no removal (revokeScopeShares), each marked so it comes back only by re-issue, the answer counting them and a second call answering 0; a member who does not own the group is refused 403 not_scope_owner and nothing moves; a link minted afterwards is untouched (A5, ADR 0075 point 5).
     coverage:

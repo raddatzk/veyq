@@ -76,7 +76,9 @@ export type GrantRow = {
  * - **In its tenant** (ADR 0111 decisions 12 and 15): a GROUP's grant is judged against the granter's standing in the
  *   group's tenant (`tenantId`) — a granter without a join record who is no owner there, or whose join record does not
  *   verify, is `granter_key_unanchored`, and a joined granter's key must sit on their chain at or after the step the
- *   record names. The TENANT scope's own grant is judged by the pin alone: its standings are read with the very key it
+ *   record names. Not by any role in the group: who is in one is the server's word, so a device's first grant of a
+ *   group opens from any member the tenant anchors (ADR 0111 § What stays open, inbox #750, `groupFirstGrant.test.ts`).
+ *   The TENANT scope's own grant is judged by the pin alone: its standings are read with the very key it
  *   carries, and a tenant whose directory this device cannot read (another tenant than the active one) falls back to
  *   the pin as well. What ties a new epoch to the key this device held is not the granter but the epoch chain, checked
  *   where the grant is opened and held (`scopes.ts` § `requireLinkToHeld`, ADR 0111 decision 23).

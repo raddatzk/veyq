@@ -126,6 +126,13 @@ The same gap covers further cases:
   removed while the tenant has not re-keyed since) can, with the operator, still plant a linked next epoch. In the active tenant a group grant from a granter without an
   owner-rooted join record is refused. The signature rules out a grant presented under the identity of someone the
   recipient has already pinned (ADR 0028 Decision 6).
+- **A group's first grant from any member of its tenant.** A device that holds no key of a group yet — a newcomer's
+  after accepting the proposal, a new or linked device — opens a grant from any member the tenant anchors, in the
+  group or not. With the operator, such a member has the device write under a key of its choosing; one removed from
+  the group can link that key to the epoch it held, so the device also shows the group's history. Accepted, because it
+  gains nothing over a group of that member's own: which groups you are listed in, who else is in one and who proposed
+  you are the server's word, so the operator can present that group as this one. Nothing on the device tells the two
+  apart; closing it needs signed group membership (ADR 0111 § What stays open).
 
 **Related residuals of the same mechanism:**
 

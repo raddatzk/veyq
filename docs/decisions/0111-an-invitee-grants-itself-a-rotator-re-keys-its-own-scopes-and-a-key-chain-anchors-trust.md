@@ -387,8 +387,9 @@ Facts the design rests on, read in the code:
       granter is anchored in its tenant, but a tenant member outside the group could otherwise, with the operator, plant
       a group's next epoch.
     - **The legitimate cases pass.** The accepting device's first open finds the self-grant of the key it holds, or a
-      later epoch linked down to it; a device holding nothing yet — another device of the account — takes its first
-      grant as it comes; a member pending across several epochs peels through every link
+      later epoch linked down to it; a device holding nothing yet — another device of the account, or a group's
+      newcomer, whose consent accept opens no grant — takes its first grant as it comes (§ What stays open, the group's
+      first grant); a member pending across several epochs peels through every link
       in between; a securing's self-grant carries the very key the device held; a grant below the held epoch is no new
       epoch, and the floor is its check.
     - **Local and never synced, like the floor, and not carried by pairing.** The envelope that carries the marks is
@@ -549,6 +550,22 @@ Facts the design rests on, read in the code:
   owner, can with the operator's help root a key of their choosing. It is the class of ADR 0020's departing-member
   residual, and closing it needs signed roles and removals — the membership protocol ADR 0020 declined, which nothing
   here waits for.
+- **A group's first grant on a device is judged by its granter's standing in the tenant, not in the group — accepted
+  as a residual (inbox #750, measured 2026-10-29).** A device that holds no key of a group — a newcomer's after a
+  consent accept, which opens no grant (unlike a tenant accept, decision 23), or a new or newly linked device — opens a
+  grant from any member its tenant anchors and holds it. `groupFirstGrant.test.ts` (`src/web/src/features/spaces/`)
+  measures it on real keys: a member in no role in the group, with the operator, has the device open and write under a
+  key of its choosing; one removed from the group links that key down to the epoch it held, so the device reads the
+  group's history too. **The gain is nil**: which groups an account is listed in, who else is in one and who proposed an
+  add (`addedBy`, a plaintext username) are the server's word, so the same member makes a group of its own and the
+  operator presents it as this one and hides the real one — and the client judges both grants alike (the same test).
+  What holds: a granter the tenant does not anchor is refused, and a device that held the group's key refuses the plant.
+  **Not closed, because nothing local tells the plant from an honest first grant** — a device that refuses a group's
+  first grant refuses the owner's add and every member's re-key too (measured: each honest control turns red) — and a
+  signed adder (the add names its proposer, the first open requires the key the proposer committed to) binds the key to
+  a proposer whose name and membership in the group stay the server's word, so the lookalike group reopens all of it.
+  Closing it needs a group membership the newcomer can verify: signed adds, removals and roles, the membership protocol
+  of the residual above.
 - **Withholding** is detected only by a device that saw a newer step, or by two people comparing heads (decision 14);
   a first-time reader cannot tell on its own (the fork, until Key Transparency).
 - **A malicious server on a retry** may re-list a revoked invite to the other of two concurrent rotators — the
