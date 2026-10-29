@@ -103,10 +103,12 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
   own caps — every pin entry exactly 296 characters — and fails on a field without a cap or a total above the server's
   limit; on 2026-10-28 that is 10,101,123 bytes ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 22). The pin store stays in the publish: staging it would only matter for a higher cap. One new pin writes
-  about 400 bytes instead of the whole store.
+  about 400 bytes instead of the whole store, and a pass over a member list (the members list, Who's who) writes all the
+  pins it took in one write at its end (`PinPass`, `identityPins.ts`; inbox #741: 52 first contacts were 52 writes).
 - **What the operator learns per write changes shape, not amount.** It sees which entry was written, where it saw that
   the store was. Linking an entry to a contact by timing (a write right after a directory read of that contact) works
-  for both shapes alike, and the server already relays the grant the pin precedes.
+  for both shapes alike — for a single check; a pass's one write names its entries together — and the server already
+  relays the grant the pin precedes.
 - **A rotation now re-keys every entry**: a new Master Key is a new `K_pinIndex`, so new ids, re-sealed entries and a new
   head in the rotation's one request — the same work it did on one blob.
 - **New state:** a table of `(account_id, pin_id, sealed_entry)` rows, erased with the account
