@@ -18,8 +18,9 @@
    behind an **Upload** affordance).
 2. Each file is enqueued into the **global upload queue** as a batch against the current `{scopeId, nodeId}` +
    the Memory key. The TopBar **uploads** button shows a spinner + an active-file count badge, **and** the picked
-   photos appear **immediately as tiles in that Memory's gallery grid** — an instant **local preview** (the user's
-   own image, before it is sealed — a local object URL, never uploaded in the clear) with a per-tile progress /
+   photos appear **immediately as tiles in that Memory's gallery grid** — with a **local preview** (the user's
+   own image, before it is sealed, never uploaded in the clear: a photo drawn on the device at the gallery thumbnail's
+   size, one at a time, for the tiles near the viewport first, inbox #785) and a per-tile progress /
    error(+retry) state (cr-0074). A tile appears **at its capture-time place**, not at the front: the sort key is
    derived on device before sealing, from the same rule the sealed tier will carry, so the tile is already where
    it will stay. [uc.memory.gallery](uc.memory.gallery.md) owns that ordering rule.
@@ -94,9 +95,17 @@
   drawn), never from a decode, so the only decodes are the on-device stage's, one file ahead (inbox #558). Read in the
   profile's S2 (50 photos of 5.2 MB, 2026-10-29): decoding every picked photo for its size had put the tab's renderer
   at 2.30–2.79 GiB at throttle 4 within 1.6 s of the pick, against 1.0–1.1 GiB for the rest of the upload; now its peak
-  is the upload's own, 1.14–1.27 GiB. What the renderer holds while the batch uploads, about 0.8 GiB above the tab
-  before the pick, is not yet attributed; the tiles' previews, each the picked file shown whole, are the likely holder
-  (inbox #785).
+  is the upload's own, 1.14–1.27 GiB.
+- **A tile's preview is tile-sized, and drawn only near the viewport.** A tile used to show the picked file itself, so
+  every tile near the viewport held a decode of the whole photo (48.8 MB for 12 megapixels) while the batch uploaded: in
+  S2 the renderer sat at 1.03–1.04 GiB (median of the window; peak 1.11–1.18 GiB) against 0.24 GiB before the pick, and
+  0.44–0.46 GiB in a build that showed no preview at all, so the previews held about 0.6 GiB (inbox #785, 2026-10-29).
+  Now the grid announces the tiles it mounts, nearest first, as it does for thumbnails
+  ([ADR 0105](../../../decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)),
+  and the media Worker draws each one's photo at the thumbnail tier's size, one at a time
+  (`src/web/src/features/memories/useOptimisticTiles.ts`): 0.49–0.53 GiB, peak 0.61–0.67 GiB, in the same 10.4–11.6 s
+  (13.0–13.4 s at throttle 4). The price is that a tile's picture arrives a moment after the tile (about 0.2 s per
+  tile while the batch is being prepared: 12 of the 24 mounted tiles had theirs 2.5 s after the pick).
 
 ## User impact
 

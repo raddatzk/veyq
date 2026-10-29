@@ -78,9 +78,14 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
   never two at once (inbox #557). Read in the profile's S4 (`scripts/profile_hot_paths.py`: a download of 50 photos of
   5.2 MB imported, three runs each without the CPU profiler, 2026-10-29): 15.8 s against 20.2 s at throttle 1 and 17.2 s
   against 35.1 s at throttle 4. The main thread had spent 3.5 s (14.6 s at throttle 4) on the SHA-256 and 0.5 s (1.9 s)
-  on the CRC-32; its tasks fell from 5.5 s to 1.3 s (21.0 s to 3.3 s), and the worker spends 4.5 s on both. What is
-  left between two uploads is the original's own preparation (its tiers, 154 ms a photo), which the import does not yet
-  overlap with the previous upload as a member's upload does (inbox #784).
+  on the CRC-32; its tasks fell from 5.5 s to 1.3 s (21.0 s to 3.3 s), and the worker spends 4.5 s on both.
+- **The next original is prepared while this one uploads.** Memories' import hook asks for the next original and runs
+  its on-device stage (its tiers, its metadata read; its digest is the check's) once the current one reports its first
+  progress, one ahead, as a member's upload batch does
+  ([uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) step 3); a refusal of that payload is still the
+  import's only after the one before it landed (inbox #784). S4 again, 2026-10-29: the wait between two uploads fell from
+  157–168 ms to 2–9 ms, and the import from 16.3–17.3 s to 9.3–9.8 s at throttle 1 (17.7–18.4 s to 10.7–13.3 s at 4) — as
+  long as the plain upload of the same photos.
 - **Not atomic.** The server has no multi-node transaction; the rollback is best effort and says so when it fails.
 - **Quota, without exposing it.** The preflight is the rule an upload start applies, asked without a lock: the tenant's usage (trash and open uploads included) plus the declared bytes against the quota the Server Owner set; a tenant with no quota fits anything. It answers **yes or no, never a number**, so a member learns no more than a refused upload already tells; because a long run of questions could still be bisected towards the free space, it is rate-limited per member and per tenant (`veyq.ratelimit.storage-fit.*`, default 10 and 60 per minute, `429` with `Retry-After`). It is advisory: another upload may take the room first, and the start stays the one decision.
 

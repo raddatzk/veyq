@@ -124,11 +124,17 @@ per scenario at CPU throttle 1 and 4):
   Each reading now also records the browser's memory. Picking the 50 photos decoded every one of them at once, only to
   learn each tile's shape: the tab's renderer reached 2.30–2.79 GiB at throttle 4 within 1.6 s, against 1.0–1.1 GiB for
   the rest of the upload. A tile now reads its photo's size from the first bytes of the file, and the highest the
-  renderer reaches is the upload's own, 1.14–1.27 GiB (2026-10-29, three runs each at throttle 1 and 4).
+  renderer reaches is the upload's own, 1.14–1.27 GiB (2026-10-29, three runs each at throttle 1 and 4). Most of what
+  stayed was the tiles themselves: each showed the whole photo, and without them the renderer held 0.44–0.46 GiB. A tile
+  near the screen now shows its photo shrunk to the thumbnail's size, one at a time, and the renderer stays at
+  0.49–0.53 GiB, in the same time.
 - **Importing a download** of the same 50 photos, a fourth path read since 2026-10-29, took 20.2 s at throttle 1 and
   35.1 s at throttle 4. Before each photo was sent, the page itself checked it against the download's list of
   checksums: 4.0 s of its main thread at throttle 1, about 17 s at throttle 4. That check now runs in the worker that
-  hashes uploads, one photo ahead, while the previous one is sent: 15.8 s and 17.2 s, three runs each.
+  hashes uploads, one photo ahead, while the previous one is sent: 15.8 s and 17.2 s, three runs each. Each photo was
+  then still prepared for sending (its smaller copies made, its details read) only after the one before it was sent;
+  that now happens while the one before it is sent, as for an upload: 9.3–9.8 s and 10.7–13.3 s, as long as the upload
+  of the same photos.
 - **Opening a Chapter of 1,000 photos** shows every tile in the viewport after about 0.43 s. Its three requests sent
   about 116 SQL statements each, because the request for the thumbnails' download addresses read the database twice
   for every photo it named. It now reads each batch once, so the three send 13 to 17 statements however many photos
@@ -171,7 +177,7 @@ Its stages start together; only lane L1 waits for another stage, the image build
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release | 15 min, an estimate | 3.5 min, run directly (2026-10-15) |
 | Stack lanes L2, L3 | no job | — | — |
 | Pentests | no job, by design: run by hand on a developer machine | — | — |
-| Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29) |
+| Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29) |
 
 Per commit in CI, the longest of these paths is *estimated* at 20–25 minutes (ADR 0091); the first CI run replaces the
 estimate. Two other workflows check the repository without being a stage: CodeQL's static analysis (`codeql.yml`) and

@@ -344,12 +344,17 @@ itself, about 190 ms a file, with the frame worker busy 6.4 s of the 10.8 s. Eac
 resident memory now, read from `/proc` beside the browser (inbox #558): picking those 50 photos decoded every one at once
 for its tile's aspect ratio, and the renderer peaked at 2.30–2.79 GiB at throttle 4 against 1.0–1.1 GiB for the rest of
 the upload. A tile now reads the size its file's header names (`src/web/src/shared/image/imageHeader.ts`), and the
-batch's peak is the upload's own, 1.14–1.27 GiB ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
-§ Quality notes; 2026-10-29). A fourth path, an import of a download of the same 50 photos (S4, inbox #557), spent 3.5 s
+batch's peak is the upload's own, 1.14–1.27 GiB. The 1.0–1.1 GiB the renderer then held through the upload was the
+tiles' previews, each the picked photo decoded whole (0.44–0.46 GiB with none, inbox #785); a tile near the viewport
+now shows its photo drawn at the thumbnail's size, one at a time, and the renderer stays at 0.49–0.53 GiB in the same
+time ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md) § Quality notes; 2026-10-29). A fourth path,
+an import of a download of the same 50 photos (S4, inbox #557), spent 3.5 s
 of its main thread on each payload's SHA-256 and 0.5 s on its CRC-32 at throttle 1 (14.6 s and 1.9 s at 4); that check
 now runs in the digest worker, one payload ahead of the upload, and the import takes 15.8 s against 20.2 s and 17.2 s
-against 35.1 s ([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md) § Quality
-notes). On the server side the first reading's
+against 35.1 s. It then waited about 160 ms between two uploads for the next original's tiers; that preparation now
+runs while the previous original uploads, as in a member's batch (inbox #784), and the import takes 9.3–9.8 s
+(10.7–13.3 s at throttle 4), as long as S2's upload ([uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md)
+§ Quality notes). On the server side the first reading's
 two statement counts that grew with the data now stay fixed (inbox #537, 2026-10-29): opening the 1,000-photo Chapter
 sent about 116 SQL statements a request because the thumbnails' `blob-downloads-batch` read its blob row and the space's
 content blocks once per id it named (12 + 2 per id, 524 for a batch of 256), and the member list read each member's
