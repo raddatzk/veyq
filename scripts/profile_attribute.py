@@ -46,6 +46,9 @@ interval below is cut to them. Every number is of the page's renderer, never of 
     (2026-10-28, ×0.894–0.895 at throttle 4 against ×1.026–1.035 at 1), CPU time the throttle itself spends outside the
     page's tasks. Not `TaskDuration`: it counted 7.9 s where the trace's tasks held 14.5 s and `ThreadTime` 14.1 s (S2
     at throttle 1, 2026-10-28) — it leaves out task types the trace shows, among them the workers' messages to the page.
+    Gated on an unprofiled run only: the CPU profiler's sampler costs the main thread CPU time outside its tasks, which
+    stayed inside 10 % while M was 15 s and failed it once M fell to 3 s (2026-10-29, inbox #220: ×0.853 profiled against
+    ×1.030–1.079 unprofiled on the same tree, about 0.55 s over 18.8 s); a profiled run's ratio is printed.
   - `other` stays under 15 % of the sampled script, or the buckets decide nothing and [RULES] needs extending.
   - The frame worker is busy at least [FRAME_WORKER_MIN_S]: the 50 photos' frames are sealed there (5.1–5.6 s,
     2026-10-27 and -28), so a reading whose frames went back to the page, or that named another thread the frame
@@ -566,6 +569,7 @@ def read_run(trace: Trace, window: dict, maps: Maps) -> dict:
         "storeRequests": store,
         "digestInsidePreviousUpload": overlapped,
         "threadTimeDelta": ms(thread_delta) if thread_delta is not None else None,
+        "cpuProfile": window.get("cpuProfile", True),
     }
 
 
@@ -574,10 +578,11 @@ def controls(stem: str, run: dict, expect_overlap: bool) -> list[tuple[str, bool
     if run["threadTimeDelta"] is not None:
         ratio = run["M"] / run["threadTimeDelta"] if run["threadTimeDelta"] else 0.0
         text = f"{stem}: M {run['M']:.0f} ms against the main thread's CPU time, {run['threadTimeDelta']:.0f} ms (×{ratio:.3f}"
-        if re.search(r"-t1-", stem):
+        if re.search(r"-t1-", stem) and not run.get("cpuProfile", True):
             out.append((f"{text}, within {TASK_AGREEMENT:.0%})", abs(ratio - 1.0) <= TASK_AGREEMENT))
         else:
-            print(f"INFO {text}; under a throttle, not gated)")
+            why = "with the CPU profiler" if run.get("cpuProfile", True) else "under a throttle"
+            print(f"INFO {text}; {why}, not gated)")
     if run["otherShare"] is not None:
         out.append((f"{stem}: other is {run['otherShare']:.1%} of the sampled script (under {OTHER_MAX:.0%})",
                     run["otherShare"] < OTHER_MAX))
@@ -715,7 +720,16 @@ def selftest() -> int:
             failures.append("M is not the task's 10 ms")
     for f in failures:
         print(f"FAIL {f}")
-    print(f"selftest: {len(cases) + 5 - len(failures)} of {len(cases) + 5} checks hold")
+    # The CPU-time angle is gated on an unprofiled run at throttle 1 only: a profiled run's sampler costs the main thread
+    # CPU time outside its tasks (×0.853 on 2026-10-29), so the same ratio there is printed, not failed.
+    starved = {"M": 850.0, "threadTimeDelta": 1000.0, "otherShare": 0.01, "workers": {"frames.worker-x": 6000.0},
+               "files": 2, "digestInsidePreviousUpload": 0}
+    gated = [ok for text, ok in controls("s2-t1-r1", {**starved, "cpuProfile": False}, False) if "CPU time" in text]
+    if gated != [False]:
+        failures.append(f"an unprofiled throttle-1 run at ×0.85 was not failed by the CPU-time control: {gated}")
+    if any("CPU time" in text for text, _ in controls("s2-t1-r1", {**starved, "cpuProfile": True}, False)):
+        failures.append("a profiled run was gated by the CPU-time control")
+    print(f"selftest: {len(cases) + 7 - len(failures)} of {len(cases) + 7} checks hold")
     return 1 if failures else 0
 
 
