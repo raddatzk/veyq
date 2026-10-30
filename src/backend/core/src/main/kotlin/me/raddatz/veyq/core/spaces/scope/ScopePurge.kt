@@ -49,7 +49,9 @@ class ScopePurge(
     private val measures: MeasureTargets,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects an injection point typed kotlin.collections.List with @All (Kotlin's List is
-    // a java.util.List<? extends E> wildcard); the explicit phase, not bean order, decides who runs first.
+    // a java.util.List<? extends E> wildcard); the explicit phase, not bean order, decides who runs first. On a
+    // constructor PROPERTY (`private val`) it is spelled `@param:All`: from Kotlin 2.4 a bare annotation there lands on
+    // the backing field too (KT-73255), and the injection point is the constructor parameter alone.
     @All erasers: MutableList<ScopeEraser>,
 ) {
     // Sorted by the explicit phase, never by bean order; split once at core's own blob delete (ScopeEraser).

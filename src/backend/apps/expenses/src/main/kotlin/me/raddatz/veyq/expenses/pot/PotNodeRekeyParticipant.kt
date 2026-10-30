@@ -69,7 +69,7 @@ class PotRekeyHandler(private val rekey: RekeyHandler, private val store: PotRev
         val revisions = if (inReceipts) ItemsPage(emptyList(), false) else store.pageByAddress(nodeId, since?.let { RevisionRef.parse(it.id) }, limit)
         if (revisions.more) return PotRekeyListOutcome.Page(revisions.items, emptyList(), true, revisions.cursor)
         val room = limit - revisions.items.size
-        val after = if (inReceipts) since?.id else null
+        val after = if (inReceipts) since.id else null
         val fetched = receipts.pageById(nodeId, after, room + 1) // one past the room only says more remain
         val shown = fetched.take(room)
         val blobRows = shown.map { it.blobId }.takeIf { it.isNotEmpty() }?.let { BlobEntity.list("id in ?1", it) }.orEmpty().associateBy { it.id }

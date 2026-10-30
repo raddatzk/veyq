@@ -362,7 +362,7 @@ class CaseDecisions(
             measureId = row.id
             this.caseId = case.id
             ground = statement.ground.name
-            provision = statement.provision?.trim()?.takeIf { it.isNotEmpty() }
+            provision = statement.provision.trim().takeIf { it.isNotEmpty() }
             basis = StatementBasis.REPORT.name
             epoch = facts.epoch
             sealedFacts = facts.sealed

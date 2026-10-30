@@ -79,7 +79,7 @@ class ApiMethodIndex private constructor(private val paths: List<DeclaredPath>) 
             fun visit(c: Class<*>) {
                 if (!seen.add(c)) return
                 c.interfaces.forEach(::visit)
-                c.superclass?.takeIf { it != Object::class.java }?.let(::visit)
+                c.superclass?.takeIf { it != Any::class.java }?.let(::visit)
             }
             visit(cls)
             return seen.toList()
@@ -116,7 +116,7 @@ class DeclaredMethods(private val beans: BeanManager) {
 
     fun index(): ApiMethodIndex = built ?: synchronized(this) {
         built ?: ApiMethodIndex.of(
-            beans.getBeans(Object::class.java, jakarta.enterprise.inject.Any.Literal.INSTANCE).map { it.beanClass }.filter(ApiMethodIndex::isResource).toSet(),
+            beans.getBeans(Any::class.java, jakarta.enterprise.inject.Any.Literal.INSTANCE).map { it.beanClass }.filter(ApiMethodIndex::isResource).toSet(),
         ).also { built = it }
     }
 }

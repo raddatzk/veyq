@@ -23,14 +23,14 @@ class StatementTemplateConformanceTest {
     @Test
     fun everyTextEqualsTheContract() {
         assertEquals(file.path("measures").fieldNames().asSequence().toList(), StatementTemplate.MEASURES.keys.toList())
-        file.path("measures").fields().forEach { (k, v) ->
+        file.path("measures").properties().forEach { (k, v) ->
             val pinned = StatementTemplate.MEASURES.getValue(k)
             assertEquals(Texts(v.path("en").path("measure").asText(), v.path("de").path("measure").asText()), pinned.measure, k)
             assertEquals(Texts(v.path("en").path("reach").asText(), v.path("de").path("reach").asText()), pinned.reach, k)
         }
         for ((key, pinned) in listOf("roles" to StatementTemplate.ROLES, "basis" to StatementTemplate.BASIS, "grounds" to StatementTemplate.GROUNDS)) {
             assertEquals(file.path(key).fieldNames().asSequence().toList(), pinned.keys.toList(), key)
-            file.path(key).fields().forEach { (k, v) -> assertEquals(texts(v), pinned.getValue(k), "$key.$k") }
+            file.path(key).properties().forEach { (k, v) -> assertEquals(texts(v), pinned.getValue(k), "$key.$k") }
         }
         assertEquals(texts(file.path("rolesJoiner")), StatementTemplate.ROLES_JOINER)
         assertEquals(texts(file.path("gap")), StatementTemplate.GAP)

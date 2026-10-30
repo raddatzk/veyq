@@ -130,9 +130,9 @@ class ShareNodesHandler(
     private val tree: NodesStore,
     private val shares: SharingStore,
     /** `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
-    @All private val rules: MutableList<GuestNodeRules>,
-    @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
-    @All private val placeholders: MutableList<GuestPlaceholders>,
+    @param:All private val rules: MutableList<GuestNodeRules>,
+    @param:All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
+    @param:All private val placeholders: MutableList<GuestPlaceholders>,
     private val purge: NodeSubtreePurge,
     /** The guest-write record (ADR 0093 § 10): a create and a placement enter the guest as the name's last editor. */
     private val guestWriteRecords: GuestWriteRecords,

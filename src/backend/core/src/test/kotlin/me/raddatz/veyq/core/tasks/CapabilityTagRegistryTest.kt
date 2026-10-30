@@ -38,7 +38,7 @@ class CapabilityTagRegistryTest {
     @Test
     fun theServerOriginatedTagsAreTheContractsAndTheFrontDoorsAlike() {
         val registry = ObjectMapper().readTree(File("../../contracts/tasks/tags/v1.json")).path("tags")
-        val fromRegistry = registry.fields().asSequence()
+        val fromRegistry = registry.properties().asSequence()
             .filter { (_, tag) -> tag.path("originator").asText().startsWith("server-") }
             .map { (_, tag) -> tag.path("tag").asText() }
             .toSet()

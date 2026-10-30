@@ -59,7 +59,7 @@ class RateLimitPostureSweepTest {
 
     private fun deployedResourceClasses(): Set<Class<*>> =
         Arc.container().beanManager()
-            .getBeans(Object::class.java, jakarta.enterprise.inject.Any.Literal.INSTANCE)
+            .getBeans(Any::class.java, jakarta.enterprise.inject.Any.Literal.INSTANCE)
             .map { it.beanClass }
             .filter { isJaxrsResource(it) && !isTestScoped(it) }
             .toSet()

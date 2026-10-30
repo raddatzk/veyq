@@ -274,7 +274,7 @@ class QueuedRotationSliceTest {
     fun everyServerOriginatedTagIsRefusedAtEnqueue() {
         // Derived from the registry, never listed: a third server-side tag is refused without anyone remembering it.
         val tags = ObjectMapper().readTree(File("../../contracts/tasks/tags/v1.json")).path("tags")
-        val serverTags = tags.fields().asSequence()
+        val serverTags = tags.properties().asSequence()
             .filter { it.value.path("originator").asText().startsWith("server-") }
             .map { it.value.path("tag").asText() }.toList()
         assertTrue(CapabilityTags.SCOPE_ROTATION in serverTags && CapabilityTags.GRANT_DELIVERY in serverTags, "$serverTags")

@@ -33,7 +33,7 @@ class EveryStoredTimeHasAReaderTest {
 
     @Test
     fun everyStoredTimeHasANamedReader() {
-        val persisters = emf.unwrap(SessionFactoryImplementor::class.java).mappingMetamodel.streamEntityDescriptors().toList()
+        val persisters = buildList { emf.unwrap(SessionFactoryImplementor::class.java).mappingMetamodel.forEachEntityDescriptor { add(it) } }
         // Tells "no time column" apart from "no entity was read": the persistence unit has dozens.
         assertTrue(persisters.size >= 30, "read only ${persisters.size} entities — is this the application's persistence unit?")
         val stored = persisters.map { it as AbstractEntityPersister }.flatMap { p ->

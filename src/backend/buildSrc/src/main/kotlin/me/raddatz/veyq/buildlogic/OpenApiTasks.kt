@@ -149,8 +149,9 @@ abstract class OpenApiGenerate : DefaultTask() {
             .setAdditionalProperties(additional)
             .setApiPackage(set.apiPackage)
             .setModelPackage(set.modelPackage)
-            .setInvokerPackage(set.packageRoot)
             .setPackageName(set.packageRoot)
+        // The Kotlin generator reads `packageName` only and warns on an invoker package ("ignored. Use packageName.").
+        if (generator != "kotlin") cfg.setInvokerPackage(set.packageRoot)
         // Measured when the contracts were split by owner: both generators honour a schema mapping — the Kotlin models and
         // the jaxrs-spec interfaces name the core FQN and emit no type of their own for it. `importMappings` alone is
         // the wrong lever: it still generates the model, as a junk file named after the FQN.

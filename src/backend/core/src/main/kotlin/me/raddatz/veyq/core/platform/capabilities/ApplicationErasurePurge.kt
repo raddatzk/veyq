@@ -41,7 +41,7 @@ class ApplicationErasurePurge(
     private val nodes: NodeSubtreePurge,
     private val mail: ApplicationErasureMail,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
-    @All private val kindRules: MutableList<NodeKindRules>,
+    @param:All private val kindRules: MutableList<NodeKindRules>,
 ) {
     private val log = Logger.getLogger(ApplicationErasurePurge::class.java)
 

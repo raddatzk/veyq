@@ -101,8 +101,8 @@ class KeyChainStore {
         return MembershipEntity.getEntityManager().createQuery(
             "select count(a) from MembershipEntity a, MembershipEntity b where a.userId = :caller and b.userId = :target " +
                 "and a.scopeId = a.tenantId and b.scopeId = a.scopeId and a.pendingConsent = false and b.pendingConsent = false",
-            java.lang.Long::class.java,
-        ).setParameter("caller", callerId).setParameter("target", userId).singleResult.toLong() > 0
+            Long::class.javaObjectType,
+        ).setParameter("caller", callerId).setParameter("target", userId).singleResult > 0
     }
 
     private fun genesisOf(user: VeyqUser): KeyChainLink {

@@ -76,7 +76,7 @@ class BlobUploadHandler(
     private val blocks: ModerationBlocks,
     /** The roles the applications attach a member's upload in (see [MemberBlobRoles]); none → no member start.
      *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
-    @All private val memberRoles: MutableList<MemberBlobRoles>,
+    @param:All private val memberRoles: MutableList<MemberBlobRoles>,
     private val applications: ApplicationSwitch,
     private val nodes: NodesStore,
     config: VeyqConfig,

@@ -68,8 +68,9 @@ class CommitFailureLogSliceTest {
         val own = record("ARJUNA012125: TwoPhaseCoordinator.beforeCompletion - failed for %s", thrown)
         assertTrue(CommitFailureLogFilter.isLoggable(own))
         assertNull(own.thrown, "the exception and its message are dropped")
-        assertFalse("someone@example.org" in own.formattedMessage)
-        assertTrue(IllegalStateException::class.java.name in own.formattedMessage, "<${own.formattedMessage}>")
+        val message = LogCapture.formatted(own)
+        assertFalse("someone@example.org" in message)
+        assertTrue(IllegalStateException::class.java.name in message, "<$message>")
 
         val other = record("ARJUNA012117: TransactionReaper::check processing TX %s in state  %s", thrown)
         assertTrue(CommitFailureLogFilter.isLoggable(other))
