@@ -7,10 +7,10 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 
 vi.mock('../../../api/client', () => ({ blobApi: vi.fn(), contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn() }))
 vi.mock('../api', () => ({ mediaApi: vi.fn(), itemFavoritesApi: vi.fn(), ownItemFavoritesApi: vi.fn() }))
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import exifr from 'exifr'
+import { readExifTags } from '../../../shared/image/exifTags'
 import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
@@ -60,7 +60,7 @@ afterEach(() => {
 
 /** A dated photo in the Memory: the automatic date reconcile has something to write on open. */
 async function seedDated(memoryKey: Uint8Array) {
-  vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2021, 4, 1)) })
+  vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: Date.UTC(2021, 4, 1) })
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 

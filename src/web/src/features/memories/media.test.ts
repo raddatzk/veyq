@@ -8,9 +8,9 @@ vi.mock('../../api/client', () => ({
 }))
 vi.mock('./api', () => ({ mediaApi: vi.fn() }))
 
-// exifr does the real image parse in the browser; here we drive it so the seal/round-trip is deterministic.
-// Default: no EXIF (parse → undefined), so the non-EXIF paths behave exactly as a source without metadata.
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+// The EXIF reader (`shared/image/exifTags`) does the real image parse in the browser; here we drive it so the seal/round-trip is deterministic.
+// Default: no EXIF (readExifTags → undefined), so the non-EXIF paths behave exactly as a source without metadata.
+vi.mock('../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 import {
   addMedia,
@@ -46,7 +46,7 @@ import {
   type MediaMeta,
   type Dimensions,
 } from './media'
-import exifr from 'exifr'
+import { readExifTags } from '../../shared/image/exifTags'
 import { blobApi } from '../../api/client'
 import { mediaApi } from './api'
 import {
@@ -603,7 +603,7 @@ describe('addMedia — a source prepared ahead (inbox #220)', () => {
     })
 
     expect(deriver.deriveImage).not.toHaveBeenCalled()
-    expect(exifr.parse).not.toHaveBeenCalled()
+    expect(readExifTags).not.toHaveBeenCalled()
     expect(digests).toEqual([SENTINEL])
     expect(store.blob.startBlobUploads).toHaveBeenCalledTimes(1)
     expect(store.api.completeMedia).toHaveBeenCalledTimes(1)
@@ -618,7 +618,7 @@ describe('addMedia — a source prepared ahead (inbox #220)', () => {
     })
 
     expect(deriver.deriveImage).toHaveBeenCalledTimes(2)
-    expect(exifr.parse).toHaveBeenCalledTimes(1)
+    expect(readExifTags).toHaveBeenCalledTimes(1)
     expect(digests).toHaveLength(1)
     expect(digests[0]).not.toBe(SENTINEL)
   })
@@ -657,8 +657,8 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   const CAPTURED_AT = Date.UTC(2021, 4, 1, 10, 0, 0) // 2021-05-01T10:00:00Z
 
   afterEach(() => {
-    vi.mocked(exifr.parse).mockReset()
-    vi.mocked(exifr.parse).mockResolvedValue(undefined)
+    vi.mocked(readExifTags).mockReset()
+    vi.mocked(readExifTags).mockResolvedValue(undefined)
   })
 
   it('seals the layout tier {v,w,h} (geometry only) under K_node and round-trips it through listMedia', async () => {
@@ -668,7 +668,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 1920, h: 1080 }))
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT), Make: 'Canon' })
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: CAPTURED_AT, Make: 'Canon' })
 
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/png' }, deriver)
@@ -692,9 +692,9 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 800, h: 600 }))
-    vi.mocked(exifr.parse).mockResolvedValue({
-      DateTimeOriginal: new Date(CAPTURED_AT),
-      Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FNumber: 1.8, ISO: 200, latitude: 48.137, longitude: 11.575,
+    vi.mocked(readExifTags).mockResolvedValue({
+      DateTimeOriginal: CAPTURED_AT,
+      Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FNumber: 1.8, ISOSpeedRatings: 200, latitude: 48.137, longitude: 11.575,
     })
 
     const memoryKey = v1.randomBytes(32)
@@ -728,7 +728,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   // and shared with the capture-time PUT), and the filename must not appear in anything sent.
   //
   // The raw shapes below are not invented: they are what the un-mocked library actually returns for the
-  // generated fixture, pinned by `readExif.fixture.test.ts`. Keep the two in step — that test is the only
+  // generated fixture, pinned by `shared/image/exifTags.fixture.test.ts`. Keep the two in step — that test is the only
   // thing standing between this mock and a green lie.
   it('seals the panel fields and the filename in the LAZY tier, and leaks neither into the listed one nor the wire', async () => {
     const store = fakeStore()
@@ -737,16 +737,16 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.sourceDims = { w: 4032, h: 3024 }
-    vi.mocked(exifr.parse).mockResolvedValue({
+    vi.mocked(readExifTags).mockResolvedValue({
       Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm F1.8 STM',
-      FocalLength: 50, FocalLengthIn35mmFormat: 75, FNumber: 1.8, ExposureTime: 0.002, ISO: 200,
-      ExposureCompensation: -0.7, Flash: 9, Orientation: 6,
-      DateTimeOriginal: new Date(CAPTURED_AT),
+      FocalLength: 50, FocalLengthIn35mmFilm: 75, FNumber: 1.8, ExposureTime: 0.002, ISOSpeedRatings: 200,
+      ExposureBiasValue: -0.7, Flash: 9, Orientation: 6,
+      DateTimeOriginal: CAPTURED_AT,
       Software: 'veyq fixture 1.0', Artist: 'A. Photographer', Copyright: '(c) 2021 A. Photographer',
       Rating: 4,
-      title: { lang: 'x-default', value: 'Marienplatz' },
-      description: { lang: 'x-default', value: 'Marienplatz at golden hour' },
-      GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
+      xmpTitle: 'Marienplatz',
+      xmpDescription: 'Marienplatz at golden hour',
+      GPSAltitude: 519.4, GPSAltitudeRef: 0,
       GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
       latitude: 48.137, longitude: 11.575,
     })
@@ -792,8 +792,8 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.sourceDims = { w: 4032, h: 3024 }
-    vi.mocked(exifr.parse).mockResolvedValue({
-      DateTimeOriginal: new Date(CAPTURED_AT), latitude: 48.137, longitude: 11.575, Make: 'Canon',
+    vi.mocked(readExifTags).mockResolvedValue({
+      DateTimeOriginal: CAPTURED_AT, latitude: 48.137, longitude: 11.575, Make: 'Canon',
     })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
@@ -834,9 +834,9 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({
-      Make: 'Canon', FNumber: 1.8, ISO: 200, FocalLength: 50, Rating: 4,
-      description: { lang: 'x-default', value: 'ä'.repeat(20_000) },
+    vi.mocked(readExifTags).mockResolvedValue({
+      Make: 'Canon', FNumber: 1.8, ISOSpeedRatings: 200, FocalLength: 50, Rating: 4,
+      xmpDescription: 'ä'.repeat(20_000),
     })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -858,9 +858,9 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const escaped = '\u0001'.repeat(5_000)
-    vi.mocked(exifr.parse).mockResolvedValue({
-      Make: 'Canon', FNumber: 1.8, ISO: 200,
-      Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
+    vi.mocked(readExifTags).mockResolvedValue({
+      Make: 'Canon', FNumber: 1.8, ISOSpeedRatings: 200,
+      Artist: escaped, Copyright: escaped, xmpTitle: 'x' + escaped,
     })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -880,18 +880,18 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   // from the ORIGINAL's `planBlob` in `uploadMediaVia` (every case reddens).
   it('seals the file name, type and modified time into the original\'s blob meta — never into a tier, never in the clear', async () => {
     const memoryKey = v1.randomBytes(32)
-    const cases: { mediaType: string; name: string; exifr: 'none' | 'throws' }[] = [
-      { mediaType: 'video/mp4', name: 'VID_2026.mp4', exifr: 'none' },
-      { mediaType: 'image/png', name: ' Screenshot 2026-10-09.png ', exifr: 'none' },
-      { mediaType: 'image/jpeg', name: 'broken.jpg', exifr: 'throws' },
-      { mediaType: 'application/pdf', name: 'Tickets.pdf', exifr: 'none' },
+    const cases: { mediaType: string; name: string; reader: 'none' | 'throws' }[] = [
+      { mediaType: 'video/mp4', name: 'VID_2026.mp4', reader: 'none' },
+      { mediaType: 'image/png', name: ' Screenshot 2026-10-09.png ', reader: 'none' },
+      { mediaType: 'image/jpeg', name: 'broken.jpg', reader: 'throws' },
+      { mediaType: 'application/pdf', name: 'Tickets.pdf', reader: 'none' },
     ]
     for (const c of cases) {
       const store = fakeStore()
       fakeApi(mediaApi, store.api)
       fakeApi(blobApi, store.blob)
       vi.stubGlobal('fetch', store.fetchStub)
-      if (c.exifr === 'throws') vi.mocked(exifr.parse).mockRejectedValueOnce(new Error('corrupt'))
+      if (c.reader === 'throws') vi.mocked(readExifTags).mockRejectedValueOnce(new Error('corrupt'))
       await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: c.mediaType, name: c.name, lastModified: 1_700_000_000_000 }, stubDeriver())
 
       const { mediaId, wrappedExif, wrappedMeta } = store.captured.completeItem
@@ -959,7 +959,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 640, h: 480 }))
-    // exifr.parse → undefined (default mock): no readable EXIF; the file's lastModified stands in
+    // readExifTags → undefined (default mock): no readable EXIF; the file's lastModified stands in
     const FILE_MTIME = Date.UTC(2020, 0, 2, 3, 4, 5)
 
     const memoryKey = v1.randomBytes(32)
@@ -1037,7 +1037,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const asPickedFile = () => new File([bytes as BlobPart], 'p.jpg', { type: 'image/jpeg', lastModified: FILE_MTIME })
 
     // (a) the file carries a real EXIF date → both sides take it, and the file date is ignored by both
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) })
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: CAPTURED_AT })
     const keyA = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyA, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const sealedA = unsealMeta(SCOPE_ID, keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
@@ -1047,7 +1047,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(tileA.capturedAtSource).toBe(sealedA?.capturedAtSource)
 
     // (b) no readable EXIF → both fall back to the file's own date. This is the half the lever removes.
-    vi.mocked(exifr.parse).mockResolvedValue(undefined)
+    vi.mocked(readExifTags).mockResolvedValue(undefined)
     const keyB = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyB, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const listed = await listMedia(SCOPE_ID, NODE_ID)
@@ -1118,6 +1118,55 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(store.captured.completeItem.wrappedMeta ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     expect(unsealMeta(SCOPE_ID, memoryKey, item)).toBeNull()
+  })
+})
+
+// inbox #799: what each of the two readers asks of the EXIF seam, and what it makes of an answer it cannot use.
+describe('the EXIF read — which scope it asks for, and when it asks at all', () => {
+  const TAGS = { DateTimeOriginal: Date.UTC(2021, 4, 1), Make: 'Canon' }
+  const image = new Blob([new Uint8Array([1, 2, 3]) as BlobPart])
+
+  afterEach(() => {
+    vi.mocked(readExifTags).mockReset()
+    vi.mocked(readExifTags).mockResolvedValue(undefined)
+  })
+
+  it('the pick-time read asks for the dates only, of an image only, and takes the file date when the read fails', async () => {
+    vi.mocked(readExifTags).mockResolvedValue(TAGS)
+    expect(await readCaptureTime(image, 'image/jpeg', 7)).toEqual({ capturedAt: TAGS.DateTimeOriginal, capturedAtSource: 'exif' })
+    expect(readExifTags).toHaveBeenLastCalledWith(image, 'date')
+
+    vi.mocked(readExifTags).mockClear()
+    expect(await readCaptureTime(image, 'video/mp4', 7)).toEqual({ capturedAt: 7, capturedAtSource: 'file' })
+    expect(readExifTags).not.toHaveBeenCalled()
+
+    vi.mocked(readExifTags).mockRejectedValueOnce(new Error('corrupt'))
+    expect(await readCaptureTime(image, 'image/jpeg', 7)).toEqual({ capturedAt: 7, capturedAtSource: 'file' })
+  })
+
+  it('the upload asks for every tag of an image, and a video, a failed read and a read with no tags seal no EXIF tier', async () => {
+    vi.mocked(readExifTags).mockResolvedValue(TAGS)
+    const read = await prepareMedia({ blob: image, mediaType: 'image/jpeg' }, stubDeriver())
+    expect(read.meta.exif).toMatchObject({ make: 'Canon' })
+    expect(readExifTags).toHaveBeenLastCalledWith(image, 'all')
+
+    vi.mocked(readExifTags).mockClear()
+    const video = await prepareMedia({ blob: image, mediaType: 'video/mp4' }, stubDeriver())
+    expect(readExifTags).not.toHaveBeenCalled()
+    expect(video.meta.exif).toBeNull()
+    expect(video.meta.capturedAt).toBeUndefined()
+
+    vi.mocked(readExifTags).mockRejectedValueOnce(new Error('corrupt'))
+    expect((await prepareMedia({ blob: image, mediaType: 'image/jpeg' }, stubDeriver())).meta.exif).toBeNull()
+
+    vi.mocked(readExifTags).mockResolvedValueOnce(undefined)
+    expect((await prepareMedia({ blob: image, mediaType: 'image/jpeg' }, stubDeriver())).meta.exif).toBeNull()
+  })
+
+  it('seals no altitude from a below-sea-level flag without a height', async () => {
+    vi.mocked(readExifTags).mockResolvedValue({ Make: 'Canon', GPSAltitudeRef: 1 })
+    const { meta } = await prepareMedia({ blob: image, mediaType: 'image/jpeg' }, stubDeriver())
+    expect(meta.exif).toEqual({ v: 1, make: 'Canon' })
   })
 })
 

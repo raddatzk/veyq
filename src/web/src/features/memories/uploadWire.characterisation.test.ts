@@ -10,14 +10,14 @@
 //
 // **Pinned.** `crypto.getRandomValues` (so every `K_blob`, nonce and seal) is a seeded generator, `crypto.randomUUID` a
 // counter, `Date.now` a constant — each reset per scenario, so a scenario's bytes do not depend on what ran before.
-// The deriver is a stub returning fixed bytes, and `exifr` finds nothing (as in `media.test.ts`): the derived pixels
+// The deriver is a stub returning fixed bytes, and the EXIF reader finds nothing (as in `media.test.ts`): the derived pixels
 // and the EXIF tier are the deriver's and the parser's business, not the transport's, and are NOT pinned here. (Since
 // inbox #395 F10 the EXIF tier is sealed even when the parser finds nothing — it carries the source's file name — so its
 // seal draws a nonce before the blobs are planned: that update changed `wrappedExif` from null and, through the pinned
 // stream, every later `K_blob` wrap and PUT digest; no length, path, header, order or count moved.)
 // (Re-blessed again for inbox #397, the blob meta. Every declare item gained `wrappedBlobMeta` (380 base64: one 256-byte
 // bucket sealed — ORIGINAL `{type,name,modifiedAt}`, THUMBNAIL/PREVIEW/COVER `{type:'image/jpeg'}`); `wrappedExif` went
-// back to null (the name left the EXIF tier, and exifr finds nothing here); `wrappedMeta` shrank 176 → 144 base64 (the
+// back to null (the name left the EXIF tier, and the reader finds nothing here); `wrappedMeta` shrank 176 → 144 base64 (the
 // listed tier dropped `mediaType`). Through the pinned stream: the EXIF nonce is no longer drawn and each plan draws a
 // meta nonce after its wrap, so the ORIGINAL's and PREVIEW's `K_blob` wraps and every PUT digest changed, while the
 // THUMBNAIL's and the cover's wraps came out byte-identical (the stream realigns behind the ORIGINAL; the cover had no
@@ -40,11 +40,12 @@
 // the diff of `__snapshots__/uploadWire.*.json` is reviewed as part of that change. A move that is meant to change
 // nothing (B1) must leave them untouched.
 //
-// Only `exifr` is mocked, by its package name — no module of ours, so a move cannot disarm a mock here: the real
-// `media.ts`, `share.ts`, generated clients, `api/client.ts` and `withRefresh` all run.
+// Only the EXIF reader seam (`shared/image/exifTags.ts`) is mocked: the real `media.ts`, `share.ts`, generated clients,
+// `api/client.ts` and `withRefresh` all run. A move of that module would disarm the mock and nothing would say so — the
+// real reader finds nothing in these fixed bytes either — so it is the one path to carry along (src/web/CLAUDE.md § vi.mock).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+vi.mock('../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 import { addMedia, CHUNK_SIZE, type MediaDeriver, type AddMediaSource } from './media'
 import { FULL_FRAME, uploadedCover } from '../../core/node/cover/coverModel'

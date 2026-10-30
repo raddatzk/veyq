@@ -1,60 +1,85 @@
-// uc.memory.upload — **the one test in this suite that runs the REAL `exifr`.**
+// @vitest-environment happy-dom
+// uc.memory.upload — what `media.ts` seals from a photo, over the REAL EXIF reader (inbox #799). Every other suite here
+// mocks `shared/image/exifTags`, which proves the mapping against a record a test wrote and never against one the
+// library produced; `shared/image/exifTags.test.ts` pins the reader's tags, and this file the whole chain from the
+// file's bytes to the two sealed tiers' contents.
 //
-// Every other test mocks it (`media.test.ts:12`), which proves our *mapping* and never that the library yields
-// a tag under the options we pass. A tag name invented at the keyboard therefore passes every mocked test and
-// is `undefined` forever in production. This file is the gap, and it caught four such guesses on its first run
-// — see the assertions below, each of which is a name or a shape the plan got wrong.
-//
-// The fixture is generated, never a third-party photo: `python3 scripts/make_exif_fixture.py` writes
-// `__fixtures__/exif-sample.jpg` from the JPEG/TIFF spec with no dependency, so it is auditable byte for byte
-// and carries exactly the tags the client claims to read. Re-run it when that list changes.
+// **It is also the parity proof of the reader swap.** Every expectation below is what the client produced under
+// `exifr` (captured 2026-10-30 from the same fixtures, before the swap) — except where exifr read nothing: a WebP (it
+// had no WebP reader) and a HEIC whose `ftyp` is 52 bytes (it refused any over 50, which iOS 18 writes on an
+// adaptive-HDR photo). Those two now read exactly what their siblings read. Change an expectation only for a reason a
+// comment names. The fixtures are generated (`python3 scripts/make_exif_fixture.py`), never a third-party photo.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import exifr from 'exifr'
-import { EXIF_PARSE_OPTIONS } from './media'
+import { fileURLToPath, URL as FileURL } from 'node:url'
+import { prepareMedia, readCaptureTime, type MediaDeriver, type MediaExif } from './media'
 
-const FIXTURE = fileURLToPath(new URL('./__fixtures__/exif-sample.jpg', import.meta.url))
+const blobOf = (name: string) =>
+  new Blob([readFileSync(fileURLToPath(new FileURL(`./__fixtures__/${name}`, import.meta.url))) as BlobPart])
 
-describe('exifr, un-mocked, over the generated fixture', () => {
-  it('yields every tag the client reads, under the options the client passes', async () => {
-    const raw = (await exifr.parse(readFileSync(FIXTURE), EXIF_PARSE_OPTIONS)) as Record<string, unknown>
-    expect(raw).toBeTruthy()
+/** No pixels are derived here: the geometry is not what this file is about, and the fixtures carry 1x1 bodies. */
+const noDecode = {
+  deriveImage: async () => { throw new Error('not decoded here') },
+  deriveVideoPoster: async () => { throw new Error('not decoded here') },
+} as unknown as MediaDeriver
 
-    // camera + lens, already read today
-    expect(raw).toMatchObject({ Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm F1.8 STM' })
-    expect(raw).toMatchObject({ FocalLength: 50, FNumber: 1.8, ISO: 200, ExposureTime: 0.002 })
-    expect(raw.DateTimeOriginal).toBeInstanceOf(Date)
-    expect(raw).toMatchObject({ ExifImageWidth: 4032, ExifImageHeight: 3024 })
+const FILE_DATE = 1_000_000
+/** The EXIF wall clock, read in the device's zone — as exifr read it, so the dates sealed so far stay comparable. */
+const TAKEN = new Date(2021, 6, 15, 18, 4, 5).getTime()
 
-    // (1) The plan said `ExposureBiasValue`. There is no such key — exifr names it `ExposureCompensation`,
-    // and a mocked test would never have noticed.
-    expect(raw.ExposureBiasValue).toBeUndefined()
-    expect(raw.ExposureCompensation).toBe(-0.7)
+/** The main fixture's panel bundle: every field the panel shows, each from its first-choice tag. */
+const BUNDLE: MediaExif = {
+  v: 1, make: 'Canon', model: 'EOS R', lens: 'RF 50mm F1.8 STM', focalLength: 50, focalLength35: 75, fNumber: 1.8,
+  exposureTime: 0.002, exposureCompensation: -0.7, iso: 200, flash: 9, orientation: 6, software: 'veyq fixture 1.0',
+  artist: 'A. Photographer', copyright: '(c) 2021 A. Photographer', rating: 4, title: 'Marienplatz',
+  description: 'Marienplatz at golden hour', altitude: 519.4, imgDirection: 215.3, imgDirectionRef: 'T', gpsAccuracy: 4.8,
+  w: 4032, h: 3024,
+}
+/** A container that carries the TIFF block and no XMP: the title is XMP-only, the description falls back to IFD0's. */
+const { title: _xmpOnly, ...BUNDLE_WITHOUT_XMP } = BUNDLE
 
-    // (2) `Flash` is only the bitfield the plan assumed with `translateValues: false`. Under exifr's default
-    // it is the English string "Flash fired, compulsory flash mode", and `Flash & 0x1` on a string is 0 —
-    // i.e. "never fired", always. The option set is what makes the bit test legal.
-    expect(raw.Flash).toBe(9)
+const SAMPLE = { capturedAt: TAKEN, gpsLat: 48.136944444444445, gpsLng: 11.575 }
 
-    // (3) The same option revives `Orientation` as the NUMBER the existing code has always assumed. Under the
-    // default it is "Rotate 90 CW", so `finiteNum(raw.Orientation)` yielded undefined and the field this
-    // client has sealed since cr-0064 was never once populated.
-    expect(raw.Orientation).toBe(6)
+async function sealedFrom(name: string, mediaType: string) {
+  const blob = blobOf(name)
+  const { meta } = await prepareMedia({ blob, mediaType, lastModified: FILE_DATE, name }, noDecode)
+  return { meta, captureTime: await readCaptureTime(blob, mediaType, FILE_DATE) }
+}
 
-    // (4) GPSAltitudeRef is neither a number nor a string: exifr hands back a byte-indexed object.
-    expect(raw.GPSAltitude).toBe(519.4)
-    expect(raw.GPSAltitudeRef).toMatchObject({ 0: 0 })
-    expect(raw).toMatchObject({ GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8 })
-    expect(raw.latitude).toBeCloseTo(48.136944, 5)
-    expect(raw.longitude).toBeCloseTo(11.575, 5)
+describe('media.ts over the real EXIF reader', () => {
+  it.each([
+    ['exif-sample.jpg', 'image/jpeg', BUNDLE],
+    ['exif-sample.png', 'image/png', BUNDLE],
+    ['exif-sample.tif', 'image/tiff', BUNDLE_WITHOUT_XMP],
+    ['exif-sample-le.tif', 'image/tiff', BUNDLE_WITHOUT_XMP],
+    ['exif-sample.avif', 'image/avif', BUNDLE_WITHOUT_XMP],
+    ['exif-sample.heic', 'image/heic', BUNDLE_WITHOUT_XMP],
+    // exifr read nothing of these two; each now reads what its sibling above reads
+    ['exif-sample.webp', 'image/webp', BUNDLE],
+    ['exif-sample-ftyp52.heic', 'image/heic', BUNDLE_WITHOUT_XMP],
+  ])('%s: the date and the position in the listed tier, the rest in the panel bundle', async (name, mediaType, exif) => {
+    expect(await sealedFrom(name, mediaType)).toEqual({
+      meta: { dims: null, ...SAMPLE, exif },
+      captureTime: { capturedAt: TAKEN, capturedAtSource: 'exif' },
+    })
+  })
 
-    // provenance: `Software`/`Artist`/`Copyright` from IFD0, `Rating` and the titles from XMP — which is what
-    // proves `xmp: true` is actually in the option set rather than assumed.
-    expect(raw).toMatchObject({ Software: 'veyq fixture 1.0', Artist: 'A. Photographer' })
-    expect(raw.Copyright).toContain('A. Photographer')
-    expect(raw.Rating).toBe(4)
-    expect(raw.title).toMatchObject({ value: 'Marienplatz' })
-    expect(raw.description).toMatchObject({ value: 'Marienplatz at golden hour' })
+  it('takes each second choice where the first is missing: lens make, XMP software and rating, IFD0 size and date', async () => {
+    const modified = new Date(2020, 0, 2, 3, 4, 5).getTime()
+    expect(await sealedFrom('exif-sample-fallbacks.jpg', 'image/jpeg')).toEqual({
+      meta: {
+        dims: null, capturedAt: modified, gpsLat: -33.867777777777775, gpsLng: -70.67, // south and west: negative
+        exif: { v: 1, make: 'Nikon', lens: 'Nikkor', software: 'darktable 4.8', rating: 3, altitude: -12.5, w: 640, h: 480 },
+      },
+      captureTime: { capturedAt: modified, capturedAtSource: 'exif' },
+    })
+  })
+
+  it('takes the digitised date when there is no original one, and an IPTC object name for a title', async () => {
+    const digitised = new Date(2019, 2, 4, 5, 6, 7).getTime()
+    expect(await sealedFrom('exif-sample-iptc.jpg', 'image/jpeg')).toEqual({
+      meta: { dims: null, capturedAt: digitised, exif: { v: 1, title: 'Hofgarten' } },
+      captureTime: { capturedAt: digitised, capturedAtSource: 'exif' },
+    })
   })
 })
