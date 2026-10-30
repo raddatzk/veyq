@@ -1,7 +1,7 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
 - Status: Accepted
-- Built: partly (not built: decision 5's client window, decision 10's major entry from a fix release)
+- Built: partly (not built: decision 5's client window, lane L3's archive holding decision 10's major entry)
 - Date: 2026-10-15
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -123,13 +123,21 @@ keeps inside a major reaches the operators who have not left the previous major 
 - **Written into the release procedure (decisions 2, 3 and 10):** the 1 May train, its release order and the release
   branch, in [`infra/README.md`](../../infra/README.md) § Cutting a release. The manifest's deprecation lifecycle stays
   deferred (ADR 0032 § Consequences) and is not needed for this.
+- **Built: a fix release moves the major entry (decision 10).** Every release of major N is proved from its MAJOR
+  ENTRY — the newest release tag of major N−1 among all the repository's tags, `main`'s and every `release/<old>.x`
+  branch's, by version order — beside its default predecessor (the newest tag its first parent reaches, which never
+  sees a branch's tag), and its tools image bakes that entry for the gate (ADR 0098 decision 3). One derivation,
+  `run_web_e2e.major_entry_ref()`: `ci.yml`'s `upgrade-proof` runs `run_web_e2e.py --upgrade-major-entry`, its `chart`
+  job `chart_upgrade_check.py --upgrade-major-entry`, and `release_assets.py --major-entry` stamps the tools image —
+  so the gate never admits an entry the pipeline did not prove. No tag of major N−1 (major 0, or while the pin file
+  says `release: none`): no entry and no second run; an entry equal to the default predecessor — a major's first
+  release, cut before any fix release — is proved once. `upgrade_proof_selftest.py` holds the derivation on a
+  fabricated history with a `release/1.x` branch. Like the whole upgrade proof, the second run is disabled until the
+  first release, and no CI run has executed either.
 - **Not built.** Each is open work tracked in the inbox (#436):
-  - **a fix release does not move the major entry yet** (decision 10). `run_web_e2e.default_predecessor` picks the
-    newest release tag reachable from `main`'s first parent, and a tag on `release/<old>.x` is not reachable from it.
-    `release_assets.py --major-entry` names an entry only where that predecessor lies in the previous major, so only
-    for a major's first release. While a branch is maintained, the current major's release must also be proved from
-    the branch's newest release and bake it, and lane L3's archive must hold that release as the previous major's last
-    (ADR 0096). Needed before the first branch release, so not before the first train;
+  - **lane L3's archive holding the major entry** (ADR 0096): the previous major's last release archived, so that a
+    backup of it restores into the new major. L3 has no lane yet (ADR 0091 decision 6). Needed before the first branch
+    release, so not before the first train;
   - no CI job runs a client against older server majors. None can be needed before a native client exists.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
   adapter, and at V1 `VERSION` and the advertised major both become `1`. Until then the advertised major is `0`,

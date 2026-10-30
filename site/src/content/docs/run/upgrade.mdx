@@ -35,7 +35,10 @@ start", ADR 0056 §7), the candidate migrates it up at its start, must report `c
 checkout's reader opens every item the seeder recorded — names, date and place, the cover, every photo and file byte
 for byte, the drop box's guest files, and a READ link as its guest sees it. The predecessor is the commit before the
 one under test until the first release, the last release (`v<major>.<minor>`) from then on; `--upgrade-from <ref>`
-names another one, and a ref older than the seeder is refused. The run's summary ends with the predecessor, both
+names another one, and a ref older than the seeder is refused. A release of major N is proved a second time
+(`--upgrade-major-entry`) from the newest release of major N−1, a fix release on its `release/<N−1>.x` branch included:
+the release its tools image's gate lets a new major be entered from. Where there is none, or it is the predecessor
+above, that run says so and runs nothing. The run's summary ends with the predecessor, both
 builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
 refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
 gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
@@ -141,7 +144,7 @@ way back. Four things are specific to this target.
 - **What the chart change between two releases is checked for — and what not** ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)
   § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's chart out of git
   (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
-  another) — at `infra/kubernetes/charts/veyq`, or at `charts/veyq` where an older release carries it — renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
+  another, and `--upgrade-major-entry` the newest release of the previous major, as the proof's second run does) — at `infra/kubernetes/charts/veyq`, or at `charts/veyq` where an older release carries it — renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
   `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, any StatefulSet
   `spec` field the API server does not let an update change (all but `replicas`, `ordinals`, `template`,
   `updateStrategy`, `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - `serviceName`, `podManagementPolicy`,
