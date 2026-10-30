@@ -55,7 +55,8 @@ describe('readExifTags over the generated fixtures', () => {
       ImageWidth: 640, ImageLength: 480, Make: 'Nikon', DateTime: new Date(2020, 0, 2, 3, 4, 5).getTime(), LensMake: 'Nikkor',
       latitude: -(33 + 52 / 60 + 4 / 3600), longitude: -(70 + 40 / 60 + 12 / 3600), GPSAltitude: 12.5, GPSAltitudeRef: 1,
       xmpRating: 3, xmpCreatorTool: 'darktable 4.8',
-      // and nothing from `dc:creator` / `dc:rights`: no field of ours reads them
+      // and nothing from `dc:creator` / `dc:rights`: no field of ours reads them - the panel's author and copyright are
+      // EXIF's only (owner 2026-10-30, uc.memory.gallery)
     })
     expect(await readExifTags(blobOf('exif-sample-iptc.jpg'), 'all')).toEqual({
       DateTimeDigitized: new Date(2019, 2, 4, 5, 6, 7).getTime(), iptcObjectName: 'Hofgarten',

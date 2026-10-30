@@ -77,7 +77,8 @@
    shows the file (its original name, its plaintext size, its format — for every item, EXIF or not), the camera
    and lens, the exposure
    (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, whether the flash
-   fired), the provenance an editor wrote in (software, author, copyright, rating, title, description) and the
+   fired), the provenance an editor wrote in (software, author, copyright, rating, title, description; author and
+   copyright from EXIF only, never from XMP `dc:creator`/`dc:rights` or IPTC, owner 2026-10-30) and the
    geo block (altitude, the direction the camera faced, the fix's own accuracy). **Every row is present only
    when the photo carries it** — a phone snapshot shows a handful, a raw file from a camera shows twenty, and
    neither is a special case. Where the user has consented to maps ([ADR 0018](../../../decisions/0018-map-tiles-provider-neutrality.md))
