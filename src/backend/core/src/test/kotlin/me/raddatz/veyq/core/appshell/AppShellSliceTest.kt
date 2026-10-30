@@ -63,6 +63,16 @@ class AppShellSliceTest {
     }
 
     @Test
+    fun theWebBundlesLicenceNoticesAreServedAsAFileNotTheShell() {
+        // The web build's `third-party-licenses.txt` (with each package's source, MPL-2.0 §3.2) reaches a recipient here,
+        // at the root the image puts `src/web/dist` in. A browser opening it asks for HTML, which is what the fallback
+        // answers — so the file must win before the fallback is reached.
+        html("/third-party-licenses.txt").then().statusCode(200).header("Content-Type", containsString("text/plain"))
+            .body(containsString("third-party-licenses-fixture")).body(not(containsString(FIXTURE_MARKER)))
+        html("/third-party-licenses-missing.txt").then().statusCode(200).body(containsString(FIXTURE_MARKER)) // control: no file, the shell
+    }
+
+    @Test
     fun anUnknownApiPathIsNeverTheShell() {
         html("/api/no-such-endpoint").then().statusCode(404).body(not(containsString(FIXTURE_MARKER)))
         html("/api/setup").then().statusCode(200) // control: the API answers under the same Accept

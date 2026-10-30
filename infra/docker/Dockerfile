@@ -47,7 +47,9 @@ COPY VERSION /repo/VERSION
 # (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
 # backend's app shell refuses to boot without, caught here rather than at a self-hoster's first start.
-RUN npm run build && npm run verify:no-backdoor && npm run verify:csp
+# verify:license-sources holds that the bundle's licence file names each package's source (MPL-2.0 §3.2), which the
+# runtime stage copies out of this dist.
+RUN npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:license-sources
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base
@@ -158,11 +160,13 @@ RUN apt-get update \
     && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
 COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarkus-app /work/quarkus-app
 # The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
-# both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses); the web
-# bundle's own are served by the app, at /third-party-licenses.txt. The MariaDB driver (LGPL-2.1) stays a jar of
-# its own in lib/main, which is what lets a recipient replace it.
+# both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses) and of every
+# package the web bundle carries (vite.config.ts's licence file, each with its source - ExifReader is MPL-2.0, §3.2).
+# The app also serves that file, at /third-party-licenses.txt; the copy here is for a recipient who never starts it.
+# The MariaDB driver (LGPL-2.1) stays a jar of its own in lib/main, which is what lets a recipient replace it.
 COPY LICENSE NOTICE /usr/share/licenses/veyq/
 COPY --from=backend-build-jvm /repo/src/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
+COPY --from=frontend-build /repo/src/web/dist/third-party-licenses.txt /usr/share/licenses/veyq/THIRD-PARTY-LICENSES-WEB.txt
 # The two stamps, after the last layer on purpose: a stamp declared before a RUN enters its cache key, which re-ran the
 # `apt-get` layer above at every commit (measured in the heavy stage's round 2, 2026-10-24). Nothing above reads them.
 # The labels are the image's identity as `docker inspect` shows it, set here only: no build step passes a label, and

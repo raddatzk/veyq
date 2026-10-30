@@ -1,0 +1,3 @@
+# Licenses
+
+third-party-licenses-fixture
