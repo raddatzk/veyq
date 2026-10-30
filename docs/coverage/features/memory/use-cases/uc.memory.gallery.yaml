@@ -150,7 +150,7 @@ acceptanceCriteria:
           - src/features/memories/media.test.ts
           - src/features/memories/components/MediaLightbox.test.ts
   - id: date-sorted-grid
-    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under a field key derived from K_node in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
+    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under a field key derived from K_node in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is a photo's EXIF DateTimeOriginal or a video's container time (videoHeader.ts), else the file's date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
     coverage:
       # Sorting is client-side; cite the tests that assert the ORDER. MemoryDetail.test.ts asserts newest-first
       # default + the oldest-first toggle re-sorting already-listed tiles with no refetch (and a lightbox date
@@ -166,6 +166,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memories/media.test.ts
+          - src/shared/image/videoHeader.test.ts
           - src/features/memories/components/MemoryDetail.test.ts
           - src/features/memories/components/MemoryDetail.optimistic.test.ts
   - id: lightbox-correct-capturedat

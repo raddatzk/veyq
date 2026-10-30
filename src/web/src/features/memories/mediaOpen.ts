@@ -4,7 +4,7 @@
 // network, the API client or page state; it imports the crypto suite and nothing of the app.
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import type { MediaMeta } from './media'
+import type { CaptureSource, MediaMeta } from './media'
 
 /**
  * The sealed **listed-metadata** tier of one media (cr-0068), bound to (scope, media). This one blob carries the
@@ -29,12 +29,15 @@ export function cleanStr(s: unknown): string | undefined {
   return t.length ? t : undefined
 }
 
+/** Every `capturedAtSource` this client knows; any other value (a newer client's) reads as no source, so untrustworthy. */
+const CAPTURE_SOURCES: ReadonlySet<CaptureSource> = new Set(['exif', 'container', 'file'])
+
 /** The display projection of a raw tier: numbers coerced, geometry validated, unknown fields left out. */
 export function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
   const w = finiteNum(m.w)
   const h = finiteNum(m.h)
   const geo = w !== undefined && h !== undefined && w > 0 && h > 0
-  const source = m.capturedAtSource === 'exif' || m.capturedAtSource === 'file' ? m.capturedAtSource : undefined
+  const source = CAPTURE_SOURCES.has(m.capturedAtSource as CaptureSource) ? (m.capturedAtSource as CaptureSource) : undefined
   return {
     v: finiteNum(m.v) ?? 1,
     w: geo ? w : undefined,

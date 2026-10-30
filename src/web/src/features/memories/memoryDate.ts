@@ -103,7 +103,7 @@ export async function reconcileMemoryDate(
 
 /**
  * Materialize a Memory's `auto` range from its **own** media, day-truncated (local `YYYY-MM-DD`). Counts only
- * **trustworthy** capture times — a user `capturedAtOverride`, or an EXIF-sourced `capturedAt` — so a
+ * **trustworthy** capture times — a user `capturedAtOverride`, or a `capturedAt` from EXIF or a video's container — so a
  * file-modification-date fallback can't stretch the range (cr-0067). An empty result ⇒ `{ mode: 'auto' }` (the
  * "no date yet" state). `nodeKey` = the Memory's `K_node` (each media's capture-time tier is sealed under it).
  */
@@ -112,7 +112,7 @@ export function computeAutoRange(scopeId: string, items: MediaItem[], nodeKey: U
   for (const item of items) {
     const tier = openedMeta(scopeId, nodeKey, item)
     if (!tier) continue
-    const trustworthy = tier.capturedAtOverride !== undefined || tier.capturedAtSource === 'exif'
+    const trustworthy = tier.capturedAtOverride !== undefined || tier.capturedAtSource === 'exif' || tier.capturedAtSource === 'container'
     const ms = effectiveCapturedAt(tier)
     if (trustworthy && ms !== undefined) days.push(ms)
   }

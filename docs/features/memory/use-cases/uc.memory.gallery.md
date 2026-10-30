@@ -163,8 +163,8 @@
   50-photo upload at the 4× throttle.
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
-  is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's
-  date** rule the sealed tier will carry. Finishing an upload therefore changes a tile's **content** (the local
+  is sealed or uploaded — because that key is derivable on device from the same **EXIF date (a video's container
+  time), else the file's date** rule the sealed tier will carry. Finishing an upload therefore changes a tile's **content** (the local
   preview becomes the real decrypted thumbnail), never its **place**. This is stated as an obligation because
   the obvious implementation breaks it: holding in-flight tiles in a block of their own is one line shorter and
   makes every completed upload jump *behind* the files still going — the more a user picks at once, the worse

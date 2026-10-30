@@ -243,6 +243,20 @@ describe('computeAutoRange', () => {
     })
   })
 
+  it('a video’s container time is trustworthy; a source this client does not know is not (inbox #794)', () => {
+    const day = (iso: string) => new Date(iso + 'T12:00:00').getTime()
+    const items = [
+      itemWith({ capturedAt: day('2026-03-02'), capturedAtSource: 'container' }), // a recorded video — counted
+      itemWith({ capturedAt: day('2026-03-05'), capturedAtSource: 'exif' }),
+      itemWith({ capturedAt: day('2026-04-30'), capturedAtSource: 'satellite' as MediaMeta['capturedAtSource'] }), // a newer client's — EXCLUDED
+    ]
+    expect(computeAutoRange(SCOPE_ID, items, nodeKey)).toEqual({
+      mode: 'auto',
+      from: epochMsToIsoDate(day('2026-03-02')),
+      to: epochMsToIsoDate(day('2026-03-05')),
+    })
+  })
+
   it('is empty auto when no trustworthy dated media (only file fallbacks / none)', () => {
     const items = [itemWith({ capturedAt: Date.now(), capturedAtSource: 'file' }), itemWith(null)]
     expect(computeAutoRange(SCOPE_ID, items, nodeKey)).toEqual({ mode: 'auto' })

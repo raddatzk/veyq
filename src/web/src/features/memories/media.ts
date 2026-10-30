@@ -42,6 +42,7 @@ import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditC
 import type { ChunkProvider } from '../../sw/protocol'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
 import { readExifTags, type ExifTags } from '../../shared/image/exifTags'
+import { videoCaptureTimeFromHeader } from '../../shared/image/videoHeader'
 
 // The on-device pixel stage lives in `shared/image/mediaDeriver` (cr-0143). Re-exported here so existing importers of
 // `./media` (share.ts, useOptimisticTiles.ts, uploadQueue.ts, tests) keep their import path unchanged.
@@ -84,11 +85,12 @@ export type MediaDerivative = { kind: MediaDerivativeKind; ref: BlobRef }
  * The **listed-metadata tier** sealed under `K_node` (cr-0068) — one always-listed blob (returned with every
  * `listMedia`) carrying everything the gallery + place need at list-level, kept small:
  * - **geometry** `w,h` — the justified grid's aspect (cr-0059);
- * - **capture time** `capturedAt` (EXIF date or the file's creation date) + any user `capturedAtOverride` — date
- *   sort/display/edit (cr-0066). Effective = `capturedAtOverride ?? capturedAt`. `capturedAtSource` records
- *   where the derived `capturedAt` came from: `'exif'` (a real `DateTimeOriginal`, trustworthy) or `'file'` (the
- *   file's modification date, a fallback that must NOT feed a Memory's `auto` date range — an edited photo's
- *   file date would wrongly stretch it);
+ * - **capture time** `capturedAt` (a photo's EXIF date, a video's container time, else the file's date) + any user
+ *   `capturedAtOverride` — date sort/display/edit (cr-0066). Effective = `capturedAtOverride ?? capturedAt`.
+ *   `capturedAtSource` records where the derived `capturedAt` came from: `'exif'` (a real `DateTimeOriginal`,
+ *   trustworthy), `'container'` (a video's recorded time, inbox #794, trustworthy) or `'file'` (the file's
+ *   modification date, a fallback that must NOT feed a Memory's `auto` date range — an edited photo's file date
+ *   would wrongly stretch it). A client that predates a value reads it as no source, so as untrustworthy;
  * - **GPS** `gpsLat,gpsLng` (decimal degrees) — the source of a Memory's place medoid (cr-0068, uc.memory.place).
  *
  * Not here: the original's **type** and **file name**. They are what the upload declared about the original's bytes,
@@ -104,7 +106,7 @@ export type MediaMeta = {
   h?: number
   capturedAt?: number
   capturedAtOverride?: number
-  capturedAtSource?: 'exif' | 'file'
+  capturedAtSource?: CaptureSource
   gpsLat?: number
   gpsLng?: number
   /**
@@ -303,18 +305,37 @@ export function effectiveCapturedAt(meta: MediaMeta | null): number | undefined 
 // the gallery **before a byte is uploaded** (`useOptimisticTiles`). If these two ever disagreed, a tile would
 // jump the moment its upload settled — which is the defect this rule's single definition exists to prevent.
 
-/** A media's capture time and where it came from — an EXIF date is trustworthy, a file date is a fallback. */
-export type CaptureTime = { capturedAt?: number; capturedAtSource?: 'exif' | 'file' }
+/** Where a capture time came from: a photo's EXIF, a video's container header, or the file's own date. */
+export type CaptureSource = 'exif' | 'container' | 'file'
+/** The two sources the file's bytes carry, so a trustworthy capture time; the file's date is only a fallback. */
+export type EmbeddedSource = Exclude<CaptureSource, 'file'>
+
+/** A media's capture time and where it came from — an embedded date is trustworthy, a file date is a fallback. */
+export type CaptureTime = { capturedAt?: number; capturedAtSource?: CaptureSource }
 
 /**
- * The rule: the EXIF date if the image carries one, else the file's own date. The source is recorded because
- * only a trustworthy EXIF date (or a user override) may feed a Memory's `auto` range (cr-0067) — a file
- * modification date must not stretch it.
+ * The rule: the date the bytes carry (a photo's EXIF, a video's container time — [embeddedCaptureTime]) if there is
+ * one, else the file's own date. The source is recorded because only a trustworthy embedded date (or a user override)
+ * may feed a Memory's `auto` range (cr-0067) — a file modification date must not stretch it.
  */
-export function captureTimeOf(exifDate: number | undefined, lastModified: number | undefined): CaptureTime {
-  const capturedAt = exifDate ?? finiteNum(lastModified)
+export function captureTimeOf(embedded: number | undefined, lastModified: number | undefined, embeddedSource: EmbeddedSource = 'exif'): CaptureTime {
+  const capturedAt = embedded ?? finiteNum(lastModified)
   if (capturedAt === undefined) return {}
-  return { capturedAt, capturedAtSource: exifDate !== undefined ? 'exif' : 'file' }
+  return { capturedAt, capturedAtSource: embedded !== undefined ? embeddedSource : 'file' }
+}
+
+/**
+ * A video's recorded time from its container header (`videoHeader.ts`; MP4 / QuickTime only), best-effort: another
+ * type, a container that carries none or a read that fails yields nothing. Both readers of a video's date — the tile
+ * and the sealed tier — go through here, as both of an image's go through [exifCapturedAt].
+ */
+async function containerCapturedAt(file: Blob, mediaType: string): Promise<number | undefined> {
+  if (!mediaType.startsWith('video/')) return undefined
+  try {
+    return (await videoCaptureTimeFromHeader(file)) ?? undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -324,6 +345,7 @@ export function captureTimeOf(exifDate: number | undefined, lastModified: number
  * of the rule is visible at the call site and a caller cannot silently lose it.
  */
 export async function readCaptureTime(file: Blob, mediaType: string, lastModified: number | undefined): Promise<CaptureTime> {
+  if (mediaType.startsWith('video/')) return captureTimeOf(await containerCapturedAt(file, mediaType), lastModified, 'container')
   if (!mediaType.startsWith('image/')) return captureTimeOf(undefined, lastModified)
   try {
     const tags = await readExifTags(file, 'date')
@@ -422,7 +444,7 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 }
 
 /** What the metadata tiers are sealed from, read on the device before any key is used: the geometry and the EXIF read. */
-type MetadataRead = { dims: Dimensions | null } & Awaited<ReturnType<typeof readExif>>
+type MetadataRead = { dims: Dimensions | null; capturedAtFrom?: EmbeddedSource } & Awaited<ReturnType<typeof readExif>>
 
 /**
  * Read what the two metadata tiers carry — key-free, sending nothing, so it is part of a file's on-device stage
@@ -430,13 +452,17 @@ type MetadataRead = { dims: Dimensions | null } & Awaited<ReturnType<typeof read
  * does; absent for a video or an underivable source, and only then is a probe (its own decode) worth paying for.
  */
 async function readMetadata(source: AddMediaSource, deriver: MediaDeriver, knownDims: Dimensions | null): Promise<MetadataRead> {
-  const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
-  return { dims, ...meta }
+  const [dims, meta, recorded] = await Promise.all([
+    knownDims ?? probeDims(source, deriver),
+    readExif(source),
+    containerCapturedAt(source.blob, source.mediaType),
+  ])
+  return recorded === undefined ? { dims, ...meta } : { dims, ...meta, capturedAt: recorded, capturedAtFrom: 'container' }
 }
 
 /**
  * Seal the two metadata tiers under `K_node` (best-effort, operator-blind) from what [readMetadata] read: the always-listed **metadata** tier
- * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
+ * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF or container date, else the file's date,
  * + GPS; and what an import restores, a corrected capture time and a place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
  * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
  */
@@ -450,7 +476,7 @@ function sealMetadata(
   restored: RestoredMediaFacts = {},
 ): { wrappedMeta: string | null; wrappedExif: string | null } {
   const dims = meta.dims
-  const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, lastModified)
+  const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, lastModified, meta.capturedAtFrom)
   const placeName = cleanStr(restored.placeName)
   const metaTier: MediaMeta = {
     v: 1,

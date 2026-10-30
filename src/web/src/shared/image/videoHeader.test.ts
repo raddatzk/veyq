@@ -6,11 +6,15 @@
 //     -fflags +bitexact -flags:v +bitexact [-movflags +faststart] <out>
 // `landscape.mp4` with `+faststart` (its `moov` first); `portrait-moov-at-end.mov` without it (its `moov` behind the media
 // data, as a phone writes it), remuxed with `-display_rotation 90 -c copy`, so its matrix turns it upright (Chromium
-// reports it 36x64); `clip.webm` VP9 (`-c:v libvpx-vp9 -b:v 50k`); `clip.mkv` H.264. The rest is built byte by byte here.
+// reports it 36x64); `clip.webm` VP9 (`-c:v libvpx-vp9 -b:v 50k`); `clip.mkv` H.264. The two dated ones carry a capture
+// time (inbox #794): `dated.mp4` as `landscape.mp4` plus `-metadata creation_time=2024-05-12T12:03:21Z` (its `mvhd`), and
+// `dated-apple-keys.mov` without `+faststart`, plus `-movflags use_metadata_tags -metadata creation_time=2024-05-12T12:00:00Z
+// -metadata com.apple.quicktime.creationdate=2024-05-12T14:03:21+0200` (an `mvhd` time AND Apple's key, three minutes
+// apart, in a `meta` ffmpeg writes as a full box). The rest is built byte by byte here.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { videoSizeFromHeader } from './videoHeader'
+import { videoCaptureTimeFromHeader, videoSizeFromHeader } from './videoHeader'
 
 const fixture = (name: string) =>
   new Blob([readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url))) as BlobPart])
@@ -216,5 +220,98 @@ describe('Matroska: the first video TrackEntry’s Video element', () => {
     const past = cat(header, el(ID.segment, el(ID.tracks, video())).subarray(0, 40))
     await expect(videoSizeFromHeader(new Blob([past as BlobPart]))).resolves.toBeNull()
     await expect(videoSizeFromHeader(new Blob([cat(header, [0, 0, 0, 0, 0, 0, 0, 0]) as BlobPart]))).resolves.toBeNull()
+  })
+})
+
+// --- the capture time (inbox #794) ---------------------------------------------------------------------------------
+
+const AT = Date.UTC(2024, 4, 12, 12, 3, 21)
+const NOW = Date.UTC(2026, 9, 30)
+const EPOCH_1904 = 2_082_844_800
+const u64 = (n: number) => [...u32(Math.floor(n / 2 ** 32)), ...u32(n % 2 ** 32)]
+function mvhd(ms: number, version = 0) {
+  const s = Math.floor(ms / 1000) + EPOCH_1904
+  const times = version === 1 ? [...u64(s), ...u64(s)] : [...u32(s), ...u32(s)]
+  return box('mvhd', [version, 0, 0, 0], times, new Array(80).fill(0))
+}
+const utf8 = (s: string) => new TextEncoder().encode(s)
+/** A QuickTime `meta` of `mdta` keys, each with its UTF-8 value; `fullBox` puts version and flags first, as ffmpeg does. */
+function keyedMeta(entries: [string, string][], { fullBox = false, type = 1 } = {}) {
+  const keys = box('keys', [0, 0, 0, 0], u32(entries.length), ...entries.map(([k]) => cat(u32(8 + k.length), ascii('mdta'), ascii(k))))
+  const items = entries.map(([, v], i) => {
+    const data = box('data', u32(type), u32(0), utf8(v))
+    return cat(u32(8 + data.length), u32(i + 1), data)
+  })
+  return box('meta', fullBox ? [0, 0, 0, 0] : [], hdlr('mdta'), keys, box('ilst', ...items))
+}
+const KEY = 'com.apple.quicktime.creationdate'
+const captured = (blob: Blob) => videoCaptureTimeFromHeader(blob, NOW)
+
+describe('capture time: files as ffmpeg writes them', () => {
+  it('an MP4 whose mvhd names the time', async () => {
+    await expect(captured(fixture('dated.mp4'))).resolves.toBe(AT)
+  })
+  it('Apple’s creationdate key wins over the mvhd time, its offset applied, in a moov behind the media data', async () => {
+    await expect(captured(fixture('dated-apple-keys.mov'))).resolves.toBe(AT)
+  })
+  it('a file whose muxer wrote no time, and a Matroska or WebM file, answer null', async () => {
+    await expect(captured(fixture('landscape.mp4'))).resolves.toBeNull()
+    await expect(captured(fixture('clip.webm'))).resolves.toBeNull()
+    await expect(captured(fixture('clip.mkv'))).resolves.toBeNull()
+  })
+})
+
+describe('capture time: built', () => {
+  const track = trak(tkhd(64, 36), 'vide')
+  const moovOf = (...parts: Uint8Array[]) => mp4(box('moov', ...parts, track))
+
+  it('mvhd version 0 and version 1 (64-bit times)', async () => {
+    await expect(captured(moovOf(mvhd(AT)))).resolves.toBe(AT)
+    await expect(captured(moovOf(mvhd(AT, 1)))).resolves.toBe(AT)
+  })
+
+  it('Apple’s key in a plain atom, as Apple writes it, and after other keys: its value by its index', async () => {
+    const meta = keyedMeta([['com.apple.quicktime.make', 'Apple'], [KEY, '2024-05-12T14:03:21+0200']])
+    await expect(captured(moovOf(mvhd(Date.UTC(2020, 0, 1)), meta))).resolves.toBe(AT)
+  })
+
+  it('every zone form: Z, +HH:MM, a negative offset, fractions of a second', async () => {
+    for (const [value, at] of [
+      ['2024-05-12T12:03:21Z', AT],
+      ['2024-05-12T14:03:21+02:00', AT],
+      ['2024-05-12T07:03:21-0500', AT],
+      ['2024-05-12T12:03:21.250Z', AT],
+    ] as const) {
+      await expect(captured(moovOf(keyedMeta([[KEY, value]], { fullBox: true }))), value).resolves.toBe(at)
+    }
+  })
+
+  it('a key that names no instant falls back to the mvhd time: no zone, no such day, not UTF-8 text', async () => {
+    const fallback = Date.UTC(2023, 0, 2)
+    for (const meta of [
+      keyedMeta([[KEY, '2024-05-12T14:03:21']]),
+      keyedMeta([[KEY, '2024-02-30T10:00:00Z']]),
+      keyedMeta([[KEY, '2024-05-12T14:03:21+0200']], { type: 23 }),
+    ]) {
+      await expect(captured(moovOf(mvhd(fallback), meta))).resolves.toBe(fallback)
+    }
+  })
+
+  it('no time: zero, a time counted from 1970 in a field that counts from 1904, more than a day ahead', async () => {
+    const zero = box('mvhd', new Array(100).fill(0))
+    await expect(captured(moovOf(zero))).resolves.toBeNull()
+    await expect(captured(moovOf(mvhd(-EPOCH_1904 * 1000 + AT)))).resolves.toBeNull() // reads as 1958
+    await expect(captured(moovOf(mvhd(NOW + 2 * 86_400_000)))).resolves.toBeNull()
+    await expect(captured(moovOf(mvhd(NOW + 3_600_000)))).resolves.toBe(NOW + 3_600_000) // a clock an hour off is still one
+  })
+
+  it('a key out of range does not hide a good mvhd time', async () => {
+    await expect(captured(moovOf(mvhd(AT), keyedMeta([[KEY, '1904-01-01T00:00:00Z']])))).resolves.toBe(AT)
+  })
+
+  it('a damaged header answers null, never throws', async () => {
+    const cut = cat(ftyp, box('moov', mvhd(AT))).subarray(0, ftyp.length + 20)
+    await expect(captured(new Blob([cut as BlobPart]))).resolves.toBeNull()
+    await expect(captured(new Blob([new Uint8Array(4) as BlobPart]))).resolves.toBeNull()
   })
 })

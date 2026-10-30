@@ -82,7 +82,7 @@ export const ENVELOPE_VOCABULARY: ReadonlySet<string> = new Set([
   'geocoded', 'manual', 'fixed',
   'road', 'suburb', 'city', 'county', 'island', 'state', 'country',
   'media', 'upload',
-  'exif', 'file',
+  'exif', 'container', 'file',
 ])
 
 /**

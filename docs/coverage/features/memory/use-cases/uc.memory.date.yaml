@@ -24,7 +24,7 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryDateEditor.test.ts
           - src/features/memories/components/MemoryDetail.test.ts
   - id: auto-materialized-trustworthy
-    text: The `auto` range is materialized min→from / max→to (day-truncated to a local YYYY-MM-DD) over only TRUSTWORTHY capture times — a media whose capturedAt is EXIF-sourced (capturedAtSource === 'exif') or carries a user capturedAtOverride; file-modification-date fallbacks (and older source-less media) are excluded so an edited photo can't stretch the range. It is recomputed from the complete media list and re-sealed only when it changed, at settle points — on Memory open (the self-heal), after an upload batch — leaving an empty `auto` for a Memory with no trustworthy dated media.
+    text: The `auto` range is materialized min→from / max→to (day-truncated to a local YYYY-MM-DD) over only TRUSTWORTHY capture times — a media whose capturedAt is EXIF- or container-sourced (capturedAtSource === 'exif' or 'container', a video's recorded time) or carries a user capturedAtOverride; file-modification-date fallbacks (and older source-less media) are excluded so an edited photo can't stretch the range. It is recomputed from the complete media list and re-sealed only when it changed, at settle points — on Memory open (the self-heal), after an upload batch — leaving an empty `auto` for a Memory with no trustworthy dated media.
     coverage:
       web:
         unit:

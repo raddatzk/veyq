@@ -18,12 +18,16 @@ The date's sealed **shape** + envelope (sealing under `K_node`, versioning, `upd
 materialization on the node) is the enabler [en.memory.node-meta](../enablers/en.memory.node-meta.md). What this
 use-case adds is the **`auto`** behaviour — the other three modes just carry the user's typed days:
 
-- **`auto` counts only *trustworthy* capture times.** A media's `capturedAt` (cr-0066) is the EXIF
-  `DateTimeOriginal` **or**, absent that, a **file-modification-date fallback**. A file date is not a real
-  capture time — an edited photo whose EXIF was dropped would carry its *edit* date and wrongly stretch the
-  range — so the capture-time tier records `capturedAtSource: 'exif' | 'file'`, and **`auto` includes a media
-  only when its `capturedAt` is EXIF-sourced *or* the user set a `capturedAtOverride`** (an intentional
-  correction). File-fallback media (and older source-less media) are excluded; a Memory with only such media
+- **`auto` counts only *trustworthy* capture times.** A media's `capturedAt` (cr-0066) is the date its bytes
+  carry — a photo's EXIF `DateTimeOriginal`, a video's container time (inbox #794: Apple's
+  `com.apple.quicktime.creationdate`, else the `mvhd` creation time; a WebM or Matroska file carries none) — **or**,
+  absent that, a **file-modification-date fallback**. A file date is not a real capture time — an edited photo whose
+  EXIF was dropped would carry its *edit* date and wrongly stretch the range, and a copy, a download or a messenger
+  rewrites a video's — so the capture-time tier records `capturedAtSource: 'exif' | 'container' | 'file'`, and
+  **`auto` includes a media only when its `capturedAt` is EXIF- or container-sourced *or* the user set a
+  `capturedAtOverride`** (an intentional correction). File-fallback media (and older source-less media, and a source
+  this client does not know) are excluded. Residual: an app that re-encodes a video and writes its own encode time
+  into `mvhd` hands over a wrong time that counts as trustworthy; the lightbox correction fixes it; a Memory with only such media
   has an empty `auto` range (set it manually). (The media grid still *sorts* by the effective `capturedAt`
   regardless of source — cr-0066 unchanged.)
 

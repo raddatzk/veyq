@@ -17,6 +17,14 @@
 // Anything else - another container, a fragmented MP4 whose `tkhd` names no size, a damaged header - answers null, and
 // the caller asks the browser instead. The reads are slices of the Blob, 64 KiB at a time and at most 1 MiB in all; the
 // walk visits at most 4,096 boxes or elements. Nothing here holds the file.
+//
+// The same walk reads a video's **capture time** (inbox #794), which a copy, a download or a messenger leaves alone where
+// they rewrite the file's own date. Only MP4 / QuickTime carry one: Apple's `com.apple.quicktime.creationdate`, an
+// ISO 8601 time with the local offset, in the `mdta` keys of a `meta` in the `moov` (ffmpeg puts that `meta` in the
+// `moov`'s `udta`), else the `mvhd` creation time (seconds since 1904, UTC), which a phone writes as the time it started
+// recording. A zero or anything before 1970-01-02 is an encoder that wrote no time (or counted from the wrong epoch),
+// and a time more than a day ahead of the clock is no capture time either; both answer null. Matroska's `DateUTC` is
+// not read: the format defines it as when the file was muxed, and a browser's recorder writes none.
 import type { Dimensions } from './mediaDeriver'
 
 /** Bytes per read: a `moov` of a short clip fits whole; a longer one's track headers sit at its start. */
@@ -72,6 +80,24 @@ export async function videoSizeFromHeader(blob: Blob): Promise<Dimensions | null
   if (u32be(head, 0) === 0x1a45dfa3) return matroskaSize(r)
   if (TOP_LEVEL.has(fourcc(head, 4))) return bmffSize(r)
   return null
+}
+
+/**
+ * The capture time (epoch ms) a video file's container header names, or null for a container that carries none, a
+ * header this cannot read or a time that is no capture time. Never rejects for a malformed file; a read the browser
+ * refuses rejects, as any read would. `now` bounds a time ahead of the clock.
+ */
+export async function videoCaptureTimeFromHeader(blob: Blob, now: number = Date.now()): Promise<number | null> {
+  const r = new HeaderReader(blob)
+  const head = await r.view(0, 8)
+  if (!head || head.length < 8 || !TOP_LEVEL.has(fourcc(head, 4))) return null
+  const moov = await child(r, { body: 0, end: r.blob.size }, 'moov')
+  if (!moov) return null
+  const plausible = (at: number | null) => (at !== null && at >= EARLIEST_CAPTURE && at <= now + DAY ? at : null)
+  const udta = await child(r, moov, 'udta')
+  const meta = (await child(r, moov, 'meta')) ?? (udta && (await child(r, udta, 'meta'))) // Apple's place, then ffmpeg's
+  const tagged = meta && plausible(parseIsoTime(await quickTimeKey(r, meta, CREATION_DATE_KEY)))
+  return tagged ?? plausible(await mvhdCreation(r, moov))
 }
 
 // --- MP4 / QuickTime -----------------------------------------------------------------------------------------------
@@ -149,6 +175,87 @@ async function videoTrackSize(r: HeaderReader, trak: Box): Promise<Dimensions | 
   if (upright) return sized(w, h)
   if (quarter) return sized(h, w)
   return null // a flip, a scale or a skew: the browser answers
+}
+
+/** Seconds from 1904-01-01 (ISO BMFF's epoch) to 1970-01-01. */
+const EPOCH_1904 = 2_082_844_800
+const DAY = 86_400_000
+/** A time before this is an encoder that wrote zero or counted from 1970 into a field that counts from 1904. */
+const EARLIEST_CAPTURE = DAY
+const CREATION_DATE_KEY = 'com.apple.quicktime.creationdate'
+
+/** The `mvhd` creation time in epoch ms; null where the box is missing or short. */
+async function mvhdCreation(r: HeaderReader, moov: Box): Promise<number | null> {
+  const mvhd = await child(r, moov, 'mvhd')
+  const b = mvhd && (await r.view(mvhd.body, 12))
+  if (!b || b.length < 8) return null
+  const seconds = b[0] === 1 ? (b.length < 12 ? null : u32be(b, 4) * 2 ** 32 + u32be(b, 8)) : u32be(b, 4)
+  return seconds === null ? null : (seconds - EPOCH_1904) * 1000
+}
+
+/**
+ * The UTF-8 value a QuickTime `meta` (`hdlr` `mdta`, then `keys` and `ilst`) holds for `key`; null where there is none.
+ * Apple writes this `meta` as a plain atom, an ISO writer as a full box with four bytes of version and flags first.
+ */
+async function quickTimeKey(r: HeaderReader, meta: Box, key: string): Promise<string | null> {
+  const first = await r.view(meta.body, 12)
+  if (!first || first.length < 12) return null
+  const body = META_CHILDREN.has(fourcc(first, 4)) ? meta.body : META_CHILDREN.has(fourcc(first, 8)) ? meta.body + 4 : null
+  if (body === null) return null
+  const atoms = { body, end: meta.end }
+  const keys = await child(r, atoms, 'keys')
+  const index = keys && (await keyIndex(r, keys, key))
+  const ilst = index && (await child(r, atoms, 'ilst'))
+  if (!index || !ilst) return null
+  for (let at = ilst.body; at < ilst.end; ) {
+    const item = await boxAt(r, at, ilst.end)
+    if (!item) return null
+    const id = await r.view(at + 4, 4) // an item's type is the key's 1-based index, not a fourcc
+    if (id && id.length === 4 && u32be(id, 0) === index) return dataText(r, item)
+    at = item.end
+  }
+  return null
+}
+
+const META_CHILDREN = new Set(['hdlr', 'keys', 'ilst'])
+
+/** The 1-based index `key` has in a `keys` atom (version and flags, a count, then size + namespace + name each). */
+async function keyIndex(r: HeaderReader, keys: Box, key: string): Promise<number | null> {
+  const count = await r.view(keys.body + 4, 4)
+  if (!count || count.length < 4) return null
+  let at = keys.body + 8
+  for (let i = 1; i <= u32be(count, 0) && at + 8 <= keys.end && r.visit(); i++) {
+    const h = await r.view(at, 8)
+    if (!h || h.length < 8) return null
+    const size = u32be(h, 0)
+    if (size < 8 || at + size > keys.end) return null
+    if (fourcc(h, 4) === 'mdta' && size - 8 === key.length) {
+      const name = await r.view(at + 8, size - 8)
+      if (name && new TextDecoder().decode(name) === key) return i
+    }
+    at += size
+  }
+  return null
+}
+
+/** The text of an `ilst` item's `data` atom (type 1, UTF-8); null for any other type. */
+async function dataText(r: HeaderReader, item: Box): Promise<string | null> {
+  const data = await child(r, item, 'data')
+  if (!data || data.end - data.body < 8 || data.end - data.body > 256) return null
+  const b = await r.view(data.body, data.end - data.body)
+  if (!b || b.length < 8 || u32be(b, 0) !== 1) return null // the type indicator, then the locale
+  return new TextDecoder('utf-8', { fatal: true }).decode(b.subarray(8))
+}
+
+/** `YYYY-MM-DDTHH:MM:SS[.fff](Z|±HH[:]MM)` in epoch ms; null without a zone, since a local time names no instant. */
+function parseIsoTime(text: string | null): number | null {
+  const m = text?.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):?(\d{2}))$/)
+  if (!m) return null
+  const [, y, mo, d, h, mi, s, zone, sign, oh, om] = m
+  const local = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)
+  const offset = zone === 'Z' ? 0 : (sign === '-' ? -1 : 1) * (+oh * 60 + +om) * 60_000
+  const at = local - offset
+  return new Date(local).getUTCDate() === +d && +h < 24 && +mi < 60 && +s < 60 ? at : null
 }
 
 // --- WebM / Matroska -----------------------------------------------------------------------------------------------

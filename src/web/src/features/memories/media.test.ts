@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 vi.mock('../../api/client', () => ({
   blobApi: vi.fn(),
@@ -1056,6 +1058,34 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(tileB.capturedAt).toBe(sealedB?.capturedAt)
     expect(tileB.capturedAt).toBe(FILE_MTIME)
     expect(tileB.capturedAtSource).toBe('file')
+  })
+
+  // The same two consumers for a video (inbox #794): its container time, read by `videoHeader.ts` from the real files
+  // ffmpeg wrote. Lever: drop the 'container' source from either call and the tile and the tier part company.
+  it('a picked video’s capture time is the one the tier seals — its container time, else the file date', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    const FILE_MTIME = Date.UTC(2019, 5, 6, 7, 8, 9)
+    const video = (name: string) =>
+      new Blob([readFileSync(fileURLToPath(new URL(`../../shared/image/__fixtures__/${name}`, import.meta.url))) as BlobPart])
+
+    for (const [name, capturedAt, capturedAtSource] of [
+      ['dated.mp4', Date.UTC(2024, 4, 12, 12, 3, 21), 'container'],
+      ['dated-apple-keys.mov', Date.UTC(2024, 4, 12, 12, 3, 21), 'container'],
+      ['landscape.mp4', FILE_MTIME, 'file'], // the muxer wrote no time
+    ] as const) {
+      const key = v1.randomBytes(32)
+      const mediaType = name.endsWith('.mov') ? 'video/quicktime' : 'video/mp4'
+      await addMedia(SCOPE_ID, NODE_ID, key, { blob: video(name), mediaType, lastModified: FILE_MTIME }, deriver)
+      const listed = await listMedia(SCOPE_ID, NODE_ID)
+      const sealed = unsealMeta(SCOPE_ID, key, listed[listed.length - 1])
+      const tile = await readCaptureTime(video(name), mediaType, FILE_MTIME)
+      expect([sealed?.capturedAt, sealed?.capturedAtSource], name).toEqual([capturedAt, capturedAtSource])
+      expect(tile, name).toEqual({ capturedAt, capturedAtSource })
+    }
   })
 
   it('seals no capture date in the tier when there is neither an EXIF date nor a file date', async () => {
