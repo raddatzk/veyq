@@ -143,8 +143,19 @@
   scales down the PREVIEW-tier poster its upload stores, drawn once for both (`videoPosterOf`). Three series each against
   the build before, every one started under a load of 3: 21 players instead of 37, the peak 0.95–0.97 GiB against
   1.08–1.12 GiB, the upload 11.1–11.4 s against 12.4–13.4 s at throttle 4 (8.1–8.8 s against 8.1–9.1 s at throttle 1),
-  the first tile picture about 0.1 s later. The median fell only to 0.84–0.86 GiB (0.82–0.84 at throttle 4), so most of
-  what it holds above the floor is not the tile's draw, and what is has not been attributed.
+  the first tile picture about 0.1 s later. The median fell only to 0.84–0.86 GiB (0.82–0.84 at throttle 4). What holds
+  it above a build with no video tile picture (0.69–0.72 GiB) is the real frame, in two parts (two series of three runs
+  per build, interleaved, all under the load gate): the tiles asking for their posters ahead of the upload, about
+  0.08 GiB of median, which piles each poster draw's residue up early and leaves the end level where the floor's is
+  (0.88–0.90 GiB); and the worker's decode of each 2048 px poster to scale it, about 0.04–0.06 GiB, still there at the
+  end (0.94 against 0.88 GiB). Showing the picture costs nothing measurable: the scaled posters made and never shown hold
+  what the shipped build holds, a constant 8×8 JPEG shown on every tile holds the floor, and the play badge moves nothing.
+  So the floor is reached only by a video tile with no frame of its own, which is the product's choice and not taken: the
+  peak differs by 0.04 GiB. A tile that asks only once its upload leaves `queued` lowers the median by 0.09 GiB and raises
+  the peak by 0.03–0.05 GiB, so it is not taken either. A tile wanted after its upload took the poster drew the clip a
+  second time (21–22 players for 20 clips); it now waits for its listed thumbnail (`tileVideoPosterOf`). The one lever
+  left unmeasured is encoding the tile's 512 px JPEG from the canvas the poster draw already holds, instead of the
+  worker decoding the 2048 px JPEG: at most the 0.04–0.06 GiB end-level part, not the peak (S2v, 2026-10-30; inbox #795).
 
 ## User impact
 

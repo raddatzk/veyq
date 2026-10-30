@@ -357,7 +357,7 @@ the pick and again at its upload: 22 players alive at once become 2, and the upl
 12.8–13.5 s at throttle 4; the renderer's 0.85–0.89 GiB through it are the tile posters' draws of their 1080p frame,
 not the probes and not the decodes (0.71–0.72 GiB without those posters, 0.70–0.71 GiB decoded and never drawn, inbox #795);
 a tile now scales its upload's poster instead of drawing the frame, which lowered the peak to 0.95–0.97 GiB and the upload
-to 11.1–11.4 s at throttle 4, the median only to 0.84–0.86 GiB ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
+to 11.1–11.4 s at throttle 4, the median only to 0.84–0.86 GiB, the rest the real frame a video tile shows ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
 § Quality notes; 2026-10-29). A fourth path,
 an import of a download of the same 50 photos (S4, inbox #557), spent 3.5 s
 of its main thread on each payload's SHA-256 and 0.5 s on its CRC-32 at throttle 1 (14.6 s and 1.9 s at 4); that check
