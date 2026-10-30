@@ -225,6 +225,9 @@ run and the version clients check already share one major; no train has left yet
   removed (an API operation, a setting you must act on), at most once a year, on 1 May, and only if a removal is
   pending. A security fix that cannot keep the API intact is the one exception: an unscheduled major that removes only
   the insecure piece.
+- **The previous major gets security fixes until the next train.** When a new major is released, the one before it
+  keeps receiving minor releases with security fixes, and nothing else, until the following 1 May. You can take such
+  a fix without leaving your major. After that train your major gets no more fixes.
 - **What you must act on is named in that release's notes,** a removed configuration variable included.
 - **Apps keep working across your upgrade window.** An installed app speaks every major since the train before last,
   so after your major stops being current you have about two years to upgrade before an app asks you to. Apps that

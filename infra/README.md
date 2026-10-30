@@ -224,6 +224,37 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
   line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
   on a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
+**The 1 May train** ([ADR 0085](../docs/decisions/0085-one-major-moved-on-a-yearly-train.md) decisions 2, 3 and 10)
+leaves only when a removal is pending. A year without one has no major, and an unscheduled major (decision 4) follows
+the same steps on its own date:
+
+1. **The clients that speak the new major are published first,** so the apps in the stores speak it before any server
+   does. Until a native client exists this step is empty: the web client and admin-web ship in the server's image.
+2. **The old major's last release, on the commit before the bump:** a release dispatch on `main`.
+3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
+   `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
+4. **The bump:** one commit setting `VERSION` to the new major, then its release dispatch. Whatever an operator must act
+   on goes into that release's notes.
+
+```sh
+gh workflow run ci.yml --ref main -f release=true                       # step 2: v<old>.<n>
+git fetch --tags && git branch release/<old>.x v<old>.<n> && git push origin release/<old>.x  # step 3
+```
+
+**A fix for the previous major** is one decision 4 keeps inside a major. It never carries a migration. It lands on
+`main` first, then on the branch, and the branch is released **before** the current major's next release, because
+that release is the one the new major is entered from after it:
+
+```sh
+git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main>
+gh workflow run ci.yml --ref release/<old>.x -f release=true            # <old>.<m>: <old> moves, latest does not
+gh workflow run ci.yml --ref main -f release=true                       # then the current major's release
+```
+
+Built is the publish from the branch. Not built is the current major's release being proved from the branch's newest
+release and baking it as the major entry (ADR 0085 § Consequences). It is needed before the first fix release, and
+until it exists an instance on a fix release cannot enter the new major.
+
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
 held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
 push (the dry run is green and nothing lands in GHCR); a snapshot dispatch at `VERSION=0` (the images and the

@@ -1,7 +1,7 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
 - Status: Accepted
-- Built: partly (not built: decision 2's release order, decision 3's train, decision 5's client window)
+- Built: partly (not built: decision 5's client window, decision 10's major entry from a fix release)
 - Date: 2026-10-15
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -89,6 +89,28 @@ a scope's tree revision ([ADR 0081](0081-a-scopes-tree-revision-is-the-level-vie
 database migrations. They answer other questions and stay independent of the major
 ([ADR 0086](0086-one-word-per-meaning.md) names them revisions).
 
+**10. The previous major keeps a release branch until the next train** (owner 2026-10-30). A security fix decision 4
+keeps inside a major reaches the operators who have not left the previous major yet, without an upgrade:
+- **When:** the old major's last commit on `main` is released before `VERSION` is bumped, so that release is the
+  bump's parent. `release/<old>.x` is cut from its tag `v<old>.<n>`. The branch counts its own history since `VERSION`
+  last changed (ADR 0057 § 1), so its first fix is `<old>.<n+1>`, a number `main` never reached in that major, and no
+  unreleased work of `main` rides along with a fix. `ci.yml` already publishes from `release/<major>.x`, signed, with
+  `<major>` and without `latest`.
+- **What:** only a fix decision 4 allows inside a major — never a feature, never a removal. It lands on `main` first
+  and is cherry-picked onto the branch (`git cherry-pick -x`). **It carries no migration.** An instance on the fix
+  release would hold a migration the new major's schema history does not have at that place, and its upgrade would
+  meet a history no tested path covers. A fix that needs one is made in the current major only, and the old major's
+  operators upgrade to get it.
+- **How long:** until the next train. A train ends every branch cut before it and cuts the new one, so one branch
+  is maintained beside `main`. An unscheduled major (decision 4) cuts a branch too, kept until the same train, so a
+  year with one has two. The client window (decision 5) is longer and stays so: an app keeps talking to an N-2
+  server, but that server gets no more fixes.
+- **The release order:** the branch release first, then a release of the current major. Each fix release moves the
+  release the new major is entered from (ADR 0096 decision 5; ADR 0098 decision 3: the gate admits a major entered
+  only from the release the target was tested from). The current major's next release is proved from the fix release
+  and bakes it as its major entry. Until it exists, an instance on the fix release cannot enter the new major, but it
+  runs the fixed release while it waits.
+
 ## Consequences
 
 - **Built: one major (decision 1).** buildSrc's `GeneratePlatformMajor` compiles `VERSION` into `:core`'s
@@ -98,10 +120,16 @@ database migrations. They answer other questions and stay independent of the maj
   compares for equality (decision 6). `CapabilityManifestSliceTest` and `src/web/src/shared/state/capabilities.test.ts`
   each read `VERSION` from disk and hold the served and the compiled major to it. The `setup.openapi.yaml`
   `Version.major` text names the train and the window.
+- **Written into the release procedure (decisions 2, 3 and 10):** the 1 May train, its release order and the release
+  branch, in [`infra/README.md`](../../infra/README.md) § Cutting a release. The manifest's deprecation lifecycle stays
+  deferred (ADR 0032 § Consequences) and is not needed for this.
 - **Not built.** Each is open work tracked in the inbox (#436):
-  - the 1 May train and its release order (clients that speak the new major published before the server major) in
-    the release procedure; the manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not
-    needed for this;
+  - **a fix release does not move the major entry yet** (decision 10). `run_web_e2e.default_predecessor` picks the
+    newest release tag reachable from `main`'s first parent, and a tag on `release/<old>.x` is not reachable from it.
+    `release_assets.py --major-entry` names an entry only where that predecessor lies in the previous major, so only
+    for a major's first release. While a branch is maintained, the current major's release must also be proved from
+    the branch's newest release and bake it, and lane L3's archive must hold that release as the previous major's last
+    (ADR 0096). Needed before the first branch release, so not before the first train;
   - no CI job runs a client against older server majors. None can be needed before a native client exists.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
   adapter, and at V1 `VERSION` and the advertised major both become `1`. Until then the advertised major is `0`,
@@ -133,6 +161,12 @@ database migrations. They answer other questions and stay independent of the maj
 - **A minimum deprecation period (six months, with a cutoff date for the next train).** Rejected: it buys an
   operator nothing, since they upgrade either way, and the clients are already covered by the window. The only
   ordering that matters is that clients ship before the server (decision 2).
+- **No release branch: an old major is fixed only by upgrading.** Rejected (owner 2026-10-30): a security fix
+  would then cost an operator a major upgrade, with its removals, on the day the fix is published.
+- **A release branch for every major in the client window (N-1 and N-2).** Rejected (owner 2026-10-30): two
+  branches beside `main`, each with every lane on both architectures and every backport, for operators who have had a
+  year since their major stopped being current. The client window stays longer because updating an app costs its user
+  nothing, and that does not hold for an operator's server.
 - **A year as the major (calendar versioning).** Rejected: a year with no removal has no major, and the window
   counts trains, not years.
 - **Bundling the payload format into the major.** Rejected: formats are per node kind, owned by the application,

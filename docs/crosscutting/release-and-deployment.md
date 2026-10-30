@@ -199,5 +199,10 @@ check is logged and retried with a back-off, and blocks nothing.
   major is entered from is the one `--major-entry` derives, not an attested L2 input.
 - **Immutable releases and the first publish** (ADR 0096 decision 3): the repository setting and the first dispatch
   wait on the remote. The staged order of the first runs is in [`infra/README.md`](../../infra/README.md) § Cutting a release.
-- **The yearly major train** and the window of majors a client speaks
-  ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decisions 2, 3 and 5).
+- **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
+  decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
+  are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
+- **A fix release on the previous major's branch moving the major entry** (ADR 0085 decision 10). A
+  `release/<old>.x` publish is built. The current major's release being proved from that branch's newest release and
+  baking it for its gate (ADR 0098 decision 3) is not built, and neither is lane L3 holding it as the previous major's
+  last release.
