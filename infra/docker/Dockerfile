@@ -96,7 +96,7 @@ COPY src/backend/apps/expenses/src ./apps/expenses/src
 # The license texts buildSrc's ThirdPartyLicenses appends to the backend's notices; `quarkusBuild` runs it after itself.
 COPY src/backend/licenses ./licenses
 COPY --from=frontend-build /repo/src/web/dist ./src/main/resources/META-INF/resources
-# Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, src/backend/build.gradle.kts:26)
+# Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (the version is src/backend/gradle/libs.versions.toml's)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
 

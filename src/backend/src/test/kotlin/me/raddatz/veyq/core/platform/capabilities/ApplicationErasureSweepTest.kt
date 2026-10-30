@@ -58,6 +58,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
+import java.sql.Connection
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -366,7 +367,7 @@ class ApplicationErasureSweepTest {
     /** Every id-shaped column of every table but Flyway's: uuid and short text, never a LOB of ciphertext. The schema is
      *  `DATABASE()` on MariaDB and `PUBLIC` on H2, whose `DATABASE()` names the catalog. */
     private fun columns(): List<Column> = read {
-        em.unwrap(Session::class.java).doReturningWork { c ->
+        em.unwrap(Session::class.java).doReturningWork { c: Connection ->
             c.prepareStatement(
                 "SELECT table_name, column_name, data_type FROM information_schema.columns " +
                     "WHERE table_schema IN (DATABASE(), 'PUBLIC') AND LOWER(table_name) <> 'flyway_schema_history'",
@@ -413,7 +414,7 @@ class ApplicationErasureSweepTest {
         }.filterValues { it > 0 }
     }
 
-    private fun idsOfRowsNaming(col: Column, ids: Set<String>): List<String> = em.unwrap(Session::class.java).doReturningWork { c ->
+    private fun idsOfRowsNaming(col: Column, ids: Set<String>): List<String> = em.unwrap(Session::class.java).doReturningWork { c: Connection ->
         c.prepareStatement(
             "SELECT CAST(id AS CHAR(64)) FROM ${col.table} WHERE CAST(${col.column} AS CHAR(64)) IN (${ids.joinToString { "?" }})",
         ).use { ps ->
@@ -422,7 +423,7 @@ class ApplicationErasureSweepTest {
         }
     }
 
-    private fun countNaming(col: Column, ids: Set<String>): Long = em.unwrap(Session::class.java).doReturningWork { c ->
+    private fun countNaming(col: Column, ids: Set<String>): Long = em.unwrap(Session::class.java).doReturningWork { c: Connection ->
         c.prepareStatement(
             "SELECT COUNT(*) FROM ${col.table} WHERE CAST(${col.column} AS CHAR(64)) IN (${ids.joinToString { "?" }})",
         ).use { ps ->
