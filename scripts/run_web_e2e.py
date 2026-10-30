@@ -43,7 +43,10 @@ checkout's jar ([upgrade_hook]); the READER, this tree's last member of the grou
 the predecessor's schema up — and must read `configSecretState: OK` before it asserts every item of the record the
 seeder wrote (`src/web/src/test/upgradeRecord.ts`). The predecessor defaults to the first parent of `HEAD` while the pin
 file says `release: none`, and to the newest `v<major>.<minor>` release tag once it names a release
-([default_predecessor] — the one switch); a ref without the seeder is refused before anything is built. The run's
+([default_predecessor] — the one switch); a ref without the seeder is refused before anything is built. A release is
+proved a second time, `--upgrade-major-entry`, from its MAJOR ENTRY ([major_entry]: the newest release of the previous
+major among all the repository's tags, a `release/<old>.x` branch's included, ADR 0085 decision 10) — when there is one
+and it is not the default predecessor; otherwise that run says so and runs nothing. The run's
 summary ends with the proof's own lines ([upgrade_verdict]): the predecessor, both builds' highest migration, the
 migrations changed or removed between them, the reader's `configSecretState`, and GREEN or RED with its cause — a
 Flyway refusal read out of the reader's boot log is named as such ([flyway_cause]). Red exits non-zero; before the
@@ -75,6 +78,7 @@ Usage:
     python3 scripts/run_web_e2e.py [FILE ...]        # from the repo root
     python3 scripts/run_web_e2e.py --upgrade         # the upgrade proof against the default predecessor
     python3 scripts/run_web_e2e.py --upgrade-from <git ref>
+    python3 scripts/run_web_e2e.py --upgrade-major-entry   # the second proof, from the major entry (none: no run)
 
 With no arguments it runs every `src/web/src/**/*.e2e.test.ts` — that is how CI invokes it — except the
 **measurements**, `*.measure.e2e.test.ts`: a suite that takes a reading rather than holding a claim CI must keep (the
@@ -1412,22 +1416,29 @@ PIN_FILE = "scripts/applied_migrations.sha256"
 RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)$")
 MIGRATION_VERSION = re.compile(r"/V(\d+)__[^/]+\.sql$")
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+# The `ref` [upgrade_request] returns for `--upgrade-major-entry`: resolved by [main] through [major_entry_proof_ref]. No
+# git ref collides with it — `--upgrade-from` refuses a ref that starts with `--`.
+MAJOR_ENTRY_REQUEST = "--upgrade-major-entry"
 
 
 def upgrade_request(argv: list[str]) -> tuple[bool, str | None, list[str]]:
     """Split the proof's flags off argv: (`is the proof asked for`, `the predecessor ref or None for the default`, rest).
 
     `--upgrade` asks for the default predecessor ([default_predecessor]); `--upgrade-from <ref>` (or `=<ref>`) for that
-    ref. Every other argument is a test path, as it always was — and the proof refuses those itself ([main]).
+    ref; `--upgrade-major-entry` for the major entry ([major_entry]), returned as [MAJOR_ENTRY_REQUEST]. Every other
+    argument is a test path, as it always was — and the proof refuses those itself ([main]).
     """
     upgrade, ref, rest = False, None, []
     args = iter(argv)
     for arg in args:
-        if arg == "--upgrade" or arg == "--upgrade-from" or arg.startswith("--upgrade-from="):
+        if arg in ("--upgrade", "--upgrade-from", MAJOR_ENTRY_REQUEST) or arg.startswith("--upgrade-from="):
             if upgrade:
-                raise ValueError("--upgrade and --upgrade-from name one predecessor between them; pass one of them once")
+                raise ValueError("--upgrade, --upgrade-from and --upgrade-major-entry name one predecessor between "
+                                 "them; pass one of them once")
             upgrade = True
-            if arg != "--upgrade":
+            if arg == MAJOR_ENTRY_REQUEST:
+                ref = MAJOR_ENTRY_REQUEST
+            elif arg != "--upgrade":
                 ref = arg.split("=", 1)[1] if "=" in arg else next(args, "")
                 if not ref or ref.startswith("--"):
                     raise ValueError("--upgrade-from names the predecessor: --upgrade-from <git ref>")
@@ -1460,6 +1471,29 @@ def default_predecessor(release: str, tags: list[str]) -> str:
         raise ValueError(f"{PIN_FILE} says `release: {release}`, but no v<major>.<minor> tag is reachable from HEAD^1 "
                          f"— fetch the tags, or name the predecessor with --upgrade-from <ref>")
     return found[-1][1]
+
+
+def major_entry(major: int, tags: list[str]) -> str | None:
+    """The release a release of `major` enters its major from — the newest `v<major-1>.<minor>` among `tags`, by version
+    order; None where major `major-1` has no release tag, which major 0 (no major before it) never has. ADR 0085
+    decision 10.
+
+    The caller passes EVERY release tag of the repository ([major_entry_ref]: `git tag --list`), never only the ones the
+    candidate reaches as [default_predecessor]'s are: a fix release of the previous major is tagged on its
+    `release/<major-1>.x` branch, which `main` never merges, and it is the release that major's operators run — so it is
+    the one the new major is entered from, proved ([second_predecessor]) and baked into the tools image
+    (`release_assets.py --major-entry`), whose gate admits no other (ADR 0098 decision 3).
+    """
+    found = sorted((int(m.group(2)), tag) for tag in tags
+                   if (m := RELEASE_TAG.match(tag)) and int(m.group(1)) == major - 1)
+    return found[-1][1] if found else None
+
+
+def second_predecessor(default: str, entry: str | None) -> str | None:
+    """The predecessor a release is proved from BESIDE its default one: its major entry, when there is one and it is not
+    the default predecessor — a major's first release, cut before any fix release, enters from the release `main`
+    reaches, which its default proof already covers, so it is proved once, not twice. None: no second proof."""
+    return entry if entry is not None and entry != default else None
 
 
 def pinned_migrations(pin_text: str) -> dict[str, str]:
@@ -1665,14 +1699,55 @@ class Predecessor(NamedTuple):
     build: Build
 
 
-def default_predecessor_ref() -> tuple[str, str]:
+def default_predecessor_ref(root: Path = REPO) -> tuple[str, str]:
     """(the default predecessor's ref, how it was chosen): [default_predecessor] fed with this checkout's pin file and
     the release tags `HEAD^1` contains. Raises ValueError where that refuses. `chart_upgrade_check.py` resolves its
-    predecessor here too, so the chart's upgrade check and this proof never compare against different builds."""
-    release = read_release((REPO / PIN_FILE).read_text())
-    tags = git("tag", "--merged", "HEAD^1", "--list", "v*").splitlines() if release != "none" else []
+    predecessor here too, so the chart's upgrade check and this proof never compare against different builds. `root`
+    is another checkout only for `upgrade_proof_selftest.py`'s fabricated history."""
+    release = read_release((root / PIN_FILE).read_text())
+    tags = git("tag", "--merged", "HEAD^1", "--list", "v*", cwd=root).splitlines() if release != "none" else []
     ref = default_predecessor(release, tags)
     return ref, f"{ref} (the default while `release: {release}`)"
+
+
+def candidate_major(root: Path = REPO) -> int:
+    """The major this checkout builds: `VERSION`, which holds the major alone (ADR 0057 § 1)."""
+    raw = (root / "VERSION").read_text().strip()
+    if not re.fullmatch(r"[0-9]+", raw):
+        raise ValueError(f"VERSION must hold the major alone, got {raw!r}")
+    return int(raw)
+
+
+def major_entry_ref(major: int | None = None, root: Path = REPO) -> str | None:
+    """The major entry of a release of `major` (default: this checkout's, [candidate_major]) as a tag, or None:
+    [major_entry] fed with EVERY `v*` tag of the repository — `git tag --list`, not `--merged`, so a fix release on a
+    `release/<old>.x` branch counts. While the pin file says `release: none` no tag is read and there is none, the
+    same switch [default_predecessor_ref] makes. `release_assets.py --major-entry` (the tools image's stamp) and
+    `chart_upgrade_check.py --upgrade-major-entry` resolve it here: ONE derivation, so the gate never admits an entry
+    the pipeline did not prove. A checkout without the tags (a shallow one) finds none — CI checks out with
+    `fetch-depth: 0`, which fetches every tag."""
+    release = read_release((root / PIN_FILE).read_text())
+    tags = git("tag", "--list", "v*", cwd=root).splitlines() if release != "none" else []
+    return major_entry(candidate_major(root) if major is None else major, tags)
+
+
+def major_entry_proof_ref(root: Path = REPO) -> tuple[str | None, str]:
+    """(the second predecessor's ref or None, the line saying which and why): [second_predecessor] of this checkout's
+    default predecessor and its major entry. Raises ValueError where either refuses. The upgrade proof's
+    `--upgrade-major-entry` and the chart upgrade check's resolve it here alike."""
+    default, _ = default_predecessor_ref(root)
+    major = candidate_major(root)
+    entry = major_entry_ref(major, root)
+    second = second_predecessor(default, entry)
+    if second is not None:
+        return second, (f"{second} (major {major}'s entry: the newest release of major {major - 1} among every tag, "
+                        f"beside the default predecessor {default})")
+    if entry is None:
+        release = read_release((root / PIN_FILE).read_text())
+        cause = (f"the pin file says `release: {release}`" if release == "none" else
+                 "there is no major before it" if major < 1 else f"no release tag of major {major - 1} exists")
+        return None, f"major {major} has no entry ({cause}), so there is no second predecessor"
+    return None, f"major {major}'s entry {entry} is the default predecessor, which the default run covers"
 
 
 def resolve_predecessor(ref: str | None) -> tuple[str, str]:
@@ -1967,6 +2042,12 @@ def keep_runs() -> int:
 def main(argv: list[str]) -> int:
     try:
         upgrade, upgrade_from, argv = upgrade_request(argv)
+        if upgrade_from == MAJOR_ENTRY_REQUEST:
+            upgrade_from, why = major_entry_proof_ref()
+            log(f"upgrade proof from the major entry: {why}")
+            if upgrade_from is None:
+                log("no second upgrade proof to run (ADR 0085 decision 10) — nothing was started")
+                return 0
     except ValueError as e:
         raise SystemExit(f"[e2e] {e}") from e
     if upgrade and argv:

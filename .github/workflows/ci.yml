@@ -201,8 +201,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # The whole history: the chart upgrade check below reads its predecessor's chart out of git (HEAD^1, or the
-      # last release tag once there is one).
+      # The whole history and every tag (fetch-depth: 0 fetches both): the chart upgrade check below reads its
+      # predecessor's chart out of git (HEAD^1, or the last release tag once there is one), and its second run the
+      # major entry's, which may be a tag on a `release/<old>.x` branch that this commit does not reach.
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -248,6 +249,13 @@ jobs:
         run: |
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check_selftest.py
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py
+
+      # The same check from the release's major entry (ADR 0085 decision 10): the newest release of the previous major
+      # among every tag, which the tools image bakes and its gate admits alone. The script resolves it through the
+      # upgrade proof's derivation and exits 0, saying why, when there is none or it is the default predecessor above.
+      - name: Chart upgrade check from the major entry
+        run: |
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py --upgrade-major-entry
 
   web-e2e:
     name: Web E2E (live backend)
@@ -515,14 +523,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The tools image bakes the release a new major is entered from, which is read from the release tags
-          # (`release_assets.py --major-entry`): that leg needs the history and the tags; the other two do not.
+          # The tools image bakes the release a new major is entered from, which is read from EVERY release tag, a
+          # `release/<old>.x` branch's included (`release_assets.py --major-entry`): that leg needs the tags, which
+          # fetch-depth: 0 fetches with the history (no `fetch-tags` needed); the other two need neither.
           fetch-depth: ${{ matrix.image == 'veyq-tools' && '0' || '1' }}
 
       # The tools image's gate refuses to enter a new major from any release but the one this release's own upgrade
-      # proof and chart check ran from (ADR 0098) — the ONE derivation of that predecessor, read here and baked in as
-      # VEYQ_MAJOR_ENTRY; empty when it lies in no previous major. Planned to be replaced by the L2 lane's attestation
-      # (ADR 0091 decision 5, not built).
+      # proof and chart check ran from (ADR 0098) — the newest release of the previous major among every tag (ADR 0085
+      # decision 10), the ONE derivation `upgrade-proof` and `chart` prove from too, read here and baked in as
+      # VEYQ_MAJOR_ENTRY; empty when the previous major has no release. Planned to be replaced by the L2 lane's
+      # attestation (ADR 0091 decision 5, not built).
       - name: Find the release a new major is entered from (tools)
         id: major-entry
         if: matrix.image == 'veyq-tools'
@@ -856,7 +866,9 @@ jobs:
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
   # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
-  # `v<major>.<minor>` tag from then on — hence the full history and the tags.
+  # `v<major>.<minor>` tag it reaches from then on. A second run proves the release's major entry (ADR 0085 decision
+  # 10), the newest release of the previous major among EVERY tag — a fix release tagged on `release/<old>.x`, which this
+  # commit does not reach — hence the full history and every tag (fetch-depth: 0 fetches both).
   #
   # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
   # (src/backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
@@ -898,6 +910,11 @@ jobs:
       # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
       - name: Run the upgrade proof
         run: python3 scripts/run_web_e2e.py --upgrade
+      # The proof from the major entry, which the tools image bakes and its gate admits alone (ADR 0098 decision 3). The
+      # orchestrator resolves it and exits 0, saying why, when there is none or it is the default predecessor above;
+      # its run directory sits beside the first one's in `.e2e-out/` (VEYQ_E2E_KEEP_RUNS keeps both).
+      - name: Run the upgrade proof from the major entry
+        run: python3 scripts/run_web_e2e.py --upgrade-major-entry
       - name: Keep the e2e run directory
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

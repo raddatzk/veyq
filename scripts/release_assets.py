@@ -296,18 +296,20 @@ def earlier_releases_of_major(out: pathlib.Path, major: int, minor: int) -> list
 
 def major_entry(release: str) -> str | None:
     """The release a new major is entered from, which the `veyq-tools` image bakes (ADR 0098, its gate's entry rule):
-    the predecessor this release's own upgrade proof and chart check run from — `run_web_e2e.default_predecessor_ref()`,
-    ONE derivation, so the gate never admits an entry the pipeline did not prove — when it is a release tag of the
-    previous major; None otherwise (a release that stays in its major, or no release tag at all while the pin file
-    says `release: none`). Planned to be replaced by the L2 lane's attestation (ADR 0091 decision 5, not built)."""
+    `run_web_e2e.major_entry_ref()` for RELEASE's major — the newest release of the previous major among every tag of
+    the repository, a `release/<old>.x` branch's fix releases included (ADR 0085 decision 10). That is the ONE
+    derivation the upgrade proof's `--upgrade-major-entry` and the chart check's prove from, so the gate never admits
+    an entry the pipeline did not prove. None for major 0, where the previous major has no release tag, and while the
+    pin file says `release: none`. Planned to be replaced by the L2 lane's attestation (ADR 0091 decision 5, not built)."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import run_web_e2e  # noqa: E402 — the upgrade proof's own derivation, imported only for this question
 
-    ref, _ = run_web_e2e.default_predecessor_ref()
-    found, ours = TAG.match(ref), re.match(r"^([0-9]+)\.", release)
-    if found and ours and int(found.group(1)) == int(ours.group(1)) - 1:
-        return f"{found.group(1)}.{found.group(2)}"
-    return None
+    ours = re.match(r"^([0-9]+)\.", release)
+    if not ours:
+        raise ReleaseError(f"`{release}` is not a release number (`<major>.<minor>`)")
+    tag = run_web_e2e.major_entry_ref(int(ours.group(1)))
+    found = TAG.match(tag) if tag else None
+    return f"{found.group(1)}.{found.group(2)}" if found else None
 
 
 def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: str | None = None, *,
@@ -374,7 +376,11 @@ def main() -> int:
                              "and write nothing")
     args = parser.parse_args()
     if args.major_entry is not None:
-        print(major_entry(args.major_entry) or "")
+        try:
+            print(major_entry(args.major_entry) or "")
+        except (ReleaseError, ValueError) as e:
+            print(f"release_assets: {e}", file=sys.stderr)
+            return 1
         return 0
     if args.out is None or not args.app or not args.admin:
         parser.error("<out>, --app and --admin are required to produce a release")

@@ -28,8 +28,11 @@ candidate's schema and render, or the upgrade fails before it starts.
 **The predecessor** is the upgrade proof's ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)
 Decision 7): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
 `scripts/applied_migrations.sha256` says `release: none`, then the newest `v<major>.<minor>` tag the first parent
-contains. `--upgrade-from <ref>` names another one, as it does for the proof. A predecessor with a chart at neither path is said and skipped -
-nothing to upgrade from.
+contains. `--upgrade-from <ref>` names another one, as it does for the proof. `--upgrade-major-entry` checks from the
+release's major entry instead, as the proof's second run does (`run_web_e2e.major_entry_proof_ref()`: the newest
+release of the previous major among every tag, a `release/<old>.x` branch's included, ADR 0085 decision 10) - when
+there is one and it is not the default predecessor; otherwise it says so and exits 0, nothing to check twice. A
+predecessor with a chart at neither path is said and skipped - nothing to upgrade from.
 
 **The verdict** is [verdict]'s alone, on the same `release:` line the upgrade proof reads: while it is `none` the
 findings are printed with their reasons and the run exits 0, "information only" - a chart before the first release
@@ -57,7 +60,7 @@ buildless trust chain has (`chart_meta_check.py` says the same for itself). `ci.
 "Chart checks", on a checkout with the whole history (`fetch-depth: 0`) - a job no run has executed yet (this
 repository has no remote). Run it locally with `helm` on the PATH; without `helm` it exits 2, never 0:
 
-    python3 scripts/chart_upgrade_check.py [--upgrade-from <ref>]
+    python3 scripts/chart_upgrade_check.py [--upgrade-from <ref> | --upgrade-major-entry]
 
 Its pure parts - the comparison and the verdict - are pinned by `scripts/chart_upgrade_check_selftest.py`.
 """
@@ -249,6 +252,15 @@ def predecessor(ref: str | None) -> tuple[str, str]:
         except ValueError as e:  # a set release with no release tag to find: refused, never guessed
             print(f"{WHO}: {e}", file=sys.stderr)
             sys.exit(2)
+    elif ref == e2e.MAJOR_ENTRY_REQUEST:
+        try:
+            ref, asked = e2e.major_entry_proof_ref()
+        except ValueError as e:
+            print(f"{WHO}: {e}", file=sys.stderr)
+            sys.exit(2)
+        if ref is None:
+            print(f"{WHO}: {asked} - no second chart upgrade check to run (ADR 0085 decision 10)")
+            sys.exit(0)
     else:
         asked = ref
     found = git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
@@ -297,9 +309,12 @@ def render(chart: pathlib.Path, values: pathlib.Path, what: str, problems: list[
 
 def main(argv: list[str]) -> int:
     ref = None
-    if argv:
-        if len(argv) != 2 or argv[0] != "--upgrade-from":
-            print(f"usage: {pathlib.Path(__file__).name} [--upgrade-from <ref>]", file=sys.stderr)
+    if argv == [e2e.MAJOR_ENTRY_REQUEST]:
+        ref = e2e.MAJOR_ENTRY_REQUEST
+    elif argv:
+        if len(argv) != 2 or argv[0] != "--upgrade-from" or argv[1].startswith("--"):
+            print(f"usage: {pathlib.Path(__file__).name} [--upgrade-from <ref> | {e2e.MAJOR_ENTRY_REQUEST}]",
+                  file=sys.stderr)
             return 2
         ref = argv[1]
     chart_render.helm(WHO)  # no helm, no run - before any work, so a missing tool is never a skip

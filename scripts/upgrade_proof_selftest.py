@@ -20,7 +20,13 @@ decide WHICH predecessor and WHAT a red run means are plain functions. This asse
      TypeScript reader to, so the two validators cannot drift apart unseen (they had: the orchestrator still required
      `memory.cover.mediaId` after the seeder moved to `blobId`, collection run 2026-10-23, F10);
   7. the predecessor's surfaces in either layout (ADR 0106 decision 7): its web client in a fabricated tree of each,
-     and its seeder found in the commit before the code surfaces moved under `src/` as well as in HEAD.
+     and its seeder found in the commit before the code surfaces moved under `src/` as well as in HEAD;
+  8. the major entry (ADR 0085 decision 10) - the release a release of major N is proved from a second time and whose
+     tools image bakes it: the newest `v<N-1>.<minor>` tag by version order, none for major 0 or without such a tag;
+     the second predecessor is that entry only where it is not the default one; and on a fabricated history with a
+     `release/1.x` branch, the fix release tagged there - which `HEAD^1` does not reach - is the entry
+     (`--upgrade-major-entry` asks for it), while the default stays the newest tag `HEAD^1` reaches; and the tools
+     image's stamp (`release_assets.py --major-entry`) is that same derivation, never a second one.
 
 What it cannot show: that the proof runs - the worktree, the two builds, the restore and the two suites need Docker
 and a jar, and the run itself is the proof (its summary is recorded in the criterion's comment). Not a
@@ -33,6 +39,7 @@ from __future__ import annotations  # the repo's scripts run on Python 3.9
 
 import copy
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -73,6 +80,11 @@ def request_cases() -> None:
     check("--upgrade-from without a ref is refused", "names the predecessor" in refused(R, ["--upgrade-from"]))
     check("--upgrade-from= without a ref is refused", "names the predecessor" in refused(R, ["--upgrade-from="]))
     check("both flags are refused", "one predecessor" in refused(R, ["--upgrade", "--upgrade-from", "x"]))
+    check("--upgrade-major-entry: the major entry", R(["--upgrade-major-entry"]) == (True, e2e.MAJOR_ENTRY_REQUEST, []))
+    check("--upgrade-major-entry beside --upgrade is refused",
+          "one predecessor" in refused(R, ["--upgrade", "--upgrade-major-entry"]))
+    check("--upgrade-from cannot smuggle the major-entry request in as a ref",
+          "names the predecessor" in refused(R, ["--upgrade-from", e2e.MAJOR_ENTRY_REQUEST]))
 
 
 def predecessor_cases() -> None:
@@ -84,6 +96,93 @@ def predecessor_cases() -> None:
     check("only v<major>.<minor> tags count", D("202610041201", ["v1.3-rc", "v1.2", "release-9", "v1.4.1"]) == "v1.2")
     message = refused(D, "202610041201", ["nightly", "v1"])
     check("a set release with no release tag is refused, naming the line", "release: 202610041201" in message, message)
+
+
+def major_entry_cases() -> None:
+    E, P = e2e.major_entry, e2e.second_predecessor
+    tags = ["v0.4", "v1.0", "v1.9", "v1.10", "v2.0", "v2.3", "v1.11-rc", "v1.12.1", "nightly"]
+    check("major entry: the newest release of the previous major", E(2, tags) == "v1.10")
+    check("major entry: by version order, not string order", E(2, ["v1.10", "v1.9"]) == "v1.10")
+    check("major entry: only the previous major's tags, never the current one's or an older one's",
+          E(3, tags) == "v2.3" and E(1, tags) == "v0.4")
+    check("major entry: only v<major>.<minor> tags count", E(2, ["v1.11-rc", "v1.12.1", "v1.3"]) == "v1.3")
+    check("major entry: none for major 0", E(0, tags) is None)
+    check("major entry: none where the previous major has no release tag", E(4, tags) is None and E(2, []) is None)
+    check("second predecessor: the entry where it is not the default", P("v2.3", "v1.10") == "v1.10")
+    check("second predecessor: none where the entry IS the default (a major's first release)", P("v1.9", "v1.9") is None)
+    check("second predecessor: none without an entry", P("v2.3", None) is None and P("HEAD^1", None) is None)
+    history_cases()
+    stamp_cases()
+
+
+def stamp_cases() -> None:
+    """The tools image's stamp is the SAME derivation: `release_assets.major_entry` asks [major_entry_ref] for the
+    release's major and only reshapes the tag, so the gate cannot admit an entry the proof did not run from. Its
+    `run_web_e2e` is this module object (one `sys.modules` entry), so a stand-in here is the one it calls."""
+    import release_assets  # noqa: E402 - PyYAML, which run_web_e2e already needs, is all it adds
+    real, asked = e2e.major_entry_ref, []
+    try:
+        e2e.major_entry_ref = lambda major=None, root=None: (asked.append(major), "v1.10")[1]
+        stamped = release_assets.major_entry("2.3")
+        e2e.major_entry_ref = lambda major=None, root=None: None
+        none = release_assets.major_entry("2.0")
+    finally:
+        e2e.major_entry_ref = real
+    check("stamp: the tools image bakes run_web_e2e's major entry for the release's major, as `<major>.<minor>`",
+          stamped == "1.10" and asked == [2], f"{stamped!r}, asked for {asked}")
+    check("stamp: no entry, no stamp", none is None, repr(none))
+
+
+def history_cases() -> None:
+    """The impure half on a fabricated history: `main` released 1.0 and 1.1, bumped to major 2 and released 2.0, while
+    `release/1.x` (cut from v1.1) released the fix 1.2 - a tag `main` never reaches. Each step is the shape ADR 0085
+    decision 10 orders; the derivation must read every tag for the entry and only the reachable ones for the default."""
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+
+    def git(root: pathlib.Path, *args: str) -> None:
+        subprocess.run(["git", "-c", "user.name=selftest", "-c", "user.email=selftest@invalid",
+                        "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                       cwd=root, env=env, check=True, capture_output=True)
+
+    def commit(root: pathlib.Path, message: str, version: str | None = None, release: str = "202610041201") -> None:
+        if version is not None:
+            (root / "VERSION").write_text(f"{version}\n")
+        pins = root / e2e.PIN_FILE
+        pins.parent.mkdir(parents=True, exist_ok=True)
+        pins.write_text(f"release: {release}\n")
+        (root / "notes").write_text(message)
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", message)
+
+    with tempfile.TemporaryDirectory() as d:
+        root = pathlib.Path(d)
+        git(root, "init", "-q", "-b", "main")
+        commit(root, "1.0", version="1")
+        git(root, "tag", "v1.0")
+        commit(root, "1.1")
+        git(root, "tag", "v1.1")
+        commit(root, "the bump", version="2")           # major 2's first release, 2.0, is this commit
+        check("history: major 2's first release, no fix release yet - entry = default = v1.1, proved once",
+              e2e.default_predecessor_ref(root)[0] == "v1.1" and e2e.major_entry_ref(root=root) == "v1.1"
+              and e2e.major_entry_proof_ref(root)[0] is None)
+        git(root, "tag", "v2.0")
+        git(root, "branch", "release/1.x", "v1.1")
+        git(root, "checkout", "-q", "release/1.x")
+        commit(root, "the fix 1.2", version="1")
+        git(root, "tag", "v1.2")
+        git(root, "checkout", "-q", "main")
+        commit(root, "2.1")                              # HEAD^1 is v2.0; v1.2 lies on the branch only
+        default, entry = e2e.default_predecessor_ref(root)[0], e2e.major_entry_ref(root=root)
+        check("history: the default predecessor is the newest tag HEAD^1 reaches (v2.0)", default == "v2.0", default)
+        check("history: the major entry is the branch's fix release v1.2, which HEAD^1 does not reach",
+              entry == "v1.2", str(entry))
+        second, why = e2e.major_entry_proof_ref(root)
+        check("history: the release after a fix release is proved a second time, from v1.2", second == "v1.2", why)
+        check("history: an explicit major (1, a release of the branch) enters from no tag of major 0",
+              e2e.major_entry_ref(1, root) is None)
+        commit(root, "pre-release", release="none")
+        check("history: while the pin file says `release: none` there is no entry, whatever is tagged",
+              e2e.major_entry_ref(root=root) is None and e2e.major_entry_proof_ref(root)[0] is None)
 
 
 PINS_BEFORE = """# comment
@@ -214,6 +313,7 @@ def record_cases() -> None:
 def main() -> int:
     request_cases()
     predecessor_cases()
+    major_entry_cases()
     pin_cases()
     flyway_cases()
     seeder_cases()
@@ -222,8 +322,8 @@ def main() -> int:
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1
-    print("[selftest] the upgrade proof picks its predecessor, reads both builds' migrations, names Flyway's refusal "
-          "and checks the shared record the way the TypeScript reader does")
+    print("[selftest] the upgrade proof picks its predecessor and its major entry, reads both builds' migrations, "
+          "names Flyway's refusal and checks the shared record the way the TypeScript reader does")
     return 0
 
 

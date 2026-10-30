@@ -25,8 +25,9 @@ COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
 COPY src/tools/instance_backup.py src/tools/instance_backup_selftest.py /opt/veyq/
 
 # What the gate holds a release change to (instance_backup.py `gate`): this image's release, and the release a new
-# major is entered from — the predecessor this release's own upgrade proof and chart check ran from
-# (`scripts/release_assets.py --major-entry`), empty when it lies in no previous major. Stamped here and only here.
+# major is entered from — the newest release of the previous major among every tag, which this release's own upgrade
+# proof and chart check ran from too (`scripts/release_assets.py --major-entry`, ADR 0085 decision 10), empty when the
+# previous major has no release. Stamped here and only here.
 ARG VEYQ_VERSION=""
 ARG VEYQ_MAJOR_ENTRY=""
 RUN python3 -c 'import json, os; json.dump({"release": os.environ["VEYQ_VERSION"], "majorEntry": os.environ["VEYQ_MAJOR_ENTRY"] or None}, open("/opt/veyq/release.json", "w")); print(open("/opt/veyq/release.json").read())'
