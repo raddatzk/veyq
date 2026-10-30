@@ -285,6 +285,19 @@ export function videoPosterOf(source: Blob, deriver: MediaDeriver, decodeAs: Blo
 /** Drop the poster [videoPosterOf] holds for `source`; a caller already waiting on it still gets it. */
 export function releaseVideoPoster(source: Blob): void {
   videoPosters.delete(source)
+  postersTaken.add(source)
+}
+
+/** The picked videos whose upload has taken its poster ([releaseVideoPoster]). */
+const postersTaken = new WeakSet<Blob>()
+
+/**
+ * The poster for `source`'s upload tile: [videoPosterOf]'s, or null once its upload has taken it, so a tile wanted only
+ * after that draws the video no second time and waits for its listed thumbnail. A tile asking after the release redrew
+ * 1-2 clips of 20 (21-22 players created against 20, profile S2v, 2026-10-30).
+ */
+export function tileVideoPosterOf(source: Blob, deriver: MediaDeriver): Promise<Uint8Array | null> {
+  return postersTaken.has(source) ? Promise.resolve(null) : videoPosterOf(source, deriver)
 }
 
 /**

@@ -8,7 +8,7 @@
 // change of content, never of place, because both sides derive the key from the same `captureTimeOf` rule. The
 // pure selection/merge logic lives in ./optimisticUpload; this composable owns the reactive preview lifecycle.
 import { reactive, computed, watch, onBeforeUnmount, type Ref } from 'vue'
-import { captureTimeOf, createBrowserDeriver, readCaptureTime, TIER_SPECS, videoPosterOf } from './media'
+import { captureTimeOf, createBrowserDeriver, readCaptureTime, tileVideoPosterOf, TIER_SPECS } from './media'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useUploadQueue, type UploadFile } from './uploadQueue'
 import { selectOptimisticUploads, optimisticTileId, fileIdOfTile } from './optimisticUpload'
@@ -82,7 +82,10 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * drawn by whichever of the two asks first) and the deriver scales that JPEG down, as it does a photo: 21 players instead
  * of 37, the renderer's peak 0.95-0.97 GiB against 1.08-1.12 GiB and the upload 11.1-11.4 s against 12.4-13.4 s at
  * throttle 4, the first tile picture about 0.1 s later (profile S2v, 2026-10-30). Its median fell only to 0.84-0.86 GiB
- * (0.82-0.84 at throttle 4), so what holds the rest above the floor is not this draw; it is not attributed (inbox #795).
+ * (0.82-0.84 at throttle 4): the rest is the real frame, the posters asked for ahead of the upload (about 0.08 GiB, early
+ * only) and the worker's decode of each 2048 px poster to scale it (0.04-0.06 GiB, to the end); showing the pictures costs
+ * nothing measurable, and only a video tile without its own frame reaches the floor (uc.memory.upload § Quality notes).
+ * A tile wanted once its upload took the poster waits for its listed thumbnail (`tileVideoPosterOf`).
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
@@ -171,10 +174,10 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
     const picture: Promise<string | null> = mediaType.startsWith('video/')
       ? // an <img> can't decode video bytes: a video's picture is its first frame, scaled to the thumbnail's size from the
         // poster its upload stores, so the video is drawn once for both (inbox #795); a video the browser cannot decode
-        // stays icon-only (no url), as its listed tile does
-        videoPosterOf(file, deriver)
-          .then((poster) => deriver.deriveImage(new Blob([poster as BlobPart], { type: 'image/jpeg' }), TIER_SPECS.THUMBNAIL))
-          .then(({ bytes }) => jpeg(bytes), () => null)
+        // stays icon-only (no url), as its listed tile does, and one whose upload already took the poster waits for it
+        tileVideoPosterOf(file, deriver)
+          .then((poster) => poster && deriver.deriveImage(new Blob([poster as BlobPart], { type: 'image/jpeg' }), TIER_SPECS.THUMBNAIL))
+          .then((tile) => tile && jpeg(tile.bytes), () => null)
       : deriver.deriveImage(file, TIER_SPECS.THUMBNAIL).then(
           ({ bytes }) => jpeg(bytes),
           () => URL.createObjectURL(file), // a photo the deriver cannot read: the file itself, as an <img> may still show it

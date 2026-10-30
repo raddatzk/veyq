@@ -5,7 +5,7 @@
 // actual Safari frame-grab is covered by live verification.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  onceEvent, firstPresentedFrame, VIDEO_EVENT_TIMEOUT_MS, deriveTiers, createBrowserDeriver, videoPosterOf, TIER_SPECS, type AddMediaSource, type MediaDeriver,
+  onceEvent, firstPresentedFrame, VIDEO_EVENT_TIMEOUT_MS, deriveTiers, createBrowserDeriver, videoPosterOf, tileVideoPosterOf, TIER_SPECS, type AddMediaSource, type MediaDeriver,
 } from './mediaDeriver'
 
 afterEach(() => vi.useRealTimers())
@@ -100,6 +100,18 @@ describe("videoPosterOf — a picked video's one poster, held only until its upl
     expect(d.deriveVideoPoster, "the upload took the tile's poster").toHaveBeenCalledTimes(1)
     await deriveTiers({ blob: file, mediaType: 'video/mp4' }, d)
     expect(d.deriveVideoPoster, 'and did not keep it').toHaveBeenCalledTimes(2)
+  })
+
+  it('a tile wanted once its upload took the poster draws none; one wanted before shares the draw', async () => {
+    const early = new Blob([new Uint8Array([0, 0, 0, 0x18]) as BlobPart], { type: 'video/mp4' })
+    const late = new Blob([new Uint8Array([0, 0, 0, 0x19]) as BlobPart], { type: 'video/mp4' })
+    const d = posterDeriver()
+    const tile = tileVideoPosterOf(early, d)
+    await deriveTiers({ blob: early, mediaType: 'video/mp4' }, d)
+    await expect(tile).resolves.toEqual(new Uint8Array([1]))
+    await deriveTiers({ blob: late, mediaType: 'video/mp4' }, d)
+    await expect(tileVideoPosterOf(late, d), 'its listed thumbnail comes instead').resolves.toBeNull()
+    expect(d.deriveVideoPoster, 'one draw per clip').toHaveBeenCalledTimes(2)
   })
 
   it('a failed draw is not kept: the next caller tries again', async () => {
