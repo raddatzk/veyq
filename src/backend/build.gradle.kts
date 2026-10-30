@@ -17,6 +17,30 @@ repositories {
     mavenCentral()
 }
 
+// OpenTelemetry above the Quarkus BOM, for GHSA-ccrj-gw8r-854m (quadratic CPU in W3C `tracestate` parsing, fixed in
+// opentelemetry-api 1.67.0): the BOM of Quarkus 3.40.1.1 pins 1.62.0, and no Quarkus release pins 1.67.0 yet. veyq ships
+// no OpenTelemetry extension — the API reaches the fast-jar only through quarkus-scheduler's
+// opentelemetry-instrumentation-api — so no request header reaches the propagator today; it is lifted anyway, so the
+// shipped jar carries no published advisory. The whole `io.opentelemetry` group moves together (its artifacts are
+// released in lockstep; `-alpha` is the incubator's suffix), and only that group: instrumentation and semconv keep the
+// BOM's. A substitution, not a constraint: the BOM is an `enforcedPlatform`, whose forced versions a constraint loses
+// to. Applied to every project's configurations, Quarkus' own (app model, dev-mode bootstrap) included. **Remove it,
+// and `opentelemetry` in gradle/libs.versions.toml, once the Quarkus BOM pins opentelemetry-api 1.67.0 or later.**
+val otel = libs.versions.opentelemetry.get()
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy.dependencySubstitution {
+            listOf("opentelemetry-api", "opentelemetry-context", "opentelemetry-common").forEach {
+                substitute(module("io.opentelemetry:$it")).using(module("io.opentelemetry:$it:$otel"))
+                    .because("GHSA-ccrj-gw8r-854m, fixed in opentelemetry-api $otel")
+            }
+            substitute(module("io.opentelemetry:opentelemetry-api-incubator"))
+                .using(module("io.opentelemetry:opentelemetry-api-incubator:$otel-alpha"))
+                .because("released in lockstep with opentelemetry-api $otel")
+        }
+    }
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))

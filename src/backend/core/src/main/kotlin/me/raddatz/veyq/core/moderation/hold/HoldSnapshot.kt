@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation.hold
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.persistence.EntityManager
 import org.hibernate.Session
+import java.sql.Connection
 import java.sql.Types
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -98,7 +99,10 @@ class HoldSnapshot internal constructor(
     }
 
     private fun select(table: String, column: String, values: List<String>): List<Map<String, String?>> =
-        em.unwrap(Session::class.java).doReturningWork { connection ->
+        // The parameter is typed: Hibernate 7.4's `ReturningWork` carries Checker Framework type annotations, and an
+        // inferred `connection` drags them into a type whose classes are not on the classpath (KT-80247 — a warning
+        // now, an error from Kotlin language version 2.4). The same holds for every `doReturningWork` lambda.
+        em.unwrap(Session::class.java).doReturningWork { connection: Connection ->
             val marks = values.joinToString(",") { "?" }
             connection.prepareStatement("SELECT * FROM $table WHERE $column IN ($marks)").use { statement ->
                 values.forEachIndexed { i, v -> statement.setString(i + 1, v) }

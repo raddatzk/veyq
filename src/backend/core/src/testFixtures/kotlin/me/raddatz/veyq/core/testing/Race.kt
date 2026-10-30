@@ -128,7 +128,7 @@ fun holdForOverlap(finished: () -> Boolean = { false }): Overlap {
     Thread.sleep(OVERLAP_HOLD_MS) // the change's commit, held back
     if (finished()) return Overlap(true, "the overlapping side finished inside the hold")
     val session = Arc.container().instance(EntityManager::class.java).get().unwrap(Session::class.java)
-    return session.doReturningWork { connection ->
+    return session.doReturningWork { connection: Connection -> // typed: KT-80247, HoldSnapshot.select says why
         when (val kind = ConfigProvider.getConfig().getValue("quarkus.datasource.db-kind", String::class.java)) {
             "h2" -> h2Overlap(connection, finished)
             "mariadb" -> innodbOverlap(connection)
@@ -155,7 +155,7 @@ fun awaitWaiters(count: Int, finishedUnwaited: () -> Boolean = { false }): Strin
     val session = Arc.container().instance(EntityManager::class.java).get().unwrap(Session::class.java)
     val kind = ConfigProvider.getConfig().getValue("quarkus.datasource.db-kind", String::class.java)
     return pollWaiters(count, waitPollPauseMs(kind), finishedUnwaited) {
-        session.doReturningWork { connection ->
+        session.doReturningWork { connection: Connection ->
             when (kind) {
                 "h2" -> connection.createStatement().use { st ->
                     st.executeQuery(

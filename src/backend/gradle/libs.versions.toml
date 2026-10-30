@@ -3,7 +3,9 @@
 # moves the plugin and the BOM together; any bump here regenerates gradle/verification-metadata.xml (src/backend/CLAUDE.md).
 [versions]
 kotlin = "2.3.21"
-quarkus = "3.36.0"
+quarkus = "3.40.1.1"
+# Above the BOM's 1.62.0 on purpose, applied by the root build's substitution (build.gradle.kts says why and when it goes).
+opentelemetry = "1.67.0"
 
 [libraries]
 quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }
