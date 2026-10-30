@@ -139,7 +139,12 @@
   there within the first ~2 s, while the 17 tile posters are made, and stays to the end. Neither `preload = 'metadata'`,
   one reused `<video>`, a player given only the file's first 2 MiB, one poster player at a time, emptied canvases nor
   low smoothing moves it; drawing an `ImageBitmap` of the frame, closed after the encode, takes off about 0.04 GiB
-  (S2v, 2026-10-30, every series at a 1-minute load of 4.3–9.8; inbox #795).
+  (S2v, 2026-10-30, every series at a 1-minute load of 4.3–9.8; inbox #795). So a tile no longer draws its video: it
+  scales down the PREVIEW-tier poster its upload stores, drawn once for both (`videoPosterOf`). Three series each against
+  the build before, every one started under a load of 3: 21 players instead of 37, the peak 0.95–0.97 GiB against
+  1.08–1.12 GiB, the upload 11.1–11.4 s against 12.4–13.4 s at throttle 4 (8.1–8.8 s against 8.1–9.1 s at throttle 1),
+  the first tile picture about 0.1 s later. The median fell only to 0.84–0.86 GiB (0.82–0.84 at throttle 4), so most of
+  what it holds above the floor is not the tile's draw, and what is has not been attributed.
 
 ## User impact
 

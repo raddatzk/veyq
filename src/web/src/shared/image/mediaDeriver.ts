@@ -264,7 +264,8 @@ const videoPosters = new WeakMap<Blob, Promise<Uint8Array>>()
  * 1080p frame onto a canvas leaves memory in the renderer for the rest of the upload, whatever happens to the element,
  * the player and the canvas after it: 20 clips whose tiles drew a 512 px poster of their own beside the upload's held a
  * median of 0.87-0.89 GiB, against 0.70-0.71 GiB when the tile's frame was decoded and never drawn (profile S2v,
- * 2026-10-30). So the tile scales this poster down instead of drawing the video, and the upload takes the same one.
+ * 2026-10-30). So the tile scales this poster down instead of drawing the video, and the upload takes the same one; what
+ * that saved, and what it did not, is `useOptimisticTiles`'s.
  *
  * Keyed by the picked file, so the two share it whichever asks first, also while it is still being drawn. A failed draw
  * is not kept, so the next caller tries again. The upload lets go of it once it has the bytes ([releaseVideoPoster]); a

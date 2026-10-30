@@ -79,7 +79,10 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * **The tile does not draw the video itself** (inbox #795): each draw of a 1080p frame onto a canvas left memory in the
  * renderer for the rest of the upload, and the tiles' own 512 px draws, beside the upload's, held it at 0.87-0.89 GiB
  * against 0.69-0.73 GiB without tile posters. The tile takes the PREVIEW-tier poster its upload stores (`videoPosterOf`,
- * drawn by whichever of the two asks first) and the deriver scales that JPEG down, as it does a photo.
+ * drawn by whichever of the two asks first) and the deriver scales that JPEG down, as it does a photo: 21 players instead
+ * of 37, the renderer's peak 0.95-0.97 GiB against 1.08-1.12 GiB and the upload 11.1-11.4 s against 12.4-13.4 s at
+ * throttle 4, the first tile picture about 0.1 s later (profile S2v, 2026-10-30). Its median fell only to 0.84-0.86 GiB
+ * (0.82-0.84 at throttle 4), so what holds the rest above the floor is not this draw; it is not attributed (inbox #795).
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
