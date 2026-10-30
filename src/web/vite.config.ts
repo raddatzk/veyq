@@ -57,6 +57,65 @@ function cspPlugin(dev: boolean): Plugin {
   }
 }
 
+// Vite's `build.license` file names each bundled package, its version and its licence text, but not where its source is.
+// MPL-2.0 §3.2(a) asks exactly that of a copy in executable form - ExifReader is MPL-2.0 and ships minified - so this
+// plugin adds, under every package's heading, its published source at that version on npm (the tarball that was bundled,
+// file for file) and its repository when it names one. Every package rather than only MPL: the line costs nothing, and a
+// later file-level copyleft dependency is covered without anyone remembering this. `verify:license-sources` checks dist.
+const LICENSE_FILE = 'third-party-licenses.txt'
+function packageOf(moduleId: string, cache: Map<string, { name: string; version: string; repository?: unknown } | null>) {
+  for (let dir = dirname(moduleId); dir.includes('/node_modules/'); dir = dirname(dir)) {
+    if (cache.has(dir)) return cache.get(dir) ?? undefined
+    const file = join(dir, 'package.json')
+    const pkg = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined
+    // A nested package.json without a name (`{"type":"module"}` in a dist folder) is not the package; Vite skips it too.
+    if (pkg?.name && pkg.version) {
+      cache.set(dir, pkg)
+      return pkg
+    }
+  }
+  return undefined
+}
+function repositoryUrl(repository: unknown): string | undefined {
+  const raw = typeof repository === 'string' ? repository : (repository as { url?: unknown } | undefined)?.url
+  if (typeof raw !== 'string' || !raw) return undefined
+  if (/^[\w.-]+\/[\w.-]+$/.test(raw) || raw.startsWith('github:')) return `https://github.com/${raw.replace(/^github:/, '')}`
+  const url = raw
+    .replace(/^git\+/, '')
+    .replace(/^git:\/\//, 'https://')
+    .replace(/^git@([^:]+):/, 'https://$1/')
+    .replace(/\.git$/, '')
+  return /^https:\/\//.test(url) ? url : undefined
+}
+function licenseSourcesPlugin(): Plugin {
+  return {
+    name: 'veyq-license-sources',
+    apply: 'build',
+    // `order: 'post'` runs after every plain `generateBundle`, Vite's licence plugin among them, which emits the file.
+    generateBundle: {
+      order: 'post',
+      handler(_, bundle) {
+        const asset = bundle[LICENSE_FILE]
+        if (asset?.type !== 'asset' || typeof asset.source !== 'string') return this.error(`${LICENSE_FILE} was not emitted before this plugin ran`)
+        const cache = new Map()
+        const repositories = new Map<string, string | undefined>()
+        for (const chunk of Object.values(bundle)) {
+          if (chunk.type !== 'chunk') continue
+          for (const id of chunk.moduleIds) {
+            const pkg = packageOf(id, cache)
+            if (pkg) repositories.set(`${pkg.name} - ${pkg.version}`, repositoryUrl(pkg.repository))
+          }
+        }
+        asset.source = asset.source.replace(/^## (\S+) - (\S+)(.*)$/gm, (heading, name: string, version: string) => {
+          const repository = repositories.get(`${name} - ${version}`)
+          const lines = [`Source: https://www.npmjs.com/package/${name}/v/${version}`, ...(repository ? [`Repository: ${repository}`] : [])]
+          return `${heading}\n\n${lines.join('\n')}`
+        })
+      },
+    },
+  }
+}
+
 // The runtime data pdf.js reads while it draws (inbox #412): the predefined CMaps (CJK and other non-embedded encodings),
 // the standard 14 fonts' substitutes and the CMYK ICC profile. pdf.js fetches them by URL from a DIRECTORY, so they cannot
 // be hashed single imports; this plugin copies the three directories verbatim to `assets/pdfjs-<version>/` (under
@@ -191,7 +250,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
+    plugins: [vue(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads
@@ -210,7 +269,7 @@ export default defineConfig(({ command }) => {
     build: {
       // The minifier drops the bundled dependencies' license comments, so their MIT/Apache/BSD notices would never
       // reach the browser that receives their code. Vite writes them out instead, at a stable, unhashed path.
-      license: { fileName: 'third-party-licenses.txt' },
+      license: { fileName: LICENSE_FILE },
       rollupOptions: {
         // Two entries: the app (from index.html) and the media Service Worker (cr-inline-video-playback Slice 2).
         // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`);
