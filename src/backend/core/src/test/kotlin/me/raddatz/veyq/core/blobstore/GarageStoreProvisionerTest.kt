@@ -127,9 +127,10 @@ class GarageStoreProvisionerTest {
     @Test
     fun aRefusingAdminApiThrowsSoTheRunnerCanBoundIt() {
         garage.stop()
-        val e = assertThrows(Exception::class.java) { provisioner().provision() }
-        // The runner treats any throw as "try again"; what must NOT happen is a silent success.
-        assertTrue(e !is AssertionError)
+        // The runner treats any throw as "try again"; what must NOT happen is a silent success. `assertThrows` with
+        // `Exception` is the whole check: it fails on a success and on an `Error` (an `AssertionError` is not an
+        // `Exception`), so no `!is AssertionError` beside it — that was always true (KTLC-365, an error from Kotlin 2.4).
+        assertThrows(Exception::class.java) { provisioner().provision() }
         garage = FakeGarageAdminApi().also { it.start() } // so @AfterEach's stop() has something to stop
     }
 
