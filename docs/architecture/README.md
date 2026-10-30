@@ -354,8 +354,8 @@ first frame now joins the photos' queue at the thumbnail's size, 2 decoders run 
 the upload takes 12.4 s against 14.5 s at throttle 4. Each video's size is read from its container's header
 (`src/web/src/shared/image/videoHeader.ts`, inbox #793) instead of by a `<video>` per file that loaded its metadata at
 the pick and again at its upload: 22 players alive at once become 2, and the upload takes 12.0–12.3 s against
-12.8–13.5 s at throttle 4; the renderer's 0.85–0.89 GiB through it are the tile posters' decodes, not the probes
-(0.71–0.72 GiB without those posters, inbox #795) ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
+12.8–13.5 s at throttle 4; the renderer's 0.85–0.89 GiB through it are the tile posters' draws of their 1080p frame,
+not the probes and not the decodes (0.71–0.72 GiB without those posters, 0.70–0.71 GiB decoded and never drawn, inbox #795) ([uc.memory.upload](../features/memory/use-cases/uc.memory.upload.md)
 § Quality notes; 2026-10-29). A fourth path,
 an import of a download of the same 50 photos (S4, inbox #557), spent 3.5 s
 of its main thread on each payload's SHA-256 and 0.5 s on its CRC-32 at throttle 1 (14.6 s and 1.9 s at 4); that check

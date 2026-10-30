@@ -134,7 +134,12 @@
   Only dropping the old probe's source once its metadata was in shortened each player's life to 0.05–0.18 s but kept the
   22 at once and the time (12.5–13.1 s). The renderer's memory is unchanged by either, a median of 0.85–0.89 GiB and a peak of 1.07–1.13 GiB:
   what it holds above the 0.71–0.72 GiB of a build that draws no tile poster (peak 0.92–0.94 GiB, the upload 10.6–10.8 s
-  at throttle 4) is those posters' decodes, the same 0.85–0.88 GiB when they are drawn and never shown (inbox #795).
+  at throttle 4) is those posters' draws onto the canvas, not their decodes: a build that decodes and presents each
+  tile's frame and never draws it holds 0.70–0.71 GiB, one that draws it and never encodes it 0.87–0.88 GiB. The step is
+  there within the first ~2 s, while the 17 tile posters are made, and stays to the end. Neither `preload = 'metadata'`,
+  one reused `<video>`, a player given only the file's first 2 MiB, one poster player at a time, emptied canvases nor
+  low smoothing moves it; drawing an `ImageBitmap` of the frame, closed after the encode, takes off about 0.04 GiB
+  (S2v, 2026-10-30, every series at a 1-minute load of 4.3–9.8; inbox #795).
 
 ## User impact
 
