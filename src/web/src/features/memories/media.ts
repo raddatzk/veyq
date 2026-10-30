@@ -46,7 +46,7 @@ import { videoCaptureTimeFromHeader } from '../../shared/image/videoHeader'
 
 // The on-device pixel stage lives in `shared/image/mediaDeriver` (cr-0143). Re-exported here so existing importers of
 // `./media` (share.ts, useOptimisticTiles.ts, uploadQueue.ts, tests) keep their import path unchanged.
-export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
+export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, videoPosterOf, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
 
 // The per-uploader "Beiträge" buckets (en.memory.buckets, ADR 0034) live in `./mediaBuckets` (#96) — uploader
 // metadata, not blob data. Re-exported here so existing importers of `./media` (MemoryBuckets.vue, tests) keep

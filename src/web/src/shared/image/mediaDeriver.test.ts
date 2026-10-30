@@ -5,7 +5,7 @@
 // actual Safari frame-grab is covered by live verification.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  onceEvent, firstPresentedFrame, VIDEO_EVENT_TIMEOUT_MS, deriveTiers, createBrowserDeriver, type AddMediaSource, type MediaDeriver,
+  onceEvent, firstPresentedFrame, VIDEO_EVENT_TIMEOUT_MS, deriveTiers, createBrowserDeriver, videoPosterOf, TIER_SPECS, type AddMediaSource, type MediaDeriver,
 } from './mediaDeriver'
 
 afterEach(() => vi.useRealTimers())
@@ -73,6 +73,41 @@ describe('deriveTiers — an undecodable/hanging video degrades to original-only
     }
     await expect(deriveTiers(videoSource, deriver)).resolves.toEqual({ derivatives: [], dimensions: null })
     expect(deriver.deriveVideoPoster).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("videoPosterOf — a picked video's one poster, held only until its upload has it (inbox #795)", () => {
+  const posterDeriver = (...answers: (() => Promise<Uint8Array>)[]): MediaDeriver => {
+    const deriveVideoPoster = vi.fn(async () => (answers.shift() ?? (async () => new Uint8Array([1])))())
+    return { deriveImage: vi.fn(), deriveVideoPoster }
+  }
+
+  it('draws at the PREVIEW tier, the decode on the re-typed blob, and hands every caller the one draw', async () => {
+    const file = new Blob([new Uint8Array([0, 0, 0, 0x18]) as BlobPart])
+    const typed = file.slice(0, file.size, 'video/mp4')
+    const d = posterDeriver()
+    const [a, b] = await Promise.all([videoPosterOf(file, d, typed), videoPosterOf(file, d)])
+    expect(a).toBe(b)
+    expect(d.deriveVideoPoster).toHaveBeenCalledTimes(1)
+    expect(d.deriveVideoPoster).toHaveBeenCalledWith(typed, TIER_SPECS.PREVIEW)
+  })
+
+  it('the upload lets go of the poster once it has it, so a later upload of the file draws again', async () => {
+    const file = new Blob([new Uint8Array([0, 0, 0, 0x18]) as BlobPart], { type: 'video/mp4' })
+    const d = posterDeriver()
+    await videoPosterOf(file, d)
+    await deriveTiers({ blob: file, mediaType: 'video/mp4' }, d)
+    expect(d.deriveVideoPoster, "the upload took the tile's poster").toHaveBeenCalledTimes(1)
+    await deriveTiers({ blob: file, mediaType: 'video/mp4' }, d)
+    expect(d.deriveVideoPoster, 'and did not keep it').toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed draw is not kept: the next caller tries again', async () => {
+    const file = new Blob([new Uint8Array([0]) as BlobPart], { type: 'video/mp4' })
+    const d = posterDeriver(async () => { throw new Error('video_frame_timeout') })
+    await expect(videoPosterOf(file, d)).rejects.toThrow('video_frame_timeout')
+    await expect(videoPosterOf(file, d)).resolves.toEqual(new Uint8Array([1]))
+    expect(d.deriveVideoPoster).toHaveBeenCalledTimes(2)
   })
 })
 

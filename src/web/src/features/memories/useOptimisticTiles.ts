@@ -8,7 +8,7 @@
 // change of content, never of place, because both sides derive the key from the same `captureTimeOf` rule. The
 // pure selection/merge logic lives in ./optimisticUpload; this composable owns the reactive preview lifecycle.
 import { reactive, computed, watch, onBeforeUnmount, type Ref } from 'vue'
-import { captureTimeOf, createBrowserDeriver, readCaptureTime, TIER_SPECS } from './media'
+import { captureTimeOf, createBrowserDeriver, readCaptureTime, TIER_SPECS, videoPosterOf } from './media'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useUploadQueue, type UploadFile } from './uploadQueue'
 import { selectOptimisticUploads, optimisticTileId, fileIdOfTile } from './optimisticUpload'
@@ -65,9 +65,8 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * 0.49-0.53 GiB through the same upload, its peak 0.61-0.67 GiB against 1.11-1.18 GiB, in the same time (0.44-0.46 GiB
  * with no preview at all). A photo the deriver cannot read falls back to the file itself, as before.
  *
- * **A video's poster joins the same queue** (inbox #786): its first frame, drawn at the thumbnail tier's size by
- * `deriveVideoPoster`, for a tile near the viewport, one decode at a time with the photos. It used to be derived for
- * every picked video at once, at the lightbox's 2048 px: picking 20 clips of 1080p (profile S2v, 2026-10-29) kept 34-41
+ * **A video's poster joins the same queue** (inbox #786): its first frame, for a tile near the viewport, one decode at a
+ * time with the photos. It used to be derived for every picked video at once, at the lightbox's 2048 px: picking 20 clips of 1080p (profile S2v, 2026-10-29) kept 34-41
  * `<video>` players alive and 18-20 of them decoding at once, the renderer peaking at 1.51-1.78 GiB within 0.5-2.4 s of
  * the pick against 0.94-0.96 GiB with no tile poster, and the main thread's 20 large encodes cost the upload 3.5 s at
  * throttle 4. Now 2 decode at once (this queue's and the upload's own), the peak is 1.09-1.12 GiB, the upload takes
@@ -75,8 +74,12 @@ function sameTiles(a: readonly OptimisticTileVM[], b: readonly OptimisticTileVM[
  * turn shows the listed thumbnail without a poster of its own. A video the browser cannot decode stays icon-only.
  * The probe below reads every picked video's size at once, but from its container's header (`videoHeader.ts`, inbox
  * #793): a `<video>` each that loaded its metadata made 22 players alive at once at the pick, now 2, and the upload took
- * 12.8-13.5 s at throttle 4 against 12.0-12.3 s now (profile S2v, 2026-10-29). What the renderer holds through the upload above the 0.71-0.72 GiB of a build without tile
- * posters is these posters' decodes (0.85-0.89 GiB with them drawn but never shown; inbox #795), not the probes.
+ * 12.8-13.5 s at throttle 4 against 12.0-12.3 s now (profile S2v, 2026-10-29).
+ *
+ * **The tile does not draw the video itself** (inbox #795): each draw of a 1080p frame onto a canvas left memory in the
+ * renderer for the rest of the upload, and the tiles' own 512 px draws, beside the upload's, held it at 0.87-0.89 GiB
+ * against 0.69-0.73 GiB without tile posters. The tile takes the PREVIEW-tier poster its upload stores (`videoPosterOf`,
+ * drawn by whichever of the two asks first) and the deriver scales that JPEG down, as it does a photo.
  */
 export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<ReadonlySet<string>>) {
   const { batches } = useUploadQueue()
@@ -163,9 +166,12 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
     drawing = true
     const jpeg = (bytes: Uint8Array) => URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' }))
     const picture: Promise<string | null> = mediaType.startsWith('video/')
-      ? // an <img> can't decode video bytes: a video's picture is its first frame, at the thumbnail's size; a video the
-        // browser cannot decode stays icon-only (no url), as its listed tile does
-        deriver.deriveVideoPoster(file, TIER_SPECS.THUMBNAIL).then(jpeg, () => null)
+      ? // an <img> can't decode video bytes: a video's picture is its first frame, scaled to the thumbnail's size from the
+        // poster its upload stores, so the video is drawn once for both (inbox #795); a video the browser cannot decode
+        // stays icon-only (no url), as its listed tile does
+        videoPosterOf(file, deriver)
+          .then((poster) => deriver.deriveImage(new Blob([poster as BlobPart], { type: 'image/jpeg' }), TIER_SPECS.THUMBNAIL))
+          .then(({ bytes }) => jpeg(bytes), () => null)
       : deriver.deriveImage(file, TIER_SPECS.THUMBNAIL).then(
           ({ bytes }) => jpeg(bytes),
           () => URL.createObjectURL(file), // a photo the deriver cannot read: the file itself, as an <img> may still show it

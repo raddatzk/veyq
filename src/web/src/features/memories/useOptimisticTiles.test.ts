@@ -21,6 +21,7 @@ import { computed, defineComponent, h, watch, type ComputedRef } from 'vue'
 import { useOptimisticTiles, type OptimisticTileVM } from './useOptimisticTiles'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { captureTimeOf, createBrowserDeriver, readCaptureTime } from './media'
+import { deriveTiers } from '../../shared/image/mediaDeriver'
 
 /** Releases the pending dimension probe. It answers a portrait (the fallback is landscape), so its answer is a placement
  *  change. */
@@ -51,6 +52,8 @@ function harness() {
 }
 
 const fileAt = (i: number) => (hoisted.batches[0] as { files: File$[] }).files[i]
+/** The File the queue's item at `i` was picked as — what the upload hands `deriveTiers`. */
+const pickedFile = (i: number) => (fileAt(i) as unknown as { file: File }).file
 
 beforeEach(() => {
   hoisted.batches.length = 0
@@ -195,7 +198,7 @@ describe('useOptimisticTiles — a photo is previewed tile-sized, near the viewp
   })
 })
 
-describe("useOptimisticTiles — a video's poster joins the photos' queue: near the viewport, one at a time, tile-sized (inbox #786)", () => {
+describe("useOptimisticTiles — a video's poster joins the photos' queue: near the viewport, one at a time, tile-sized (inbox #786, #795)", () => {
   /** Every object URL minted and not revoked, with the blob it shows. */
   const minted = new Map<string, Blob>()
   /** What was asked of the deriver, in order — photos and videos in one list — each settled by the test. */
@@ -203,7 +206,8 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
   const POSTER = new Uint8Array([0xff, 0xd8, 7])
   const deriveImage = vi.fn((file: Blob, { maxEdge }: { maxEdge: number; quality: number }) =>
     new Promise<{ bytes: Uint8Array; source: null }>((resolve, reject) => {
-      asked.push({ kind: 'image', name: (file as File).name, maxEdge, release: () => resolve({ bytes: new Uint8Array([0xff, 0xd8, 1]), source: null }), fail: () => reject(new Error('source')) })
+      // a video's poster reaches the deriver as a JPEG blob with no name
+      asked.push({ kind: 'image', name: file instanceof File ? file.name : 'poster.jpg', maxEdge, release: () => resolve({ bytes: new Uint8Array([0xff, 0xd8, 1]), source: null }), fail: () => reject(new Error('source')) })
     }))
   const deriveVideoPoster = vi.fn((file: Blob, opts?: { maxEdge: number; quality: number }) =>
     new Promise<Uint8Array>((resolve, reject) => {
@@ -251,7 +255,7 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
     return { wrapper, want: (ids: string[]) => api.wantPreviews('gallery', ids), url: (id: string) => tile(id)!.url, tile }
   }
 
-  it('a pick decodes no video before its tile is near the viewport, then its first frame at the thumbnail\'s size', async () => {
+  it('a pick decodes no video before its tile is near the viewport, then the upload\'s poster scaled to the thumbnail\'s size', async () => {
     const { want, url, tile } = picked()
     await flushPromises()
     expect(deriveVideoPoster, 'no tile announced: no decoder opened').not.toHaveBeenCalled()
@@ -262,12 +266,20 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
 
     want(['upload:v2'])
     await flushPromises()
-    expect(asked.map((a) => [a.kind, a.name, a.maxEdge])).toEqual([['poster', 'v2.mp4', 512]])
+    // the video is drawn at the PREVIEW tier its upload stores, never at the tile's size (inbox #795)
+    expect(asked.map((a) => [a.kind, a.name, a.maxEdge])).toEqual([['poster', 'v2.mp4', 2048]])
     asked[0].release()
+    await flushPromises()
+    expect(asked.map((a) => [a.kind, a.name, a.maxEdge]), 'then that poster is scaled down').toEqual([['poster', 'v2.mp4', 2048], ['image', 'poster.jpg', 512]])
+    const scaled = deriveImage.mock.calls[0][0]
+    expect(scaled.type).toBe('image/jpeg')
+    expect(new Uint8Array(await scaled.arrayBuffer())).toEqual(POSTER)
+    expect(url('v2'), 'nothing shown before it is scaled').toBeNull()
+    asked[1].release()
     await flushPromises()
     const shown = minted.get(url('v2')!)!
     expect(shown.type).toBe('image/jpeg')
-    expect(new Uint8Array(await shown.arrayBuffer())).toEqual(POSTER)
+    expect(new Uint8Array(await shown.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 1]))
     expect([url('v1'), url('v3')]).toEqual([null, null])
   })
 
@@ -284,13 +296,18 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
     await flushPromises()
     asked[0].release()
     await flushPromises()
-    expect(asked.map((a) => [a.kind, a.name])).toEqual([['poster', 'v3.mp4'], ['image', 'p1.jpg']])
+    expect(asked.map((a) => [a.kind, a.name]), 'the photo waits for the poster to be scaled too').toEqual([['poster', 'v3.mp4'], ['image', 'poster.jpg']])
     asked[1].release()
     await flushPromises()
-    expect(asked.map((a) => a.name)).toEqual(['v3.mp4', 'p1.jpg', 'v1.mp4'])
+    expect(asked.map((a) => [a.kind, a.name]).slice(2)).toEqual([['image', 'p1.jpg']])
     asked[2].release()
     await flushPromises()
-    expect(asked, 'v2 was never wanted').toHaveLength(3)
+    expect(asked.map((a) => [a.kind, a.name]).slice(3)).toEqual([['poster', 'v1.mp4']])
+    asked[3].release()
+    await flushPromises()
+    asked[4].release()
+    await flushPromises()
+    expect(asked, 'v2 was never wanted').toHaveLength(5)
   })
 
   it('a video the browser cannot decode stays icon-only - never the file - and the queue goes on', async () => {
@@ -312,6 +329,8 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
     await flushPromises()
     asked[0].release()
     await flushPromises()
+    asked[1].release()
+    await flushPromises()
     const shownV1 = url('v1')!
     expect(minted.has(shownV1)).toBe(true)
     // v1 is cancelled while v2's poster is being drawn: both tiles leave the grid
@@ -319,8 +338,44 @@ describe("useOptimisticTiles — a video's poster joins the photos' queue: near 
     fileAt(1).status = 'cancelled'
     await flushPromises()
     expect(minted.has(shownV1), 'the shown poster is revoked with its tile').toBe(false)
-    asked[1].release()
+    asked[2].release()
+    await flushPromises()
+    asked[3].release()
     await flushPromises()
     expect(minted.size, 'the poster finished after its tile left is not kept').toBe(0)
+  })
+  it('a tile and its upload draw the video once: the upload stores the poster the tile was scaled from', async () => {
+    const { want, url } = picked()
+    await flushPromises()
+    want(['upload:v1'])
+    await flushPromises()
+    asked[0].release()
+    await flushPromises()
+    asked[1].release()
+    await flushPromises()
+    expect(url('v1')).not.toBeNull()
+    const upload = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn(async () => new Uint8Array([9])) }
+    const { derivatives } = await deriveTiers({ blob: pickedFile(0), mediaType: 'video/mp4' }, upload)
+    expect(upload.deriveVideoPoster, 'the upload draws no frame of its own').not.toHaveBeenCalled()
+    expect(derivatives).toEqual([{ kind: 'THUMBNAIL', bytes: POSTER }, { kind: 'PREVIEW', bytes: POSTER }])
+  })
+
+  it("a tile wanted while its upload draws the poster waits for that one, and opens no decoder of its own", async () => {
+    const { want, url } = picked()
+    await flushPromises()
+    let drawn!: (b: Uint8Array) => void
+    const upload = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn(() => new Promise<Uint8Array>((r) => (drawn = r))) }
+    const tiers = deriveTiers({ blob: pickedFile(1), mediaType: 'video/mp4' }, upload)
+    want(['upload:v2'])
+    await flushPromises()
+    expect(deriveVideoPoster, "the tile asks for no frame: the upload's is on its way").not.toHaveBeenCalled()
+    drawn(POSTER)
+    await flushPromises()
+    expect(asked.map((a) => [a.kind, a.name, a.maxEdge])).toEqual([['image', 'poster.jpg', 512]])
+    asked[0].release()
+    await flushPromises()
+    expect(url('v2')).not.toBeNull()
+    expect((await tiers).derivatives.map((d) => d.bytes)).toEqual([POSTER, POSTER])
+    expect(upload.deriveVideoPoster).toHaveBeenCalledTimes(1)
   })
 })

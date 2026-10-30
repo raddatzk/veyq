@@ -256,6 +256,36 @@ export function firstPresentedFrame(video: HTMLVideoElement, timeoutMs = VIDEO_E
   })
 }
 
+/** The PREVIEW-tier poster of each picked video, while one is being drawn or waits for the upload ([videoPosterOf]). */
+const videoPosters = new WeakMap<Blob, Promise<Uint8Array>>()
+
+/**
+ * A picked video's poster at the PREVIEW tier, drawn ONCE for its upload tile and its upload (inbox #795). Each draw of a
+ * 1080p frame onto a canvas leaves memory in the renderer for the rest of the upload, whatever happens to the element,
+ * the player and the canvas after it: 20 clips whose tiles drew a 512 px poster of their own beside the upload's held a
+ * median of 0.87-0.89 GiB, against 0.70-0.71 GiB when the tile's frame was decoded and never drawn (profile S2v,
+ * 2026-10-30). So the tile scales this poster down instead of drawing the video, and the upload takes the same one.
+ *
+ * Keyed by the picked file, so the two share it whichever asks first, also while it is still being drawn. A failed draw
+ * is not kept, so the next caller tries again. The upload lets go of it once it has the bytes ([releaseVideoPoster]); a
+ * poster nobody uploads goes with its file. `decodeAs` is the blob to decode when it is a re-typed slice of `source`.
+ */
+export function videoPosterOf(source: Blob, deriver: MediaDeriver, decodeAs: Blob = source): Promise<Uint8Array> {
+  const known = videoPosters.get(source)
+  if (known) return known
+  const poster = deriver.deriveVideoPoster(decodeAs, TIER_SPECS.PREVIEW)
+  videoPosters.set(source, poster)
+  poster.catch(() => {
+    if (videoPosters.get(source) === poster) videoPosters.delete(source)
+  })
+  return poster
+}
+
+/** Drop the poster [videoPosterOf] holds for `source`; a caller already waiting on it still gets it. */
+export function releaseVideoPoster(source: Blob): void {
+  videoPosters.delete(source)
+}
+
 /**
  * Generate the role-tagged derivatives for a source (image: two downscales; video: one poster for both), and
  * hand back the original's intrinsic size when the decode knew it.
@@ -289,7 +319,8 @@ export async function deriveTiers(
       }
     }
     if (source.mediaType.startsWith('video/')) {
-      const poster = await deriver.deriveVideoPoster(blob) // one poster serves both tiers
+      // one poster serves both tiers, and the one an upload tile may already have drawn of this file serves the upload
+      const poster = await videoPosterOf(source.blob, deriver, blob).finally(() => releaseVideoPoster(source.blob))
       return { derivatives: [{ kind: 'THUMBNAIL', bytes: poster }, { kind: 'PREVIEW', bytes: poster }], dimensions: null }
     }
   } catch {
