@@ -131,12 +131,13 @@ acceptanceCriteria:
           - src/features/memories/components/MediaLightbox.test.ts
   - id: panel-shows-what-the-photo-knows
     text: The detail panel renders, from the two sealed tiers, the file (original name, plaintext size — byteSize minus 28 per chunk, never the raw ciphertext size — and format), the camera and lens, the exposure (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, and whether the flash fired — read as the EXIF BITFIELD, so 16 means it did not), the provenance an editor wrote in (software, author, copyright, rating, title, description), and the geo block (altitude, camera view direction, positioning accuracy). Every row appears only when the photo carries that value; none of it is ever sent, and the filename in particular is sealed and never leaves the device.
-    # The tag NAMES and the parse options are pinned separately by readExif.fixture.test.ts, the one test that
-    # runs the UN-MOCKED exifr over a generated fixture — without it every mocked assertion here would pass
-    # just as well against an invented tag. It caught four on its first run.
+    # The tag NAMES are pinned separately by the two tests that run the UN-MOCKED reader (ExifReader) over generated
+    # fixtures, one per container: exifTags.test.ts the reader seam's tags, readExif.fixture.test.ts what media.ts
+    # seals from them — without them every mocked assertion here would pass just as well against an invented tag.
     coverage:
       web:
         unit:
+          - src/shared/image/exifTags.test.ts
           - src/features/memories/readExif.fixture.test.ts
           - src/features/memories/media.test.ts
           - src/features/memories/components/MediaLightbox.test.ts

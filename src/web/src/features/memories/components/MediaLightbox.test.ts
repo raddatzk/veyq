@@ -10,8 +10,8 @@ vi.mock('../../../api/client', () => ({
 }))
 vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 
-// exifr does the real parse in the browser; here we drive it so the sealed EXIF tier is deterministic.
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+// The EXIF reader (`shared/image/exifTags`) does the real parse in the browser; here we drive it so the sealed EXIF tier is deterministic.
+vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 // The map/geocoding consent gate (uc.memory.place, ADR 0016). Default: consented WITH a geocoder, so the
 // place-name path is exercised; the consent bite flips `geocodingAvailable` off and asserts silence.
@@ -54,7 +54,7 @@ import { reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
 import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
-import exifr from 'exifr'
+import { readExifTags, type ExifTags } from '../../../shared/image/exifTags'
 import { blobApi } from '../../../api/client'
 import { mediaApi } from '../api'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
@@ -334,7 +334,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
   })
 
   // inbox #395 F10, the owner's repro: two photos, then a third upload shifts the gallery. The download name must not
-  // move with it. Since inbox #397 the name is the original's blob meta (the EXIF tier carries none — exifr finds
+  // move with it. Since inbox #397 the name is the original's blob meta (the EXIF tier carries none — the reader finds
   // nothing here). Lever: hand `originalDownloadName` null instead of the blob meta (the Memory name + position again).
   it('downloads an original under its own sealed file name, and the name holds when a newer upload shifts the gallery', async () => {
     const memoryKey = v1.randomBytes(32)
@@ -695,9 +695,9 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   it('lazily loads the EXIF tier via getMediaExif and renders the decoded detail rows', async () => {
     const memoryKey = v1.randomBytes(32)
     // the source carries readable EXIF → addMedia seals it under K_node into the (lazy) Tier-2 blob
-    vi.mocked(exifr.parse).mockResolvedValue({
-      DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)),
-      Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FocalLength: 50, FNumber: 1.8, ExposureTime: 0.008, ISO: 200,
+    vi.mocked(readExifTags).mockResolvedValue({
+      DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0),
+      Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FocalLength: 50, FNumber: 1.8, ExposureTime: 0.008, ISOSpeedRatings: 200,
       latitude: 48.137, longitude: 11.575,
     })
 
@@ -731,14 +731,14 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   // twenty empty rows.
   it('renders the file, exposure, provenance and geo rows, and omits the ones the photo does not carry', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({
-      Make: 'Canon', Model: 'EOS R', FocalLength: 50, FocalLengthIn35mmFormat: 75,
-      ExposureCompensation: -0.7, Flash: 9, Orientation: 6, ISO: 200,
+    vi.mocked(readExifTags).mockResolvedValue({
+      Make: 'Canon', Model: 'EOS R', FocalLength: 50, FocalLengthIn35mmFilm: 75,
+      ExposureBiasValue: -0.7, Flash: 9, Orientation: 6, ISOSpeedRatings: 200,
       Software: 'veyq fixture 1.0', Artist: 'A. Photographer', Copyright: '(c) 2021 A. Photographer',
       Rating: 4,
-      title: { lang: 'x-default', value: 'Marienplatz' },
-      description: { lang: 'x-default', value: 'Marienplatz at golden hour' },
-      GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
+      xmpTitle: 'Marienplatz',
+      xmpDescription: 'Marienplatz at golden hour',
+      GPSAltitude: 519.4, GPSAltitudeRef: 0,
       GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
       latitude: 48.137, longitude: 11.575,
     })
@@ -771,7 +771,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
   it('a flash value of 16 reads as "did not fire" — the bitfield, not a truthiness test', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 })
+    vi.mocked(readExifTags).mockResolvedValue({ Make: 'Canon', Flash: 16 })
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -794,7 +794,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   // --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
   /** One geotagged photo, listed and ready to open. */
   async function seedGeotagged(memoryKey: Uint8Array) {
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 })
+    vi.mocked(readExifTags).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 })
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -894,7 +894,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     resetPlaceNameCache()
     mapConfig.maps = true
     mapConfig.geocoder = null // no geocoder: this test is about the needle, not the name
-    vi.mocked(exifr.parse).mockResolvedValue({
+    vi.mocked(readExifTags).mockResolvedValue({
       Make: 'Canon', latitude: 48.137, longitude: 11.575, GPSImgDirection: 215.3, GPSImgDirectionRef: 'T',
     })
     const store = galleryFakeStore()
@@ -918,7 +918,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   // its ref), so a media without EXIF still lists them; only the camera rows are missing.
   it('lists the file\'s own facts, and no camera rows, when the item carries no sealed EXIF', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue(undefined) // no readable EXIF → nothing sealed
+    vi.mocked(readExifTags).mockResolvedValue(undefined) // no readable EXIF → nothing sealed
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -940,8 +940,8 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 })
 
 describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
-  async function seedOne(memoryKey: Uint8Array, exifRaw: unknown) {
-    vi.mocked(exifr.parse).mockResolvedValue(exifRaw)
+  async function seedOne(memoryKey: Uint8Array, exifTags: ExifTags | undefined) {
+    vi.mocked(readExifTags).mockResolvedValue(exifTags)
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -953,7 +953,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
 
   it('corrects the time (re-seals opaque, shows the badge), then resets to the original', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0) })
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
@@ -1008,7 +1008,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
    */
   it('a peer\'s correction written meanwhile re-opens the editor on theirs, with the conflict notice', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0) })
     const PEER = Date.UTC(2020, 1, 2, 3, 4, 0)
     const peers = b64std(v1.sealField(
       { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: items[0].mediaId }, memoryKey,
@@ -1038,7 +1038,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
    */
   it('a details tier that does not open refuses the save with a message, and sends nothing', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0) })
     const damaged = { ...items[0], wrappedMeta: b64std(v1.randomBytes(64)) } // present, and opens under no key
 
     const wrapper = mountLightbox(memoryKey, [damaged], 0)
@@ -1520,7 +1520,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     )
     vi.stubGlobal('fetch', geo)
     for (const [i, lat] of [48.1, 50.9, 52.5].entries()) { // three places apart, so each is a geocoder request of its own
-      vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: lat, longitude: 11.5 })
+      vi.mocked(readExifTags).mockResolvedValue({ Make: 'Canon', latitude: lat, longitude: 11.5 })
       await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i + 1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     }
     const items = await listMedia(SCOPE_ID, NODE_ID)

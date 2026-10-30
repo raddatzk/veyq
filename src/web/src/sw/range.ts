@@ -6,7 +6,7 @@
 
 /**
  * The frame size, as local literals: the SW bundle stays free of the crypto package and of the data layer (media.ts
- * would pull exifr + the API client into the worker). They are the contract's `chunk_frame_size` (ADR 0013 §3) all
+ * would pull the EXIF reader + the API client into the worker). They are the contract's `chunk_frame_size` (ADR 0013 §3) all
  * the same — range.test.ts pins both to the `@veyq/crypto` export, so they cannot drift from what uploads seal.
  */
 

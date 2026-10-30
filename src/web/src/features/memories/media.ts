@@ -10,7 +10,6 @@
 // grid = thumbnail / lightbox = preview / download = original without ever pulling the full original for a grid.
 // The pixel stage (decode → downscale → JPEG re-encode) is hidden behind an injectable MediaDeriver so the
 // wiring is unit-testable; the real Canvas/<video> decode is exercised by a live browser round-trip.
-import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
@@ -42,6 +41,7 @@ import { cleanStr, finiteNum, mediaMetaContext, normalizeMediaMeta, openMediaMet
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
+import { readExifTags, type ExifTags } from '../../shared/image/exifTags'
 
 // The on-device pixel stage lives in `shared/image/mediaDeriver` (cr-0143). Re-exported here so existing importers of
 // `./media` (share.ts, useOptimisticTiles.ts, uploadQueue.ts, tests) keep their import path unchanged.
@@ -135,7 +135,7 @@ export type MediaExif = {
   focalLength35?: number
   fNumber?: number
   exposureTime?: number
-  /** EV compensation the photographer dialled in. Signed — exifr calls this `ExposureCompensation`. */
+  /** EV compensation the photographer dialled in. Signed — EXIF's `ExposureBiasValue`. */
   exposureCompensation?: number
   iso?: number
   /** The raw EXIF Flash **bitfield**, not a boolean: bit 0 is "fired", so 16 is truthy and means it did NOT.
@@ -326,8 +326,8 @@ export function captureTimeOf(exifDate: number | undefined, lastModified: number
 export async function readCaptureTime(file: Blob, mediaType: string, lastModified: number | undefined): Promise<CaptureTime> {
   if (!mediaType.startsWith('image/')) return captureTimeOf(undefined, lastModified)
   try {
-    const raw = await exifr.parse(file, { tiff: true, exif: true })
-    return captureTimeOf(raw ? exifCapturedAt(raw) : undefined, lastModified)
+    const tags = await readExifTags(file, 'date')
+    return captureTimeOf(tags ? exifCapturedAt(tags) : undefined, lastModified)
   } catch {
     return captureTimeOf(undefined, lastModified)
   }
@@ -342,43 +342,14 @@ function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.FieldContex
 }
 
 /** The EXIF capture date, by its one precedence rule. Both readers of an image's date go through here. */
-function exifCapturedAt(raw: { DateTimeOriginal?: unknown; CreateDate?: unknown; ModifyDate?: unknown }): number | undefined {
-  return toEpochMs(raw.DateTimeOriginal ?? raw.CreateDate ?? raw.ModifyDate)
+function exifCapturedAt(tags: ExifTags): number | undefined {
+  return finiteNum(tags.DateTimeOriginal ?? tags.DateTimeDigitized ?? tags.DateTime)
 }
 
-/** Coerce an EXIF date (exifr yields a `Date`; some sources a number) to epoch-ms, or undefined when unusable. */
-function toEpochMs(d: unknown): number | undefined {
-  if (d instanceof Date) return finiteNum(d.getTime())
-  return finiteNum(d)
-}
-
-/**
- * The option set every EXIF read passes — exported because the fixture test parses with **exactly this** or it
- * proves nothing about the client (`readExif.fixture.test.ts`).
- *
- * **`translateValues: false` is load-bearing, and was measured rather than assumed.** With exifr's default
- * translation `Flash` arrives as the English string "Flash fired, compulsory flash mode" and `Orientation` as
- * "Rotate 90 CW" — so a bit test on Flash silently reads 0, and `finiteNum(raw.Orientation)` has been yielding
- * `undefined` since this bundle was introduced, meaning the sealed `orientation` field never once carried a
- * value. Raw values also keep the phrasing ours: a library's English string sealed into a user's tier would be
- * shown untranslated to a German reader. `reviveValues` stays ON, because it is what makes `DateTimeOriginal` a
- * `Date`, which the capture-time rule depends on.
- */
-export const EXIF_PARSE_OPTIONS = { tiff: true, exif: true, gps: true, xmp: true, iptc: true, translateValues: false } as const
-
-/** XMP text arrives as a language alternative (`{ lang, value }`), not a string. Take the value. */
-function xmpText(v: unknown): string | undefined {
-  if (typeof v === 'string') return v
-  if (v && typeof v === 'object' && 'value' in v) return cleanStr((v as { value: unknown }).value)
-  return undefined
-}
-
-/** Altitude, signed. `GPSAltitudeRef` 1 means *below* sea level, and exifr hands it back byte-indexed. */
-function signedAltitude(alt: unknown, ref: unknown): number | undefined {
-  const metres = finiteNum(alt)
+/** Altitude, signed. `GPSAltitudeRef` 1 means *below* sea level. */
+function signedAltitude(metres: number | undefined, ref: number | undefined): number | undefined {
   if (metres === undefined) return undefined
-  const refByte = typeof ref === 'object' && ref !== null ? finiteNum((ref as Record<number, unknown>)[0]) : finiteNum(ref)
-  return refByte === 1 ? -metres : metres
+  return ref === 1 ? -metres : metres
 }
 
 /** Whether an EXIF bundle carries anything beyond the version tag (else there's nothing worth sealing). */
@@ -397,46 +368,52 @@ async function probeDims(source: AddMediaSource, deriver: MediaDeriver): Promise
 }
 
 /**
- * Read an image's original bytes with `exifr` (HEIC/JPEG/TIFF/PNG; GPS auto-decoded DMS→decimal) and split the
- * result into the **capture time** (epoch-ms, cr-0066) and the **panel bundle** ([MediaExif], date-free).
+ * Read an image's tags ([readExifTags]: the formats and how the file is read are its header's) and split them into
+ * the **capture time** (epoch-ms, cr-0066), the **position** and the **panel bundle** ([MediaExif], date-free).
  * Best-effort: non-images, unreadable/absent EXIF, or a decode error → `{ capturedAt: undefined, exif: null }`
  * (the item still uploads). Never leaves the device in the clear — the caller seals both.
+ *
+ * Each field takes the EXIF tag first, then the one an editor writes when the camera wrote none. **Raw values only**:
+ * `Flash` is the bitfield and `Orientation` the number 1..8, never a library's English phrase ("Flash fired, compulsory
+ * flash mode", "right-top"): a bit test on the phrase reads 0, `finiteNum` of it is nothing (that sealed `orientation`
+ * empty from cr-0064 until it was measured), and a library's wording sealed into a user's tier would reach a German
+ * reader untranslated.
  */
 async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; gpsLat?: number; gpsLng?: number; exif: MediaExif | null }> {
   if (!source.mediaType.startsWith('image/')) return { exif: null }
   try {
-    const raw = await exifr.parse(source.blob, EXIF_PARSE_OPTIONS)
-    if (!raw) return { exif: null }
+    const tags = await readExifTags(source.blob, 'all')
+    if (!tags) return { exif: null }
     const exif: MediaExif = {
       v: 1,
-      make: cleanStr(raw.Make),
-      model: cleanStr(raw.Model),
-      lens: cleanStr(raw.LensModel ?? raw.LensMake),
-      focalLength: finiteNum(raw.FocalLength),
-      focalLength35: finiteNum(raw.FocalLengthIn35mmFormat),
-      fNumber: finiteNum(raw.FNumber),
-      exposureTime: finiteNum(raw.ExposureTime),
-      exposureCompensation: finiteNum(raw.ExposureCompensation),
-      iso: finiteNum(raw.ISO),
-      flash: finiteNum(raw.Flash),
-      orientation: finiteNum(raw.Orientation),
-      software: cleanStr(raw.Software ?? raw.CreatorTool),
-      artist: cleanStr(raw.Artist ?? raw.Creator),
-      copyright: cleanStr(raw.Copyright ?? raw.Rights),
-      rating: finiteNum(raw.Rating),
-      title: cleanStr(xmpText(raw.title) ?? raw.ObjectName),
-      description: cleanStr(xmpText(raw.description) ?? raw.ImageDescription ?? raw['Caption-Abstract']),
-      altitude: signedAltitude(raw.GPSAltitude, raw.GPSAltitudeRef),
-      imgDirection: finiteNum(raw.GPSImgDirection),
-      imgDirectionRef: cleanStr(raw.GPSImgDirectionRef),
-      gpsAccuracy: finiteNum(raw.GPSHPositioningError),
-      w: finiteNum(raw.ExifImageWidth ?? raw.ImageWidth),
-      h: finiteNum(raw.ExifImageHeight ?? raw.ImageHeight),
+      make: cleanStr(tags.Make),
+      model: cleanStr(tags.Model),
+      lens: cleanStr(tags.LensModel ?? tags.LensMake),
+      focalLength: finiteNum(tags.FocalLength),
+      focalLength35: finiteNum(tags.FocalLengthIn35mmFilm),
+      fNumber: finiteNum(tags.FNumber),
+      exposureTime: finiteNum(tags.ExposureTime),
+      exposureCompensation: finiteNum(tags.ExposureBiasValue),
+      iso: finiteNum(tags.ISOSpeedRatings),
+      flash: finiteNum(tags.Flash),
+      orientation: finiteNum(tags.Orientation),
+      software: cleanStr(tags.Software ?? tags.xmpCreatorTool),
+      artist: cleanStr(tags.Artist),
+      copyright: cleanStr(tags.Copyright),
+      rating: finiteNum(tags.Rating ?? tags.xmpRating),
+      title: cleanStr(tags.xmpTitle ?? tags.iptcObjectName),
+      description: cleanStr(tags.xmpDescription ?? tags.ImageDescription),
+      altitude: signedAltitude(tags.GPSAltitude, tags.GPSAltitudeRef),
+      imgDirection: finiteNum(tags.GPSImgDirection),
+      imgDirectionRef: cleanStr(tags.GPSImgDirectionRef),
+      gpsAccuracy: finiteNum(tags.GPSHPositioningError),
+      w: finiteNum(tags.PixelXDimension ?? tags.ImageWidth),
+      h: finiteNum(tags.PixelYDimension ?? tags.ImageLength),
     }
     return {
-      capturedAt: exifCapturedAt(raw),
-      gpsLat: finiteNum(raw.latitude), // GPS rides the listed tier now (cr-0068), not the lazy EXIF
-      gpsLng: finiteNum(raw.longitude),
+      capturedAt: exifCapturedAt(tags),
+      gpsLat: finiteNum(tags.latitude), // GPS rides the listed tier now (cr-0068), not the lazy EXIF
+      gpsLng: finiteNum(tags.longitude),
       exif: hasExifPayload(exif) ? exif : null,
     }
   } catch {

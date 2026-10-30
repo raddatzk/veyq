@@ -119,7 +119,7 @@ PICK_PROBE = re.compile(r"^src/features/memories/useOptimisticTiles\.ts$")
 # on-device stage's page side (derivation and digest clients), plus the page's own crypto and Vue's reactive writes.
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("pump", re.compile(r"^src/core/blob/(transport|frameWorker|frameOps|stream|readScheduler|queue)\.ts$")),
-    ("exif", re.compile(r"node_modules/exifr/")),
+    ("exif", re.compile(r"node_modules/exifreader/|^src/shared/image/exifTags\.ts$")),
     ("reconcile", re.compile(
         r"^src/(features/memories/(useMediaGalleryLive|mediaRevisionPolling|listingOpener|listingOpenerCore|openedListing"
         r"|useMemoryDate|memoryDate|memoryDateRange|useMemoryLocation|memoryLocation|useThumbnailPipeline|mediaOpen)\.ts"
@@ -709,10 +709,10 @@ def selftest() -> int:
             if not v:
                 return out
 
-    sources = ["/home/someone/veyq/src/web/src/core/blob/transport.ts", "../../../../node_modules/exifr/dist/full.esm.mjs",
+    sources = ["/home/someone/veyq/src/web/src/core/blob/transport.ts", "../../../../node_modules/exifreader/src/exif-reader.js",
                "../../src/features/memories/useMediaGalleryLive.ts", "../../src/features/memories/useOptimisticTiles.ts",
                "../../../../" + SCHEDULER_SOURCE, "../../src/features/memories/components/MediaGrid.vue",
-               "../../src/app/somethingElse.ts"]
+               "../../src/app/somethingElse.ts", "../../src/shared/image/exifTags.ts"]
     scheduler = "let x\nfunction flushJobs(seen) {\n  run()\n}\nfunction other() {}\n"
     # One generated line; column 10*i maps to source i, original line 0 — except source 4 (the scheduler), mapped to
     # its line 2 (inside flushJobs).
@@ -723,16 +723,17 @@ def selftest() -> int:
         segs.append(enc(col - prev[0]) + enc(src - prev[1]) + enc(orig - prev[2]) + enc(0))
         prev = (col, src, orig)
     doc = {"version": 3, "sources": sources, "mappings": ",".join(segs),
-           "sourcesContent": [""] * 4 + [scheduler] + [""] * 2, "names": []}
+           "sourcesContent": [""] * 4 + [scheduler] + [""] * 3, "names": []}
     url = "https://veyq.test/assets/index-AbCdEf12.js"
     frame = lambda i, name="f": {"url": url, "lineNumber": 0, "columnNumber": 10 * i + 1, "functionName": name}  # noqa: E731
     native = {"url": "", "lineNumber": -1, "columnNumber": -1, "functionName": "fetch"}
     cases = [
         ([frame(6), frame(0), native], "pump"),                 # a native leaf under the pump is the pump's
-        ([frame(6), frame(1)], "exif"),                         # exifr at the leaf
+        ([frame(6), frame(1)], "exif"),                         # the EXIF reader at the leaf
+        ([frame(6), frame(7)], "exif"),                         # its one seam, ours
         ([frame(0), frame(2)], "reconcile"),                    # leaf-first: the reconcile, not the pump above it
         ([frame(4), frame(5), frame(0)], "reactivity"),         # under the scheduler's flush, whatever runs below
-        ([frame(3), frame(1)], "pick-time probe"),              # the probe's context outranks exifr at the leaf
+        ([frame(3), frame(1)], "pick-time probe"),              # the probe's context outranks the reader at the leaf
         ([frame(6)], "other"),                                  # nothing named
     ]
     failures = []
@@ -750,7 +751,7 @@ def selftest() -> int:
             pass
 
         # A trace of one main thread: a 10 ms task holding a 6 ms FunctionCall with a 2 ms MinorGC inside, and samples
-        # every 1 ms: 3 in the pump, 2 in exifr, 1 under the flush, 4 idle.
+        # every 1 ms: 3 in the pump, 2 in the EXIF reader, 1 under the flush, 4 idle.
         events = [
             {"ph": "M", "name": "thread_name", "pid": 1, "tid": 1, "args": {"name": "CrRendererMain"}},
             {"ph": "I", "name": WINDOW_MARKS[0], "cat": "blink.user_timing", "pid": 1, "tid": 1, "ts": 1000},

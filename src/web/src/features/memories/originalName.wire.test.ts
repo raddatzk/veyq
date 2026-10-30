@@ -8,7 +8,7 @@
 // sealing but not the transport.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+vi.mock('../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'

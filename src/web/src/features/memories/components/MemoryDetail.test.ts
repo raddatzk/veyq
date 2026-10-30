@@ -13,14 +13,14 @@ vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => toast }))
 
-// exifr drives the sealed capture-time tier; default = no date, tests override per media (cr-0066).
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+// The EXIF reader (`shared/image/exifTags`) drives the sealed capture-time tier; default = no date, tests override per media (cr-0066).
+vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 // the reverse-geocode seam is mocked — the self-heal that materializes a pending auto name is under test.
 // Keep the real defaultLevel/nameAtLevel helpers (the self-heal picks a level from the mocked hierarchy).
 vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocode')>()), reverseGeocode: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import exifr from 'exifr'
+import { readExifTags } from '../../../shared/image/exifTags'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, MEDIA_PAGE_LIMIT, type MediaDeriver } from '../media'
@@ -246,11 +246,11 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    // media 0 = 2020, media 1 = 2022, media 2 = 2021 (creation order); the exifr date drives the capturedAt tier
-    vi.mocked(exifr.parse)
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2020, 0, 1)) })
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2022, 0, 1)) })
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2021, 0, 1)) })
+    // media 0 = 2020, media 1 = 2022, media 2 = 2021 (creation order); the EXIF date drives the capturedAt tier
+    vi.mocked(readExifTags)
+      .mockResolvedValueOnce({ DateTimeOriginal: Date.UTC(2020, 0, 1) })
+      .mockResolvedValueOnce({ DateTimeOriginal: Date.UTC(2022, 0, 1) })
+      .mockResolvedValueOnce({ DateTimeOriginal: Date.UTC(2021, 0, 1) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -277,7 +277,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)
@@ -491,7 +491,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(epoch) })
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: epoch })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     return store
   }
@@ -668,7 +668,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     mountWithLocationStub(memoryKey, sealed)
@@ -698,7 +698,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2026, 2, 3, 12)) })
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: Date.UTC(2026, 2, 3, 12) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const peers = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { ...GEOCODED, derivedMode: 'fixed' } })
     updateNode.mockRejectedValueOnce(staleNode(peers, 1))
@@ -724,7 +724,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const stale = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' } })
     const fixed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 38.7, lng: -9.1 } } })
@@ -757,7 +757,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
@@ -776,7 +776,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     mountWithLocationStub(memoryKey, pending)
@@ -850,7 +850,7 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
   it('sets a place from the photos’ GPS with a typed name', async () => {
     servicesOff()
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const wrapper = mountReal(memoryKey)
     await flushPromises()

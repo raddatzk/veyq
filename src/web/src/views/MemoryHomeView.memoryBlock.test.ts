@@ -39,7 +39,7 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   toggleFavorite: vi.fn(async () => {}),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+vi.mock('../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'

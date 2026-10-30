@@ -12,7 +12,7 @@ vi.mock('../../../api/client', () => ({
   blobApi: vi.fn(), contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn(),
 }))
 vi.mock('../api', () => ({ mediaApi: vi.fn() }))
-vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
+vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 // The justified layout, counted (inbox #640): the real one behind a spy (set in `beforeEach`), so a test can say how
 // often the grid laid out.
 vi.mock('../mediaGridLayout', async (orig) => ({ ...(await orig<typeof import('../mediaGridLayout')>()), calculateJustifiedMediaLayout: vi.fn() }))
@@ -37,7 +37,7 @@ vi.mock('../uploadQueue', async (orig) => {
 
 import { mount, flushPromises } from '@vue/test-utils'
 import { reactive } from 'vue'
-import exifr from 'exifr'
+import { readExifTags } from '../../../shared/image/exifTags'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
@@ -447,7 +447,7 @@ describe('MemoryDetail — an upload settles the Memory\'s meta once', () => {
 
     // the queue's upload lands one EXIF-dated photo, then calls its file's and its batch's hooks back to back
     const taken = Date.UTC(2021, 4, 1, 10)
-    vi.mocked(exifr.parse).mockResolvedValueOnce({ DateTimeOriginal: new Date(taken) })
+    vi.mocked(readExifTags).mockResolvedValueOnce({ DateTimeOriginal: taken })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     // the hooks read nothing of what they are handed here: the file and the batch are named casts, not built
     opts.onFileDone?.({} as unknown as UploadFile)
