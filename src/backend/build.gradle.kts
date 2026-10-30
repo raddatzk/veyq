@@ -108,8 +108,9 @@ kotlin {
 
 // The third-party notices of what the fast-jar ships (buildSrc's ThirdPartyLicenses): every `quarkusBuild` writes them,
 // the Dockerfile's and CI's included, so an unlisted license fails the build that would ship it. The Dockerfile copies
-// the report into the image beside veyq's own LICENSE and NOTICE.
-val thirdPartyLicenses by tasks.registering(me.raddatz.veyq.buildlogic.ThirdPartyLicenses::class) {
+// the report into the image beside veyq's own LICENSE and NOTICE. `tasks.register<T>(name)`, never the delegated
+// `by tasks.registering(T::class)`: Gradle 9.6 deprecated the delegate, and a deprecation fails this script's compilation.
+val thirdPartyLicenses = tasks.register<me.raddatz.veyq.buildlogic.ThirdPartyLicenses>("thirdPartyLicenses") {
     dependsOn(tasks.named("quarkusBuild"))
     libDir.set(layout.buildDirectory.dir("quarkus-app/lib"))
     licenseTexts.set(layout.projectDirectory.dir("licenses"))
