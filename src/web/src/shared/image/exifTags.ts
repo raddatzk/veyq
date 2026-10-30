@@ -22,7 +22,8 @@
 //    that answers nothing). A bare TIFF names no container that mode finds; its first [TIFF_PREFIX] is handed over as
 //    bytes (a camera's raw file is a TIFF of tens of MB, its tags at its head).
 // 4. **Only the tags named here are parsed** (`includeTags`): no maker notes, ICC profile, thumbnail or Photoshop block,
-//    and for a date only the three date tags. What is not parsed cannot be mis-parsed.
+//    and for a date only the three date tags - or, read only where those are missing, XMP's three capture dates
+//    (`xmpDate`, inbox #808). What is not parsed cannot be mis-parsed.
 // It fetches nothing: a URL or a path is the only input it would fetch for, and this module hands it neither.
 import type { IncludeTagsOptions } from 'exifreader'
 
@@ -72,6 +73,9 @@ export type ExifTags = {
   latitude?: number
   longitude?: number
   // XMP
+  /** When the picture was taken, as an editor's export may carry it in XMP only (a Lightroom PNG, inbox #808): the first
+   *  of `exif:DateTimeOriginal`, `photoshop:DateCreated` and `xmp:CreateDate`, a wall clock as the EXIF dates are. */
+  xmpCapturedAt?: number
   xmpCreatorTool?: string
   xmpRating?: number
   /** `dc:title` / `dc:description`: the `x-default` entry of the language alternative, else its first. */
@@ -81,10 +85,13 @@ export type ExifTags = {
   iptcObjectName?: string
 }
 
-/** What to read: only the three date tags (the pick-time capture time), or every tag [ExifTags] names. */
-export type ExifScope = 'date' | 'all'
+/** What to read: only the three date tags (the pick-time capture time), only XMP's capture dates (the pick-time
+ *  fallback where the file has no EXIF date), or every tag [ExifTags] names. */
+export type ExifScope = 'date' | 'xmpDate' | 'all'
 
 const DATE_TAGS = ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']
+/** XMP's capture dates, first choice first; never `xmp:ModifyDate` or `xmp:MetadataDate`, which an edit moves. */
+const XMP_DATE_TAGS = ['DateTimeOriginal', 'DateCreated', 'CreateDate']
 
 const ALL_EXIF_TAGS = [
   ...DATE_TAGS,
@@ -97,6 +104,7 @@ const ALL_EXIF_TAGS = [
 
 const INCLUDE_TAGS: Record<ExifScope, IncludeTagsOptions> = {
   date: { exif: DATE_TAGS },
+  xmpDate: { xmp: XMP_DATE_TAGS },
   all: { exif: ALL_EXIF_TAGS, gps: true, xmp: true, iptc: ['Object Name'] },
 }
 
@@ -126,6 +134,20 @@ const num = (tag: Tag | undefined): number | undefined => finite(tag?.computed)
 function wallClock(tag: Tag | undefined): number | undefined {
   const s = text(tag)
   const m = s === undefined ? null : /^(\d{4})[:-](\d{2})[:-](\d{2})(?: (\d{2}):(\d{2}):(\d{2}))?/.exec(s.trim())
+  return clockOf(m)
+}
+
+/**
+ * An XMP date - ISO 8601, `YYYY-MM-DD` with an optional `Thh:mm[:ss[.s]]` and zone - as [wallClock] reads an EXIF one:
+ * the wall clock in the device's zone, its fraction and zone dropped, so an export sorts where the camera's own file of
+ * the same picture does (the client reads no EXIF offset either). A year or a month alone is no capture time.
+ */
+function xmpWallClock(tag: Tag | undefined): number | undefined {
+  const s = xmpText(tag)
+  return clockOf(s === undefined ? null : /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s.trim()))
+}
+
+function clockOf(m: RegExpExecArray | null): number | undefined {
   if (!m) return undefined
   const [year, month, day, hours, minutes, seconds] = m.slice(1).map((part) => Number(part ?? 0))
   if (year === 0 || month === 0 || day === 0) return undefined
@@ -167,6 +189,8 @@ export function tagsFrom(expanded: Expanded, scope: ExifScope): ExifTags | undef
   }
   if (scope === 'date') return present(dates)
   const xmp = expanded.xmp ?? {}
+  const xmpCapturedAt = xmpWallClock(xmp.DateTimeOriginal) ?? xmpWallClock(xmp.DateCreated) ?? xmpWallClock(xmp.CreateDate)
+  if (scope === 'xmpDate') return present({ xmpCapturedAt })
   const latitude = finite(expanded.gps?.Latitude)
   const longitude = finite(expanded.gps?.Longitude)
   const located = latitude !== undefined && longitude !== undefined
@@ -200,6 +224,7 @@ export function tagsFrom(expanded: Expanded, scope: ExifScope): ExifTags | undef
     GPSHPositioningError: num(exif.GPSHPositioningError),
     latitude: located ? latitude : undefined,
     longitude: located ? longitude : undefined,
+    xmpCapturedAt,
     xmpCreatorTool: xmpText(xmp.CreatorTool),
     xmpRating: xmpNum(xmp.Rating),
     xmpTitle: xmpText(xmp.title),

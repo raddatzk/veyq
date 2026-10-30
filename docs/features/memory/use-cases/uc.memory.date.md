@@ -19,7 +19,11 @@ materialization on the node) is the enabler [en.memory.node-meta](../enablers/en
 use-case adds is the **`auto`** behaviour — the other three modes just carry the user's typed days:
 
 - **`auto` counts only *trustworthy* capture times.** A media's `capturedAt` (cr-0066) is the date its bytes
-  carry — a photo's EXIF `DateTimeOriginal`, a video's container time (inbox #794: Apple's
+  carry — a photo's EXIF `DateTimeOriginal` (else `DateTimeDigitized`; where EXIF names neither, the XMP capture date an
+  editor's export may carry alone — `exif:DateTimeOriginal`, else `photoshop:DateCreated`, else `xmp:CreateDate`, never
+  `xmp:ModifyDate`, inbox #808: a Lightroom PNG; only then EXIF's `DateTime`; every one read as a wall clock in the
+  device's zone, an XMP offset dropped like the EXIF one, so an export sorts beside the camera's own file; the XMP date
+  is recorded as `exif` too, both being the photo's embedded metadata), a video's container time (inbox #794: Apple's
   `com.apple.quicktime.creationdate`, else the `mvhd` creation time; a WebM or Matroska file carries none) — **or**,
   absent that, a **file-modification-date fallback**. A file date is not a real capture time — an edited photo whose
   EXIF was dropped would carry its *edit* date and wrongly stretch the range, and a copy, a download or a messenger

@@ -1174,6 +1174,23 @@ describe('the EXIF read — which scope it asks for, and when it asks at all', (
     expect(await readCaptureTime(image, 'image/jpeg', 7)).toEqual({ capturedAt: 7, capturedAtSource: 'file' })
   })
 
+  // inbox #808: an editor's export (a Lightroom PNG) may carry its capture time in XMP alone
+  it('the pick-time read asks for XMP\'s dates only where EXIF names no capture time, and ranks them before its file date', async () => {
+    const XMP = Date.UTC(2022, 7, 7)
+    const answer = (date: object) => async (_: Blob, scope: string) => (scope === 'xmpDate' ? { xmpCapturedAt: XMP } : date)
+    vi.mocked(readExifTags).mockImplementation(answer({ DateTime: Date.UTC(2026, 0, 2) }))
+    expect(await readCaptureTime(image, 'image/png', 7)).toEqual({ capturedAt: XMP, capturedAtSource: 'exif' })
+    expect(readExifTags).toHaveBeenLastCalledWith(image, 'xmpDate')
+
+    vi.mocked(readExifTags).mockImplementation(answer(undefined as unknown as object))
+    expect(await readCaptureTime(image, 'image/png', 7)).toEqual({ capturedAt: XMP, capturedAtSource: 'exif' })
+
+    vi.mocked(readExifTags).mockClear()
+    vi.mocked(readExifTags).mockImplementation(answer({ DateTimeDigitized: TAGS.DateTimeOriginal }))
+    expect(await readCaptureTime(image, 'image/jpeg', 7)).toEqual({ capturedAt: TAGS.DateTimeOriginal, capturedAtSource: 'exif' })
+    expect(readExifTags, "a camera's file is read once").toHaveBeenCalledTimes(1)
+  })
+
   it('the upload asks for every tag of an image, and a video, a failed read and a read with no tags seal no EXIF tier', async () => {
     vi.mocked(readExifTags).mockResolvedValue(TAGS)
     const read = await prepareMedia({ blob: image, mediaType: 'image/jpeg' }, stubDeriver())

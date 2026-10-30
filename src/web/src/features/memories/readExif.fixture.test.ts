@@ -13,6 +13,9 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL as FileURL } from 'node:url'
 import { prepareMedia, readCaptureTime, type MediaDeriver, type MediaExif } from './media'
+import { qualifiedAttrNodeNames } from '../../test/attrNodeName'
+
+qualifiedAttrNodeNames() // XMP's attribute-form properties, as a browser parses them
 
 const blobOf = (name: string) =>
   new Blob([readFileSync(fileURLToPath(new FileURL(`./__fixtures__/${name}`, import.meta.url))) as BlobPart])
@@ -61,6 +64,15 @@ describe('media.ts over the real EXIF reader', () => {
     expect(await sealedFrom(name, mediaType)).toEqual({
       meta: { dims: null, ...SAMPLE, exif },
       captureTime: { capturedAt: TAKEN, capturedAtSource: 'exif' },
+    })
+  })
+
+  // inbox #808: Lightroom writes a PNG's capture time in XMP alone; no reader took it, so the photo sorted by its file date
+  it('takes the XMP capture date of a PNG that carries no EXIF, not its modify date', async () => {
+    const taken = new Date(2022, 7, 7, 6, 5, 4).getTime() // exif:DateTimeOriginal, the first of the three
+    expect(await sealedFrom('exif-sample-xmpdate.png', 'image/png')).toEqual({
+      meta: { dims: null, capturedAt: taken, exif: { v: 1, software: 'veyq fixture 1.0' } },
+      captureTime: { capturedAt: taken, capturedAtSource: 'exif' },
     })
   })
 

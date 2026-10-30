@@ -16,14 +16,15 @@ adaptive-HDR photo, which exifr refused (it gave up on any `ftyp` over 50 bytes,
 synthetic, not copied from a camera; only their count matters. No image item, so a decoder shows nothing; the readers
 need none. Two more JPEGs carry each second-choice source the client falls back to: `-fallbacks` (IFD0 size and date,
 lens make, XMP software and rating, the southern and western hemispheres, below sea level) and `-iptc` (the digitised
-date, an IPTC object name).
+date, an IPTC object name). One PNG carries its capture date in XMP only, as Lightroom exports one (inbox #808):
+`-xmpdate`, with no `eXIf`, the three XMP capture dates each a different moment, and a later `xmp:ModifyDate`.
 
 Re-run after changing which tags the client reads:
 
     python3 scripts/make_exif_fixture.py
 
 Output: src/web/src/features/memories/__fixtures__/exif-sample{,-fallbacks,-iptc}.jpg, exif-sample{,-le}.tif,
-exif-sample.{png,webp,avif,heic}, exif-sample-ftyp52.heic
+exif-sample{,-xmpdate}.png, exif-sample.{webp,avif,heic}, exif-sample-ftyp52.heic
 """
 from __future__ import annotations
 
@@ -224,6 +225,25 @@ XMP_FALLBACKS = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 </x:xmpmeta>
 <?xpacket end="w"?>"""
 
+# An editor's export with no EXIF date (inbox #808): Lightroom writes its PNG's capture time in XMP alone, as attributes,
+# a wall clock with a fraction and no zone. Each capture date is a different moment so the order the client reads them
+# in is pinned; the modify date, later and with a zone, is the one that must never be taken.
+XMP_DATES = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+   xmp:CreatorTool="veyq fixture 1.0"
+   xmp:CreateDate="2022-08-09T10:11:12"
+   xmp:ModifyDate="2026-01-02T03:04:05+02:00"
+   exif:DateTimeOriginal="2022-08-07T06:05:04.000"
+   photoshop:DateCreated="2022-08-08T07:06:05.000"/>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"""
+
 
 def iptc_app13(datasets: list[tuple[int, str]]) -> bytes:
     """An APP13 payload: "Photoshop 3.0", one 8BIM resource 0x0404 holding IPTC-IIM record-2 datasets (IIM 4.2)."""
@@ -261,13 +281,14 @@ def png_chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
-def build_png(tiff: bytes) -> bytes:
-    """A 1x1 greyscale PNG carrying the TIFF block as `eXIf` (PNG 1.5 extension) and the XMP as an `iTXt`."""
+def build_png(tiff: bytes | None, xmp: str = XMP_PACKET) -> bytes:
+    """A 1x1 greyscale PNG carrying the TIFF block as `eXIf` (PNG 1.5 extension), if any, and the XMP as an `iTXt`."""
     ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)  # 1x1, 8-bit, greyscale, deflate, no filter set, no interlace
     # iTXt: keyword, NUL, compression flag + method (0 = uncompressed), empty language tag + NUL, empty translation + NUL
-    itxt = b"XML:com.adobe.xmp\x00" + b"\x00\x00" + b"\x00" + b"\x00" + XMP_PACKET.encode("utf-8")
+    itxt = b"XML:com.adobe.xmp\x00" + b"\x00\x00" + b"\x00" + b"\x00" + xmp.encode("utf-8")
     idat = zlib.compress(b"\x00\x80")  # one scanline: filter byte 0, one grey pixel
-    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + png_chunk(b"eXIf", tiff) + png_chunk(b"iTXt", itxt)
+    exif = png_chunk(b"eXIf", tiff) if tiff is not None else b""
+    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + exif + png_chunk(b"iTXt", itxt)
             + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b""))
 
 
@@ -340,6 +361,7 @@ def main() -> None:
         "exif-sample.tif": tiff,
         "exif-sample-le.tif": sample_tiff("<"),  # little-endian (`II`), as most cameras write it; Apple writes `MM`
         "exif-sample.png": build_png(tiff),
+        "exif-sample-xmpdate.png": build_png(None, XMP_DATES),
         "exif-sample.webp": build_webp(tiff),
         "exif-sample.avif": build_heif(b"avif", [b"avif", b"mif1", b"miaf"], tiff),
         "exif-sample.heic": build_heif(b"heic", HEIC_BRANDS, tiff),

@@ -305,7 +305,8 @@ export function effectiveCapturedAt(meta: MediaMeta | null): number | undefined 
 // the gallery **before a byte is uploaded** (`useOptimisticTiles`). If these two ever disagreed, a tile would
 // jump the moment its upload settled — which is the defect this rule's single definition exists to prevent.
 
-/** Where a capture time came from: a photo's EXIF, a video's container header, or the file's own date. */
+/** Where a capture time came from: a photo's EXIF (or its XMP, which `exif` names too: both are the photo's embedded
+ *  metadata), a video's container header, or the file's own date. */
 export type CaptureSource = 'exif' | 'container' | 'file'
 /** The two sources the file's bytes carry, so a trustworthy capture time; the file's date is only a fallback. */
 export type EmbeddedSource = Exclude<CaptureSource, 'file'>
@@ -349,7 +350,9 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
   if (!mediaType.startsWith('image/')) return captureTimeOf(undefined, lastModified)
   try {
     const tags = await readExifTags(file, 'date')
-    return captureTimeOf(tags ? exifCapturedAt(tags) : undefined, lastModified)
+    // XMP only where EXIF names no capture time (an editor's export, inbox #808), so a camera's file is read once
+    const xmp = tags?.DateTimeOriginal ?? tags?.DateTimeDigitized ? undefined : await readExifTags(file, 'xmpDate')
+    return captureTimeOf(exifCapturedAt({ ...tags, ...xmp }), lastModified)
   } catch {
     return captureTimeOf(undefined, lastModified)
   }
@@ -363,9 +366,10 @@ function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.FieldContex
   return b64std(v1.sealField(context, memoryKey, bytes))
 }
 
-/** The EXIF capture date, by its one precedence rule. Both readers of an image's date go through here. */
+/** A photo's embedded capture date, by its one precedence rule: EXIF's capture dates, then XMP's (inbox #808), then the
+ *  EXIF date the file was last changed. Both readers of an image's date go through here. */
 function exifCapturedAt(tags: ExifTags): number | undefined {
-  return finiteNum(tags.DateTimeOriginal ?? tags.DateTimeDigitized ?? tags.DateTime)
+  return finiteNum(tags.DateTimeOriginal ?? tags.DateTimeDigitized ?? tags.xmpCapturedAt ?? tags.DateTime)
 }
 
 /** Altitude, signed. `GPSAltitudeRef` 1 means *below* sea level. */

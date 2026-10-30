@@ -9,6 +9,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL as FileURL } from 'node:url'
 import { deflateSync } from 'node:zlib'
 import { CHUNKED_PREFIX, TIFF_PREFIX, readExifTags, tagsFrom, type ExifTags } from './exifTags'
+import { qualifiedAttrNodeNames } from '../../test/attrNodeName'
+
+qualifiedAttrNodeNames() // XMP's attribute-form properties, as a browser parses them
 
 const bytesOf = (name: string) =>
   new Uint8Array(readFileSync(fileURLToPath(new FileURL(`../../features/memories/__fixtures__/${name}`, import.meta.url))))
@@ -48,6 +51,15 @@ describe('readExifTags over the generated fixtures', () => {
     expect(new DataView(heic.buffer).getUint32(0)).toBe(52)
     expect(new TextDecoder().decode(heic.subarray(4, 8))).toBe('ftyp')
     expect(await readExifTags(new Blob([heic as BlobPart]), 'date')).toEqual({ DateTimeOriginal: SAMPLE.DateTimeOriginal })
+  })
+
+  // inbox #808: an editor's PNG export with its capture time in XMP alone, as attributes (Lightroom's form)
+  it('reads the XMP capture date of a PNG without EXIF, only when asked for it, and never the modify date', async () => {
+    const png = blobOf('exif-sample-xmpdate.png')
+    const xmpCapturedAt = new Date(2022, 7, 7, 6, 5, 4).getTime()
+    expect(await readExifTags(png, 'date')).toBeUndefined()
+    expect(await readExifTags(png, 'xmpDate')).toEqual({ xmpCapturedAt })
+    expect(await readExifTags(png, 'all')).toEqual({ xmpCapturedAt, xmpCreatorTool: 'veyq fixture 1.0' })
   })
 
   it('reads each second-choice source where the first is missing, and the southern and western hemispheres', async () => {
@@ -204,6 +216,22 @@ describe('tagsFrom', () => {
   it('gives a date scope the dates and nothing else', () => {
     expect(tagsFrom({ exif: { Make: tag('Canon'), DateTime: tag('2020:01:02 03:04:05') } }, 'date'))
       .toEqual({ DateTime: new Date(2020, 0, 2, 3, 4, 5).getTime() })
+  })
+
+  it('takes XMP\'s capture dates in their order as wall clocks, fraction and zone dropped, and a year or month alone as none', () => {
+    const v = (value: string) => ({ value })
+    const at = new Date(2022, 7, 8, 7, 6, 5).getTime()
+    expect(tagsFrom({ xmp: { DateCreated: v('2022-08-08T07:06:05.000'), CreateDate: v('2022-08-09T10:11:12') } }, 'xmpDate'))
+      .toEqual({ xmpCapturedAt: at })
+    expect(tagsFrom({ xmp: { CreateDate: v(' 2022-08-08T07:06:05+09:00 ') } }, 'xmpDate')).toEqual({ xmpCapturedAt: at })
+    expect(tagsFrom({ xmp: { CreateDate: v('2022-08-08T07:06Z') } }, 'xmpDate')).toEqual({ xmpCapturedAt: new Date(2022, 7, 8, 7, 6).getTime() })
+    expect(tagsFrom({ xmp: { DateTimeOriginal: v('2022-08-08') } }, 'xmpDate')).toEqual({ xmpCapturedAt: new Date(2022, 7, 8).getTime() })
+    // an unreadable first choice gives way to the next
+    expect(tagsFrom({ xmp: { DateTimeOriginal: v('2022'), CreateDate: v('2022-08-08T07:06:05') } }, 'xmpDate')).toEqual({ xmpCapturedAt: at })
+    expect(tagsFrom({ xmp: { DateTimeOriginal: v('2022-08'), ModifyDate: v('2026-01-02T03:04:05') } }, 'xmpDate')).toBeUndefined()
+    expect(tagsFrom({ xmp: { CreateDate: v('0000-00-00T00:00:00') } }, 'xmpDate')).toBeUndefined()
+    // the date scope never answers from XMP: the capture time asks for it only where EXIF has none
+    expect(tagsFrom({ xmp: { CreateDate: v('2022-08-08T07:06:05') } }, 'date')).toBeUndefined()
   })
 
   it('takes the x-default entry of an XMP language alternative, else its first, and an XMP number only when it is one', () => {
