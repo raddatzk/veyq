@@ -79,7 +79,7 @@ interface UploadCompletion {
 class UploadCompletions(
     private val nodes: NodesStore,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val completions: MutableList<UploadCompletion>,
+    @param:All private val completions: MutableList<UploadCompletion>,
 ) {
     /**
      * Verify + attach each item, scoped only by `scopeId`, resolving each upload only for its [opener] — who is also

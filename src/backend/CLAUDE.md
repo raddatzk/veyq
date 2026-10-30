@@ -53,6 +53,12 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   through `Arc` in whatever application is under test), consumed by the root as
   `testImplementation(testFixtures(project(":apps:memories")))` (inbox #335). So core's world builds with core alone,
   and a second application covers its routes in the gate probes by contributing a `WorldContent` the same way.
+- **A compiler warning fails the build** (inbox #803): Kotlin in every source set — `allWarningsAsErrors` in `buildSrc`'s
+  `veyq.module`, in the root's `build.gradle.kts` and in `buildSrc` itself — and every `*.gradle.kts` script
+  (`org.gradle.kotlin.dsl.allWarningsAsErrors` in `gradle.properties`). Fix a warning at its cause; suppress one only
+  where it cannot be fixed (a library API, generated code), at the narrowest element, with the reason beside it. To
+  list warnings, build without `--warning-mode all`: with it Gradle routes Kotlin's diagnostics into its problems
+  report and summarizes them past the first 15, so most never print (measured 2026-10-30, Kotlin 2.4.10).
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.

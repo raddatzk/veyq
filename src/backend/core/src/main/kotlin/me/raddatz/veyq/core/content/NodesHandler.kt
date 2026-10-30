@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.transaction.Status
 
 sealed interface CreateNodeOutcome {
     data class Created(val nodeId: String) : CreateNodeOutcome
@@ -114,7 +115,7 @@ class NodesHandler(
     private val store: NodesStore,
     private val access: ScopeAccess,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val kindRules: MutableList<NodeKindRules>,
+    @param:All private val kindRules: MutableList<NodeKindRules>,
     private val capabilities: CapabilityRegistry,
     private val applications: ApplicationSwitch,
     private val blocks: ModerationBlocks,
@@ -183,7 +184,7 @@ class NodesHandler(
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         parentEpoch: Int?, editor: PrincipalKey, boundary: SubtreeBoundary? = null, identityWriter: String? = null,
     ): CreateNodeOutcome {
-        check(QuarkusTransaction.isActive()) { "createInScope joins its caller's transaction; open one with createOrConflict" }
+        check(QuarkusTransaction.getStatus() != Status.STATUS_NO_TRANSACTION) { "createInScope joins its caller's transaction; open one with createOrConflict" }
         // Every decision under the tree's lock (NodesStore.lockScope), taken before ANY node is read. Not only because
         // a parent trashed, or an ancestor moved out of the boundary, between an unlocked read and the write would let
         // the node land under a trashed parent or outside the subtree: this runs inside its caller's transaction, and

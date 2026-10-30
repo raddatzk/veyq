@@ -140,7 +140,7 @@ class ScopesStore(
     private val keyChain: KeyChainStore,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge). What goes with one member's access
     // to one scope, owned by the package whose rows they are (today item favorites, ADR 0068).
-    @All private val membershipErasers: MutableList<MembershipEraser>,
+    @param:All private val membershipErasers: MutableList<MembershipEraser>,
 ) {
 
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */

@@ -63,7 +63,7 @@ interface GuestNodeRules {
 @ApplicationScoped
 class FolderGuestNodeRules(
     /** `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
-    @All private val creatable: MutableList<GuestCreatableKinds>,
+    @param:All private val creatable: MutableList<GuestCreatableKinds>,
 ) : GuestNodeRules {
     override fun handles(containerKind: String): Boolean = containerKind == NodeEntity.FOLDER
 

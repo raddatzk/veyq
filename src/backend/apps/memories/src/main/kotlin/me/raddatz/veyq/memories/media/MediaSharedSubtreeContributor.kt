@@ -29,8 +29,8 @@ class MediaSharedSubtreeContributor : SharedSubtreeContributor {
                 .createQuery(
                     "select count(d) from MediaDerivativeEntity d, MediaEntity m where d.blobId = ?1 and m.id = d.mediaId " +
                         "and m.scopeId = ?2 and m.nodeId = ?3 and m.deletedAt is null",
-                    java.lang.Long::class.java,
+                    Long::class.javaObjectType,
                 )
                 .setParameter(1, blobId).setParameter(2, scopeId).setParameter(3, liveNodeId)
-                .singleResult.toLong() > 0
+                .singleResult > 0
 }

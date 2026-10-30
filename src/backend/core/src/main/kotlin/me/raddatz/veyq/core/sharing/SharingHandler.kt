@@ -282,7 +282,7 @@ class SharingHandler(
     private val guestWrites: Instance<ShareGuestWrites>,
     /** Which roles a node of a kind may be shared with — its owner's answer (see [ShareRoots]); none → no share.
      *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
-    @All private val roots: MutableList<ShareRoots>,
+    @param:All private val roots: MutableList<ShareRoots>,
     /** The guest gate every guest call passes first (active link, password, mode, token, budget). */
     private val gate: ShareGuestGate,
     private val rateLimiter: ShareRateLimiter,

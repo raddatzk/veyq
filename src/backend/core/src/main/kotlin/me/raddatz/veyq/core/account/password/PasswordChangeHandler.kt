@@ -91,7 +91,7 @@ class PasswordChangeHandler(
         if (!verified) return@call PasswordChangeOutcome.AttestationFailed
 
         val statement = SecretKeyProof.passwordChangeStatement(
-            currentAuthPublicKey = currentAuthPublicKey!!,
+            currentAuthPublicKey = currentAuthPublicKey,
             authPublicKey = newAuthPublicKey,
             passwordWrap = SecretKeyProof.Wrap(wrappedKey, kdfParams),
         )

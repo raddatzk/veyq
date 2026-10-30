@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.testing
 
+import org.jboss.logmanager.ExtFormatter
 import org.jboss.logmanager.ExtLogRecord
 import org.junit.jupiter.api.Assertions.assertTrue
 import java.util.concurrent.CopyOnWriteArrayList
@@ -56,13 +57,21 @@ class LogCapture : AutoCloseable {
     }
 
     private fun render(record: LogRecord): String {
-        val message = (record as? ExtLogRecord)?.formattedMessage ?: record.message.orEmpty()
+        val message = (record as? ExtLogRecord)?.let(::formatted) ?: record.message.orEmpty()
         val parameters = record.parameters?.joinToString(prefix = " [", postfix = "]").orEmpty()
         val thrown = record.thrown?.stackTraceToString()?.let { "\n$it" }.orEmpty()
         return "${record.level} ${record.loggerName}: $message$parameters$thrown"
     }
 
-    private companion object {
-        const val CONTROL = "log capture control"
+    companion object {
+        private const val CONTROL = "log capture control"
+
+        /** [record]'s message with its parameters in, by the record's own format style: what the deprecated
+         *  `ExtLogRecord.getFormattedMessage` answered, through the formatter jboss-logmanager 3 points to instead. */
+        fun formatted(record: ExtLogRecord): String = MESSAGE.formatMessage(record).orEmpty()
+
+        private val MESSAGE = object : ExtFormatter() {
+            override fun format(record: ExtLogRecord): String = formatMessage(record)
+        }
     }
 }

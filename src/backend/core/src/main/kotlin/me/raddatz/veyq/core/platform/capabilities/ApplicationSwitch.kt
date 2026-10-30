@@ -32,7 +32,7 @@ import jakarta.ws.rs.ext.Provider
 class ApplicationSwitch(
     private val capabilities: CapabilityRegistry,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val kindRules: MutableList<NodeKindRules>,
+    @param:All private val kindRules: MutableList<NodeKindRules>,
 ) {
     /** Whether [application] takes writes in the tenant [scopeId] lives in. */
     fun isWritable(application: String, scopeId: String): Boolean = capabilities.isActiveInScope(application, scopeId)

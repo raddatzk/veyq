@@ -68,7 +68,7 @@ class NodeCoverHandler(
     private val uploads: BlobUploadHandler,
     private val store: NodeCoverStore,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val kindRules: MutableList<NodeKindRules>,
+    @param:All private val kindRules: MutableList<NodeKindRules>,
     private val applications: ApplicationSwitch,
 ) {
     /**

@@ -32,16 +32,16 @@ class StrictParamConverters : ParamConverterProvider {
     override fun <T : Any?> getConverter(rawType: Class<T>, genericType: Type?, annotations: Array<out Annotation>?): ParamConverter<T>? {
         val parse: ((String) -> Any?)? = when {
             rawType == UUID::class.java -> { s -> StorableUuid.parse(s) }
-            rawType == java.lang.Boolean::class.java || rawType == java.lang.Boolean.TYPE -> { s ->
+            rawType == Boolean::class.javaObjectType || rawType == Boolean::class.javaPrimitiveType -> { s ->
                 when (s) {
                     "true" -> true
                     "false" -> false
                     else -> null
                 }
             }
-            rawType == java.lang.Integer::class.java || rawType == Integer.TYPE ->
+            rawType == Int::class.javaObjectType || rawType == Int::class.javaPrimitiveType ->
                 { s -> if (INTEGER_SHAPE.matches(s)) s.toIntOrNull() else null }
-            rawType == java.lang.Long::class.java || rawType == java.lang.Long.TYPE ->
+            rawType == Long::class.javaObjectType || rawType == Long::class.javaPrimitiveType ->
                 { s -> if (INTEGER_SHAPE.matches(s)) s.toLongOrNull() else null }
             rawType.isEnum -> { s -> rawType.enumConstants.firstOrNull { (it as Enum<*>).name == s } }
             else -> null

@@ -11,6 +11,13 @@ repositories {
     gradlePluginPortal()
 }
 
+// A compiler warning in the build logic fails it, as in every module (`veyq.module` says how to meet one).
+kotlin {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
 // What the convention plugins apply or call, each version once, in `../gradle/libs.versions.toml` (this build reads
 // the same catalog, `settings.gradle.kts`).
 dependencies {

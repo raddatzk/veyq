@@ -59,7 +59,7 @@ class RekeyStore(
     private val stage: NodeRekeyStage,
     private val ownerOnly: OwnerOnlyRekey,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val participants: MutableList<NodeRekeyParticipant>,
+    @param:All private val participants: MutableList<NodeRekeyParticipant>,
 ) {
 
     /** Every node of the scope, live and trashed (ADR 0109 point 1: a trashed node is re-keyed too). A node is trashed

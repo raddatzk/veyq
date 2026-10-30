@@ -35,7 +35,7 @@ class SharedBlobs(
     private val blobs: BlobUploadStore,
     private val blocks: ModerationBlocks,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val arms: MutableList<SharedSubtreeContributor>,
+    @param:All private val arms: MutableList<SharedSubtreeContributor>,
 ) {
     /**
      * Persist [spec] as a new row of [scopeId] on its source's stored object when [nodeId] - a live node the caller

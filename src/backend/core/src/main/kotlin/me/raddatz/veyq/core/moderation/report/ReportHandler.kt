@@ -202,8 +202,8 @@ class ReportHandler(
         ModerationReportEntity.getEntityManager().createQuery(
             "select count(distinct r.id) from ModerationReportEntity r, ReportShareEntity s, ModerationCaseEntity c " +
                 "where s.reportId = r.id and c.id = s.caseId and r.reporterAccount = :account and c.state = :open",
-            java.lang.Long::class.java,
-        ).setParameter("account", userId).setParameter("open", CaseState.OPEN.name).singleResult.toLong()
+            Long::class.javaObjectType,
+        ).setParameter("account", userId).setParameter("open", CaseState.OPEN.name).singleResult
 
     private fun receive(
         r: ReportIn,

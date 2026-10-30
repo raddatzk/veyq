@@ -110,21 +110,23 @@ class StrictJsonTypes : ObjectMapperCustomizer {
     ) : StdScalarDeserializer<T>(type) {
         private val primitive = type.isPrimitive
 
+        // What a `DeserializationProblemHandler` answers instead of the refusal is typed `Object` by Jackson; it is cast
+        // through the boxed class (a primitive `Class` casts nothing), a checked cast rather than an unchecked `as T`.
+        private val boxed: Class<T> = type.kotlin.javaObjectType
+
         override fun deserialize(p: JsonParser, ctxt: DeserializationContext): T {
             val value: BigDecimal = when (p.currentToken()) {
                 JsonToken.VALUE_NUMBER_INT -> BigDecimal(p.bigIntegerValue)
                 JsonToken.VALUE_NUMBER_FLOAT -> p.decimalValue
-                else -> return ctxt.handleUnexpectedToken(handledType(), p) as T
+                else -> return boxed.cast(ctxt.handleUnexpectedToken(handledType(), p))
             }
             val whole = value.signum() == 0 || value.stripTrailingZeros().scale() <= 0
             if (!whole || value < BigDecimal.valueOf(min) || value > BigDecimal.valueOf(max)) {
-                @Suppress("UNCHECKED_CAST")
-                return ctxt.handleWeirdNumberValue(handledType(), p.numberValue, "not a whole number within the field's type") as T
+                return boxed.cast(ctxt.handleWeirdNumberValue(handledType(), p.numberValue, "not a whole number within the field's type"))
             }
             return of(value.toLong())
         }
 
-        @Suppress("UNCHECKED_CAST")
         override fun getNullValue(ctxt: DeserializationContext): T? = if (primitive) of(0) else null
     }
 

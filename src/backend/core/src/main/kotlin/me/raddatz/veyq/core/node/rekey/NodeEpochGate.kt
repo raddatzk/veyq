@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
+import jakarta.transaction.Status
 
 /**
  * Layer 1 of ADR 0109 point 6: **no write lands under a node key from before a rotation.** Every write that seals
@@ -37,7 +38,7 @@ class NodeEpochGate {
      *  it. [Verdict.MISSING] when there is no such node in [scopeId]. Joins the caller's transaction, which must exist:
      *  the lock is worth nothing past the statement that takes it. */
     fun check(scopeId: String, nodeId: String, stated: Int): Verdict {
-        check(QuarkusTransaction.isActive()) { "NodeEpochGate.check joins the writer's transaction" }
+        check(QuarkusTransaction.getStatus() != Status.STATUS_NO_TRANSACTION) { "NodeEpochGate.check joins the writer's transaction" }
         val node = lockNode(nodeId)?.takeIf { it.scopeId == scopeId } ?: return Verdict.MISSING
         return verdict(stated, node.epoch, ScopeEntity.findById(scopeId)?.currentEpoch)
     }

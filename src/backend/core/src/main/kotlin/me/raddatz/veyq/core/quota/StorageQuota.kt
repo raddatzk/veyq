@@ -27,7 +27,7 @@ class StorageQuota(
     private val em: EntityManager,
     private val usage: StorageUsage,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val admissions: MutableList<UploadAdmission>,
+    @param:All private val admissions: MutableList<UploadAdmission>,
 ) {
 
     /** [StorageUsage.lockTenant], kept here so the upload path has one quota entry point. */

@@ -39,6 +39,10 @@ kotlin {
         // The generated lists carry their cascade as `List<@Valid Item>` (`ModelCascade`, HV000271): Kotlin writes a
         // type-argument annotation into the bytecode only with this flag — drop it and the cascade silently vanishes.
         freeCompilerArgs.add("-Xemit-jvm-type-annotations")
+        // A compiler warning fails the build: main, test and test-fixtures code is held at zero (inbox #803 took it
+        // there). Fix a new one at its cause; where it is genuinely unavoidable (a library API, generated code), suppress
+        // it at the narrowest element with a comment saying why. The root's own tests carry the same flag (build.gradle.kts).
+        allWarningsAsErrors.set(true)
     }
 }
 

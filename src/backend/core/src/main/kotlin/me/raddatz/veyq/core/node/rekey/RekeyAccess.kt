@@ -76,7 +76,7 @@ class RekeyAccess(private val access: ScopeAccess, private val ownerOnly: OwnerO
 @ApplicationScoped
 class OwnerOnlyRekey(
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
+    @param:All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
 ) {
     /** Whether [node] is owner-only; [parentOf] answers a parent id with its row in the same scope, null at the root. */
     fun of(node: NodeEntity, parentOf: (String) -> NodeEntity?): Boolean = of(node, ::isDropBox, parentOf)

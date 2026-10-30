@@ -27,7 +27,7 @@ class DynamicUpdateEverywhereTest {
 
     @Test
     fun everyEntityFlushesOnlyWhatItChanged() {
-        val persisters = emf.unwrap(SessionFactoryImplementor::class.java).mappingMetamodel.streamEntityDescriptors().toList()
+        val persisters = buildList { emf.unwrap(SessionFactoryImplementor::class.java).mappingMetamodel.forEachEntityDescriptor { add(it) } }
         // Tells "every entity is dynamic" apart from "no entity was read": the persistence unit has dozens.
         assertTrue(persisters.size >= 30, "read only ${persisters.size} entities — is this the application's persistence unit?")
         val wholeRow = persisters.filterNot { it.isDynamicUpdate }.map { it.entityName }.sorted()

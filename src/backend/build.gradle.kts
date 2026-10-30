@@ -101,6 +101,8 @@ tasks.named<Test>("test") {
 kotlin {
     compilerOptions {
         javaParameters = true
+        // A compiler warning fails the build, as in every module (buildSrc's `veyq.module` says how to meet one).
+        allWarningsAsErrors = true
     }
 }
 

@@ -77,14 +77,15 @@ dependencies {
 // The mutate scope is read from pitest.scope.json — the SAME manifest a scripts/ meta-check consumes, so the mutator
 // and its "something was mutated" guard never drift (ADR 0045 §4; mirrors src/web/stryker.config.mjs reading
 // stryker.mutate.json). PIT class globs, curated to the pure decision tier (never the dumb stores or the slices).
-@Suppress("UNCHECKED_CAST")
-val pitScope = groovy.json.JsonSlurper().parse(file("pitest.scope.json")) as Map<String, Any>
+// Each entry checked as it is read (a JSON list of strings), so no unchecked cast stands in for the manifest's shape.
+val pitScope = groovy.json.JsonSlurper().parse(file("pitest.scope.json")) as Map<*, *>
+fun pitScopeList(key: String): List<String> = (pitScope[key] as List<*>).map { it as String }
 
 pitest {
     pitestVersion.set("1.19.4") // paired with pitest-junit5-plugin 1.2.3 (its floor)
     junit5PluginVersion.set("1.2.3")
-    targetClasses.set(pitScope["targetClasses"] as List<String>)
-    targetTests.set(pitScope["targetTests"] as List<String>)
+    targetClasses.set(pitScopeList("targetClasses"))
+    targetTests.set(pitScopeList("targetTests"))
     // The gate: the build goes red below this mutation score. The pure tier measures 100% (zero survivors, zero
     // equivalents); the margin is NOT slack for a known gap — it is deliberate headroom for a FUTURE equivalent
     // mutant (one PIT cannot detect as equivalent, so it surfaces as SURVIVED), which at 100 would red the gate
