@@ -92,7 +92,7 @@ const en = {
       autoOptInHint: 'from where your photos were taken',
       consentTitle: 'Enable maps for locations?',
       consentBody:
-        'To place a Memory on a map, tiles load from a third-party map provider and the framed point is sent to a third-party geocoder for a name — both straight from your device. You can turn this off again at any time, on the map or in Settings.',
+        'To show a map and name places, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn this off again at any time, on the map or in Settings.',
       consentEnable: 'Enable maps',
       // A stored consent that named other hosts (or none, before hosts were recorded) is asked again, naming the new ones.
       consentRenewTiles: 'Agree again for the service this server uses now: the map from {tiles}.',
@@ -372,7 +372,7 @@ const de: typeof en = {
       autoOptInHint: 'aus dem Standort deiner Fotos',
       consentTitle: 'Karten für Orte aktivieren?',
       consentBody:
-        'Um eine Erinnerung auf einer Karte zu platzieren, werden Kacheln von einem Drittanbieter geladen und der eingerahmte Punkt wird für einen Namen an einen Drittanbieter-Geocoder gesendet – beides direkt von deinem Gerät. Du kannst das jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
+        'Um eine Karte zu zeigen und Orte zu benennen, wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst das jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
       consentEnable: 'Karten aktivieren',
       consentRenewTiles: 'Stimme erneut zu, für den Dienst, den dieser Server jetzt nutzt: die Karte von {tiles}.',
       consentRenewBoth: 'Stimme erneut zu, für die Dienste, die dieser Server jetzt nutzt: die Karte von {tiles}, Ortsnamen von {places}.',
