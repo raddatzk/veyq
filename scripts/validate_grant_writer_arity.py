@@ -102,7 +102,7 @@ def main() -> int:
         errors.append(
             f"pairing: {where} writes a grant's granter but not `granterIdentityPublicKey`. The reads serve that copy, "
             f"so the grant is served with no granter key and every recipient refuses it as unsigned (ADR 0028 "
-            f"§ What is still open). Record the granter's identity key in the same write."
+            f"Decision 6). Record the granter's identity key in the same write."
         )
     for name in sorted(set(sites) - set(EXPECTED_WRITERS)):
         errors.append(

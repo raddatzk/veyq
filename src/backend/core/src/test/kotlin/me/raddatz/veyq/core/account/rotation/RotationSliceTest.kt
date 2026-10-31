@@ -575,7 +575,7 @@ class RotationSliceTest {
 
     @Test
     fun aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt() {
-        // Inbox #233, ADR 0028 § What is still open. The rotator wrote the co-member's grant (a commit of the group,
+        // Inbox #233, ADR 0028 Decision 6. The rotator wrote the co-member's grant (a commit of the group,
         // through its pending row after a first securing) and signed it with that identity. Securing the account again
         // must leave that grant served with the key that SIGNED it: the co-member's client verifies before it reads its
         // pin. Control: the rotator's own self-grant of the publish is served with its new key.

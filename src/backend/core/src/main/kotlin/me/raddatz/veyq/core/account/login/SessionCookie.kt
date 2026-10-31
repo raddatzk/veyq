@@ -12,8 +12,9 @@ import jakarta.ws.rs.core.NewCookie
  * sent). The value is the same opaque refresh token the body carries for native clients — no key material — so
  * the cookie keeps the server operator-blind.
  *
- * Two lifetimes (ADR 0004 addendum), distinguished by **name** because a cookie can't report its own `Max-Age`
- * back to the server — so refresh re-sets the same-named cookie and never silently changes the lifetime:
+ * Two lifetimes (ADR 0004 § web refresh cookie lifetimes), distinguished by **name** because a cookie can't report
+ * its own `Max-Age` back to the server — so refresh re-sets the same-named cookie and never silently changes the
+ * lifetime:
  *   - [persistent] `veyq_refresh` with `Max-Age` = refresh TTL — survives a browser restart ("remember me").
  *   - [session] `veyq_refresh_session` with **no** `Max-Age` (a session cookie) — survives reloads, dropped on
  *     browser close (the web default).

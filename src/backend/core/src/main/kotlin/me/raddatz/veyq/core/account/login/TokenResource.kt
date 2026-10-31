@@ -43,8 +43,8 @@ class TokenResource(private val sessions: SessionService, private val cookie: Se
             ?: return httpError(httpFailure("refresh_rejected", UNAUTHORIZED))
         return if (fromCookie != null) {
             // Re-issue the SAME lifetime the request carried (persistent vs session) — so rotation never
-            // silently upgrades/downgrades it (ADR 0004 addendum) — and clear the other lifetime, via the one
-            // `issue` API. The token stays out of the body on the web path.
+            // silently upgrades/downgrades it (ADR 0004 § web refresh cookie lifetimes) — and clear the other
+            // lifetime, via the one `issue` API. The token stays out of the body on the web path.
             Response.ok(TokenPair(accessToken = rotated.accessToken, refreshToken = null))
                 .cookie(*cookie.issue(rotated.refreshToken, fromCookie.persistent)).build()
         } else {

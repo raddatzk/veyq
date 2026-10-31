@@ -64,7 +64,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // `unsealNodeMeta` covers date + location + cover, including any leaf this suite never looks at — that is the
     // point of recording the envelope rather than the asserted value.
     //
-    // ONE named blind spot (ADR 0053 decision 5): the cover's `source` is dropped before recording. It is a
+    // ONE named blind spot (ADR 0053 § Consequences): the cover's `source` is dropped before recording. It is a
     // reference, not sealed user content — an `{ kind: 'upload', ref }` source carries a blob id that lives in the DB
     // legitimately and `ref.wrappedBlobKey`, base64 ciphertext that IS present in `veyq_blob` and would be a false hit
     // every run. Its `kind` discriminant is a closed-vocabulary leaf with no confidentiality value. Dropped here, at the

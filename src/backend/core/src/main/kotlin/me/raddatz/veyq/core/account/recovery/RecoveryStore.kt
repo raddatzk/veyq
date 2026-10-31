@@ -66,7 +66,7 @@ class RecoveryStore(private val accounts: AccountStore) {
      * This reads `MasterKeyWrapEntity` directly rather than going through `KeyMaterialStore.find`, and that is
      * deliberate: `KeyMaterialStore.find` returns **all** wraps unfiltered, and the RECOVERY one is stripped a
      * level up in `KeyMaterialHandler.forUser`. Reusing it here would mean a second caller of an unfiltered
-     * read, which is exactly the trap ADR 0054 § Consequences names. Selecting the one method this flow is
+     * read, which is exactly the trap `KeyMaterialStore.find`'s KDoc names. Selecting the one method this flow is
      * entitled to keeps the blast radius at one row.
      */
     @Transactional

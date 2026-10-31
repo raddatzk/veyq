@@ -1,7 +1,7 @@
 useCase: uc.account.remember-this-device
 feature: account
 title: Sign in & remember this device (web — one screen, one toggle)
-# Implemented on web by cr-0054 (ADR 0005 §17-21): the combined login/unlock screen, the single "remember me"
+# Implemented on web by cr-0054 (ADR 0005 §17-20): the combined login/unlock screen, the single "remember me"
 # toggle, auto-enrol, and the password-less DEVICE_KEY wrap — superseding cr-0052's two overlapping checkboxes +
 # local Master-Key cache. cr-0055 (ADR 0005 §22) makes the "off" tier session-scoped: a session refresh cookie +
 # the Master Key in sessionStorage → survives a reload, dropped on browser close, password-only after a close.

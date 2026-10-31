@@ -83,7 +83,7 @@ class MembershipEntity : PanacheEntityBase {
     /** The granter's identity public bundle **as it was when this grant was written** — the key [grantSignature] was
      *  made with — copied from their account row in the write's own transaction, and what the reads serve. Never
      *  the granter's CURRENT key: an account rotation (ADR 0060) replaces that, and a grant served beside it fails
-     *  verification before the recipient's pin is read (ADR 0028 § What is still open). The pin, not this value,
+     *  verification before the recipient's pin is read (ADR 0028 Decision 6). The pin, not this value,
      *  decides whether the key is trusted. Non-null exactly when [granterUserId] is; every writer sets both, which
      *  `scripts/validate_grant_writer_arity.py` holds. */
     @Column(name = "granter_identity_public_key")

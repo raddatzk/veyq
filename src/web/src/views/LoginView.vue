@@ -41,7 +41,7 @@ import { takeRoute } from '../app/pendingRoute'
 import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 
 // uc.account.remember-this-device (web, cr-0054) — ONE adaptive login/unlock screen with ONE "remember me"
-// toggle (ADR 0005 §17-21). The same password authenticates AND derives the DEVICE-wrap KEK, so login + unlock
+// toggle (ADR 0005 §17-20). The same password authenticates AND derives the DEVICE-wrap KEK, so login + unlock
 // collapse into a single submit. The screen shows only the fields this device still needs: the FIRST sign-in
 // per device (no DEVICE wrap yet) adds the **Secret Key** field; once a wrap exists it is email + password
 // only; a remembered device opens straight in at boot (no screen). On a successful unlock the client

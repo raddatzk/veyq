@@ -795,7 +795,7 @@ export async function anchorServedChain(userId: string, chain: KeyChain, served:
  * The pin store as one whole document (`trustMarks.ts` § `AccountDocumentStore`), for the two operations that
  * act on it whole:
  *
- *  - **key rotation** (ADR 0060 step 4) opens it under the OLD Master Key and re-seals it under the new one inside
+ *  - **key rotation** (ADR 0060 § Consequences) opens it under the OLD Master Key and re-seals it under the new one inside
  *    the rotation's own request — so a re-seal that cannot land fails the rotation instead of stranding the store
  *    under a retired key. Both keys are explicit, because mid-rotation the vault still holds the old one. A new Master
  *    Key is a new index key, so every entry moves to a new id: the write replaces the whole set (ADR 0104). The pins

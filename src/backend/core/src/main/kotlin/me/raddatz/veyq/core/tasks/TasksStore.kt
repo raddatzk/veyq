@@ -267,7 +267,7 @@ class TasksStore(private val keyChain: KeyChainStore) {
         // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
         // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
         // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
-        // grant stays verifiable after the worker's own account rotation (ADR 0028 § What is still open). The
+        // grant stays verifiable after the worker's own account rotation (ADR 0028 Decision 6). The
         // worker is the authenticated lease holder, so its account row exists.
         val workerKey = VeyqUser.findById(userId)!!.identityPublicKey
         job.resourceRef?.let { membershipId ->

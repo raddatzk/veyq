@@ -73,7 +73,7 @@ class RotationStore {
     /**
      * Write one staged self-grant as [userId]'s grant on [scopeId] (ADR 0111 decision 6): the scope's
      * current-epoch key sealed to the identity the publish installs, signed by it — so the account's grant row names the
-     * caller as its granter and the NEW identity as the key that signed it (ADR 0028 § What is still open: the reads
+     * caller as its granter and the NEW identity as the key that signed it (ADR 0028 Decision 6: the reads
      * serve that copy). A bulk update by `(user, scope)`, never a write onto an entity this transaction may hold from
      * before the scope's lock. In the publish's transaction, under that scope's row lock.
      */

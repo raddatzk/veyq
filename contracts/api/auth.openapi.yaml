@@ -169,8 +169,8 @@ paths:
                 Present only when the request's refresh token arrived via cookie. The rotated refresh token
                 as an httpOnly + SameSite=Strict cookie scoped to `/api/token/refresh`, re-issued under the
                 **same** name (`veyq_refresh` or `veyq_refresh_session`) the request carried it on — rotation
-                never silently changes the lifetime (ADR 0004 addendum). A clearing cookie for the other
-                lifetime is sent alongside, so exactly one refresh cookie ever exists.
+                never silently changes the lifetime (ADR 0004 § web refresh cookie lifetimes). A clearing
+                cookie for the other lifetime is sent alongside, so exactly one refresh cookie ever exists.
               schema: { type: string }
           content:
             application/json:

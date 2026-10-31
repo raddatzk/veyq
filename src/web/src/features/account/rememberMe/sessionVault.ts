@@ -1,6 +1,7 @@
 // uc.account.remember-this-device (web "off" tier, cr-0055 / cr-0057). The session-scoped vault: a page reload
 // re-opens the vault with no prompt, and it is gone when the browser closes — paired with the session refresh
-// cookie (ADR 0004 addendum). This is the conventional web-session experience for "not remembered" sign-ins.
+// cookie (ADR 0004 § web refresh cookie lifetimes). This is the conventional web-session experience for "not
+// remembered" sign-ins.
 //
 // How (cr-0057, ADR 0005 §23): a NON-EXTRACTABLE AES-GCM key K lives in IndexedDB (like the other device tiers),
 // and only the **ciphertext** of the Master Key (+ iv) sits in `sessionStorage`. So K's bytes never enter JS —

@@ -1095,7 +1095,7 @@ describe('a grant opens only if its granter\'s signature verifies (ADR 0028 Deci
 
 describe('a grant verifies under the key its granter signed it with, not the granter\'s current one (inbox #233)', () => {
   // The rotator R signed our grant with its OLD identity, then rotated its account keys (ADR 0060). The server serves
-  // the key as of the grant (ADR 0028 § What is still open); this pins what the client does with each served key,
+  // the key as of the grant (ADR 0028 Decision 6); this pins what the client does with each served key,
   // with real signatures. The client is unchanged by #233 — the backend's
   // `RotationSliceTest.aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt` is the half that was red.
   const R = 'a0000000-0000-4000-8000-0000000000a1'

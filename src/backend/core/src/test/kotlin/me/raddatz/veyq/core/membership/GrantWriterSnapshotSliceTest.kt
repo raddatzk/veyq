@@ -27,7 +27,7 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * Every path that writes a grant records the key its granter signed it with (ADR 0028 § What is still open,
+ * Every path that writes a grant records the key its granter signed it with (ADR 0028 Decision 6,
  * inbox #233). The reads serve that copy, so a writer that forgets it serves no granter key at all and the
  * recipient refuses the grant as unsigned.
  *

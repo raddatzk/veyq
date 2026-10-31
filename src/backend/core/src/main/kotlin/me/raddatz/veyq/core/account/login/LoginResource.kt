@@ -35,9 +35,10 @@ class LoginResource(private val handler: LoginHandler, private val cookie: Sessi
         val session = handler.verify(loginVerifyRequest.email, loginVerifyRequest.nonce, loginVerifyRequest.signature)
             ?: return httpError(httpFailure("authentication_failed", UNAUTHORIZED))
         val family = SessionFamily(id = UUID.fromString(session.familyId))
-        // Pick the refresh transport (ADR 0004 addendum / ADR 0005 §22). Web sends `sessionScope`; native omits
-        // it. Compare by wire value so the exact generated enum constant doesn't matter. `remember` is the legacy
-        // web flag, honoured (→ persistent) only when `sessionScope` is absent. Operator-blind in every case.
+        // Pick the refresh transport (ADR 0004 § web refresh cookie lifetimes / ADR 0005 §22). Web sends
+        // `sessionScope`; native omits it. Compare by wire value so the exact generated enum constant doesn't
+        // matter. `remember` is the legacy web flag, honoured (→ persistent) only when `sessionScope` is absent.
+        // Operator-blind in every case.
         val noBodyToken = SessionResponse(accessToken = session.accessToken, family = family, refreshToken = null)
         // The web rides a refresh cookie; `cookie.issue` sets the chosen lifetime AND clears the other (exactly
         // one refresh cookie per device). `remember` is the legacy fallback (→ persistent). Native omits both

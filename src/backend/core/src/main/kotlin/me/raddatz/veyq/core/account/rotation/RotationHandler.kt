@@ -252,10 +252,11 @@ class RotationHandler(
     /**
      * Stage one chunk into [userId]'s open stage [stageId]: every grant is for a scope the caller holds a grant on
      * (else `409 rotation_plan_changed`), names the stage's identity and verifies under it as the `grant` statement for
-     * the scope's own kind, its epoch and the caller (else `422 self_grant_invalid`) — the one place the server checks a
-     * grant signature: a consistency check of the stage against the identity the publish then registers under the Secret
-     * Key's proof, not a trust judgment. All checked before anything is written: a refused chunk leaves nothing. The epoch
-     * is not judged here; the publish does, against the scope's current one.
+     * the scope's own kind, its epoch and the caller (else `422 self_grant_invalid`) — with [stageInvites]' re-signed
+     * anchors, the only places the server checks a grant signature: a consistency check of the stage against the
+     * identity the publish then registers under the Secret Key's proof, not a trust judgment. All checked before
+     * anything is written: a refused chunk leaves nothing. The epoch is not judged here; the publish does, against the
+     * scope's current one.
      */
     fun stageGrants(userId: String, stageId: String, grants: List<StagedSelfGrantInput>): StageGrantsOutcome =
         QuarkusTransaction.requiringNew().call {

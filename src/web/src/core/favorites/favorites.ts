@@ -44,7 +44,7 @@ export async function saveFavorites(scopeId: string, scopeKey: Uint8Array, ids: 
 }
 
 /**
- * Re-seal the caller's pin sets from the **old** Master Key to a **new** one — key rotation (ADR 0060 step 4).
+ * Re-seal the caller's pin sets from the **old** Master Key to a **new** one — key rotation (ADR 0060 § Consequences).
  *
  * It takes both keys for the same reason the pin store's rotation re-seal does (`pinStoreDocument`): during a
  * rotation the vault still holds the *old* Master Key (the sole-member scope re-key that follows opens grants with

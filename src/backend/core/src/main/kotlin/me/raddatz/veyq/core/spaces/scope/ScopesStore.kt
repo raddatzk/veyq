@@ -283,7 +283,7 @@ class ScopesStore(
      *  it was written (the key that signed it, [MembershipEntity.granterIdentityPublicKey]) — or null when the grant
      *  carries no signature (written before grants were signed) or no recorded key. Never the granter's CURRENT key:
      *  after an account rotation that is a key the signature was not made with, and the recipient, which verifies
-     *  before it reads its pin, would refuse every grant the rotator signed (ADR 0028 § What is still open). */
+     *  before it reads its pin, would refuse every grant the rotator signed (ADR 0028 Decision 6). */
     private fun granterOf(m: MembershipEntity): GranterRow? {
         val granterId = m.granterUserId ?: return null
         val signature = m.grantSignature ?: return null

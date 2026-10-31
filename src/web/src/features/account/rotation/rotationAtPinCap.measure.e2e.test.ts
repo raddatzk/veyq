@@ -1,8 +1,21 @@
 // Inbox #538 live MEASUREMENT (VEYQ_E2E=1 and VEYQ_E2E_MEASURE=1): does an account rotation still fit the request body
 // limit when the identity-pin store holds the contract's cap of 25,000 entries? REAL backend + MariaDB, REAL crypto, the
 // REAL `rotateKeys` — the request measured is the one the client builds, not a body assembled here. ADR 0104
-// § Consequences holds its readings (9,602,700 bytes at the cap, 384 a pin) and the decision they bought: the cap and the
-// one request stay.
+// § Consequences holds the decision the readings bought: the cap and the one request stay. The readings, against the
+// server's default body limit of 10,485,760 bytes (`quarkus.http.limits.max-body-size` unset; `RequestTooLargeRoutes`
+// answers it alike on every path):
+//   - a rotation costs 384 bytes a pin and about 2,700 beside them, so at the cap it sends 9,602,700 bytes (91.6 %) and
+//     is answered 200 — a margin of 883 KB;
+//   - with every other field at its contract maximum (the identity bundle and its wrapped private key, both cold wraps,
+//     the signature, the device register, the head) it would send about 9.70 MB (92.5 %), ≈ 27,000 pins' worth;
+//   - securing the account adds fixed fields of 2,424 bytes and 39 bytes per scope this device cannot open (at most
+//     10,000), measured with the real encoders: about 9,605,224 bytes at the cap with nothing unreadable;
+//   - a body past the limit is `413 request_too_large`, answered on its `Content-Length` before authentication, with
+//     nothing written; headless Chrome over HTTP/1.1 reads that answer while still sending (bodies of 1.1×, 2× and 10×
+//     the limit, direct to the jar and through Traefik), so the client maps it to a refusal naming the Server Owner
+//     (uc.account.rotate-keys E10).
+// The worst case the contract admits is computed, not measured: `scripts/validate_rotation_shape.py` derives it from
+// the contract's own caps and fails above the limit.
 //
 // **Opt-in, not in the default web-e2e run** (the `.measure.e2e.test.ts` suffix; `scripts/run_web_e2e.py` leaves it out
 // unless the variable is set, and refuses to run it named without it). From a worktree, beside the owner's stack:
@@ -27,7 +40,7 @@
 // Master Key. Its bite is the server's own limit, passed to the jar through the orchestrator's environment:
 // `QUARKUS_HTTP_LIMITS_MAX_BODY_SIZE=9601500` lets the seed of 25,000 entries land and refuses the cap's rotation with
 // `413 request_too_large` (measured 2026-10-26, inbox #538). A lower limit refuses the seed already, which an undici
-// client still sending sees as `ECONNRESET`, not as the 413 — a browser reads the 413 (ADR 0104 § Consequences, inbox #553).
+// client still sending sees as `ECONNRESET`, not as the 413 — a browser reads the 413 (above, inbox #553).
 import { beforeAll, describe, it, expect } from 'vitest'
 import { fromB64std } from '@veyq/crypto/base64'
 import { createHash } from 'node:crypto'

@@ -41,10 +41,11 @@ class KeyMaterialHandler(
      *  as a 500 at the boundary.
      *
      *  Serves only the **interactive** unlock wraps. The RECOVERY wrap is a password-less, Secret-Key-only path
-     *  (`KEK = Argon2id(secretKey)`) — it must be released **only** by the future email-gated recovery flow,
-     *  never in the normal material; otherwise a live session + the Secret Key would open the vault **without
-     *  the password**, silently demoting the password from a content factor (cr-0052). PASSWORD / DEVICE /
-     *  PASSKEY stay (their KEKs are device- or password-bound); the client's normal unlock uses PASSWORD.
+     *  (`KEK = Argon2id(secretKey)`) — it is released **only** by the two-factor recovery flow (ADR 0054,
+     *  `RecoveryStore.recoveryMaterial`), never in the normal material; otherwise a live session + the Secret Key
+     *  would open the vault **without the password**, silently demoting the password from a content factor.
+     *  PASSWORD / DEVICE / PASSKEY stay (their KEKs are device- or password-bound); the client's normal unlock
+     *  uses PASSWORD.
      *
      *  **A device switch acts at once** (ADR 0088 decision 5): every DEVICE wrap is withheld while
      *  [CapabilityIds.REMEMBER_DEVICE] is effectively off, and every DEVICE_KEY wrap while

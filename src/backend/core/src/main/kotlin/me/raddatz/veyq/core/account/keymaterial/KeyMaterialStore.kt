@@ -21,6 +21,15 @@ data class KeyMaterial(
 @ApplicationScoped
 class KeyMaterialStore {
 
+    /**
+     * Every wrap of the account, **RECOVERY included, unfiltered**.
+     *
+     * **A trap:** the RECOVERY wrap is a password-less path to the Master Key, and it is withheld a level up, in
+     * [KeyMaterialHandler.forUser] — not here. A second caller of this read that forgets to filter it lets a
+     * session plus the Secret Key open the vault without the password (ADR 0054, Context fact 2), and the slice
+     * test pins the endpoint, not this store. So a new caller filters, or reads only the methods it is entitled to, as
+     * `RecoveryStore.recoveryMaterial` does.
+     */
     @Transactional
     fun find(userId: String): KeyMaterial? {
         val user = VeyqUser.findById(userId) ?: return null
