@@ -84,6 +84,14 @@ describe('Settings — Map and place names', () => {
     expect(w.find('.maps-given-for').exists()).toBe(false)
   })
 
+  it('a consent stored before hosts were recorded is named as such, never as a host', () => {
+    localStorage.setItem(KEY, '1') // the legacy value: it named no service
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+    const w = mountPanel()
+    expect(w.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    expect(w.get('.maps-given-for').text()).toBe(t('settings.mapsGivenForUnrecorded'))
+  })
+
   it('names no earlier hosts for the same ones', () => {
     expect(mountPanel().find('.maps-given-for').exists()).toBe(false)
   })

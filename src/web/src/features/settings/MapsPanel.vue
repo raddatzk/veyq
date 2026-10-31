@@ -52,7 +52,7 @@ const geocoderHost = computed(() => (geocoderUrl.value ? serviceHost(geocoderUrl
           <!-- no tile host recorded: the legacy consent, which named no host at all; else no geocoder was served then -->
           {{
             givenFor.tiles === null
-              ? t('settings.mapsGivenFor', { tiles: t('settings.mapsNotRecorded'), places: t('settings.mapsNotRecorded') })
+              ? t('settings.mapsGivenForUnrecorded')
               : t('settings.mapsGivenFor', { tiles: givenFor.tiles, places: givenFor.places ?? t('settings.mapsNone') })
           }}
         </p>
