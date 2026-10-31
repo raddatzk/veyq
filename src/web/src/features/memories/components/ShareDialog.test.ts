@@ -58,8 +58,8 @@ const mountList = () =>
     global: { plugins: [realI18n()], stubs },
   })
 
-// cr-node-key-hierarchy 5b.5: a chapter is a share root of its own, so the dialog on one says "chapter", not "Memory";
-// the uploader variant keeps its own copy.
+// uc.sharing.share-public-viewer:chapter-share-root: a chapter is a share root of its own, so the dialog on one says
+// "chapter", not "Memory"; the uploader variant keeps its own copy.
 describe('ShareDialog — the wording follows the shared node\'s kind', () => {
   const mountKind = (nodeKind: string, uploader = false) =>
     mount(ShareDialog, {

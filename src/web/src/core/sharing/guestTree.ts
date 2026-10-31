@@ -1,7 +1,8 @@
-// A READ_WRITE guest's tree operations on a share link (ADR 0080 decisions 2, 3, 6 and 10; cr-node-key-hierarchy 5b.4a):
-// create a node inside the shared subtree, move or rename one, and take back an empty upload placeholder it gave up.
-// Core's, like the member's (`core/node/tree.ts`): they carry no application semantics, and the server checks structure
-// only (inside the subtree, the containers' owners, `NodeKindRules`) and opens nothing.
+// A READ_WRITE guest's tree operations on a share link (ADR 0080 decisions 2, 3, 6 and 10;
+// uc.sharing.share-contributor:folder-guest-tree-operations): create a node inside the shared subtree, move or rename
+// one, and take back an empty upload placeholder it gave up. Core's, like the member's (`core/node/tree.ts`): they
+// carry no application semantics, and the server checks structure only (inside the subtree, the containers' owners,
+// `NodeKindRules`) and opens nothing.
 //
 // **Keys come from the chain, never from `K_SC`.** A guest holds the root's key (the share's `wrap` under `K_share`) and
 // every key below it (`walkSubtree`); it never holds the scope key, so it never writes at the scope root. Every write

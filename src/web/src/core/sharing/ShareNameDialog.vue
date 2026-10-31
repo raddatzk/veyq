@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// The one small name dialog of a public share page (cr-node-key-hierarchy 5b.4b): a guest names a new folder with it,
-// and names itself with it before its first write on a READ_WRITE link. The shape of the member's `FolderNameDialog`
-// (`VeyqDialog` + `VeyqInput` + `VeyqMessage`, `.veyq-form`, `.veyq-dialog-action-row`, `useAsyncAction`), without anything
-// Memories adds there. What the name is FOR is the caller's: it hands the action and how a failure reads.
+// The one small name dialog of a public share page (uc.sharing.share-contributor:folder-guest-tree-operations): a guest
+// names a new folder with it, and names itself with it before its first write on a READ_WRITE link. The shape of the
+// member's `FolderNameDialog` (`VeyqDialog` + `VeyqInput` + `VeyqMessage`, `.veyq-form`, `.veyq-dialog-action-row`,
+// `useAsyncAction`), without anything Memories adds there. What the name is FOR is the caller's: it hands the action
+// and how a failure reads.
 //
 // Mounted via v-if while open; closing = the parent unmounting it on `close`.
 import { ref, computed } from 'vue'

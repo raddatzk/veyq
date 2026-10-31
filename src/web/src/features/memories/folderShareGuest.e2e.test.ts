@@ -1,7 +1,8 @@
-// cr-node-key-hierarchy 5b.4a live e2e (VEYQ_E2E=1) — a READ_WRITE guest's tree operations on a FOLDER link (ADR 0080
-// decisions 2, 3, 6 and 10), against a REAL backend + MariaDB + the bundled store, with REAL crypto. Core's functions
-// only (`core/sharing/guestTree.ts`, `core/sharing/guestIdentity.ts`): the public folder page is 5b.4b, and so is a
-// guest's upload into a Memory below the folder (5a.5), which this suite does not touch.
+// uc.sharing.share-contributor:folder-guest-tree-operations live e2e (VEYQ_E2E=1) — a READ_WRITE guest's tree
+// operations on a FOLDER link (ADR 0080 decisions 2, 3, 6 and 10), against a REAL backend + MariaDB + the bundled
+// store, with REAL crypto. Core's functions only (`core/sharing/guestTree.ts`, `core/sharing/guestIdentity.ts`): the
+// public folder page and a guest's upload into a Memory below the folder (`folderShareUpload.e2e.test.ts`) are not
+// touched here.
 //
 // Two actors on one instance, serialized (the `folderShare.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding two subfolders, a Memory

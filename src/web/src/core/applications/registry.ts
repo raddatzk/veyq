@@ -109,10 +109,11 @@ import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
 
-// The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
-// a reason: the dialog's module graph reaches this registry again (measured: `shareLink` →
-// `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.slugFor`), so a static import is a cycle.
-// `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its own.
+// The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
+// `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
+// `shareLink` → `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.slugFor`), so a static import is
+// a cycle. `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its
+// own.
 const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
 
 /** The props of a section an application adds to a person's profile page (`Registry.claimPersonSection`, ADR 0083). */
@@ -590,8 +591,9 @@ const ROUTE_SLUG = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
 
 /** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, shareable through core's
- *  own `core/sharing/FolderShareDialog.vue`, its pre-registered `shareDialog` — cr-node-key-hierarchy 5b.3).
- *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
+ *  own `core/sharing/FolderShareDialog.vue`, its pre-registered `shareDialog` —
+ *  uc.sharing.share-public-viewer:folder-share-root). The app uses the single `registry` below; tests build their own
+ *  to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).

@@ -306,8 +306,8 @@ describe('LevelView: the folders', () => {
   })
 })
 
-// cr-node-key-hierarchy 5b.3 (moved from `MemoryBrowse.test.ts`): the folder header carries the share button core's folder
-// rights allow (the instance's public links, a folder, not a guest's identity folder).
+// uc.sharing.share-public-viewer:folder-share-root: the folder header carries the share button core's folder rights
+// allow (the instance's public links, a folder, not a guest's identity folder).
 describe('LevelView: the folder header', () => {
   const shareButton = (w: Level) => w.find(`button[aria-label="${t('share.share')}"]`)
 

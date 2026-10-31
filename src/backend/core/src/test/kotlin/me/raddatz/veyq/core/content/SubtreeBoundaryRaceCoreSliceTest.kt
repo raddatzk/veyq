@@ -19,11 +19,11 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * A [SubtreeBoundary] is decided under the scope lock (5a.2 of cr-node-key-hierarchy). Each race holds a member's move
- * of folder `a` out of the boundary uncommitted ([whileUncommitted]) and runs a bounded write targeting `a` inside
- * that window: its unlocked fast path still sees `a` inside the boundary, so only the walk under the scope lock stands
- * between it and a node landing outside. Exactly one outcome: the member's move lands, the bounded write is
- * `illegal_structure` and writes nothing. Each race has a control: alone, the bounded write lands.
+ * A [SubtreeBoundary] is decided under the scope lock (uc.sharing.share-contributor:guest-tree-refusals). Each race
+ * holds a member's move of folder `a` out of the boundary uncommitted ([whileUncommitted]) and runs a bounded write
+ * targeting `a` inside that window: its unlocked fast path still sees `a` inside the boundary, so only the walk under
+ * the scope lock stands between it and a node landing outside. Exactly one outcome: the member's move lands, the
+ * bounded write is `illegal_structure` and writes nothing. Each race has a control: alone, the bounded write lands.
  */
 @QuarkusTest
 class SubtreeBoundaryRaceCoreSliceTest {

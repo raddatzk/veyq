@@ -21,7 +21,7 @@ vi.mock('../media', () => ({
   hasDerivatives: vi.fn(),
 }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
-// The member's epoch keys, for the chain to a guest's name sealed above this node (5b.4b); none unless a test sets them.
+// The member's epoch keys, for the chain to a guest's name sealed above this node; none unless a test sets them.
 const space = vi.hoisted(() => ({ epochs: null as null | import('../../spaces/epochs').EpochKeys }))
 vi.mock('../../../app/activeSpace', () => ({ activeEpochKeys: () => space.epochs }))
 
@@ -106,7 +106,7 @@ beforeEach(() => {
 const selectBucket = (w: Awaited<ReturnType<typeof mountBuckets>>, id: string) =>
   w.find(`.bucket-opt[data-val="${id}"]`).trigger('click')
 
-describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy 5b.4b)', () => {
+describe('MemoryBuckets — a guest named above this node (uc.memory.buckets:guest-named-above-the-node)', () => {
   it("opens a contributor's name with the keys of the node's ancestors, from the loaded tree", async () => {
     const SCOPE = '5c09e000-0000-4000-8000-0000000005c0'
     const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'

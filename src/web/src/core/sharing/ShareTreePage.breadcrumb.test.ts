@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-// The folder share page's breadcrumb, clicked through the DOM (cr-node-key-hierarchy 5b.4b; found in the browser,
-// 2026-10-07). `ShareTreePage.test.ts` stubs the Breadcrumb and the router, so it pins only the `push` arguments — it
-// cannot see that `VeyqBreadcrumb` renders every crumb as an `<a href>` whose DEFAULT action still runs after the `command`:
-// with `href="#"` the browser cleared the `#k=` fragment (the share key) and the pending push was cancelled. Here the
-// real `VeyqBreadcrumb` and the real vue-router render and route; the registry is a Proxy onto a fresh one, as there.
+// The folder share page's breadcrumb, clicked through the DOM (uc.sharing.share-public-viewer:folder-share-root; found
+// in the browser). `ShareTreePage.test.ts` stubs the Breadcrumb and the router, so it pins only the `push` arguments —
+// it cannot see that `VeyqBreadcrumb` renders every crumb as an `<a href>` whose DEFAULT action still runs after the
+// `command`: with `href="#"` the browser cleared the `#k=` fragment (the share key) and the pending push was cancelled.
+// Here the real `VeyqBreadcrumb` and the real vue-router render and route; the registry is a Proxy onto a fresh one, as
+// there.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'

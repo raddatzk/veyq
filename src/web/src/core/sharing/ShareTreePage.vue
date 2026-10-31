@@ -1,9 +1,10 @@
 <script setup lang="ts">
-// Core's page of a `READ` or `READ_WRITE` public share, whatever its root kind (a folder, a Memory, a chapter, …; inbox
-// #401, cr-node-key-hierarchy 5b.4b; the shell is `views/ShareView.vue`, which mounts this page behind its gates and a
-// `WRITE_ONLY` link's drop page instead). The shell has resolved the head, run the password and terms gates and built
-// the guest's `access` (its role, the page's one naming flow); this page builds the guest's TREE from the head
-// (`guestTreeSource`: the root's key from the share's `wrap`, every key and name below through the chain) and browses it.
+// Core's page of a `READ` or `READ_WRITE` public share, whatever its root kind (a folder, a Memory, a chapter, …;
+// uc.sharing.share-public-viewer:guest-sees-the-member-view; the shell is `views/ShareView.vue`, which mounts this page
+// behind its gates and a `WRITE_ONLY` link's drop page instead). The shell has resolved the head, run the password and
+// terms gates and built the guest's `access` (its role, the page's one naming flow); this page builds the guest's TREE
+// from the head (`guestTreeSource`: the root's key from the share's `wrap`, every key and name below through the chain)
+// and browses it.
 //
 // **The member's page, with functions removed (inbox #401).** At a folder it renders core's `LevelView` — the very view
 // a member browses with: the folder's header and ONE list of the folders and every application's rows through the

@@ -11,7 +11,7 @@ import {
 } from './range'
 import * as v1 from '@veyq/crypto/v1'
 
-describe('range.ts — pure range↔chunk arithmetic (Slice 2)', () => {
+describe('range.ts — pure range↔chunk arithmetic (ADR 0047)', () => {
   it('the SW\'s frame size is the contract\'s (the SW bundle imports neither the data layer nor the crypto package)', () => {
     // range.ts keeps local literals so the worker stays small; this test is the anti-drift guard that holds them to
     // the one export uploads seal with — which the crypto conformance test in turn pins to the vector file.

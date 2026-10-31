@@ -1,5 +1,5 @@
-// cr-node-key-hierarchy 5b.1 live e2e (VEYQ_E2E=1) — a CHAPTER is a share root of its own (ADR 0080 Decisions 9 and
-// 13), against a REAL backend + MariaDB + the bundled store, with REAL crypto.
+// uc.sharing.share-public-viewer:chapter-share-root live e2e (VEYQ_E2E=1) — a CHAPTER is a share root of its own (ADR
+// 0080 Decisions 9 and 13), against a REAL backend + MariaDB + the bundled store, with REAL crypto.
 //
 // Two actors on one instance, serialized (the `shareContributor.e2e` / `shareUploader.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); one Memory with two chapters — the

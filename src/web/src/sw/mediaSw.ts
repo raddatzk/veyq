@@ -1,4 +1,4 @@
-// cr-inline-video-playback Slice 2 (ADR 0047) — the media Service Worker: a KEY-FREE range shim.
+// ADR 0047 — the media Service Worker: a KEY-FREE range shim.
 //
 // It holds NO key, NO auth token and NO plaintext-at-rest. For a `/__media/<handle>` request it maps the <video>
 // demuxer's plaintext byte-range to the covering chunk indices (range.ts), asks the owning PAGE for those chunks'

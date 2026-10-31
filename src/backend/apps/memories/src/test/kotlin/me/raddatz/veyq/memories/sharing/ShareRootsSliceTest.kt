@@ -28,7 +28,7 @@ import me.raddatz.veyq.core.sharing.SharingHandler
 /**
  * Share roots by kind, with Memories present (ADR 0080 decisions 6, 11, 13): which roles a node of a kind may be shared
  * with is its owner's answer through [ShareRoots] — core's `FOLDER` READ and READ_WRITE, Memories' `MEMORY` and
- * `CHAPTER` all three (a chapter link since cr-node-key-hierarchy 5a.4; it was refused before), a kind nobody declares
+ * `CHAPTER` all three (uc.sharing.share-public-viewer:chapter-share-root), a kind nobody declares
  * none — and it holds on create and on a role change alike. Whether a guest may then upload under
  * the root is a separate seam ([ShareGuestWrites]): a `READ_WRITE` folder share exists, and its guest's upload falls
  * closed. Each refusal sits beside a control through the same path on the kind that admits it.
@@ -38,8 +38,8 @@ import me.raddatz.veyq.core.sharing.SharingHandler
 @TestProfile(FakePresignProfile::class)
 class ShareRootsSliceTest {
 
-    /** A chapter is a share root with every role, as the Memory above it (ADR 0080 decision 13; until 5a.4 every
-     *  role here was `illegal_scope`). A kind nobody declares stays refused with the same body. */
+    /** A chapter is a share root with every role, as the Memory above it (ADR 0080 decision 13). A kind nobody
+     *  declares stays refused with the same body. */
     @Test
     fun aChapterIsAShareRootForEveryRole() {
         val (userId, scopeId) = seedMemberScope()
@@ -118,7 +118,7 @@ class ShareRootsSliceTest {
      * A `READ_WRITE` folder share is created, and its guest names itself — but no application writes into a folder, so
      * a start and a window naming no node (the target is the folder root itself) both fail closed
      * (`SharingHandler.writesFor`: no [ShareGuestWrites] for the kind; the start is also refused by the missing
-     * admission). Its uploads into a Memory or chapter below the folder are `SubtreeUploadSliceTest`'s (5a.5). Control:
+     * admission). Its uploads into a Memory or chapter below the folder are `SubtreeUploadSliceTest`'s. Control:
      * the same calls on a Memory's contributor link.
      */
     @Test

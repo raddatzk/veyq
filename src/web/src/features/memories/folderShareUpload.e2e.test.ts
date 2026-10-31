@@ -1,7 +1,7 @@
-// cr-node-key-hierarchy 5b.4b live e2e (VEYQ_E2E=1) — a READ_WRITE guest of a FOLDER link uploads into a Memory below
-// the folder and into its chapter (5a.5, ADR 0080 Decision 6), against a REAL backend + MariaDB + the bundled store,
-// with REAL crypto. The web half of what `SubtreeUploadSliceTest` proves on the server: the upload names its TARGET
-// (`addSharePhoto`'s `nodeId`) and seals under the target's key from the chain.
+// uc.sharing.share-contributor:rights-inherit-below-a-folder live e2e (VEYQ_E2E=1) — a READ_WRITE guest of a FOLDER
+// link uploads into a Memory below the folder and into its chapter (ADR 0080 Decision 6), against a REAL backend +
+// MariaDB + the bundled store, with REAL crypto. The web half of what `SubtreeUploadSliceTest` proves on the server:
+// the upload names its TARGET (`addSharePhoto`'s `nodeId`) and seals under the target's key from the chain.
 //
 // Two actors on one instance, serialized (the `chapterShare.e2e` / `folderShareGuest.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a chapter

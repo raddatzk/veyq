@@ -1334,7 +1334,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   })
 })
 
-describe('the media type — the persisted video signal (cr-inline-video-playback, #104/#105; blob meta since inbox #397)', () => {
+describe('the media type — the persisted video signal (ADR 0047, #104; in the blob meta)', () => {
   const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a01'
   function decodeMeta(memoryKey: Uint8Array, sealed: string): MediaMeta {
     return openJson(metaCtx(MEDIA_ID), memoryKey, sealed)

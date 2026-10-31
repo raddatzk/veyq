@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-// Core's page of a READ or READ_WRITE public link (cr-node-key-hierarchy 5b.4b; inbox #401: core's member level view and
-// the kinds' member details handed a guest's access and tree, whatever the link's root kind), against a STUBBED registry
-// (a fresh `createRegistry()` behind a delegating Proxy, as `views/ShareView.registry.test.ts`): the test registers the
-// kinds, their level sections and details "an application" would, with stubs that render what they were handed. The subtree is real crypto (names and keys open
-// through the chain), the router and the UI layer are real and every navigation is a DOM click on the rendered element, the
-// clients are guarded (`test/guestMode.ts`: an authenticated one throws).
+// Core's page of a READ or READ_WRITE public link (uc.sharing.share-public-viewer:guest-sees-the-member-view: core's
+// member level view and the kinds' member details handed a guest's access and tree, whatever the link's root kind),
+// against a STUBBED registry (a fresh `createRegistry()` behind a delegating Proxy, as
+// `views/ShareView.registry.test.ts`): the test registers the kinds, their level sections and details "an application"
+// would, with stubs that render what they were handed. The subtree is real crypto (names and keys open through the
+// chain), the router and the UI layer are real and every navigation is a DOM click on the rendered element, the clients
+// are guarded (`test/guestMode.ts`: an authenticated one throws).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'

@@ -1,8 +1,8 @@
-// A root rename's share-name re-seal on the wire (cr-node-key-hierarchy 5b.5, ADR 0080 decision 14): recorded at
-// `fetch` — the JSON the real generated client serializes, no mock of the API client — the list is read for the
-// node, and each share gets one `PUT /api/shares/{shareId}/sealed-name` whose body is exactly `{sealedName}`: no note,
-// label, role, expiry, password or key rides along (the operation changes the name only, and must not look like an
-// `updateShare`), and the name is the new one under that share's `K_share`.
+// A root rename's share-name re-seal on the wire (uc.sharing.share-public-viewer:root-rename-reseals-share-names, ADR
+// 0080 decision 14): recorded at `fetch` — the JSON the real generated client serializes, no mock of the API client —
+// the list is read for the node, and each share gets one `PUT /api/shares/{shareId}/sealed-name` whose body is exactly
+// `{sealedName}`: no note, label, role, expiry, password or key rides along (the operation changes the name only, and
+// must not look like an `updateShare`), and the name is the new one under that share's `K_share`.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'

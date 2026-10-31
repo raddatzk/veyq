@@ -30,8 +30,8 @@ vi.mock('../../../shared/state/useMapConfig', async () => {
   }
 })
 
-// The Slice-2 SW registrar (there is no real Service Worker in the test env). Default: no usable SW → every play
-// takes the Slice-1 fallback; individual tests override registerPlayback to simulate a controlling SW.
+// The SW registrar (there is no real Service Worker in the test env). Default: no usable SW → every play
+// takes the whole-blob fallback; individual tests override registerPlayback to simulate a controlling SW.
 vi.mock('../../../sw/register', () => ({
   registerPlayback: vi.fn(async () => null),
   revokePlayback: vi.fn(),
@@ -482,7 +482,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
   })
 })
 
-describe('MediaLightbox — video playback from the blob meta type (cr-inline-video-playback, #104/#105; inbox #397)', () => {
+describe('MediaLightbox — video playback from the blob meta type (ADR 0047, #104; inbox #397)', () => {
   const FTYP_MP4 = new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]) // "....ftypisom"
 
   /** Seed one media with an explicit source type + original bytes. */
@@ -557,7 +557,7 @@ describe('MediaLightbox — video playback from the blob meta type (cr-inline-vi
   })
 })
 
-describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR 0047)', () => {
+describe('MediaLightbox — SW switchover (ADR 0047)', () => {
   const FTYP_MP4 = new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])
 
   async function seedVideo(memoryKey: Uint8Array) {
@@ -595,7 +595,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
     expect(revokePlayback).toHaveBeenCalledWith('handle-1')
   })
 
-  it('falls back to the Slice-1 full-blob path when no SW is usable', async () => {
+  it('falls back to the full-blob path when no SW is usable', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedVideo(memoryKey)
     vi.mocked(registerPlayback).mockResolvedValueOnce(null) // no / stale / mismatched SW

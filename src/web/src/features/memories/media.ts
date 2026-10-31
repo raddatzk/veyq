@@ -1262,7 +1262,7 @@ export const openLightbox = (scopeId: string, memoryKey: Uint8Array, item: Media
 export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
   openBlob(scopeId, mediaKey(scopeId, memoryKey, item), downloadRef(item))
 
-// --- Slice-2 range streaming: the page-side chunk provider (ADR 0047) --------
+// --- range streaming: the page-side chunk provider (ADR 0047) ---------------
 //
 // The provider itself is core's ([makeChunkProvider], `core/blob/transport.ts`); this is the authed app's wiring of it
 // over a media's original.

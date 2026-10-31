@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// The platform's share dialog for a FOLDER (cr-node-key-hierarchy 5b.3, ADR 0080 decisions 6 and 12): a member lists
-// the folder's links, makes a new one (READ or READ_WRITE), copies, switches off, re-activates, renews and deletes
-// them. Core owns FOLDER, so this is core's own dialog, built only on `./manageShares.ts` and `./shareLink.ts` — never
-// on the Memories application's share dialogs, whose uploader (WRITE_ONLY) variant has no meaning here: the backend
-// refuses a WRITE_ONLY link on a folder (`illegal_scope`), so no such option is offered.
+// The platform's share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root, ADR 0080 decisions 6 and
+// 12): a member lists the folder's links, makes a new one (READ or READ_WRITE), copies, switches off, re-activates,
+// renews and deletes them. Core owns FOLDER, so this is core's own dialog, built only on `./manageShares.ts` and
+// `./shareLink.ts` — never on the Memories application's share dialogs, whose uploader (WRITE_ONLY) variant has no
+// meaning here: the backend refuses a WRITE_ONLY link on a folder (`illegal_scope`), so no such option is offered.
 //
 // What a READ_WRITE link lets a guest do below a folder is the role matrix (docs/apps/memories.md): add folders, move
 // and rename between them (core), and contribute photos to any Memory or chapter below (Memories) — never upload into

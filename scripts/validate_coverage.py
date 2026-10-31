@@ -15,8 +15,8 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
                Playwright setup file (*.setup.ts) is a test file too; which criterion its test carries is
                `validate_stack_criterion_tags.py`'s
 
-`http` is NOT a coverage surface (ADR 0040): the `.http` files remain IntelliJ dev tooling but run in
-no CI job, so they make no coverage claim — the same behaviour is proven by the backend slice tests.
+`http` is NOT a coverage surface (ADR 0040): the hand-fired `.http` requests ran in no CI job, so they made no
+coverage claim, and they are deleted — the same behaviour is proven by the backend slice tests.
 
 Class-scoped resolution: a "ClassName.method" ref is checked against the test file whose stem is
 ClassName, not a flat set of every method name on the surface — so a ref pointing at the wrong class
@@ -616,7 +616,7 @@ def rel(p: pathlib.Path) -> str:
 
 WEB_TEST_RE = re.compile(r"\.(test|spec)\.(ts|tsx|js|jsx)$")
 # Lane L1's Playwright projects: the scenarios (*.spec.ts) and the setup project's file (*.setup.ts), which is a test
-# like any other there — first run is the scenario, not a fixture (ADR 0090 answer 4).
+# like any other there — first run is the scenario, not a fixture (ADR 0090 decision 7).
 TEST_FILE_RE = {"stack": re.compile(r"\.(spec|setup)\.ts$")}
 
 

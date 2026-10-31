@@ -121,10 +121,10 @@ describe('SpaceTrashDialog', () => {
     expect(wrapper.text()).toContain(t('node.trash.empty'))
   })
 
-  // Changed deliberately in cr-node-key-hierarchy 5b.5 (inbox #357): this used to assert only that the row is filtered
-  // out locally. The list is now read again once the host has reloaded the tree — a descendant left in the trash (its
-  // name was freed by an earlier delete) becomes a root of its own, and its name opens only under the parent the
-  // reloaded tree holds — so the order is part of the contract: restore → `restored` → host's tree → re-read.
+  // uc.memory.delete-node:space-trash-lists-deleted-subtree-roots: the row is not only filtered out locally; the list
+  // is read again once the host has reloaded the tree — a descendant left in the trash (its name was freed by an
+  // earlier delete) becomes a root of its own, and its name opens only under the parent the reloaded tree holds — so
+  // the order is part of the contract: restore → `restored` → host's tree → re-read.
   it('restores a row, asks the host to refetch the tree, and re-reads the list against the RELOADED tree', async () => {
     vi.mocked(listTrash).mockResolvedValue([ROW])
     const wrapper = mountDialog()

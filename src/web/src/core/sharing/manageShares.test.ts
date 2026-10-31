@@ -1,7 +1,7 @@
-// The platform's share mint (cr-node-key-hierarchy 5b.2), driven without any application: a READ / READ_WRITE share of
-// a node carries the wrap of its key and the mandatory recovery copy, and a WRITE_ONLY role is reachable only with the
-// drop half an application hands in. The Memories suite (`features/memories/share.test.ts`) drives the same mint through
-// its `createShare` / `reissueShare`, the drop key included.
+// The platform's share mint (uc.sharing.share-public-viewer:create-public-share), driven without any application: a
+// READ / READ_WRITE share of a node carries the wrap of its key and the mandatory recovery copy, and a WRITE_ONLY role
+// is reachable only with the drop half an application hands in. The Memories suite (`features/memories/share.test.ts`)
+// drives the same mint through its `createShare` / `reissueShare`, the drop key included.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ sharesApi: vi.fn() }))

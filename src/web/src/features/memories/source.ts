@@ -404,8 +404,8 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
 /**
  * A share guest's source over its link (`access`, a getter: a re-resolve replaces the head). `rootId` is the share root
  * (the tree's): an upload into it names no target node, as every upload of a link always did; one into a Memory or
- * chapter below names that node (5a.5), sealed under ITS key from the chain — the server then creates the guest's own
- * bucket there (`ensurePrimaryBucket` for `share:<identity>`).
+ * chapter below names that node (ADR 0080 decision 6), sealed under ITS key from the chain — the server then creates
+ * the guest's own bucket there (`ensurePrimaryBucket` for `share:<identity>`).
  *
  * Reads for `READ` and `READ_WRITE`; the upload and the delete of its own media for `READ_WRITE` only (see the header).
  */

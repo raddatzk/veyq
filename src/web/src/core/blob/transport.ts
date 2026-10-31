@@ -387,7 +387,7 @@ export function makeChunkProvider(
         frame = await readScheduler.getChunk(all[index], { issuedAt })
       }
       // AAD trap (load-bearing): `total` is the WHOLE blob's chunkCount, never the streamed range subset —
-      // openFrame binds `index‖total` (v1.ts), so a subset `total` fails every open. See the CR Slice-2 §5b.
+      // openFrame binds `index‖total` (v1.ts), so a subset `total` fails every open. (ADR 0047).
       // Opened in core's frame worker as a run of one frame at its own index (inbox #536).
       return openFrameRunOff(blobKey, ref.chunkCount, index, [frame])
     },

@@ -68,11 +68,11 @@ const props = defineProps<{
   /** Whether the shown item carries a delete (`delete` event; the parent trashes or purges it, Delete key included). */
   canDelete: (item: MediaItem) => boolean
   previewLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier
-  originalLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback and the zoom
+  originalLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the whole-blob video fallback and the zoom
   metaResolver: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier
   // the original's sealed blob meta — its type, file name, modified time (inbox #397)
   blobMetaResolver: (item: MediaItem) => OpenedBlobMeta | null
-  // Slice 2 (ADR 0047): the per-item key-free chunk source over the ORIGINAL, for SW range playback and the streamed
+  // ADR 0047: the per-item key-free chunk source over the ORIGINAL, for SW range playback and the streamed
   // download (inbox #371 S4) — the member's presigns via the media API, the guest's via the share presign, so the SW
   // never learns the route.
   videoChunkProvider: (item: MediaItem) => ChunkProvider
@@ -99,7 +99,7 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const toast = useToast()
 
-// Byte/metadata access through the source's loaders (see the header). The whole decrypted original is only the Slice-1
+// Byte/metadata access through the source's loaders (see the header). The whole decrypted original is only the whole-blob
 // video fallback (no usable SW); the video and the download stream the ORIGINAL through the chunk provider.
 const previewOf = (it: MediaItem) => props.previewLoader(it)
 const originalOf = (it: MediaItem) => props.originalLoader(it)
@@ -111,10 +111,10 @@ const exifOf = (it: MediaItem): Promise<MediaExif | null> => (props.exifLoader ?
 const current = ref(props.startIndex)
 // The current item's decrypted preview tier as an object URL — minted + revoked (on switch/unmount) by the primitive.
 const { url: previewUrl, set: setPreview, clear: clearPreview } = useObjectUrl()
-// A video's decrypted original, played from a typed blob URL — the Slice-1 FALLBACK path (no/stale SW). Its own
+// A video's decrypted original, played from a typed blob URL — the whole-blob FALLBACK path (no/stale SW). Its own
 // object-URL owner (revoked on switch/unmount).
 const { url: videoUrl, set: setVideo, clear: clearVideo } = useObjectUrl()
-// Slice 2 (ADR 0047): the active SW playback. `videoSwUrl` is the synthetic `/__media/<handle>` src (NOT a blob
+// ADR 0047: the active SW playback. `videoSwUrl` is the synthetic `/__media/<handle>` src (NOT a blob
 // URL — never an object-URL owner); `videoHandle` is kept so we can revoke the playback on switch/close/unmount.
 const videoSwUrl = ref<string | null>(null)
 const videoHandle = ref<string | null>(null)
@@ -597,7 +597,7 @@ function stopSwPlayback() {
 }
 
 // Click-to-play (ADR 0047), so autoplay with sound is allowed (the user gesture drove it). Two paths:
-//  - **Slice 2 (preferred):** register a key-free playback with the controlling Service Worker and set the video
+//  - **The range shim (preferred):** register a key-free playback with the controlling Service Worker and set the video
 //    src to a synthetic `/__media/<handle>`; the SW streams byte ranges, pulling decrypted chunks from the page's
 //    ChunkProvider on demand. Keys never leave the page.
 //  - **Slice 1 fallback (retained):** no SW, a stale/mismatched SW, or a registration failure → fetch + decrypt
@@ -625,7 +625,7 @@ async function playVideo() {
       videoHandle.value = handle
       videoSwUrl.value = url // the <video> src; the SW answers its range requests
     } else {
-      const bytes = await originalOf(target) // Slice-1 fallback: no usable SW
+      const bytes = await originalOf(target) // whole-blob fallback: no usable SW
       if (movedOn(target)) return // navigated away (or blocked) mid-decrypt — drop it
       setVideo(new Blob([bytes as BlobPart], { type }))
     }
@@ -799,7 +799,7 @@ onBeforeUnmount(() => {
           </template>
           <p v-else-if="error" class="media-lightbox-error">{{ t('media.loadError') }}</p>
           <!-- Video playback (#104, ADR 0047): once the user clicks play, the video plays either from the SW range
-               path (`videoSwUrl` = /__media/<handle>, Slice 2) or, as a fallback, a decrypted typed blob URL
+               path (`videoSwUrl` = /__media/<handle>, ADR 0047) or, as a fallback, a decrypted typed blob URL
                (`videoUrl`, Slice 1). Before that, a video shows its poster (the PREVIEW tier) + a play affordance. -->
           <video v-else-if="videoSwUrl || videoUrl" :src="videoSwUrl ?? videoUrl ?? undefined" controls autoplay playsinline />
           <div v-else-if="videoType && previewUrl" class="media-lightbox-video-poster">

@@ -18,10 +18,11 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * The principal-free node operations confined to a [SubtreeBoundary] (5a.2 of cr-node-key-hierarchy; ADR 0080
- * Decisions 6, 9, 10): the node acted on strictly inside, a parent or destination inside (the root included), the
- * boundary's root never moved, renamed or deleted. No endpoint passes a boundary yet — the share guest operations will
- * — so the operations are driven directly. Every refusal writes nothing; the races are `SubtreeBoundaryRaceCoreSliceTest`.
+ * The principal-free node operations confined to a [SubtreeBoundary] (ADR 0080 Decisions 6, 9, 10;
+ * uc.sharing.share-contributor:guest-tree-refusals): the node acted on strictly inside, a parent or destination inside
+ * (the root included), the boundary's root never moved, renamed or deleted. The share guest operations pass one
+ * (`ShareNodesHandler`); here the operations are driven directly. Every refusal writes nothing; the races are
+ * `SubtreeBoundaryRaceCoreSliceTest`.
  */
 @QuarkusTest
 class SubtreeBoundaryCoreSliceTest {

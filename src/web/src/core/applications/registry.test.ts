@@ -11,7 +11,8 @@ const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
 
 describe('registry: kinds', () => {
-  // FOLDER is a share root since cr-node-key-hierarchy 5b.3 (core's own FolderShareDialog; ADR 0080 decision 12).
+  // FOLDER is a share root (core's own FolderShareDialog; ADR 0080 decision 6,
+  // uc.sharing.share-public-viewer:folder-share-root).
   it('holds only the platform kind (FOLDER, shareable) until an application registers its own', () => {
     const r = createRegistry()
     expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, icon: 'folder', shareable: true })

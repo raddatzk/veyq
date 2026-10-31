@@ -1,7 +1,7 @@
-// The kind-independent tree half of a public share (ADR 0080 Decisions 2 and 9; cr-node-key-hierarchy 5b.2): the root's
-// key opened from the share's own wrap, and every descendant's key and name opened top-down through the chain. Nothing
-// here reads what a node IS — a walk opens a folder, a Memory or anything an application registers the same way, so a
-// body of any kind (the platform's own folder body in 5b.4, the Memories body today) builds on it.
+// The kind-independent tree half of a public share (ADR 0080 Decisions 2 and 9): the root's key opened from the share's
+// own wrap, and every descendant's key and name opened top-down through the chain. Nothing here reads what a node IS —
+// a walk opens a folder, a Memory or anything an application registers the same way, so a body of any kind (the
+// platform's own folder body, the Memories body) builds on it.
 //
 // What stays out: the WRITE_ONLY drop key (an uploader link carries no wrap and opens nothing here — ADR 0031 point 7;
 // the application that registered the drop flow opens its drop public key) and anything attached to the nodes (the

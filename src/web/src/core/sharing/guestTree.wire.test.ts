@@ -1,8 +1,8 @@
-// A guest's tree operations on the wire (cr-node-key-hierarchy 5b.4a, ADR 0080 decisions 2, 3, 6 and 10): recorded at
-// `fetch` — the JSON and headers the real generated client sends, no mock of the API client. A create seals under the
-// PARENT's key (never the root's when the parent is below it, never `K_SC`) at the parent's served epoch and revision 0;
-// a placement re-wraps under the DESTINATION's key at served+1 and states no epoch; one `stale_placement` retry; a
-// readable sibling's name refuses before sending; every refusal maps by its code.
+// A guest's tree operations on the wire (uc.sharing.share-contributor:folder-guest-tree-operations, ADR 0080 decisions
+// 2, 3, 6 and 10): recorded at `fetch` — the JSON and headers the real generated client sends, no mock of the API
+// client. A create seals under the PARENT's key (never the root's when the parent is below it, never `K_SC`) at the
+// parent's served epoch and revision 0; a placement re-wraps under the DESTINATION's key at served+1 and states no
+// epoch; one `stale_placement` retry; a readable sibling's name refuses before sending; every refusal maps by its code.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'

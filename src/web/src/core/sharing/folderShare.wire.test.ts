@@ -1,8 +1,9 @@
-// A folder share on the wire (cr-node-key-hierarchy 5b.3, ADR 0080 decisions 1 and 12): the key the shell hands core's
-// folder dialog is the folder's own, opened through the key chain, and the mint request — recorded at `fetch`, the JSON
-// the real generated client serializes, no mock of the API client — carries the recovery copy (`sealedShareKey` +
-// `sealedShareKeyEpoch`), a `wrap` that opens under `K_share` to THAT folder key (not `K_SC`, not the parent's), and
-// the folder's name sealed under `K_share`. The folder sits one level down so the chain, not the scope key, yields it.
+// A folder share on the wire (uc.sharing.share-public-viewer:folder-share-root, ADR 0080 decisions 1 and 12): the key
+// the shell hands core's folder dialog is the folder's own, opened through the key chain, and the mint request —
+// recorded at `fetch`, the JSON the real generated client serializes, no mock of the API client — carries the recovery
+// copy (`sealedShareKey` + `sealedShareKeyEpoch`), a `wrap` that opens under `K_share` to THAT folder key (not `K_SC`,
+// not the parent's), and the folder's name sealed under `K_share`. The folder sits one level down so the chain, not the
+// scope key, yields it.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'

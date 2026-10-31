@@ -316,7 +316,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(dialogs.map((s) => s.text())).toEqual(['day1|viewer', 'day1|uploader'])
     expect(dialogs.map((s) => s.attributes('data-name'))).toEqual(['Day1', 'Day1'])
     expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
-    // the node's kind travels with it, so the application's dialog can say "chapter" (5b.5)
+    // the node's kind travels with it, so the application's dialog can say "chapter"
     expect(dialogs.map((s) => s.attributes('data-kind'))).toEqual(['CHAPTER', 'CHAPTER'])
     // the offer the detail's rights function made reaches the dialog as a prop (the host never reads it again)
     expect(dialogs[0].attributes('data-contribute')).toBe('true')
@@ -418,9 +418,9 @@ describe('MemoryHomeView over the real registry', () => {
   })
 })
 
-// cr-node-key-hierarchy 5b.3: a FOLDER is shareable (core's descriptor), so its level view offers the share button
-// exactly as a Memory's detail does — descriptor AND right — and the share opens FOLDER's share dialog (core's,
-// pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
+// uc.sharing.share-public-viewer:folder-share-root: a FOLDER is shareable (core's descriptor), so its level view offers
+// the share button exactly as a Memory's detail does — descriptor AND right — and the share opens FOLDER's share dialog
+// (core's, pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
 describe('MemoryHomeView sharing a folder', () => {
   const shareButton = (w: Mounted) => w.find(`.veyq-node-header button[aria-label="${t('share.share')}"]`)
 

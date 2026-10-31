@@ -3,7 +3,7 @@
 // in, connect the bundled store and check it, publish who runs the instance (each empty value not stated), create the
 // first tenant and copy its invite link — then open that link as the invitee would, and see the provider
 // identification on the tenant's sign-in page. The labels are admin-web's own (src/admin-web/src/i18n/index.ts, en), so a renamed button is
-// a red run here and a stale Run page at the same time. It is the scenario, not a fixture (ADR 0090 answer 4): it
+// a red run here and a stale Run page at the same time. It is the scenario, not a fixture (ADR 0090 decision 7): it
 // runs once per instance, one browser context throughout, and hands what later scenarios need — the owner's
 // credentials and Secret Key, the tenant's domain and invite link — to them in `instance.json` in the run directory,
 // never in the repository. What it types that the product promises never to send — the password — is recorded for the

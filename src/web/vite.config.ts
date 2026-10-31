@@ -157,10 +157,10 @@ function pdfjsAssetsPlugin(): Plugin {
   }
 }
 
-// cr-inline-video-playback Slice 2 (ADR 0047): serve the media Service Worker at a stable root `/sw.js` in DEV
+// ADR 0047: serve the media Service Worker at a stable root `/sw.js` in DEV
 // too, so dev == prod (register.ts always registers `/sw.js`). Vite transforms the module on the fly; the
 // `Service-Worker-Allowed: /` header lets a script served from `/sw.js` claim the whole origin (needed to
-// intercept `/__media/*`). Best-effort dev convenience — the SW path always has the Slice-1 fallback if a dev
+// intercept `/__media/*`). Best-effort dev convenience — the SW path always has the full-blob fallback if a dev
 // browser can't register it. NOTE: not yet live-verified end-to-end (rides #102 like the rest of the SW slice).
 function mediaSwDevPlugin(): Plugin {
   return {
@@ -271,7 +271,7 @@ export default defineConfig(({ command }) => {
       // reach the browser that receives their code. Vite writes them out instead, at a stable, unhashed path.
       license: { fileName: LICENSE_FILE },
       rollupOptions: {
-        // Two entries: the app (from index.html) and the media Service Worker (cr-inline-video-playback Slice 2).
+        // Two entries: the app (from index.html) and the media Service Worker (ADR 0047).
         // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`);
         // the app keeps its hashed assets. `chunk.name === 'media-sw'` → `sw.js` at the dist root; all else keeps
         // the default hashed `assets/` layout.

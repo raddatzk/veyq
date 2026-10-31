@@ -1,4 +1,4 @@
-// cr-inline-video-playback Slice 2 (ADR 0047) — PURE range↔chunk arithmetic for the media Service Worker.
+// ADR 0047 — PURE range↔chunk arithmetic for the media Service Worker.
 //
 // This file holds NO service-worker globals and NO key material: it is the maths that turns the <video> demuxer's
 // plaintext byte-range request into the covering ciphertext chunk indices and back into the exact window of bytes

@@ -42,10 +42,10 @@ export type BucketItem = {
  * addressed by the node the caller opened and the row's bucket. Operator-blind — the server relays ciphertext.
  *
  * A READ_WRITE guest's name is sealed under the key of its link's ROOT, which need not be this node: a folder link's
- * guest who uploads into a Memory below, a Memory link's guest into a chapter (5a.5). So a contributor primary also
- * tries `ancestorKeys` — the keys of this node's ancestors, nearest first, as a member holds them through the chain
- * (`contentKeyChain`) — through core's {@link openIdentityName}, which every application reads a guest's name with. A
- * sub-bucket's name and a WRITE_ONLY guest's (under its own `K_up`) open under this node's only.
+ * guest who uploads into a Memory below, a Memory link's guest into a chapter (ADR 0080 decision 6). So a contributor
+ * primary also tries `ancestorKeys` — the keys of this node's ancestors, nearest first, as a member holds them through
+ * the chain (`contentKeyChain`) — through core's {@link openIdentityName}, which every application reads a guest's name
+ * with. A sub-bucket's name and a WRITE_ONLY guest's (under its own `K_up`) open under this node's only.
  */
 export function openBucketName(
   scopeId: string, nodeId: string, memoryKey: Uint8Array, bucket: BucketItem, ancestorKeys: readonly Uint8Array[] = [],

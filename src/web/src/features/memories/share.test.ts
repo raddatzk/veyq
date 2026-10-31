@@ -846,7 +846,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
 
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 
-describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, ADR 0047)', () => {
+describe('shareChunkProvider (the SW range seam for the anonymous viewer, ADR 0047)', () => {
   // A HARDCODED blob-key context (== media.ts blobKeyContext): the viewer binds the wrap to the listed media + role.
   const BLOB = { blobId: '5c09e000-0000-4000-8000-00000000bb01', ownerId: MEDIA_1, role: 'ORIGINAL' as const }
 
@@ -961,7 +961,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
   })
 })
 
-describe('openSharedMemory on a folder link (cr-node-key-hierarchy 5b.4b)', () => {
+describe('openSharedMemory on a folder link (uc.sharing.share-public-viewer:folder-share-root)', () => {
   const FOLDER = '5c09e000-0000-4000-8000-0000000f0001'
   const SIBLING = '5c09e000-0000-4000-8000-0000000f0002'
   const MEDIA_3 = '5c09e000-0000-4000-8000-00000000ae03'

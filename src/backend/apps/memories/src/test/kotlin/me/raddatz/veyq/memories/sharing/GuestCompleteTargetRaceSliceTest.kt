@@ -34,10 +34,11 @@ import me.raddatz.veyq.core.sharing.SharingStore
 
 /**
  * A guest's completion into a node below its share's root decides that target again in the attach's own transaction,
- * under the scope lock and then the share row's (`ShareGuestGate.admittedInto`; cr-node-key-hierarchy 5a.5, the
- * order of `ShareNodesHandler`). Each race holds a member's or a curator's write uncommitted ([whileUncommitted]) and
- * runs the guest's completion in that window: its gate and its target check — plain reads before any lock — still see
- * the old state, so only the decision under the locks stands between it and a medium where the link no longer reaches.
+ * under the scope lock and then the share row's (`ShareGuestGate.admittedInto`;
+ * uc.sharing.share-contributor:rights-inherit-below-a-folder, the order of `ShareNodesHandler`). Each race holds a
+ * member's or a curator's write uncommitted ([whileUncommitted]) and runs the guest's completion in that window: its
+ * gate and its target check — plain reads before any lock — still see the old state, so only the decision under the
+ * locks stands between it and a medium where the link no longer reaches.
  *
  *  1. A member trashes the target Memory: the item is `upload_not_found`, no medium in the trash.
  *  2. A member moves the target Memory out of the shared folder: the item is `upload_not_found`, no medium outside the

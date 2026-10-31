@@ -27,10 +27,10 @@ import org.junit.jupiter.api.Test
 
 /**
  * A guest's tree operation decides everything under the scope lock and then the share row's, in that order
- * (`ShareNodesHandler`'s lock order; sub-slice 5a.3 of cr-node-key-hierarchy). Each race holds a member's or a curator's
- * write uncommitted ([whileUncommitted]) and runs the guest's operation in that window, whose gate — read before any
- * lock — still sees the old state: only the decisions under the locks stand between it and a wrong write. Exactly one
- * outcome each time, and a control where the guest's operation lands alone.
+ * (`ShareNodesHandler`'s lock order; uc.sharing.share-contributor:folder-guest-tree-operations). Each race holds a
+ * member's or a curator's write uncommitted ([whileUncommitted]) and runs the guest's operation in that window, whose
+ * gate — read before any lock — still sees the old state: only the decisions under the locks stand between it and a
+ * wrong write. Exactly one outcome each time, and a control where the guest's operation lands alone.
  *
  *  1. A member's move of the destination out of the subtree: the guest's move into it is `illegal_structure`, nothing
  *     lands outside the share's subtree.

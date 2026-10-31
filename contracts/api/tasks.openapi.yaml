@@ -14,8 +14,9 @@ info:
 
     **Envelope split.** Cleartext (server-visible — already-known routing + bookkeeping): `jobId`, `scopeId`,
     `capabilityTag` (an **opaque** token from the public registry in `contracts/tasks/tags/`, not a plaintext
-    label), `resourceRef`, `status`, `leaseExpiresAt`, `attempts`. **Sealed body** (under a `K_SC`-derived key,
-    context `job`): the task type + parameters — only a scope-key-holding worker unseals it. The residual leak
+    label), `resourceRef`, `status`, `leaseExpiresAt`, `attempts`. **Sealed body** (under a `K_SC`-derived key):
+    the task type + parameters — only a scope-key-holding worker unseals it. No job carries one yet: the first
+    that seals a body adds its purpose to the typed seal union (ADR 0072). The residual leak
     is **correlation-bounded, not label-bounded** (ADR 0021; self-hosted moot) — documented, not hidden.
 
     **First consumer — `grant-delivery` (ADR 0020, ADR 0024 Decision 6).** Every TENANT/GROUP membership is born
@@ -114,8 +115,8 @@ paths:
       summary: Enqueue a client-originated job onto a scope the caller belongs to.
       description: >
         Creates a `pending` job in `scopeId` (the caller must be a member). The body (`type` + params) is
-        **sealed client-side** under a `K_SC`-derived key (context `job`) and handed over as opaque
-        `sealedBody`; the server stores it verbatim and never unseals it. Server-originated jobs — every tag the
+        **sealed client-side** under a `K_SC`-derived key (its purpose added by the first such job, ADR 0072)
+        and handed over as opaque `sealedBody`; the server stores it verbatim and never unseals it. Server-originated jobs — every tag the
         registry (`contracts/tasks/tags/v1.json`) marks `server-structural` or `server-event`, today
         `grant-delivery` and `scope-rotation` — are **not** created here (`400 invalid_request`, nothing written);
         the backend originates those itself, and this is the front door for content-processing jobs a client/agent
@@ -497,7 +498,8 @@ components:
         sealedBody:
           type: [string, "null"]
           description: >
-            The sealed task body (`type` + params) under a `K_SC`-derived key, context `job` — opaque base64.
+            The sealed task body (`type` + params) under a `K_SC`-derived key — opaque base64. No job carries
+            one yet; the first that does adds its seal purpose (ADR 0072).
             Absent for server-structural jobs (like `grant-delivery`) whose task is fully described by the
             cleartext envelope + the resolved target.
           contentEncoding: base64
@@ -590,7 +592,9 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
         sealedBody:
           type: [string, "null"]
-          description: The sealed task body under a `K_SC`-derived key, context `job` — opaque base64, stored verbatim.
+          description: >
+            The sealed task body under a `K_SC`-derived key — opaque base64, stored verbatim (no job carries one
+            yet, ADR 0072).
           contentEncoding: base64
           maxLength: 65536
           example: AQ==

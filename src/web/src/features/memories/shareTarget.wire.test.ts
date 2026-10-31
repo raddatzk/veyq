@@ -1,7 +1,8 @@
-// A guest's upload into a node BELOW its link's root, on the wire (cr-node-key-hierarchy 5b.4b, 5a.5): recorded at
-// `fetch` — the JSON the real generated clients send, no mock of either API client. An upload with a target names it
-// on the start, every window and the completion (one target per request); an upload without one sends the bodies a
-// root-level upload always sent — no `nodeId` key at all.
+// A guest's upload into a node BELOW its link's root, on the wire
+// (uc.sharing.share-contributor:rights-inherit-below-a-folder): recorded at `fetch` — the JSON the real generated
+// clients send, no mock of either API client. An upload with a target names it on the start, every window and the
+// completion (one target per request); an upload without one sends the bodies a root-level upload always sent — no
+// `nodeId` key at all.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { addSharePhoto } from './share'

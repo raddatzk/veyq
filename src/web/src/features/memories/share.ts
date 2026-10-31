@@ -63,10 +63,10 @@ import type { ShareMedia, ShareMediaListing } from '../../api/generated/share-me
 import type { MediaDerivativeKind } from '../../api/generated/media'
 
 // The seals and the share management are the platform's (`core/sharing/manageShares.ts`, `core/sharing/shareTree.ts`;
-// lifted in cr-node-key-hierarchy 5b.2) and re-exported here, so this application's dialogs, suites and their
-// `vi.mock('../share')` keep the one module they import. What stays is what involves the drop key or a guest: the
-// WRITE_ONLY half of a mint and a re-issue (the drop key, ADR 0031 point 7), the uploader identity (a contributor's is
-// the platform's `createGuestIdentity`, `core/sharing/guestIdentity.ts`), the upload transport, and the viewer.
+// ADR 0079) and re-exported here, so this application's dialogs, suites and their `vi.mock('../share')`
+// keep the one module they import. What stays is what involves the drop key or a guest: the WRITE_ONLY half of a mint
+// and a re-issue (the drop key, ADR 0031 point 7), the uploader identity (a contributor's is the platform's
+// `createGuestIdentity`, `core/sharing/guestIdentity.ts`), the upload transport, and the viewer.
 export {
   newShareId,
   hasLocaleText,
@@ -223,8 +223,9 @@ export function sessionSealKey(session: ContributorSession, access: ShareAccess)
 function shareUploadTransport(
   shareId: string, contributorToken: string, nodeEpoch: number, pwToken?: string, nodeId?: string,
 ): MediaUploadTransport {
-  // The target (5a.5): a Memory or chapter below the share root, named on every start, window and completion — one target
-  // per request. Absent for the root itself, so a root-level upload sends exactly what it always did.
+  // The target (ADR 0080 decision 6): a Memory or chapter below the share root, named on every start, window and
+  // completion — one target per request. Absent for the root itself, so a root-level upload sends exactly what it
+  // always did.
   const target = nodeId === undefined ? {} : { nodeId }
   // A contributor uploads media only — never a cover: ORIGINAL/THUMBNAIL/PREVIEW is the whole role set, and the server
   // refuses any other role from a guest (`400 invalid_request`, Memories' `admitsGuestRole`).
@@ -265,9 +266,9 @@ function shareUploadTransport(
  * via the share-scoped endpoints — the exact same operator-blind pipeline as the curator's `addMedia`, only the
  * transport is share-gated. Returns the new blob + media ids.
  *
- * `nodeId` targets a Memory or chapter BELOW the share root (a folder link's Memory, a Memory link's chapter — 5a.5,
- * ADR 0080 Decision 6); `sealKey` is then that node's key from the chain, never the root's. Omitted, the upload lands on
- * the root, as every upload did before.
+ * `nodeId` targets a Memory or chapter BELOW the share root (a folder link's Memory, a Memory link's chapter — ADR 0080
+ * Decision 6); `sealKey` is then that node's key from the chain, never the root's. Omitted, the upload lands on the
+ * root, as every upload did before.
  */
 export async function addSharePhoto(
   session: ContributorSession & {
@@ -496,7 +497,7 @@ async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwTok
 }
 
 /**
- * A {@link ChunkProvider} for the anonymous share viewer — the Slice-2 SW range seam over the gated share-scoped
+ * A {@link ChunkProvider} for the anonymous share viewer — the SW range seam over the gated share-scoped
  * presign (`resolveShareBlob`: `shareId` + guest `pwToken`, whole-blob only). Same `openFrame` core as the authed
  * `chunkProvider`; only the presign differs, so the SW never learns which route served the bytes (ADR 0047).
  */

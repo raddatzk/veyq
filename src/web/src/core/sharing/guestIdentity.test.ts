@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-// A guest's identity on a READ_WRITE link, the platform's half (cr-node-key-hierarchy 5b.4a): the name sealed under the
-// shared ROOT's key bound to (scope, share, identity), the link proven by its fragment key (ADR 0076), and the session
-// kept on the device under the one key both share bodies read.
+// A guest's identity on a READ_WRITE link, the platform's half
+// (uc.sharing.share-contributor:sealed-name-anonymous-identity): the name sealed under the shared ROOT's key bound to
+// (scope, share, identity), the link proven by its fragment key (ADR 0076), and the session kept on the device under
+// the one key both share bodies read.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ publicSharesApi: vi.fn() }))

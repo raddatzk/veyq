@@ -37,9 +37,9 @@ const contributorRow = (sealedName: string) =>
 const subRow = (sealedName: string, bucketId = BUCKET) =>
   ({ bucketId, ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, sealedName })
 
-// cr-node-key-hierarchy 5b.4b: a guest of a link rooted ABOVE the node names itself under the ROOT's key — a folder
-// link's guest who uploads into a Memory below the folder. The member opens the Memory's buckets holding the Memory's
-// key and, through the chain, its ancestors'.
+// uc.memory.buckets:guest-named-above-the-node: a guest of a link rooted ABOVE the node names itself under the ROOT's
+// key — a folder link's guest who uploads into a Memory below the folder. The member opens the Memory's buckets holding
+// the Memory's key and, through the chain, its ancestors'.
 describe('openBucketName — a guest named under an ancestor\'s key', () => {
   const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
   const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>

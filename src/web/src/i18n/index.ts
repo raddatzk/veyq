@@ -87,9 +87,9 @@ const en = {
     operator: 'The person who runs this server has taken it offline for the moment. Once they bring it back, everything is exactly where you left it.',
   },
   incompatible: {
-    title: 'This app and this server don’t match',
-    updateApp: 'Your app is older than this server. Update the app to a newer version to continue.',
-    updateServer: 'This server is older than your app. The person who runs it needs to update the server before you can continue.',
+    title: 'This page and this server don’t match',
+    updateApp: 'This page is older than this server. Reload the page to get the current version and continue.',
+    updateServer: 'This server is older than this page. The person who runs it needs to update the server before you can continue.',
     hint: 'Nothing is wrong with your account or data — this is only a version check to avoid errors.',
   },
   members: {
@@ -1997,10 +1997,11 @@ const en = {
     deleteOwnAccept: 'Delete photo',
     // after a member renamed a shared node (core's FolderNameDialog → resealShareNames, ADR 0080 decision 14)
     nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
-    // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
-    // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, add photos to the
-    // Memories below it (5a.5, docs/apps/memories.md) and upload or replace files (docs/apps/depot.md). Core serves every
-    // application's nodes, so these strings name none of them; a replaced file is gone (no versioning, inbox #383).
+    // core's folder share dialog and folder page (uc.sharing.share-public-viewer:folder-share-root): only where a Memory
+    // sentence would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, add photos
+    // to the Memories below it (ADR 0080 decision 6, docs/apps/memories.md) and upload or replace files
+    // (docs/apps/depot.md). Core serves every application's nodes, so these strings name none of them; a replaced file
+    // is gone (no versioning, inbox #383).
     folder: {
       title: 'Share this folder',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
@@ -2111,9 +2112,9 @@ const de: typeof en = {
     operator: 'Wer diesen Server betreibt, hat ihn vorübergehend offline genommen. Sobald er wieder da ist, ist alles genau so, wie du es verlassen hast.',
   },
   incompatible: {
-    title: 'Diese App und dieser Server passen nicht zusammen',
-    updateApp: 'Deine App ist älter als dieser Server. Aktualisiere die App auf eine neuere Version, um fortzufahren.',
-    updateServer: 'Dieser Server ist älter als deine App. Die Person, die ihn betreibt, muss den Server aktualisieren, bevor du fortfahren kannst.',
+    title: 'Diese Seite und dieser Server passen nicht zusammen',
+    updateApp: 'Diese Seite ist älter als dieser Server. Lade die Seite neu, um die aktuelle Version zu bekommen und fortzufahren.',
+    updateServer: 'Dieser Server ist älter als diese Seite. Die Person, die ihn betreibt, muss den Server aktualisieren, bevor du fortfahren kannst.',
     hint: 'Mit deinem Konto oder deinen Daten ist nichts falsch — das ist nur eine Versionsprüfung, um Fehler zu vermeiden.',
   },
   members: {

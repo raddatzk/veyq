@@ -1,9 +1,9 @@
 // The platform's share management (uc.sharing.share-public-viewer curator side, cr-0100/0104/0115/0116/0118/0119, ADR
-// 0029/0036/0037/0072/0075/0076; lifted out of the Memories application in cr-node-key-hierarchy 5b.2). A member turns
-// ONE node of their scope into an anonymous, revocable link `/s/{shareId}#k=<K_share>`: the share adds an INDEPENDENT
-// second wrap of that node's key — sealed under `K_share` (ADR 0012) — whose secret `K_share` rides the URL **fragment**
-// (ADR 0015) and never reaches the server; the node's name is re-sealed under `K_share` so a viewer with only the
-// fragment key can show the title without `K_SC`.
+// 0029/0036/0037/0072/0075/0076; the platform's, not an application's, ADR 0079). A member turns ONE node of their
+// scope into an anonymous, revocable link `/s/{shareId}#k=<K_share>`: the share adds an INDEPENDENT second wrap of that
+// node's key — sealed under `K_share` (ADR 0012) — whose secret `K_share` rides the URL **fragment** (ADR 0015) and
+// never reaches the server; the node's name is re-sealed under `K_share` so a viewer with only the fragment key can
+// show the title without `K_SC`.
 //
 // Everything here is kind-independent: mint (READ / READ_WRITE, with the mandatory recovery copy), list, revoke,
 // re-activate, delete, re-issue, edit, reading a managed share's fields back through its recovery copy, and re-sealing

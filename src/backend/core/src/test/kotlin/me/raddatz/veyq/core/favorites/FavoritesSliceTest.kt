@@ -90,7 +90,7 @@ class FavoritesSliceTest {
     @Test
     fun theCapIsTheContractsAndNotOneCharacterMore() {
         val (userId, scopeId) = seedMember()
-        // 65 536 base64 chars is the last blob that fits (ADR 0068 § The ceiling); the column is MEDIUMTEXT.
+        // 65 536 base64 chars is the last blob that fits (ADR 0068 §4); the column is MEDIUMTEXT.
         val atCap = "A".repeat(65_536)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$atCap"}""")
             .`when`().put("/api/scopes/$scopeId/favorites").then().statusCode(204)

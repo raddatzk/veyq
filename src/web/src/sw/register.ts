@@ -1,10 +1,10 @@
-// cr-inline-video-playback Slice 2 (ADR 0047) — main-thread Service-Worker registration + per-playback wiring.
+// ADR 0047 — main-thread Service-Worker registration + per-playback wiring.
 //
 // This is the page side of the key-free delegation: it registers the SW, does the versioned handshake, and for
 // each playback opens a MessagePort whose page end answers the SW's chunk requests by running the given
 // ChunkProvider (presign→openFrame, in the page). Keys and the auth context NEVER cross to the SW — only opaque
 // handles and decrypted plaintext do. If no SW controls the page, or the handshake version mismatches, every
-// entry point resolves to "no SW" so the caller falls back to the Slice-1 full-blob path.
+// entry point resolves to "no SW" so the caller falls back to the full-blob path.
 
 import type { ByteSink } from '../core/blob/stream'
 import {
@@ -30,7 +30,7 @@ let registration: Promise<ServiceWorkerRegistration | null> | undefined
 const active = new Map<string, { channel: MessageChannel; sw: ServiceWorker }>()
 
 /** Register the media SW once, lazily (on first play). Resolves null when SWs are unavailable or registration
- *  fails — the caller then uses the Slice-1 fallback. `updateViaCache:'none'` + the stable `/sw.js` name is what
+ *  fails — the caller then uses the full-blob fallback. `updateViaCache:'none'` + the stable `/sw.js` name is what
  *  makes a redeployed SW detectable. */
 export function ensureMediaSw(): Promise<ServiceWorkerRegistration | null> {
   if (registration) return registration

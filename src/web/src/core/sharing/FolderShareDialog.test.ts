@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// Core's folder share dialog (cr-node-key-hierarchy 5b.3): a member mints a READ or a READ_WRITE link of a folder — never
-// a WRITE_ONLY one, which the backend refuses on a folder — sees the link, and manages the folder's existing links
-// (state badges, revoke, delete). The data layer (`./manageShares`, `./shareLink`) is stubbed so the dialog mounts
-// crypto- and network-free; `folderShare.wire.test.ts` drives the real mint onto the wire.
+// Core's folder share dialog (uc.sharing.share-public-viewer:folder-share-root): a member mints a READ or a READ_WRITE
+// link of a folder — never a WRITE_ONLY one, which the backend refuses on a folder — sees the link, and manages the
+// folder's existing links (state badges, revoke, delete). The data layer (`./manageShares`, `./shareLink`) is stubbed
+// so the dialog mounts crypto- and network-free; `folderShare.wire.test.ts` drives the real mint onto the wire.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 

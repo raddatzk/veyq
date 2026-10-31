@@ -82,6 +82,27 @@ acceptanceCriteria:
         reason: >-
           The real grid at 2,000 items in happy-dom, boxes given by hand. Not yet seen in a browser — the browser pass
           waits for the V1 heavy stage.
+  - id: guest-named-above-the-node
+    text: >-
+      A link guest who uploads into a node below its link's root names itself under the ROOT's key (a folder link's
+      guest uploading into a Memory below the folder, a Memory link's into a chapter), so a member opens that bucket's
+      name with the node's key or an ancestor's, taken through the loaded tree's key chain (ADR 0080 decision 6).
+    coverage:
+      web:
+        unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
+  - id: concurrent-organizing-finishes
+    text: >-
+      Members organizing one Memory at once — a sub-bucket created or deleted, media moved between buckets, a medium
+      trashed — never deadlock: every media writer takes the bucket, then the media, then the node, so two such writes
+      both finish (a forced interleaving per pair, each with a control).
+    coverage:
+      backend:
+        integration:
+          - MediaLockOrderRaceSliceTest.aSubBucketDeleteAndATrashOfItsMediumBothFinish
+          - MediaLockOrderRaceSliceTest.aMoveIntoASubBucketAndThatBucketsDeleteBothFinish
+          - MediaLockOrderRaceSliceTest.aMoveToThePrimaryLocksItBeforeTheNode
+          - MediaLockOrderRaceSliceTest.aSubBucketDeleteLocksThePrimaryBeforeTheNode
+          - MediaLockOrderRaceSliceTest.aSubBucketCreateThatWaitedForTheNodeRunsAgainWhenThePrimaryAppeared
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `sub-bucket-endpoints`,

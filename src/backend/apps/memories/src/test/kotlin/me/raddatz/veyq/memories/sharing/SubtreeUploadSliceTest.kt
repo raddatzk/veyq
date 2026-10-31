@@ -39,9 +39,10 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 
 /**
- * A link's role applies to every node below its root as the application allows it (ADR 0080 decision 6, owner
- * 2026-10-07; cr-node-key-hierarchy 5a.5): a guest's upload names an optional target `nodeId` — on the start, every
- * window and the completion — and the writer, the per-link measure and the completion are picked by THAT node's kind.
+ * A link's role applies to every node below its root as the application allows it (ADR 0080 decision 6;
+ * uc.sharing.share-contributor:rights-inherit-below-a-folder): a guest's upload names an optional target `nodeId` — on
+ * the start, every window and the completion — and the writer, the per-link measure and the completion are picked by
+ * THAT node's kind.
  * A `READ_WRITE` folder link's guest uploads into a Memory or chapter below the folder (never into a folder), a
  * `READ_WRITE` Memory link's guest into a chapter below the Memory; a `WRITE_ONLY` guest holds no key below its root and
  * names nothing but the root. No `nodeId` is the root, as before (the existing share-media suites, unchanged).

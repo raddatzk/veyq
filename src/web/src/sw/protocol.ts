@@ -1,4 +1,4 @@
-// cr-inline-video-playback Slice 2 (ADR 0047) — the page↔Service-Worker wire protocol.
+// ADR 0047 — the page↔Service-Worker wire protocol.
 //
 // Shared by the main-thread register.ts and the worker-side mediaSw.ts. Pure types, constants and one pure
 // predicate: NO globals, NO key material. The SW is key-free by design — every message below carries handles,
@@ -8,7 +8,7 @@
  * Protocol version. Bump on ANY breaking change to the messages below (4: a playback may be `audio/*` too, inbox #412; 5: a
  * download's SW-side failure and its clean end reach the page, `veyq-dl-failed` / `veyq-dl-done`, F11). register.ts sends it in the handshake; a
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
- * Slice-1 full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
+ * full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
 export const PROTOCOL_VERSION = 5
 

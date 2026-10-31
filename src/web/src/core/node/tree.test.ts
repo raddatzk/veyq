@@ -88,7 +88,8 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
     expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), cycle, MEM)).toBeNull()
   })
 
-  // 5b.4b: a member reads what a guest sealed under an ANCESTOR's key (a folder link's guest name on a Memory below).
+  // uc.memory.buckets:guest-named-above-the-node: a member reads what a guest sealed under an ANCESTOR's key (a folder
+  // link's guest name on a Memory below).
   it('contentKeyChain: the node\'s key and every ancestor\'s, nearest first; empty without a chain', () => {
     const folderKey = v1.randomBytes(32)
     const memKey = v1.randomBytes(32)

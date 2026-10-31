@@ -1,6 +1,6 @@
-// cr-node-key-hierarchy 5b.3 live e2e (VEYQ_E2E=1) — a member shares a FOLDER (ADR 0080 decisions 6, 9 and 12), against
-// a REAL backend + MariaDB + the bundled store, with REAL crypto. The member side only: the guest's folder page and its
-// READ_WRITE operations are 5b.4.
+// uc.sharing.share-public-viewer:folder-share-root live e2e (VEYQ_E2E=1) — a member shares a FOLDER (ADR 0080 decisions
+// 6, 9 and 12), against a REAL backend + MariaDB + the bundled store, with REAL crypto. The member side only: the
+// guest's folder page and its READ_WRITE operations are `folderShareGuest.e2e.test.ts`'s.
 //
 // Two actors on one instance, serialized (the `chapterShare.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a photo)

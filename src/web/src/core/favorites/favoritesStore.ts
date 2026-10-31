@@ -15,7 +15,7 @@
 // **A pinned id is inert when its node does not resolve.** The server cannot read the set, so a purged node's id cannot be
 // removed server-side; every view resolves the ids against the loaded tree and skips what is not there (the sidebar), and a
 // trashed node's pin survives so a restore hands the heart back. No client-side prune: a tree that is merely not loaded yet
-// would be read as "gone", and a prune on that is a lost pin. The ceiling (ADR 0068, ~1 600 ids) is the only cost.
+// would be read as "gone", and a prune on that is a lost pin. The ceiling (ADR 0068 §4, 1 259 ids) is the only cost.
 import { reactive } from 'vue'
 import { loadFavorites, saveFavorites } from './favorites'
 import { masterKey } from '../../app/vault'

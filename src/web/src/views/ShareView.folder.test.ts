@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// A link rooted at a FOLDER on the share page, with the REAL registry (cr-node-key-hierarchy 5b.4b): the shell renders
-// core's page (`ShareTreePage`), not the unavailable state; a Memory below the folder opens in the member's REAL
-// `MemoryDetail` (inbox #401 S5). Only the network reads are stubbed (the resolve, the terms, Memories' media read; every
-// authenticated client throws, `test/guestMode.ts`); the subtree is real crypto.
+// A link rooted at a FOLDER on the share page, with the REAL registry
+// (uc.sharing.share-public-viewer:folder-share-root): the shell renders core's page (`ShareTreePage`), not the
+// unavailable state; a Memory below the folder opens in the member's REAL `MemoryDetail` (inbox #401 S5). Only the
+// network reads are stubbed (the resolve, the terms, Memories' media read; every authenticated client throws,
+// `test/guestMode.ts`); the subtree is real crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
