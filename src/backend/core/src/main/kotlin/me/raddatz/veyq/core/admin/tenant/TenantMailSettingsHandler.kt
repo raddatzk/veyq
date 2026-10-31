@@ -48,6 +48,9 @@ sealed interface MailSettingsUpdateOutcome {
     data object InvalidTemplate : MailSettingsUpdateOutcome, HttpFailure by httpFailure("invalid_mail_template", FailureStatus.BAD_REQUEST)
     // A password was supplied but no config-secret KEK could be loaded to seal it (ADR 0050) — we refuse rather than store it in the clear.
     data object SealUnavailable : MailSettingsUpdateOutcome, HttpFailure by httpFailure("mail_secret_unavailable", FailureStatus.SERVICE_UNAVAILABLE)
+    // host/port/tls changed while a password is stored and none was supplied — a kept password would go to a server
+    // it was never entered for (one co-owner redirecting another's secret to a host they run, plaintext with tls off).
+    data object PasswordRequired : MailSettingsUpdateOutcome, HttpFailure by httpFailure("mail_password_required", FailureStatus.BAD_REQUEST)
 }
 
 /**
@@ -55,7 +58,8 @@ sealed interface MailSettingsUpdateOutcome {
  * its own SMTP + the invite template as runtime settings — the same owner-gated CRUD shape as
  * [TenantTermsHandler] (membership-gate → `findTenant` → `isOwner` → store). Two invariants live here:
  *  - **The SMTP password is never stored, returned or logged in plaintext** (ADR 0050): a supplied password is
- *    sealed via [ConfigSecretSeal]; an omitted one keeps the stored ciphertext; a read exposes only `passwordSet`.
+ *    sealed via [ConfigSecretSeal]; an omitted one keeps the stored ciphertext — only while host, port and TLS stay
+ *    the same, so a kept password never reaches a server it was not entered for; a read exposes only `passwordSet`.
  *  - **The invite template interpolates only the closed variable set** (ADR 0049): a template referencing any
  *    other `{{tag}}` is rejected at write time and never stored, so veyq's machinery can never inject a sealed
  *    field into a mail. What the owner *types* is a consented, operator-visible disclosure (out of scope here).
@@ -85,7 +89,7 @@ class TenantMailSettingsHandler(
     /**
      * The **owner** sets/replaces the mail settings. Membership-gated first (a non-member gets the same 404 as a
      * bogus tenant id, ADR 0042), then owner-gated. Validates the templates against the closed variable set, seals
-     * a supplied password (keeping the stored one when omitted), and stores the row. The password is never
+     * a supplied password (keeping the stored one when omitted, unless host/port/TLS changed), and stores the row. The password is never
      * returned or logged.
      */
     @Transactional
@@ -116,6 +120,12 @@ class TenantMailSettingsHandler(
         // Password: seal a freshly-supplied one (needs the config-secret KEK); keep the stored ciphertext when omitted.
         val existing = store.mailSettingsFor(tenantId)
         val supplied = password.blankToNull()
+        // Clearing the host sends nothing; a later host is a change from null, so it needs the password again anyway.
+        if (supplied == null && host.blankToNull() != null && existing?.passwordSet == true &&
+            (existing.host != host.blankToNull() || existing.port != port || existing.tls != tls)
+        ) {
+            return MailSettingsUpdateOutcome.PasswordRequired
+        }
         val ciphertext: String?
         val nonce: String?
         val fingerprint: String?

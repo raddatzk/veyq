@@ -246,7 +246,8 @@ components:
           x-veyq-visibility: public
           type: string
           description: >
-            On `memories.map` only, while active: the tile provider's attribution, shown on every map.
+            On `memories.map` only, while active: the tile provider's attribution, shown on every map as plain
+            text (markup is shown literally, never rendered).
           maxLength: 256
           example: © OpenStreetMap contributors
 

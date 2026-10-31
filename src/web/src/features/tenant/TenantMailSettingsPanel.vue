@@ -134,9 +134,11 @@ const { run: runSave, pending: saving } = useAsyncAction(
           ? t('mail.invalidTemplate', { vars: TEMPLATE_VARS })
           : code === 'mail_secret_unavailable'
             ? t('mail.kekUnavailable')
-            : status === HttpStatus.forbidden
-              ? t('mail.notOwner')
-              : t('mail.saveFailed')
+            : code === 'mail_password_required'
+              ? t('mail.passwordRequired')
+              : status === HttpStatus.forbidden
+                ? t('mail.notOwner')
+                : t('mail.saveFailed')
     },
   },
 )

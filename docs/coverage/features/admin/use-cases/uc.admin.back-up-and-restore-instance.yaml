@@ -265,8 +265,8 @@ acceptanceCriteria:
   - id: moderation-survives-a-restore
     # A13, ADR 0056 decision 8 (owner 2026-10-18; TCO Art. 3, DSA Art. 17): the same ledger, the same start.
     text: >-
-      A block, a lift, a case and a hold's end enter the erasure ledger too. At start, per item the last block or lift
-      line wins: an item whose last line is a block and that the restored database does not block is blocked again on
+      A block, a lift, a case and a hold's end enter the erasure ledger too. At start, per measure the last block or
+      lift line wins — an uploader's block is a measure per space, so one space's line never stands in for another's: an item whose last line is a block and that the restored database does not block is blocked again on
       its basis, and a lifted one is never blocked again. A hold that ended after the capture ends again, its snapshot
       and pins gone, and a case the database holds moves on to the state its last line names, forward only. A case the
       database lacks is recreated as a stub — no report, no sealed content, marked as restored — that keeps its
@@ -276,6 +276,7 @@ acceptanceCriteria:
         integration:
           - ErasureLedgerSliceTest.aBlockedAccountIsBlockedAgainAndALiftedOneIsNot
           - ErasureLedgerSliceTest.aBlockLiftedAfterTheCaptureStaysLifted
+          - ErasureLedgerSliceTest.anUploaderBlockedInTwoSpacesIsReappliedPerSpace
           - ErasureLedgerSliceTest.aCaseTheRestoreLacksComesBackAsAStubKeepingItsRetention
           - ErasureLedgerSliceTest.aHoldADismissalEndedAfterTheCaptureEndsAgainAndItsCaseClosesAgain
       web:

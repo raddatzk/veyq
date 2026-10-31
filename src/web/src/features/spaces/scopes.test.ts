@@ -681,6 +681,21 @@ describe('no device seals under an epoch below the highest it has held for the s
     expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
   })
 
+  it('the switcher opens no name or icon from a grant below the floor either: the group reads as unopenable', async () => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    serveG1(keys, 1, 1)
+    await openScopeById(G1) // this device has now held epoch 1
+    const encryptedName = sealGroupName(deriveGroupNameKey(keys[0]), G1, 0, 'Alt-Crew')
+    const sealedIcon = sealIcon(deriveSpaceIconKey(keys[0]), { scopeId: G1, iconEpoch: 0 }, new Uint8Array([1, 2, 3]))
+    const rolledBack = signed({
+      id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, keys[0], 0), grantedEpoch: 0, currentEpoch: 0,
+      encryptedName, nameEpoch: 0, sealedIcon, iconEpoch: 0,
+    })
+    fakeApi(scopesApi, { listMyScopes: listing([rolledBack]), listScopeEpochs: vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue([]) })
+    expect(await listMyGroups()).toEqual([])
+    expect(await openGroupIcon(G1)).toBeNull()
+  })
+
   it('a rotation is not built on a grant below the floor either', async () => {
     const keys = [v1.randomBytes(32), v1.randomBytes(32)]
     serveG1(keys, 1, 1)

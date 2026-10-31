@@ -26,12 +26,19 @@ acceptanceCriteria:
         integration: [TenantMailSettingsSliceTest.theSmtpPasswordIsSealedAtRestNotPlaintext, TenantMailSettingsSliceTest.omittingThePasswordOnUpdateKeepsTheStoredOne]
       web:
         unit: [src/features/tenant/mailSettings.test.ts, src/features/tenant/TenantMailSettingsPanel.test.ts]
+  - id: kept-password-goes-only-to-its-server
+    text: Omitting the password keeps the stored one only while host, port and TLS stay as they are. Changing any of them without supplying the password again is refused (400 mail_password_required) and stores nothing, so one co-owner cannot redirect another's sealed password to a host they control. The web form surfaces that refusal as a request to re-enter the password, not a generic failure.
+    coverage:
+      backend:
+        integration: [TenantMailSettingsSliceTest.aChangedDestinationWithoutAFreshPasswordIsRefusedAndKeepsTheOldSettings]
+      web:
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: invite-template-closed-variable-set
-    text: The owner-authored subject/body template is rendered over a closed, non-secret variable set ({{link}}/{{domain}}/{{expiry}} only); veyq's machinery interpolates nothing sealed, and a template referencing any other {{tag}} is rejected at write time (400 invalid_mail_template) and never stored (ADR 0048 §6, ADR 0049). The web editor shows the allowed variables and surfaces that rejection as a specific, understandable message rather than a generic failure.
+    text: The owner-authored subject/body template is rendered over a closed, non-secret variable set ({{link}}/{{domain}}/{{expiry}} only); veyq's machinery interpolates nothing sealed, and a template referencing any other {{tag}} is rejected at write time (400 invalid_mail_template) and never stored (ADR 0048 §6, ADR 0049). The subject is one line — a CR or LF in it is refused (400), so an owner's template cannot start a header of its own. The web editor shows the allowed variables and surfaces that rejection as a specific, understandable message rather than a generic failure.
     coverage:
       backend:
         unit: [InviteMailRendererTest.theRenderContextIsClosedToExactlyThreeNonSecretFields, InviteMailRendererTest.rejectsTagsOutsideTheClosedSet, InviteMailRendererTest.theShippedDefaultsAreContentFreeAndValid]
-        integration: [TenantMailSettingsSliceTest.aTemplateOutsideTheClosedVariableSetIsRejectedAndNotStored, SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet]
+        integration: [TenantMailSettingsSliceTest.aTemplateOutsideTheClosedVariableSetIsRejectedAndNotStored, TenantMailSettingsSliceTest.aSubjectTemplateSpanningLinesIsRefusedAndNotStored, SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet]
       web:
         unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: unconfigured-blocks-member-invites

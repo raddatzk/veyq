@@ -143,8 +143,8 @@ no line of its own is counted in the start's log line and served as a missing ob
 
 **Moderation survives a restore.** The same outbox carries every block and lift of a measure (item kind and target,
 link, space and case, who took it, and its basis), every change of a case (item, space, category, state, opening time
-and its retention date) and every end of a hold (`HOLD_ENDED`). At start, per item the **last** line wins in both
-directions: an item whose last line is a block and that the restored database does not block is blocked again, with
+and its retention date) and every end of a hold (`HOLD_ENDED`). At start, per measure the **last** line wins in both
+directions (an uploader's block is a measure per space, as its active key is): an item whose last line is a block and that the restored database does not block is blocked again, with
 what the block did besides its row (a member's sessions end; a tenant set offline or pending deletion again); one whose
 last line is a lift is lifted. A case the database lacks comes back as a stub, `origin = RESTORED`, with no report and
 nothing sealed — closed on its retention date if it had closed, open and owed a decision otherwise. A case in an earlier

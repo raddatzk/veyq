@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.lift
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.order
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.orderBody
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.propose
@@ -171,6 +172,18 @@ class ServerOwnerStatementSliceTest {
         assertEquals("Space terms, clause 4", written.provision)
         // A Server Owner's statement is a mail's: it is not listed in the app (the member cannot sign in to read it).
         assertTrue(statements.mine(proposed).isEmpty())
+    }
+
+    @Test
+    fun aModeratorCannotLiftTheServerOwnersStepOnTheirCase() {
+        val proposed = seedUser()
+        val (caseId, _) = reported(proposed)
+        mod.propose(caseId, "MEMBER_SIGN_IN", targetId = proposed).then().statusCode(201)
+        block(emailOf(proposed), ""","statement":${statement()}""").then().statusCode(200)
+        val row = QuarkusTransaction.requiringNew().call { ModerationBlockEntity.find("targetId = ?1 and kind = ?2", proposed, BlockKind.MEMBER_SIGN_IN.name).firstResult()!! }
+        assertEquals(caseId, row.caseId, "the step stands on the moderator's case")
+        mod.lift(caseId, row.id).then().statusCode(404).body("code", equalTo("measure_not_found"))
+        assertNotNull(QuarkusTransaction.requiringNew().call { ModerationBlockEntity.findById(row.id)!!.activeKey }, "still in force")
     }
 
     @Test

@@ -88,11 +88,34 @@ class InstanceMailSettingsSliceTest {
         save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""").statusCode(200)
         val sealed = row().passwordCiphertext
 
-        save("""{"host":"smtp2.veyq.invalid","from":"veyq@example.com","username":"veyq","tls":false}""").statusCode(200)
-            .body("host", equalTo("smtp2.veyq.invalid"))
-            .body("tls", equalTo(false))
+        // Same server, other sender and login name: the password stays.
+        save("""{"host":"smtp.veyq.invalid","from":"other@example.com","username":"veyq2","tls":true}""").statusCode(200)
+            .body("from", equalTo("other@example.com"))
             .body("passwordSet", equalTo(true))
         assertEquals(sealed, row().passwordCiphertext)
+    }
+
+    @Test
+    fun aChangedServerWithoutThePasswordIsRefusedAndKeepsTheOldSettings() {
+        save("""{"host":"smtp.veyq.invalid","from":"veyq@example.com","username":"veyq","password":"$SECRET","tls":true}""").statusCode(200)
+
+        // Each of host, port and tls decides where the kept password (and the save's test mail) would go.
+        for (redirect in listOf(
+            """{"host":"smtp2.veyq.invalid","from":"veyq@example.com","username":"veyq","tls":true}""",
+            """{"host":"smtp.veyq.invalid","port":25,"from":"veyq@example.com","username":"veyq","tls":true}""",
+            """{"host":"smtp.veyq.invalid","from":"veyq@example.com","username":"veyq","tls":false}""",
+        )) {
+            save(redirect).statusCode(400).body("code", equalTo("mail_password_required"))
+        }
+        assertEquals("smtp.veyq.invalid", row().host)
+        assertEquals(true, row().tls)
+
+        // Clearing sends nothing, so it needs no password; setting a host again then does.
+        save("""{"host":null,"tls":true}""").statusCode(200)
+        save("""{"host":"smtp2.veyq.invalid","from":"veyq@example.com","tls":true}""").statusCode(400)
+            .body("code", equalTo("mail_password_required"))
+        save("""{"host":"smtp2.veyq.invalid","from":"veyq@example.com","password":"$SECRET","tls":true}""").statusCode(200)
+            .body("host", equalTo("smtp2.veyq.invalid"))
     }
 
     @Test

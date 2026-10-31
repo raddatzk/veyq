@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const leaflet = vi.hoisted(() => {
   const markers: Array<{ latlng: [number, number]; click: ((e?: unknown) => void) | null }> = []
   // How often a map was created with its tile layer, and removed: a withdrawn consent must remove it and add no other.
-  const calls = { tileLayers: 0, removed: 0 }
+  const calls = { tileLayers: 0, removed: 0, attribution: undefined as string | undefined }
   const map = {
     setView: () => map,
     fitBounds: () => map,
@@ -20,8 +20,9 @@ const leaflet = vi.hoisted(() => {
   }
   const L = {
     map: () => map,
-    tileLayer: () => {
+    tileLayer: (_url: string, options?: { attribution?: string }) => {
       calls.tileLayers++
+      calls.attribution = options?.attribution
       return { addTo: () => ({}) }
     },
     layerGroup: () => {
@@ -54,7 +55,7 @@ vi.mock('leaflet', () => ({ default: leaflet.L }))
 import { mount, flushPromises } from '@vue/test-utils'
 import SpaceMap from './SpaceMap.vue'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
-import { setTileUrl } from '../../../test/services'
+import { DEFAULT_TEST_TILES, setTileUrl } from '../../../test/services'
 import { MEMORY_KIND } from '../kinds'
 import type { LocatedPin } from '../spaceMap'
 import { realI18n, t } from '../../../test/i18n'
@@ -127,6 +128,14 @@ describe('SpaceMap', () => {
     expect(level.find('h3').exists()).toBe(false)
     expect(person.get('h3.map-consent-prompt-title').text()).toBe(t('memory.place.consentTitle'))
     expect(person.find('h2').exists()).toBe(false)
+  })
+
+  it('hands Leaflet the attribution escaped: it writes it as HTML, and the Server Owner\'s text must stay text', async () => {
+    setTileUrl(DEFAULT_TEST_TILES, '© <a href="https://evil.example">Tiles</a> & co') // the consented host, new text
+    setMapsConsent(true)
+    mountMap([pin('m1', 'Rome', 41.9, 12.5)])
+    await flushPromises()
+    expect(leaflet.calls.attribution).toBe('© &lt;a href=&quot;https://evil.example&quot;&gt;Tiles&lt;/a&gt; &amp; co')
   })
 
   it('"Turn map off" withdraws at once: the map is removed, no further tile layer is made, the consent prompt returns', async () => {

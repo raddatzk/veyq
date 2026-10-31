@@ -369,6 +369,43 @@ class ErasureLedgerSliceTest {
         assertEquals(owner, read { ModerationBlockEntity.findById(row)!!.liftedBy })
     }
 
+    /** An uploader's block is one per space (`activeKeyOf`), so its last line is too: a lift in one space and a block in
+     *  another, after a capture that held the first block in force, both stand again — neither space's line hides the other's. */
+    @Test
+    fun anUploaderBlockedInTwoSpacesIsReappliedPerSpace() {
+        val owner = seedUser(serverRole = "SERVER_OWNER")
+        val member = seedUser()
+        val s1 = seedMemberScope().scopeId
+        val s2 = seedMemberScope().scopeId
+        val first = UUID.randomUUID().toString()
+        val taken = Instant.now().minusSeconds(60)
+        fun line(kind: String, id: String, scope: String, at: Instant) = LedgerLine(mapOf(
+            "at" to at.toString(), "kind" to kind, "id" to id, "item" to BlockKind.CONTENT_UPLOADER.name,
+            "target" to member, "scope" to scope, "by" to owner,
+        )).json()
+        // After the capture: blocked in S1, lifted there on an objection, then blocked in S2.
+        Files.createDirectories(file.path.parent)
+        Files.writeString(file.path, listOf(
+            line("BLOCK", first, s1, taken),
+            line("LIFT", first, s1, taken.plusSeconds(10)),
+            line("BLOCK", UUID.randomUUID().toString(), s2, taken.plusSeconds(20)),
+        ).joinToString("\n", postfix = "\n"))
+        // The restore: the capture held the S1 block in force and nothing in S2.
+        QuarkusTransaction.requiringNew().run {
+            ModerationBlockEntity().apply {
+                id = first; kind = BlockKind.CONTENT_UPLOADER.name; targetId = member; scopeId = s1
+                takenBy = owner; takenAt = taken; activeKey = ModerationBlockEntity.activeKeyOf(BlockKind.CONTENT_UPLOADER, member, s1)
+            }.persist()
+        }
+        val done = start.run()
+        assertEquals(1, done.relifted, "the S1 lift stands")
+        assertEquals(1, done.reblocked, "the S2 block stands")
+        assertNull(read { ModerationBlockEntity.findById(first)!!.activeKey })
+        assertEquals(1L, read {
+            ModerationBlockEntity.count("activeKey", ModerationBlockEntity.activeKeyOf(BlockKind.CONTENT_UPLOADER, member, s2))
+        })
+    }
+
     @Test
     fun aCaseTheRestoreLacksComesBackAsAStubKeepingItsRetention() {
         val (_, scopeId) = seedMemberScope()

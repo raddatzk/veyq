@@ -406,7 +406,10 @@ class CaseDecisions(
         var changed: ModerationBlockEntity? = null
         val outcome = QuarkusTransaction.requiringNew().call {
             val case = lock(caseId) ?: return@call refused(CaseFailures.caseNotFound)
+            // A Server Owner's step on the case (a sign-in block, a tenant offline) is the Server Owner's to lift, on the
+            // admin channel (ADR 0099 § 6): to a moderator it is no measure of the case, as the case view shows none.
             val row = ModerationBlockEntity.find("id = ?1 and caseId = ?2", measureId, case.id).firstResult()
+                ?.takeUnless { it.blockKind.isServerOwnerStep }
                 ?: return@call refused(CaseFailures.measureNotFound)
             if (row.activeKey == null) return@call DecisionOutcome.Done
             noteRefusal(note)?.let { return@call refused(it) }
@@ -476,7 +479,9 @@ class CaseDecisions(
         if (!objection.open) return refused(CaseFailures.objectionDecided)
         noteRefusal(note)?.let { return refused(it) }
         val statement = ModerationStatementEntity.findById(objection.statementId) ?: return refused(CaseFailures.objectionNotFound)
-        val measure = ModerationBlockEntity.findById(statement.measureId) ?: return refused(CaseFailures.objectionNotFound)
+        // An objection to a Server Owner's step is not a moderator's to decide, nor its lift theirs (ADR 0099 § 6).
+        val measure = ModerationBlockEntity.findById(statement.measureId)?.takeUnless { it.blockKind.isServerOwnerStep }
+            ?: return refused(CaseFailures.objectionNotFound)
         val own = measure.takenBy == moderatorId
         if (own && (currentEpochHolders() - moderatorId).isNotEmpty()) return refused(CaseFailures.needsAnotherModerator)
         objection.decidedAt = now

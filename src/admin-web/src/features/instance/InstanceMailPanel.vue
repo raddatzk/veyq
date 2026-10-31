@@ -79,6 +79,7 @@ const { run: runSave, pending: saving } = useAsyncAction(
       const { status, code: c } = await decodeHttpError(e)
       actionError.value = t(
         c === 'mail_secret_unavailable' ? 'instanceMail.keyUnavailable'
+          : c === 'mail_password_required' ? 'instanceMail.passwordRequired'
           : c === 'invalid_request' ? 'instanceMail.invalid'
             : status === HttpStatus.forbidden ? 'instanceMail.notOwner'
               : 'instanceMail.saveFailed',
