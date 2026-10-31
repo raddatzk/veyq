@@ -80,6 +80,14 @@
   group's nodes ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). Not offered on a removal, which
   already rotates, nor while the group is in its deletion grace; a co-owner may run it, a non-owner is refused
   (`403 not_scope_owner`).
+- **A7 — a member who does not own the group reads its roster.** A member of the group (role `MEMBER`) reaches the
+  group's page in the settings hub — the hub's default while that group is the active space, or its address — and
+  sees the member directory read-only ([ADR 0022](../../../decisions/0022-settings-information-architecture.md)
+  decision 3): every member with their role and state, a note that only an owner changes it, and **no** owner
+  action rendered — add, roles, remove, rescind, rename, icon, links, new lock, delete. Each is gated by the page's
+  owner answer, derived from the directory the server returned (false while it loads and on a failed read); the
+  server refuses each action anyway (A3). The group is not in the hub's *Groups* collection, which lists the groups
+  the caller owns. A caller who is no member of the group finds no such page: its address leads back to `/settings`.
 - **E1 — already-read content:** a removed member keeps whatever they already decrypted — **not retractable** by
   any design (the stated limit). Removal protects **future** content only.
 

@@ -426,3 +426,74 @@ describe('GroupMembersPanel - who is verified in its tenant (ADR 0111 decision 1
     expect(w2.get('.member-row').text()).toContain(t('trust.anomalyNote'))
   })
 })
+
+// ADR 0022 decision 3 (inbox #814): a member who belongs to the group but does not own it reaches this page in the
+// settings hub and reads the directory - no owner action is rendered (not hidden by CSS). The gate is the page's own
+// `isOwner`, read from the directory: false for a MEMBER row, for a caller the directory does not list, and on a failed read.
+describe('GroupMembersPanel — read-only for a member who does not own the group (ADR 0022 decision 3)', () => {
+  const ROWS: ScopeMember[] = [
+    ...OWNER_ROW,
+    { userId: 'u-bob', username: 'bob', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'Qk9C', keyChainHead: 'Qk9C', pending: false, pendingConsent: false },
+    { userId: 'u-pia', username: 'pia', avatarRevision: 0, role: 'MEMBER', identityPublicKey: 'cGlh', keyChainHead: 'cGlh', pending: false, pendingConsent: true },
+  ]
+  // Every owner action the page has, by its label: rename, icon, add, roles, remove, rescind, links, lock, delete.
+  const OWNER_LABELS = [
+    'groups.rename', 'spaceIcon.add', 'groups.addMember', 'groups.promote', 'groups.demote', 'groups.remove',
+    'groups.rescind', 'spaceLinks.revokeAll', 'spaceLock.action', 'groups.deleteGroup',
+  ]
+  // Every owner-only state the page can show beside them: a queued rotation and a re-keying lock.
+  const withOwnerState = () =>
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation: 'failed', rekeying: true })
+
+  async function mountAs(me: string) {
+    vi.mocked(listScopeMembers).mockResolvedValue(ROWS)
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: me }))
+    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Reise-Crew' }, global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    return w
+  }
+  const labelsShown = (w: ReturnType<typeof mount>) => OWNER_LABELS.filter((k) => button(w, t(k)))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(tenantBadges).mockResolvedValue({})
+    vi.mocked(openGroupIcon).mockResolvedValue(null)
+    withOwnerState()
+  })
+
+  it('a member sees the whole directory, the note, and no owner control', async () => {
+    const w = await mountAs('bob')
+    expect(w.findAll('.member-row').map((r) => r.get('.veyq-row-title').text())).toEqual(['@owner', '@bob', '@pia'])
+    expect(w.get('[data-testid="group-readonly"]').text()).toBe(t('groups.readonlyNote'))
+    expect(labelsShown(w)).toEqual([])
+    expect(w.find('form').exists()).toBe(false)
+    expect(w.find('input').exists()).toBe(false) // no username field, no remove opt-in
+    expect(w.findAll('.management-actions')).toHaveLength(0)
+    expect(w.text()).not.toContain(t('members.compromiseRotation.failed'))
+    expect(w.text()).not.toContain(t('rotation.statusHint.rekeying'))
+    expect(w.text()).toContain('Reise-Crew') // the group's own name heads the page
+  })
+
+  it('control: the owner of the same group sees every owner control and no note', async () => {
+    const w = await mountAs('owner')
+    expect(labelsShown(w)).toEqual(OWNER_LABELS) // demote on the owner's own row (the last-owner guard is the server's)
+    expect(w.find('[data-testid="group-readonly"]').exists()).toBe(false)
+    expect(w.text()).toContain(t('members.compromiseRotation.failed'))
+    expect(w.text()).toContain(t('rotation.statusHint.rekeying'))
+  })
+
+  it('a directory that cannot be read offers nothing and says it failed, not that it is read-only', async () => {
+    vi.mocked(listScopeMembers).mockRejectedValue(new Error('offline'))
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: 'owner' }))
+    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Reise-Crew' }, global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    expect(labelsShown(w)).toEqual([])
+    expect(w.find('[data-testid="group-readonly"]').exists()).toBe(false)
+    expect(w.text()).toContain(t('members.loadFailed'))
+  })
+
+  it('the note is in EN and DE', () => {
+    expect(i18n.global.t('groups.readonlyNote', {}, { locale: 'en' })).toBe('Only an owner of this group can change its members and settings.')
+    expect(i18n.global.t('groups.readonlyNote', {}, { locale: 'de' })).toBe('Nur wer die Gruppe besitzt, kann ihre Mitglieder und Einstellungen ändern.')
+  })
+})

@@ -1476,6 +1476,8 @@ const en = {
     promote: 'Make co-owner',
     demote: 'Remove co-owner',
     lastOwner: 'A group needs at least one owner.',
+    // ADR 0022 decision 3 (inbox #814): a member who does not own the group reads its directory, and changes nothing
+    readonlyNote: 'Only an owner of this group can change its members and settings.',
     roleChangeFailed: 'Could not change the role. Please try again.',
     remove: 'Remove',
     removeConfirm: 'Remove and rotate the key?',
@@ -3475,6 +3477,7 @@ const de: typeof en = {
     removeMemberFailed: 'Das Mitglied konnte nicht entfernt werden. Bitte erneut versuchen.',
     invitationSent: 'Einladung gesendet — wartet auf ihre Zustimmung.',
     rescind: 'Zurückziehen',
+    readonlyNote: 'Nur wer die Gruppe besitzt, kann ihre Mitglieder und Einstellungen ändern.',
     rescindFailed: 'Die Einladung konnte nicht zurückgezogen werden. Bitte erneut versuchen.',
     untitled: 'Unbenannte Gruppe',
     rename: 'Umbenennen',

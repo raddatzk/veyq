@@ -49,9 +49,12 @@ const deviceLinking = hasCapability(CORE_DEVICE_LINKING)
 const route = useRoute()
 const router = useRouter()
 
-// The groups the caller OWNs — the Gruppen collection (ADR 0022 §3). Names decrypted on-device; a member-only
-// group isn't listed (nothing to manage), though its detail page stays reachable by a direct link.
-const ownedGroups = ref<GroupSpace[]>([])
+// Every group the caller belongs to (names decrypted on-device), and of those the ones it OWNs — the Gruppen collection
+// (ADR 0022 §3). A member-only group isn't listed (nothing to manage), but its page is reachable read-only: as the
+// contextual default inside that group and by its address (inbox #814). What that page offers is the panel's own
+// fail-closed owner answer, read from the group's directory - the hub only decides that the page exists for the caller.
+const myGroups = ref<GroupSpace[]>([])
+const ownedGroups = computed(() => myGroups.value.filter((g) => g.role === 'OWNER'))
 const createGroupOpen = ref(false)
 
 // Whether this device refuses its pin store or its device register right now (ADR 0028 Decision 7) — the one
@@ -118,7 +121,7 @@ async function loadTrustRefusals() {
 
 async function loadGroups() {
   try {
-    ownedGroups.value = (await listMyGroups()).filter((g) => g.role === 'OWNER')
+    myGroups.value = await listMyGroups()
   } catch {
     /* the rail tolerates an empty groups collection */
   }
@@ -213,35 +216,37 @@ const categories = computed<NavCategory[]>(() => {
   return cats
 })
 
-// Entering the hub with no param opens the active scope's entity: a group → its page, the Tenant scope → its
-// members, else Persönlich. Narrow with no param shows the list only.
-const defaultId = computed(() =>
+// Entering the hub with no param opens the active scope's entity: a group → its page (owned or not), the Tenant scope →
+// its members, else Persönlich. Narrow with no param shows the list only. Once the answers are in, a contextual default
+// the caller may not see falls back to Persönlich: the hidden redirect below sends a hidden section to /settings, and a
+// default that were itself hidden would send it straight back - on a wide screen the two watchers then replaced the
+// route for ever (inbox #814, measured by SettingsHubView.test.ts's settle cases).
+const contextualId = computed(() =>
   activeSpace.kind === ScopeKind.Group && activeSpace.scopeId
     ? `group-${activeSpace.scopeId}`
     : activeSpace.kind === ScopeKind.Tenant
       ? 'tenant-members'
       : 'appearance',
 )
+const defaultId = computed(() => (settled.value && isHidden(contextualId.value) ? 'appearance' : contextualId.value))
 const activeId = computed(() => (route.params.section as string | undefined) || defaultId.value)
 const hasSection = computed(() => Boolean(route.params.section))
 
 // A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
 // /settings (which, on a wide screen, opens the default section). Judged only once the answers are in: the owner-only pages
-// (mail, storage, capabilities) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's,
+// (mail, storage, capabilities) need the tenant role, a trust reset needs a refused document, a group page needs the caller to be its member
+// (an owner or not - a failed group read is no membership),
 // moderation needs an appointment; adding a device needs the instance's `core.device-linking`, known at mount.
 const OWNER_ONLY = new Set(['mail', 'storage', 'capabilities'])
-const isHidden = (id: string): boolean =>
-  id === 'pairing'
-    ? !deviceLinking
-    : OWNER_ONLY.has(id)
-      ? !isTenantOwner.value
-      : id === 'trust-reset'
-        ? !trustRefused.value
-        : id === 'moderation'
-          ? !isAppointed.value
-          : id.startsWith('group-')
-          ? !ownedGroups.value.some((g) => `group-${g.scopeId}` === id)
-          : false
+// A function declaration, not an arrow: `defaultId` above reads it.
+function isHidden(id: string): boolean {
+  if (id === 'pairing') return !deviceLinking
+  if (OWNER_ONLY.has(id)) return !isTenantOwner.value
+  if (id === 'trust-reset') return !trustRefused.value
+  if (id === 'moderation') return !isAppointed.value
+  if (id.startsWith('group-')) return !myGroups.value.some((g) => `group-${g.scopeId}` === id)
+  return false
+}
 // The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
 // pages that depend on an answer still on its way, before that answer is in.
 // A tenant page reads the tenant the shell opened, so it is not mounted while the space is still being entered.
@@ -253,7 +258,7 @@ const detailVisible = computed(
     !(entering.value && TENANT_PAGES.has(activeId.value)),
 )
 watch(
-  [settled, hasSection, activeId, isTenantOwner, trustRefused, ownedGroups, isAppointed],
+  [settled, hasSection, activeId, isTenantOwner, trustRefused, myGroups, isAppointed],
   () => {
     if (settled.value && hasSection.value && isHidden(activeId.value)) void router.replace('/settings')
   },
@@ -282,7 +287,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'capabilities') return { component: TenantCapabilitiesPanel, props: {} }
   if (id.startsWith('group-')) {
     const scopeId = id.slice('group-'.length)
-    return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }
+    return { component: GroupMembersPanel, props: { scopeId, name: myGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }
   }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'maps') return { component: MapsPanel, props: {} }

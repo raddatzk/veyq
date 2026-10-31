@@ -266,8 +266,13 @@ theme and language quick-pickers and sign-out.
   space* is there while the Tenant scope is active: members, who's who and terms for every member, and mail, storage
   and capabilities for its owner only. *Groups* is a collapsible collection of every group the caller owns, with a
   create entry where the instance offers groups.
-- **No section given** opens the active scope's own: a group's page, the Tenant's members, else appearance. A section
-  the caller may not see is not in the rail, and its address leads back to `/settings`.
+- **A group the caller belongs to but does not own** is not in the rail, yet its page opens: the member directory,
+  read-only. No owner control is rendered (not hidden by CSS) — each is gated by the page's own owner answer from the
+  directory, false until it is in — and one info note says that only an owner of the group changes it (no reassurance
+  beside it).
+- **No section given** opens the active scope's own: a group's page (owned or not), the Tenant's members, else
+  appearance. A section the caller may not see is not in the rail, and its address leads back to `/settings`; a
+  default that would lead back gives way to appearance, so the two redirects never trade the route.
 - **One breakpoint, 720 px**: above it the rail and the detail pane side by side, the default section's address made
   explicit; at or below it the rail is a list that drills into a section.
 - **Hub or inline** (ADR 0022 decision 4): what configures me, a space or its access lives here; what changes one node

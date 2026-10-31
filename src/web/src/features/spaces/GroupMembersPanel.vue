@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // uc.spaces.add-group-member (web, cr-0086) — the "Members" rubric of the GROUP settings (re-homed into the
 // settings hub, ADR 0022). Lists the group's members (username + role + active/pending consent) and, for the
-// group OWNER, adds an existing tenant member by username (inline). Markup mirrors TenantMembersPanel. Operator-
+// group OWNER, adds an existing tenant member by username (inline). A member who does not own the group gets this same
+// page read-only (ADR 0022 decision 3): the directory, and no owner control. Markup mirrors TenantMembersPanel. Operator-
 // blind: only operational metadata (usernames/roles) is shown; the add wraps the group's current key to the target's
 // pinned identity key on this device (ADR 0111 decision 4, `addGroupMember`), so the member holds it from the add on.
 // Real names stay `@username`
@@ -469,6 +470,11 @@ async function onRestore() {
           <p>{{ t('groups.membersSub') }}</p>
         </div>
       </div>
+
+      <!-- A member who does not own the group (ADR 0022 decision 3, inbox #814) reads the directory: every owner control on
+           this page is gated by `isOwner`, the directory's own answer (false until it is in, and on a failed read), so
+           none is rendered for them; this note says why the page offers nothing to change. -->
+      <VeyqMessage v-if="!isOwner && !loading && loadError === ''" tone="info" data-testid="group-readonly">{{ t('groups.readonlyNote') }}</VeyqMessage>
 
       <!-- Owner-only: add an existing tenant member by username (inline; the tenant owner has no say, ADR 0014). -->
       <form v-if="isOwner" class="group-add-form" @submit.prevent="submit">

@@ -11,7 +11,7 @@ vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/PeopleOverviewPanel.vue', () => ({ default: { template: '<div class="stub-people" />' } }))
-vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
+vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { props: ['scopeId', 'name'], template: '<div class="stub-group-members" :data-scope="scopeId" :data-name="name" />' } }))
 vi.mock('../features/tenant/TenantMailSettingsPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 vi.mock('../features/tenant/TenantStoragePanel.vue', () => ({ default: { template: '<div class="stub-storage" />' } }))
 vi.mock('../features/tenant/TenantTermsPanel.vue', () => ({ default: { template: '<div class="stub-terms" />' } }))
@@ -149,12 +149,30 @@ describe('SettingsHubView — a section the caller may not see leads back to /se
     expect(router.currentRoute.value.path).toBe('/settings/storage') // an owner: stays
   })
 
-  it('a group page of a group the caller does not own leads back; an owned one stays', async () => {
+  // ADR 0022 decision 3 (inbox #814): a member-only group is not in the rail, but its page opens read-only; what the page
+  // offers is the panel's own owner answer (GroupMembersPanel.test.ts). Only a group the caller is no member of leads back.
+  it('a group page opens for a group the caller owns and for one it only belongs to; a group it is no member of leads back', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
       { scopeId: 'g-1', tenantId: 't-1', name: 'Mine', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-2', tenantId: 't-1', name: 'Theirs', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
     ])
-    expect(pathOf(await mountHub('/settings/group-g-9'))).toBe('/settings')
-    expect(pathOf(await mountHub('/settings/group-g-1'))).toBe('/settings/group-g-1')
+    const owned = await mountHub('/settings/group-g-1')
+    expect(pathOf(owned)).toBe('/settings/group-g-1')
+    expect(owned.find('.stub-group-members').exists()).toBe(true)
+
+    const memberOnly = await mountHub('/settings/group-g-2')
+    expect(pathOf(memberOnly)).toBe('/settings/group-g-2')
+    expect(memberOnly.get('.stub-group-members').attributes('data-name')).toBe('Theirs') // its name, not an owned group's
+    expect(navText(memberOnly)).not.toContain('Theirs') // the Gruppen collection lists owned groups only
+
+    const stranger = await mountHub('/settings/group-g-9')
+    expect(pathOf(stranger)).toBe('/settings')
+    expect(stranger.find('.stub-group-members').exists()).toBe(false)
+  })
+
+  it('a group listing that cannot be read is no membership: the group page leads back', async () => {
+    vi.mocked(listMyGroups).mockRejectedValue(new Error('offline'))
+    expect(pathOf(await mountHub('/settings/group-g-2'))).toBe('/settings')
   })
 
   it('adding a device needs core.device-linking: its entry and its address are there with the leaf, gone without it', async () => {
@@ -226,6 +244,32 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     expect(w.find('.stub-members').exists()).toBe(false) // the Tenant panel is not shown in a group
   })
 
+  it('in a group the caller belongs to but does not own, entering the hub opens that group’s page (decision 1)', async () => {
+    vi.mocked(listMyGroups).mockResolvedValue([
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+    ])
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Group
+    activeSpace.scopeId = 'g-2'
+    const w = await mountHub()
+    const page = w.get('.stub-group-members')
+    expect(page.attributes('data-scope')).toBe('g-2') // the active group, not an owned one
+    expect(page.attributes('data-name')).toBe('Reise-Crew')
+    await w.get('.settings-nav-cat-toggle').trigger('click') // collapsed: the page shown is none of its entries
+    expect(navText(w)).toContain('Familie Raddatz') // the collection still lists the owned group
+    expect(navText(w)).not.toContain('Reise-Crew') // and only that one
+  })
+
+  it('control: a member of no group but in the Tenant scope still opens the Tenant members', async () => {
+    vi.mocked(listMyGroups).mockResolvedValue([])
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Tenant
+    const w = await mountHub()
+    expect(w.find('.stub-members').exists()).toBe(true)
+    expect(w.find('.stub-group-members').exists()).toBe(false)
+  })
+
   it('clicking a group in the collection routes to its per-entity detail page', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
       { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
@@ -248,6 +292,53 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     expect(nav).toContain(t('settings.personal'))
     expect(nav).not.toContain(t('members.title'))
     expect(nav).not.toContain(t('whoIsWho.navTitle'))
+  })
+})
+
+// Inbox #814: on a wide viewport two watchers write the route — the default-section reflection (/settings →
+// /settings/<default>) and the hidden-section redirect (/settings/<hidden> → /settings). Where the default IS a hidden
+// section they would hand the route back and forth for ever. Mounted with the real view and the real router at a wide
+// width, every navigation is counted; a guard aborts past 40, so a loop shows as a count, never as a hung test.
+describe('SettingsHubView — the default section and the hidden redirect settle (inbox #814)', () => {
+  async function mountCounting(path: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/settings/:section?', name: 'settings', component: { template: '<div />' } }],
+    })
+    await router.replace(path)
+    await router.isReady()
+    const seen: string[] = []
+    router.beforeEach((to) => {
+      if (seen.length >= 40) return false
+      seen.push(to.fullPath)
+      return true
+    })
+    const wrapper = mount(SettingsHubView, { global: { plugins: [router, realI18n()] } })
+    for (let i = 0; i < 10; i++) await flushPromises()
+    return { wrapper, router, seen }
+  }
+
+  beforeEach(() => {
+    stubMatchMedia(true) // wide: the default section's address is made explicit
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Group
+    activeSpace.scopeId = 'g-9'
+  })
+
+  it('in a group the caller belongs to but does not own, /settings settles on that group\'s page', async () => {
+    vi.mocked(listMyGroups).mockResolvedValue([
+      { scopeId: 'g-9', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+    ])
+    const { router, seen } = await mountCounting('/settings')
+    expect(seen).toEqual(['/settings/group-g-9'])
+    expect(router.currentRoute.value.path).toBe('/settings/group-g-9')
+  })
+
+  it('a group listing that cannot be read settles on Personal: the default is never a section that leads back', async () => {
+    vi.mocked(listMyGroups).mockRejectedValue(new Error('offline'))
+    const { router, seen } = await mountCounting('/settings')
+    expect(seen.length).toBeLessThanOrEqual(3)
+    expect(router.currentRoute.value.path).toBe('/settings/appearance')
   })
 })
 

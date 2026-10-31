@@ -1,7 +1,7 @@
 # ADR 0022 — Settings & administration information architecture (one scope-contextual hub)
 
 - Status: Accepted
-- Built: partly (not built: decision 3's read-only page of a group the member does not own (inbox #814))
+- Built: yes
 - Date: 2026-07-04
 - Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
 - Replaced in part: decisions 3 and 4 by ADR 0065 (built)
@@ -44,7 +44,12 @@ role.
      Tenant scope — encoding the natural hierarchy (from within a group you see Group **and** Tenant).
    - **Collections** (a management hub, decoupled from the active scope): a **Gruppen** category lists **every
      group the caller OWNs**, so you configure any of them without first switching into it. A member-only group has nothing to manage → it is
-     **not** listed, though its detail page stays reachable read-only. Listing "groups I own" needs the caller's
+     **not** listed, though its detail page stays reachable read-only: decision 1's default inside that group and its
+     `/settings/group-<id>` open the group's member directory with no owner control rendered — each gated by the page's
+     own owner answer, read from that directory and false until it is in — and a note that only an owner changes it
+     (inbox #814). A group the caller is no member of (or whose listing could not be read) leads back to `/settings`,
+     and a contextual default that leads back gives way to *Persönlich*, so the default-section and hidden-section
+     redirects cannot hand the route to each other. Listing "groups I own" needs the caller's
      **role per scope**, so the scope list surfaces it ([ADR 0007](0007-membership-role-grant-relation.md) — role
      is already stored; exposing *my own* is operational metadata, operator-blind untouched).
    - **The Server Owner's tenant administration is not in the hub.** It is admin-web's, a separate service

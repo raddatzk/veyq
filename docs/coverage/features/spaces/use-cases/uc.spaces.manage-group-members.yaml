@@ -130,6 +130,18 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [GroupRekeySliceTest.anOwnerReKeysTheGroupWithNobodyRemovedGrantingWhomItAnchorsAndDeclaringTheRest, GroupRekeySliceTest.aPlainMemberCannotReKeyTheGroupAndACoOwnerCan] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/features/spaces/members.test.ts], e2e: [src/features/spaces/groupRekey.e2e.test.ts] }
+  - id: member-reads-the-roster-read-only
+    # ADR 0022 decision 3 (inbox #814). Before it, the hub sent this member back to /settings, and on a wide viewport
+    # the default-section and hidden-section redirects then traded the route without end (measured: 40 navigations
+    # until the test's guard stopped them). The panel's gate is its directory-derived `isOwner`.
+    text: >
+      A member who does not own the group opens its page in the settings hub — the default while that group is the
+      active space, and by its address — and sees the whole directory with a read-only note and no owner control
+      rendered; the group's owner sees every control and no note; a directory that cannot be read offers nothing. The
+      group is not in the hub's Groups collection, a caller who is no member of it (or whose group listing fails) is led
+      back to /settings, and on a wide viewport the route settles after one replacement.
+    coverage:
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/views/SettingsHubView.test.ts] }
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `remove-rotates-forward` in
