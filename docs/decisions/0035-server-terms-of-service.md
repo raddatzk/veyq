@@ -209,8 +209,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 - **The terms are read where they are accepted** — the member gate and the share gate — and edited on an **authed
   tenant endpoint** beside a member **accept** endpoint; their pre-auth read on the login page stays decision 5's
   open slice.
-- **The clause template gives a legally-meaningful starting ToS** (esp. the CSAM/illegal-content + review-removal
-  clauses) matching the pre-E2EE product. No server ships default terms: a new tenant has none (revision 0) until
+- **The clause template gives a starting ToS** (esp. the CSAM/illegal-content + review-removal clauses) matching the
+  pre-E2EE product. It is not legally reviewed: the space owner who publishes it answers for it. No server ships default terms: a new tenant has none (revision 0) until
   its owner writes them, the template inserted only on request. DE strings follow
   [cc.inclusive-language](../crosscutting/cc.inclusive-language.md).
 - **Anonymous client-side acceptance is honest about its limits** (no server non-repudiation for an accountless
@@ -242,9 +242,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   visitor needs a cookie/fingerprint that either **breaks anonymity** or is unreliable; client-side localStorage
   is the honest choice for an accountless visitor.
 - **Shown-only (no acceptance gate).** Rejected — no consent record; a **hard gate + re-accept on change** is the
-  legally-meaningful choice, matching the pre-E2EE product.
+  choice that records a consent, matching the pre-E2EE product.
 - **Free-text markdown (no clause template).** Rejected — the template gives space owners a sound starting ToS
-  (the CSAM/illegal + review-removal clauses matter) and matches the pre-E2EE UX; the owner can still edit freely.
+  (the CSAM/illegal + review-removal clauses matter, unreviewed as they are) and matches the pre-E2EE UX; the owner can still edit freely.
 - **One global ToS (central infra only).** Rejected — veyq is **self-hostable**, and the central infra is one
   operator among many.
 - **One ToS per server, written by its operator.** Rejected — a server hosts many spaces, each answering for its

@@ -16,7 +16,7 @@ export const TERMS_TEMPLATE: { de: string; en: string } = {
 Dieser Server dient dem privaten Teilen von Erinnerungen (Fotos, Videos, Notizen) mit Menschen, die du einlädst.
 
 ## 2. Datenschutz & Verschlüsselung
-Inhalte sind Ende-zu-Ende-verschlüsselt. Wer den Server betreibt, kann private Inhalte nicht lesen; sichtbar sind nur technische Metadaten (Größen, Zeitpunkte, Mitgliedschaften). Was der Server über Gäste aufzeichnet und nach einer Meldung aufbewahrt, steht im Abschnitt der Betreiberseite unten.
+Inhalte sind Ende-zu-Ende-verschlüsselt: Der Server speichert sie nur verschlüsselt, und wer ihn betreibt, kann sie dort nicht lesen; sichtbar sind technische Metadaten (Größen, Zeitpunkte, Mitgliedschaften). Wer den Server betreibt, liefert meist auch diese App aus und könnte sie so ändern, dass sie mitliest, was du darin öffnest — dagegen hilft die Verschlüsselung allein nicht. Was der Server über Gäste aufzeichnet und nach einer Meldung aufbewahrt, steht im Abschnitt der Betreiberseite unten.
 
 ## 3. Deine Inhalte
 Du behältst alle Rechte an dem, was du hochlädst. Du bestätigst, die nötigen Rechte zum Hochladen und Teilen zu haben.
@@ -50,7 +50,7 @@ Fragen, Meldungen oder Löschwünsche: {contact}`,
 This server is for privately sharing memories (photos, videos, notes) with people you invite.
 
 ## 2. Privacy & encryption
-Content is end-to-end encrypted. Whoever runs the server cannot read private content; only technical metadata (sizes, timestamps, memberships) is visible. What the server records about guests and keeps after a report is stated in the operator's section below.
+Content is end-to-end encrypted: the server stores it only encrypted, and whoever runs it cannot read it there; technical metadata (sizes, timestamps, memberships) is visible. Whoever runs the server usually also delivers this app, and could change it to read what you open in it — encryption alone does not prevent that. What the server records about guests and keeps after a report is stated in the operator's section below.
 
 ## 3. Your content
 You keep all rights to what you upload. You confirm you hold the rights needed to upload and share it.

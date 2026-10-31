@@ -29,4 +29,13 @@ describe('TERMS_TEMPLATE — the host’s duties live in the operator section', 
     expect(clause(text, 7)).toContain(pointer)
     expect(clause(text, 4)).not.toContain(pointer) // control: an unrelated clause does not
   })
+
+  it.each([
+    ['en', 'could change it to read what you open in it'],
+    ['de', 'könnte sie so ändern, dass sie mitliest'],
+  ] as const)('%s: clause 2 promises no more than holds against an operator who delivers the app (ADR 0026)', (lang, limit) => {
+    const text = TERMS_TEMPLATE[lang].replace(/'/g, '’')
+    expect(clause(text, 2)).toContain(limit)
+    expect(text).not.toMatch(/cannot read private content|kann private Inhalte nicht lesen/)
+  })
 })
