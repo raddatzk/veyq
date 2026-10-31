@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsEntity
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.AuthAttestation
 import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
@@ -33,10 +34,12 @@ import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusMock
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
+import jakarta.enterprise.inject.Vetoed
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
@@ -67,6 +70,9 @@ class AccountErasureSliceTest {
 
     @Inject
     lateinit var mail: AccountErasureMail
+
+    @Inject
+    lateinit var config: VeyqConfig
 
     // --- the request, the lockout and the purge ---
 
@@ -135,6 +141,84 @@ class AccountErasureSliceTest {
             assertNull(AccountErasureEntity.findById(u))
             assertEquals(0L, TenantInviteEntity.count("ownerEmail", emailOf(u)), "no invite keeps its address")
             assertEquals("", TenantEntity.findById(invitedTenant)!!.ownerEmail, "nor does the tenant its owner invite went to")
+        }
+    }
+
+    // --- the window (ADR 0101 decision 3) ---
+
+    /**
+     * The erasure is due its own window after the request — 14 days by default, not the scope trash's 30 — and the
+     * purge's tick erases the account and its own scopes then, while the scope trash alone would still keep them: once
+     * due, and not before. Driven through [AccountPurge.run], the hourly tick, with the clock moved by hand.
+     */
+    @Test
+    fun theErasureIsDueItsOwnWindowAfterTheRequestAndTheTickTakesTheOwnScopesThen() {
+        val window = config.account().erasure().window()
+        val scopeRetention = config.scope().delete().retention()
+        assertEquals(Duration.ofDays(14), window, "the default")
+        assertTrue(window < scopeRetention, "control: shorter than the scope trash's retention, so the two are told apart")
+        val tenant = seedTenant(owner = seedUser())
+        val (u, kp) = keyedUser()
+        val personal = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            TenantRoots.join(u, tenant)
+            scope(personal, tenant, ScopeEntity.PERSONAL, personalOwner = u)
+            member(u, tenant, personal, MembershipEntity.OWNER)
+        }
+
+        val served = Instant.parse(eraseOwn(u, kp, TestFixtures.bearer(u)).then().statusCode(200).extract().path<String>("dueAt"))
+
+        val pending = tx { AccountErasureEntity.findById(u)!! }
+        assertEquals(window, Duration.between(pending.requestedAt, pending.dueAt), "due the window after the request")
+        assertTrue(Duration.between(served, pending.dueAt).abs() < Duration.ofSeconds(1), "the member is told that date")
+
+        purge.run()
+        tx {
+            assertNotNull(VeyqUser.findById(u), "not due yet: the tick leaves the account")
+            assertNotNull(ScopeEntity.findById(personal), "and its own scope")
+        }
+
+        // The window passes: the request, its due date and the own scope's trash marker move back by it and a minute.
+        val span = window.plusMinutes(1)
+        QuarkusTransaction.requiringNew().run {
+            AccountErasureEntity.findById(u)!!.apply { requestedAt = requestedAt.minus(span); dueAt = dueAt.minus(span) }
+            ScopeEntity.findById(personal)!!.apply { deletedAt = deletedAt!!.minus(span) }
+        }
+        tx {
+            assertTrue(
+                ScopeEntity.findById(personal)!!.deletedAt!!.plus(scopeRetention).isAfter(Instant.now()),
+                "control: the scope trash alone would keep the own scope for weeks yet",
+            )
+        }
+
+        purge.run()
+        tx {
+            assertNull(VeyqUser.findById(u), "due: the tick erases the account")
+            assertNull(ScopeEntity.findById(personal), "with its own scope, at the account's date")
+            assertNull(AccountErasureEntity.findById(u))
+        }
+    }
+
+    /**
+     * A configured window is honoured, and a request keeps the date it was given: the window is read at the request and
+     * stored as its due date, so a later change moves no pending erasure.
+     */
+    @Test
+    fun aConfiguredWindowIsHonouredAndARequestKeepsTheDateItWasGiven() {
+        QuarkusMock.installMockForType(FixedWindow(config, Duration.ofDays(3)), AccountErasureWindow::class.java)
+        val first = seedUser()
+        eraseByOwner(serverOwnerToken(), emailOf(first)).then().statusCode(200)
+        val firstPending = tx { AccountErasureEntity.findById(first)!! }
+        assertEquals(Duration.ofDays(3), Duration.between(firstPending.requestedAt, firstPending.dueAt))
+
+        QuarkusMock.installMockForType(FixedWindow(config, Duration.ofDays(20)), AccountErasureWindow::class.java)
+        val second = seedUser()
+        eraseByOwner(serverOwnerToken(), emailOf(second)).then().statusCode(200)
+        purge.run()
+        tx {
+            val secondPending = AccountErasureEntity.findById(second)!!
+            assertEquals(Duration.ofDays(20), Duration.between(secondPending.requestedAt, secondPending.dueAt), "the new window")
+            assertEquals(firstPending.dueAt, AccountErasureEntity.findById(first)!!.dueAt, "the earlier request keeps its date")
         }
     }
 
@@ -326,7 +410,11 @@ class AccountErasureSliceTest {
         tx {
             assertEquals(TenantEntity.PENDING_DELETION, TenantEntity.findById(withOthers)!!.status)
             assertEquals(TenantEntity.PENDING_DELETION, TenantEntity.findById(alone)!!.status)
-            assertNotNull(TenantEntity.findById(alone)!!.deletionDueAt)
+            // A tenant deleted along waits out a tenant deletion's window (decision 10), not the account's.
+            val requested = AccountErasureEntity.findById(u)!!.requestedAt
+            for (t in listOf(withOthers, alone)) {
+                assertEquals(config.scope().delete().retention(), Duration.between(requested, TenantEntity.findById(t)!!.deletionDueAt))
+            }
         }
     }
 
@@ -532,6 +620,13 @@ class AccountErasureSliceTest {
         MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, tenantId).firstResult()?.role
 
     private fun <T> tx(block: () -> T): T = QuarkusTransaction.requiringNew().call(block)
+
+    /** Another window for one test ([AccountErasureWindow]'s KDoc says why not a profile). `@Vetoed`: the scope is
+     *  inherited, and as a bean of its own it would make every injection of the window ambiguous. */
+    @Vetoed
+    class FixedWindow(config: VeyqConfig, private val fixed: Duration) : AccountErasureWindow(config) {
+        override fun current(): Duration = fixed
+    }
 
     private companion object {
         // This class's own SMTP port (TestMailbox says how to find the taken ones).

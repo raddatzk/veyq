@@ -25,9 +25,10 @@ or pictures ([security-model](security-model.md)). What follows is what the serv
   [§ Logs](#logs)). Evidence never rides a log; it lives in the guest-write record and the moderation records below.
 - **An account's erasure deletes what is its own and keeps only what the law needs**, under the opaque id and to a
   date ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)). It runs
-  30 days after the request (`veyq.scope.delete.retention`), by `AccountPurge`
-  (`veyq.account.erasure.purge.every`, hourly); ADR 0101 decision 3 decides a window of its own of 14 days, not built
-  yet (inbox #811).
+  14 days after the request, a window of its own (`veyq.account.erasure.window`, decision 3; the boot refuses one that is
+  not positive or that with a purge tick passes 28 days, the shortest calendar month), by `AccountPurge`
+  (`veyq.account.erasure.purge.every`, hourly), which takes the account's own scopes with it then, whatever the scope
+  trash's 30 days would keep. The due date is stored with the request, so a changed window moves no pending erasure.
 - **A tenant's erasure** (`TenantPurge`, hourly) purges every scope of it, then its profiles, invites and the terms
   acceptances no moderation case keeps (as an account's erasure keeps them), then the tenant row, whose foreign keys take
   its mail settings and switches with it.

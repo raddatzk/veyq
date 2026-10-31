@@ -210,9 +210,11 @@ someone who lost their password — you answer it here (GDPR Art. 17; you have a
 
 - The account stops at once: every session ends, sign-in is refused, it leaves every tenant as a removal takes it
   (its own spaces into the trash, shared ones cut, a group it owned alone handed on) and the moderator roster.
-- It is erased 30 days later with its own spaces, its address and everything kept about it. What it put into shared
-  spaces stays with them, shown as a former member's; holds and the moderation records naming it stay to their own
-  ends.
+- It is erased 14 days later with its own spaces, its address and everything kept about it
+  (`veyq.account.erasure.window`, [Configuration](/veyq/run/configuration/#backend-keys-for-tuning)). What it put into
+  shared spaces stays with them, shown as a former member's; holds and the moderation records naming it stay to their
+  own ends. A tenant its person chose in the settings to delete along with it waits out a tenant deletion's 30 days,
+  as one you delete does.
 - Until then it is listed under **Pending erasures**, and **Stop erasure** lets it sign in again — for a mistaken or
   coerced request. The memberships it was cut from need a new invitation.
 - Your own account cannot be erased this way. The last holder of the moderation key is refused until another
@@ -249,7 +251,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `tenant suspend --tenant-id <id>` / `tenant reactivate --tenant-id <id>` | Take a tenant offline, bring it back |
 | `tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]` / `tenant stop-deletion --tenant-id <id>` | Delete an active or offline tenant (offline at once, erased after 30 days); stop it, which leaves it offline |
 | `tenant invite-owner --tenant-id <id> --email <address>` | Invite one of a tenant's members to own it, and print the invitation |
-| `account erase --address <address>` / `account stop-erasure --address <address>` / `account erasures` | Erase an account (erased after 30 days); stop a pending erasure; list the pending ones |
+| `account erase --address <address>` / `account stop-erasure --address <address>` / `account erasures` | Erase an account (erased after 14 days); stop a pending erasure; list the pending ones |
 | `tenant quota --tenant-id <id> --gib <GiB\|none>` | Set or clear a tenant's storage quota |
 | `release` | Print the running release |
 | `config-secret` | Print the config-secret key's state (`OK`, `ABSENT` or `MISMATCH`); changes nothing |

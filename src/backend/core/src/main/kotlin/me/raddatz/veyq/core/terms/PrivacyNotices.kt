@@ -37,8 +37,8 @@ class PrivacyNotices(
 ) {
     private val text: PrivacyNoticeText = PrivacyNoticeText.load()
 
-    /** The account erasure's window: the scope trash's retention, on purpose one value (ADR 0101 decision 3). */
-    private val erasureWindowDays: Int = config.scope().delete().retention().toDays().toInt()
+    /** The account erasure's window, its own (`veyq.account.erasure.window`, ADR 0101 decision 3). */
+    private val erasureWindowDays: Int = config.account().erasure().window().toDays().toInt()
 
     /** The node trash's window and an application's switched-off window: the storage period of content (GDPR Art. 13(2)(a)). */
     private val trashWindowDays: Int = config.node().trash().retention().toDays().toInt()

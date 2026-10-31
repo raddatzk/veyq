@@ -2379,7 +2379,8 @@ paths:
         ADR 0101 decisions 1, 2 and 9: starts the same erasure the account's holder starts in the settings. In one
         transaction every session of the account ends, sign-in is refused, its pending invites, pairings, recoveries and
         address changes go, the member removal runs in every tenant it belongs to, and it leaves the moderator roster;
-        the account is purged after the scope trash's retention (`veyq.scope.delete.retention`). **This door never
+        the account is purged with its own scopes after the erasure's own window (`veyq.account.erasure.window`, 14
+        days). **This door never
         refuses a last owner** (an erasure cannot wait on a third person, GDPR Art. 12(2)): a tenant whose last owner
         this was is left with no owner, which `listTenants` shows. It does refuse the last holder of the moderation key
         (`409 moderation_last_holder`), at both doors: the key, and every report and hold sealed to it, would be lost with
@@ -4377,7 +4378,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the purge erases the account — the request plus the scope trash's retention.
+          description: When the purge erases the account — the request plus the erasure's window (`veyq.account.erasure.window`) as it stood at the request.
           example: 2026-11-17T10:00:00Z
 
     AccountErasureList:

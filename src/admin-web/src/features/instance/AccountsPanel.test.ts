@@ -64,7 +64,7 @@ describe('AccountsPanel (uc.account.erase-account, admin-web)', () => {
     const w = await mountPanel()
     expect(w.text()).toContain('No erasure is pending.')
     expect(w.text()).toContain('The account stops at once')
-    expect(w.text()).toContain('After 30 days it is erased for good')
+    expect(w.text()).toContain('After 14 days, unless you set another window, it is erased for good')
     expect(w.text()).toContain("Your own account, the Server Owner's, can't be erased.")
     expect(w.text()).toContain('that tenant is left without an owner')
     expect(w.text()).toContain('Holds and moderation records that name the account stay')

@@ -16,7 +16,7 @@ export async function listAccountErasures(): Promise<PendingAccountErasure[]> {
 
 /**
  * Erase the account at this address: it stops at once (sessions end, sign-in refused, member removal in every tenant)
- * and is purged after the scope trash's retention. Refusals: 404 `account_not_found`; 409 `server_owner_account`,
+ * and is purged after the erasure's own window (`veyq.account.erasure.window`, 14 days). Refusals: 404 `account_not_found`; 409 `server_owner_account`,
  * `account_erasure_pending`, `moderation_last_holder`. A last owner is NOT refused — its tenant is left ownerless.
  */
 export function eraseAccount(address: string): Promise<PendingAccountErasure> {

@@ -287,7 +287,7 @@ const en = {
     factKept: 'Reports, moderation records and held copies that name your account stay until their legal retention ends.',
     factBackups: 'Backups of this instance keep your account until they expire.',
     factWindow:
-      'The erasure completes after a waiting period — 30 days unless the Server Owner set another. From the moment you confirm, you cannot sign in, and only the Server Owner can stop it.',
+      'The erasure completes after a waiting period — 14 days unless the Server Owner set another. From the moment you confirm, you cannot sign in, and only the Server Owner can stop it.',
     choiceTitle: 'Spaces you are the last owner of',
     choiceSub: 'Others are members here. For each one, choose: delete it along with your account, or make one of its members the owner.',
     choicePlaceholder: 'Choose…',
@@ -2316,7 +2316,7 @@ const de: typeof en = {
     factKept: 'Meldungen, Moderationsunterlagen und gesicherte Kopien, die dein Konto nennen, bleiben bis zum Ende ihrer gesetzlichen Aufbewahrung.',
     factBackups: 'Sicherungen dieser Instanz behalten dein Konto, bis sie ablaufen.',
     factWindow:
-      'Die Löschung ist nach einer Wartezeit abgeschlossen – 30 Tage, sofern die Person, die den Server betreibt, keine andere festgelegt hat. Ab deiner Bestätigung kannst du dich nicht mehr anmelden, und nur sie kann die Löschung noch aufhalten.',
+      'Die Löschung ist nach einer Wartezeit abgeschlossen – 14 Tage, sofern die Person, die den Server betreibt, keine andere festgelegt hat. Ab deiner Bestätigung kannst du dich nicht mehr anmelden, und nur sie kann die Löschung noch aufhalten.',
     choiceTitle: 'Bereiche, die nur noch dir gehören',
     choiceSub: 'Hier sind noch andere Mitglieder. Wähle für jeden Bereich: mit deinem Konto löschen oder einem seiner Mitglieder übergeben.',
     choicePlaceholder: 'Auswählen…',

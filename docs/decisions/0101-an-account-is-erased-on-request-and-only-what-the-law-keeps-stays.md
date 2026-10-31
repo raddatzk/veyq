@@ -1,7 +1,7 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
 - Status: Accepted
-- Built: partly (not built: decision 3's 14-day window (inbox #811), decision 9's hand-over of the moderation key (inbox #812))
+- Built: partly (not built: decision 9's hand-over of the moderation key (inbox #812))
 - Date: 2026-10-18
 - Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
 
@@ -167,8 +167,7 @@ user id without a foreign key classified in the eraser's code as erased or kept,
 
 ## Rejected alternatives
 
-- **Erasing at once, with no window.** A coerced or mistaken request would be final, and the own scopes go through
-  the scope trash's 30 days anyway.
+- **Erasing at once, with no window.** A coerced or mistaken request would be final.
 - **Pseudonymising the account instead of deleting it.** A row kept without its address serves no purpose a
   controller could name.
 - **Nulling the ids in others' content.** It would cut a hold's attribution (ADR 0093 § 8) and turn "a former member"

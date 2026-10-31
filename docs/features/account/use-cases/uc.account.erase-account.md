@@ -9,9 +9,9 @@
   Art. 17).
 - **Preconditions:** The account exists and is not the Server Owner's. For the self-service door: the member is signed in
   and proves their password.
-- **Postconditions (success):** The account can no longer sign in from the request on; after the scope trash's
-  retention its row and every row keyed on it are gone, its own scopes are purged, and the erasure is in the erasure
-  ledger; what a moderation case or a hold keeps stays, under an opaque id, to its own end.
+- **Postconditions (success):** The account can no longer sign in from the request on; after the erasure's own window
+  (14 days, `veyq.account.erasure.window`) its row and every row keyed on it are gone, its own scopes are purged with
+  it, and the erasure is in the erasure ledger; what a moderation case or a hold keeps stays, under an opaque id, to its own end.
 
 ## Main flow
 
@@ -22,11 +22,14 @@
 2. **The account stops.** In one transaction the server ends every session, refuses sign-in, drops pending invites,
    pairings, recoveries and address changes, runs the member removal in every tenant (own scopes into the scope trash,
    shared scopes cut, a sole-owned group handed on, links in shared scopes switched off), removes the account from the
-   moderator roster if it is on it, and records the erasure as pending until the scope trash's retention ends.
+   moderator roster if it is on it, and records the erasure as pending, due the erasure's window after the request
+   (14 days by default; ADR 0101 decision 3, a safeguard for a mistaken or coerced request). The due date is stored
+   with the request: a window changed later moves no pending erasure.
 3. **The person is told.** One mail to the account address, through the instance mail where it is set up: erasure
    requested, the date it completes, and that the Server Owner can stop it until then. The browser that erased clears
    its own records for the address.
-4. **The purge.** When the retention ends, the purge that erases the own scopes erases the account: its row, keys and
+4. **The purge.** When the window ends, the purge erases the account with its own scopes — then, though the scope trash
+   alone would keep them longer: its row, keys and
    wraps, sessions, pins, recovery, device register and pairings, profiles, memberships, favorites, moderator grants and
    terms acceptance rows (unless step 5 keeps them), and writes the erasure into the erasure ledger.
 5. **What stays.** Content in scopes the person did not own alone keeps its opaque attribution and shows as a former
@@ -41,7 +44,7 @@
 - **A2 — The Server Owner's own account:** refused (`server_owner_account`).
 - **A3 — The last owner of a tenant with other members**, at the self-service door: the dialog offers a choice per such
   tenant — **delete the tenant along** ([uc.admin.delete-tenant](../../admin/use-cases/uc.admin.delete-tenant.md), its
-  window) **or name a new owner** from its members — and the erasure proceeds after either, in the request's one
+  window: the scope trash's retention, not the account's) **or name a new owner** from its members — and the erasure proceeds after either, in the request's one
   transaction. A request that leaves such a tenant without a choice is refused (`last_owner_choice_required`), nothing
   changed. A tenant with no other member is deleted with the account, and the dialog names it.
 - **A4 — The Server Owner's door for a last owner:** not refused; the tenant is left with no owner, and admin-web shows

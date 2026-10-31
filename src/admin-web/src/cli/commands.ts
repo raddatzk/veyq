@@ -784,7 +784,7 @@ export const COMMANDS: Record<string, Command> = {
   'account erase': {
     usage: 'account erase --address <address>',
     summary:
-      'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 30 days (printed as dueAt) unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay.',
+      'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 14 days, or the window `veyq.account.erasure.window` sets (printed as dueAt), unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay.',
     flags: { address: { describe: 'the account’s address', required: true } },
     run: (f) => eraseAccount(f.address),
   },

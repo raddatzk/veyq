@@ -4,7 +4,7 @@
 // erasures with a stop per row. What it keeps honest:
 //   - the address is typed twice and the button stays disarmed until both match (`addressConfirmed`, the facade's
 //     rule): an erasure is final after the purge, and a typo would erase someone else;
-//   - what happens is said before it happens — the account stops at once, it is erased after the retention, it can be
+//   - what happens is said before it happens — the account stops at once, it is erased after its window, it can be
 //     stopped until then, the Server Owner's own account cannot be erased, a last owner's tenant is left ownerless, and
 //     holds and moderation records stay;
 //   - each refusal the server can give is named apart, not one generic failure.

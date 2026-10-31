@@ -41,9 +41,11 @@ data class OwnerChoice(val tenantId: String, val newOwnerId: String?)
 data class PendingErasureView(val address: String, val requestedAt: Instant, val requestedBy: String, val dueAt: Instant)
 
 sealed interface ErasureOutcome {
-    /** Requested: the purge erases the account at [dueAt]; [deletedTenants] went offline with it, to be mailed. */
+    /** Requested: the purge erases the account at [dueAt]; [deletedTenants] went offline with it, due at [tenantsDueAt]
+     *  (a tenant deletion's own window, decision 10), to be mailed. */
     data class Pending(
-        val accountId: String, val address: String, val requestedAt: Instant, val dueAt: Instant, val deletedTenants: List<String>,
+        val accountId: String, val address: String, val requestedAt: Instant, val dueAt: Instant,
+        val deletedTenants: List<String>, val tenantsDueAt: Instant,
     ) : ErasureOutcome
     data object NotFound : ErasureOutcome, HttpFailure by httpFailure("account_not_found", FailureStatus.NOT_FOUND)
     data object ServerOwnerAccount : ErasureOutcome, HttpFailure by httpFailure("server_owner_account", FailureStatus.CONFLICT)
@@ -69,7 +71,10 @@ sealed interface StopErasureOutcome {
  *  3. the member removal in every other tenant ([TenantHandler.removeForErasure]): own scopes into the scope trash with
  *     the membership kept, shared ones cut and their links off, a sole-owned group handed on;
  *  4. every session ends, and the pending invites, pairings, recoveries and address changes go;
- *  5. the pending erasure, due after the scope trash's retention, which [AccountPurge] carries out.
+ *  5. the pending erasure, due the erasure's own window after the request ([AccountErasureWindow], decision 3), which
+ *     [AccountPurge] carries out with the own scopes. A stored due date is never recomputed: a request keeps the window
+ *     it was made under. A tenant deleted along waits out a tenant deletion's window instead (decision 10, the scope
+ *     trash's retention), as one the Server Owner deletes does.
  * After the commit: the routers of a tenant deleted along are withdrawn, its members are mailed, and so is the account.
  * A refusal at any step rolls everything back: nothing is ever half requested.
  */
@@ -85,9 +90,11 @@ class AccountErasureHandler(
     private val mail: AccountErasureMail,
     private val tenantMail: TenantDeletionMail,
     private val ingress: TenantIngressProjector,
+    private val window: AccountErasureWindow,
     config: VeyqConfig,
 ) {
-    private val retention: Duration = config.scope().delete().retention()
+    /** A tenant deletion's window (decision 10), the one `TenantHandler.delete` gives a tenant the Server Owner deletes. */
+    private val tenantDeletionRetention: Duration = config.scope().delete().retention()
 
     /** The tenants the erasure decides about (`getOwnAccountErasurePreview`); null for the Server Owner's own account. */
     fun preview(accountId: String): List<LastOwnerTenant>? = QuarkusTransaction.requiringNew().call {
@@ -140,7 +147,7 @@ class AccountErasureHandler(
     private fun finish(outcome: ErasureOutcome): ErasureOutcome {
         if (outcome !is ErasureOutcome.Pending) return outcome
         if (outcome.deletedTenants.isNotEmpty()) ingress.regenerate()
-        outcome.deletedTenants.forEach { tenantMail.tenantDeleted(it, outcome.dueAt) }
+        outcome.deletedTenants.forEach { tenantMail.tenantDeleted(it, outcome.tenantsDueAt) }
         mail.requested(outcome.accountId)
         return outcome
     }
@@ -149,7 +156,8 @@ class AccountErasureHandler(
         val accountId = user.id
         if (AccountErasureEntity.isPending(accountId)) return ErasureOutcome.AlreadyPending
         val now = Instant.now()
-        val dueAt = now.plus(retention)
+        val dueAt = now.plus(window.current())
+        val tenantsDueAt = now.plus(tenantDeletionRetention)
 
         // 1. The roster — the one step that may refuse after the gates, so it runs before anything is written.
         val left = moderation.leaveForErasure(accountId, actorId, now)
@@ -176,7 +184,7 @@ class AccountErasureHandler(
                 }
             }
             // The tenant deletion's own transition, offline at once; its routers go after the commit ([finish]).
-            deleted.forEach { tenants.markForDeletion(it, dueAt) }
+            deleted.forEach { tenants.markForDeletion(it, tenantsDueAt) }
         }
 
         // 3. The member removal in every other tenant.
@@ -211,7 +219,7 @@ class AccountErasureHandler(
             this.requestedBy = requestedBy
             this.dueAt = dueAt
         }.persist()
-        return ErasureOutcome.Pending(accountId, user.email, now, dueAt, deleted)
+        return ErasureOutcome.Pending(accountId, user.email, now, dueAt, deleted, tenantsDueAt)
     }
 
     /** The tenants whose only OWNER [accountId] is — ACTIVE or SUSPENDED ones; a tenant deleted already decides nothing. */

@@ -377,13 +377,22 @@ interface VeyqConfig {
         }
     }
 
-    /** The account erasure (ADR 0101): how often `AccountPurge` looks for a due one. Its window is the scope trash's
-     *  (`veyq.scope.delete.retention`): an account goes when its own scopes go. */
+    /** `veyq.account.*` — the account erasure (ADR 0101) and securing the account (ADR 0111). */
     interface Account {
         fun erasure(): Erasure
         fun rotation(): Rotation
 
+        /** The account erasure (ADR 0101 decision 3): its window, and how often `AccountPurge` looks for a due one. */
         interface Erasure {
+            /** How long after the request the account is erased, its own scopes with it: a window of the erasure's
+             *  own, a safeguard for a mistaken or coerced request, no longer the scope trash's
+             *  (`veyq.scope.delete.retention`, which stays for a scope deleted on its own). Read at each request and
+             *  stored as the request's due date, so a change applies to requests made after it.
+             *  `AccountErasureWindow` refuses to start on one that is not positive, or that with one purge tick
+             *  reaches past the shortest calendar month. */
+            @WithDefault("P14D")
+            fun window(): Duration
+
             fun purge(): Interval
         }
 

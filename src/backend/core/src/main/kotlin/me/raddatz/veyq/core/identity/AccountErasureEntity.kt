@@ -11,9 +11,9 @@ import java.time.Instant
 
 /**
  * A pending account erasure (ADR 0101 decisions 1-3, uc.account.erase-account): the account stopped at [requestedAt]
- * and `AccountPurge` erases it at [dueAt] — the request plus the scope trash's retention — unless the Server Owner stops
- * it first, which deletes this row. While it exists, sign-in refuses the account as it refuses a wrong password, and a
- * password reset mints nothing. [mailedAt] is when the instance mail telling the address went out; the purge's hourly
+ * and `AccountPurge` erases it at [dueAt] — the request plus `veyq.account.erasure.window`, fixed when it was requested
+ * (a later change of the window moves no stored date) — unless the Server Owner stops it first, which deletes this
+ * row. While it exists, sign-in refuses the account as it refuses a wrong password, and a password reset mints nothing. [mailedAt] is when the instance mail telling the address went out; the purge's hourly
  * tick retries it until then.
  *
  * In the kernel, beside the account row, because the sign-in and the reset ask it: neither may import the erasure slice.

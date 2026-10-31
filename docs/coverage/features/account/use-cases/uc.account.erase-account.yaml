@@ -39,8 +39,20 @@ acceptanceCriteria:
         reason: >-
           The pending invites, pairings, recoveries and address changes are superseded in the request's transaction
           (`AccountErasureHandler.start`), and the purge deletes their rows; no slice seeds each of them at the request.
+  - id: the-erasure-waits-a-window-of-its-own
+    text: The erasure is due the erasure's own window after the request — 14 days by default (`veyq.account.erasure.window`), not the scope trash's retention — and the purge's tick erases the account with its own scopes once due and not before; a configured window is honoured, a request keeps the due date it was given, a tenant deleted along waits out a tenant deletion's window, and the boot refuses a window that is not positive or that with a purge tick passes 28 days.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.theErasureIsDueItsOwnWindowAfterTheRequestAndTheTickTakesTheOwnScopesThen
+          - AccountErasureSliceTest.aConfiguredWindowIsHonouredAndARequestKeepsTheDateItWasGiven
+          - AccountErasureSliceTest.theLastOwnerMayDeleteTheTenantAlongAndASoleMembersTenantGoesWithoutAChoice
+        unit:
+          - AccountErasureWindowTest.theDefaultAndAnyWindowInsideTheShortestMonthAreAccepted
+          - AccountErasureWindowTest.aWindowThatIsNotPositiveIsRefused
+          - AccountErasureWindowTest.aWindowThatWithItsPurgeTickPassesTheShortestMonthIsRefused
   - id: the-purge-erases-every-row-keyed-on-the-account
-    text: After the scope trash's retention the purge erases the account row and every row keyed on it, and a guard derived from the migrations holds every such table erased or cascading.
+    text: After the erasure's window the purge erases the account row and every row keyed on it, and a guard derived from the migrations holds every such table erased or cascading.
     coverage:
       backend:
         integration:

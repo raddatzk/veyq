@@ -50,9 +50,11 @@ import org.jboss.logging.Logger
 
 /**
  * The account erasure's purge (uc.account.erase-account step 4, ADR 0101 decisions 3-6): once a pending erasure is
- * due — the request plus `veyq.scope.delete.retention`, the scope trash's 30 days — one transaction erases the account
- * with its own scopes and every row keyed on it, and writes the erasure into the erasure ledger. Pending or complete,
- * never partial: a failure rolls the whole account back, is logged, and the next tick tries again.
+ * due — the request plus the erasure's own window, `veyq.account.erasure.window` (14 days), as the request stored it —
+ * one transaction erases the account with its own scopes and every row keyed on it, and writes the erasure into the
+ * erasure ledger. The own scopes go then, though the scope trash would keep them longer: the window is the account's,
+ * not theirs. Pending or complete, never partial: a failure rolls the whole account back, is logged, and the next tick
+ * tries again.
  *
  * **Its own scopes go first, through the scope erasure** ([ScopePurge.purge]): its personal scope in every tenant and
  * every scope the member removal put into the trash with the membership kept (a solo group). Then the applications'

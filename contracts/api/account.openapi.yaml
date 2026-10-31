@@ -1539,8 +1539,9 @@ paths:
         `newOwnerId` null: the tenant is deleted along (`deleteTenant`'s pending deletion, the Server Owner can stop
         it) — and a tenant with no other member is deleted along without a choice. Every session of the account ends,
         sign-in is refused, its pending invites, pairings, recoveries and address changes go, the member removal runs in
-        every tenant, and it leaves the moderator roster. The account is purged after the scope trash's retention; until
-        then only the Server Owner can stop it. One mail goes to the account's address through the instance mail where
+        every tenant, and it leaves the moderator roster. The account is purged with its own scopes after the erasure's
+        own window (`veyq.account.erasure.window`, 14 days; a tenant deleted along waits out a tenant deletion's window);
+        until then only the Server Owner can stop it. One mail goes to the account's address through the instance mail where
         it is set up.
 
         Checked in this order: the Server Owner's account (`409 server_owner_account`); the proof (`403
@@ -1689,7 +1690,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the purge erases the account — the request plus the scope trash's retention.
+          description: When the purge erases the account — the request plus the erasure's window (`veyq.account.erasure.window`) as it stood at the request.
           example: 2026-11-17T10:00:00Z
 
     # MasterKeyWrap and ErrorResponse are single-sourced in _common.openapi.yaml (ADR 0038), aliased here by name

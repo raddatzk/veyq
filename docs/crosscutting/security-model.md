@@ -779,9 +779,10 @@ keeps a moderation block or case
 off the host is theirs to delete by B, and a restore onto a new host re-applies only the ledger carried there. An
 account is erased on request and an active tenant can be deleted
 ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)): the account stops
-at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after the
-scope trash's retention one purge erases it with its own scopes, every row keyed on it and its address wherever it was
-copied; a tenant goes offline at once and is erased after the same window. An application left switched off in a
+at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after a
+window of its own (14 days, `veyq.account.erasure.window`) one purge erases it with its own scopes, every row keyed on
+it and its address wherever it was copied; a tenant goes offline at once and is erased after the scope trash's
+retention. An application left switched off in a
 tenant is erased there on a day its members are told, `veyq.application.off.retention` after it went off: every node of
 its kinds made before the day, in every scope of the tenant, goes through the trash purge's erase, and switched on
 before the day nothing goes

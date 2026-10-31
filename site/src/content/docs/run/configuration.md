@@ -221,7 +221,8 @@ environment-variable form is the key in upper case with `.` and `-` turned into 
 | `veyq.pairing.channel.ttl` | `PT10M` | How long a device-linking code is valid |
 | `veyq.node.trash.retention` | `P30D` | How long trashed folders and Memories can be restored |
 | `veyq.media.trash.retention` | `P30D` | How long trashed photos and videos can be restored |
-| `veyq.scope.delete.retention` | `P30D` | How long a deleted group stays restorable |
+| `veyq.scope.delete.retention` | `P30D` | How long a deleted group stays restorable, and how long a deleted tenant waits before it is erased |
+| `veyq.account.erasure.window` | `P14D` | How long after the request an account is erased, its own spaces with it; until then you can stop the erasure ([Accounts](/veyq/run/first-run/#accounts)). It must be positive and, with the hourly purge, at most 28 days (the shortest calendar month), or the application refuses to start; a change applies to requests made after it |
 | `veyq.application.off.retention` | `P30D` | How long an application stays switched off in a tenant before its content there is erased; the day is the switch-off plus this ([Capabilities](/veyq/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)) |
 | `veyq.blob.max-bytes` | 20 GiB | The largest single file |
 | `veyq.blob.upload.retention` | `PT1H` | When an abandoned upload is cleaned up; must be longer than the presigned-link lifetime |
