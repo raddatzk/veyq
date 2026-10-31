@@ -1114,6 +1114,30 @@ class ScopesSliceTest {
     }
 
     @Test
+    fun aPlainMemberOfTheGroupReadsItsRosterAndANonMemberGets404() {
+        // The settings hub opens a group the caller does not own read-only and lists who is in it (ADR 0022 decision 3,
+        // uc.spaces.manage-group-members A7): the directory is any key-holder's to read, not the owner's alone.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+        val outsider = seedTenantMember(tenantIdOf(domain), "third")
+
+        given().header("Authorization", bearer(partner))
+            .`when`().get("/api/scopes/$groupId/members")
+            .then().statusCode(200).body("size()", equalTo(2))
+            .body("find { it.userId == '$owner' }.role", equalTo("OWNER"))
+            .body("find { it.userId == '$partner' }.role", equalTo("MEMBER"))
+            .body("find { it.userId == '$partner' }.username", equalTo("partner"))
+            .body("find { it.userId == '$owner' }.identityPublicKey", notNullValue())
+
+        // A fellow tenant member outside the group gets the answer for a group that does not exist (ADR 0042).
+        given().header("Authorization", bearer(outsider))
+            .`when`().get("/api/scopes/$groupId/members")
+            .then().statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    @Test
     fun addGroupMemberUnknownUsernameIs404() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
