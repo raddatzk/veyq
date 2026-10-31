@@ -7,12 +7,11 @@
 
 ## Context
 
-[ADR 0005](0005-unlock-methods-and-device-trust.md) reserved cross-device onboarding as its own use-case and
-ADR, and named three constraints it would have to carry: E2E unlock-transfer, QR-login phishing, and
-non-enumerability. This is that ADR. The crypto it needs is almost entirely built — one Master Key per account
+[ADR 0005](0005-unlock-methods-and-device-trust.md) §16 leaves bringing in a second device to its own use-case
+and to this ADR. The sealing it needs is the suite's own — one Master Key per account
 ([en.account.key-model](../features/account/enablers/en.account.key-model.md)), `asymWrap` to a foreign public
-bundle, the `DEVICE_KEY` wrap envelope, a QR decoder — so what had to be decided was never the sealing. It was
-the ceremony around it.
+bundle, the `DEVICE_KEY` wrap — so what is decided here is not the sealing but the ceremony around it, against
+three threats: moving the unlock end to end, QR-login phishing, and enumeration.
 
 **Linking is the only mechanism in veyq that converts an auth-layer fact into an unlock-layer one.** Everything
 else holds the two apart on purpose: a valid session fetches ciphertext and never opens it
@@ -20,19 +19,17 @@ else holds the two apart on purpose: a valid session fetches ciphertext and neve
 ([ADR 0058](0058-revoke-never-takes-key-material.md)). Linking hands a device the Master Key on the strength of
 one human confirmation. That single fact sets everything below.
 
-**And the reason this feature was sequenced behind the session manager needs correcting, because the corrected
-version is what sets the ceremony's floor.** It was deferred so that a phished grant could be taken back. It
-cannot be. A revoke cuts the granted device off the server; the Master Key it already holds stays, and the
-account's identity private key travels with it, so a phished grant is an identity takeover and not merely a
-read. The cure is master-key **and** identity rotation
+**A phished grant cannot be taken back, and that is what sets the ceremony's floor.** A revoke cuts the granted device
+off the server; the Master Key it already holds stays, and the account's identity private key travels with it, so a
+phished grant is an identity takeover and not merely a read. The cure is master-key **and** identity rotation
 ([ADR 0060](0060-key-rotation-after-compromise.md)) — and it is a cure in one direction only: it **ends** the
-compromise, it does not undo it, because what was already read stays read. So what the session manager
-actually bought this feature is **containment and discovery**, and what rotation adds is **an end date**;
-neither is reversal. The grant is visible, nameable and severable. Ship no copy that implies otherwise.
+compromise, it does not undo it, because what was already read stays read. So what the session manager gives this
+feature is **containment and discovery**, and what rotation adds is **an end date**; neither is reversal. The grant is
+visible, nameable and severable. Ship no copy that implies otherwise.
 
 ## Decision
 
-**1. Two directions, both built, each with its own name and its own entry point.** They answer different
+**1. Two directions, each with its own name and its own entry point.** They answer different
 questions and must not be collapsed into one screen:
 
 | | **Add a new device** | **Sign in with a QR code** |
@@ -82,7 +79,7 @@ will reach for. This is the one rule of this ADR that a reviewer should look for
 device being granted is one the user is holding.
 
 - **Add a new device — compare.** After the new device answers, it shows a short code and the trusted device
-  shows the same one: *"your new device shows 4821 — correct?"* Without it, anyone who can see the displayed
+  shows the same one: *"your new device shows 48217 — correct?"* Without it, anyone who can see the displayed
   QR (a screen share, a photo, a person in the room) can answer faster than the real device and be approved by
   a user who cannot tell the difference. Comparing works **here** because both screens are in front of the
   user.
@@ -115,10 +112,10 @@ defends — a six-digit offline search.
 than a button, the device's name in the sentence, and the truth § Context establishes: signing this device out
 later will not take the key back. The reflex is the attack; the copy and the gesture are what stand against it.
 
-**8. Short-lived, single-use, one outstanding pairing per account.** The shape is
-`AccountRecoveryEntity`'s — an opaque row with an expiry, a terminal status, enforcement at read *and* a
-scheduled sweep — not [ADR 0021](0021-operator-blind-background-tasks.md)'s job queue, whose routing is
-scope-membership-based and therefore cannot address a device that has no membership yet.
+**8. Short-lived, single-use, one outstanding pairing per account.** The shape is the recovery token's
+([ADR 0054](0054-password-recovery-two-factor-release.md)) — an opaque row with an expiry, a terminal status,
+enforcement at read *and* a scheduled sweep — not [ADR 0021](0021-operator-blind-background-tasks.md)'s job queue, whose
+routing is scope-membership-based and therefore cannot address a device that has no membership yet.
 
 **9. The trusted device *suggests* the label; the new device *writes* it.** The name the user types during the
 ceremony travels inside the sealed envelope and is written to the register by the device it names, on that
@@ -126,11 +123,12 @@ device's ordinary post-unlock write. This keeps
 [en.account.device-register](../features/account/enablers/en.account.device-register.md)'s single-writer rule
 intact and adds **no fourth write moment** — do not add one.
 
-**10. A linked device enrols a `DEVICE_KEY` wrap, never a `DEVICE` one.** A `DEVICE` wrap takes the password,
-which this device has never seen ([ADR 0005](0005-unlock-methods-and-device-trust.md) §9, §17–21). It is
-therefore born at the password-less tier, and the consequence belongs in the copy: if it ever loses that saved
-key — or another device removes it via [ADR 0058](0058-revoke-never-takes-key-material.md)'s escalation — it
-needs the password or the Emergency Kit, neither of which was ever typed on it.
+**10. A linked device enrols at most a `DEVICE_KEY` wrap, never a `DEVICE` one.** A `DEVICE` wrap takes the password,
+which this device has never seen ([ADR 0005](0005-unlock-methods-and-device-trust.md) §9, §17–20). With *"stay signed
+in"* answered yes it is therefore born at the password-less tier; declined, it enrols no wrap and holds the Master Key
+only for the browser session (ADR 0005 §22). The consequence belongs in the copy: if it ever loses that saved key — or
+another device removes it via [ADR 0058](0058-revoke-never-takes-key-material.md)'s escalation — it needs the password
+or the Emergency Kit, neither of which was ever typed on it.
 
 **11. The QR carries a secret the relay never sees, and that secret authenticates both messages the relay
 carries.** The code's payload is 32 random bytes, never the routing handle itself. Both devices derive the handle
@@ -161,16 +159,17 @@ verifies; the new device opens only an envelope whose MAC verifies.
 ## Consequences
 
 **What it buys.** The E2EE-native answer to "sign in on my other device": one flow that solves auth *and*
-unlock, with the Secret Key kept for the case it exists for. It also delivers recovery path #1 ("another
-enrolled device still holds the keys") — the Recovery topic should consume this rather than reinvent it.
+unlock, with the Secret Key kept for the case it exists for. It is also recovery path 1 ("another enrolled
+device still holds the keys") of
+[en.account.key-model § Recovery](../features/account/enablers/en.account.key-model.md#recovery--three-independent-paths-no-escrow).
 
 **What it costs.** Session delegation is a genuinely new server capability, and it is account-scoped: an
 unlocked session can mint a session. That adds no class of exposure (an unlocked session already holds
 everything) but it is new surface, and both pairing endpoints are unauthenticated, so each owes an explicit
 rate-limit posture rather than the wraps resource's exemption, whose reasoning does not transfer.
 
-**The obligation this feature created, and what discharging it does not buy.** A phished grant was
-unrecoverable until [ADR 0060](0060-key-rotation-after-compromise.md); with rotation it becomes *stoppable*.
+**What rotation does and does not buy against a phished grant.** With
+[ADR 0060](0060-key-rotation-after-compromise.md)'s rotation a phished grant is *stoppable*.
 It never becomes reversible, and rotation depends on the **Secret Key** — which a device linked here has never
 seen (§10), and which the account holder may not have to hand. So §5–§7 and §11 carry the same weight after
 rotation exists as before: they are the only barrier that acts *before* the key leaves.

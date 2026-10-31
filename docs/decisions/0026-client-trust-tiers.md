@@ -1,7 +1,7 @@
 # ADR 0026 — Client trust tiers & the operator-blindness boundary
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: the tier surfaced to a signed-in member; the share page shows it)
 - Date: 2026-07-06
 - Model: [security-model](../crosscutting/security-model.md)
 
@@ -76,8 +76,10 @@ SaaS-era build.
   **Branded + trusted** domains require veyq to control the DNS → SaaS. An **operator-owned** domain is *always*
   operator-served (it owns its DNS → controls code delivery; no CNAME/attestation trick durably removes that).
   Tracked in the inbox.
-- **The key-substitution residual persists** on every tier until fingerprint/TOFU/KT (the existing seam,
-  [ADR 0020](0020-grant-distribution-invite-wrap.md) / security-model § key-directory trust).
+- **A key-substitution residual persists** on every tier: what TOFU, the key chain and safety-number compares
+  leave open until Key Transparency is listed under
+  [security-model § What holds today](../crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve)
+  (*What stays open*).
 - **Rejected — claiming browser-delivered E2EE is operator-proof:** dishonest.
 - **Rejected — treating a stronger *unlock* method as a client-integrity answer.** A passkey (WebAuthn, incl. the
   PRF extension) yields a secret the server never sees, so it reads like a fix. It is not: the operator still

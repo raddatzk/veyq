@@ -22,11 +22,11 @@ The contract is where the hole opens. This is an API-first repo: a field exists 
 fill it. A plaintext `title: {type: string}` in `content.openapi.yaml` is the design error; a client putting a
 real title into it is only the symptom, and it arrives one phase later.
 
-Measured over `contracts/api/*.openapi.yaml` (2026-07-16): 9 specs, 140 schemas, **401 property occurrences**,
-136 distinct names. **106 occurrences already carry `contentEncoding: base64`**; 60 are containers whose targets
-carry their own properties; **235 scalar occurrences say nothing about whether the server may read them.** No
-request or response body defines inline properties — every named field lives under `components.schemas.*
-.properties.*` — so a validator over that path sees the whole body surface.
+Measured over the specs when this was decided: the opaque fields already carried `contentEncoding: base64`, and
+containers' targets carry their own properties, but **every other scalar said nothing about whether the server
+may read it** — the larger part of the body surface. No request or response body defines inline properties —
+every named field lives under `components.schemas.*.properties.*` — so a validator over that path sees the whole
+body surface.
 
 ## Decision
 
@@ -34,15 +34,15 @@ request or response body defines inline properties — every named field lives u
 
 1. **`contentEncoding: base64` ⇒ opaque — no marker needed.** The server derives no meaning from these bytes,
    whether they are ciphertext, a wrapped key, a public key, a signature, a salt or a blinded token. This is
-   standard OpenAPI 3.1, it is already true for all 106 occurrences, and — unlike `x-field-extra-annotation`,
-   which binds request DTOs only — it reaches the 59 response-only field names too.
+   standard OpenAPI 3.1, it was already true of every opaque field, and — unlike `x-field-extra-annotation`,
+   which binds request DTOs only — it reaches the response-only fields too.
 
 2. **Every other scalar property carries `x-veyq-visibility: <class>`.** An unmarked scalar fails the build.
    Containers (`$ref`, or an array of `$ref`) carry none: their target's properties carry theirs. **A container
    stays one through every nullable spelling** — OpenAPI 3.1 has three (`type: ['array','null']`,
-   `oneOf: [{$ref}, {type: null}]`, and the plain form), all three are in these specs, and 11 containers hide in
-   the first two. A guard that only knows `type: array` demands a marker on a `$ref` and contradicts this rule.
-   The marker goes **first** in the property, before `type`: a `description` block runs to 374 characters here,
+   `oneOf: [{$ref}, {type: null}]`, and the plain form), and all three are in these specs. A guard that only
+   knows `type: array` demands a marker on a `$ref` and contradicts this rule.
+   The marker goes **first** in the property, before `type`: a `description` block runs to hundreds of characters,
    and a claim about what the operator may read is not something to bury under one.
 
 3. **The classes are `security-model.md` § *What is encrypted vs. server-visible*'s own kinds**, not a new
@@ -61,7 +61,7 @@ request or response body defines inline properties — every named field lives u
    | `pii` | deliberate sensitive plaintext | *"per-tenant username, identity public key"* |
 
    `public` is the doc's terms-text kind, read for what actually distinguishes it: **whose data it is**, not who
-   may see it. 41 of the 235 scalars are the instance describing itself or reporting on itself — error `code`s,
+   may see it. Many scalars are the instance describing itself or reporting on itself — error `code`s,
    developer-facing `message`/`reason` text, `Version.major`/`build`, the capability catalog, the advertised
    crypto suites, a tenant's own display name and domain. None is the user's data, and forcing them into `pii`
    or `enum` would say something false about every one of them.
@@ -86,10 +86,9 @@ The point is the **default**. Today silence means "nobody classified this". Afte
 - **A new `title: {type: string}` cannot land quietly.** Its author must seal it or write
   `x-veyq-visibility: pii` with a reason — and a reviewer reads that choice in the same diff as the field. That
   is the whole mechanism: it does not detect bad fields, it makes the decision unavoidable and visible.
-- **Backfill: 235 scalar occurrences.** Mechanical, and it is the cost. It is paid once; a marker on a field is
-  cheaper than a list in the middle, which is what the rejected alternatives all are. It settled at
-  `id`=74 · `public`=41 · `structure`=27 · `measure`=22 · `pii`=20 · `time`=14 · `flag`=14 · `token`=13 ·
-  `enum`=10.
+- **Backfill: every unmarked scalar.** Mechanical, and it is the cost. It is paid once; a marker on a field is
+  cheaper than a list in the middle, which is what the rejected alternatives all are. The guard prints the spread
+  per class on every run.
 - **This checks the contract, not the traffic — and that is the sharpest limit, not the list below.** A field
   carrying `contentEncoding: base64` is *permitted* to be opaque; nothing here observes whether the client put
   ciphertext in it. A client that writes plaintext into a field marked opaque satisfies this ADR completely. The
@@ -100,13 +99,12 @@ The point is the **default**. Today silence means "nobody classified this". Afte
 - **The claim is narrow, and the validator's docstring must say so.** It covers the JSON body properties and,
   by the same rules, three places a value crosses the wire outside a body property: a **scalar component schema**
   (a `$ref`'d target with no properties to carry a class — `InviteBootstrapSecret` was classified by nobody until
-  this was ruled), every **`in: header` parameter** (`X-Contributor-Token`, `X-Share-Password`, `If-None-Match`)
-  and every **declared response header** (the refresh-token `Set-Cookie`, the media list's `ETag`). Each was
-  marked when cr-wire-assertion-capability-tokens made the `token` class load-bearing: the e2e run derives its
-  capability-token needles by reading `token`-marked values out of its HTTP recording, so an unmarked token is
-  one no sweep looks for. It does not see: path params, query params, presigned-URL query strings, 67 DB column
-  names with no contract, error `message` free text, a header the server sends without declaring it, or **the
-  S3 object key** — the one surface the operator literally lists. A green run means *"no unclassified field in a
+  this was ruled), every **`in: header` parameter** (a capability header among them) and every **declared response
+  header** (the refresh-token `Set-Cookie` among them). They are marked because the `token` class is load-bearing:
+  the e2e run derives its capability-token needles by reading `token`-marked values out of its HTTP recording, so
+  an unmarked token is one no sweep looks for. It does not see: path params, query params, presigned-URL query
+  strings, DB columns with no contract, error `message` free text, a header the server sends without declaring
+  it, or **the S3 object key** — the one surface the operator literally lists. A green run means *"no unclassified field in a
   JSON body, and no unclassified declared header"*, never *"operator-blind, verified"*. The object key gets its
   own guard, because it needs one and this cannot be it.
 - **`token` is a class, not an encoding — a base64 capability is `token`, not opaque.** The pairing `handle` is
@@ -114,8 +112,8 @@ The point is the **default**. Today silence means "nobody classified this". Afte
   `contentEncoding: base64` it was invisible to the token sweep, and the opacity check it got instead proves
   nothing about random bytes. The guard forbids a marker on a base64 field (a second way to say "opaque" is a
   way to say the opposite), so such a field declares its alphabet with a `pattern` and carries `token`.
-- **`x-veyq-*` is claimed here.** It was provably free: `x-field-extra-annotation` (87 uses) was the only
-  extension anywhere in `contracts/`.
+- **`x-veyq-*` is claimed here.** It was provably free: `x-field-extra-annotation` was the only extension
+  anywhere in `contracts/`.
 - `security-model.md` § *What is encrypted vs. server-visible* stays the rationale and gains a pointer here. The
   specs do not restate it; they reference its kinds by name.
 - **Rejected — a name-keyed rule** (`^sealed|^wrapped|^encrypted|Key$|Blob$`). Measured unsound **in both
@@ -129,12 +127,12 @@ The point is the **default**. Today silence means "nobody classified this". Afte
   budget. A budget with false entries stops being read, and being read is its only function. And `kdfParams`, `pwSalt`, `pwVerifier`, `secretKeyProofSignature`, `signature`, `slugToken`,
   `nonce`, `instanceSalt` are opaque with no matching name. A convention that is 80% real is worse than none: it
   invites the rule that the other 20% silently defeats.
-- **Rejected — a central allowlist of permitted field names.** 401 occurrences collapse to 136 names, so names
-  are reused across schemas with different meanings: `id` appears in 7 specs; `name` is a tenant's display name
+- **Rejected — a central allowlist of permitted field names.** Far fewer names than occurrences, so names
+  are reused across schemas with different meanings: `id` appears in many specs; `name` is a tenant's display name
   in `tenants` and something else in `scopes`; `blob` is ciphertext in `account` while `blobId` is an opaque id
   in `media`. Allowlisting the string `name` blesses **every** future `name` in every schema, including the one
-  that ends up holding a person's real name. To be sound the list must key on `(schema, property)` — 401
-  entries, a second spec, drifting the moment a schema is added.
+  that ends up holding a person's real name. To be sound the list must key on `(schema, property)` — one entry
+  per occurrence, a second spec, drifting the moment a schema is added.
 - **Rejected — guarding only the forbidden names** (assert no plaintext `title`/`caption`/`place`/`tag` appears).
   Cheap, and the same shape as `validate_scope_model_vocabulary.py`, which is why it was tempting. But it only
   catches what someone already thought to forbid, and the field that breaks this invariant will be one nobody

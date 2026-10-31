@@ -7,25 +7,25 @@
 
 ## Context
 
-Ending a session and removing a device's convenience wrap are two different cuts, and until now nothing decided
-how they relate. [ADR 0004](0004-session-tokens.md) decides session families and revocation and does not contain
+Ending a session and removing a device's convenience wrap are two different cuts, and this ADR decides how they
+relate. [ADR 0004](0004-session-tokens.md) decides session families and revocation and does not contain
 the word *wrap*. [ADR 0005](0005-unlock-methods-and-device-trust.md) decides the wraps and says nothing about
-sessions. The only place the two are coupled is [ADR 0054](0054-password-recovery-two-factor-release.md) §3,
-where a password reset deletes **every** `DEVICE` and `DEVICE_KEY` wrap in the same transaction as
-`revokeAllForUser` — account-wide, in one exceptional flow, for a reason that generalises: a `DEVICE_KEY` wrap
+revoking a session. The only place the two are coupled is [ADR 0054](0054-password-recovery-two-factor-release.md) §3,
+where a password reset deletes **every** `DEVICE` and `DEVICE_KEY` wrap in the same transaction that revokes
+every session — account-wide, in one exceptional flow, for a reason that generalises: a `DEVICE_KEY` wrap
 takes no password, so a device trusted before the reset would keep password-less access afterwards.
 
-The same argument reaches the ordinary case and nobody had drawn it. A revoked device keeps whatever wrap it
+The same argument reaches the ordinary case. A revoked device keeps whatever wrap it
 enrolled: it can no longer reach the server, but the next time it signs in — which needs only the password it
 already had — its `DEVICE` wrap opens the Master Key with **no Secret Key**. So "sign this device out" is a
-weaker act than the person clicking it believes, and `uc.account.sessions` already promises the missing half in
-its published section (*"if it is truly gone, also remove its saved key"*) without a surface that can do it.
+weaker act than the person clicking it believes — and the person who clicks it after losing a device needs the
+missing half.
 
-What made that surface impossible was a missing fact, not a missing endpoint. `DELETE /api/account/wraps/{id}`
-is account-scoped, every wrap id is served to every device, and session revoke is account-scoped too — but
-nothing said **which wrap belongs to which device**. That join is now available
-([en.account.device-register](../features/account/enablers/en.account.device-register.md)), so the question is
-live: given the ability to delete another device's wrap, when should a revoke do it?
+What such a surface needs is a fact, not an endpoint. Deleting a wrap is account-scoped, every wrap id is served
+to every device, and session revoke is account-scoped too — but only the sealed device register
+([en.account.device-register](../features/account/enablers/en.account.device-register.md)) says **which wrap
+belongs to which device**. So the question is: given the ability to delete another device's wrap, when should a
+revoke do it?
 
 ## Decision
 
@@ -62,12 +62,6 @@ wraps the register cannot name, the action is defined by **exclusion of what the
 
 ## Consequences
 
-- **`uc.account.sessions`' published promise becomes satisfiable and gets corrected.** It currently tells the
-  user to remove the saved key "on the device page", which only ever reached *this* device. The escalation is
-  what it should have described.
-- **`uc.account.remember-this-device`'s claim that the remember-me wrap is *"portable and server-revocable"*
-  loses half of itself.** *Server-revocable* becomes true here. *Portable* was never true and is removed: a
-  `DEVICE_KEY` wrap is ciphertext that only the device-local key `K` opens, so it travels nowhere.
 - **The revoked device is left holding an unusable handle, and that is correct.** Its local key material is
   untouched by anything done from another device — deleting it remotely is not possible and must not be
   simulated. On that device the next boot without a session drops the local tiers on a locally-verifiable fact,
@@ -79,10 +73,10 @@ wraps the register cannot name, the action is defined by **exclusion of what the
   worse: the common revoke is housekeeping ("I signed in somewhere I don't use any more"), and silently charging
   it an Emergency Kit on another device teaches people not to revoke. It also collapses a distinction the product
   depends on everywhere else.
-- **Rejected — leaving it as it is** (revoke only, as before this ADR). That keeps a control whose name promises
+- **Rejected — revoke only, with no escalation.** That keeps a control whose name promises
   more than it does, in the one flow — a lost or stolen device — the whole use-case exists for.
 - **The operator learns nothing new.** Both halves are calls the account could already make; the join that makes
   the escalation possible lives inside the Master-Key-sealed register and never reaches the server. The
   temptation this creates — a cleartext wrap-id list on the register, or a `deviceId` on the wrap, "so the server
   can prune" — would hand a blind operator the device↔wrap correlation while everything kept working, which no
-  test would catch. That is a shape obligation on the contract, owed to a guard rather than to prose.
+  test would catch. That is a shape obligation on the contract, held by a guard rather than by prose.

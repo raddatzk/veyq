@@ -7,14 +7,13 @@
 
 ## Context
 
-A `RECOVERY` `MasterKeyWrap` is written at every account birth (`src/packages/crypto/src/accountBirth.ts`), and the
-server withholds it from the endpoint that serves wraps (`KeyMaterialHandler.forUser` filters it out). The account
-key model says a forgotten password "must not mean lost memories"
+A `RECOVERY` `MasterKeyWrap` is written at every account birth, and the server withholds it from the endpoint that
+serves wraps. The account key model says a forgotten password "must not mean lost memories"
 ([en.account.key-model](../features/account/enablers/en.account.key-model.md)), so recovery is a promise the product
-owes, not merely a missing feature. ADR 0053's sibling durability bar is stated in
-[architecture](../architecture/README.md) §10.
+owes, not merely a missing feature: it is the half of the durability bar in
+[architecture](../architecture/README.md) §10 that the operator cannot hold alone.
 
-Three facts constrain the design. The first two are in the code; the third is a trap.
+Three facts constrain the design; the third is a trap.
 
 **1. The RECOVERY wrap is opened by the Secret Key alone.** `kekRecovery(secretKey, salt)` takes no password,
 where the `PASSWORD` floor takes both (`kekPasswordSecret`). So there is **no separate recovery code** in veyq
@@ -22,7 +21,7 @@ and never has been: the recovery factor *is* the Secret Key from the Emergency K
 one — a second 256-bit secret that unlocks exactly what the first one unlocks doubles the loss surface and adds
 no factor.
 
-**2. Releasing that wrap to a session would silently demote the password.** The withholding comment states it:
+**2. Releasing that wrap to a session would silently demote the password.** That is why it is withheld:
 a live session plus the Secret Key would open the vault *without* the password, turning the password from a
 content factor into a login-only one. So release cannot be authenticated by session — it must be gated on
 something the ordinary logged-in user does not have.
@@ -61,17 +60,19 @@ closed the first of those and not the second.
 **2. Recovery is not escrow, and the server gains no new power.** The server hands out ciphertext it already
 stores, to a party that must already hold the key that opens it. It cannot open the wrap, cannot derive the
 Master Key, and cannot complete a reset on anyone's behalf. Losing both the password *and* the Emergency Kit
-remains unrecoverable — deliberately, and as the wiki already says.
+remains unrecoverable — deliberately, and as the published docs already say
+([Lost Emergency Kit](../../site/src/content/docs/help/lost-emergency-kit.mdx)).
 
-**3. The reset re-writes exactly three things, and re-encrypts nothing.** The Master Key is unchanged, so all
+**3. The reset re-writes the credential, deletes every other way in, and re-encrypts nothing.** The Master Key
+is unchanged, so all
 content, scope keys and the identity keypair survive untouched — the same property that makes adding an unlock
 method cheap ([ADR 0005](0005-unlock-methods-and-device-trust.md)). What changes:
 
 - the `PASSWORD` wrap (fresh salt + nonce, new KEK from the new password),
-- `veyq_user.auth_public_key` (the Ed25519 keypair is derived from the password;
+- the auth public key (the Ed25519 keypair is derived from the password;
   [ADR 0003](0003-operator-blind-password-auth.md)),
-- and, by deletion, **every wrap but `PASSWORD` and `RECOVERY`** — today every `DEVICE` and `DEVICE_KEY` wrap. The
-  list names survivors, so a method added later dies too until it is declared one
+- and, by deletion, **every wrap but `PASSWORD` and `RECOVERY`**. The list names survivors, so a method added
+  later dies too until it is declared one
   ([en.account.key-model](../features/account/enablers/en.account.key-model.md) § Adding / removing unlock methods).
 
 The last one is not housekeeping. `DEVICE` wraps mix the old password and would simply fail, but `DEVICE_KEY`
@@ -80,8 +81,8 @@ password-less access afterwards. Since "someone else has my device" is a reason 
 alive would defeat the flow. All device trust is dropped; every device re-enrols on next sign-in. Live sessions
 are revoked with them.
 
-The three writes are **one transaction**. A partial apply leaves an account whose password logs in but does not
-unlock, or the reverse — both are lockouts.
+These writes, the session revoke and spending the token are **one transaction**. A partial apply leaves an
+account whose password logs in but does not unlock, or the reverse — both are lockouts.
 
 **4. Mail is a hard requirement, not a degraded path.** Recovery has **no `FALLBACK_COPYLINK`**, and the reason
 is what the link *points at* rather than who would carry it.
@@ -116,8 +117,7 @@ Server Owner, has no recovery until it joins one. That is the no-SMTP rule above
 
 The same reasoning reaches the member-invite copy-link, which handed a tenant owner a token minted for somebody
 else. That is decided in [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md), which retires it and makes
-a working mailer a precondition rather than a hope. **One exception survives it:** the ServerOwner's invite to a
-tenant's first owner, where a `PENDING` tenant has no mail settings by construction and no channel can exist yet.
+a working mailer a precondition rather than a hope, except for the one copy-link its decision 3 keeps.
 
 **5. The mail obeys [ADR 0049](0049-email-delivery-boundary.md) unchanged** — link, domain, expiry, and nothing
 else. It may not name the user, the tenant beyond its domain, or what is being recovered. Recovery copy is
@@ -126,7 +126,7 @@ their own voice, but an owner-authored *recovery* mail is a phishing surface aim
 
 **6. Request is non-enumerable — about the *address*.** A recovery request answers identically for a known and
 an unknown address, and for the address of an account in another tenant (§4), mirroring the login challenge
-([ADR 0004](0004-session-tokens.md)). The response is never an oracle for "is this address registered here",
+([ADR 0003](0003-operator-blind-password-auth.md), Salt). The response is never an oracle for "is this address registered here",
 and neither is the mail, which only an account of the addressed tenant can receive. Rate limiting is
 per-address and per-source, not per-tenant: an account is tenant-global, so the invite limiter's key does not
 apply.
@@ -138,7 +138,7 @@ mail transaction slower than an unknown one, which is an oracle any stopwatch ca
 the synchronous side, before the hand-off, and that is what bounds the work queued behind the answer.
 
 That promise is about the address and nothing else. Whether the addressed tenant can send mail at all is a
-property of the deployment, is answered plainly with `503 mail_unavailable`, and is checked **before** the rate
+property of the deployment, is answered plainly with a `503`, and is checked **before** the rate
 limiter so the two answers cannot be paired into an address-level oracle
 ([ADR 0055 §4/§5](0055-mail-is-a-precondition-not-a-capability.md)).
 
@@ -154,11 +154,3 @@ limiter so the two answers cannot be paired into an address-level oracle
   never gated on (its Decision 3) — and a completed reset is one of the events that sets it.
 - **The Secret-Key proof key is a correctness dependency.** An account whose proof key is missing or wrong
   cannot recover, cannot change its password, and cannot rotate.
-- **The invite-token lifecycle is the template**, not a new invention: `Tokens.random()` → store only
-  `Tokens.hash()` with an expiry and a status → mail the raw token in a URL fragment → look up by hash, check
-  liveness, flip status on consumption → scheduled expire-then-purge. Recovery wants a far shorter TTL than an
-  invite's `P7D`.
-- **A trap this creates.** `KeyMaterialStore.find` returns the RECOVERY wrap unfiltered; only the handler
-  filters it. A second caller that forgets to filter leaks a password-less path to the Master Key. The slice
-  test pins the *endpoint*, not the store. This ADR makes that a live risk rather than a latent one, because
-  recovery adds the first legitimate second caller.

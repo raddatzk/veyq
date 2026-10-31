@@ -11,7 +11,7 @@
 [ADR 0024](0024-scope-key-rotation.md) gives the rotation **mechanism** (a backward-linked content-key epoch chain;
 remove-a-member = mint `E_{n+1}`, re-grant the remaining members, delete the removed membership) and notes it is
 "scope-generic, group-first" — but deliberately leaves the **policy** open: *which* scopes rotate on removal, and
-*when*. Its first and only consumer so far is group member-removal.
+*when*. Its first consumer was group member-removal.
 This ADR settles the policy, because the tenant scope forces the question.
 
 **The tenant scope is veyq's primary shared-content home** (groups are secondary), and a tenant can hold **hundreds
@@ -65,19 +65,16 @@ vault") is an explicit, rare action. This is the established practice for per-us
      default so a routine removal stays ACL-revoke. With a removal, the removal lands first and the rotation follows
      over the members then remaining, the removed one excluded by the owner's own choice: it is never wrapped to them.
      A failed rotation leaves the removal standing and says so.
-   - **An account rotation** ([ADR 0060](0060-key-rotation-after-compromise.md)): the securing account re-keys the
-     tenant from its own device
-     ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-     decision 8).
+   - **An account rotation**: the securing account re-keys the tenant
+     ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 5).
 
-   Either rotator grants every member it anchors from its own device and declares the rest, and every open invite it
-   cannot vouch for, pending (ADR 0111 decisions 2 and 9); only the node re-key is spread across members' devices, and
-   a member declared pending is brought current by grant-delivery ([ADR 0024](0024-scope-key-rotation.md) §5).
-   The flow is [uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9.
+   What either rotation grants, declares pending and spreads across members' devices is
+   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)'s
+   (decisions 2, 8, 9 and 11). The flow is
+   [uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md) A8–A9.
 
-3. **Personal — never on a removal** (a single member; nothing to rotate away from). It rotates when its account is
-   secured, self-served: there the old identity is exactly the somebody to rotate away from
-   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 5).
+3. **Personal — never on a removal** (a single member; nothing to rotate away from). Its rotation on a compromise is
+   [ADR 0060](0060-key-rotation-after-compromise.md) Decision 5's.
 
 ## Consequences
 
@@ -93,11 +90,9 @@ vault") is an explicit, rare action. This is the established practice for per-us
   `O(log N)` re-wraps) — a large, deferred architecture change, taken up only if tenants prove large **and** churny.
 - **No rotation means no epoch signal for a public link.** A link a removed tenant member could copy cannot be
   "rotated away" (a rotation re-wraps it to the new node key, [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
-  point 4), and the tenant's epoch does not move on a removal, so the scope instead
-  counts its removals and each share stamps the count it was minted under; a link minted before a removal is
-  re-issued, never re-activated, and the removal can turn every tenant link off in the same act
-  ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) points 4–5). A counter, not a key event —
-  the `O(1)` removal stands.
+  point 4), and the tenant's epoch does not move on a removal, so a link minted before a removal is re-issued, never
+  re-activated, by a removal counter rather than a key event
+  ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) points 4–5) — the `O(1)` removal stands.
 - **Rejected — apply the group policy uniformly (always-rotate the tenant):** puts an `O(N)` burst on *every*
   routine removal from the largest, primary scope, for a threat (operator + ex-member collusion) outside the default
   posture — the wrong default for the primary content home. **Rejected — `m-of-n` threshold as a cost reducer:**

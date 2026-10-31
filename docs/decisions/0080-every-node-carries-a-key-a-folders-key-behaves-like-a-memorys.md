@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-10-06
 - Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
-- Replaced in part: Decision 2, Decision 4 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
+- Replaced in part: Decision 2, Decision 4, Decision 5 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
 
 ## Context
 

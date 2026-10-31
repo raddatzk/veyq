@@ -292,7 +292,7 @@ flowchart TB
   idk["Identity private key<br>(you)"]
   idk2["Identity private key<br>(another member)"]
   ksc["Scope content key K_SC<br>(current epoch)"]
-  knode["Per-Memory content keys K_node"]
+  knode["Per-node content keys K_node"]
   content["Content<br>(memories, media, journal, sensitive metadata)"]
   share["Public share<br>(per-share key)"]
   NB["The scope's current content-epoch key is sealed once<br>per member — to each member's identity public key<br>(one wrap = the whole scope). Every member, you<br>included, opens it with their own identity private key."]
@@ -316,9 +316,10 @@ flowchart TB
   [ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) wrapped to a per-share key. **Revoking a member
   = rotate `K_SC` forward into a new epoch** granted to the remaining members
   ([ADR 0024](../decisions/0024-scope-key-rotation.md)); already-read content cannot be retroactively pulled
-  back (a documented limitation). The concrete per-Memory key model — `K_SC` (scope), `K_node` (per Memory, the
+  back (a documented limitation). The concrete key model — `K_SC` (scope), `K_node` (per node, every kind, the
   random, many-wrapped **share grain**), `K_blob` (per blob) — is pinned in
-  [ADR 0012](../decisions/0012-content-key-hierarchy.md).
+  [ADR 0012](../decisions/0012-content-key-hierarchy.md) and
+  [ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 1.
 - **A field seals under a key of its own.** Every text or icon field — a node's name and meta, a medium's two
   metadata tiers, a bucket's name, a guest's display name, a share's note, name and label, a member's name and
   picture — seals under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")`, where `K_parent` is the key the
@@ -616,7 +617,8 @@ it plainly ([ADR 0026](../decisions/0026-client-trust-tiers.md)):
   posture**, and therefore its high-assurance answer — the question dissolves rather than being mitigated.
 - **Operator-served web:** the operator serves the code each load → an active operator can serve tampered code
   that captures keys/plaintext. **Protects against a *passive* operator only** (honest serving + at-rest),
-  honestly labelled and surfaced in-client — never claimed operator-proof.
+  honestly labelled — linked from the share page; not yet surfaced to a signed-in member — never claimed
+  operator-proof.
 - **Trusted central / attested web** (code from an origin the operator does *not* control, reproducibly built —
   SaaS-era): restores the full guarantee in the browser, for the no-install flows (a public-share/upload
   viewer). An **operator-owned** domain is *always* operator-served — it owns its DNS, so it controls delivery.

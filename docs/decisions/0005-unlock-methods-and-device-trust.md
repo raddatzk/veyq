@@ -1,10 +1,10 @@
 # ADR 0005 — Account unlock: one Master Key, many wraps; device trust, re-lock & method precedence
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: § 1's PASSKEY wrap, § 6's idle-timeout re-lock)
 - Date: 2026-06-25
 - Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
-- Replaced in part: § 16's cross-device onboarding by ADR 0059 (built)
+- Replaced in part: § 16 by ADR 0059 (built)
 
 ## Context
 
@@ -20,8 +20,9 @@ Key, ideally passwordless on trusted devices); **reload ≠ session end**.
 ## Decision
 
 1. **One Master Key, many wraps.** Exactly one Master Key per account; **one `MasterKeyWrap` per unlock
-   method** (`PASSWORD`, `DEVICE`, `PASSKEY`, `RECOVERY`). Adding/removing a method adds/removes **one
-   wrap**; content is never re-encrypted. (Binding basis: [en.account.key-model](../features/account/enablers/en.account.key-model.md).)
+   method** — `PASSWORD`, `RECOVERY`, `DEVICE`, `DEVICE_KEY` (§20) and `PASSKEY`, which is **not built** (§16:
+   the contract names it, no client writes one). Adding/removing a method adds/removes **one wrap**; content is
+   never re-encrypted. (Binding basis: [en.account.key-model](../features/account/enablers/en.account.key-model.md).)
 
 2. **The wrap blob is server-side (portable); the KEK source is what binds.** Every wrap (ciphertext)
    lives on the blind server and is fetchable by any authenticated client. What differs is whether a
@@ -51,38 +52,20 @@ Key, ideally passwordless on trusted devices); **reload ≠ session end**.
    keeps the password as a real factor. This is stated so the guarantee is never overclaimed — the wrap is as
    strong as the browser's key store and the password, and the key store is a software promise.
 
-6. **Re-lock policy — two triggers, no periodic expiry.** The unlocked Master Key is cached for the
-   session in a **worker** (survives reload, non-extractable, dies on real close). Re-lock on **(a) idle
-   timeout** and **(b) session end** (tab/app close). **Reload ≠ session end.** (Periodic trusted-device
-   expiry was considered and **dropped**.)
+6. **Re-lock policy — two triggers, no periodic expiry.** The unlocked Master Key is held in the page's
+   memory only, never persisted, and is gone on a reload; a reload re-opens it from the device's own tier
+   without a prompt (§22: the session vault when "remember me" is off, the `DEVICE_KEY` wrap when it is on), so
+   **reload ≠ session end**. Re-lock on
+   **(a) idle timeout** — decided, **not built** — and **(b) session end** (sign-out, browser close; ADR 0070).
+   (Periodic trusted-device expiry was considered and **dropped**.)
 
 7. **Method choice is client-side; the server never picks.** The client offers the wraps it can open
    **locally** — at most one convenience wrap per device (§9) and the floor — and the **password + Secret Key
    floor is always reachable** ("unlock another way").
 
-## Consequences
+### Device unlock levels (the per-device slider)
 
-- **Operator-blind preserved.** The server holds only ciphertext wraps + opaque metadata — no KEK, Master
-  Key, or Secret Key is ever server-side.
-- **2SKD intact.** The Secret Key is never persisted; convenience replaces it with a *device-bound factor
-  + password*, or with a device-held key alone.
-- **The KEK source is an adapter.** The backend and contracts know only the wrap; what produces the KEK is
-  a client concern, so a new method (a passkey's PRF) is an added adapter and an added wrap — not a change
-  to the model.
-- **UX.** Secret Key only on a *new* device; thereafter the password, or nothing at all; a reload costs
-  nothing.
-- **Costs / limits.** Device-local wraps don't travel (cross-device = a passkey or per-device enrolment);
-  synced / 3rd-party passkeys trade hardware-binding for reach; non-extractable is a *software* boundary;
-  a live in-session XSS can still abuse an unlocked key / read plaintext — wraps protect against **key
-  theft**, not **session misuse**.
-- **Rejected — raw Secret Key in localStorage:** portable, exfiltratable, no real gain over a device-bound
-  key. **Rejected — periodic trusted-device expiry:** dropped per product choice. **Rejected —
-  server-side method selection:** the server would have to know which methods a device can open, which is
-  exactly the metadata blindness forbids — so the client picks.
-
-## Decision — device unlock levels (the per-device slider)
-
-§7 settled *automatic precedence among openable wraps*; the clients expose that as a **per-device "unlock
+§7 settles *automatic precedence among openable wraps*; the clients expose that as a **per-device "unlock
 level"** the user picks themselves, after the first floor unlock, from an **ordered, mutually-exclusive**
 set — the *security of my own device is the user's call*, the *server is not*.
 
@@ -99,10 +82,10 @@ set — the *security of my own device is the user's call*, the *server is not*.
    **A passkey (WebAuthn + PRF) would be a level of its own** — its PRF output *is* the KEK, derived per use
    rather than gating a stored key (§16). Until one is built, the scale is these three.
 
-9. **Mutually exclusive per device — narrows §4's "combinable" for UX clarity.** A device carries **one**
+9. **Mutually exclusive per device, for UX clarity.** A device carries **one**
    convenience wrap at a time (plus the always-present floor). Switching level **removes** the old
    convenience wrap and **adds** the new one — never re-encrypts content. (The crypto still permits
-   multiple wraps; the *level* abstraction deliberately exposes one, so the user has a single clear
+   multiple wraps, §4's "combinable"; the *level* abstraction deliberately exposes one, so the user has a single clear
    "how does this device unlock" answer.)
 
 10. **The level is the user's choice, made at the first sign-in; the floor stays reachable.** The choice is the
@@ -113,8 +96,7 @@ set — the *security of my own device is the user's call*, the *server is not*.
 11. **The passwordless level (L2) requires a persisted session.** Without the password the client cannot
     mint a fresh session (the password signs the login challenge, ADR 0003), so the **refresh token** is
     persisted alongside the device key. Token expiry / rotation-out falls back automatically to the floor
-    (L0). L1 needs **no** persistence — the password login mints a fresh session each time. This is the
-    clean implementation seam between the "L1 only" slice and the L2 slice.
+    (L0). L1 needs **no** persistence — the password login mints a fresh session each time.
 
 12. **Operator-blindness is untouched at every level — including L2.** The level choice relaxes **only
     local** device defense-in-depth, never server trust. Even at L2 the server holds only ciphertext wraps
@@ -129,7 +111,7 @@ set — the *security of my own device is the user's call*, the *server is not*.
     only as a clearly-labelled choice, and presumes the device itself is locked. Considered and **declined**
     as any kind of default.
 
-## Decision — product shape (L0 not a routine choice; "remember me")
+### Product shape (L0 not a routine choice; "remember me")
 
 14. **L0 is not a routine, selectable level; it stays the floor (bootstrap + emergency fallback).** Asking
     for the Secret Key on *every* unlock is the wrong friction for a memory-sharing app (not a secrets
@@ -152,9 +134,9 @@ set — the *security of my own device is the user's call*, the *server is not*.
     A new device is brought in by an existing unlocked one over a channel the blind server only relays —
     [ADR 0059](0059-device-linking.md), which carries the key *and* the session.
 
-## Decision — one combined login/unlock screen, auto-enrol; web's single "remember me" toggle
+### One combined login/unlock screen, auto-enrol; web's single "remember me" toggle
 
-This concretizes §15: the login "remember me" and unlock "trust this device" choices are two views of the
+§15 in concrete form: the login "remember me" and unlock "trust this device" choices are two views of the
 *same* per-device decision (§9).
 
 17. **Login + unlock collapse into one screen wherever a device wrap exists.** The same password both
@@ -172,7 +154,7 @@ This concretizes §15: the login "remember me" and unlock "trust this device" ch
     - **On** → a **password-less device-key wrap** (§20) + a persisted session ([ADR 0004](0004-session-tokens.md)
       cookie) → next launch: **opens straight in**. (L2.)
 
-19. **No "remember nothing" / public-device level — "every device is mine" (refines §14).** Even
+19. **No "remember nothing" / public-device level — "every device is mine".** Even
     remember-me-off enrols the password DEVICE wrap; there is **no** L0 "Secret Key each time" option.
     Justification: a stolen device + its DEVICE wrap is **useless without the password** (still gated), and a
     genuinely untrusted machine is covered by the browser's **private/incognito** mode (no persisted
@@ -184,9 +166,9 @@ This concretizes §15: the login "remember me" and unlock "trust this device" ch
     (`symWrap(K, masterKey)` — high-entropy, no password, no KDF). A distinct construction earns a distinct
     method: `DEVICE_KEY`. The difference that matters is **what gates the key**, and here nothing does (§8-9).
 
-## Decision — "off" is session-scoped (survives a reload, dies on browser close)
+### "Off" is session-scoped (survives a reload, dies on browser close)
 
-This refines §15/§18's "**Off**": it persists for the **browser session** — a no-"remember me" session
+§15/§18's "**Off**" persists for the **browser session** — a no-"remember me" session
 survives page reloads and ends only when the browser closes, matching the conventional web norm (rather than an
 in-memory-only session that dies on the first reload).
 
@@ -217,7 +199,27 @@ in-memory-only session that dies on the first reload).
     + an opaque cookie token; the relaxation is purely local. A genuinely untrusted machine still uses
     **private/incognito** (§19).
 
-## Related / future
+## Consequences
+
+- **Operator-blind preserved.** The server holds only ciphertext wraps + opaque metadata — no KEK, Master
+  Key, or Secret Key is ever server-side.
+- **2SKD intact.** The Secret Key is never persisted; convenience replaces it with a *device-bound factor
+  + password*, or with a device-held key alone.
+- **The KEK source is an adapter.** The backend and contracts know only the wrap; what produces the KEK is
+  a client concern, so a new method (a passkey's PRF) is an added adapter and an added wrap — not a change
+  to the model.
+- **UX.** Secret Key only on a *new* device; thereafter the password, or nothing at all; a reload costs
+  nothing.
+- **Costs / limits.** Device-local wraps don't travel (cross-device = a passkey or per-device enrolment);
+  synced / 3rd-party passkeys trade hardware-binding for reach; non-extractable is a *software* boundary;
+  a live in-session XSS can still abuse an unlocked key / read plaintext — wraps protect against **key
+  theft**, not **session misuse**.
+- **Rejected — raw Secret Key in localStorage:** portable, exfiltratable, no real gain over a device-bound
+  key. **Rejected — periodic trusted-device expiry:** dropped per product choice. **Rejected —
+  server-side method selection:** the server would have to know which methods a device can open, which is
+  exactly the metadata blindness forbids — so the client picks.
+
+## Related
 
 - **Cross-device onboarding** is device linking, [ADR 0059](0059-device-linking.md) (§16).
 - **Device unlock levels** (§8–13 above) — the user-facing flow that picks one is

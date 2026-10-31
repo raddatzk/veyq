@@ -75,7 +75,9 @@ flowchart TB
   (`409 node_rekey_pending`, `NodeEpochGate`) — [§ Re-keying the nodes](#re-keying-the-nodes).
 - **Every seal names its object** — a grant its scope and epoch, a node key and a name its scope, node, epoch and
   placement revision, a blob key its scope, owner, blob and role — so a wrap served on another row fails to open
-  ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)).
+  ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)). The client mints the id of every object it seals and
+  carries it in the create request; the server refuses a taken one (`409 id_taken`) and never substitutes its own. A
+  share's id is the client-minted 256-bit token instead of a UUID (ADR 0072 Decision 3).
 - **Each scope kind is born on a client.** A personal scope by its owner's client after unlock, at epoch 0, with a
   self-grant (`ensurePersonalScope`); a group by its creator's client (`createGroup`); the tenant scope cold, by the
   invited first owner at activation ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md)). The server never mints
@@ -86,7 +88,11 @@ flowchart TB
 A grant is an epoch key sealed to one identity **and a signed statement** by its granter's identity over the scope,
 its kind, the epoch, the recipient's user id, the SHA-256 of the recipient's identity bundle and the SHA-256 of the
 wrapped grant (`grant` statement; `sealGrant` in `src/web/src/features/spaces/grant.ts`). The membership row stores the
-wrapped grant, its epoch, the granter's id, the signature and the granter's key as it signed.
+wrapped grant, its epoch, the granter's id, the signature and a copy of the granter's identity bundle **as it was when
+the server wrote the grant**, which the reads serve beside it. The copy decides nothing on its own — the recipient's
+chain walk does — but it keeps a grant verifiable after its granter secures their account: serving the granter's
+*current* key would fail every grant their retired key signed as `bad_signature` before any chain is read
+([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
 
 | Writer | Recipient | When |
 |---|---|---|
@@ -104,8 +110,9 @@ server compares with the recipient's **current** identity — or, for an invite,
 otherwise (`409 recipient_key_not_current`). The digest is checked at the write and not stored: the recipient is bound
 inside the signed statement. So no grant lands on a key an account has retired
 ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-decision 10). The server stores the signature and does not verify it, except on a staged self-grant
-(below); whether a grant is genuine is the recipient's check.
+decision 10). The server stores the signature and does not verify it, except on what a securing stages — its
+self-grants and its re-signed invite anchors (§ Securing the account, step 4) — a check of the stage against the
+identity it declares, not a trust judgment; whether a grant is genuine is the recipient's check.
 
 **What the recipient checks before opening one** (`verifyOwnGrant`, `src/web/src/features/spaces/grantTrust.ts`;
 [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6): the signature must verify — for
@@ -288,9 +295,12 @@ Every rotation re-keys every node of the scope, so nothing added inside an exist
 the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
 
 - **A node's re-key is one commit, top-down** (`RekeyStore.commit`): a fresh key, the node's entry under its parent's
-  current key, each child's entry re-sealed, the node's meta, its media's meta and EXIF, every `K_blob` re-wrapped
-  (nothing in the store is re-encrypted), its drop key replaced, each share on it re-wrapped from its recovery copy. The
-  parent must already be at the current epoch. It fails closed: a child, blob, share, identity or participant row
+  current key, each child's entry re-sealed, the node's meta, every `K_blob` re-wrapped (nothing in the store is
+  re-encrypted), its drop key replaced, each share on it re-wrapped from its recovery copy. What an application seals
+  under the node's key it re-keys in the same commit through its **re-key participant** (`NodeRekeyParticipant`):
+  Memories its media's meta, EXIF, blob wraps and bucket names, Expenses a Pot's revision-key wraps and its receipts'
+  `K_blob` wraps (no entry body changes, [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)).
+  The parent must already be at the current epoch. It fails closed: a child, blob, share, identity or participant row
   without its staged part is `409 rekey_parts_missing`, a moved or changed one `409 rekey_parts_stale`. The node's epoch
   becomes the scope's.
 - **Any member holding the current grant re-keys** (`RekeyAccess`; a member behind gets `403 grant_behind`), of any
@@ -345,8 +355,9 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
    `veyq.account.rotation.stage.ttl`. A scope this device cannot open is **declared** (`unreadableScopeIds`), never
    dropped: it keeps its grant and gets no new epoch from this account. The same stage takes **what the account rooted**
    (ADR 0111 decisions 20 and 21): every open invite it signed, re-signed by the new identity when both its current
-   signatures verify under the outgoing key and declared otherwise (`putRotationStageInvites`), and every join record it
-   rooted, endorsed by the new identity when the record names it and its outgoing key (or an endorsement by that key),
+   signatures verify under the outgoing key and declared otherwise (`putRotationStageInvites`; the server verifies the
+   re-signed invite key and anchor grant under the stage's identity, `422 invite_resign_invalid`), and every join
+   record it rooted, endorsed by the new identity when the record names it and its outgoing key (or an endorsement by that key),
    declared otherwise (`putRotationStageJoinEndorsements`).
 5. **Collect** this account's verifications that still count, per tenant it can open (`collectMyVerifications`).
 6. **One publish** (`POST /api/account/rotation`, one transaction): the server checks the stage and its digest, rebuilds
@@ -356,7 +367,11 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
    staged — else `409 rotation_plan_changed` and the client re-stages the delta. It writes the new identity, the identity private key under the new Master Key, the `PASSWORD` and `RECOVERY`
    wraps under the **new** Secret Key (every other wrap deleted), the new auth and proof keys, the pin store and device
    register re-sealed under the new Master Key, the self-grants, **one pending re-key row per re-granted scope**, the
-   chain step, the re-signed invites (a declared one ends) and the endorsements; and it clears the delivery declines that target the account and revokes its other sessions.
+   chain step, the re-signed invites (a declared one ends) and the endorsements; and it clears the delivery declines that
+   target the account, voids every open sign-in-address change (its proof was taken under the old proof key) and
+   revokes its other sessions. The publish is one body, bounded by the contract's caps with the whole pin store inside
+   it; `scripts/validate_rotation_shape.py` computes that bound from the contract and is red on an uncapped field or a
+   total above the server's request limit (ADR 0111 decision 22).
 7. **After the commit**, on any unlocked device of the account: the vault swaps to the new identity, the collected
    verifications are **re-signed** with the new key (`resignVerifications`), and the account **mints the next epoch of
    every scope it was re-granted, itself** (`finishRotation`, also run on every pass of the scope-rotation worker):
@@ -367,7 +382,9 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
 
 From the publish on, every scope the account was in holds its current epoch for the new identity, so a lost answer, a
 closed tab or a failed next epoch strands nothing. Other members' grants are untouched by the publish; they receive
-the next epoch from it.
+the next epoch from it. A pending group proposal keeps its grant, re-granted like every other, but not its name: its
+name key stays sealed to the old identity, nothing re-seals it, and the invitation shows as an unnamed group
+(`openInviteeName`, `src/web/src/features/spaces/inviteName.ts`; ADR 0060 § Consequences).
 
 ## Trust: who is who
 
@@ -472,7 +489,12 @@ lacks it ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decisio
 
 ## Decided, not built
 
-Nothing: every decision this concern draws on is built.
+- **Opt-in strict mode** ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 4,
+  decided in principle): a user or a group owner requires *verified* before a first wrap, so grant delivery skips an
+  unverified member until a human verifies them. It needs redesigning before it is wired — an account-global toggle
+  cannot protect a shared scope any co-member may key — on its own use-case,
+  [uc.spaces.require-verified-identities](../features/spaces/use-cases/uc.spaces.require-verified-identities.md). Until
+  then a verification only informs (§ Verifications and what a member sees).
 
 ## Related
 

@@ -8,17 +8,15 @@
 
 ## Context
 
-[ADR 0059](0059-device-linking.md) shipped device linking and named what it created: a device receives the
+[ADR 0059](0059-device-linking.md) decided device linking and named what it creates: a device receives the
 Master Key **and** the identity private key on one human confirmation, and a revoke takes neither back
 ([ADR 0058](0058-revoke-never-takes-key-material.md)). A phished grant is therefore an identity takeover,
 containable and visible but **not reversible**. That ADR calls rotation *"the live obligation this feature
-creates"*; [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 5 deferred the mechanics to
-this record and left three things standing: identity rotation is the core, the Master Key rotates **only** if
-it was itself exposed, and the other members must rotate every shared `K_SC` to exclude the old identity.
+creates"*; [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 5 hands the mechanics to
+this record: identity rotation is the core, and every shared `K_SC` rotates to exclude the old identity.
 
-**What forced the decision was that only the account-side operation was missing.** What it drives was built: the
-epoch chain and `POST /api/scopes/{scopeId}/epochs`, the grant-delivery *stale-epoch* reconcile, the TOFU pin check
-at every foreign-wrap surface and the worker's decline seam. So this is a trigger and a ceremony more than a
+**What forced the decision was that only the account-side operation was missing.** The scope epochs, grant delivery
+and the identity check at every wrap it drives already stood. So this is a trigger and a ceremony more than a
 mechanism — and the design questions it has to settle are about **who may do it** and **what it honestly buys**.
 The key chain and the stage of self-grants it rests on are
 [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)'s
@@ -32,18 +30,17 @@ linked device is born at the password-less tier and has never seen the password 
 ## Decision
 
 **1. One mode: the Master Key, the identity keypair and the Secret Key rotate together, always, as one signed step of
-the account's key chain.** ADR 0028 Decision 5's
-conditional — identity-only when the Master Key was never exposed — is retired, because its case has no
-population. Every path to the identity private key runs through the Master Key, so an identity compromise
-*implies* a Master-Key compromise; and the driver, a phished pairing grant, hands the Master Key over by
-construction. An identity-only mode is [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s
+the account's key chain.** A conditional mode — the identity alone when the Master Key was never exposed — is
+rejected, because its case has no population. Every path to the identity private key runs through the Master Key,
+so an identity compromise *implies* a Master-Key compromise; and the driver, a phished pairing grant, hands the
+Master Key over by construction. An identity-only mode is [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s
 rejected-alternative (d) with a button in front of it: a new identity re-wrapped under the leaked Master Key is
 still readable. Offering the choice would ask the user a question they cannot answer and let them pick the
 useless half. The Secret Key rotates with them because someone who holds it and the password is otherwise
 indistinguishable from the member, so a leaked Secret Key would have no remedy.
 
 So the request has one shape and **every field is mandatory**, because an optional field is a mode spelled by
-omission (`scripts/validate_rotation_shape.py` pins the set; the fields are
+omission (the fields are
 [keys-grants-and-trust § Securing the account](../crosscutting/keys-grants-and-trust.md#securing-the-account)). It
 carries the **identity-pin store and the device register re-sealed under the new Master Key**, empty for an account
 that never wrote either. The two documents are not part of the proof's statement: a session holder without the Secret
@@ -64,9 +61,8 @@ client's refusal.
 
 **The server enforces the half it can check, and that half is the Secret Key, which both attackers lack.** A
 client-side refusal binds only the client that runs it, and the attacker this gate exists for runs their own.
-A device-link holder has the Master Key and the identity key and can call `rotateAccountKeys` or
-`POST /api/account/password` directly. So can someone who holds only the password, because a session is all
-those endpoints used to ask for. Therefore every account carries a **Secret-Key proof key**: an Ed25519 keypair
+A device-link holder has the Master Key and the identity key and can call the rotation or the password change
+directly. So can someone who holds only the password, if a session is all those requests ask for. Therefore every account carries a **Secret-Key proof key**: an Ed25519 keypair
 derived from the Secret Key alone, whose public half is registered at account birth and replaced when the account is secured. Every flow that mints a
 cold credential — rotation, change-password, recovery completion ([ADR 0054](0054-password-recovery-two-factor-release.md)),
 and a change of the sign-in address ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md) Decision 8) — carries a signature of that key over what the flow installs and the state it replaces. The server verifies
@@ -77,8 +73,8 @@ the signature against the stored public key and refuses the request otherwise.
   recovery and a change of the sign-in address leave it as it is.
 - **It does not replace the client's refusal.** That refusal proves the password half, now. The server's check
   proves the half the attacker most plausibly lacks. A rotation also carries the current auth key's attestation over
-  the auth key it installs, verified as change-password verifies its own (`403 attestation_failed`), so the server
-  checks the password half of a rotation too.
+  the auth key it installs, verified as change-password verifies its own, so the server checks the password half of a
+  rotation too.
 
 *Which* `MasterKeyWrap` opened this vault is recorded too — new client state, three-valued, because the
 session-restore path opens no wrap at all and `none` is its only honest entry (a boolean would have to label it
@@ -89,11 +85,10 @@ What the record earns is the *sentence on the screen* — why the Secret Key is 
 demand reads as the defence it is rather than as an unexplained hurdle.
 
 **The gate is not rotation's — it belongs to every flow that MINTS a cold credential, and change-password is
-the other one.** `POST /api/account/password` writes a new `PASSWORD` floor plus the `auth_public_key` derived
-from it: exactly the material this decision is about. It shipped without the gate and with a *"I don't remember
-my current password"* entry point that waived it, which made it the bypass of this record — a `DEVICE_KEY`
-holder minted a cold credential for themselves and then passed the gate below for the victim's account. Both
-screens now run one shared implementation of the proof
+the other one.** A password change writes a new `PASSWORD` floor plus the auth key derived from it: exactly the
+material this decision is about. Without the gate, or with an entry point that waives it, it is the bypass of this
+record — a `DEVICE_KEY` holder mints a cold credential for themselves and then passes the gate below for the victim's
+account. So both screens run one shared implementation of the proof
 ([uc.account.change-password](../features/account/use-cases/uc.account.change-password.md) § *One entry
 point*); a third screen that mints one inherits the same obligation.
 
@@ -109,14 +104,12 @@ retracts it — the same shape [ADR 0058](0058-revoke-never-takes-key-material.m
 imply that rotating undoes a compromise; it ends it.
 
 **4. Access moves first, security after: the rotator re-grants itself and mints every next epoch, and an attacker
-cannot.** In its one transaction the publish appends the key-chain step and re-grants every scope the account holds a
-grant on — personal, tenant and group, across every tenant — at its **current** epoch to the new identity, from
-self-grants staged before it ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-decision 6 holds the stage and why it exists). Then the account mints each scope's next epoch itself, from any of its
-unlocked devices (ADR 0111 decisions 8–9), and any member re-keys the nodes (ADR 0111 decision 11). No retired private
-key is kept, and no state after the publish can lose access: a lost answer, a closed tab, a failed next epoch or a
-space in another tenant leaves each space readable by the published identity, and the next device that unlocks
-finishes it. A scope this device cannot open is declared and keeps its grant; it was already closed to the account.
+cannot.** The publish re-grants every scope the account holds a grant on to the new identity at its **current**
+epoch, and the account then mints each scope's next epoch itself; how is
+[ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 6 and 8–11. What this record chooses is that no retired private key is kept and no state after the publish
+can lose access: a lost answer, a closed tab, a failed next epoch or a space in another tenant leaves each space
+readable by the published identity, and the next device that unlocks finishes it (alternatives (j)–(l)).
 
 The danger of a self-service re-grant is an attacker holding the old identity minting the new epoch for their **own**
 new key and excluding the legitimate owner. The key-chain step closes it: it is signed by the old identity **and** the
@@ -129,22 +122,19 @@ The mechanism is [keys-grants-and-trust § Securing the account](../crosscutting
 
 **5. Every shared scope rotates, the tenant included — and this is not a new policy.**
 [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 already reserves an **explicit "re-key this space"** for
-exactly the compromise case. Account rotation is one caller, a tenant owner's own action the other; nothing about
-routine removal changes. The wraps (one per
-member per scope) land on the rotator's devices, and the far larger node re-key is spread across every member's
-(ADR 0111 § Consequences). Personal scopes rotate too, self-served (one member, who is the owner): on a removal there
-is nobody to rotate away from, on a compromise the old identity is exactly that somebody.
+exactly the compromise case, and account rotation is one of its callers; nothing about routine removal changes. Where
+the wraps and the node re-key land is ADR 0111's (decision 8, § Consequences). Personal scopes rotate too, self-served
+(one member, who is the owner): on a removal there is nobody to rotate away from, on a compromise the old identity is
+exactly that somebody.
 
 **6. Each space's progress is stated, not hidden, and none waits for anyone else.** The rotator is never outside a
 scope. What follows the publish is each scope's next epoch and its node re-key, and the honest surface is a per-scope
 status, not a spinner: the **server's**, derived from the pending rows the publish left, re-readable at any time and
-Host-independent, so a space in another tenant reads too (`waiting`, `rekeying`, `secured` or `blocked`). There is no
-job, so nothing stalls or fails: `waiting` ends with the next device of the account that unlocks.
+Host-independent, so a space in another tenant reads too. There is no job, so nothing stalls or fails: a waiting scope
+moves on with the next device of the account that unlocks.
 
-**7. The publish clears the declines that target the rotator.** A delivery worker that cannot anchor a member's key
-declines the job and is excluded from it, and no human accepts a key (ADR 0028 Decision 2). Without clearing, a member
-a worker once declined would stay excluded from that worker after every rotation; cleared, a worker that could not
-anchor the old key tries the new one, which the chain reaches.
+**7. The publish clears the declines that target the rotator** —
+[ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 9.
 
 ## Consequences
 

@@ -45,7 +45,7 @@ accepted**:
 - **The first-use trust gap.** Identity keys are trust-on-first-use. A changed key is surfaced, every grant is
   signed by its granter, and out-of-band safety-number verification is built, but nothing *enforces* it: the
   opt-in strict mode that would require a verified key before a first share is decided, not built — see
-  [ADR 0028 § What is still open](docs/decisions/0028-identity-authenticity-tofu-verification.md#what-is-still-open).
+  [ADR 0028 Decision 4](docs/decisions/0028-identity-authenticity-tofu-verification.md#decision).
 - Findings against the development stack in [`infra/`](infra/README.md), which is not a production
   deployment and is not presented as one.
 - Missing hardening headers or rate limits on an instance the reporter configured themselves — limits are

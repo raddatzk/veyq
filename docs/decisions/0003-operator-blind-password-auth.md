@@ -21,15 +21,19 @@ replayable is transmitted; only primitives already in the suite; minimal server-
 
 ## Decision
 
-Authenticate with a **password-derived signing keypair + challenge-response**:
+**Model B:** authenticate with a **password-derived signing keypair + challenge-response** — the name the
+code and the other docs cite this decision by:
 
 - **Derive:** `seed = Argon2id(password, authSalt)`, then an **Ed25519** keypair `(authPriv, authPub)`
-  from the seed (domain-separated from the unlock KEK, which is `Argon2id(password + Secret Key, …)`).
+  from the seed (domain-separated from the unlock KEK, which also takes the Secret Key —
+  [en.account.key-model § Unlock methods & KEK derivation](../features/account/enablers/en.account.key-model.md#unlock-methods--kek-derivation)).
 - **Register (setup):** the client sends only `authPublicKey`. The server stores only the public key.
 - **Login:** challenge-response — the server issues a single-use nonce; the client signs it with
   `authPriv`; the server verifies against `authPublicKey` and issues a session.
-- **Salt:** `authSalt` is derived deterministically (e.g. `HKDF(instanceSalt, normalizedEmail)`), so the
-  server behaves identically for existing and non-existing accounts → **non-enumerable**.
+- **Salt:** `authSalt` is derived deterministically — HKDF of the normalized address under an instance-wide
+  salt, pinned by the `deriveAuthSalt` vector in [`v1.json`](../../contracts/crypto/vectors/v1.json) — so the
+  server behaves identically for existing and non-existing accounts → **non-enumerable**. The keypair is
+  therefore bound to the sign-in address too: changing it re-derives the keypair like a password change.
 - **PQ posture:** Ed25519 now; migrate to a PQ/hybrid signature (ML-DSA) later via a suite bump. There
   is **no harvest-now-decrypt-later for authentication** (a signature is a one-time live check), and
   operator-blindness bounds the blast radius of an auth break to a session over ciphertext. See the
@@ -47,8 +51,10 @@ Authenticate with a **password-derived signing keypair + challenge-response**:
   server only stores a public key, issues a nonce and verifies a signature — no OPAQUE/PAKE state machine.
 - **Weak passwords stay crackable** at Argon2id cost — inherent to any password scheme; mitigated by the
   Argon2id work factor, and content stays protected by the Secret Key regardless ([2SKD](../crosscutting/security-model.md)).
-- **Password change / reset** re-derives the keypair and re-registers `authPublicKey` (plus re-wraps the
-  PASSWORD Master-Key copy); the password is never sent.
+- **A password change, a reset or a new sign-in address** re-derives the keypair and re-registers
+  `authPublicKey`; the password is never sent. What else a credential change rewrites or deletes is
+  [ADR 0054](0054-password-recovery-two-factor-release.md) decision 3 and
+  [en.account.key-model § Adding / removing unlock methods](../features/account/enablers/en.account.key-model.md#adding--removing-unlock-methods).
 - **Rejected:** Model A (server sees password); Model B-naive (`V` is a replayable bearer credential);
   OPAQUE/PAKE (cross-stack byte-identical conformance cost + server-side protocol crypto, marginal
   benefit when TLS is assumed).

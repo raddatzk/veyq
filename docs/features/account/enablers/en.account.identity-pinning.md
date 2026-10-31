@@ -11,7 +11,8 @@
   owner-rooted **join record** decides first, so the pin there is the counter, not the anchor
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 2,
   [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  decisions 7, 12, 15, 16).
+  decisions 7, 12, 15, 16). The one wrap that does not go through it is a moderation statement's facts, sealed to
+  the keys the server serves (ADR 0111 § What stays open).
 - **The model** this check sits in — the key chain, the join record, verifications and what a member sees, the
   grants it guards — is the topic's current picture,
   [keys, grants and trust § Trust](../../../crosscutting/keys-grants-and-trust.md#trust-who-is-who). This enabler keeps
@@ -65,7 +66,8 @@ head at revision n:                                 seal("identity-pins" ‖ n, 
 ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)), so there is **one pin per contact**. The anchor
 and *verified* are per tenant (ADR 0111 decision 15): a person is anchored by their join record in each tenant, and a
 verification counts only in the tenant it was written in. A store holds at most 25,000 pins: the rotation and the
-reset write the whole set in one request, and that request must fit the server's body limit.
+reset write the whole set in one request, and that request must fit the server's body limit — computed from the
+contract's caps by `scripts/validate_rotation_shape.py`, measured at the cap by `rotationAtPinCap.measure.e2e.test.ts`.
 
 ## Main flow — the anchor check before every foreign wrap and grant
 

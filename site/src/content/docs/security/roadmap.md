@@ -83,7 +83,7 @@ fixed: the setting must not hand the server a who-must-be-verified graph, and, b
 hold against an active operator only on a client that operator does not serve.
 
 **Decided in:** [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
-Decision 4 and [§ What is still open](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md#what-is-still-open),
+Decision 4,
 [uc.spaces.require-verified-identities](https://github.com/raddatzk/veyq/blob/main/docs/features/spaces/use-cases/uc.spaces.require-verified-identities.md).
 
 ## Statement of reasons, objection and authority orders

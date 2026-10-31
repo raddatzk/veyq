@@ -34,7 +34,7 @@ holds only **public** keys and ciphertext, never the password and never a conten
 ([ADR 0005 §8–13](../../decisions/0005-unlock-methods-and-device-trust.md)):
 
 - ★ [Trust this device (only password)](use-cases/uc.account.trust-device.md) — **built (web + backend)** (the DEVICE wrap — password still required, Secret Key not)
-- ★ [Sign in & remember this device](use-cases/uc.account.remember-this-device.md) — **built (web + backend)** (the combined sign-in+unlock screen; a "remember me" toggle auto-enrols the DEVICE wrap or the password-less device-key wrap; [ADR 0005 §17–21](../../decisions/0005-unlock-methods-and-device-trust.md))
+- ★ [Sign in & remember this device](use-cases/uc.account.remember-this-device.md) — **built (web + backend)** (the combined sign-in+unlock screen; a "remember me" toggle auto-enrols the DEVICE wrap or the password-less device-key wrap; [ADR 0005 §17–20](../../decisions/0005-unlock-methods-and-device-trust.md))
 - Log in with a passkey — planned; nothing writes or opens a `PASSKEY` wrap yet (alternate auth + PRF-derived unlock; [ADR 0005](../../decisions/0005-unlock-methods-and-device-trust.md))
 - ★ [Onboard a device from one you are already signed in on](use-cases/uc.account.onboard-device.md) — **built (web + backend)** (two directions — *add a device* and *sign in with a QR code*; the grant carries the Master Key **and** a session, so no password and no Secret Key is typed on the new device; [ADR 0059](../../decisions/0059-device-linking.md))
 - [uc.account.change-password](use-cases/uc.account.change-password.md) — **built (backend + web)**

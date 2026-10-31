@@ -7,26 +7,25 @@
 
 ## Context
 
-Every AEAD seal in veyq authenticates a **purpose** and nothing else. `symWrap`/`asymWrap` take a free context
-string and put `type ‖ "v1" ‖ context` into the AAD (`src/packages/crypto/src/v1.ts`, `wrapAad`); every call site
-passes a static literal such as `'node-name'`, `'content-key'`, `'blob-key'` or `'scope-grant'`. So two
-ciphertexts sealed for the same purpose under the same key are interchangeable, and the operator-blind server
-decides which one a client receives for which object. Measured against the whole `web/src` tree,
-that yields three things:
+Every AEAD seal in veyq authenticated a **purpose** and nothing else. The wraps took a free context string and put
+`type ‖ "v1" ‖ context` into the AAD, and every call site passed a static literal such as `'node-name'`,
+`'content-key'`, `'blob-key'` or `'scope-grant'`. So two ciphertexts sealed for the same purpose under the same key
+were interchangeable, and the operator-blind server decided which one a client received for which object. Measured
+against the whole web client, that yielded three things:
 
-- **Swap between objects under one shared key.** Node names (under `K_SC`), `K_blob` wraps, derivative refs and
+- **Swap between objects under one shared key.** Node names (then under `K_SC`), `K_blob` wraps, derivative refs and
   media metadata (under `K_node`), member names (under the tenant key), bucket and contributor names, share-key
-  recovery wraps, item favorites: the server can serve any of them for any sibling.
-- **A confidentiality break, not only an integrity one.** A Memory's `K_node` is `symWrap(K_SC, K_node, 'content-key')`
-  for every Memory in the scope. A server that serves shared Memory S's wrap on private Memory X's row makes the
-  client unwrap `K_node(S)` cleanly and seal every new upload and chapter under X to it, where S's public share
-  link reads them.
-- **Cross-scope and cross-epoch grant swaps.** Every self-grant is `asymWrap(ownPub, K, 'scope-grant')`, so one
-  scope's grant opens in another scope's row, and the client takes the epoch a grant belongs to from the server.
+  recovery wraps, item favorites: the server could serve any of them for any sibling.
+- **A confidentiality break, not only an integrity one.** A Memory's `K_node` was `symWrap(K_SC, K_node,
+  'content-key')` for every Memory in the scope. A server that served shared Memory S's wrap on private Memory X's row
+  made the client unwrap `K_node(S)` cleanly and seal every new upload and chapter under X to it, where S's public
+  share link reads them.
+- **Cross-scope and cross-epoch grant swaps.** Every self-grant was `asymWrap(ownPub, K, 'scope-grant')`, so one
+  scope's grant opened in another scope's row, and the client took the epoch a grant belongs to from the server.
 
-The object ids these seals would bind are, in most cases, **minted by the server after the client has sealed**:
-`createNode`, `startBlobUploads`, `completeMedia`, `createBucket`, `createShare`, `createShareIdentity`,
-`createGroup` and `createPersonalScope` all return the id the ciphertext they carry should have been bound to.
+The object ids these seals would bind were, in most cases, **minted by the server after the client had sealed**: the
+create operations for nodes, blob uploads, media, buckets, shares, share identities, groups and personal scopes each
+returned the id the ciphertext they carried should have been bound to.
 
 This is a stored-format change. Before V1 it is a code change; after V1 it would be a suite `v2` plus a
 re-encryption of every existing ciphertext. That is why it is decided now.
@@ -42,10 +41,10 @@ envelope, so a ciphertext moved to a different slot fails to open.
 **2. Where the key is unique to one object, the key is the binding and the context names the purpose only.**
 Chunk frames under a per-blob `K_blob` (their AAD stays `index ‖ total`, and the `K_blob` wrap itself is bound
 to its blob), a blob's sealed metadata under that same `K_blob` (`blob-meta` — its type, upload name and
-modification time; its AAD `0x02 ‖ 'v1' ‖ lp('blob-meta')` is 16 bytes against a frame's 8, so the two never open as
-each other), a share's three fields under field keys derived from its own `K_share`, the Master-Key wraps under a
-KEK with a fresh salt, the single-use pairing envelope, and the two WebCrypto seals under a non-extractable
-per-device key. Those WebCrypto seals carry no AAD today, and they gain their purpose as `additionalData`. A field
+modification time; its AAD differs from a frame's in length, so the two never open as each other), a share's three
+fields under field keys derived from its own `K_share`, the Master-Key wraps under a KEK with a fresh salt, the
+single-use pairing envelope, and the two WebCrypto seals under a non-extractable per-device key, which carry their
+purpose as `additionalData`. A field
 under its own `K_field` ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
 § 9) has a key unique to that one revision as well, but keeps Decision 1's object binding wherever its purpose
 names an object; only the share's three bind their purpose alone.
@@ -88,31 +87,26 @@ carrying exactly its binding fields, encoded canonically (length-prefixed, fixed
 its own nonce. The raw `symWrap`/`asymWrap`/`aeadSeal` leave the package's public exports, so an unbound seal
 cannot be written from `src/web/` or `src/admin-web/` at all — the structure is the guard. `contracts/crypto/vectors/v1.json`
 carries one vector per purpose, and a conformance test compares the union's purposes with the vector set **in
-both directions**. That settles inbox #32's question of what earns a vector: a live seal purpose earns one, and
-a vector with no live purpose is deleted. `journalSeal` (empty AAD, no caller) is deleted with it.
+both directions**: a live seal purpose earns a vector, and a vector with no live purpose is deleted.
 
 ## Consequences
 
 - **The server can no longer choose which object a ciphertext opens as.** The swap and the upload chain above
   fail at the AEAD tag. It keeps every capability it had over *which* objects exist, where they sit in the tree,
   and how fresh they are (Decisions 4 and 5).
-- **Every existing ciphertext stops opening.** No migration is written: before V1 there is no user data to
-  carry, and every development instance is reset. The AAD keeps its `v1` marker, because no `v1` artifact was
-  ever released.
+- **The AAD keeps its `v1` marker**, because the binding came before any `v1` artifact was released; no
+  ciphertext without it is read.
 - **Adding a purpose after V1 is additive; changing a purpose's fields is a suite `v2`.** A new variant plus
   its vector is backward-compatible, and a new field on an existing variant changes bytes that are already
   stored.
-- **Eight create operations take a client-minted id.** That is a contract change on `content`, `media`,
-  `sharing` and `scopes`, and the backend stops generating those ids.
 - **A public share's guest learns the shared node's scope id.** Every node-key seal the viewer opens is bound to
   the scope, so the id rides with the subtree; two links into one space become linkable to anyone holding both
   ([security model](../crosscutting/security-model.md) § What is encrypted vs. server-visible).
 - **A grant states the epoch it seals.** A grant-delivery completion names its epoch, and the server records
-  exactly that and refuses one that is not current — before, it recorded the scope's current epoch, which a
-  rotation between claim and completion made a lie the binding would now turn into an unopenable grant.
-- **The group name gets its own purpose.** It used to reuse `node-name` under the derived name key, "domain
-  separation lives in the key derivation" ([ADR 0027](0027-group-invite-name-shared-key.md)). A typed union has
-  no reason to share a variant between two kinds of object.
+  exactly that and refuses one that is not current: recording the scope's current epoch instead would, after a
+  rotation between claim and completion, store a grant whose bound epoch no longer opens it.
+- **The group name has its own purpose** ([ADR 0027](0027-group-invite-name-shared-key.md)), not `node-name` under
+  the derived name key: a typed union has no reason to share a variant between two kinds of object.
 
 **Alternatives rejected.**
 

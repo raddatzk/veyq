@@ -4,11 +4,16 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Provides:** a **single account's** key model — the identity keypair, the one **Master Key** (wrapped once
-  per unlock method), the **unlock methods + KEK derivation** that open it, and recovery. It is the **root of
-  the key chain** the scope + content keys extend downstream.
+  per unlock method), the **unlock methods + KEK derivation** that open it, and recovery — plus the sessions
+  that sign it in, where its unlocked keys live on a device, how a device is linked and how a session ends. It
+  is the **root of the key chain** the scope + content keys extend downstream.
 - **Serves (use-cases):** [login](../use-cases/uc.account.login.md), [unlock](../use-cases/uc.account.unlock.md),
   [trust-device](../use-cases/uc.account.trust-device.md),
   [remember-this-device](../use-cases/uc.account.remember-this-device.md),
+  [sessions](../use-cases/uc.account.sessions.md),
+  [onboard-device](../use-cases/uc.account.onboard-device.md),
+  [recover-access](../use-cases/uc.account.recover-access.md),
+  [change-password](../use-cases/uc.account.change-password.md),
   [rotate-keys](../use-cases/uc.account.rotate-keys.md); and downstream
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on it.
@@ -26,7 +31,7 @@
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
 > companion: [docs site: Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx). Built as
-> stated, except the passkey method, marked **not built** where it appears.
+> stated, except the passkey method and the idle-timeout re-lock, each marked **not built** where it appears.
 
 ## Principle: one Master Key, many wraps
 
@@ -95,6 +100,33 @@ scope keys to it), while the **auth public key** only *proves your login* (verif
 challenge). Separate keys for separate jobs. (A passkey — **not built** — would be an alternative login+unlock method:
 its signature would authenticate and its **PRF** secret would derive an unlock KEK.)
 
+## Sessions
+
+A login (above) or a device-linking grant opens a **session family**; the decision and its rejected alternatives
+are [ADR 0004](../../../decisions/0004-session-tokens.md).
+
+- **Two opaque tokens, stored only as hashes.** An **access token** (15 minutes) is the bearer of every request;
+  a **refresh token** (30 days, sliding — each refresh re-mints it) goes only to `POST /api/token/refresh`. A
+  database dump yields no usable session.
+- **What the server keeps per family:** an opaque id, a status, and when it was created and last used — no name,
+  no origin, no device string. The display name and the device↔family join live in the Master-Key-sealed
+  [device register](en.account.device-register.md). Listing (`/api/sessions`) and revoking need only a session;
+  reading the names needs unlock ([uc.account.sessions](../use-cases/uc.account.sessions.md)).
+- **Rotation and reuse detection.** Each refresh supersedes the presented token and mints its successor, numbered
+  by generation. A superseded token presented again revokes the whole family — unless it is exactly one
+  generation behind the family's current one, which rotates instead (the one-generation grace: a refresh whose
+  response was lost, or a concurrent one). Superseded rows stay until they expire, each one a tripwire.
+- **Transport.** A browser keeps the refresh token only in an httpOnly, `SameSite=Strict` cookie scoped to the
+  refresh path (`Secure` outside local development), under a name that encodes its lifetime: `veyq_refresh`
+  (persistent, `Max-Age` = the refresh TTL — "remember me") or `veyq_refresh_session` (no `Max-Age`, dropped
+  when the browser closes — the default). The client chooses at login (`sessionScope`; the legacy `remember` flag
+  means persistent where `sessionScope` is absent). A refresh re-sets the same name and clears the other, so it
+  never changes a lifetime; logout clears both. A login that names neither gets its refresh token in the
+  response body, and only the admin CLI does that (`src/admin-web/src/cli/`), because Node keeps no cookie jar.
+- **Adoption.** A device brought in by a grant receives a refresh token inside the sealed envelope and spends it
+  once at `POST /api/token/adopt`, which rotates it and returns the successor in the cookie of the lifetime that
+  device chose — the only place besides login where a lifetime is chosen.
+
 ## Unlock methods & KEK derivation
 
 | Method | Unlock KEK source | Notes |
@@ -135,6 +167,74 @@ built. The default protects the case a reset exists for — a device- or authent
 and "someone else holds my device" is a reason people reset. The backend holds this classification once, in
 `core/identity`.
 
+## Where the unlocked key lives
+
+Once opened, the Master Key and the identity private key are held in the **page's memory** only
+([`src/web/src/app/vault.ts`](../../../../src/web/src/app/vault.ts)) — never persisted, zeroed on sign-out, gone
+on a reload. What re-opens them without a prompt is the device's tier
+([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §18–23):
+
+| Tier | What the device keeps | A reload | The next launch |
+|---|---|---|---|
+| "Remember me" off — the default | a `DEVICE` wrap; for the browser session, the Master Key's **ciphertext** in `sessionStorage`, sealed under a non-extractable AES-GCM key in IndexedDB | re-opens from the session vault | email + password |
+| "Remember me" on | a `DEVICE_KEY` wrap, its key `K` in IndexedDB, a persistent cookie | opens straight in | opens straight in |
+| Linked by a grant, "stay signed in" off | the session vault only — no password was ever typed to key a `DEVICE` wrap | re-opens from the session vault | a fresh pairing |
+| Linked by a grant, "stay signed in" on | as "remember me" on | opens straight in | opens straight in |
+
+A device's first unlock is the floor (password + Secret Key) unless a grant links it. While the operator's switch
+for remembering devices is off, the server withholds the `DEVICE` / `DEVICE_KEY` wraps from the key material
+without deleting them ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
+decision 5).
+
+**Re-lock, as built:** the vault closes when the session ends ([§ Session ending](#session-ending)), and the session
+tier dies with the browser session. The **idle-timeout re-lock** ADR 0005 §6 decides is **not built**: nothing
+locks an open, idle tab.
+
+## Device linking
+
+An unlocked device brings in a new one over a channel the server only relays
+([ADR 0059](../../../decisions/0059-device-linking.md); the flow is
+[uc.account.onboard-device](../use-cases/uc.account.onboard-device.md)).
+
+- **Two directions.** *Add a new device*: the trusted device shows the QR, and both screens show a five-digit code
+  the user compares. *Sign in with a QR code*: the new device shows the QR, and the trusted device shows a
+  six-digit code the user types into the new device.
+- **The QR carries 32 random bytes and never a server address.** Both devices derive from them, under two HKDF
+  labels, the channel's routing handle — the only thing the server receives — and a **channel key** that MACs the
+  answer (the new device's ephemeral transport key, and the typed code's proof) and the envelope. The bytes are
+  pinned by the `pairing_channel` vector in [`v1.json`](../../../../contracts/crypto/vectors/v1.json).
+- **The envelope** is `asymWrap`ped to the new device's ephemeral key and carries the Master Key, the refresh token
+  of one further session family minted for the account, the label the user typed, and the trusted device's
+  identity trust marks. Its pickup is unauthenticated: without the ephemeral private key it is worthless.
+- **A channel is single-use, one outstanding per account, and lives ten minutes** (`veyq.pairing.channel.ttl`);
+  the endpoints are `/api/pairing/open`, `…/answer`, `…/delegate`, `…/seal` and `…/collect`.
+- **The new device adopts first** (§ Sessions), with its own "stay signed in" answer, then unlocks with the
+  granted Master Key, writes its register entry, and enrols a `DEVICE_KEY` wrap only if it stays signed in.
+- **A grant cannot be taken back.** A revoke ends the session; the Master Key stays on that device. Ending the
+  compromise is securing the account ([§ Rotation after a compromise](#rotation-after-a-compromise)).
+
+## Revoke vs. wrap removal
+
+- **A revoke takes no key material** ([ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md)). It ends
+  the family's server access; the revoked device keeps its wrap, so at its next sign-in, which needs only the
+  password, that wrap opens the Master Key with no Secret Key — and a `DEVICE_KEY` wrap takes no password at all.
+- **"Sign out and remove this device's saved key"** is a separate, named action, offered where the device register
+  names that device's wrap. It revokes the family first, then deletes the wrap
+  (`DELETE /api/account/wraps/{id}`), restoring the Secret-Key floor for that device; a removal that did not
+  finish is retried from [uc.account.sessions § Devices with a saved key](../use-cases/uc.account.sessions.md).
+- Wraps the register cannot name are reached only as *"remove every saved key except this device's"*, never by a
+  claim about the others.
+- No wrap carries a device id, and the register's join never reaches the server — a contract shape
+  `scripts/validate_device_shapes.py` holds.
+- A password change, a reset and securing the account delete every wrap but the two cold ones, account-wide
+  ([§ Adding / removing unlock methods](#adding--removing-unlock-methods)).
+
+## Session ending
+
+How a session ends on the web — sign-out, a refused refresh, another tab ending it — and what stays on the device
+afterwards is [uc.account.sign-out](../use-cases/uc.account.sign-out.md). That the ending loads a new document
+rather than resetting stores is [ADR 0070](../../../decisions/0070-a-session-ends-with-a-new-document.md).
+
 ## Rotation after a compromise
 
 When key material reached someone it should not have — a phished device-link grant
@@ -160,6 +260,16 @@ scopes at once:
    control) and possession of the Secret Key, proven by a signature of the Secret-Key proof key
    ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md),
    [uc.account.recover-access](../use-cases/uc.account.recover-access.md)).
+
+**The recovery token.** A request (`/api/recovery/request`) answers the same for every address; only for a member
+of the tenant it arrived on does it then store a random token's SHA-256 hash with an expiry and mail the raw
+token in the link's URL fragment (a tenant that cannot send mail answers `503 mail_unavailable` instead). The
+token lives **one hour** (`veyq.recovery.token.ttl=PT1H`); a scheduled sweep marks overdue tokens expired, and
+spent or expired rows are purged after seven days (`veyq.recovery.token.retention`), so a replay reads as spent
+rather than unknown. Release (`/api/recovery/release`) hands out the withheld wrap; completion
+(`/api/recovery/complete`) spends the token by a compare-and-set and, in the same transaction, rewrites the
+`PASSWORD` wrap and the auth public key, deletes every other wrap but `RECOVERY`, revokes every session and
+records the mailed address as confirmed.
 
 Every path runs through the Secret Key or an already-enrolled device — there is **no** standalone code, so
 losing the Emergency Kit narrows recovery to path 1. After recovery the user sets a new password, which
@@ -203,13 +313,22 @@ a tenant grants the account the tenant's key from its invite
 
 - Feature: [Account & auth](../_index.md)
 - Decisions: [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) (the auth keypair — why the
-  password never reaches the server), [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)
+  password never reaches the server), [ADR 0004](../../../decisions/0004-session-tokens.md) (session tokens and
+  families), [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)
   (which unlock methods exist and how a device earns one),
+  [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) (recovery's two factors),
+  [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md) (a revoke takes no key material),
+  [ADR 0059](../../../decisions/0059-device-linking.md) (device linking),
+  [ADR 0070](../../../decisions/0070-a-session-ends-with-a-new-document.md) (a session ends with a new document),
   [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (the primitives + the
   conformance vectors that pin their bytes)
 - Serves: [login](../use-cases/uc.account.login.md), [unlock](../use-cases/uc.account.unlock.md),
   [trust-device](../use-cases/uc.account.trust-device.md),
-  [remember-this-device](../use-cases/uc.account.remember-this-device.md)
+  [remember-this-device](../use-cases/uc.account.remember-this-device.md),
+  [sessions](../use-cases/uc.account.sessions.md),
+  [onboard-device](../use-cases/uc.account.onboard-device.md),
+  [recover-access](../use-cases/uc.account.recover-access.md),
+  [change-password](../use-cases/uc.account.change-password.md), [rotate-keys](../use-cases/uc.account.rotate-keys.md)
 - Downstream: [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on this root
 - Concepts: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the keys this root opens, rotation

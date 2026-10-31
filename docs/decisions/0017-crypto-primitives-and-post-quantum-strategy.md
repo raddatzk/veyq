@@ -12,9 +12,8 @@ choice of **which cryptographic primitives** to use and **what posture to take t
 durable, foundational decision that outlives any single feature — and it had been stated only inside the
 [Security Model](../crosscutting/security-model.md), a descriptive concern doc, not recorded as a decision.
 
-This ADR records the **strategy**. The **concrete byte contents** of a suite (e.g. `v1`) are settled in the
-first crypto change-request and pinned as conformance vectors (rule 4 below) — the vectors *realize* this
-strategy; they do not choose it.
+This ADR records the **strategy**. The **concrete byte contents** of a suite (e.g. `v1`) are pinned as
+conformance vectors (rule 4 below) — the vectors *realize* this strategy; they do not choose it.
 
 ## Decision
 
@@ -39,32 +38,31 @@ strategy; they do not choose it.
    an **individual Internet-Draft** (Independent Submission, Informational), not an RFC and not CFRG-adopted;
    CFRG's own generic `draft-irtf-cfrg-hybrid-kems` describes the same combiner shape and cites X-Wing for its
    analysis. A draft can still move, so the suite pins the draft's own Appendix C vectors (decision 4) and a
-   change to the draft cannot silently change ours. **Signatures** (login auth, key-directory, derivative-signing) are **not** HNDL-urgent —
+   change to the draft cannot silently change ours. **Signatures** (every Ed25519 signature of the suite) are **not** HNDL-urgent —
    there is no harvest-now-decrypt-later for a one-time verification — so PQ urgency is deliberately asymmetric:
    **high for encryption (now)**, **low for signatures (Ed25519 now → hybrid ML-DSA later)**.
 3. **Crypto-agility is non-negotiable.** A suite is named by a **versioned suite id**, and its seals are bound to
-   it: `wrapAad` (`src/packages/crypto/src/primitives.ts`) puts `v1` into the authenticated data of every seal and
-   wrap, and every derivation label reads `veyq/v1/…`, so a seal written under one suite never opens as another's.
-   A media frame (`sealFrame`) binds only its index and count — it is reached through a content key that is
-   itself sealed under `v1`.
-   The id is stored **per account** (`veyq_user.suite_id`, sent as `suiteId` when the account is born), not in
-   the bytes of each artifact — enough while exactly one suite exists. The goal stands: new artifacts use the
-   current suite and old ones stay readable under the suite that wrote them, which is what makes adopting, and
-   later upgrading, post-quantum crypto safe without breaking the model or forcing a re-encryption migration.
+   it: the id is in the authenticated data of every seal and wrap, and in every derivation label, so a seal
+   written under one suite never opens as another's. A media frame binds only its index and count — it is reached
+   through a content key that is itself sealed under the suite.
+   The id is stored **per account**, not in the bytes of each artifact — enough while exactly one suite exists
+   ([security-model § Cryptographic stance](../crosscutting/security-model.md#cryptographic-stance) says where).
+   The goal stands: new artifacts use the current suite and old ones stay readable under the suite that wrote
+   them, which is what makes adopting, and later upgrading, post-quantum crypto safe without breaking the model or
+   forcing a re-encryption migration.
    The suite that comes second therefore has to bring the per-artifact label that tells a reader which suite
    wrote a blob; until then nothing re-wraps old data onto a newer suite.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
    `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire, and every
    seal purpose has exactly one vector ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 6).
-   `src/packages/crypto/src/v1.ts` is pinned to it by `src/packages/crypto/src/v1.conformance.test.ts`. Since the
-   native surfaces were dropped (commit `7a1c4e9f`), that TypeScript test is the **only** stack asserting the file's
-   seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently
-   moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
-   (`src/backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
-   this file. The statements it asserts too are the **Secret-Key proof** over a cold-credential request
-   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) and the change-email **auth attestation**
-   (`auth_attestation`, ADR 0074 Decision 8): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
-   implementation green** — never the reverse. One group is a **cross-implementation** anchor rather than a
+   The suite's conformance tests pin its implementation to it. The TypeScript suite is the **only** stack asserting
+   the file's seals, so for them it is a single-implementation **regression pin** — it stops a refactor from
+   silently moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
+   (`src/backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored auth public key and never
+   against this file. **Every statement both stacks build** — the backend rebuilds the signed bytes it checks or
+   stores, such as the **Secret-Key proof** over a cold-credential request
+   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) — is pinned by a vector on both stacks. Pinning a
+   new primitive still means **adding a vector first, then making the implementation green** — never the reverse. One group is a **cross-implementation** anchor rather than a
    regression pin: the hybrid KEM is held to X-Wing's published vectors, which other implementations produced.
 5. **The server never chooses a cost parameter.** A key-derivation profile travels with each wrap so that a
    later profile stays readable (rule 3), but a client derives only with a profile it would itself write — today
@@ -74,8 +72,7 @@ strategy; they do not choose it.
    (gigabytes, billions of passes). A downgrade is not open — the password-derived auth key uses no served
    parameters, and every served KEK mixes in the Secret Key or a device factor — so a ceiling alone would do; an
    exact profile is simpler and closes both. The check is the one decode every served profile passes through,
-   `decodeKdfParams` in `src/packages/crypto/src/v1.ts`, and its refusal is not a wrong password: a screen says the
-   unlock failed without blaming the credential.
+   and its refusal is not a wrong password: a screen says the unlock failed without blaming the credential.
 
 ## Consequences
 
@@ -88,10 +85,9 @@ strategy; they do not choose it.
   with one suite and a per-account id, that is the design, not yet a property of the bytes.
 - **The vectors are what makes rule 3 enforceable.** A versioned suite id only keeps old artifacts readable if
   the bytes behind a version cannot quietly move. The vector file is that pin: a refactor that shifts them
-  fails a red test instead of silently orphaning stored ciphertext. It was also meant as the seam between two
-  stacks that must agree on those bytes; since the native drop the backend asserts against it only for the
-  Secret-Key proof statements and the change-email attestation (rule 4), so for everything else that cross-stack-parity role is dormant until a
-  second independent implementation exists.
+  fails a red test instead of silently orphaning stored ciphertext. It is also the seam between two stacks that
+  must agree on those bytes; the backend asserts against it only for the statements it builds too (rule 4), so
+  for the seals that cross-stack-parity role is dormant until a second independent implementation exists.
 - **Rejected — home-grown crypto:** unreviewed constructions are a foot-gun; rejected outright. The suite's
   first hybrid KEM broke this rule without saying so: its own combiner,
   `HKDF-SHA256(ikm = lp(ss_M) ‖ lp(ss_X), salt = SHA-256(lp(ct_M) ‖ lp(ct_X) ‖ lp(pk_M) ‖ lp(pk_X)), "veyq/v1/kem")`,
@@ -106,16 +102,14 @@ strategy; they do not choose it.
 - **Rejected for now — HPKE with a post-quantum KEM (`draft-ietf-hpke-pq`):** it would standardise the wrap
   layer as well, but it is a working-group draft still moving, and the wrap layer above X-Wing is the common
   KEM-DEM composition (HKDF, then AES-256-GCM). Worth re-asking when that draft is an RFC.
-- **Rejected for now — the platform's WebCrypto AES-GCM for a blob's chunk frames.** In Chromium (2026-10-23),
-  `@noble` sealed and opened frames at about 60 MiB/s. WebCrypto ran at about 1,080 MiB/s over a whole buffer and
-  about 2,200 MiB/s over 256 KiB frames, gave the v1 vectors' bytes and `@noble`'s, and slowed with the main thread
-  under CPU throttling. Rejected because it is a second implementation of a primitive of the suite. Its agreement
-  would need a proof in every engine, and a disagreement writes frames only that engine opens. The frames' cost is
-  answered by placement instead: they are sealed and opened in a worker of core's blob transport
-  (`src/web/src/core/blob/frames.worker.ts`), off the page's main thread; an upload's chunk is also read and sent
-  from there, so its frame never returns to the page (inbox #220). The worker is also where WebCrypto could
-  come in without a wire change, because the bytes are the same. Re-ask when a reading shows that the frame worker,
-  and not the wire, bounds an upload.
+- **Rejected for now — the platform's WebCrypto AES-GCM for a blob's chunk frames.** Measured in Chromium, it is
+  more than an order of magnitude faster than `@noble` and gives the same bytes. Rejected because it is a second
+  implementation of a primitive of the suite. Its agreement would need a proof in every engine, and a disagreement
+  writes frames only that engine opens. The frames' cost is answered by placement instead: they are sealed and
+  opened in a worker of core's blob transport, off the page's main thread, and an upload's chunk is also read and
+  sent from there, so its frame never returns to the page. The worker is also where WebCrypto could come in without
+  a wire change, because the bytes are the same. Re-ask when a reading shows that the frame worker, and not the
+  wire, bounds an upload.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories
   make HNDL a real present threat; accepted (for now) only for *signatures*, per the asymmetry above.
 - **Applied by [ADR 0012](0012-content-key-hierarchy.md)** (the key hierarchy this crypto protects); the
