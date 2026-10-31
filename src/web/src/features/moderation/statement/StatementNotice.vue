@@ -2,15 +2,18 @@
 // The statement of reasons on a blocked item, node or link (ADR 0093 § 7, uc.moderation.object-to-a-measure steps 5, 8,
 // 10): shown only to a member it names — everyone else keeps the bare "Blocked by the operator" — rendered from the one
 // template (one form, ADR 0093 § 14), the facts opened with the member's identity key, and the objection: its form once, then its
-// state and answer. It names the host, never the moderator.
+// state and answer. It names the host, never the moderator. On a guest's page the guest uploader a moderator's statement names
+// reads it here too, from what its link told it (ADR 0093 § 7, `guestStatementFor`): the same passages in the template's
+// guest words, no facts — where to ask for them instead — and the objection through the instance contact, no form. A drop
+// page, which has no placeholder to hang one on, asks for every statement the link told its guest (`everyGuestStatement`).
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
-import { loadStatements, objectionFailure, objectTo, openFacts, statementFor } from './statements'
+import { guestStatementFor, guestStatements, loadGuestStatements, loadStatements, objectionFailure, objectTo, openFacts, statementFor, type GuestStatement } from './statements'
 import { renderStatement } from './template'
 
-const props = defineProps<{ targetId?: string | null; shareId?: string | null }>()
+const props = defineProps<{ targetId?: string | null; shareId?: string | null; everyGuestStatement?: boolean }>()
 
 const { t, locale } = useI18n()
 
@@ -20,10 +23,31 @@ const error = ref('')
 const sent = ref(false)
 
 const statement = computed(() => statementFor({ targetId: props.targetId, shareId: props.shareId }))
+// A member's statement first: a guest's page shows a guest's only where this device holds no member statement about it.
+const guests = computed<GuestStatement[]>(() => {
+  if (props.everyGuestStatement) return guestStatements()
+  if (statement.value) return []
+  const g = guestStatementFor({ targetId: props.targetId, shareId: props.shareId })
+  return g ? [g] : []
+})
 const lang = computed(() => (locale.value.startsWith('de') ? 'de' : 'en'))
 const day = (d: Date) => d.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' })
 
 const facts = computed(() => (statement.value ? openFacts(statement.value) : null))
+
+/** A guest's statement in the template's guest words: always told as the uploader, after a moderator's measure. */
+const guestPassages = (g: GuestStatement) =>
+  renderStatement(lang.value, {
+    measureKind: g.statement.measureKind,
+    roles: ['UPLOADER'],
+    basis: 'REPORT',
+    ground: g.statement.ground,
+    date: day(g.statement.takenAt),
+    contact: g.contact,
+    hasFacts: true,
+    provision: g.statement.provision,
+    reader: 'guest',
+  })
 
 const passages = computed(() => {
   const s = statement.value
@@ -63,11 +87,21 @@ async function submit() {
   }
 }
 
-onMounted(() => loadStatements())
+onMounted(() => {
+  loadStatements()
+  loadGuestStatements()
+})
 </script>
 
 <template>
-  <section v-if="statement" class="veyq-form statement-notice">
+  <!-- A guest's statement (ADR 0093 § 7): the passages alone — its facts passage says where to ask, its objection where to write. -->
+  <template v-if="guests.length">
+    <section v-for="g in guests" :key="g.statement.id" class="veyq-form statement-notice" data-testid="guest-statement">
+      <strong class="statement-title">{{ t('statement.title') }}</strong>
+      <p v-for="p in guestPassages(g)" :key="p.id" class="veyq-form-copy statement-passage" :data-passage="p.id">{{ p.text }}</p>
+    </section>
+  </template>
+  <section v-else-if="statement" class="veyq-form statement-notice">
     <strong class="statement-title">{{ t('statement.title') }}</strong>
     <template v-for="p in passages" :key="p.id">
       <p class="veyq-form-copy statement-passage" :data-passage="p.id">{{ p.text }}</p>

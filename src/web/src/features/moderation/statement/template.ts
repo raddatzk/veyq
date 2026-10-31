@@ -3,7 +3,7 @@
 // (`core/moderation/statement/StatementTemplate.kt`), and `template.test.ts` here and its conformance test there hold
 // both copies equal to it, so the placeholder and the mail render one text. It names the host, never the moderator.
 export const TEMPLATE = {
-  version: 2,
+  version: 3,
   measures: {
     SHARE: {
       en: { measure: 'a link you created was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
@@ -78,6 +78,25 @@ export const TEMPLATE = {
     ],
   },
   mail: { subject: { en: 'veyq: a moderation decision concerns you', de: 'veyq: eine Moderationsentscheidung betrifft dich' }, factsInVeyq: { en: 'What they found is in veyq: sign in at {domain} to read it.', de: 'Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen.' } },
+  guest: {
+    measures: {
+      SHARE: {
+        en: { measure: 'the link you uploaded through was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted.' },
+        de: { measure: 'der Link, über den du hochgeladen hast, wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.' },
+      },
+      UPLOADER_CONTENT: {
+        en: { measure: 'everything you had uploaded through the link was blocked', reach: 'None of it is shown to anyone any more, and each item appears as "Blocked by the operator"; nothing was deleted. What you add later is not affected.' },
+        de: { measure: 'alles, was du über den Link hochgeladen hattest, wurde gesperrt', reach: 'Nichts davon wird jemandem mehr angezeigt, und jedes Element erscheint als „Von der Moderation gesperrt“; gelöscht wurde nichts. Was du später hinzufügst, ist nicht betroffen.' },
+      },
+      GUEST_IDENTITY: {
+        en: { measure: 'you and the link you uploaded through were blocked', reach: 'You can no longer add anything through it, and the link answers as if it did not exist; nothing was deleted.' },
+        de: { measure: 'du und der Link, über den du hochgeladen hast, wurden gesperrt', reach: 'Du kannst darüber nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts.' },
+      },
+    },
+    facts: { en: "What they found is not shown here, since it opens only with an account's key: ask {contact} for it.", de: 'Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos: Frag unter {contact} danach.' },
+    factsNoContact: { en: "What they found is not shown here, since it opens only with an account's key, and this operator names no address to ask for it.", de: 'Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos, und die Betreiberseite nennt keine Adresse, unter der man danach fragen kann.' },
+    objectionNoContact: { en: 'This operator names no address to write to if you disagree.', de: 'Die Betreiberseite nennt keine Adresse, an die du schreiben kannst, wenn du nicht einverstanden bist.' },
+  },
 } as const
 
 export type StatementLang = 'en' | 'de'
@@ -99,6 +118,12 @@ export type StatementFields = {
   contact: string | null
   hasFacts: boolean
   provision?: string | null
+  /**
+   * Who reads it: a member (the default), or the guest uploader it names, on the link it came through (ADR 0093 § 7) —
+   * the template's `guest` words for the measure where the member's would misname the reader, the facts passage saying
+   * where to ask for them (a guest identity has no key to open them), and the objection through the instance contact.
+   */
+  reader?: 'member' | 'guest'
 }
 
 /** One rendered passage: its id (the facts passage is where the opened facts follow) and its text. */
@@ -107,10 +132,20 @@ export type RenderedPassage = { id: string; text: string }
 /**
  * The statement as the placeholder shows it, in [lang]: every passage whose condition holds, in the template's order
  * (ADR 0093 §§ 7, 14: one form on every instance; an instance with no contact shows the gap in its place). src/web/ shows only a
- * moderator's measure, whose objection is made in veyq (`inApp`); a Server Owner's step goes by mail alone (`byContact`).
+ * moderator's measure, whose objection a member makes in veyq (`inApp`) and a guest through the instance contact
+ * (`byContact`, as a Server Owner's step's mail says it).
  */
 export function renderStatement(lang: StatementLang, f: StatementFields): RenderedPassage[] {
-  const measure = TEMPLATE.measures[f.measureKind][lang]
+  const guest = f.reader === 'guest'
+  // A guest's facts and objection passages ask it to write to the contact: where none is named, a sentence of its own
+  // says so, rather than the gap inside a sentence that asks the guest to write to it.
+  const guestText = (id: string, contact: string | null): string | undefined => {
+    if (id === 'facts') return (contact ? TEMPLATE.guest.facts : TEMPLATE.guest.factsNoContact)[lang]
+    if (id === 'objectionByContact' && !contact) return TEMPLATE.guest.objectionNoContact[lang]
+    return undefined
+  }
+  const guestMeasures: Partial<Record<MeasureKind, (typeof TEMPLATE.guest.measures)[keyof typeof TEMPLATE.guest.measures]>> = TEMPLATE.guest.measures
+  const measure = (guest ? guestMeasures[f.measureKind]?.[lang] : undefined) ?? TEMPLATE.measures[f.measureKind][lang]
   const roles = f.roles.map((r) => TEMPLATE.roles[r][lang])
   const joined = roles.length <= 1 ? roles.join('') : roles.slice(0, -1).join(', ') + TEMPLATE.rolesJoiner[lang] + roles[roles.length - 1]
   const fill = (text: string) =>
@@ -128,8 +163,9 @@ export function renderStatement(lang: StatementLang, f: StatementFields): Render
       const when = 'when' in p ? p.when : undefined
       if (when === 'facts') return f.hasFacts
       if (when === 'provision') return !!f.provision?.trim()
-      if (when === 'byContact') return false
+      if (when === 'inApp') return !guest
+      if (when === 'byContact') return guest
       return true
     })
-    .map((p) => ({ id: p.id, text: fill(p[lang]) }))
+    .map((p) => ({ id: p.id, text: fill(guest ? guestText(p.id, f.contact) ?? p[lang] : p[lang]) }))
 }

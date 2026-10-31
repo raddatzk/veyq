@@ -22,7 +22,8 @@ import type { StatementsApi } from '../../../api/generated/moderation'
 import { fakeApi } from '../../../test/apiMock'
 import { account } from '../../../app/account'
 import { publishedKey } from '../../../core/report/report'
-import { loadStatements, objectTo, openFacts, statementFor, statements } from './statements'
+import { guestStatementFor, loadStatements, objectTo, openFacts, statementFor, statements } from './statements'
+import { closeGuestPage, guestPage, openGuestPage } from '../../../core/sharing/guestNotice'
 import { readMyStatements } from './statementsRead'
 
 const CASE = '1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b'
@@ -76,6 +77,23 @@ describe('the statements of an affected member', () => {
     expect(statementFor({ targetId: 'medium-1' })?.measureKind).toBe('UPLOADER_CONTENT')
     expect(statementFor({ targetId: 'file-1' })?.measureKind).toBe('UPLOADER_CONTENT')
     expect(statementFor({ targetId: 'medium-2' })).toBeUndefined()
+  })
+
+  it('finds a guest uploader’s statement on the guest page by the same ids, with the contact, and none off that page (ADR 0093 § 7)', () => {
+    const guestOne = {
+      id: STATEMENT, measureKind: 'UPLOADER_CONTENT' as const, targetId: 'identity-1', covers: ['medium-1'],
+      ground: 'TERMS_BREACH' as const, takenAt: new Date('2026-10-17T12:00:00Z'),
+    }
+    const link = { ...guestOne, id: 'other', measureKind: 'SHARE' as const, targetId: 'link-1', shareId: 'link-1', covers: [] }
+    openGuestPage('link-1')
+    guestPage.notice = { receivedAt: [], statements: [guestOne, link], contact: 'abuse@example.org' }
+    expect(guestStatementFor({ targetId: 'medium-1' })).toEqual({ statement: guestOne, contact: 'abuse@example.org' })
+    expect(guestStatementFor({ shareId: 'link-1' })?.statement.measureKind).toBe('SHARE')
+    expect(guestStatementFor({ targetId: 'medium-2' })).toBeUndefined()
+    // A member's lookup never reads the guest's answer, nor the guest's a member's.
+    expect(statementFor({ targetId: 'medium-1' })).toBeUndefined()
+    closeGuestPage()
+    expect(guestStatementFor({ targetId: 'medium-1' })).toBeUndefined()
   })
 
   it('unwraps the facts’ key with this member’s identity key and opens the one sealed copy, at the statement it names', () => {

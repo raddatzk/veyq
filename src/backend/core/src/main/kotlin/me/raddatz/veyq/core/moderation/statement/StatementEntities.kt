@@ -15,7 +15,10 @@ import java.time.Instant
  */
 enum class StatementRole { SHARE_CREATOR, UPLOADER, SCOPE_OWNER, ACCOUNT_HOLDER, TENANT_OWNER }
 
-/** Whom a recipient row names: a member's account, or a guest identity (told nothing in veyq, it has no account). */
+/**
+ * Whom a recipient row names: a member's account, or a guest identity — told on the link it came through, never by mail,
+ * it has no account (ADR 0093 §§ 7, 12; [me.raddatz.veyq.core.moderation.order.GuestNotices]).
+ */
 enum class RecipientKind { ACCOUNT, GUEST }
 
 /**

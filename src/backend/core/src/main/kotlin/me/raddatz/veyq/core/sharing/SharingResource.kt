@@ -40,7 +40,7 @@ import me.raddatz.veyq.core.moderation.report.ReportReceived
 import me.raddatz.veyq.core.moderation.report.Reporter
 import me.raddatz.veyq.core.moderation.report.ReportsResource
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
-import me.raddatz.veyq.core.moderation.order.GuestOrderNotices
+import me.raddatz.veyq.core.moderation.order.GuestNotices
 import me.raddatz.veyq.core.moderation.report.ReportsResource.Companion.toReport
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -76,7 +76,7 @@ class SharingResource(
     private val reports: ReportHandler,
     private val received: ReportReceived,
     private val blocks: ModerationBlocks,
-    private val orderNotices: GuestOrderNotices,
+    private val guestNotices: GuestNotices,
     /** The client a guest write records (ADR 0093 § 10, ADR 0094): resolved once per write, handed down to it. */
     private val client: RequestClient,
     /** What a guest page discloses before the first write (ADR 0093 § 10). */
@@ -332,12 +332,13 @@ class SharingResource(
             ReportsResource.answer(reports.report(Reporter.Guest(shareId, xSharePassword, xShareWrite), report), received, report.receiptAddress)
         }
 
-    // A guest uploader's notice of an authority's removal order (TCO Art. 11, ADR 0093 § 12): named by its contributor
-    // token, answered even on a blocked link, and the link's ordinary unknown answer for anything else.
+    // What a guest uploader is told of a measure on its upload — an authority's removal order (TCO Art. 11, ADR 0093
+    // § 12), a moderator's statement of reasons (ADR 0093 § 7): named by its contributor token, answered even on a
+    // blocked link, and the link's ordinary unknown answer for anything else.
     @PermitAll
     @RateLimit(key = RateLimitKey.IP)
-    override fun getShareOrderNotice(shareId: String, xContributorToken: String): Response =
-        orderNotices.noticeFor(shareId, xContributorToken)?.let { Response.ok(it).build() }
+    override fun getShareGuestNotice(shareId: String, xContributorToken: String): Response =
+        guestNotices.noticeFor(shareId, xContributorToken)?.let { Response.ok(it).build() }
             ?: httpError(CreateIdentityOutcome.NotFound)
 
     private fun toShareNode(n: ShareNodeRow, blocked: Boolean) = ShareNode(

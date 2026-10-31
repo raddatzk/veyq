@@ -52,7 +52,8 @@ serves the full fixed texts, and a value the Server Owner leaves empty shows as 
   (ADR 0093 § 6).
 - **The affected are told.** A statement of reasons goes to the share's creator, the uploader and, on a content block,
   the scope owner, in the app and by mail; an affected member objects once in the app and another moderator decides;
-  a reporter who left a contact gets a receipt and the decision. Only an authority defers a statement (ADR 0093 § 7,
+  a guest uploader reads its statement's clear fields on the link it came through, without the facts, and objects
+  through the instance contact; a reporter who left a contact gets a receipt and the decision. Only an authority defers a statement (ADR 0093 § 7,
   ADR 0099 § 5).
 - **Authorities.** An order acts on ids, within the hour, with no key and no report: the share and its content blocked,
   a case opened with a hold that ends where the order says. An Art. 18 report goes to the BKA as an export of clear

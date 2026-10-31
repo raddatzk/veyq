@@ -2,16 +2,20 @@
 // afresh after an objection, matched to a blocked item, node or link by its id; the facts' key unwraps with the member's
 // own identity key (`moderation-facts-key` [caseId, statementId, accountId]) and opens the facts sealed once for every
 // member (`moderation-statement-facts` [caseId, statementId]), and an objection seals to the moderation key's current epoch
-// (`moderation-objection` [epoch, statementId]). Nothing here is shown to a guest: a guest has no session to ask with.
+// (`moderation-objection` [epoch, statementId]). A guest uploader the statement names reads its clear fields on the link
+// it came through instead (`guestStatementFor`, ADR 0093 § 7): no facts — they open only with a member's identity key — and
+// no objection in veyq; it writes to the instance contact.
 import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { statementsApi } from '../../../api/client'
 import type { ModerationStatement } from '../../../api/generated/moderation'
+import type { ShareGuestStatement } from '../../../api/generated/sharing'
 import { account } from '../../../app/account'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate } from '../../../app/vault'
 import { publishedKey } from '../../../core/report/report'
+import { guestPage, loadGuestNotice } from '../../../core/sharing/guestNotice'
 import { decodeHttpError } from '../../../shared/httpError'
 import { readMyStatements } from './statementsRead'
 
@@ -36,14 +40,46 @@ export function loadStatements(fresh = false): Promise<void> {
 }
 
 /**
+ * Read the guest page's notice, where one is open: what the link tells this device's guest identity (ADR 0093 § 7). A
+ * page with no guest session for its link reads nothing; a failed read shows none.
+ */
+export function loadGuestStatements(): Promise<void> {
+  const shareId = guestPage.shareId
+  if (!shareId) return Promise.resolve()
+  return loadGuestNotice(shareId).then(
+    () => undefined,
+    () => undefined,
+  )
+}
+
+/** Whether [s] is about [target] — a node or an item by its id, its own or one an uploader's block covers, or a link. */
+function about(s: { targetId: string; covers?: string[]; shareId?: string | null }, target: { targetId?: string | null; shareId?: string | null }): boolean {
+  const id = target.targetId
+  return (id != null && (s.targetId === id || (s.covers ?? []).includes(id))) || (target.shareId != null && s.shareId === target.shareId)
+}
+
+/** A statement the guest page's link told this device's guest identity, with the contact it names. */
+export type GuestStatement = { statement: ShareGuestStatement; contact: string | null }
+
+/** The newest statement about [target] that the guest page's link told this device's guest identity, and the contact. */
+export function guestStatementFor(target: { targetId?: string | null; shareId?: string | null }): GuestStatement | undefined {
+  const notice = guestPage.notice
+  const statement = notice?.statements.find((s) => about(s, target))
+  return statement ? { statement, contact: notice!.contact } : undefined
+}
+
+/** Every statement the guest page's link told this device's guest identity, newest first — a drop page's, which has no placeholder. */
+export function guestStatements(): GuestStatement[] {
+  const notice = guestPage.notice
+  return notice ? notice.statements.map((statement) => ({ statement, contact: notice.contact })) : []
+}
+
+/**
  * The newest statement about [target]: a node or an item by its id — its own, or one an uploader's block covers
  * (`UPLOADER_CONTENT`'s `covers`) — or a link by its share id.
  */
 export function statementFor(target: { targetId?: string | null; shareId?: string | null }): ModerationStatement | undefined {
-  const id = target.targetId
-  return statements.list.find(
-    (s) => (id != null && (s.targetId === id || (s.covers ?? []).includes(id))) || (target.shareId != null && s.shareId === target.shareId),
-  )
+  return statements.list.find((s) => about(s, target))
 }
 
 /**

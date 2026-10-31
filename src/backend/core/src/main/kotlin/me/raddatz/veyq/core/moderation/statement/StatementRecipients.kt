@@ -18,7 +18,8 @@ data class Recipient(val kind: RecipientKind, val id: String, val roles: Set<Sta
  * metadata only: the creator of a blocked link or of the link a blocked guest came through, the uploaders the case's held
  * rows name (a blocked guest: that guest alone; everything from one uploader: that uploader alone), and on a content block
  * every owner of the space. A member whose account
- * is gone has nobody to tell and is left out; a guest is listed, though veyq tells it nothing — it has no account.
+ * is gone has nobody to tell and is left out; a guest is listed, and is told on the link it came through
+ * ([me.raddatz.veyq.core.moderation.order.GuestNotices]) — never by mail, it has no account.
  */
 @ApplicationScoped
 class StatementRecipients {
@@ -41,7 +42,7 @@ class StatementRecipients {
                 MembershipEntity.list("scopeId = ?1 and role = ?2", case.scopeId, MembershipEntity.OWNER)
                     .forEach { add(RecipientKind.ACCOUNT, it.userId, StatementRole.SCOPE_OWNER) }
             }
-            // Everything from one uploader: that uploader (a guest is told nothing in veyq), and every owner of the space.
+            // Everything from one uploader: that uploader (a guest on its link), and every owner of the space.
             BlockKind.CONTENT_UPLOADER -> {
                 add(if (step.shareId != null) RecipientKind.GUEST else RecipientKind.ACCOUNT, step.targetId, StatementRole.UPLOADER)
                 MembershipEntity.list("scopeId = ?1 and role = ?2", case.scopeId, MembershipEntity.OWNER)

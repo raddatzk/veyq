@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 16(5), 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by src/web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. There is one form on every instance (ADR 0093 § 14: no operating mode, version 2). A passage is rendered in order; one with 'when' only when that value is there: 'facts' when facts were written (required of every statement), 'provision' when the provision or clause relied on was named (required of every statement), 'inApp' for a moderator's measure (the objection is made in veyq), 'byContact' for a Server Owner's step (the objection goes to the instance contact). {contact} renders as 'gap' while the instance names no address — a visible 'not stated by this operator', never an empty sentence (ADR 0093 §§ 7, 14). A moderator's measure's mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place; a Server Owner's step's mail carries them after the facts passage, the Server Owner's own words (ADR 0093 § 7, ADR 0049 decision 2). Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground}, {provision} and {contact}, and {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field or the clear value named, never content. 'reporterDecision' is the redress a reporter's decision mail carries after its outcome (DSA Art. 16(5), Art. 53); its coordinator sentence carries its own 'where the DSA applies to this instance', since veyq cannot know whether it does and a right only the DSA grants is never promised unconditionally (ADR 0093 § 7). It names the host, never the moderator.",
+  "version": 3,
+  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 16(5), 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by src/web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. There is one form on every instance (ADR 0093 § 14: no operating mode). A passage is rendered in order; one with 'when' only when that value is there: 'facts' when facts were written (required of every statement), 'provision' when the provision or clause relied on was named (required of every statement), 'inApp' for a moderator's measure (the objection is made in veyq), 'byContact' for a Server Owner's step (the objection goes to the instance contact). {contact} renders as 'gap' while the instance names no address — a visible 'not stated by this operator', never an empty sentence (ADR 0093 §§ 7, 14). A moderator's measure's mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place; a Server Owner's step's mail carries them after the facts passage, the Server Owner's own words (ADR 0093 § 7, ADR 0049 decision 2). Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground}, {provision} and {contact}, and {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field or the clear value named, never content. 'reporterDecision' is the redress a reporter's decision mail carries after its outcome (DSA Art. 16(5), Art. 53); its coordinator sentence carries its own 'where the DSA applies to this instance', since veyq cannot know whether it does and a right only the DSA grants is never promised unconditionally (ADR 0093 § 7). It names the host, never the moderator. 'guest' is how src/web/ renders a moderator's statement to the guest uploader it names, on the link it came through (ADR 0093 § 7, inbox #813; version 3): a guest has no account, so no mail reaches it and the backend renders none; its 'measures' replace the measure and its reach where the member's words would misname the reader (the creator of the link), a kind it lacks keeps the member's; its 'facts' stands in the facts passage's place, since the facts are sealed to the members' identity keys and a guest identity has none; and its objection is 'byContact', ADR 0093 § 7's 'a guest uses the instance contact'. Where the instance names no contact, 'factsNoContact' and 'objectionNoContact' take those two passages' place whole, rather than the gap inside a sentence that asks the guest to write to it; the 'contact' passage keeps the gap, as every reader's does.",
   "measures": {
     "SHARE": {
       "en": {
@@ -237,6 +237,52 @@
     "factsInVeyq": {
       "en": "What they found is in veyq: sign in at {domain} to read it.",
       "de": "Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen."
+    }
+  },
+  "guest": {
+    "measures": {
+      "SHARE": {
+        "en": {
+          "measure": "the link you uploaded through was blocked",
+          "reach": "Everyone who opens it is told the link does not exist; nothing was deleted."
+        },
+        "de": {
+          "measure": "der Link, über den du hochgeladen hast, wurde gesperrt",
+          "reach": "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts."
+        }
+      },
+      "UPLOADER_CONTENT": {
+        "en": {
+          "measure": "everything you had uploaded through the link was blocked",
+          "reach": "None of it is shown to anyone any more, and each item appears as \"Blocked by the operator\"; nothing was deleted. What you add later is not affected."
+        },
+        "de": {
+          "measure": "alles, was du über den Link hochgeladen hattest, wurde gesperrt",
+          "reach": "Nichts davon wird jemandem mehr angezeigt, und jedes Element erscheint als „Von der Moderation gesperrt“; gelöscht wurde nichts. Was du später hinzufügst, ist nicht betroffen."
+        }
+      },
+      "GUEST_IDENTITY": {
+        "en": {
+          "measure": "you and the link you uploaded through were blocked",
+          "reach": "You can no longer add anything through it, and the link answers as if it did not exist; nothing was deleted."
+        },
+        "de": {
+          "measure": "du und der Link, über den du hochgeladen hast, wurden gesperrt",
+          "reach": "Du kannst darüber nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts."
+        }
+      }
+    },
+    "facts": {
+      "en": "What they found is not shown here, since it opens only with an account's key: ask {contact} for it.",
+      "de": "Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos: Frag unter {contact} danach."
+    },
+    "factsNoContact": {
+      "en": "What they found is not shown here, since it opens only with an account's key, and this operator names no address to ask for it.",
+      "de": "Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos, und die Betreiberseite nennt keine Adresse, unter der man danach fragen kann."
+    },
+    "objectionNoContact": {
+      "en": "This operator names no address to write to if you disagree.",
+      "de": "Die Betreiberseite nennt keine Adresse, an die du schreiben kannst, wenn du nicht einverstanden bist."
     }
   }
 }

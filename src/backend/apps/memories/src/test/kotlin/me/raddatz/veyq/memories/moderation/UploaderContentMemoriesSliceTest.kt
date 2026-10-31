@@ -49,8 +49,8 @@ class UploaderContentMemoriesSliceTest {
     fun theStepBlocksExactlyThatUploadersMediaAndTheHoldNowHoldsThem() {
         val mod = CaseTestKit.moderator()
         val w = world()
-        val guest = guest(w)
-        val other = guest(w)
+        val (guest, guestToken) = guestWithToken(w)
+        val (other, otherToken) = guestWithToken(w)
         val g1 = medium(w, guest)
         val g2 = medium(w, guest)
         val h1 = medium(w, other)
@@ -65,7 +65,8 @@ class UploaderContentMemoriesSliceTest {
             .body("targets.uploaders[0].items", equalTo(2))
             .body("targets.uploaders[0].contentBlocked", equalTo(false))
         assertEquals(listOf(g1), heldMedia(caseId), "the report held the one medium")
-        // The statement goes to the space's owners (a guest is told nothing in veyq).
+        // The statement's wrapped facts go to the space's owners — a guest has no identity key; it reads the statement on
+        // its link without the facts (ADR 0093 § 7, below).
         mod.recipients(caseId, "UPLOADER_CONTENT", targetId = guest).then().statusCode(200).body("accounts.accountId", equalTo(listOf(w.owner)))
 
         val measure = mod.take(caseId, "UPLOADER_CONTENT", targetId = guest).then().statusCode(201)
@@ -93,6 +94,12 @@ class UploaderContentMemoriesSliceTest {
             .body("statements[0].measureKind", equalTo("UPLOADER_CONTENT"))
             .extract().path<List<String>>("statements[0].covers")
         assertEquals(listOf(g1, g2).sorted(), covers.sorted())
+        // The guest uploader reads it on its link and finds it on the same items; the other guest of the link is told nothing.
+        val guestCovers = guestNotice(w, guestToken).then().statusCode(200)
+            .body("statements[0].measureKind", equalTo("UPLOADER_CONTENT"))
+            .extract().path<List<String>>("statements[0].covers")
+        assertEquals(listOf(g1, g2).sorted(), guestCovers.sorted())
+        guestNotice(w, otherToken).then().statusCode(404).body("code", equalTo("share_not_found"))
 
         // What the uploader adds after the decision is not what a person decided on.
         val later = medium(w, guest)
@@ -152,10 +159,19 @@ class UploaderContentMemoriesSliceTest {
     }
 
     /** A guest identity of the world's link, minted as a guest's client does; its id. */
-    private fun guest(w: World): String =
-        given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(w.shareId))
+    private fun guest(w: World): String = guestWithToken(w).first
+
+    /** A guest identity of the world's link, minted as a guest's client does; its id and the token its client holds. */
+    private fun guestWithToken(w: World): Pair<String, String> {
+        val r = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(w.shareId))
             .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
-            .`when`().post("/api/shares/${w.shareId}/identities").then().statusCode(201).extract().path("identityId")
+            .`when`().post("/api/shares/${w.shareId}/identities").then().statusCode(201).extract()
+        return r.path<String>("identityId") to r.path<String>("contributorToken")
+    }
+
+    /** What the guest whose client holds [token] is told on the world's link (ADR 0093 §§ 7, 12). */
+    private fun guestNotice(w: World, token: String) =
+        given().header("X-Contributor-Token", token).`when`().get("/api/shares/${w.shareId}/guest-notice")
 
     /** A medium of the world's Memory, uploaded by the guest [identity] or, null, by the owner. Seeded, not uploaded. */
     private fun medium(w: World, identity: String?): String {

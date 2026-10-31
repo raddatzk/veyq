@@ -860,8 +860,8 @@ paths:
         ADR 0093 § 7 (uc.moderation.object-to-a-measure step 2): for the step `kind` on its target, the members the
         statement goes to — the creator of a blocked link or of the link a blocked guest came through, the uploaders the
         held rows name, every owner of the space on a content block — each with the identity public bundle to wrap the
-        facts' key to (`moderation-facts-key` [caseId, statementId, accountId]), and how many guests it names (they are
-        told nothing in veyq).
+        facts' key to (`moderation-facts-key` [caseId, statementId, accountId]), and how many guests it names (each reads
+        the statement on its link without the facts, `getShareGuestNotice`: a guest identity has no key to wrap them to).
         The same target rules as `takeModerationMeasure` (`404 moderation_target_unknown`). The list is whole or refused
         (`422 statement_recipients_too_many`), never cut: a statement reaches every affected member. Key-proved over
         this case.
@@ -2318,7 +2318,7 @@ components:
           x-veyq-visibility: measure
           type: integer
           format: int32
-          description: How many guest identities it names — told nothing in veyq, they have no account.
+          description: How many guest identities it names — each reads it on its link, without the facts (no account, no key).
           example: 0
 
     StatementRecipient:
@@ -2393,7 +2393,7 @@ components:
           x-veyq-visibility: measure
           type: integer
           format: int32
-          description: How many guest identities it names — told nothing in veyq.
+          description: How many guest identities it names — each reads it on its link, without the facts.
           example: 0
 
     ModerationObjection:

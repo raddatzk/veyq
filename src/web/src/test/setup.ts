@@ -124,6 +124,12 @@ vi.mock('../features/moderation/statement/statementsRead', () => ({
   readMyStatements: () => Promise.resolve([]),
 }))
 
+// …and so does every placeholder and notice on a guest's page, what the link tells this device's guest uploader (ADR 0093
+// §§ 7, 12): nothing to tell, no request, unless a test of the notice takes the real module back.
+vi.mock('../core/sharing/guestNoticeRead', () => ({
+  readGuestNotice: () => Promise.resolve(null),
+}))
+
 afterEach(() => {
   if (!attempted.length) return
   const calls = attempted.splice(0).join('\n  - ')

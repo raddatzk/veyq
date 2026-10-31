@@ -1258,32 +1258,36 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
-  /api/shares/{shareId}/order-notice:
+  /api/shares/{shareId}/guest-notice:
     get:
       tags: [sharing]
-      operationId: getShareOrderNotice
-      summary: A guest uploader's notice that an authority's removal order took its upload down (unauthenticated).
+      operationId: getShareGuestNotice
+      summary: What a guest uploader is told of a measure on its upload — an authority's removal order, a moderator's statement of reasons (unauthenticated).
       description: >
-        **No auth** — TCO Art. 11(1), ADR 0093 § 12 (uc.moderation.authority-order step 5). A guest identity whose upload
-        an authority's **removal order** blocked is told so on the link it came through, even while that link is blocked:
-        the time the order was received, and the instance contact from which the reasons or a copy of the order are
-        given on request (Art. 11(2)). The identity is named by the `X-Contributor-Token` its client holds, and only its
-        own uploads count. It is the one thing a link blocked by such an order still answers, and only to such an
-        identity: another identity's token, an unknown one, an upload blocked by a moderator's measure (DSA Art. 17(2):
-        a guest is told nothing then), an order whose statement an authority's deferral still holds back (Art. 11(3)),
-        and a measure since lifted all get the link's ordinary unknown answer, `404 share_not_found` — so the read tells
-        nobody else that the link exists. No password and no write proof: the contributor token is the identity's own
-        capability, minted only for the client that named itself.
+        **No auth** — ADR 0093 §§ 7, 12 (uc.moderation.authority-order step 5, uc.moderation.object-to-a-measure step 5).
+        A guest identity whose upload a measure restricts is told so on the link it came through, even while that link
+        is blocked. The identity is named by the `X-Contributor-Token` its client holds, and only the statements whose
+        recipient it is count — its own uploads. An authority's **removal order** is told as TCO Art. 11 asks, and
+        nothing more: the time the order was received, and the instance contact from which the reasons or a copy of the
+        order are given on request (Art. 11(2)) — `removals`. A **moderator's measure** is told by its statement of
+        reasons (DSA Art. 17), its clear fields — `statements`: what the template renders for a member, without the
+        facts, which are sealed to the members' identity keys and which a guest identity has no key to open. Only while
+        the measure stands, and never while an authority's deferral holds the statement back (Art. 11(3), ADR 0093 § 7).
+        It is the one thing a link blocked by such a measure still answers, and only to such an identity: another
+        identity's token, an unknown one, a measure an authority's deferral still holds back, a measure since lifted and
+        an identity with nothing to be told all get the link's ordinary unknown answer, `404 share_not_found` — so the read
+        tells nobody else that the link exists. No password and no write proof: the contributor token is the identity's
+        own capability, minted only for the client that named itself.
       parameters:
         - $ref: "#/components/parameters/ShareId"
         - $ref: "#/components/parameters/ContributorToken"
       responses:
         "200":
-          description: The removals by an authority's order of this identity's uploads, oldest first.
+          description: The removals by an authority's order and the moderators' statements of this identity's uploads; at least one of the two is not empty.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ShareOrderNotice" }
-              example: { removals: [{ orderReceivedAt: 2026-10-18T07:12:00Z }], contactAddress: abuse@example.org }
+              schema: { $ref: "#/components/schemas/ShareGuestNotice" }
+              example: { removals: [{ orderReceivedAt: 2026-10-18T07:12:00Z }], statements: [], contactAddress: abuse@example.org }
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:
@@ -2784,24 +2788,32 @@ components:
     OperatorSection:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
 
-    ShareOrderNotice:
+    ShareGuestNotice:
       type: object
       description: >
-        What a guest uploader is told of an authority's removal order that took its upload down (TCO Art. 11, ADR 0093
-        § 12): when each order was received, and where to ask for the reasons or a copy. Never the order's reference,
-        the authority, or anything of another identity.
-      required: [removals]
+        What a guest uploader is told of the measures on its uploads (ADR 0093 §§ 7, 12): each authority's removal order
+        that took one down, by when it was received (TCO Art. 11), and each moderator's measure by its statement of
+        reasons without the facts (DSA Art. 17); and where to ask. Never an order's reference, the authority, the
+        moderator, the facts, or anything of another identity. At least one of the two lists is not empty.
+      required: [removals, statements]
       properties:
         removals:
           type: array
-          minItems: 1
           maxItems: 100
+          description: The removal orders that blocked an upload of this identity, oldest first.
           items: { $ref: "#/components/schemas/ShareOrderRemoval" }
+        statements:
+          type: array
+          maxItems: 100
+          description: The statements of reasons of the moderators' measures on this identity's uploads, newest first.
+          items: { $ref: "#/components/schemas/ShareGuestStatement" }
         contactAddress:
           x-veyq-visibility: public
           type: string
           format: email
-          description: The instance contact (ADR 0093 § 11), where the reasons or a copy of the order are asked for; null where none is set.
+          description: >
+            The instance contact (ADR 0093 § 11) — where the reasons or a copy of an order are asked for, and where a guest
+            objects to a moderator's measure and asks for its facts (§ 7); null where none is set.
           maxLength: 254
           example: abuse@example.org
 
@@ -2816,6 +2828,61 @@ components:
           format: date-time
           description: When the order was received at the instance's contact point, as it was entered.
           example: 2026-10-18T07:12:00Z
+
+    ShareGuestStatement:
+      type: object
+      description: >
+        A moderator's statement of reasons as the guest uploader it names reads it (ADR 0093 § 7): the clear fields the
+        one template renders — a member's `ModerationStatement` without the facts and their key, the objection and the
+        case. A guest is always told as the uploader, after a moderator's measure (`REPORT`), and objects through the
+        instance contact. It names the host, never the moderator.
+      required: [id, measureKind, targetId, covers, ground, takenAt]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
+        measureKind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`SHARE` = the link blocked; `CONTENT` = a node or an item blocked; `UPLOADER_CONTENT` = everything this identity uploaded through the link, as counted when it was taken; `GUEST_IDENTITY` = this identity blocked with the link."
+          enum: [SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY]
+          example: CONTENT
+        targetId:
+          x-veyq-visibility: id
+          type: string
+          description: The blocked id — the link's id, a node's or an item's id, or this identity's id — so the page finds it on the placeholder the guest sees.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The link a `SHARE` or `GUEST_IDENTITY` measure blocked — this one; null otherwise.
+          maxLength: 43
+          example: null
+        covers:
+          x-veyq-visibility: id
+          type: array
+          description: >
+            For `UPLOADER_CONTENT`, the ids of the nodes and items it blocks — this identity's own uploads — so the guest
+            finds it on each one's placeholder; empty for every other kind. No `maxItems`, as a member's: nothing bounds
+            how many items one guest uploads, and a cut list would leave a blocked item without its statement.
+          items:
+            x-veyq-visibility: id
+            type: string
+            maxLength: 64
+          example: []
+        ground: { $ref: "#/components/schemas/ModerationGround" }
+        provision: { $ref: "#/components/schemas/StatementProvision" }
+        takenAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the measure was taken — the date the statement names.
+          example: 2026-10-17T12:00:00Z
+
+    # The statement of reasons' shared parts are single-sourced in _common (ADR 0093 § 7).
+    ModerationGround:
+      $ref: '_common.openapi.yaml#/components/schemas/ModerationGround'
+    StatementProvision:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementProvision'
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:

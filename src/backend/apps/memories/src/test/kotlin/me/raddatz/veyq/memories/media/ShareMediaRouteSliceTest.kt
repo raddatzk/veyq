@@ -128,10 +128,10 @@ class ShareMediaRouteSliceTest {
             given().header("X-Contributor-Token", w.token).`when`().delete("/api/shares/${w.shareId}/nodes/${w.memory}")
                 .then().statusCode(422).body("code", equalTo("illegal_structure"))
         },
-        "getShareOrderNotice" to Probe("GET", "/api/shares/{shareId}/order-notice") { w ->
-            // The real link and its guest's own token, with no removal order: only the notice's handler answers a token
-            // it knows with the link's ordinary unknown answer.
-            given().header("X-Contributor-Token", w.token).`when`().get("/api/shares/${w.shareId}/order-notice")
+        "getShareGuestNotice" to Probe("GET", "/api/shares/{shareId}/guest-notice") { w ->
+            // The real link and its guest's own token, with no measure on its uploads: only the notice's handler answers a
+            // token it knows with the link's ordinary unknown answer.
+            given().header("X-Contributor-Token", w.token).`when`().get("/api/shares/${w.shareId}/guest-notice")
                 .then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "reportInShare" to Probe("POST", "/api/shares/{shareId}/reports") { w ->

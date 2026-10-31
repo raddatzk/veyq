@@ -262,7 +262,7 @@ class AuthorityOrderHandler(
      * ground terrorist content and its provision ([REMOVAL_PROVISION]), no facts — the order is what led to it — to the
      * recipients a moderator's block would reach. Sent now where a member is named, unless the authority deferred it.
      * Answers its id when it went out now. A guest uploader among the recipients asks for its notice on the link
-     * ([GuestOrderNotices], TCO Art. 11(1)) — the same row, so the same deferral holds both back.
+     * ([GuestNotices], TCO Art. 11(1)) — the same row, so the same deferral holds both back.
      */
     private fun statementFor(measure: ModerationBlockEntity, case: ModerationCaseEntity, order: AuthorityOrderEntity, deferUntil: Instant?, now: Instant): String? {
         val held = snapshots.rowsOf(case.id, now)

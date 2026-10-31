@@ -327,7 +327,7 @@ class OperatorBlindProbeTest {
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
             "listSharePotRevisions", "appendSharePotRevisions", "listSharePotReceipts", "completeSharePotReceipt",
-            "reportInShare", "getShareOrderNotice",
+            "reportInShare", "getShareGuestNotice",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
         reason(

@@ -7,6 +7,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -51,8 +52,12 @@ If the link was switched off, has expired or is incomplete, the page says **This
 
 If an authority ordered something a guest uploaded through the link removed, that guest's own browser — the one they
 named themselves in — is told so on the link, even though it answers everyone else as unavailable: that it was removed
-on an order of an authority received on that date, and where to ask for the reasons or a copy of the order. Nobody else
-sees that, and nothing is shown while the authority has asked the server to wait.
+on an order of an authority received on that date, and where to ask for the reasons or a copy of the order. If the
+server's moderators blocked it — or the guest, or the link — that browser reads their reasons in the same place, and
+where the blocked item would be: what was blocked and why, without what they found, which only an account's key opens,
+and the address to ask for it and to write to if the guest disagrees. A page that only takes uploads shows every such
+reason, whether or not the link still works. Nobody else sees that, and nothing is shown while
+an authority has asked the server to wait.
 
 Everything a guest sees is unlocked in their own browser with the key from the link:
 [Is my data safe?](/veyq/privacy/is-my-data-safe/#when-you-share)

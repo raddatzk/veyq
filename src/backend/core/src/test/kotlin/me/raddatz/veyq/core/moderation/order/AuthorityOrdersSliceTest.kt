@@ -91,9 +91,9 @@ class AuthorityOrdersSliceTest {
 
     private fun resolve(shareId: String): Response = given().`when`().get("/api/shares/$shareId")
 
-    /** A guest's order notice on [shareId], as the client holding [token] asks it (TCO Art. 11). */
+    /** A guest's notice on [shareId], as the client holding [token] asks it (TCO Art. 11, ADR 0093 § 12). */
     private fun notice(shareId: String, token: String): Response =
-        given().header("X-Contributor-Token", token).`when`().get("/api/shares/$shareId/order-notice")
+        given().header("X-Contributor-Token", token).`when`().get("/api/shares/$shareId/guest-notice")
 
     /** A second guest identity on [shareId] that uploaded nothing — its token, as its client holds it. */
     private fun otherGuest(shareId: String): String {
@@ -186,6 +186,8 @@ class AuthorityOrdersSliceTest {
         resolve(w.ordered).then().statusCode(404)
         val told = notice(w.ordered, w.guestToken).then().statusCode(200)
             .body("removals.size()", equalTo(1))
+            // Nothing else is served to it (§ 12): the order's own statement is no moderator's statement of reasons.
+            .body("statements.size()", equalTo(0))
             .extract().response()
         assertEquals(receivedAt, time(told, "removals[0].orderReceivedAt"))
         // Control: another identity's token on the same link, and an unknown one, get the link's ordinary unknown answer.
@@ -193,37 +195,6 @@ class AuthorityOrdersSliceTest {
         notice(w.ordered, me.raddatz.veyq.core.crypto.Tokens.random()).then().statusCode(404).body("code", equalTo("share_not_found"))
         // The identity's token names it on its own link only.
         notice(w.other, w.guestToken).then().statusCode(404)
-    }
-
-    @Test
-    fun aGuestUploaderIsToldNothingOfAModeratorsMeasure() {
-        val mod = CaseTestKit.moderator()
-        val w = world()
-        asMember(w.ownerId, w.scopeId, body(listOf(item("NODE", w.root)))).then().statusCode(201)
-        val caseId = openCase("NODE", w.root)!!.id
-        mod.take(caseId, "CONTENT", targetId = w.root).then().statusCode(201)
-        mod.take(caseId, "SHARE", shareId = w.ordered).then().statusCode(201)
-        // The guest is among the statement's recipients — and still told nothing (DSA Art. 17(2): no contact is known).
-        assertTrue(QuarkusTransaction.requiringNew().call {
-            me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity.count("recipientKind = ?1 and recipientId = ?2", "GUEST", w.guestIdentity)
-        } > 0)
-        notice(w.ordered, w.guestToken).then().statusCode(404).body("code", equalTo("share_not_found"))
-    }
-
-    @Test
-    fun aModeratorsMeasureOnAPreservationOrdersCaseTellsTheGuestNothing() {
-        val mod = CaseTestKit.moderator()
-        val w = world()
-        // A preservation order blocks nothing and opens a case; a moderator then blocks the content on that case. The
-        // guest is a recipient of that measure's statement, and the case carries an order — but no removal order took
-        // the upload down, so nothing is told: two checks (a statement on an order's basis, a removal order on its case),
-        // each held with the other off by the bite.
-        val caseId = mod.order(orderBody(w.ordered, kind = "PRESERVATION")).then().statusCode(201).extract().path<String>("caseId")
-        mod.take(caseId, "CONTENT", targetId = w.root).then().statusCode(201)
-        assertTrue(QuarkusTransaction.requiringNew().call {
-            me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity.count("recipientKind = ?1 and recipientId = ?2", "GUEST", w.guestIdentity)
-        } > 0)
-        notice(w.ordered, w.guestToken).then().statusCode(404).body("code", equalTo("share_not_found"))
     }
 
     @Test

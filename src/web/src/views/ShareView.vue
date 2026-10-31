@@ -58,6 +58,8 @@ import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import OrderNotice from '../core/sharing/OrderNotice.vue'
+import { closeGuestPage, openGuestPage } from '../core/sharing/guestNotice'
+import StatementNotice from '../features/moderation/statement/StatementNotice.vue'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
@@ -237,6 +239,13 @@ function reportLink() {
 // (`shared/state/scopedPreference`, inbox #408).
 setPreferenceAudience('guest')
 onBeforeUnmount(() => setPreferenceAudience('account'))
+// What the link tells this device's guest uploader of a measure on its upload (ADR 0093 §§ 7, 12) is read for this page
+// — by the § 12 notice and by a blocked placeholder, only where this device holds the guest's session; never in a review,
+// whose id is a case's and which calls no guest endpoint.
+if (!moderation) {
+  openGuestPage(shareId)
+  onBeforeUnmount(closeGuestPage)
+}
 
 /** The level view's live refresh (inbox #408, ADR 0081): re-resolve quietly and CONDITIONALLY — the last response's tag
  *  goes as `If-None-Match`, and a `304` is no work at all — and swap `head` only when the subtree differs (the
@@ -349,6 +358,8 @@ onMounted(() => {
       <!-- TCO Art. 11: a guest uploader whose upload an authority's removal order took down is told so here, on its own
            link, though the link answers everyone else as unknown (asked only when this device holds its session). -->
       <OrderNotice :share-id="shareId" />
+      <!-- ADR 0093 § 7: so is one whose upload — or itself, with the link — a moderator blocked, by its statement of reasons. -->
+      <StatementNotice :share-id="shareId" />
     </div>
 
     <!-- cr-0118: a password-protected share resolves to a LOCKED shell (nothing else crossed the wire) — prompt for

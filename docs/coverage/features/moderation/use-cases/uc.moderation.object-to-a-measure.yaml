@@ -76,6 +76,20 @@ acceptanceCriteria:
         integration: [StatementMailSliceTest.aReporterIsToldTheDecisionOnceAndTheAddressIsStoredNowhere]
       web:
         unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
+  - id: a-guest-uploader-reads-its-statement-on-its-link
+    # Added by inbox #813 (ADR 0093 § 7): the read § 12 opened answers a moderator's measure too.
+    text: >-
+      A guest identity a moderator's statement names reads its clear fields on the link it came through, by the
+      contributor token its client holds, even while the link is blocked — never the facts, which open only with a
+      member's identity key, and with the objection through the instance contact; another identity of the link, an
+      unknown token, the token on another link, a running deferral and a lifted measure get the link's ordinary unknown
+      answer. The guest's page shows it where a member's would — a drop page every one, its link alive or gone — in the
+      template's guest words, with sentences of their own where no contact is named, calling no authenticated client.
+    coverage:
+      backend:
+        integration: [GuestStatementsSliceTest.aGuestUploaderReadsAModeratorsStatementOnItsLinkWithoutTheFactsAndNobodyElseDoes, GuestStatementsSliceTest.aBlockedGuestIdentityReadsItsStatementOnItsBlockedLink, GuestStatementsSliceTest.aDeferredStatementReachesTheGuestOnlyOnceTheDeferralEnds, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementAndNoRemoval, UploaderContentMemoriesSliceTest.theStepBlocksExactlyThatUploadersMediaAndTheHoldNowHoldsThem]
+      web:
+        unit: [src/views/ShareView.guestStatement.test.ts, src/features/depot/components/DropBoxShareBody.guestStatement.test.ts, src/features/memories/components/MemoryShareBody.test.ts, src/features/moderation/statement/statements.test.ts, src/features/moderation/statement/template.test.ts, src/core/sharing/OrderNotice.test.ts]
   - id: the-hold-counts-from-the-statement
     text: >-
       A measure's hold ends six months after its statement is sent, and from the decision where nobody can be told.

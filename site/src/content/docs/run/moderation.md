@@ -122,7 +122,9 @@ each member the statement reaches, so the server stores neither in the clear. On
 6,000 members; past that the block is refused rather than told to only some of them. It reaches the creator of a blocked link (or of the link a blocked guest came
 through), the uploaders the held copy names, and on a content block every owner of the space: each reads it under
 **Blocked by the operator**, and the instance mail tells their account address that it is there — never the facts. A
-guest is told nothing of a moderator's block, having no account (an authority's removal order is different, below). A
+guest uploader, having no account, reads the statement on the link it came through, from the browser that holds its
+guest identity — the clear parts only, never the facts, which no guest key opens; it asks your instance contact for
+them and objects there, so answer such a request from the case's log. A
 reporter who left an address is told the decision, from that address, which
 the moderator's browser sends once and the server mails without keeping, with what they may do next: report again with
 more information, write to the instance contact, go to court, and — where the Digital Services Act applies to your
@@ -309,8 +311,8 @@ veyq-admin order inform   --share '<link or id>' --reference '<reference>' [--re
 - **A guest who uploaded what a removal order took down is told too** (TCO Art. 11): on the link it came through, from
   the browser that holds its guest identity, even though the link answers everyone else as unknown — when the order
   was received, and that the reasons or a copy of the order are given on request from your instance contact. Answer such
-  a request from the order you hold. Nothing is told while the authority's deferral runs, and nothing for a moderator's
-  block.
+  a request from the order you hold. Nothing is told while the authority's deferral runs; a moderator's block is told
+  by its statement (above).
 - **Information handed over** in answer to an order is recorded in the case's log with its reference (below).
 
 **The hour is yours to keep.** A removal order has to be acted on within one hour of reaching your contact point, with

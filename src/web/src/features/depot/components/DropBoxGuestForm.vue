@@ -30,6 +30,7 @@ import {
 import { guestFileUploadJob } from '../shareUpload'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
 import OrderNotice from '../../../core/sharing/OrderNotice.vue'
+import StatementNotice from '../../moderation/statement/StatementNotice.vue'
 import { FileUploadError } from '../uploadFile'
 
 const props = defineProps<ShareBodyProps>()
@@ -206,6 +207,9 @@ async function notYou() {
         :record-days="head.share.guestWriteRecordDays"
       />
       <VeyqMessage v-if="linkGone" tone="error">{{ t('depot.dropBox.guestGone') }}</VeyqMessage>
+      <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this
+           guest's uploads — or on the guest, or the link — gave it is shown here, whether or not the link still lives. -->
+      <StatementNotice v-if="session" every-guest-statement />
       <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
       <OrderNotice v-if="linkGone" :share-id="shareId" />
       <template v-else>

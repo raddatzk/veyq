@@ -26,6 +26,7 @@ import { pickLocaleText, shareRootEpoch, type PublicShareHead } from '../../../c
 import { forgetGuestSession, saveGuestSession, useGuestSession } from '../../../core/sharing/guestIdentity'
 import type { GuestAccess } from '../../../core/access'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
+import StatementNotice from '../../moderation/statement/StatementNotice.vue'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles } from '../useOptimisticTiles'
 import { byCaptureTime } from '../optimisticUpload'
@@ -211,6 +212,10 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-if="renderedNote" class="share-note markdown-body" v-html="renderedNote"></div>
+
+    <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this guest's
+         uploads gave it is shown here. -->
+    <StatementNotice v-if="session" every-guest-statement />
 
     <!-- warning #4 of 4 (ADR 0031 §5): a persistent note that the own-view is session-only + delete-in-session -->
     <p v-if="tiles.length" class="share-uploader-note">

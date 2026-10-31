@@ -43,8 +43,9 @@
    § 12): a guest identity whose upload the removal order blocked asks, on the link it came through and with the
    contributor token its client holds, and is answered — even though the link itself is blocked — that it was removed
    on an authority's order received on `<date>`, and that the reasons or a copy of the order are given on request
-   from the instance contact (Art. 11(2)). Nothing else is served to it; another identity's token, or an upload a
-   moderator's measure blocked, gets the link's ordinary unknown answer.
+   from the instance contact (Art. 11(2)). Nothing else of the order is served to it; another identity's token gets the
+   link's ordinary unknown answer. The same read answers a moderator's measure on its upload by that measure's
+   statement ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) A8), never as a removal.
 6. **The deferral is the authority's switch** (TCO Art. 11(3)): entered with the removal order — an end at most six
    weeks ahead, the order's reference as its reason — the statement is held and the case shows when it goes out. Once
    the end has passed, the hourly cleanup sends it; a moderator may enter one renewal before then, at most six weeks

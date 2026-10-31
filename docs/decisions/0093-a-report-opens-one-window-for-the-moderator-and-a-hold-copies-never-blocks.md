@@ -1,7 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
 - Status: Accepted
-- Built: partly (not built: § 7's statement to a guest uploader on its link (inbox #813); § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
+- Built: partly (not built: § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
   identity key; § 11 the records' extension while proceedings are pending)
 - Date: 2026-10-16
 - Model: [Moderation](../features/moderation/_index.md)
@@ -231,7 +231,13 @@ nothing names its objects, and the step ends at once. The review and the steps a
   account address ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3); a
   reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest uploader whose upload a measure restricts is told on the link it came through, as § 12 tells it of a removal
   order: DSA Art. 17(2) asks this only where electronic contact details are known, which a link is not, but the route
-  exists and the safe side costs nothing. A guest has no account, so nothing reaches it by mail.
+  exists and the safe side costs nothing. A guest has no account, so nothing reaches it by mail. **What it reads is
+  the statement's clear fields** — the measure and its reach, that it is told as the uploader, the ground and its
+  provision, the date — on the link it came through, by the contributor token its client holds, even while that link
+  is blocked, only while the measure stands, and nothing while a deferral holds the statement back: the read § 12 opens,
+  which answers both. **Not the facts**: they are sealed to the members' identity keys (below), and a guest identity
+  has none, so its statement says it may ask the instance contact for them; it objects there too. The template's
+  guest words name it as the uploader where the member's would name the link's creator.
   There is one form on every instance (§ 14), so a moderator always states the facts and the provision or clause.
 - **The facts are sealed once, and per affected member only their key**. The moderator's browser seals the facts under a
   fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
@@ -407,8 +413,8 @@ The retention setting's form and its no-extension rule are [ADR 0092](0092-logs-
   upload a removal order blocked — whose client still holds that identity — is answered, on the link it came through,
   even while that link is blocked: removed on an authority's order of `<date>`; the reasons or a copy of the order on
   request from `<instance contact>` (Art. 11(2)). Nothing else is served to it. A running deferral (Art. 11(3))
-  holds this back exactly as it holds the statement. This holds for an authority's removal order only, by the rule that a
-  legal duty wins; for a moderator's measure the DSA Art. 17(2) reasoning stands.
+  holds this back exactly as it holds the statement. For a moderator's measure the same read answers its statement (§ 7):
+  the clear fields, without the facts.
 - The flow is [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md).
 
 ### 13. Art. 18 reports, and child sexual abuse material

@@ -66,11 +66,12 @@ acceptanceCriteria:
     text: >-
       A guest identity whose upload an authority's removal order blocked is told so on the link it came through, by the
       contributor token its client holds, even while the link is blocked: when the order was received and the instance
-      contact for the reasons or a copy (TCO Art. 11). Another identity's token, a moderator's measure, a running
-      deferral and a lifted measure get the link's ordinary unknown answer.
+      contact for the reasons or a copy (TCO Art. 11), and nothing else of the order. Another identity's token, a running
+      deferral and a lifted measure get the link's ordinary unknown answer; a moderator's measure is told by its
+      statement, never as a removal (uc.moderation.object-to-a-measure).
     coverage:
       backend:
-        integration: [AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs, AuthorityOrdersSliceTest.aGuestUploaderIsToldNothingOfAModeratorsMeasure, AuthorityOrdersSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseTellsTheGuestNothing, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
+        integration: [AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementAndNoRemoval, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
       web:
         unit: [src/core/sharing/OrderNotice.test.ts]
 gaps:

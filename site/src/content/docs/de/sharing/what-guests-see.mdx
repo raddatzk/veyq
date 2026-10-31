@@ -7,6 +7,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -53,8 +54,13 @@ Wurde der Link abgeschaltet, ist er abgelaufen oder unvollständig, sagt die Sei
 Hat eine Behörde angeordnet, etwas zu entfernen, das ein Gast über den Link hochgeladen hat, erfährt es der Browser,
 in dem sich der Gast einen Namen gegeben hat, auf dem Link, auch wenn der Link allen
 anderen als nicht verfügbar antwortet: dass es auf Anordnung einer Behörde entfernt wurde, die an diesem Tag eingegangen
-ist, und wo man die Gründe oder eine Kopie der Anordnung erfragen kann. Niemand sonst sieht das, und nichts davon wird
-gezeigt, solange die Behörde den Server gebeten hat zu warten.
+ist, und wo man die Gründe oder eine Kopie der Anordnung erfragen kann. Hat die Moderation des Servers es gesperrt —
+oder den Gast oder den Link —, liest dieser Browser ihre Begründung an derselben Stelle und dort, wo das gesperrte
+Element wäre: was gesperrt wurde und warum, ohne das, was sie festgestellt hat, denn das öffnet sich nur mit dem
+Schlüssel eines Kontos, und die Adresse, unter der man danach fragt und an die man schreibt, wenn man nicht
+einverstanden ist. Eine Seite, die nur Uploads annimmt, zeigt jede solche Begründung, ob der Link noch funktioniert
+oder nicht. Niemand sonst sieht das, und nichts davon wird gezeigt, solange eine Behörde den Server gebeten hat
+zu warten.
 
 Alles, was ein Gast sieht, wird in seinem eigenen Browser mit dem Schlüssel aus dem Link geöffnet:
 [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

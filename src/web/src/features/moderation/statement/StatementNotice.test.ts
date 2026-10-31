@@ -9,7 +9,10 @@ import type { ModerationStatement } from '../../../api/generated/moderation'
 
 vi.mock('./statements', () => ({
   loadStatements: vi.fn(),
+  loadGuestStatements: vi.fn(),
   statementFor: vi.fn(),
+  guestStatementFor: vi.fn(),
+  guestStatements: vi.fn(),
   openFacts: vi.fn(),
   objectTo: vi.fn(),
   objectionFailure: vi.fn(),

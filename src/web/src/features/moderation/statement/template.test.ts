@@ -52,6 +52,37 @@ describe('the statement template', () => {
     expect(noContact[1].text).toBe('Du erhältst diese Begründung als Person, die den Link erstellt hat.')
   })
 
+  it('a guest uploader reads the same form in its own words: where to ask for the facts, and the objection by the contact (ADR 0093 § 7)', () => {
+    const guest = renderStatement('en', { ...fields, measureKind: 'GUEST_IDENTITY', roles: ['UPLOADER'], reader: 'guest', provision: 'Space terms, clause 4' })
+    expect(guest.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objectionByContact', 'contact', 'courts'])
+    expect(guest[0].text).toContain('you and the link you uploaded through were blocked')
+    expect(guest.find((p) => p.id === 'facts')!.text).toBe("What they found is not shown here, since it opens only with an account's key: ask abuse@example.org for it.")
+    expect(guest.find((p) => p.id === 'objectionByContact')!.text).toContain('write to abuse@example.org')
+    // A kind the guest words leave out keeps the member's; the German form fills the gap where no contact is set.
+    expect(renderStatement('en', { ...fields, reader: 'guest' })[0].text).toContain(TEMPLATE.measures.CONTENT.en.measure)
+    const de = renderStatement('de', { ...fields, measureKind: 'SHARE', reader: 'guest' })
+    expect(de[0].text).toContain('der Link, über den du hochgeladen hast, wurde gesperrt')
+    expect(de.find((p) => p.id === 'facts')!.text).toBe('Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos: Frag unter abuse@example.org danach.')
+    expect(de.every((p) => !p.text.includes('{'))).toBe(true)
+  })
+
+  it('without an instance contact a guest is told so in sentences of their own, never the gap inside "ask … for it" (ADR 0093 §§ 7, 14)', () => {
+    for (const lang of ['en', 'de'] as const) {
+      const none = renderStatement(lang, { ...fields, reader: 'guest', contact: null })
+      expect(none.find((p) => p.id === 'facts')!.text).toBe(TEMPLATE.guest.factsNoContact[lang])
+      expect(none.find((p) => p.id === 'objectionByContact')!.text).toBe(TEMPLATE.guest.objectionNoContact[lang])
+      // The gap stays where every reader's statement shows it: the contact passage.
+      expect(none.find((p) => p.id === 'contact')!.text).toContain(TEMPLATE.gap[lang])
+      expect(none.filter((p) => p.id !== 'contact').some((p) => p.text.includes(TEMPLATE.gap[lang]))).toBe(false)
+      // Control: with a contact, the passages ask the guest to write to it.
+      const some = renderStatement(lang, { ...fields, reader: 'guest' })
+      expect(some.find((p) => p.id === 'facts')!.text).toContain('abuse@example.org')
+      expect(some.find((p) => p.id === 'objectionByContact')!.text).toContain('abuse@example.org')
+    }
+    // A member's statement keeps the gap as it was: their objection is in veyq.
+    expect(renderStatement('en', { ...fields, contact: null }).map((p) => p.text).join(' ')).not.toContain(TEMPLATE.guest.objectionNoContact.en)
+  })
+
   it('the reporter’s coordinator sentence says where the DSA applies, in both languages (ADR 0093 § 7)', () => {
     const coordinator = TEMPLATE.reporterDecision.passages.find((p) => p.id === 'coordinator')!
     expect(coordinator.en.startsWith('Where the Digital Services Act (DSA) applies to this instance')).toBe(true)

@@ -354,8 +354,8 @@ class CaseDecisions(
             ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
             epoch = note?.epoch, sealedText = note?.sealed,
         )
-        // Sent when a member can be told; where only guests are named, nobody can be told and the hold counts from the
-        // decision (ADR 0093 § 4). An authority's deferral holds it back until its end (ADR 0093 § 7).
+        // Sent when a member can be told; where only guests are named, nothing is sent — a guest reads it on its link from
+        // the decision on (GuestNotices) — and the hold counts from the decision (ADR 0093 § 4). An authority's deferral holds it back until its end (ADR 0093 § 7).
         val sentAt = if (members.isNotEmpty() && statement.deferral == null) now else null
         val written = ModerationStatementEntity().apply {
             id = statement.statementId
