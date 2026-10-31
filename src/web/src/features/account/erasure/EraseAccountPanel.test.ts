@@ -169,6 +169,32 @@ describe('EraseAccountPanel (uc.account.erase-account, web)', () => {
     expect(submitButton(w).attributes('disabled')).toBeUndefined() // the form is usable again
   })
 
+  it.each([
+    [httpError(409, 'moderation_delivery_required')],
+    [httpError(409, 'identity_changed')],
+  ])('a refused hand-over reads the preview again, so the retry carries the new one (%#)', async (err) => {
+    const fresh = { ...delivery, identityPublicKey: 'bmV3', epochs: [1, 2, 3] }
+    vi.mocked(loadErasurePreview)
+      .mockResolvedValueOnce({ kind: 'ready', tenants: [], serverOwnerDelivery: delivery })
+      .mockResolvedValueOnce({ kind: 'ready', tenants: [], serverOwnerDelivery: fresh })
+    vi.mocked(eraseOwnAccount).mockRejectedValueOnce(err)
+    const w = await mountPanel()
+    await w.find('#erasure-password').setValue('my password')
+    await submit(w)
+    expect(loadErasurePreview).toHaveBeenCalledTimes(2)
+    await submit(w)
+    expect(eraseOwnAccount).toHaveBeenLastCalledWith('my password', [], fresh)
+  })
+
+  it('a refusal that is not the hand-over’s keeps the preview it has', async () => {
+    vi.mocked(eraseOwnAccount).mockRejectedValueOnce(httpError(403, 'attestation_failed'))
+    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [], serverOwnerDelivery: null })
+    const w = await mountPanel()
+    await w.find('#erasure-password').setValue('wrong')
+    await submit(w)
+    expect(loadErasurePreview).toHaveBeenCalledOnce()
+  })
+
   it('the Server Owner’s account is explained, and no form is offered', async () => {
     vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'serverOwner' })
     const w = await mountPanel()

@@ -103,7 +103,17 @@ async function submit() {
     // On success the ending loads the sign-in page; this component does not outlive it.
     await eraseOwnAccount(password.value, lastOwnerChoices(), serverOwnerDelivery.value)
   } catch (e) {
-    error.value = t(await erasureErrorKey(e))
+    const key = await erasureErrorKey(e)
+    error.value = t(key)
+    // The hand-over the preview named no longer holds (the key moved, or the Server Owner's identity did): read it
+    // again before the form is usable, so a retry seals to what is true now, not to the same refused delivery.
+    if (key === 'erasure.errorKeyDelivery' || key === 'erasure.errorKeyIdentityChanged') {
+      try {
+        preview.value = await loadErasurePreview()
+      } catch {
+        /* the shown preview stays; the error already says nothing was erased */
+      }
+    }
     busy.value = false
   }
 }
