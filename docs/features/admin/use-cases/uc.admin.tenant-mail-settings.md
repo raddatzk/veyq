@@ -66,6 +66,10 @@ channel, stated honestly.
   only one that does: a PENDING tenant has no owner yet to configure SMTP, and there is no server-level default.
 - **A template references an unknown `{{tag}}`** → rejected at save (`400 invalid_mail_template`), never stored, so
   a malformed template can never reach send time.
+- **Host, port or TLS changes and the password field is left empty while one is stored** → refused at save
+  (`400 mail_password_required`), nothing stored, and the form asks for the password again. A kept password only
+  ever goes to the server it was entered for: otherwise one co-owner could point the relay at a host they run, with
+  TLS off, and read another owner's password from the SMTP login.
 
 ## User impact
 

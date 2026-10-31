@@ -123,6 +123,16 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
     expect(wrapper.text()).not.toContain(t('mail.saveFailed'))
   })
 
+  it('asks for the password again when a changed destination is refused (400 mail_password_required)', async () => {
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
+    vi.mocked(updateTenantMailSettings).mockRejectedValue(httpError(400, 'mail_password_required'))
+    const wrapper = await mountPanel()
+    await saveButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(t('mail.passwordRequired'))
+    expect(wrapper.text()).not.toContain(t('mail.saveFailed'))
+  })
+
   it('shows the config is send-ready when enabled + host + a stored password are all present', async () => {
     vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     const wrapper = await mountPanel()

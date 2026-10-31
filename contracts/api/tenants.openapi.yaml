@@ -1544,8 +1544,10 @@ paths:
         domain ([ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md)). The **password is
         write-only** — supplied here, sealed at rest under the env KEK
         ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)), never returned or logged;
-        **omit it to keep** the stored one. The optional `subjectTemplate` / `bodyTemplate` are owner-authored and
-        rendered over a **closed variable set** — `{{link}}`, `{{domain}}`, `{{expiry}}` only (ADR 0048 §6,
+        **omit it to keep** the stored one — unless `host`, `port` or `tls` change to another server: a stored password is never sent to
+        a server it was not entered for, so changing any of them without supplying the password again is refused
+        (`400 mail_password_required`; one owner cannot redirect a co-owner's password to a host of their choosing).
+        The optional `subjectTemplate` / `bodyTemplate` are owner-authored and rendered over a **closed variable set** — `{{link}}`, `{{domain}}`, `{{expiry}}` only (ADR 0048 §6,
         [ADR 0049](../../docs/decisions/0049-email-delivery-boundary.md)); a template that references any other
         `{{tag}}` is rejected (`400 invalid_mail_template`). Omit them for veyq's bilingual EN+DE default. The PUT
         **replaces** the settings (password excepted). Owner-gated (`403 not_tenant_owner`; a non-member `404`).
@@ -1588,7 +1590,8 @@ paths:
         "400":
           description: >
             The request was malformed (invalid host/port/from/username), or a template references a `{{tag}}`
-            outside the closed set (`invalid_mail_template`).
+            outside the closed set (`invalid_mail_template`), or `host`, `port` or `tls` changed while a password
+            is stored and none was supplied (`mail_password_required`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -3144,7 +3147,8 @@ components:
       type: object
       description: >
         Owner-supplied mail configuration. The password is **write-only** (sealed at rest, ADR 0050) — omit it to
-        keep the stored one; every other field is a full replace. The template fields are optional (null ⇒ veyq's
+        keep the stored one, as long as `host`, `port` and `tls` stay as they are (otherwise
+        `400 mail_password_required`); every other field is a full replace. The template fields are optional (null ⇒ veyq's
         EN+DE default) and validated against the closed variable set at write time (an unknown `{{tag}}` ⇒
         `400 invalid_mail_template`).
       required: [tls, enabled]
@@ -3186,7 +3190,7 @@ components:
           type: [string, "null"]
           description: >
             WRITE-ONLY SMTP password; sealed at rest under the env KEK (ADR 0050), never returned or logged. Omit
-            (or null) to keep the stored one.
+            (or null) to keep the stored one — required again whenever `host`, `port` or `tls` change.
           maxLength: 256
           example: hunter2
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
@@ -3211,9 +3215,11 @@ components:
           type: [string, "null"]
           description: >
             Owner-authored invite subject over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`. Null ⇒ default.
+            One line: a CR or LF is refused, as it would start a header of the owner's choosing in every invite.
           maxLength: 200
+          pattern: '^[^\r\n]*$'
           example: "You're invited to {{domain}}"
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200) @field:jakarta.validation.constraints.Pattern(regexp = "^[^\\r\\n]*$")'
         bodyTemplate:
           x-veyq-visibility: public
           type: [string, "null"]

@@ -106,6 +106,39 @@ class TenantMailSettingsSliceTest {
     }
 
     @Test
+    fun aChangedDestinationWithoutAFreshPasswordIsRefusedAndKeepsTheOldSettings() {
+        val (tenantId, owner) = seedActiveTenant("mail-redirect.example.com", "owner@mail-redirect.example.com")
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body(settingsBody(password = "keep-me")).`when`().put("/api/tenants/$tenantId/mail-settings").then().statusCode(200)
+
+        // Each of host, port and tls decides where the kept password would be sent — each alone is refused.
+        for (redirect in listOf(
+            settingsBody(password = null, host = "smtp.attacker.example"),
+            settingsBody(password = null, port = 25),
+            settingsBody(password = null, tls = false),
+        )) {
+            given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+                .body(redirect).`when`().put("/api/tenants/$tenantId/mail-settings")
+                .then().statusCode(400).body("code", equalTo("mail_password_required"))
+        }
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }!!
+        assertEquals("smtp.example.com", row.host)
+        assertEquals(587, row.port)
+        assertEquals(true, row.tls)
+
+        // Clearing the host sends nothing, so it needs no password.
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body(settingsBody(password = null, host = null, enabled = false)).`when`().put("/api/tenants/$tenantId/mail-settings")
+            .then().statusCode(200)
+
+        // Supplying the password again with the new destination is the way through.
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body(settingsBody(password = "new-secret", host = "smtp.other.example"))
+            .`when`().put("/api/tenants/$tenantId/mail-settings")
+            .then().statusCode(200).body("host", equalTo("smtp.other.example")).body("passwordSet", equalTo(true))
+    }
+
+    @Test
     fun aTemplateOutsideTheClosedVariableSetIsRejectedAndNotStored() {
         val (tenantId, owner) = seedActiveTenant("mail-tmpl.example.com", "owner@mail-tmpl.example.com")
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
@@ -116,6 +149,22 @@ class TenantMailSettingsSliceTest {
         // Nothing was persisted — a rejected template can never reach send time.
         val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
         assertNull(row, "a rejected update must not create a settings row")
+    }
+
+    @Test
+    fun aSubjectTemplateSpanningLinesIsRefusedAndNotStored() {
+        // A line break in the subject would start a header of the owner's choosing in every invite mail.
+        val (tenantId, owner) = seedActiveTenant("mail-crlf.example.com", "owner@mail-crlf.example.com")
+        for (subject in listOf("Hi {{domain}}\\nBcc: x@evil.example", "Hi {{domain}}\\r\\nBcc: x@evil.example")) {
+            given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+                .body(settingsBody(subjectTemplate = subject)).`when`().put("/api/tenants/$tenantId/mail-settings")
+                .then().statusCode(400)
+        }
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
+        assertNull(row, "a refused update must not create a settings row")
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON) // control: one line is fine
+            .body(settingsBody(subjectTemplate = "Hi {{domain}}")).`when`().put("/api/tenants/$tenantId/mail-settings")
+            .then().statusCode(200)
     }
 
     @Test

@@ -174,6 +174,7 @@ const en = {
     "invalid": "Check the fields: a host needs a from address, and the host is a bare name such as smtp.example.com.",
     "saveFailed": "Couldn’t save the mail settings.",
     "keyUnavailable": "This server has no config-secret key, so a password can’t be stored or used. Configure the key first.",
+    "passwordRequired": "You changed the server, port or STARTTLS. Enter the password again — a saved password is only ever sent to the server it was entered for.",
     "keyMismatch": "The server’s config-secret key has changed, so the saved password can’t be opened. Re-enter it to save it under the current key; until then, no mail is sent."
   },
   "guestWriteRecord": {
@@ -854,6 +855,7 @@ const de: typeof en = {
     "invalid": "Prüfe die Felder: Ein Host braucht eine Absenderadresse, und der Host ist ein reiner Name wie smtp.example.com.",
     "saveFailed": "Die E-Mail-Einstellungen konnten nicht gespeichert werden.",
     "keyUnavailable": "Dieser Server hat keinen Config-Secret-Schlüssel, daher kann kein Passwort gespeichert oder genutzt werden. Richte zuerst den Schlüssel ein.",
+    "passwordRequired": "Du hast Server, Port oder STARTTLS geändert. Gib das Passwort noch einmal ein — ein gespeichertes Passwort wird nur an den Server geschickt, für den es eingegeben wurde.",
     "keyMismatch": "Der Config-Secret-Schlüssel des Servers hat sich geändert, daher kann das gespeicherte Passwort nicht geöffnet werden. Gib es erneut ein, um es unter dem aktuellen Schlüssel zu speichern; bis dahin wird keine E-Mail verschickt."
   },
   "guestWriteRecord": {

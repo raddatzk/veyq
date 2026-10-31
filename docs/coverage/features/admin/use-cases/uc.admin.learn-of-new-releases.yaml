@@ -46,10 +46,11 @@ acceptanceCriteria:
   - id: instance-mail-reaches-only-the-server-owner
     text: >-
       Instance mail settings are the Server Owner's, their password sealed under the config-secret key; they send
-      only instance notices and only to the Server Owner's address, and never a tenant's mail.
+      only instance notices and only to the Server Owner's address, and never a tenant's mail. A kept password only
+      goes to the server it was entered for: a changed host, port or TLS without it is refused (mail_password_required).
     coverage:
       backend:
-        integration: [InstanceMailSettingsSliceTest.theOwnerConfiguresSmtpAndThePasswordIsWriteOnlyAndSealed, InstanceMailSettingsSliceTest.omittingThePasswordKeepsTheStoredOne, InstanceMailSettingsSliceTest.theInstanceMailPasswordJoinsTheInstanceWideKeyState, InstanceMailSettingsSliceTest.aMemberIsNotTheServerOwnerAndIsRefused, InstanceNoticeMailSliceTest.aSaveMailsTheCodeToTheServerOwnerAndTheCodeConfirms, InstanceNoticeMailSliceTest.aTenantsSettingsNeverSendAnInstanceNotice, InstanceNoticeMailSliceTest.theInstanceSettingsNeverSendATenantsMail, InstanceNoticeMailSliceTest.aKeyThatCannotOpenThePasswordSendsNothingAndSaysWhy]
+        integration: [InstanceMailSettingsSliceTest.theOwnerConfiguresSmtpAndThePasswordIsWriteOnlyAndSealed, InstanceMailSettingsSliceTest.omittingThePasswordKeepsTheStoredOne, InstanceMailSettingsSliceTest.aChangedServerWithoutThePasswordIsRefusedAndKeepsTheOldSettings, InstanceMailSettingsSliceTest.theInstanceMailPasswordJoinsTheInstanceWideKeyState, InstanceMailSettingsSliceTest.aMemberIsNotTheServerOwnerAndIsRefused, InstanceNoticeMailSliceTest.aSaveMailsTheCodeToTheServerOwnerAndTheCodeConfirms, InstanceNoticeMailSliceTest.aTenantsSettingsNeverSendAnInstanceNotice, InstanceNoticeMailSliceTest.theInstanceSettingsNeverSendATenantsMail, InstanceNoticeMailSliceTest.aKeyThatCannotOpenThePasswordSendsNothingAndSaysWhy]
   - id: the-address-is-confirmed-before-any-notice
     text: >-
       Saving the instance mail settings sends a test mail with a one-time code; no notice is mailed until the code
