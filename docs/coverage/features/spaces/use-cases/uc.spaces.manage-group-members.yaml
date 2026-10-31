@@ -141,6 +141,7 @@ acceptanceCriteria:
       group is not in the hub's Groups collection, a caller who is no member of it (or whose group listing fails) is led
       back to /settings, and on a wide viewport the route settles after one replacement.
     coverage:
+      backend: { integration: [ScopesSliceTest.aPlainMemberOfTheGroupReadsItsRosterAndANonMemberGets404] }
       web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/views/SettingsHubView.test.ts] }
 gaps:
   stack: >-
