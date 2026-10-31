@@ -8,8 +8,9 @@ workflow added tomorrow is held the moment it exists:
   0. **Each file parses and has jobs.** A workflow YAML cannot load is one GitHub refuses, and one whose budgets
      nothing here sees.
   1. **Budget** (decision 1). Every job declares `timeout-minutes` as a positive whole number. The VALUES live in one
-     place, ADR 0091 decision 1 (the stages' table and the line on the jobs that are not stages), and this guard
-     keeps no second copy of them: it holds that a budget is there, the ADR says which. A job that calls a reusable
+     place, How veyq is tested § Where and when each stage runs (the stages' Budget column and the line on the jobs
+     that are not stages; ADR 0091 decision 1 holds the rule), and this guard keeps no second copy of them: it holds
+     that a budget is there, that page says which. A job that calls a reusable
      workflow (`jobs.<id>.uses`) is exempt — GitHub refuses `timeout-minutes` there, and the called workflow's own
      jobs carry the budget (a local one is in this directory and held here).
   2. **The guard-gap stage's trigger** (decision 4). `validate_guard_gaps.py` tests the guards, not the commit, so:
@@ -29,8 +30,8 @@ over its budget is sharded or moved, never made faster by weakening what ships).
 when the guard gaps left the unfiltered glob: a filter that misses `scripts/` would let a guard change land with no
 CI run of the cases that test it until the next nightly run, and nothing would say so.
 
-**Its limits — what a green run does NOT prove.** That a budget is the ADR's: the value is read for its shape, never
-compared to the table, so a job given 60 where the ADR says 15 is green here (the ADR is the values' home on
+**Its limits — what a green run does NOT prove.** That a budget is the page's: the value is read for its shape, never
+compared to the table, so a job given 60 where the page says 15 is green here (the page is the values' home on
 purpose — a copy here would be the second table that drifts). That a budget fits: whether a job finishes inside it
 is a fact about a run, and only a run shows it (`scripts/run_pipeline.py` locally, CI once there is a remote). A
 budget written as an expression (`${{ … }}`) is red, a false positive rather than a value this guard cannot read.
@@ -55,7 +56,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
-ADR = "ADR 0091 decision 1"
+BUDGETS = "How veyq is tested § Where and when each stage runs"
 GUARD_GAPS = "validate_guard_gaps.py"
 GLOB = "scripts/validate_*.py"
 PATHS_FILTER = re.compile(r"^dorny/paths-filter@")
@@ -99,9 +100,9 @@ def check_budgets(rel: str, jobs: dict) -> int:
         budget = job.get("timeout-minutes")
         if budget is None:
             fail(f"{where} declares no `timeout-minutes`, so it runs on GitHub's 360-minute default — give it its "
-                 f"stage's budget from {ADR}")
+                 f"stage's budget from {BUDGETS}")
         elif isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
-            fail(f"{where}: `timeout-minutes: {budget!r}` is not a positive whole number of minutes ({ADR})")
+            fail(f"{where}: `timeout-minutes: {budget!r}` is not a positive whole number of minutes ({BUDGETS})")
         else:
             held += 1
     return held
@@ -212,7 +213,7 @@ def main() -> int:
         for e in errors:
             print(f"::error::pipeline shape: {e}")
         return 1
-    print(f"pipeline shape: {held} job(s) in {len(files)} workflow(s), each on a budget ({ADR} holds the values); "
+    print(f"pipeline shape: {held} job(s) in {len(files)} workflow(s), each on a budget ({BUDGETS} holds the values); "
           f"{runners} guard-gap job(s), path-filtered on what {GUARD_GAPS} hashes and run nightly")
     return 0
 

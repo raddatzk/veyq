@@ -1392,9 +1392,9 @@ BUNDLED_WARNING = (
 
 
 def pool_warning(host: Host, home: Path, state: State) -> None:
-    """ADR 0096 decision 6: say it while the bundled store has no pool. Never changes an exit code — `status`'s is the
-    health verdict. `none` (no store chosen yet) warns the same: the first store an instance gets is the bundled one by
-    default. A store of the operator's own is theirs to keep durable, and is silent."""
+    """ADR 0056 §3 (the bundled store keeps no history of its own): say it while it has no pool. Never changes an exit
+    code — `status`'s is the health verdict. `none` (no store chosen yet) warns the same: the first store an instance
+    gets is the bundled one by default. A store of the operator's own is theirs to keep durable, and is silent."""
     if pool_choice(home, None, POOL_TARGET_KEY).target:
         return
     try:

@@ -3,10 +3,10 @@ package me.raddatz.veyq.core.admin.instance
 import java.time.Duration
 
 /**
- * Which ticks of the scheduled release check ask the source after it failed (ADR 0097 A2: a failed run is logged and
- * retried). Each failure in a row doubles how many ticks of the check's own rhythm [every] pass before the next
- * attempt — the next tick, then every 2nd, 4th, 8th … — up to [cap] between two attempts. Counted in ticks, not by the
- * clock, so a tick that fires a moment early is never taken for one that came too soon.
+ * Which ticks of the scheduled release check ask the source after it failed (uc.admin.learn-of-new-releases A2: a
+ * failed run is logged and retried). Each failure in a row doubles how many ticks of the check's own rhythm [every]
+ * pass before the next attempt — the next tick, then every 2nd, 4th, 8th … — up to [cap] between two attempts.
+ * Counted in ticks, not by the clock, so a tick that fires a moment early is never taken for one that came too soon.
  *
  * Why: an instance with no route to its source failed and logged on every tick — every 5 s where the rhythm is short,
  * as lane L1 and the volume harness set it (collection run 2026-10-23, F9). At the default rhythm, once a day, nothing
