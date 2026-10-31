@@ -13,7 +13,15 @@ enum class StatementLang { EN, DE }
  */
 enum class ObjectionChannel { IN_APP, BY_CONTACT }
 
-data class MeasureTexts(val measure: Texts, val reach: Texts)
+/**
+ * A measure's words and its reach; [byRole] words it for the reader's relation to it (inbox #821) — the first entry, in its
+ * order, whose role the reader holds — and a reader who holds none reads [measure] and [reach], the neutral words.
+ */
+data class MeasureTexts(val measure: Texts, val reach: Texts, val byRole: Map<String, MeasureTexts> = emptyMap()) {
+    /** The words a reader told as [roles] reads. */
+    fun forRoles(roles: List<StatementRole>): MeasureTexts =
+        byRole.entries.firstOrNull { (role, _) -> roles.any { it.name == role } }?.value ?: this
+}
 
 /** One passage of the statement, rendered only when its [condition] holds (there is one form, ADR 0093 § 14). */
 data class Passage(val id: String, val condition: String?, val text: Texts)
@@ -50,8 +58,18 @@ data class StatementFields(
 object StatementTemplate {
     val MEASURES: Map<String, MeasureTexts> = linkedMapOf(
         "SHARE" to MeasureTexts(
-            measure = Texts("a link you created was blocked", "ein von dir erstellter Link wurde gesperrt"),
+            measure = Texts("a link was blocked", "ein Link wurde gesperrt"),
             reach = Texts("Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.", "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht."),
+            byRole = linkedMapOf(
+                "SHARE_CREATOR" to MeasureTexts(
+                    measure = Texts("a link you created was blocked", "ein von dir erstellter Link wurde gesperrt"),
+                    reach = Texts("Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.", "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht."),
+                ),
+                "UPLOADER" to MeasureTexts(
+                    measure = Texts("a link to something you uploaded was blocked", "ein Link zu etwas, das du hochgeladen hast, wurde gesperrt"),
+                    reach = Texts("Everyone who opens it is told the link does not exist; nothing was deleted.", "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts."),
+                ),
+            ),
         ),
         "CONTENT" to MeasureTexts(
             measure = Texts("content was blocked", "Inhalte wurden gesperrt"),
@@ -158,7 +176,8 @@ object StatementTemplate {
         REPORTER_DECISION.joinToString(" ") { it.text.of(lang).replace("{contact}", contact ?: GAP.of(lang)) }
 
     private fun fill(text: String, lang: StatementLang, f: StatementFields, domain: String): String {
-        val measure = MEASURES.getValue(f.measureKind)
+        // The words of the reader's relation to the measure: each recipient row records its roles (inbox #821).
+        val measure = MEASURES.getValue(f.measureKind).forRoles(f.roles)
         val roles = f.roles.map { ROLES.getValue(it.name).of(lang) }
         val joined = if (roles.size <= 1) roles.joinToString("") else roles.dropLast(1).joinToString(", ") + ROLES_JOINER.of(lang) + roles.last()
         return text

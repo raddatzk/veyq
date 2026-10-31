@@ -36,8 +36,10 @@
    and no address: it is told on its link (A8), never by mail, and nothing is *sent* to it — where it is the only one
    named, the statement counts as one nobody can be sent (step 6).
 3. **What it says** — one template in `contracts/moderation/statement-of-reasons.json`, rendered by the server for the
-   mail and by src/web/ on the placeholder: the measure and its reach, why the reader gets it, the facts, whether a report
-   or an order led to it, that no automated means decided, the ground and the provision or clause it relies on, that
+   mail and by src/web/ on the placeholder: the measure and its reach (in the words of the reader's own relation to it,
+   which their recipient row records: a blocked link's creator reads "a link you created", a member whose upload it
+   reaches "a link to something you uploaded", anyone else neutral words; inbox #821), why the reader gets it, the
+   facts, whether a report or an order led to it, that no automated means decided, the ground and the provision or clause it relies on, that
    the measure applies wherever the instance is reached and lasts until it is lifted (DSA Art. 17(3)(a)), the
    objection, the contact address — "not stated by this operator" where none is set — and the courts. It names the
    host, never the moderator.
@@ -99,7 +101,8 @@
   its link still lives; only where the device holds the guest's session, and afresh for each identity it holds —
   even while the link is blocked, only while the measure stands, and nothing while an authority's deferral holds the
   statement back. It reads the clear fields in the template's guest words: the measure (as the uploader, never as the
-  link's creator), the ground and the provision, the date the measure was taken, the scope, the courts. **Not the
+  link's creator; a blocked link is "a link to something you uploaded", true whether or not it is the link the guest
+  came through, inbox #821), the ground and the provision, the date the measure was taken, the scope, the courts. **Not the
   facts**: they are sealed under a key wrapped to members' identity keys, and a guest identity has none, so the facts
   passage says the instance contact gives them on request; the objection goes to the instance contact too. Where the
   instance names no contact, both passages say so in sentences of their own rather than ask the guest to write to the

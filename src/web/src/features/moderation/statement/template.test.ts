@@ -52,6 +52,48 @@ describe('the statement template', () => {
     expect(noContact[1].text).toBe('Du erhältst diese Begründung als Person, die den Link erstellt hat.')
   })
 
+  it('a blocked link is worded by the reader’s relation to it: its creator, an uploader of what it reaches, anyone else (inbox #821)', () => {
+    const measureOf = (lang: 'en' | 'de', roles: StatementFields['roles']) =>
+      renderStatement(lang, { ...fields, measureKind: 'SHARE', roles })[0].text
+    expect(measureOf('en', ['SHARE_CREATOR'])).toBe(
+      'On 18 October 2026, the people who run this veyq instance took a measure: a link you created was blocked. ' +
+        'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.',
+    )
+    expect(measureOf('en', ['UPLOADER'])).toBe(
+      'On 18 October 2026, the people who run this veyq instance took a measure: a link to something you uploaded was blocked. ' +
+        'Everyone who opens it is told the link does not exist; nothing was deleted.',
+    )
+    expect(measureOf('de', ['UPLOADER'])).toBe(
+      'Am 18 October 2026 wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: ein Link zu etwas, das du hochgeladen hast, wurde gesperrt. ' +
+        'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.',
+    )
+    expect(measureOf('de', ['SHARE_CREATOR'])).toContain('ein von dir erstellter Link wurde gesperrt.')
+    // Both relations: the creator's words, whatever order the row lists them in.
+    expect(measureOf('en', ['UPLOADER', 'SHARE_CREATOR'])).toContain('a link you created was blocked.')
+    // Neither: the neutral words, never "you created".
+    expect(measureOf('en', ['SCOPE_OWNER'])).toContain('took a measure: a link was blocked. ')
+    expect(measureOf('de', [])).toContain('ergriffen: ein Link wurde gesperrt. ')
+    // A guest keeps its own words, and a kind without per-relation words reads the same for every reader.
+    expect(renderStatement('en', { ...fields, measureKind: 'SHARE', roles: ['UPLOADER'], reader: 'guest' })[0].text).toBe(
+      'On 18 October 2026, the people who run this veyq instance took a measure: a link to something you uploaded was blocked. ' +
+        TEMPLATE.guest.measures.SHARE.en.reach,
+    )
+    expect(renderStatement('en', { ...fields, roles: ['UPLOADER'] })[0].text).toBe(renderStatement('en', { ...fields, roles: ['SCOPE_OWNER'] })[0].text)
+  })
+
+  it('a guest reads a blocked link in words true whether or not it came through that link, never "uploaded through" or "you created" (inbox #821)', () => {
+    // The SHARE statement names every guest whose upload the blocked link reaches — also one that came through another link.
+    const words = { en: 'a link to something you uploaded was blocked.', de: 'ein Link zu etwas, das du hochgeladen hast, wurde gesperrt.' }
+    const reach = { en: 'Everyone who opens it is told the link does not exist; nothing was deleted.', de: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.' }
+    for (const lang of ['en', 'de'] as const) {
+      const text = renderStatement(lang, { ...fields, measureKind: 'SHARE', roles: ['UPLOADER'], reader: 'guest' })
+        .map((p) => p.text)
+        .join(' ')
+      expect(text).toContain(`${words[lang]} ${reach[lang]}`)
+      for (const wrong of ['uploaded through', 'you created', 'über den du', 'von dir erstellter']) expect(text).not.toContain(wrong)
+    }
+  })
+
   it('a guest uploader reads the same form in its own words: where to ask for the facts, and the objection by the contact (ADR 0093 § 7)', () => {
     const guest = renderStatement('en', { ...fields, measureKind: 'GUEST_IDENTITY', roles: ['UPLOADER'], reader: 'guest', provision: 'Space terms, clause 4' })
     expect(guest.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objectionByContact', 'contact', 'courts'])
@@ -61,7 +103,7 @@ describe('the statement template', () => {
     // A kind the guest words leave out keeps the member's; the German form fills the gap where no contact is set.
     expect(renderStatement('en', { ...fields, reader: 'guest' })[0].text).toContain(TEMPLATE.measures.CONTENT.en.measure)
     const de = renderStatement('de', { ...fields, measureKind: 'SHARE', reader: 'guest' })
-    expect(de[0].text).toContain('der Link, über den du hochgeladen hast, wurde gesperrt')
+    expect(de[0].text).toContain('ein Link zu etwas, das du hochgeladen hast, wurde gesperrt')
     expect(de.find((p) => p.id === 'facts')!.text).toBe('Was sie festgestellt haben, ist hier nicht zu sehen, denn es öffnet sich nur mit dem Schlüssel eines Kontos: Frag unter abuse@example.org danach.')
     expect(de.every((p) => !p.text.includes('{'))).toBe(true)
   })

@@ -23,11 +23,17 @@ class StatementTemplateConformanceTest {
     @Test
     fun everyTextEqualsTheContract() {
         assertEquals(file.path("measures").fieldNames().asSequence().toList(), StatementTemplate.MEASURES.keys.toList())
-        file.path("measures").properties().forEach { (k, v) ->
-            val pinned = StatementTemplate.MEASURES.getValue(k)
-            assertEquals(Texts(v.path("en").path("measure").asText(), v.path("de").path("measure").asText()), pinned.measure, k)
-            assertEquals(Texts(v.path("en").path("reach").asText(), v.path("de").path("reach").asText()), pinned.reach, k)
+        fun measureEquals(v: JsonNode, pinned: MeasureTexts, at: String) {
+            assertEquals(Texts(v.path("en").path("measure").asText(), v.path("de").path("measure").asText()), pinned.measure, at)
+            assertEquals(Texts(v.path("en").path("reach").asText(), v.path("de").path("reach").asText()), pinned.reach, at)
+            // A measure's words per relation (inbox #821): the same roles in the same order, each worded as the file words it.
+            assertEquals(v.path("byRole").fieldNames().asSequence().toList(), pinned.byRole.keys.toList(), "$at.byRole")
+            v.path("byRole").properties().forEach { (role, w) ->
+                assertTrue(role in StatementTemplate.ROLES, "$at.byRole.$role names a role the template knows")
+                measureEquals(w, pinned.byRole.getValue(role), "$at.byRole.$role")
+            }
         }
+        file.path("measures").properties().forEach { (k, v) -> measureEquals(v, StatementTemplate.MEASURES.getValue(k), k) }
         for ((key, pinned) in listOf("roles" to StatementTemplate.ROLES, "basis" to StatementTemplate.BASIS, "grounds" to StatementTemplate.GROUNDS)) {
             assertEquals(file.path(key).fieldNames().asSequence().toList(), pinned.keys.toList(), key)
             file.path(key).properties().forEach { (k, v) -> assertEquals(texts(v), pinned.getValue(k), "$key.$k") }
@@ -72,6 +78,47 @@ class StatementTemplateConformanceTest {
         val de = StatementTemplate.renderMail(StatementLang.DE, fields.copy(contact = null), "club.example.org")
         assertTrue(de.contains("Person, die es hochgeladen hat und Person, der der Bereich gehört"), de)
         assertTrue(de.contains("Fragen gehen an von der Betreiberseite nicht angegeben."), de)
+    }
+
+    @Test
+    fun aBlockedLinkIsWordedByTheReadersRelationToIt() {
+        // Inbox #821: the creator reads "a link you created", an uploader of what it reaches "a link to something you
+        // uploaded", any other reader the neutral words; a reader holding both relations reads the creator's.
+        val fields = StatementFields(
+            measureKind = "SHARE", roles = listOf(StatementRole.SHARE_CREATOR), basis = StatementBasis.REPORT,
+            ground = StatementGround.TERMS_BREACH, date = "2026-10-18 09:00 UTC", contact = "abuse@example.org", hasFacts = true,
+            provision = "§ 86a StGB",
+        )
+        fun measureOf(lang: StatementLang, vararg roles: StatementRole) =
+            StatementTemplate.mailBody(fields.copy(roles = roles.toList()), "club.example.org").let { body ->
+                val part = if (lang == StatementLang.EN) body.substringBefore("\n\n—\n\n") else body.substringAfter("\n\n—\n\n")
+                part.substringAfter(if (lang == StatementLang.EN) "took a measure: " else "Maßnahme ergriffen: ").substringBefore(" You are told").substringBefore(" Du erhältst")
+            }
+        assertEquals(
+            "a link you created was blocked. Everyone who opens it is told the link does not exist; nothing was deleted, " +
+                "and the link cannot be reactivated or issued again while the block stands.",
+            measureOf(StatementLang.EN, StatementRole.SHARE_CREATOR),
+        )
+        assertEquals(
+            "a link to something you uploaded was blocked. Everyone who opens it is told the link does not exist; nothing was deleted.",
+            measureOf(StatementLang.EN, StatementRole.UPLOADER),
+        )
+        assertEquals(
+            "ein Link zu etwas, das du hochgeladen hast, wurde gesperrt. Wer ihn öffnet, erfährt, dass es den Link nicht gibt; " +
+                "gelöscht wurde nichts.",
+            measureOf(StatementLang.DE, StatementRole.UPLOADER),
+        )
+        assertTrue(measureOf(StatementLang.DE, StatementRole.SHARE_CREATOR).startsWith("ein von dir erstellter Link wurde gesperrt."))
+        assertTrue(measureOf(StatementLang.EN, StatementRole.UPLOADER, StatementRole.SHARE_CREATOR).startsWith("a link you created was blocked."))
+        // A reader with neither relation reads the neutral words, never "you created".
+        assertTrue(measureOf(StatementLang.EN, StatementRole.SCOPE_OWNER).startsWith("a link was blocked. Everyone who opens it"))
+        assertTrue(measureOf(StatementLang.DE).startsWith("ein Link wurde gesperrt. Wer ihn öffnet"))
+        // Control: a measure without per-relation words reads the same whoever is told.
+        val content = fields.copy(measureKind = "CONTENT")
+        assertEquals(
+            StatementTemplate.renderMail(StatementLang.EN, content.copy(roles = listOf(StatementRole.UPLOADER)), "x").substringBefore(" You are told"),
+            StatementTemplate.renderMail(StatementLang.EN, content.copy(roles = listOf(StatementRole.SCOPE_OWNER)), "x").substringBefore(" You are told"),
+        )
     }
 
     @Test

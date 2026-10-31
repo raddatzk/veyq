@@ -99,9 +99,22 @@ describe('StatementNotice', () => {
   })
 
   it('a blocked link finds its statement by the share id', async () => {
-    state.list = [statement({ measureKind: 'SHARE', targetId: 'link', shareId: 'link' })]
+    state.list = [statement({ measureKind: 'SHARE', targetId: 'link', shareId: 'link', roles: ['SHARE_CREATOR'] })]
     const w = await mountNotice({ shareId: 'link' })
-    expect(w.text()).toContain(TEMPLATE.measures.SHARE.en.measure)
+    expect(w.text()).toContain('took a measure: a link you created was blocked.')
+  })
+
+  it('a blocked link is worded by the reader’s own relation to it, as its statement lists it (inbox #821)', async () => {
+    state.list = [statement({ measureKind: 'SHARE', targetId: 'link', shareId: 'link', roles: ['UPLOADER'] })]
+    const uploader = await mountNotice({ shareId: 'link' })
+    expect(uploader.text()).toContain('took a measure: a link to something you uploaded was blocked.')
+    expect(uploader.text()).not.toContain('you created')
+    expect(uploader.text()).toContain('You are told as the person who uploaded it.')
+    // Control: the reader with no relation of its own reads the neutral words.
+    state.list = [statement({ measureKind: 'SHARE', targetId: 'link', shareId: 'link', roles: ['SCOPE_OWNER'] })]
+    const other = await mountNotice({ shareId: 'link' })
+    expect(other.text()).toContain('took a measure: a link was blocked.')
+    expect(other.text()).not.toContain('you created')
   })
 
   it('sends the objection once, and an empty one is not sent', async () => {

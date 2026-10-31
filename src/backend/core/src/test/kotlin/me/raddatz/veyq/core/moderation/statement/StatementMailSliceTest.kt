@@ -23,8 +23,10 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.ServerSetup
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -120,6 +122,38 @@ class StatementMailSliceTest {
             assertFalse(text.contains(secret), "the mail carries $secret:\n$text")
         }
         assertNotNull(QuarkusTransaction.requiringNew().call { StatementRecipientEntity.find("recipientId", r.userId).firstResult()!!.mailedAt })
+    }
+
+    /**
+     * Inbox #821: a blocked link's statement is worded by each recipient's relation to it, which its recipient row records —
+     * the link's creator reads "a link you created", a member whose upload the link reaches "a link to something you
+     * uploaded", never the creator's words.
+     */
+    @Test
+    fun aBlockedLinksMailIsWordedByEachRecipientsRelationToIt() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val uploader = seedScopeMember(m.scopeId, grantedEpoch = 1)
+        val folder = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        seedAttachment(m.scopeId, folder, "COVER", uploaderUserId = uploader)
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", folder)))).then().statusCode(201)
+        mailbox.waitForIncomingEmail(500, 1)
+        mailbox.purgeEmailFromAllMailboxes()
+        val caseId = openCase("NODE", folder)!!.id
+        mod.take(caseId, "SHARE", shareId = share(m.userId, folder)).then().statusCode(201)
+        mailbox.waitForIncomingEmail(2_000, 2)
+
+        val roles = QuarkusTransaction.requiringNew().call {
+            StatementRecipientEntity.list("recipientId in ?1", listOf(m.userId, uploader)).associate { it.recipientId to it.roleSet }
+        }
+        assertEquals(mapOf(m.userId to listOf(StatementRole.SHARE_CREATOR), uploader to listOf(StatementRole.UPLOADER)), roles)
+        val creatorText = textOf(mailsTo(addressOf(m.userId)).single())
+        assertTrue(creatorText.contains("took a measure: a link you created was blocked."), creatorText)
+        assertTrue(creatorText.contains("ein von dir erstellter Link wurde gesperrt."), creatorText)
+        val uploaderText = textOf(mailsTo(addressOf(uploader)).single())
+        assertTrue(uploaderText.contains("took a measure: a link to something you uploaded was blocked."), uploaderText)
+        assertTrue(uploaderText.contains("ein Link zu etwas, das du hochgeladen hast, wurde gesperrt."), uploaderText)
+        assertFalse(uploaderText.contains("you created"), uploaderText)
+        assertFalse(uploaderText.contains("von dir erstellter"), uploaderText)
     }
 
     @Test

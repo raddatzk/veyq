@@ -227,6 +227,9 @@ nothing names its objects, and the step ends at once. The review and the steps a
   the terms relied on**, required, with the facts explaining why the content falls under it
   (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
   (Art. 17(3)(a)), and the objection and the courts (Art. 17(3)). A dismissed report is told only to the reporter.
+  Each member reads the measure in the words of their own relation to it, which their recipient row records: a blocked
+  link's creator "a link you created", a member whose upload the link reaches "a link to something you uploaded" (a
+  member uploads as a member, never through a link), and a member with neither relation neutral words (inbox #821).
   The statement and the answer to an objection reach each affected member in the app and by instance mail at their
   account address ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3); a
   reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest uploader whose upload a measure restricts is told on the link it came through, as § 12 tells it of a removal

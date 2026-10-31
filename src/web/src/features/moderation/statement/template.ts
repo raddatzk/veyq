@@ -6,8 +6,18 @@ export const TEMPLATE = {
   version: 3,
   measures: {
     SHARE: {
-      en: { measure: 'a link you created was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
-      de: { measure: 'ein von dir erstellter Link wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht.' },
+      en: { measure: 'a link was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
+      de: { measure: 'ein Link wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht.' },
+      byRole: {
+        SHARE_CREATOR: {
+          en: { measure: 'a link you created was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
+          de: { measure: 'ein von dir erstellter Link wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht.' },
+        },
+        UPLOADER: {
+          en: { measure: 'a link to something you uploaded was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted.' },
+          de: { measure: 'ein Link zu etwas, das du hochgeladen hast, wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.' },
+        },
+      },
     },
     CONTENT: {
       en: { measure: 'content was blocked', reach: 'It is no longer shown to anyone, members included, and appears as "Blocked by the operator"; nothing was deleted. It can still be deleted, but not replaced or restored.' },
@@ -81,8 +91,8 @@ export const TEMPLATE = {
   guest: {
     measures: {
       SHARE: {
-        en: { measure: 'the link you uploaded through was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted.' },
-        de: { measure: 'der Link, über den du hochgeladen hast, wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.' },
+        en: { measure: 'a link to something you uploaded was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted.' },
+        de: { measure: 'ein Link zu etwas, das du hochgeladen hast, wurde gesperrt', reach: 'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.' },
       },
       UPLOADER_CONTENT: {
         en: { measure: 'everything you had uploaded through the link was blocked', reach: 'None of it is shown to anyone any more, and each item appears as "Blocked by the operator"; nothing was deleted. What you add later is not affected.' },
@@ -126,6 +136,19 @@ export type StatementFields = {
   reader?: 'member' | 'guest'
 }
 
+type MeasureWords = { en: { measure: string; reach: string }; de: { measure: string; reach: string } }
+
+/**
+ * A measure's words for a reader told as [roles] (inbox #821): the first of its `byRole` entries, in the template's order,
+ * whose role the reader holds — on a blocked link its creator's, else an uploader's — and otherwise its own neutral words.
+ */
+function measureFor(kind: MeasureKind, roles: readonly Role[]): MeasureWords {
+  const m = TEMPLATE.measures[kind]
+  const byRole: Partial<Record<Role, MeasureWords>> = 'byRole' in m ? m.byRole : {}
+  const role = (Object.keys(byRole) as Role[]).find((r) => roles.includes(r))
+  return (role ? byRole[role] : undefined) ?? m
+}
+
 /** One rendered passage: its id (the facts passage is where the opened facts follow) and its text. */
 export type RenderedPassage = { id: string; text: string }
 
@@ -145,7 +168,7 @@ export function renderStatement(lang: StatementLang, f: StatementFields): Render
     return undefined
   }
   const guestMeasures: Partial<Record<MeasureKind, (typeof TEMPLATE.guest.measures)[keyof typeof TEMPLATE.guest.measures]>> = TEMPLATE.guest.measures
-  const measure = (guest ? guestMeasures[f.measureKind]?.[lang] : undefined) ?? TEMPLATE.measures[f.measureKind][lang]
+  const measure = (guest ? guestMeasures[f.measureKind]?.[lang] : undefined) ?? measureFor(f.measureKind, f.roles)[lang]
   const roles = f.roles.map((r) => TEMPLATE.roles[r][lang])
   const joined = roles.length <= 1 ? roles.join('') : roles.slice(0, -1).join(', ') + TEMPLATE.rolesJoiner[lang] + roles[roles.length - 1]
   const fill = (text: string) =>

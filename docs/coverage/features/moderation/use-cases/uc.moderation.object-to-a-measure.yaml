@@ -27,7 +27,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [StatementsSliceTest.aMeasureNamesTheFactsAndTheProvisionItReliesOn]
-        unit: [StatementTemplateConformanceTest.theOneFormCarriesEveryPassageAndTheMailNeverTheFacts, StatementTemplateConformanceTest.everyTextEqualsTheContract]
+        unit: [StatementTemplateConformanceTest.theOneFormCarriesEveryPassageAndTheMailNeverTheFacts, StatementTemplateConformanceTest.everyTextEqualsTheContract, StatementTemplateConformanceTest.aBlockedLinkIsWordedByTheReadersRelationToIt]
       web:
         unit: [src/features/moderation/statement/template.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/CaseDetail.test.ts]
   - id: the-affected-read-it-in-veyq-and-are-mailed
@@ -36,7 +36,7 @@ acceptanceCriteria:
       and instance mail tells their account address it is there, carrying no facts.
     coverage:
       backend:
-        integration: [StatementMailSliceTest.theAffectedMemberIsMailedThatTheStatementIsInVeyqAndTheMailCarriesNoFacts, StatementMailSliceTest.aStatementMailThatDidNotGoOutIsRetriedOnce]
+        integration: [StatementMailSliceTest.theAffectedMemberIsMailedThatTheStatementIsInVeyqAndTheMailCarriesNoFacts, StatementMailSliceTest.aStatementMailThatDidNotGoOutIsRetriedOnce, StatementMailSliceTest.aBlockedLinksMailIsWordedByEachRecipientsRelationToIt]
       web:
         unit: [src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/statement/statements.test.ts]
   - id: one-objection-per-measure-reopens-the-case
