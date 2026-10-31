@@ -132,7 +132,9 @@ lives in `--home` (default `/opt/veyq`): `releases/<release>/`, `.env`, `backups
 `compose.override.yml`, laid over the recipe on every command.
 
 - **Which release:** `.env`'s `VEYQ_RELEASE` — an exact release (pinned), a major (its newest release) or `latest`.
-  **A major is entered only from the newest release of the one before**, and no run crosses more than one major.
+  **A major is entered only from the release its upgrade was proved from** — `majorEntry` in the next major's signed
+  manifest, the newest release of the previous major when that release was cut — and no run crosses more than one
+  major.
 - **What it trusts:** it verifies `manifest.json.bundle` before it reads any digest or sha256 the manifest names, then
   both images' signatures by those digests, then each asset against its sha256. So a source — GitHub by default, a
   mirror or a directory (`--source`) — decides which releases are offered, never what one contains. `--unsigned-local`
@@ -204,5 +206,6 @@ check is logged and retried with a back-off, and blocks nothing.
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
 - **Lane L3 holding the major entry** (ADR 0085 decision 10, ADR 0096): the previous major's last release in L3's
   archive. What moves the entry is built — a `release/<old>.x` publish, and every release of the current major proved
-  from the newest release of the previous major among every tag, a branch's included, and baking it for its gate
-  (ADR 0098 decision 3; `run_web_e2e.major_entry_ref()`).
+  from the newest release of the previous major among every tag, a branch's included, baking it for its gate (ADR
+  0098 decision 3) and naming it as its manifest's `majorEntry`, which `veyqctl` routes by (ADR 0096 decision 5;
+  `run_web_e2e.major_entry_ref()`, one derivation).

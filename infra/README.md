@@ -253,9 +253,10 @@ gh workflow run ci.yml --ref main -f release=true                       # then t
 
 The current major's next release then moves the major entry by itself: every release of major N is proved — the
 upgrade proof and the chart upgrade check — from the newest release of major N−1 among every tag, the branch's
-included, beside its default predecessor, and its tools image bakes that release as the one its gate admits a new
-major from (`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
-`release_assets.py --major-entry`: one derivation, ADR 0085 § Consequences). Until that release exists, an instance on
+included, beside its default predecessor, its tools image bakes that release as the one its gate admits a new
+major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters the new major from
+(`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
+`release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). Until that release exists, an instance on
 the fix release cannot enter the new major. Not built is lane L3's archive holding that release (ADR 0096).
 
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,

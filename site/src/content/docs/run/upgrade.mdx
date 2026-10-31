@@ -207,16 +207,23 @@ helm upgrade veyq "oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}" -n veyq -
 | `1` | The newest release of major 1 |
 | `latest` | The newest release, one major at a time (below) |
 
-**A new major is entered only from the last release of the one before.** A major is where something is removed, and
-the path the release pipeline tests into a new major is the one from the previous major's last release; a jump from
-an older release across those removals is a path nobody tested. So when the selected release lies in a later major
-and you do not run the newest release of your own, `upgrade` goes to that newest release first, and ends by saying
-that the next `upgrade` enters the next major. One run never crosses more than one major. With 1.3 running, 1.9 the
-newest of major 1 and 2.5 the newest of all, `latest` takes 1.9, and the next run 2.5. From 1.9 with 3.1 listed it
-takes the newest of major 2, never 3.1. A pin in the next major, `2.3`, is reached directly from 1.9. A next major
-with no release (a mirror that lacks it, or only a prerelease) is refused rather than crossed. `veyqctl check` says
-which release the next `upgrade` takes, and which major the one after it would enter. Under Helm the same rule is
-yours to follow by hand. This rule is held by `veyqctl`'s self-test; no two published majors exist yet.
+**A new major is entered only from the release it was tested from.** A major is where something is removed, and
+the path the release pipeline tests into a release of a new major is the one from its *entry*: the newest release of
+the previous major when it was cut. Each release names its entry in its signed manifest (`majorEntry`); a jump from
+any other release across those removals is a path nobody tested. So when the selected release lies in a later major
+and you run an older release than its entry, `upgrade` goes to the entry first, and ends by saying that the next
+`upgrade` enters the next major. One run never crosses more than one major. With 1.3 running and 2.5 the newest of
+all, entered from 1.9, `latest` takes 1.9, and the next run 2.5. From 1.9 with 3.1 listed it takes the newest of
+major 2, never 3.1. A pin in the next major, `2.3`, is reached directly from its entry.
+
+A fix release of the old major can come out after the new major's first release (1.10 after 2.0, which was entered
+from 1.9). It is no way into 2.0: nobody tested 1.10 → 2.0, and 1.10 may hold changes 2.0 does not. From 1.3,
+`latest` still takes 1.9 and then 2.0. Running 1.10, `upgrade` refuses until a release of major 2 entered from 1.10
+or later is out; that release is the next one cut after 1.10. A next major with no release (a mirror that lacks it,
+or only a prerelease) is refused rather than crossed. `veyqctl check` says which release the next `upgrade` takes,
+and which major the one after it would enter. It reads that from the signed manifests, so it verifies them as
+`upgrade` does (`--unsigned-local` for a local build). Under Helm the chart's backup gate, above, refuses any other
+entry: the same release. This rule is held by `veyqctl`'s self-test; no two published majors exist yet.
 
 ## Versions and compatibility
 

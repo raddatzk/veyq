@@ -128,8 +128,10 @@ keeps inside a major reaches the operators who have not left the previous major 
   branch's, by version order — beside its default predecessor (the newest tag its first parent reaches, which never
   sees a branch's tag), and its tools image bakes that entry for the gate (ADR 0098 decision 3). One derivation,
   `run_web_e2e.major_entry_ref()`: `ci.yml`'s `upgrade-proof` runs `run_web_e2e.py --upgrade-major-entry`, its `chart`
-  job `chart_upgrade_check.py --upgrade-major-entry`, and `release_assets.py --major-entry` stamps the tools image —
-  so the gate never admits an entry the pipeline did not prove. No tag of major N−1 (major 0, or while the pin file
+  job `chart_upgrade_check.py --upgrade-major-entry`, `release_assets.py --major-entry` stamps the tools image, and
+  `release_assets.produce` names it as the signed manifest's `majorEntry`, by which `veyqctl` enters major N only from
+  that release (ADR 0096 decision 5) — so neither the gate nor a Compose upgrade takes an entry the pipeline did not
+  prove; an instance already past it (on a fix release cut later) is refused until a release entered from it exists. No tag of major N−1 (major 0, or while the pin file
   says `release: none`): no entry and no second run; an entry equal to the default predecessor — a major's first
   release, cut before any fix release — is proved once. `upgrade_proof_selftest.py` holds the derivation on a
   fabricated history with a `release/1.x` branch. Like the whole upgrade proof, the second run is disabled until the

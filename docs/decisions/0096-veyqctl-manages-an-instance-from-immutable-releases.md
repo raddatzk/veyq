@@ -51,10 +51,17 @@ nothing), a major (its newest release), or `latest` (the newest, crossing majors
 **5. `upgrade` runs only by hand.** No timer, no unattended mode: an upgrade replaces the web client that holds the
 keys, so it stays a deliberate act. In order, and nothing is stopped before step 4:
 1. resolve the release `VEYQ_RELEASE` selects; stop if it is the running one. **A major is entered only from the
-   last release of the one before:** when the selected release lies in a later major and the running release is not
-   the newest of its own, this run upgrades to that newest release and says that the next `upgrade` enters the next
-   major — and no run crosses more than one major. That entry is the path the lanes test
-   ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6);
+   release its upgrade was proved from:** the release of the next major this run goes to (the selected one, or that
+   major's newest when the selection lies beyond it) names its entry as `majorEntry` in its signed manifest — the
+   newest release of the previous major when it was cut, a `release/<major>.x` fix included, the one its upgrade proof
+   ran from and its tools image bakes ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 10). Running
+   that entry, this run enters the next major; running an older release, it upgrades to the entry first and says that
+   the next `upgrade` enters the next major; running a later one (a fix release cut after that release), it refuses,
+   since no path from it was proved and a later release of the next major is entered from it — and no run crosses
+   more than one major. That entry is the path the lanes test
+   ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6). *Amended
+   2026-10-31 (inbox #436): it was "the running major's newest release", which a fix release published after the
+   next major's release turned into a path nobody proved;*
 2. verify the manifest's signature, then both images' signatures by the manifest's digests, then download its assets
    into `releases/<release>/`, each against the manifest's sha256;
 3. refuse if the new `.env` template requires a value `.env` lacks, naming it — with `latest` this is what stops a
