@@ -64,8 +64,10 @@ items. The invariant therefore forces a favorite to be **ciphertext**:
   media the server already knows opaquely; sealing the **set** is what hides which of them are favorited.
 
 `GET / PUT /api/scopes/{scopeId}/favorites` carries the caller's pin blob and **never** another member's.
-`GET /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` returns `[{ memberId, ciphertext }]` — every member's
-blob for that Memory; the `PUT` writes only the caller's.
+`GET /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` returns `[{ self, ciphertext }]` — every member's
+blob for that Memory, the caller's flagged `self`, and no member id; the `PUT` writes only the caller's.
+`GET /api/item-favorites` returns the caller's own blobs across its scopes, for a Master-Key rotation's re-tag.
+Neither table stores a time: the operator sees the rows and their sizes.
 
 ## Main flow
 

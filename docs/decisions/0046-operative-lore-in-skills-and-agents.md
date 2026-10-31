@@ -13,8 +13,8 @@ the hard invariants — or it taxes the 90% of turns that never touch the thing.
 
 But operative lore has accreted that is **conditional**, not universal, and it has no home shaped for that. The
 trust-chain map (glob-is-registry, the bite-proof protocol) lives in [`changes/README.md`](../../changes/README.md);
-the coverage rules in [`ai/README.md`](../ai/README.md); per-guard detail in ten `scripts/validate_*.py` module
-docstrings. Assembling that picture from four places is a per-session cost, and none of it is relevant when the
+the coverage rules in [`ai/README.md`](../ai/README.md); per-guard detail in each `scripts/validate_*.py` module
+docstring. Assembling that picture from four places is a per-session cost, and none of it is relevant when the
 task is unrelated. Grown further, it would either bloat CLAUDE.md (taxing every turn) or the one workflow doc
 whose job is to stay short enough that a human judging the project on GitHub reads it (§ audiences).
 
@@ -89,9 +89,9 @@ exactly where claims are made, which is not every turn.
   artefacts would have been, and is the no-restate invariant holding against the skills layer itself, which is the
   point.
 
-One question stays parked (tracked in inbox #108): whether claim-provenance also earns a one-line CLAUDE.md anchor
-— so it loads even outside a triggered skill — is left open until we can observe whether the trigger coverage has
-real gaps. Deciding it now would be guessing.
+One question is open: whether claim-provenance also earns a one-line anchor in the root CLAUDE.md, so it loads even
+outside a triggered skill. It waits on whether the trigger coverage shows real gaps; deciding it without that would
+be guessing.
 
 ## Which proposed skills and roles survived measurement
 
@@ -116,12 +116,12 @@ covered by `trust-chain`'s trigger (which names *"a report, a CR, a handoff"*):
 | trust-chain guards green via the glob | `changes/README.md` § trust-chain guards |
 | promote a one-shot proof → permanent guard | `changes/README.md` § promote one-shot proofs |
 | bite-proof snapshot-restore | `changes/README.md` § bite-proof a guard |
-| close with a spoken retro | `changes/README.md` § retrospective + [`ai/README.md`](../ai/README.md) § closing process retro |
+| close with a spoken retro | [`ai/README.md`](../ai/README.md) § Context topology (the closing process retro) |
 | mark claims measured | the `trust-chain` skill + [`ai/README.md`](../ai/README.md) § the pipeline (measured, not recalled) |
 | workflow entry | [`ai/README.md`](../ai/README.md) (the entry for every working session) |
 
 **`mutation-gate` — CHECKED, NOT BUILT.** Covered even more completely — [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md)
-is 164 lines of complete decision + consequences, and the two meta-check docstrings self-document their asymmetry.
+is a complete decision + consequences, and the two meta-check docstrings self-document their asymmetry.
 No failure is on record *after* ADR 0045 that a skill would have prevented (the two known mutation missteps were
 caught inside the refine that wrote 0045, and its corrections are in the doc):
 
@@ -131,7 +131,7 @@ caught inside the refine that wrote 0045, and its corrections are in the doc):
 | per-surface finding (web KAT-pinned, backend no content crypto) | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context table |
 | tool choice (Stryker/PIT, no kotlin-plugin, no arcmutate) + why | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 1 |
 | backend three-layer split, what is mutated | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2 |
-| what is in scope + the discriminator | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2–3 + `src/web/stryker.mutate.json`, `src/backend/core/pitest.scope.json` |
+| what is in scope + the discriminator | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2–3 + the two `stryker.mutate.json` manifests (`src/web/`, `src/packages/crypto/`), `src/backend/core/pitest.scope.json` |
 | CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml`, `mutation-backend.yml` |
 | the total-vs-per-glob meta-check asymmetry | `scripts/mutation_meta_check.py` + `scripts/mutation_meta_check_backend.py` docstrings |
 | KAT-beats-mutation finding; blind spots | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context + Consequences |

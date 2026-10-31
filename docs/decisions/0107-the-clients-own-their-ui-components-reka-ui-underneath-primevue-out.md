@@ -7,12 +7,11 @@
 
 ## Context
 
-`src/web/` and `src/admin-web/` are built on **PrimeVue 4** in styled mode: its components, the `@primeuix/themes`
-Aura preset with our `--app-*` roles routed onto its `--p-*` variables
-([ui-web-styleguide](../crosscutting/ui-web-styleguide.md) § Contrast), its `locale` fed from our catalog
-(`src/app/primeVueLocale.ts`), its Toast as the one transient-feedback channel ([ADR 0039](0039-transient-feedback-via-toast.md))
-and `primeicons` for every icon. Views import PrimeVue directly, and component styles, unit tests and the e2e suite
-reach into its DOM (`.p-*` classes).
+When this was decided, `src/web/` and `src/admin-web/` were built on **PrimeVue 4** in styled mode: its components,
+the `@primeuix/themes` Aura preset with our `--app-*` roles routed onto its `--p-*` variables, its `locale` fed from our
+catalog, its Toast as the one transient-feedback channel ([ADR 0039](0039-transient-feedback-via-toast.md)) and
+`primeicons` for every icon. Views imported PrimeVue directly, and component styles, unit tests and the e2e suite
+reached into its DOM (`.p-*` classes).
 
 **PrimeVue 5 is no longer open source** (checked 2026-10-22 on npm and in the published `LICENSE.md` of
 `primevue@5.0.0`). From PrimeVue 5.0.0, `@primeuix/themes` 3, `@primeuix/styled` 1 and `primeicons` 8 on, the packages
@@ -32,18 +31,17 @@ users see is a dependency on PrimeTek inside every instance.
 ## Decision
 
 1. **PrimeVue leaves both clients, and so do `@primeuix/*` and `primeicons`.** We do not move to PrimeVue 5 under any
-   licence tier. Until the replacement has landed we stay on the MIT releases listed above, pinned below the next
-   major so no update can cross into the PrimeUI line.
+   licence tier, and no update may cross into the PrimeUI line.
 2. **Each client owns its UI components.** A layer of our own components — buttons, fields, dialogs, menus, messages,
    toasts and the rest of what the views use — is the only thing a view imports for UI; no view, composable or
    application imports a component library. The layer's API is ours, named and shaped for what veyq's screens need,
-   not a copy of PrimeVue's prop surface. The rule is enforced by the package's lint (`no-restricted-imports` on the
-   library outside the layer), so the next time a library has to go, the change stays inside one directory.
+   not a copy of PrimeVue's prop surface. The rule is enforced by the package's lint, so the next time a library has
+   to go, the change stays inside one directory.
 3. **Underneath, Reka UI where the behaviour is hard, plain HTML where it is not.** [Reka UI](https://reka-ui.com)
    (MIT, headless, the maintained successor of Radix Vue) implements the primitives whose keyboard, focus and ARIA
-   behaviour is the real work: dialog, popover, menu, select, tabs, checkbox, switch, toggle group, toast, tooltip,
-   date picker. A component with no such behaviour — a button, a text field, a message, a card — is our own markup.
-   Reka is never re-exported: a wrapper takes the props it needs and passes them on.
+   behaviour is the real work — dialog, popover, menu, select, tabs, checkbox, switch, toggle group, toast, tooltip,
+   date picker and their like. A component with no such behaviour — a button, a text field, a message, a card — is
+   our own markup. Reka is never re-exported: a wrapper takes the props it needs and passes them on.
 4. **The look lives in our stylesheets, on our tokens.** Headless means no theme preset and no runtime-injected
    style: the components are styled by the package's own sheets on the `--app-*` roles that already carry the
    colours, and the `--p-*` routing block retires with PrimeVue. The target is the screens as they look today; a
@@ -54,12 +52,9 @@ users see is a dependency on PrimeTek inside every instance.
    nothing but `@veyq/crypto`, so each gets its own layer and its own copy of what both need, as the stylesheets
    already are copied (ui-web-styleguide § Source of truth). In `src/web/` the layer is core's: an application may
    import it, it imports no application ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)).
-7. **The layer comes first, the library swap second.** The wrappers are introduced on PrimeVue 4.5.5 and every call
-   site moves onto them while the screens stay unchanged; only then is each wrapper's inside replaced by Reka UI or
-   plain markup, one component at a time, and PrimeVue is removed once nothing imports it. Each step leaves both
-   clients working. `src/admin-web/`, the smaller client, takes it in one step: its layer is written on Reka
-   directly, its call sites moved alongside. No PrimeVue, `@primeuix/*` or `primeicons` package is left in the
-   repository.
+7. **The layer first, the library swap second, and nothing of PrimeVue left.** Every call site moved onto the layer
+   before any wrapper's inside was replaced, so each step left both clients working and the swap touched one
+   directory. No PrimeVue, `@primeuix/*` or `primeicons` package is left in the repository.
 
 ## Behaviour changed on purpose
 
@@ -72,7 +67,7 @@ component that cites "behaviour changed on purpose" means one of them:
   password field's name; with its strength meter always off that text had no job.
 - **A date is typed into segments**, day, month and year, each a spinbutton typed as digits or stepped by the arrow
   keys, in the order and with the separators of the language: `tt.mm.jjjj` in German, `mm/dd/yyyy` in English, on
-  every date field (owner 2026-10-22; the share and drop-box expiry and the moderation deadlines showed a fixed
+  every date field (the owner's choice; the share and drop-box expiry and the moderation deadlines showed a fixed
   `yy-mm-dd` before). Pasting a whole date as text is gone. The calendar stays: its button opens it, and so does the
   field's focus, on every date field, as the library's did (its open-on-focus was the default everywhere, not only
   on the Memory date). It steps by month; a distant year is typed into its segment. Days outside the bounds are
@@ -84,25 +79,16 @@ component that cites "behaviour changed on purpose" means one of them:
 
 ## Consequences
 
-- **The migration is large, and most of its cost is in what reaches into PrimeVue's DOM**, not in the imports:
-  component `<style>` blocks and the shared sheets that target `.p-*` classes, tests that select by them, and the e2e
-  suite. Moving those onto the layer's own classes and roles is part of the layer step, so the swap does not have to
-  touch them again.
+- **The cost was in what reached into the library's DOM**, not in the imports: styles, tests and the e2e suite that
+  selected by `.p-*` classes now select by the layer's own classes and roles, so a later swap does not touch them.
 - **Accessibility is ours to keep.** PrimeVue shipped focus traps, `aria-*` wiring and its translated hidden texts;
-  Reka covers the primitives in decision 3, and our own markup has to carry the rest. The translated texts move from
-  `primeVueLocale.ts` into the components that render them, from the same catalog.
+  Reka covers the primitives in decision 3, and our own markup has to carry the rest. What a layer component says on
+  its own comes from the client's catalog, in every language it carries, never a literal in the component.
 - **[ADR 0039](0039-transient-feedback-via-toast.md) keeps its decision** (one global toast, `useToast`, `useUndo`);
   only what renders the toast changes.
-- **The CSP's stated reason for `style-src 'unsafe-inline'` goes away** ([cc.security.csp](../crosscutting/cc.security.csp.md)):
-  it names PrimeVue's and `@primeuix`'s runtime `<style>` tags. Whether the remaining `:style` bindings still need
-  it is a measurement after the swap, and tightening the policy is a change of its own. Measured and tightened
-  after the swap: the bindings go through the CSSOM, and `style-src` is `'self'` plus the hashes of reka-ui's
-  fixed `<style>` texts.
-- **Guards that read PrimeVue move with it**: `scripts/validate_web_contrast.py` pairs read `--p-*` variables, and
-  the stylesheet-anchor guard sees every `.p-*` rule as anchored only while PrimeVue renders that class.
-- **The e2e suites have not run against the layer yet.** Their selectors moved with the layer's classes and roles;
-  the first run is the owner's V1-end run (web-e2e and L1), and a red there that names a `veyq-*` hook or a role goes
-  back to the layer.
+- **No library's runtime `<style>` is left for the content security policy to admit**, so its
+  `style-src 'unsafe-inline'` lost its reason; what the policy admits now is
+  [cc.security.csp](../crosscutting/cc.security.csp.md)'s.
 - **Rejected — PrimeVue 5 under the Community License.** Free for us today, but every operator receives the client,
   the caps and the yearly key bind the project to PrimeTek's terms, and the next change of those terms would find us
   as deeply coupled as now.

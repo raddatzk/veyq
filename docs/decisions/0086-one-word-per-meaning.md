@@ -14,7 +14,7 @@ meaning, and a native client will add more:
 - **"Capability"** means three things. The instance-wide, pre-auth switch on `/api/setup`
   ([ADR 0032](0032-capability-discovery-version-gating.md)). A worker's capability tags
   ([ADR 0021](0021-operator-blind-background-tasks.md)). And the per-view functions `folderCapabilities`,
-  `memoryCapabilities` and `filesCapabilities` (`web/src/core/access.ts:13`), which answer *"may this viewer do X
+  `memoryCapabilities` and `filesCapabilities` of the web client, which answer *"may this viewer do X
   here"*. That last one is a permission, and ADR 0032 §3 names exactly that conflation as its main modelling risk.
 - **"Version"** means three things. The compatibility major ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)).
   A sealed payload's schema per node kind (ADR 0079 decision 7). And a node's concurrency counter `metaVersion`
@@ -33,12 +33,12 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | Word (de) | Means | Never for |
 |---|---|---|
 | **veyq**, the **platform** (*Plattform*) | core: who, what, with whom (ADR 0079) | an application |
-| **application** (*Anwendung*) | a set of node kinds with its own data and screens on the platform: Memories, Depot | "plugin"; an installable client |
+| **application** (*Anwendung*) | a set of node kinds with its own data and screens on the platform: Memories, Depot, Expenses | "plugin"; an installable client |
 | **app** (*App*) | an installable native client only. The web client is the **web client** | an application |
 | **capability** | an entry of the register of what this server serves, which its operator switches off for the instance and a tenant owner for the tenant (ADR 0032, [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)) | anything per viewer |
 | **rights** (*Rechte*) | what a view offers this viewer here, the client's projection of a permission: `memoryRights`, `folderRights`, `depotRights` | a capability switch |
 | **version** | compatibility only: the major (ADR 0085), a crypto suite | a concurrency counter |
-| **revision** | a concurrency or change counter: `metaRevision` (was `metaVersion`), `mediaRevision`, a tree revision, the edition of a text that changes (the terms' `termsRevision`) | compatibility |
+| **revision** | a concurrency or change counter: `metaRevision`, `mediaRevision`, a tree revision, the edition of a text that changes (the terms' `termsRevision`) | compatibility |
 | **format** | a sealed payload's schema, per node kind, readable forever (ADR 0079 decision 7) | the platform's major |
 | **history** (*Verlauf*) | reserved for a future earlier-contents-of-a-file feature | "versions" of a file |
 | **`K_node`** (identifier `kNode`) | the random content key every node carries — a Memory, a Chapter, a folder, a Depot file or drop box — wrapped under its parent's key (ADR 0012, ADR 0080) | `K_mem`, which named it when only a Memory had a key; the wire labels (seal purposes, derivation info strings) never carried the name and do not change |
@@ -55,17 +55,14 @@ client, and they live in the database baseline, so a rename would cost a migrati
 Where the name *Files* sits today decides what moves, and the test is Memories' precedent: the application's id
 names its directories, module, package, i18n namespace and application-prefixed seams (`MemoriesNodeKinds`), while its API
 is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
-- **Moves to `depot`:** `contracts/api/files/` and the Gradle module `:apps:files` with its package
-  `me.raddatz.veyq.files` (one commit — the build derives each from the other), `src/web/src/features/files`, the
-  i18n namespace, every `Files…` seam that names the application, the stored node kind `FILES_DROPBOX` →
-  `DEPOT_DROPBOX` (it carries the application's prefix and the operator reads it in `veyq_node.kind`), and the
-  export ids (`files.file` / `files.drop-box` → `depot.file` / `depot.drop-box`, application id `files` → `depot`),
-  with no alias for old archives: before V1 there are none to read. The application's tab in a level is labelled
-  *Depot*.
-- **Stays, because it is the generic word *file*:** the node kind `FILE`, the blob role `FILE_CONTENT` (it is
-  bound into every sealed wrap's context), the API's tags, paths and schema names (`files`, `/files`, `File…`),
-  and the UI's *file* / *Datei* wherever it means a file rather than the application.
-- **Has nothing to move:** Depot claims no route segment (ADR 0015), so there is no slug.
+- **Named `depot`:** its contract directory, Gradle module and package, its web directory and i18n namespace, every
+  seam that names the application, a stored node kind that carries the application's prefix (`DEPOT_DROPBOX`: the
+  operator reads it in `veyq_node.kind`), the export ids and the application's tab in a level. Archives written under
+  the earlier name `files` are not read: there is **no alias for old archives**, because before V1 there are none.
+- **Named *file*, because it is the generic word:** the node kind `FILE`, the blob role `FILE_CONTENT` (it is bound
+  into every sealed wrap's context), the API's tags, paths and schema names, and the UI's *file* / *Datei* wherever it
+  means a file rather than the application.
+- **No slug:** Depot claims no route segment (ADR 0015).
 
 **The shape of the apps** (native work is parked until the web V1 stands): the
 **veyq app** is core plus Depot, and each further application is its own app, reached from the others by deep
@@ -76,23 +73,20 @@ across apps, how a link's key reaches an app safely) belong to the native client
 
 - **The word rules bind** wherever a word is written: docs, code, the wire and the wiki. The root `CLAUDE.md` and
   [`docs/apps/README.md`](../apps/README.md) state them for the next reader.
-- **Depot**: what moved to `depot` and what stays `file` is the Depot paragraph above.
-- **Rights**: the per-view functions are `…Rights` (`folderRights`, `memoryRights`, `depotRights`, `favoriteRights`,
-  `coverRights`, `sourceRights`), in files named `rights.ts`. The capability switch keeps its name everywhere
-  (`hasCapability`, `useCapabilities`, the `CORE_*` ids, the catalog). Two other senses of the word stay, because
-  neither is a per-viewer function: a **capability token** (a bearer secret such as a contributor's,
+- **Depot**: what is named `depot` and what stays `file` is the Depot paragraph above.
+- **Rights**: every per-view function is named `…Rights` (`memoryRights`, `depotRights`, `folderRights`, …). The
+  capability switch keeps its name everywhere (`hasCapability`, the catalog's ids). Two other senses of the word stay,
+  because neither is a per-viewer function: a **capability token** (a bearer secret such as a contributor's,
   `cc.security.wire-assertion`) and the worker's capability tags above.
 - **Revision**: every concurrency or change counter is a revision, on the wire, in the database and in the clients —
-  `metaRevision`, `placementRevision`, the conflict code `stale_revision`, the identity pins' and device register's
-  `revision`, `avatarRevision`, the terms' `termsRevision` / `acceptedRevision` and `409 terms_revision_changed`. The
-  terms' number is a revision, not an edition: it has no compatibility meaning, moves on every change of the text and
-  guards the accept with a 409 exactly as `metaRevision` guards a meta write, and "edition" would be a second word for a
-  meaning the table already names (a user reads it as *Fassung* in German copy). No sealed byte changed with the
-  rename: the seals bind a revision by position, never by name. `validate_write_concurrency.py` refuses a declared
-  revision field named as a version.
+  `metaRevision`, the conflict code `stale_revision`, the terms' `termsRevision`, and the rest alike. The terms' number
+  is a revision, not an edition: it has no compatibility meaning, moves on every change of the text and guards the
+  accept with a 409 exactly as `metaRevision` guards a meta write, and "edition" would be a second word for a meaning
+  the table already names (a user reads it as *Fassung* in German copy). No sealed byte depends on the word: the seals
+  bind a revision by position, never by name. `validate_write_concurrency.py` refuses a declared revision field named as
+  a version.
 - **Stays "version", because it is compatibility:** `/api/setup`'s `version: { major, build }` (ADR 0032), the
-  release version (ADR 0057), an export's `appVersion` and its manifest's format `version`, the Emergency Kit's and a
-  sealed payload's format version (`v`), and every spec's `info.version`.
+  release version (ADR 0057), an export's and a sealed payload's format version, and every spec's `info.version`.
 - **The cost:** one more word for a reader to learn ("rights" next to "permission"). It pays for itself where
   ADR 0032 §3 needs it most: in a review, "capability" now always means the operator's or tenant owner's switch.
 

@@ -119,9 +119,9 @@ of [cc.privacy.retention](../crosscutting/cc.privacy.retention.md).
 
 #### Still open
 
-Not pursued (owner 2026-10-28), as ADR 0093's Still open are: what is built and decided is taken to meet them, no row
-tracks them and none holds back a CR or a release; an answer that differs, should one come, is a legal duty that wins
-over what is built (`CLAUDE.md`).
+Held as ADR 0093's Still open are: what is built is our reading, not a reviewed answer; a question holds back a CR or
+a release only where what is built would be unlawful on a plausible reading and a cheap safe-side alternative exists;
+an answer that differs, should one come, is a legal duty that wins over what is built (`CLAUDE.md`).
 
 1. Whether a period stated as a criterion — size-based rotation and recreation, no time bound — meets Art. 5(1)(e) for a
    log holding pseudonymous ids only.

@@ -31,7 +31,7 @@ The term is "application" (German *Anwendung*), not "plugin" — it is first-par
 
 **2. What is the platform ("core").** The server, tenants (resolved by `Host`, unchanged), users, the scope
 kinds `TENANT` / `GROUP` / `PERSONAL`, memberships (role + grant), invitations and admit/deliver, key
-management (epochs, rotation, revocation), public shares (viewer / contributor / uploader, password, reissue),
+management (epochs, rotation, revocation), public links (`READ`, `READ_WRITE`, `WRITE_ONLY`, password, reissue),
 blobs and the storage quota, the trash, and **the node tree**: a domain-neutral tree of objects in a scope in
 which every node has a `kind` and a content key, with folders and move / rename (one placement write) / trash.
 Application-neutral means the platform never branches on what a kind means.
@@ -68,12 +68,11 @@ scope, so nobody turns one on; switching one off, and what that does to what exi
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
 A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new variant plus its vector is
-backward-compatible). Core has added one such purpose, `blob-meta`: a blob's type, upload name and modification time,
-sealed under the blob's own `K_blob`, declared with the upload and stored write-once on the blob row. It is the
-platform's, carried by every application's blobs alike, so it is no exception to the rule below that an application
-needs no purpose of its own. For a **new** application whose keys derive from the scope key, they derive by HKDF with
-the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations use in
-`src/packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated data binds
+backward-compatible). Core has added one such purpose, `blob-meta` (a blob's sealed metadata,
+[ADR 0072](0072-a-seal-binds-its-object.md)). It is the platform's, carried by every application's blobs alike, so it is
+no exception to the rule below that an application needs no purpose of its own. For a **new** application whose keys
+derive from the scope key, they derive by HKDF with the application id as context (`veyq/v1/<application id>:…`, the
+form the existing derivations use), so two applications never share a key by accident; the seals' associated data binds
 the application id or kind, the object id and the revision, by the ADR 0072 mechanism. A kind whose node key is random
 and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md))
 meets both rules with no new seal purpose and no HKDF context: it shares no key with another application's node by
@@ -97,7 +96,7 @@ How each of these is built — the modules, the seams core asks, the web registr
   duplication this decision exists to avoid. The price is that the tree's `kind` holds values core does not
   interpret, so **node kinds are open**: an open, bounded token on the wire, core naming `FOLDER` only, each application
   bringing its kinds and their rules, and a kind no application claims refused by fail-closed seams, never by decoding.
-  `PublicShare` carries the root's kind, so the share page renders the body the kind's application claimed.
+  A link serves its root's kind, so the share page renders the body the kind's application claimed.
 - **A node's URL carries its application's slug** (the grammar is [ADR 0015](0015-operator-blind-readable-urls.md)'s).
   The path stays in the `#fragment`; each application claims its slug once or declares that it has none. Rejected:
   history-mode `/<application>/:nodeId` URLs — they put a stable per-node id into the operator's access logs on every hard load
@@ -105,24 +104,22 @@ How each of these is built — the modules, the seams core asks, the web registr
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.
-- **What the platform is**: who (tenants, users, scopes, memberships, invitations, keys, devices), what (the node tree
-  and attachments, sealed files on a node with size and quota), with whom (links with `READ`, `READ_WRITE` or
-  `WRITE_ONLY` access) and in the background (tasks, rate limits, the admin channel, operator-blindness). An application
-  supplies the meaning. **Attachments are core's**: a second application needed sealed files on a node, and every
-  further one would have; what a verified upload becomes stays the application's.
+- **Attachments are core's**: a second application needed sealed files on a node, and every further one would have;
+  what a verified upload becomes stays the application's. What the platform holds in all is
+  [Applications](../apps/README.md).
 - **Contracts by owner.** A core spec describes what core does; where a value's meaning belongs to an application, its
   description says whose it is. An operation whose behaviour is an application's lives in that application's spec
-  directory, even when its path sits under a core route.
+  directory, even when its path sits under a core route. Rejected: one spec per route, whoever's behaviour it is — the
+  module that generates it would then be core, and core would carry an application's operation.
 - **The node's payload slot and content key are core's.** Core gives every node one sealed, versioned payload
   (`wrappedMeta`, `metaRevision`) that it stores, compare-and-sets and lists with the tree, and never opens; its
   plaintext format is the kind's application's (decision 7). These are platform columns, not an application widening
   `veyq_node` (decision 6). Rejected: moving the payload into a Memories table with endpoints — it loses the atomic
   create and the payload in the tree listing that sorting relies on, and the next application would want the same
   slot back.
-- **The drop key is the `WRITE_ONLY` link's mechanism**, core's: its pair belongs to the link, its private half to the
-  shared root node, and it never joins the node payload. The seal purposes `drop-public-key` / `drop-private-key` are a
-  stored format and keep their names.
-- **Three access modes.** A link grants one of `READ`, `READ_WRITE`, `WRITE_ONLY` (`ShareRole`); core enforces the mode,
+- **The drop key is the `WRITE_ONLY` link's mechanism**, core's, not the first application's that used it. Its seal
+  purposes `drop-public-key` / `drop-private-key` are a stored format and keep their names.
+- **Three access modes.** A link grants one of `READ`, `READ_WRITE`, `WRITE_ONLY`; core enforces the mode,
   and which roles a node may be shared with is its kind's owner's. A `READ_WRITE` guest's tree operations are core's,
   each container's owner deciding them inside it; what "write" means on an application's node is the application's.
   The modes are bound in no seal. Application-specific roles, if ever needed, come through a policy seam where core
@@ -138,10 +135,9 @@ How each of these is built — the modules, the seams core asks, the web registr
 - **The backend is split into build modules; the web by import direction.** On the backend the direction is the
   build's, so a violation does not compile, and core reaches application code only through seams that fail closed —
   a kind or role no application claims gets nothing. On the web there is no module boundary, so the direction is a
-  text guard, and the shell asks a build-time registry what to render for a kind. Hand-written core code names the
-  node kind `FOLDER` only; the kind is a string token on both sides, so the registry's fail-closed answer and its tests
-  carry what a closed enum's exhaustiveness did. A cover and a record list's counters are core's (decision 3), so core's
-  schema and config name no application concept.
+  text guard, and the shell asks a build-time registry what to render for a kind. The kind is a string token on both
+  sides, so the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness did. A cover and
+  a record list's counters are core's (decision 3), so core's schema and config name no application concept.
 - **One view per kind, for a member and a share guest alike.** A share view looks exactly like the member view; a
   link's role only removes functions. So the registry's contract does not know which of the two is looking: a view
   receives who looks and the tree that session reads, and what it offers is its application's **rights function**,

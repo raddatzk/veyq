@@ -1,7 +1,7 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
 - Status: Accepted
-- Built: partly (not built: § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
+- Built: partly (not built: § 7's statement to a guest uploader on its link (inbox #813); § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
   identity key; § 11 the records' extension while proceedings are pending)
 - Date: 2026-10-16
 - Model: [Moderation](../features/moderation/_index.md)
@@ -229,8 +229,9 @@ nothing names its objects, and the step ends at once. The review and the steps a
   (Art. 17(3)(a)), and the objection and the courts (Art. 17(3)). A dismissed report is told only to the reporter.
   The statement and the answer to an objection reach each affected member in the app and by instance mail at their
   account address ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3); a
-  reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest is told nothing in the app for a moderator's measure: it has no account, so a guest uploader counts as
-  nobody to tell (DSA Art. 17(2)); an authority's removal order is the exception (§ 12).
+  reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest uploader whose upload a measure restricts is told on the link it came through, as § 12 tells it of a removal
+  order: DSA Art. 17(2) asks this only where electronic contact details are known, which a link is not, but the route
+  exists and the safe side costs nothing. A guest has no account, so nothing reaches it by mail.
   There is one form on every instance (§ 14), so a moderator always states the facts and the provision or clause.
 - **The facts are sealed once, and per affected member only their key**. The moderator's browser seals the facts under a
   fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
@@ -274,8 +275,9 @@ nothing names its objects, and the step ends at once. The review and the steps a
   established (DSA Art. 53; in Germany the Bundesnetzagentur, the authority § 12(1) DDG names under DSA Art. 49(1)).
   The qualifier is the passage's own, not a mode's: veyq cannot know whether the DSA reaches an instance (§ 14), and
   a right that only the DSA grants is never promised unconditionally. An empty instance contact renders as the gap.
-- **Deferring the statement is an authority's switch, never the moderator's discretion** (Art. 17 DSA has no
-  exception of its own; TCO Art. 11(3) lets the authority forbid the notice for six weeks, renewable once by six).
+- **Deferring the statement is an authority's switch, never the moderator's discretion** (for a moderator's own
+  measure Art. 17 DSA has none; an authority's order is outside Art. 17 altogether, Art. 17(5), and TCO Art. 11(3)
+  lets the authority forbid the notice for six weeks, renewable once by six).
   It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date the
   moderation surface reminds and the statement goes out unless a new request renews it.
 - **Objection in the app**, for the affected only, on the placeholder and the statement: free text sealed to the
@@ -399,7 +401,7 @@ The retention setting's form and its no-extension rule are [ADR 0092](0092-logs-
   say plainly that an operator who cannot keep the hour turns public links off (`core.public-shares`).
 - **A preservation order or a request for information** (the e-Evidence Regulation, §§ 100j–100k StPO) opens the
   same hold without a block. Information handed over is an event in the moderation log with the reference sealed.
-- **The notice to the uploader** (TCO Art. 11, DSA Art. 17) follows § 7, including its deferral on the authority's
+- **The notice to the uploader** (TCO Art. 11; DSA Art. 17 does not reach an authority's order, Art. 17(5)) follows § 7, including its deferral on the authority's
   request. **A guest uploader is told too, on a removal order** (TCO Art. 11(1) asks the host to make the information
   available to the content provider, with no condition of a known contact, unlike DSA Art. 17(2)): an identity whose
   upload a removal order blocked — whose client still holds that identity — is answered, on the link it came through,
@@ -564,11 +566,12 @@ What the register concluded, and where this ADR applies it:
 
 ### Still open
 
-Questions the law leaves open for an operator who runs veyq for a household, a club or a company. **They are not
-pursued (owner 2026-10-28)**: no row tracks them and none holds back a CR or a release. What is built and decided is
-taken to meet them, and nothing they name is built on that assumption (no hold past 90 days, no authority link).
-They stay named here because code and docs cite them by number, and because an answer that differs, should one come,
-is a legal duty that wins over what is built (`CLAUDE.md`).
+Questions the law leaves open for an operator who runs veyq for a household, a club or a company. What is built is
+**our reading, not a reviewed answer**, and nothing they name is built on an assumption either way (no hold past 90
+days, no authority link). A question holds back a CR or a release only where what is built would be unlawful on a
+plausible reading and a cheap alternative on the safe side exists; then the safe side is built. The others are not
+pursued further. They stay named here because code and docs cite them by number, and because an answer that
+differs, should one come, is a legal duty that wins over what is built (`CLAUDE.md`).
 
 1. § 184b(5) StGB beyond the 90 days, and for a non-commercial operator.
 2. A time-bound authority link to a hold snapshot.

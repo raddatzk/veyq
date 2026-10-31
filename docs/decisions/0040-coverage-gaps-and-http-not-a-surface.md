@@ -9,9 +9,8 @@
 
 The acceptance-coverage trust chain (`feature → use-case → criteria → tests` — see
 [docs/coverage/README.md](../coverage/README.md)) records, per acceptance criterion, a `coverage` map keyed by
-**area** (`backend · web`) then **level** (`unit · integration · e2e`), plus a per-use-case `gaps` map
-(`area: reason`) for surfaces not covered. `scripts/validate_coverage.py` enforces that every criterion has ≥1 test
-and every ref resolves.
+**area** then **level** (its § Dimensions), plus a per-use-case `gaps` map (`area: reason`) for surfaces not
+covered. `scripts/validate_coverage.py` enforces that every criterion has ≥1 test and every ref resolves.
 
 Two defects shared one root cause. **`gaps` had drifted into an overloaded free-form status field**, doing three
 jobs at once: a **real gap** (the surface is not built), a **deferred sub-slice** (the core is covered, a later
@@ -35,7 +34,8 @@ did not exist and its job was disabled, with four coverage refs riding on the fa
    current scope; they belong in the inbox) never go into `gaps`.
 
 2. **`http` is not a coverage surface.** Requests a developer fires by hand prove nothing a run executed; the area
-   and the `.http` files are gone, and the phase order is `contracts → backend → web`. The lesson that outlives
+   and the `.http` files are gone, and no CR phase is an `http` one (the phase order is root
+   [CLAUDE.md](../../CLAUDE.md)'s and [`changes/README.md`](../../changes/README.md)'s). The lesson that outlives
    them: **demoting a mechanism means finding every decision that leaned on it** — another ADR still named those
    suites as the net under re-implemented orchestration, and this one never said so. Grep for the mechanism's name,
    not only for the docs that describe it.
@@ -47,9 +47,9 @@ did not exist and its job was disabled, with four coverage refs riding on the fa
      when the job is enabled. Reading the run's log is the step, not the green tick: "the job passed" and "the job
      ran nothing" render identically, which `scripts/validate_e2e_discovery.py` guards.
    - **A gated test counts only where a workflow sets its gate.** Gradle skips a test gated on an unset variable
-     cleanly and says nothing, so `validate_coverage.py` reads the gate from the test source and holds it against
-     the runs the workflows declare. What only a run can know (a runtime `assume`, a variable a script exports)
-     stays out of its reach, and its docstring says so.
+     cleanly and says nothing, so the gate is read from the test itself and held against the runs the workflows
+     declare ([the coverage README](../coverage/README.md) § Rules). What only a run can know (a runtime `assume`,
+     a variable a script exports) stays out of the guard's reach, and its docstring says so.
    - **What a row is, and which rows a run has admitted.** A row is a *job* — the runner that executes one
      surface's tests — never a single ref. Once a run has executed a job, a new test inside it counts as soon as a
      workflow declares that run. A job no run has executed admits nothing, however green its suites are locally:
@@ -58,8 +58,7 @@ did not exist and its job was disabled, with four coverage refs riding on the fa
      other; a surface not admitted keeps its suites under the use-case `gaps`, named, until the first run whose log
      shows them executed. That edit is the admission, and nothing checks it — it records the one fact the tree
      cannot derive: that someone read a log. The set in the guard is the live list. Since the repository has had no
-     remote, no run has admitted a job born after its import (`admin-web`'s and `packages/crypto`'s
-     `npm run check`, `backend-races`, the stack lane).
+     remote, no run has admitted a job born after its import.
 
 ## Consequences
 
@@ -68,8 +67,8 @@ did not exist and its job was disabled, with four coverage refs riding on the fa
   gate and the admitted jobs from what the tree already says, beat a marker system.
 - **Cost, paid honestly:** reversing a documented stance (`http` as a verification surface) dropped ~67 redundant
   `http` refs and added one backend boundary test for the criterion only `http` had covered.
-- **A suite that exists can still claim nothing** — `admin-web`'s and `crypto`'s suites wait under `gaps` until a
-  read log admits their jobs. That is the rule working, not a gap in it.
+- **A suite that exists can still claim nothing** — a suite on a job no run has executed waits under `gaps` until a
+  read log admits that job. That is the rule working, not a gap in it.
 - **Rejected alternatives:**
   - *A CI-gating marker* (`ci-surfaces.yaml` / per-ref `ci: false` / filename convention) — machinery for what the
     gate on the test and the runs in `.github/` already state; `ADMITTED` is not that manifest: one line per

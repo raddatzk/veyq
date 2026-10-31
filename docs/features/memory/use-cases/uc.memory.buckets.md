@@ -68,6 +68,14 @@ One's own bucket reads **"Deine Beiträge"**.
   stamps a contributor's media with it
   ([ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8, which also states the accepted
   residual: a link plus a database dump opens the names, as it opens the photos).
+- **Organizing at once never deadlocks.** Two members creating or deleting sub-buckets, moving media and trashing a
+  medium in one Memory both finish: every media write takes its locks in one order (bucket, media, node).
+- **A guest named above the node.** A link's guest names itself under the link root's key, whichever node it
+  uploads into, so a member opens a guest's bucket name below the root with an ancestor's key through the tree's key
+  chain ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6).
+- **Open: members are named by username here.** The rest of the interface names a member by the display rule
+  ([en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md) § The display name); the
+  Contributions tab still shows the username. Whether it follows the rule is open.
 - **A real data model.** The bucket table ([en.memory.buckets](../enablers/en.memory.buckets.md)) carries
   sub-buckets from day one, and the organizer UI (create/rename/delete a sub-bucket, move media in) is built on the
   shipped endpoints.

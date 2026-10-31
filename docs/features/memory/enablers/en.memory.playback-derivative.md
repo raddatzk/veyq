@@ -19,17 +19,17 @@
 - **Postconditions (success):** the small copy sealed under a fresh `K_blob` bound to its node and slot, attached by the
   worker; the original untouched.
 
-## Decisions
+## The copy
 
-1. **On a key-holding device, never on the server.** The server holds no plaintext (operator-blind), and a server
-   transcode would also be a heavy dependency on a small self-hosted instance. Not in the editor's browser tab either (the
-   owner, 2026-10-19): a long video is a long job, and the worker queue serves the gallery as well.
-2. **A fixed target, not a ladder.** One copy: H.264 (the codec every engine plays), long edge 1280, about 2 Mbit/s video,
-   the frame rate of the source capped at 30. No adaptive streaming: the copy streams through ADR 0047's range shim as
-   any blob.
-3. **The sound is kept**; a source without sound gives a copy without sound.
-4. **Additive, never a replacement in place.** The copy goes into a slot of its own beside the copied original; a reader
-   that does not know it plays the original.
+The choices and their rejected alternatives are [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md)
+§ The small playable copy; what the copy is:
+
+- **Made on a key-holding device by a client worker node**, never on the server and never in the editor's browser tab.
+- **One fixed target:** H.264, long edge 1280, about 2 Mbit/s video, the source's frame rate capped at 30. No adaptive
+  streaming: the copy streams through ADR 0047's range shim as any blob does.
+- **The sound is kept**; a source without sound gives a copy without sound.
+- **Additive:** the copy goes into a slot of its own beside the copied original; a reader that does not know it plays
+  the original.
 
 ## Open — settled when the worker queue is refined
 

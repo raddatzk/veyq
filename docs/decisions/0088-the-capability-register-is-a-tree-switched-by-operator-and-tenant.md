@@ -60,10 +60,9 @@ instance and tenant layers.
    one-segment id is the only one a root may be (`core` is no entry). Every member of the tenant sees a banner saying
    so, so there is time to save what is in it.
    What exists stays readable, so there is no "activated but empty" state machine, and the gate sits on the
-   application's writes, never on its reads. **Left off, it is the one switch that erases**: after a window, an
-   instance-wide configuration property of the Server Owner (`veyq.application.off.retention`, default `P30D`), the
-   application's content in the tenant is erased on a day every member is told — by the banner and, where the instance
-   has mail, by a notice at switch-off and a reminder before the day. Switched on before that day, nothing is lost;
+   application's writes, never on its reads. **Left off, it is the one switch that erases**: after a window, one
+   instance-wide value of the Server Owner (30 days by default), the application's content in the tenant is erased on
+   a day every member is told — by the banner and, where the instance has mail, by a notice at switch-off and a reminder before the day. Switched on before that day, nothing is lost;
    switched on after it, the erasure completes and spares only what was made after the switch-on as a node of its own.
    The day a member was told is never moved earlier, and a switch is never refused. The window is no requirement
    (decision 8): a tenant owner sets no value for it, and a tenant only narrows by switching the application off, never
@@ -86,7 +85,7 @@ instance and tenant layers.
     *how a key reaches a device*: from another unlocked device instead of password and Secret Key. Remembering
     answers *whether the key may stay there*. Every combination is coherent:
     - With `passwordless` off, a linked device gets a session but no stored key, because the only wrap it can
-      enrol is a `DEVICE_KEY` (ADR 0059 §10). `useGrantReceiver.ts` already hides "stay signed in" then.
+      enrol is a `DEVICE_KEY` (ADR 0059 §10), so the client does not offer "stay signed in" there.
     - With linking off, an instance rules out the one mechanism that turns a single human confirmation into the
       Master Key, where a phished grant is an identity takeover (ADR 0059).
     - Handing the key from one of the user's own native apps to another on the same device is not
@@ -96,10 +95,11 @@ instance and tenant layers.
     - **A tenant owner** switches in the tenant settings in `src/web/`, beside terms and mail. The tenant owner is an
       ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`.
     - **An entry a client offers before sign-in is the Server Owner's alone** (`*`, never `+`): `remember-device`,
-      `passwordless` and `device-linking`. The sign-in screen offers "stay signed in" and "sign in with code" from the
-      pre-auth manifest, which carries the instance level only (decision 3), so a tenant's switch there would be a
-      button that fails after the click. The key material is the account's, not a tenant's, and the pairing channel
-      carries no tenant either. A tenant that wants these off asks the Server Owner.
+      `passwordless`, `device-linking` and `breached-password`. The sign-in screen offers "stay signed in" and "sign in
+      with code", and a password dialog before sign-in checks breaches, from the pre-auth manifest, which carries the
+      instance level only (decision 3), so a tenant's switch there would be a button that fails after the click. The key
+      material is the account's, not a tenant's, and the pairing channel carries no tenant either. A tenant that wants
+      these off asks the Server Owner.
     - **The Server Owner** switches in `admin-web` and its CLI, through the Admin API. The state lives in the
       database and takes effect without a restart. It is not a configuration property: the
       `veyq.capabilities.disabled` list retires, and with it any question of what an unknown id in it means.
@@ -125,7 +125,7 @@ instance and tenant layers.
 core/
   *   remember-device              → DEVICE wrap (password only; the device key stands in for the Secret Key)
     *   passwordless               → DEVICE_KEY wrap (no password)
-  *   device-linking               → /api/pairing/*   (built; independent of remember-device, decision 11)
+  *   device-linking               → /api/pairing/*   (independent of remember-device, decision 11)
   *+  group-space                  → group scope creation
   *+  personal-space               → scope kind PERSONAL; "off" = no new content, the scope stays (keys, favorites)
   *+  member-invites               → /member-invites
@@ -136,7 +136,7 @@ core/
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares, search, live-collab, notifications   [later]
-*+ memories                        → off = read-only: every write of its kinds and operations (built)
+*+ memories                        → off = read-only: every write of its kinds and operations
   *+  chapters                     → node kind CHAPTER
   *+  journal             [planned]→ a server-visible kind or blob role
   *+  gpx                 [planned]→ a server-visible blob role
@@ -145,9 +145,9 @@ core/
   *+  map                          → external (map tiles); CSP img-src
   *+  public-shares / contribute / drop-box   → inherit core.public-shares
     *+  download-originals         → blob role ORIGINAL (only Memories has derivatives)
-*+ depot                           → off = read-only: node kinds FILE / DEPOT_DROPBOX, blob role FILE_CONTENT (built)
+*+ depot                           → off = read-only: node kinds FILE / DEPOT_DROPBOX, blob role FILE_CONTENT
   *+  public-shares / contribute / drop-box   → inherit; drop-box also gates creating a DEPOT_DROPBOX
-*+ expenses                        → off = read-only: node kind EXPENSES_POT (built, ADR 0108); *+ public-shares/… inherit
+*+ expenses                        → off = read-only: node kind EXPENSES_POT (ADR 0108); *+ public-shares/… inherit
   *+  exchange-rates               → external (exchange-rate provider), no opt-in; CSP connect-src
 *+ inventory/  [concept]           → its node kinds; *+ public-shares/… inherit; *+ reminders-push inherits core.push
 ```
@@ -155,14 +155,14 @@ core/
 `places` and `map` are independent of each other. A place comes from the media's GPS or from a pin dropped by hand,
 and its name is geocoded or typed. The geocoder suggests names, and the tiles carry the pin and the map view. With
 both off a place still works, named by hand. The user's own consent to the two
-(`src/web/src/features/memories/useMemoryLocation.ts`) is a third, separate thing and stays.
+([ADR 0016](0016-geocoding-provider-neutrality.md)) is a third, separate thing and stays.
 
 ### Requirements
 
 | Node | Requirement |
 |---|---|
 | `core.public-shares` | a link needs a password; a link expires within N days |
-| `core.group-space` | joining a group needs the member's consent (today a per-user setting, `require_group_add_consent`) |
+| `core.group-space` | joining a group needs the member's consent (beside the member's own setting for it) |
 | `core.remember-device` | ask for the password again after N days |
 | `core.public-shares` | share only with verified identities (planned; not buildable as specified: the server knows no verified identity to check) |
 | `core.offline-cache` [native] | no decrypted data kept on the device. Only the client can keep this, the server cannot enforce it |
@@ -184,9 +184,9 @@ both off a place still works, named by hand. The user's own consent to the two
 ## Consequences
 
 - **It replaces [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and
-  [ADR 0032](0032-capability-discovery-version-gating.md) § 2, § 4 and § 5**; ADR 0032 § 3 keeps capability ≠
-  permission, narrowed per tenant. How the register is built — the catalog, the AND, both deliveries, each kind of
-  switch, the requirements, the external services and an application's erasure window — is
+  [ADR 0032](0032-capability-discovery-version-gating.md) § 2, § 4's who switches where and § 5**; ADR 0032 § 3 keeps
+  capability ≠ permission, narrowed per tenant. How the register is built — the catalog, the AND, both deliveries, each
+  kind of switch, the requirements, the external services and an application's erasure window — is
   [en.platform.capability-register](../features/platform/enablers/en.platform.capability-register.md). The catalog
   (`contracts/platform/capabilities.json`) is what is built, never a list here.
 - **A switched-off link answers like an unknown one.** Every guest endpoint answers a link of a switched-off role
@@ -203,12 +203,11 @@ both off a place still works, named by hand. The user's own consent to the two
 - **A member sees why a link serves no guest.** The guest gate's one predicate returns its reasons, and the share list
   serves the same list on every row, so the list cannot call a link on that a guest gets as unknown; a guest's `404` is
   unchanged.
-- **A feature switch has one gate.** `core.group-space` is gated at group creation only, although the catalog names
-  five use-cases: a feature switch refuses only what is new (decision 5). Creating a Depot drop box needs
+- **A feature switch has one gate.** `core.group-space` is gated at group creation only, although its catalog entry
+  serves several use-cases: a feature switch refuses only what is new (decision 5). Creating a Depot drop box needs
   `core.public-shares.drop-box`, and so does its share.
-- **The served CSP is the instance level's.** The header is written on the event loop, so its origins are a snapshot
-  recomputed after each write, and a tenant's own switch of an external service acts through its set, not through the
-  policy.
+- **The served CSP is the instance level's.** The header is written with no database read, from a snapshot of the
+  instance's origins, so a tenant's own switch of an external service acts through its set, not through the policy.
 - **`download-originals` waits for a measurement.** If guests stream video from the `ORIGINAL`
   ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video playback for guests
   until a video preview tier exists. This must be measured before the entry is built.

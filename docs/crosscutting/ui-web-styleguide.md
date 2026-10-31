@@ -178,7 +178,7 @@ or a one-off `1rem` label sitting in them.
 - Submit/save/confirm = positive (green); cancel/neutral = secondary; destructive = danger with an
   explicit label. Icon-only actions use `.veyq-icon-button` + an `aria-label`/tooltip. Two icon-only actions in one bar
   (a `NodeHeader`'s, a row's) never share an icon: the icon is the only thing a sighted user tells them apart by, so a new
-  action's icon is checked against the list it joins (the Memory header carries `user-plus` twice until inbox #425 is decided).
+  action's icon is checked against the list it joins.
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm
@@ -252,6 +252,62 @@ too long for its row is what tempts the icon-only shape in the first place. Wher
 button a short visible label and keep the full sentence as its accessible name and the dialog's header
 subject, then quote the *visible* one in the surrounding copy.
 
+## Settings hub
+
+One page, `/settings/<section>`, behind an unlocked vault
+([ADR 0022](../decisions/0022-settings-information-architecture.md)). The profile menu's *Settings* entry is the
+shell's only door into it — the top bar carries none, and lint holds that — and beside it the menu carries only the
+theme and language quick-pickers and sign-out.
+
+- **The rail** mixes two axes. *Personal* is always there: appearance and language, sessions, password, adding a device
+  (where the instance links devices), security, the trust reset (only while this device refuses a document), the
+  profile (in a tenant), the way into moderation (for an appointed account) and erasing the account, last. *Shared
+  space* is there while the Tenant scope is active: members, who's who and terms for every member, and mail, storage
+  and capabilities for its owner only. *Groups* is a collapsible collection of every group the caller owns, with a
+  create entry where the instance offers groups.
+- **No section given** opens the active scope's own: a group's page, the Tenant's members, else appearance. A section
+  the caller may not see is not in the rail, and its address leads back to `/settings`.
+- **One breakpoint, 720 px**: above it the rail and the detail pane side by side, the default section's address made
+  explicit; at or below it the rail is a list that drills into a section.
+- **Hub or inline** (ADR 0022 decision 4): what configures me, a space or its access lives here; what changes one node
+  — rename, cover, date, place, move, delete — stays on that node.
+
+## Feedback
+
+One toast channel per client ([ADR 0039](../decisions/0039-transient-feedback-via-toast.md)), mounted once in `App.vue`
+and reached only through `shared/state/useToast` (and `useUndo` for the undo timer); the toast is a layer component
+(§ Components). Three kinds:
+
+- **success** — an acknowledgement that dismisses itself after 4 s;
+- **undo** — a toast with an *Undo* action, its lifetime chosen by the call site, the restore the call site's own;
+- **error** — a failure no open form can hold inline (an undo that could not restore, a write a closed dialog
+  started); it stays until closed.
+
+A validation error and a load error stay inline, beside the form or in the panel they belong to.
+
+## Long lists
+
+Every view over a list of media — the gallery, the trash, the contributors' view, a guest's share (which is the
+member's view, with fewer actions) — goes through one windowed grid
+([ADR 0105](../decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)):
+
+- **Windowing.** The justified layout is computed for the whole list, so the scrollbar is true, and only the tiles
+  whose rows are near the viewport are mounted. The grid appears once its order is final and never reflows a placed
+  tile because a later page arrived.
+- **Thumbnails** are read only for mounted tiles, nearest first, a bounded number in flight; their object URLs sit in a
+  bounded store and are revoked when evicted.
+- **The opened listing.** Each listed seal (a medium's listed tier, its original's blob meta) is opened once per seal
+  and kept, so a sort, a filter or a resize opens nothing twice; a meta edit is a new seal and is opened anew.
+- **The listing worker** opens them off the main thread. It holds the content keys of the open Memory only, drops them
+  when the Memory closes and refuses every later request for it; without a worker, or when it fails, the same work runs
+  on the page thread.
+- **Keyboard.** The grid is one tab stop; the arrow keys, Home/End and PageUp/PageDown move it, and closing the
+  lightbox returns the focus to the tile it showed last.
+
+A new view over media that mounts every item, or opens a seal on the page at each render, is a defect. The targets are
+ADR 0105 § Targets; the reading against them is [uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md)
+§ Quality notes.
+
 ## Product language
 
 **Memory / Chapter** (DE: *Kapitel*) for content; folders are organizational and visually **secondary**
@@ -301,7 +357,8 @@ finds most of it, but the 2026-10-23 sweep found a fifth of its changes only thr
 close button, the password field's show/hide toggle, the date field's segment names and calendar buttons, the toast
 region's name - is a key of the catalog's `ui` block (one per package), read where the component renders, in EN and
 DE; no layer component carries a literal string, and a new one brings its keys into both locale blocks (inbox #434,
-ADR 0107 decision 6). Month and weekday names come from the browser's `Intl` for the language, not the catalog.
+ADR 0107 § Consequences, *Accessibility is ours to keep*). Month and weekday names come from the browser's `Intl` for
+the language, not the catalog.
 
 ## Accessibility & responsiveness
 

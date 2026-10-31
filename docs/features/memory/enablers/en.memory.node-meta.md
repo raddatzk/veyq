@@ -76,6 +76,42 @@
 - **Schema** (core baseline): `veyq_node.wrapped_meta TEXT NULL` and `veyq_node.meta_revision`; the same counter
   on `veyq_media` (Memories baseline).
 
+## The banner
+
+A Memory's or a chapter's `banner` sub-object ([uc.memory.banner](../use-cases/uc.memory.banner.md), why:
+[ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md) decision 2) names
+its bytes in core's attachment slots and frames them:
+
+```
+banner?: { medium: 'image' | 'video',
+           blob:   Ref,                  // the BANNER attachment: the image (JPEG) or the video as it was uploaded
+           poster?: Ref,                 // the BANNER_POSTER attachment: a video's first frame (JPEG); video only
+           type?:  string,               // a video's media type (the uploaded file's container); video only
+           sha256?: string,              // SHA-256 of the file it was made from (base64url, 43 characters)
+           frame:  'fill' | 'fit',       // 'fit': the whole medium, the sides a blurred enlargement of it
+           focal:  { x, y } }            // 0..1 of the medium; what 'fill' keeps in view
+Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
+```
+
+- **A `Ref` carries neither owner nor role** — both are the node's and the slot's, taken from where the meta is read —
+  and not the served blob meta: an image and a poster are always JPEG, and a video's type is the one `type` field.
+- **`sha256`** is the digest of the file the banner was made from. A video banner's `BANNER` blob is that file as it is
+  (its blob meta carries the same digest), so a gallery upload of the file shares its stored object; a gallery medium
+  whose original has that digest is the banner's picture, which its delete confirmation asks about.
+- **`frame`** is decided once in the editor — `fill` for a landscape or square medium, `fit` for a portrait one
+  (height > width), switchable for a portrait one only — and stored, so a reader never re-derives it.
+- **A reader is best-effort:** a malformed focal point is the centre, an unknown frame fills, an unknown shape is no
+  banner and is preserved by every other meta writer. A stored banner's `origin` and `alt` (an older client's) are
+  read by nobody and kept by every other writer.
+- **It fits the meta's cap** (`maxLength: 8192`, shared with the cover, the place and 100 participants): the worst
+  case — those, a range date, the place's name at its bound of 200 code points in 4-byte characters (`MAX_PLACE_NAME`),
+  and a video banner with its poster, a type and the digest — is sealed under the cap by
+  `src/web/src/features/memories/banner/bannerModel.test.ts` ("the meta budget").
+- **The later slot:** the small playback copy will fill `BANNER_PLAYBACK` and add a `playback` ref beside `blob`.
+
+The `participants` sub-object is `{ userIds: string[] }`, at most 100 unique ids
+([uc.memory.participants](../use-cases/uc.memory.participants.md)).
+
 ## Materialize, don't recompute — the reason it lives on the node
 
 The browse card grid (and, later, the tenant map) show + sort by this metadata **but never load a Memory's

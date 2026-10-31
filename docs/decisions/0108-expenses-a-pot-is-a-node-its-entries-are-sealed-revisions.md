@@ -34,7 +34,8 @@ English), *Tab*.
 **2. A Pot is one node; its participants are records in it, its settings its sealed meta.** It lives in any folder beside Memories and
 Depot files, carries its own key like every node ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
 and is a share root with `READ` and `READ_WRITE` — never `WRITE_ONLY`, which reads nothing and so has no balance to
-write against. Only a member creates one: Expenses declares no guest-creatable kind (owner decision 2026-10-14).
+write against. Only a member creates one: Expenses declares no guest-creatable kind
+([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6).
 Deleted, it goes to the space's node trash like every node ([ADR 0061](0061-node-deletion-reversible-node-trash.md));
 its deleted entries never do, they stay inside it (decision 6). The Pot's `node-meta` holds only its base currency and
 its own categories, written by a member whole with the revision it read
@@ -69,7 +70,7 @@ Both vectors go into `contracts/crypto/vectors/v1.json` (additive, ADR 0072 Cons
 (that ADR's decision 3, applied to revisions): every body and its digest (decision 5) stay byte-identical, and the server
 refuses a re-key that changes one, so not even the owner who re-keys can rewrite the history. Rejected: a field key
 derived from `K_node` directly, with the digest taken over the plaintext — one purpose less, but every re-key rewrites
-every body, and its owner could rewrite the history undetected (owner 2026-10-23). Its plaintext is padded to fixed size classes, so an itemized restaurant bill does not stand out from a
+every body, and its owner could rewrite the history undetected. Its plaintext is padded to fixed size classes, so an itemized restaurant bill does not stand out from a
 single taxi ride, and the contract caps a revision at 16 KiB.
 
 **5. Each revision names the revisions its writer had seen.** Its plaintext carries the current **heads** of the Pot as
@@ -90,7 +91,7 @@ nothing: whoever may write can cancel any entry with a counter-entry. What prote
 ADR 0080 decision 6 refuses a guest's node delete: an edit or a delete is a revision, every revision stays
 readable with its writer, a deleted entry is shown in the Pot's own deleted list and restorable for the platform's
 trash retention ([ADR 0061](0061-node-deletion-reversible-node-trash.md)), and no guest action erases anything at once.
-**Participants** follow the same shape (owner 2026-10-23): whoever may write adds and renames one, and the rest is a
+**Participants** follow the same shape: whoever may write adds and renames one, and the rest is a
 member's. A member **deactivates** a settled participant (entries keep the name; new entries and the overviews no longer
 offer it; a member activates it again), **deletes** a settled one (entries show it as one merged "deleted people", and
 its name is erased, decision 3), or **removes** one that no revision of any entry, live or deleted, names (it is
@@ -101,34 +102,33 @@ There is no extra permission; the server knows each revision's writer (a member'
 pair core's attachments record), so "only one's own entries" could be enforced later without the server learning more.
 A member reads the history with each writer's name; a guest reads every revision and its time but no writer's name,
 because a link is served no name: no guest's ([ADR 0030](0030-contributor-public-share.md) point 8) and no member's
-(inbox #190 — a Memory's uploader and Depot's guest file listing stay unnamed for a guest the same way).
-A guest's revision and receipt are guest writes like any other: behind `ShareGuestGate`, recorded by
-`GuestWriteRecords`, and reportable with a hold copy
-([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)). A report of an entry
-reaches the whole entry — every revision's `K_rev` and every receipt's `K_blob` — and a receipt can also be reported
-on its own; both are an `ITEM` (owner 2026-10-23). One report share carries up to 256 keys (`@veyq/crypto`'s
-`REPORT.maxKeysPerShare`, inbox #540), and an entry's share carries all of them: an entry with more revisions and
+([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decisions 7 and 8 — a Memory's
+uploader and Depot's guest file listing stay unnamed for a guest the same way).
+A guest's revision and receipt are guest writes like any other: behind core's guest gate, in the guest-write record
+([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10), and reportable
+with a hold copy. A report of an entry reaches the whole entry — every revision's `K_rev` and every receipt's `K_blob`
+— and a receipt can also be reported on its own; both are an `ITEM`. One report share carries a bounded number of keys
+(256, the report codec's), and an entry's share carries all of them: an entry with more revisions and
 receipts than that is not reported as an item at all — the dialog offers its Pot instead, a `NODE` whose key reaches
 every revision and receipt in it, as it offers the enclosing folder above 100 items (ADR 0093 § 1). So no report of an
 entry leaves part of it out; the hold copies every revision row either way. A moderator's content block of the Pot (or a
 node above it), or of one entry, refuses every revision of what it reaches but a tombstone, and every receipt for it,
-from a member and a guest alike (`451 blocked_by_operator`, inbox #542) — ADR 0093 § 6's "deleted, never replaced or
+from a member and a guest alike (`451 blocked_by_operator`) — ADR 0093 § 6's "deleted, never replaced or
 restored": a tombstone is the record's deletion, and an erasure is a removal, so neither is refused.
 
-**7. Receipts are images or PDFs of at most 10 MB, any number per entry, in Expenses' own table.** Core's
+**7. Receipts are images or PDFs of at most 10 MiB, up to 100 per entry, in Expenses' own table.** Core's
 attachments hold one blob per named slot of a node (`ux_attachment_node_slot`), so a receipt is a row of Expenses'
 (receipt, entry, blob, writer), filled through core's `UploadCompletion` as Memories' media are; its `K_blob` is wrapped
 under the Pot's key and bound to the blob, the node and the role as Depot's is, so it needs no new blob purpose. The
 server enforces the size, which it sees; only the client can enforce the type, which is sealed — an honest client
 offers anything else for download and never renders it. No previews are made. A revision that drops a receipt names it
 to the server, and a receipt nothing holds any more, or whose entry is deleted, is erased after the trash retention.
-Built with these choices, the mechanics in [docs/apps/expenses.md](../apps/expenses.md) § Receipts:
-the cap is the role's, a seam core's upload start asks of every application (`MemberBlobRoles.maxBytes`), never a size
-core names for one; the retention is core's node trash retention, and a deleted entry past it is offered no restore;
-a dropped receipt is never held again; a moderator's content block of a receipt or of its entry answers `451` for its
-bytes, member and guest alike; a link's storage usage sums every application's term, so a folder link holding a Memory
-and a Pot holds one limit for both, never one per application (ADR 0073 § 4); the PDF renderer is core's (`src/web/src/shared/pdf/`), lifted out of
-Depot, since an application may not import another.
+The size cap is the role's, a seam core's upload start asks of every application, never a size core names for one; the
+retention is core's node trash retention, with no key of Expenses' own; a link's storage usage sums every
+application's term, so a folder link holding a Memory and a Pot holds one limit for both, never one per application
+([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) § 4); and the PDF renderer is core's, since an
+application may not import another ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)). The
+mechanics are [docs/apps/expenses.md](../apps/expenses.md) § Receipts.
 
 **8. Exchange rates are fetched automatically, straight from the client — the second third-party request without
 opt-in.** Where a Pot uses a currency other than its base, a device fetches **the whole day's table** of an
@@ -141,19 +141,16 @@ so a later table never moves an old balance and a device without the provider st
 configurable, and the operator and a tenant owner switch the fetch off as `expenses.exchange-rates`
 ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A new instance starts with
 **Frankfurter** (open source and self-hostable, serving the ECB's reference rates), as the breached-password check starts
-with HIBP; a mirror can replace it (owner 2026-10-23). **How it serves the ECB's rates** (measured and decided when the
-fetch was built, 2026-10-25): the seeded address is Frankfurter's ECB endpoint,
-`https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}` — the ECB's own 30 euro reference rates (29 currencies
-and the euro's `1`), never v2's default table, which blends 105 sources and carries non-ISO rows (owner 2026-10-25: "nur
-EZB"); v1 is deprecated. It answers `access-control-allow-origin: *` to a plain `GET`, a weekend or a future date with
-the latest working day's rows, and the ECB's terms apply to it: its rates are free to reuse with the ECB cited as the
-source, and are published for information. So the editor says a filled rate is computed from the ECB's reference rates
-of the rows' date, and the privacy notice names Frankfurter as the service the browser contacts and the rates as the
-ECB's. Whatever address the Server Owner sets must serve the same table (a mirror, a self-hosted Frankfurter). A
-currency the table lacks is typed, never offered from another source. **The tenant's switch reaches a link guest too:**
-a guest's client holds only the instance's manifest, so its Pot read carries the table's address exactly while the
-entry is active for the Pot's tenant (`exchangeRateService`, owner 2026-10-25, option (a) of the CR's guest question), and
-a member's client reads its tenant's set — neither fetches where that tenant's privacy notice names no fetch.
+with HIBP; a mirror can replace it. **Only the ECB's reference rates:** the seeded address is Frankfurter's ECB
+endpoint, the ECB's own euro reference rates, never a table that blends many sources and carries non-ISO rows. The
+ECB's terms let its rates be reused with the ECB cited as the source, so the editor says a filled rate is computed from
+the ECB's reference rates of the rows' date, and the privacy notice names Frankfurter as the service the browser
+contacts and the rates as the ECB's. Whatever address the Server Owner sets must serve the same table (a mirror, a
+self-hosted Frankfurter). A currency the table lacks is typed, never offered from another source. **The tenant's
+switch reaches a link guest too:** a guest's client holds only the instance's manifest, so its Pot read carries the
+table's address exactly while the entry is active for the Pot's tenant, and a member's client reads its tenant's set —
+neither fetches where that tenant's privacy notice names no fetch. The endpoint and the fetch are
+[docs/apps/expenses.md](../apps/expenses.md) § Exchange rates.
 
 **9. Everything that reads amounts runs in the client**: balances, the settle-up suggestion, the overviews. The entry
 format is versioned from its first revision (ADR 0079 decision 7), and its rounding rule is part of the version, so
@@ -171,8 +168,8 @@ every device computes the same balance from the same entries.
   in a passage of its own (`exchange-rates`, beside the breached-password check's, switched by the entry), and the
   security model lists the fetch beside the breached-password check; the mechanics are in
   [docs/apps/expenses.md](../apps/expenses.md) § Exchange rates.
-- **Out of the first cut:** previews, offline, push, a category per line item, historical rates per entry date (an
-  entry entered late takes the day's rate unless typed). Each is additive under the versioned format.
+- **Out of the first cut** ([docs/apps/expenses.md](../apps/expenses.md) § Out of the first cut): each is additive
+  under the versioned format.
 
 **Alternatives rejected.**
 

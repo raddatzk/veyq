@@ -74,14 +74,14 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
 
 ## Quality notes
 
-- **Sharing (groups/tenant) — consent is per space, not a free-ride.** Tiles + geocoding are **one opt-in**
-  consented **per space** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)): a user
-  pre-opts-in in personal settings (then a join is just an info pill) or opts in per space. An owner enabling it
-  **notifies** members and does **not** bind them — a **non-consenting** member's device makes no request, so
-  they get **no map** and see an already-resolved name only as **text**; they give up the map to keep their
-  privacy (not a free-ride). **Unanimity binds:** once all members consent it is binding for new members (a
-  ratchet — to withdraw you leave the space, you don't stay as a text-only rider). A resolved name is sealed in
-  the shared `wrappedMeta`, so members holding `K_node` see it without their own device contacting the provider.
+- **Sharing (groups/tenant) — one consent, decided per space, built per browser.** Tiles + geocoding are **one
+  opt-in**. What is built is one consent per browser, asked in context and applied in every space; it cannot be
+  withdrawn in the interface yet. The per-space consent of a group — and the opt-in in personal settings — are
+  decided and **not built** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md); the current
+  picture is [Memories § Places and the map](../../../apps/memories.md#places-and-the-map)). Either way a
+  **non-consenting** member's device makes no request, so they get **no map** and see an already-resolved name only
+  as **text**. A resolved name is sealed in the shared `wrappedMeta`, so members holding `K_node` see it without
+  their own device contacting the provider.
 - **Multilingual names.** A stored `name` is a **single frozen string**. For **shared** content it resolves in
   the **tenant's configured language** (a tenant setting) — consistent across members, not the random locale of
   whoever resolved it first; a personal space uses the user's own locale. Because `nameAnchor` is kept, an
@@ -102,18 +102,15 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   the `geocoded` name auto-resolves on the first geotagged media (standing consent — see the reverse-lookup note).
 - **GPS rides the listed capture tier — like the date.** The medoid (and every `auto` re-medoid on media-add)
   reads GPS **list-level**, the way date-`auto` reads `capturedAt` — GPS is promoted into the always-listed
-  capture tier rather than left in the per-item EXIF blob. The lazy alternative (fetch each media's sealed EXIF
-  on demand) was rejected: it would make `derivedMode: 'auto'` re-medoid an N-fetch operation on every upload.
+  capture tier rather than left in the per-item EXIF blob, so an `auto` re-medoid on every upload is no N-fetch
+  operation.
   Still sealed (under a field key derived from `K_node`), still operator-blind; no backfill — older media without the listed tier don't
   contribute to the medoid (exactly as they don't to date-`auto`).
-- **A per-PHOTO place name is a different shape, and does not reopen the rejection above.** What was rejected is
-  N per-item fetches to compute **one** answer (the medoid), repeated on **every open**. The detail panel
-  resolves **one** name for the **one** photo in front of the user, **once ever**, and seals it into the same
-  listed tier the medoid already reads — so the second open is free and every later reader gets it from the
-  tier. Different frequency, different trigger, same boundary: still client-direct, still identity-free, still
-  gated on the same consent, and now under an explicit request discipline
-  ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md) § *Request discipline*) that the
-  medoid path never needed because it never asked per item.
+- **A per-PHOTO place name.** The detail panel resolves **one** name for the **one** photo in front of the user,
+  **once ever**, and seals it into the same listed tier the medoid reads — still client-direct, identity-free and
+  gated on the same consent. Why this is no per-item fetch for the medoid, and the request discipline it follows:
+  [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md) § *Request discipline* and *What this does not
+  reopen*.
 
 ## User impact
 
@@ -131,7 +128,7 @@ coordinates.
   — this UC applies it at the node level), [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)
   (reverse-only, provider-neutral geocoding; Nominatim reference; veyq-blind),
   [ADR 0018](../../../decisions/0018-map-tiles-provider-neutrality.md) (map tiles: raster via Leaflet,
-  provider-neutral, self-host/opt-in-public, veyq-blind)
+  provider-neutral, third-party only and client-direct, veyq-blind)
 - Crosscutting: [security-model](../../../crosscutting/security-model.md) (operator-blind = the veyq operator;
   third-party services are a separate consented boundary)
 - Future: **on-device coarse names** (a bundled gazetteer, ADR 0016); **derived** place from GPS clusters

@@ -6,6 +6,7 @@ sources:
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
+  - docs/decisions/0078-production-reads-committed-like-its-tests.md
 ---
 
 veyq splits its configuration in two
@@ -157,6 +158,11 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `garage.resources.limits.memory` | `512Mi` | |
 | `garage.resources.requests.cpu` | `100m` | |
 | `garage.resources.requests.memory` | `128Mi` | |
+
+A database of your own needs no isolation setting: veyq sets READ COMMITTED on every connection itself
+([ADR 0078](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0078-production-reads-committed-like-its-tests.md)).
+If you replicate it with a binary log, use `binlog_format=ROW` or `MIXED` (MariaDB's default): at READ COMMITTED a
+`STATEMENT` binlog refuses every write. The bundled database keeps no binlog.
 
 ### Backups
 

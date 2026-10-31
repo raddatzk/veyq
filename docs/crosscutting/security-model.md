@@ -42,17 +42,19 @@ state that gap plainly. In a **self-hosted** deployment the operator is the user
 
 "Operator-blind" names one adversary: **the veyq server / operator.** It does **not** mean the client never
 talks to any external service. A feature may let the client reach a **third party directly** — today the
-opt-in **reverse-geocoding** lookup that turns a photo coordinate into a place name
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)), the automatic **breached-password check** and the
-automatic **day's exchange rates** of Expenses (both below), tomorrow map tiles for the tenant map. Such a
-request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
+opt-in **map tiles** of Memories' maps (the place editor's and a level's map: the viewport's `{z,x,y}` and the client
+address reach the configured tile host, [ADR 0018](../decisions/0018-map-tiles-provider-neutrality.md)), the opt-in
+**reverse-geocoding** lookup that turns a photo coordinate into a place name
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) — both only after the member's consent, one consent
+for the two — and the automatic **breached-password check** and **day's exchange rates** of Expenses (both below).
+Such a request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
 operator's view:
 
 - **Client-direct, never proxied through the veyq backend.** Routing it through veyq's server would hand the
   operator the coordinate — so these requests go **straight from the device to the provider**. Proxying is
   explicitly disallowed.
 - **No veyq identity, no content context.** The provider receives only what its function needs — a bare
-  coordinate (+ the client IP) — never a user id, a Memory id, or any veyq token.
+  coordinate or a tile's `{z,x,y}` (+ the client IP) — never a user id, a Memory id, or any veyq token.
 - **Opt-in + transparent — and opt-in is standing consent** (two stated exceptions: the breached-password check and
   the exchange rates, below). Off by default; enabling it is an explicit choice
   with a plain-language note that a request leaves the device. Once enabled it may run **automatically** (e.g. a

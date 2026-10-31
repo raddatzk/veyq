@@ -37,6 +37,13 @@ which **server** role does it carry* — never anything scope-specific. It is **
 denies any endpoint without an annotation, so a new endpoint **fails closed**, and `DefaultDenyTest` pins that
 with a deliberately unannotated probe. This layer has never been the site of a defect.
 
+**Beside the annotation, for the moderation operations alone: the proof gate.** A moderation operation is
+`@Authenticated`, and one request filter then requires the `MODERATOR` role — an accepted, unremoved appointment,
+read from its own table, not from the server role
+([ADR 0099](../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 1) —
+**and**, where the operation declares it, a proof of the moderation key (§ 2). It is still a coarse gate: it answers
+*who* the caller is on the instance, never anything scope-specific. `@RolesAllowed` cannot carry the proof, and its refusal would read `not_server_owner`.
+
 **In front of layer 1, for the Server-Owner operations alone: the admin channel.** Reachability, not a role — an
 operation marked `x-veyq-channel: admin` answers only on the backend's admin listener, which nothing but the admin
 container is pointed at, and 404s on the public port; the Server-Owner role behind it is still required
@@ -56,7 +63,7 @@ different dimensions** — the single most common source of confusion here, and 
 | # | Dimension | Answers | Vocabulary | Enforced by |
 |---|---|---|---|---|
 | 1 | **Session** | is there a valid session? | — | annotation (layer 1) |
-| 2 | **Server role** | may they administer the *server*? | `SERVER_OWNER` · `MEMBER` | annotation (layer 1) — the **only** declarative one |
+| 2 | **Server role** | may they administer or moderate the *server*? | `SERVER_OWNER` · `MEMBER`; `MODERATOR` | `SERVER_OWNER`: annotation (layer 1) — the **only** declarative one; `MODERATOR`: the moderation proof gate |
 | 3 | **Membership** | do they belong to this scope / tenant? | — (an *accepted* row exists, or not; a tenant = its root scope) | `ScopeAccess` |
 | 4 | **Grant** | do they hold this scope's key? | — (`wrappedGrant is not null`) | `holdsGrant` |
 | 5 | **Scope role** | may they *manage* this scope? | `OWNER` · `MEMBER` | `isScopeOwner` · `isTenantOwner` · `ownerCount` · `memberRole` |
@@ -70,7 +77,7 @@ role a tenant invite confers. **`OWNER` means two** (#5, and the invite's). The 
 other**: a share guest has no account, so no membership, grant or scope role can ever apply to them.
 
 The values themselves are never copied here — read them at their definition sites:
-`core/identity/ServerRoles.kt` (#2) · `core/membership/MembershipEntity.kt` (#5) ·
+`core/identity/ServerRoles.kt` and `core/identity/ModeratorEntity.kt` (#2) · `core/membership/MembershipEntity.kt` (#5) ·
 `core/sharing/Entities.kt` (#6). Guards #3–#5 all live in the one query-only leaf
 `core/membership/MembershipStore.kt` ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); #6/#7
 are core sharing's own (`ShareAccessPolicy`, `ShareGuestGate`).
@@ -176,6 +183,8 @@ Nothing is verified by this doc. It points at the guards that already exist:
   refusal itself.
 - `SessionTokenIdentityProviderTest` — the token → `SecurityIdentity` resolution (principal + server role) that
   layer 1 rests on.
+- `ModerationProofPostureSweepTest` — every moderation operation is key-proved or named, with its reason, on the
+  gate's exemption list, and every resource implementing the moderation API is `@Authenticated` or `@PermitAll`.
 - Per-feature slice tests carry the layer-2 cases (owner-only, key-holder-only, share role, share password); the
   share-password *bound* belongs to [cc.security.rate-limit](cc.security.rate-limit.md).
 

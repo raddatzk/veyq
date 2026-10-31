@@ -24,7 +24,7 @@ reference; the decisions + rationale live in [ADR 0021](../decisions/0021-operat
 | `scopeId` | cleartext | routing key — the server already knows membership |
 | `capabilityTag` | cleartext, **opaque** | which capability the job needs (fixed public registry in `contracts/`; a bare dump sees `0x9f3a`, not `face-recognition`) |
 | `resourceRef` | cleartext, opaque id | the resource acted on (e.g. a mediaId) |
-| `status` / `leaseHolder` / `leaseExpiry` / `attempts` | cleartext | lease + retry bookkeeping |
+| `status` / `leaseHolder` / `leaseExpiresAt` / `attempts` | cleartext | lease + retry bookkeeping |
 | **body** (`type` + params) | **sealed** (under a `K_SC`-derived key) | the actual task + parameters — only a scope-key-holder unseals it. No job carries a sealed body yet; the first that does adds its purpose to the typed seal union and a vector ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)) |
 | `sealedResult` (optional) | **sealed**, opaque | a job-specific output when it is not already a normal artifact |
 
@@ -41,14 +41,20 @@ sequenceDiagram
   O->>S: create job { scopeId, capabilityTag, resourceRef, sealed body }
   W->>S: pull { my capability tags }  (scope ∈ my memberships ∧ tag ∈ mine)
   S-->>W: claimable jobs
-  W->>S: claim (atomic: status=leased, leaseExpiry=now+TTL)  — first wins
+  W->>S: claim (atomic: status=leased, leaseExpiresAt=now+TTL)  — first wins
   W->>W: unseal body (K_SC) → do the work on-device<br>(long jobs heartbeat to extend the lease)
   W->>S: sealed write via the normal path (grant / derivative / node) + mark done<br>(or post sealedResult)
   Note right of S: crash before done → lease expires → lazy reclaim by another worker<br>(at-least-once#59; jobId-keyed idempotent completion#59; attempts>max → dead-letter)
 ```
 
 - **Claim / lease.** Atomic: a compare-and-set on `status` ([§ Persistence](#persistence)). Every claim leases with a
-  **TTL**; expensive jobs **heartbeat** to keep it. Only the lease holder heartbeats, completes, fails or
+  **TTL**; expensive jobs **heartbeat** to keep it. The TTL is `veyq.tasks.lease.ttl`, **2 min** by default, and the
+  web worker renews it every **30 s** while it works, so a hidden tab whose timers the browser throttles to one a
+  minute still keeps it; a Server Owner who sets it below about **60 s** defeats the renewal, and such a tab loses a
+  job it is still working on. A worker that stops — a tab closed, reloaded or navigated away — frees its job only when
+  the lease runs out: there is **no release endpoint** on `pagehide`, and a holder does not take over its own valid
+  lease, so the same user's next page claims the job like any other worker, after the expiry
+  ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §6). Only the lease holder heartbeats, completes, fails or
   declines ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §6) — idempotency makes a *repeated*
   completion harmless, it does not make an *unclaimed* one legitimate. Each of those transitions, the completion
   included, is a compare-and-set on the lease (`… where status = LEASED and leaseHolder = <caller>`) whose row count
@@ -59,8 +65,11 @@ sequenceDiagram
   blob, a node update) → mark `done`; the originator observes it through that path. Otherwise an optional sealed
   `sealedResult`. No plaintext result store.
 - **Origination.** The server may originate only **structural, non-sensitive** jobs it already understands
-  (a membership whose grant is behind the scope's epoch → `grant-delivery`), and event jobs it witnessed but cannot complete (a co-shared member
-  cut or an account rotation → `scope-rotation`); a client's enqueue of either tag is refused. **Content-processing jobs are client/agent-originated**, so the
+  (a membership whose grant is behind the scope's epoch → `grant-delivery`), and event jobs it witnessed but cannot
+  complete (a co-shared member cut → `scope-rotation`; an account rotation queues none, its rotator mints its scopes'
+  epochs itself, [ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 4); a client's enqueue of
+  either tag is refused. `grant-delivery` is found on claim (reconcile-on-claim); an hourly backstop
+  (`veyq.tasks.grant-delivery.reconcile.every`) originates it for scopes no key-holder pulled. **Content-processing jobs are client/agent-originated**, so the
   server never picks a content-semantic type.
 
 ## What the operator sees (honest)
@@ -90,9 +99,13 @@ module (extraction-ready, not extracted).
 
 ## Consumers
 
-- **First:** member-add grant delivery ([uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md),
-  [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) — trivial blind body, universal tag, short lease;
-  validates the core loop.
+- **Grant delivery** ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) — the first consumer: trivial
+  blind body, universal tag, short lease. Built for member-add, it now serves only a member whose grant is behind —
+  one a rotation skipped, or a newcomer whose invite a rotation declared pending — since a newcomer grants itself
+  ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+  decision 5).
+- **Scope rotation** — a queued rotation of a group whose co-shared member was cut, offered only to an owner of the
+  scope ([uc.spaces.complete-queued-rotation](../features/spaces/use-cases/uc.spaces.complete-queued-rotation.md)).
 - **Informing (later):** media derivatives / **transcode** (Uploads — inbox #17),
   **face-recognition / on-device ML** (Agent — inbox #10/#23) — the heavy consumers that
   shaped the lease/tags/result.

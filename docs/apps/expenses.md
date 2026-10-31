@@ -1,7 +1,6 @@
 # Application: Expenses
 
-> **Built, on the V1 line** (owner 2026-10-23; cr-expenses-ledger, cr-expenses-receipts and
-> cr-expenses-exchange-rates, 2026-10-25, their browser pass lane L1's `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`,
+> **Built, on the V1 line** (its browser pass lane L1's `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`,
 > EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their
 > people, entries with their history and receipts, the day's exchange rate, the ledger check, balances, settle-up,
 > overviews, "Who am I" and the link are built. Backend `:apps:expenses`
@@ -80,7 +79,7 @@ compute alike:
 - An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
   first and allocated as one, so rounding never accumulates across items.
 - An entry that does not add up (payers' amounts beside the total, exact amounts beside it, line items above it) is
-  not saved; one that arrives anyway counts nowhere and is shown as invalid (owner 2026-10-24). So does an entry that
+  not saved; one that arrives anyway counts nowhere and is shown as invalid. So does an entry that
   names someone who is no participant of the Pot: it has no place in the join order the rounding breaks ties by.
 
 **Reading a Pot.** Where the schema leaves a reader a choice, every client chooses alike:

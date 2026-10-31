@@ -88,13 +88,15 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 - In `MediaLightbox` the photo's **uploader's name** is shown. For a `user:` owner key it links to that person's profile
   (members only). For a `share:` key, and in **any** share view, the name is shown **without** a link.
-- A guest today gets **no uploader names** ([inbox #190](../../../inbox.md)): in a share view, a member-uploaded photo's
+- A guest gets **no uploader names** (a link is served no name, [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8): in a share view, a member-uploaded photo's
   uploader stays unresolved — nothing is shown. A guest-uploaded photo shows a non-clickable name to members, marked as
   a guest's — "Ben (guest)" (inbox #433, core's `guestDisplayName`): a guest names itself freely and could pick a
   member's name. "Contribution", where the name does not open, stays as it is.
-- The uploader is independent of the participant list: a non-participant uploader is still shown. The bucket tab keeps
-  usernames until it is aligned with the display-name rule.
-- **Depot is not in the first version:** `files.openapi.yaml` has no uploader field (inbox follow-up).
+- The uploader is independent of the participant list: a non-participant uploader is still shown. The Contributions
+  tab still names members by username ([uc.memory.buckets](uc.memory.buckets.md)).
+- **Depot's file page** names who uploaded the file's current content, to members only
+  ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 8,
+  [uc.depot.view-file](../../depot/use-cases/uc.depot.view-file.md)).
 
 ## Quality notes
 
@@ -102,8 +104,8 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
   graph (who was on which trip). The cost is stated in the ADR: no server-side notifications and no server-side query.
 - **Guests are an exception to "share = member view".** Rights only remove functions everywhere else; here the
   interface withholds a section, because it points at other members (ids only; see E1 for the residual).
-- **Display name rule:** real name when it opens, else username — the same in the dialog, the popover, the profile and the
-  uploader name.
+- **Display name rule:** member identity's one rule ([en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md)
+  § The display name) — the same in the dialog, the popover, the profile and the uploader name.
 - **Routing:** the profile is a fragment route handled only in `core/node/location.ts`; `people` is a reserved route
   segment (an application cannot claim it, and a folder, file or drop box called "People" at a scope root is numbered `people-2`). A history-mode path would reach the server's access log.
 

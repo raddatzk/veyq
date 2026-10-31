@@ -1,7 +1,7 @@
 # ADR 0083 — Memory participants are a sealed list in the Memory's metadata
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: decision 9's display name in the Contributions tab (inbox #816))
 - Date: 2026-10-13
 - Model: [Application: Memories](../apps/memories.md)
 
@@ -10,8 +10,9 @@
 Inbox #20 ("People & participants") asks that a Memory can say **who was there** — the people of a trip, a wedding —
 and that a person can be opened to see the Memories they took part in. Two things make it a design question rather than
 a field: the server is **operator-blind** (a relation "person P is on Memory M" is exactly the co-participation graph the
-operator must not learn), and a **share is the member view** with rights removed ([inbox #401](../inbox.md), the owner's
-principle of 2026-10-09), which raises what a guest may see of it.
+operator must not learn), and a **share is the member view** with rights removed (the owner's principle,
+[ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences), which raises what a guest may
+see of it.
 
 A Memory already has the right home for sealed per-Memory facts: the `wrappedMeta` blob under a field key derived from `K_node` (purpose
 `node-meta`) that carries its date, place and cover, written with a compare-and-set on `metaRevision`
@@ -59,17 +60,16 @@ exclusion cryptographic would need a new AEAD purpose (a nested seal under a key
 on the server — both rejected for the first version.
 **Accepted residual:** a link holder with developer tools can read the participant **count and the opaque user ids**
 from the blob, **but no names**: the list holds ids only, and a guest has no member directory
-([inbox #190](../inbox.md), the public resolve serves no name). This is comparable to the residual already accepted in
+(a link is served no name, [ADR 0030](0030-contributor-public-share.md) point 8). This is comparable to the residual already accepted in
 [ADR 0030](0030-contributor-public-share.md) point 8, where a guest's device record of its own uploads is likewise a
 client-side boundary. **No name snapshot is ever stored** — in the list or on a share. **If participants ever carry
 names, snapshots or anything beyond opaque ids, this decision must be re-decided** (the residual then discloses people).
 A per-share opt-in is a possible later decision, **not made now**.
 
 **5. A participant opens a member profile — members only.** Clicking a participant opens a profile page at the fragment
-**`#people/<userId>`** (the reader also accepts `#/people/<userId>`), never reachable from a share. It is routed in `src/web/src/core/node/location.ts` (`parseHash` /
-`buildHash`, the one place `validate_web_fragment_paths_via_location.py` allows), and `people` is added to
-`RESERVED_ROUTE_SEGMENTS` in `core/applications/registry.ts` (no application can claim it as a route slug) and
-`segmentsOf` numbers a folder, file or drop box called "People" at a scope root `people-2`, so no node ever has the profile's path.
+**`#people/<userId>`**, never reachable from a share. `people` is a reserved route segment, so no application claims it
+and no node at a scope root ever has the profile's path (the routing is
+[uc.memory.participants](../features/memory/use-cases/uc.memory.participants.md)'s).
 Not `~people` (the `~` prefix is the personal-scope token), and not a history-mode path: those reach the server's access
 logs, a fragment does not.
 A foreign `~username` stays a personal-scope token, never a profile
@@ -78,18 +78,17 @@ A foreign `~username` stays a personal-scope token, never a profile
 **6. Profile content.** The **display name** (the sealed real name, falling back to the username — the rule in decision
 9), an **avatar** (the member's picture, [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md), else a letter), and below them **every Memory in which
 this person is a participant and the viewer has access**. The list is computed **in the client**: a lazily built
-in-memory index `Map<userId, Set<memoryRef>>` over the tenant scope and every group scope the viewer is in
-(`fetchTreeRows` with ETag / `If-None-Match` revalidation, [ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)),
+in-memory index from person to Memories over the tenant scope and every group scope the viewer is in (each level's
+tree revalidated by its ETag, [ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)),
 unsealing each Memory's meta. The **personal scope is excluded**. Access is enforced for free: only Memories the viewer
 can list are ever read. A **size cap** stops the walk and the page says honestly that the list is **partial**.
 
-**7. Uploader attribution is independent of participants.** The photo's detail (`MediaLightbox`) shows the **uploader's
+**7. Uploader attribution is independent of participants.** The photo's detail in the lightbox shows the **uploader's
 name**. For a `user:` owner key the name **links to the profile** (members only); for a `share:` key, and in any share
-view, it is shown **without a link**. A non-participant uploader is still shown. What a guest sees today, exactly:
-guests get **no uploader names at all** ([inbox #190](../inbox.md): the public resolve serves no name), so in a share view
-the uploader of a member-uploaded photo stays **unresolved** — nothing is shown, not a placeholder. A guest-uploaded
-photo's `share:` key resolves for members only, as a non-clickable name. The bucket tab keeps usernames until it is aligned
-with the display-name rule.
+view, it is shown **without a link**. A non-participant uploader is still shown. Guests get **no uploader names at
+all** (a link is served no name, ADR 0030 point 8), so in a share view the uploader of a member-uploaded photo stays
+**unresolved** — nothing is shown, not a placeholder. A guest-uploaded photo's `share:` key resolves for members only, as
+a non-clickable name.
 
 **8. A file's page names its uploader.** Depot's file page names whoever uploaded the file's **current** content (a
 replace moves it; who created the node is not recorded), to members only. Its mechanism — the attachment's
@@ -105,10 +104,12 @@ What is decided here:
   guest is named by the name it gave itself, without a link, and wherever a member reads a guest's name it is marked
   as a guest's ("Ben (guest)"), because a guest names itself freely and could otherwise pass for a member. Its sealed
   name reaches a member as a ciphertext the server already stores, so no new plaintext and no new relation.
-- **A share guest's listing carries no uploader** ([inbox #190](../inbox.md)): it has an item schema of its own, so the
+- **A share guest's listing carries no uploader** (ADR 0030 point 8): it has an item schema of its own, so the
   member's uploader field cannot reach it by accident.
 
-**9. Display-name rule.** The **real name** when it opens, else the **username**.
+**9. Display-name rule.** A person is named by the one display rule of member identity
+([en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md) § The display name,
+[ADR 0023](0023-per-tenant-member-identity.md)); participants, uploaders and the profile all use it.
 
 ## Consequences
 

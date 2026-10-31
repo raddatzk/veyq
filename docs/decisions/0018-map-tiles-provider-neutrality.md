@@ -1,16 +1,16 @@
 # ADR 0018 — Map tiles: raster via Leaflet, third-party-only, coupled with geocoding (OSM reference)
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: the opt-in in personal settings and its withdrawal, the per-space consent, both ADR 0016's)
 - Date: 2026-07-02
-- Model: [Applications](../apps/README.md)
+- Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
 
 ## Context
 
 The **set-location** editor ([uc.memory.place](../features/memory/use-cases/uc.memory.place.md)) shows a slippy
 map with the Memory's medoid pin; the user pans/zooms to frame the place, and the framed centre + zoom drive the
-reverse-geocoded name ([ADR 0016](0016-geocoding-provider-neutrality.md)). A later **tenant map** plots every
-Memory as a pin. Both need **map tiles** — the basemap imagery — from a **tile server**, the second thing (besides
+reverse-geocoded name ([ADR 0016](0016-geocoding-provider-neutrality.md)). A level's map plots every Memory with a
+place as a pin. Both need **map tiles** — the basemap imagery — from a **tile server**, the second thing (besides
 geocoding) that reaches outside the device. The tensions mirror ADR 0016:
 
 - **Operator-blindness is about the *veyq* operator.** A tile request reveals the **viewport** (roughly where the
@@ -52,7 +52,8 @@ opt-in.**
 - **Two-stage, coupled consent** — governed by the per-space model in
   [ADR 0016](0016-geocoding-provider-neutrality.md): **off** ⇒ no map ⇒ **no location feature at all** in that
   space (no pin, no name); **on** ⇒ tiles **and** geocoding (the basemap loads and reverse-geocoding is
-  available; a name may still be typed manually on the map). There is no tiles-on/geocoding-off middle stage.
+  available; a name may still be typed manually on the map). There is no tiles-on/geocoding-off middle stage. Built
+  so far is one such consent per browser, given in context and applied in every space; it cannot be withdrawn yet.
   Where the **server** serves no map (`memories.map` off,
   [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)), there is
   nothing to consent to and the place is set **without a map**: a typed name, the position from the photos' GPS or
@@ -69,12 +70,13 @@ opt-in.**
 - **No vendor lock-in.** Switching tile providers (public OSM ↔ another permitted server ↔ a future vector
   provider) is a tile-URL / thin-factory change behind the same seam.
 - **One consent covers the map experience.** Because tiles gate geocoding, a member either has the map + naming or
-  neither — consented per space (personal pre-opt-in, owner-soft-enable, unanimity-binds; see ADR 0016). A
-  non-consenting member gets **no tiles → no map**, and sees resolved names only as text.
+  neither — consented per space as decided in ADR 0016 (personal pre-opt-in, owner-soft-enable, unanimity-binds; not
+  built, a per-browser consent stands in). A non-consenting member gets **no tiles → no map**, and sees resolved names
+  only as text.
 - **Pairs with ADR 0016.** Tiles draw the basemap; geocoding turns the framed pin into a name; both are
   client-direct, identity-free, third-party boundaries under one opt-in — documented together in
   [security-model](../crosscutting/security-model.md).
 - **Limitation (honest).** With tiles enabled, the tile server learns the viewport tiles + client IP — a
   *consented, non-veyq* boundary, distinct from the operator-blind invariant.
-- **One toggle for every map.** The personal-space two-stage toggle (off / tiles+geocoding) serves the
-  set-location editor and the tenant map alike; the group consent mechanics are ADR 0016's.
+- **One consent for every map.** The same two-stage consent (off / tiles+geocoding) serves the set-location editor
+  and a level's map alike; the group consent mechanics are ADR 0016's.

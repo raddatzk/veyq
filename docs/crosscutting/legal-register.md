@@ -3,8 +3,8 @@
 - **ID:** legal-register
 - **Type:** **Cross-cutting reference** — the research behind veyq's legal duties: which law, which duty, which
   primary source, and what the project concluded from it. It decides nothing: each conclusion is applied by the ADR
-  it names, and the questions the law leaves open are listed at the end and not pursued.
-- **Status:** **Research, not legal advice.** The open questions are not pursued (owner 2026-10-28) and are treated as
+  it names, and the questions the law leaves open are listed at the end.
+- **Status:** **Research, not legal advice.** The open questions are held as
   [ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § Still open says, and the texts veyq ships are not legally reviewed (owner 2026-10-29; that ADR's § Legal basis
   says why). Where a legal duty and an ADR or the code disagree, the duty wins and the ADR or code is corrected
@@ -139,8 +139,9 @@ a capture lives at most B days, and an erasure is re-applied when an older one i
 
 ## Open questions
 
-Questions the law leaves open, **not pursued (owner 2026-10-28)**: no row tracks them, and what is built and decided is
-taken to meet them. The ADRs keep their own *Still open* numbering, since code and docs cite it.
+Questions the law leaves open. What is built is **our reading, not a reviewed answer**; a question holds back a CR or a
+release only where what is built would be unlawful on a plausible reading and a cheap safe-side alternative exists
+(ADR 0093 § Still open). The ADRs keep their own *Still open* numbering, since code and docs cite it.
 
 | Question | Cited as |
 |---|---|

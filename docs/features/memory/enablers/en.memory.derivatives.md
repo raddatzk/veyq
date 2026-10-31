@@ -4,8 +4,7 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Status:** **built** (web + backend) — the upload generates the tiers on the device, the gallery grid reads the
-  thumbnail and the lightbox the preview. All four design points held as decided (role-tagged blobs with
-  **per-blob keys**, **no backfill**, **first-frame video poster**, the tier sizes); see *Decisions*.
+  thumbnail and the lightbox the preview.
 - **Provides:** a **three-tier** view of each media item — a small **thumbnail** (the grid), a medium
   **preview** (the lightbox), and the **original** (download only) — each its own encrypted blob, generated
   **on the client** so the operator never sees a derivable pixel. Lets the gallery render fast and
@@ -30,7 +29,7 @@
 | **preview** | **lightbox** | JPEG, longest edge **2048 px**, quality **0.85** | opening an item |
 | **original** | **download** | **pristine**, as uploaded (full res + metadata) | explicit download only |
 
-- **The sizes are product defaults, each with a reason.** **Thumbnail 512 px** (cr-0070, raised from 400): a
+- **The sizes are product defaults, each with a reason.** **Thumbnail 512 px**: a
   ~200 px grid tile on a 2×/3× display must not be upscaled into mush. **Preview 2048 px**: covers a lightbox
   on a high-DPI screen without shipping the original. Tunable — but change them deliberately: a re-derive of
   existing media is expensive and there is **no backfill**. (WebP would be smaller — an optional swap, not the
@@ -43,10 +42,10 @@
   enabler exists at all.
 - **Video:** decode the **first frame** to a JPEG **poster**, used for **both** the thumbnail and the preview
   (a still — no motion preview tier this pass). The poster is no longer the *only* way to see a video: the
-  lightbox **plays the original in place** ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md),
-  cr-inline-video-playback) — the poster is what the grid + the un-played lightbox show, and the original is
-  fetched on **play or download**. A compressed/streamable video *tier* is still future work (it needs a
-  transcode enabler).
+  lightbox **plays the original in place** ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md))
+  — the poster is what the grid + the un-played lightbox show, and the original is fetched on **play or download**.
+  A small playable copy is planned, made by a client worker node
+  ([en.memory.playback-derivative](en.memory.playback-derivative.md), inbox #493).
 - Each tier is sealed **exactly like any media blob** — chunked AEAD under its **own fresh random `K_blob`**
   wrapped under the Memory's `K_node` ([en.memory.media](en.memory.media.md)). **No new crypto primitive** — a
   derivative is another blob with a role tag.
@@ -95,7 +94,7 @@ in the Worker exactly as it would on the page and uploads original-only, with no
 poster stays on the page thread (a Worker has no `<video>`), so a backgrounded tab still pays that wait once per
 video.
 
-## Decisions (settled)
+## How the tiers are stored
 
 1. **Attachment / keying.** The `media` record carries `original` + `derivatives: [{ kind, blob }]` —
    **role-tagged, opaque blob ids**, a contract delta on `media.openapi.yaml` (start/complete/list). Each blob
@@ -106,12 +105,11 @@ video.
    `<original-name>-<thumbnail|preview>.<suffix>` naming is a **client-side download-filename** convention only
    (derived from the decrypted original name); **storage stays opaque blob ids** — filenames are operator-blind
    under `K_node`.
-2. **No backfill.** The instance is treated as **fresh** — any current pre-derivative media (cr-0028) is
-   simply wiped, not migrated. Every image/video media therefore has its derivatives from upload; the gallery
-   may **assume** they exist (the only fallback is the rare non-image/non-video type).
-3. **Video = first-frame poster** (JPEG), used for both thumbnail and preview; the video original only on
-   download. Motion/short-clip preview is a later pass.
-4. **Tier sizes:** thumbnail JPEG longest-edge 512 / q0.80 (raised from 400 for hi-DPI, cr-0070), preview
+2. **No backfill.** Every image/video medium has its derivatives from upload — none was ever migrated in — so the
+   gallery may **assume** they exist (the only fallback is the rare non-image/non-video type).
+3. **Video = first-frame poster** (JPEG), used for both thumbnail and preview; the original plays in place
+   (ADR 0047) and downloads. A motion/short-clip preview does not exist.
+4. **Tier sizes:** thumbnail JPEG longest-edge 512 / q0.80 (for hi-DPI), preview
    JPEG longest-edge 2048 / q0.85 (see *The three tiers* for why each).
 
 ## Quality notes

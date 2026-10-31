@@ -1,10 +1,10 @@
 # ADR 0022 — Settings & administration information architecture (one scope-contextual hub)
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: decision 3's read-only page of a group the member does not own (inbox #814))
 - Date: 2026-07-04
 - Model: [ui-web-styleguide](../crosscutting/ui-web-styleguide.md)
-- Replaced in part: the Server → Tenants collection (decisions 3 and 4) by ADR 0065 (built)
+- Replaced in part: decisions 3 and 4 by ADR 0065 (built)
 
 ## Context
 
@@ -25,7 +25,7 @@ responsive sidebar↔detail split, with sections filtered by the scopes in the c
 role.
 
 1. **A route, not a popup.** The *Settings* entry (sidebar profile menu) navigates to **`/settings`** — a real page,
-   deep-linkable per entity (`/settings/group-<id>`, `/settings/tenant-<id>`), back-button-friendly, and
+   deep-linkable per section and per group (`/settings/<section>`, `/settings/group-<id>`), back-button-friendly, and
    bookmarkable. A dropdown holds too much; a modal has no URL and on mobile is a full page anyway. (A desktop
    *overlay* look is an optional later cosmetic over the same routes — no structural difference.) That entry is
    **context-aware**: with no explicit section it resolves to the caller's **active scope as a concrete entity** —
@@ -58,27 +58,25 @@ role.
    hub. Rule of thumb: *hub = "about me / about the space"; inline = "about this one thing
    I'm looking at".* A folder is spatial, not a configuration entry.
 5. **The profile menu stays "me" — and it is the shell's only door.** The avatar menu carries the **theme**
-   and **language** quick-pickers, a single **Settings** entry that opens the hub (its *Persönlich* section),
+   and **language** quick-pickers, a single **Settings** entry that opens the hub at decision 1's contextual default,
    and sign out — no duplicated screens, no space/server administration rendered in the menu itself. Theme and
    language are **one pair, on one shelf**: the hub presents them as a single *Appearance and language* block,
    so neither axis is an exception and neither sits at the shell's opposite end from the other. Both remain
    fully configurable in that hub section (the canonical home; the menu's pickers are shortcuts). The **top
    bar carries no preferences and no second entry into the hub** — it is left to what is genuinely contextual
-   (breadcrumb, invitations badge, upload tray). That matters most below the compact threshold, where
-   `src/web/src/styles/layout.css` gives the bar 3rem inside a sticky header it shares with a 72px sidebar row,
-   and at ≤720px drops it to auto height around a 2.35rem breadcrumb — so what a control there costs is
+   (breadcrumb, invitations badge, upload tray). That matters most below the compact threshold, where the bar
+   shares a sticky header with the sidebar's row and narrows again on a phone — so what a control there costs is
    **width taken from the breadcrumb**, which is the one thing on that bar the user cannot do without.
 
 ## Consequences
 
 - **One predictable settings surface that scales.** Groups slot in as just another section; no new top-level
-  entry point, no new muscle memory. `/tenant/settings` (member management) collapsed into a hub section,
-  replaced rather than redirected, since nothing was deployed; `/server/settings` left the web client for admin-web.
+  entry point, no new muscle memory.
 - **Narrow-viewport-correct by construction.** The split view collapses to a list→detail stack; there is no
   separate mobile design to maintain.
 - **Operator-blindness is untouched.** Device-local preferences stay device-local (they never reach the
-  server); the member/tenant sections show only already-stored operational metadata (pubkeys, roles,
-  grant-present, tenant name/domain) — never a key. The hub is only *where* these are shown.
+  server), and the hub adds no data path: it is only *where* a section is shown, and what each section reads and
+  who may see it is the decision of the record that section serves.
 - **Rejected — the top-bar gear as the hub's contextual door (a close call, recorded because it nearly won).**
   § Context's category-error warning cuts against decision 5 itself: the hub holds group and tenant
   sections, so hanging its door off a menu that is about *me* is that error stated one level up, and keeping

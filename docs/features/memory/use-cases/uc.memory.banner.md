@@ -4,8 +4,8 @@
 - **Status:** **built** ([ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md),
   accepted). A video banner plays its original until the small playback copy exists
   ([en.memory.playback-derivative](../enablers/en.memory.playback-derivative.md), planned with the client worker queue,
-  inbox #23). Since 2026-10-19 it is set only by an upload in its dialog, an upload equal to a gallery file shares its
-  stored object, and it has no description (cr-cover-banner-upload-only-and-dedup). Its browser pass is lane L1's
+  inbox #23). It is set only by an upload in its dialog, an upload equal to a gallery file shares its stored object, and
+  it has no description. Its browser pass is lane L1's
   `tests/e2e/tests/features/memories/memory-banner.spec.ts`.
 - **Primary actor:** A member with an **unlocked vault** who may write the Memory's scope (the cover's right,
   `memoryRights.setBanner` = `setCover`) and has a Memory or a Chapter open. **Secondary:** anyone who opens it — a member,
@@ -25,7 +25,7 @@
 A banner is **one medium in the node's own attachments** plus how to frame it:
 
 - **The medium** — an image, or a video **shown as a poster with a play button** that plays only when clicked.
-- **The source** — **a file uploaded only for the banner** in its dialog (the owner, 2026-10-19: set from the gallery in
+- **The source** — **a file uploaded only for the banner** in its dialog (set from the gallery in
   passing, it overwrote another member's choice unnoticed). It never appears in the gallery, the item count, the live list
   or the trash. Where the file equals a gallery medium's original, the banner **shares that medium's stored object**
   instead of storing it again: an image banner the medium's PREVIEW (the same spec of the same picture), a video banner

@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-07-08
 - Model: [Applications](../apps/README.md)
-- Replaced in part: § 2, § 4, § 5 by ADR 0088 (built)
+- Replaced in part: § 2, § 4's who switches where, § 5 by ADR 0088 (built)
 
 ## Context
 
@@ -22,12 +22,11 @@ that a REST API alone doesn't solve:
 The previous implementation had a **thin** server-advertised `CapabilityRegistry` (a static list at
 `/api/client-capabilities`, used mostly for a settings display + "new feature" notices) and a **much richer,
 never-built** target-picture design (a `major.build` hard gate + an append-only capability manifest + a
-deprecation lifecycle). The fresh state already has the **seams**: the pre-auth `GET /api/setup` response
-advertises `suites: ["v1"]` (crypto-suite negotiation the owner-registration picks from) and, at the time,
-`directTransport` (a runtime-detected capability the client degraded on, since removed: a byte-path store is a hard
-instance requirement, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md)) — but there was **no version field
-and no generic capability manifest**. Worker↔queue capability tags (`CapabilityTags`, ADR 0021) already realize the
-operator-blind "worker advertises what it can do" direction.
+deprecation lifecycle). The fresh state already had the **seams**: the pre-auth `GET /api/setup` response
+advertised `suites: ["v1"]` (crypto-suite negotiation the owner-registration picks from) and a runtime-detected
+transport flag the client degraded on — but there was **no version field and no generic capability manifest**.
+Worker↔queue capability tags (`CapabilityTags`, ADR 0021) already realize the operator-blind "worker advertises what it
+can do" direction.
 
 This ADR decides the **lean core** of a client-facing capability-negotiation layer. The full lifecycle
 (deprecation windows, per-user "new feature" notices, audience filtering) is **explicitly deferred**.
@@ -50,8 +49,10 @@ response and a client-side gate that reads them.
   - a server major **older** than any it speaks → the **server** is too old → a **blocking** "update this server"
     state;
   - any mismatch is a hard stop **before** login, never a silent partial operation.
-- The web client and `admin-web` ship in the server's own image and speak exactly its major. A store-shipped
-  client speaks every major released since the train before last (ADR 0085 decision 5).
+- The web client ships in the server's own image and speaks exactly its major. `admin-web` is its own image, pinned
+  to the same release as the server by the deployment recipe ([ADR 0057](0057-release-identity-and-deployment-recipe.md)),
+  so it speaks the same major and has no major gate of its own. Which majors a store-shipped client speaks is
+  [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 5's.
 - `build` is informational (diagnostics, "what's new"); it is **never** a gate.
 
 ### 2. `capabilities` — the register of what this server serves
@@ -67,7 +68,7 @@ the mechanism.
   all."* It is instance-wide before login, narrowed per tenant after it (ADR 0088), and **never** per user, per
   scope or per role.
 - A **permission** is **per-scope / per-role** and **post-auth**: *"you may do X here."* (E.g. the personal-scope
-  gate on creating a public share.) A view's client-side projection of it is its **rights**
+  gate that only a group's owner may add a member.) A view's client-side projection of it is its **rights**
   ([ADR 0086](0086-one-word-per-meaning.md)).
 - A feature is offered only when **(capability active) AND (permission granted here)**. The pre-auth manifest
   carries no identity. It stays operator-blind-safe because it is the same for everyone. The tenant set is the same
@@ -78,7 +79,7 @@ the mechanism.
 Who switches where is [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)'s
 (decision 12). What stays this ADR's is that a capability switched off is both **omitted from the manifest**, so every
 client hides the feature, and **enforced at its endpoint**: every endpoint that would exercise it, a path that brings it
-back into use included, answers `422 capability_disabled`. The manifest alone is only UX, and a stale or hostile client
+back into use included, refuses it. The manifest alone is only UX, and a stale or hostile client
 ignores it; the endpoint gate alone gives a broken-looking UI. Together they are honest and safe.
 
 ### 5. The built entries
@@ -104,13 +105,12 @@ future `server.auto-updates`) would be capabilities with **no** single use-case.
 Two rules follow, so the catalog stays honest instead of being invented in parallel:
 
 - **A capability entry declares the use-case(s) it gates** — a `serves: [uc.…]` back-ref in the catalog
-  `contracts/platform/capabilities.json` (**catalog-only metadata**, never on the wire — a client needs the ids, not
-  the use-case links). This is the **same wiring model** `validate_feature_wiring` enforces between use-cases/enablers
-  and features: `validate_capabilities.py` checks every capability's `serves` resolves to a **real**, built use-case —
-  so a catalog entry can't be a typo or drift from the graph. Because the catalog is **append-only**, an id may be *reserved* ahead of its
-  first advertisement; a capability is **advertised active** only once its use-case(s) are actually **built** and
-  the operator hasn't disabled it. (So an entry for a feature still being built is valid in the catalog,
-  advertised as that feature finishes.)
+  (**catalog-only metadata**, never on the wire — a client needs the ids, not the use-case links), held to resolve to a
+  **real**, built use-case, the same wiring the feature graph has between use-cases and enablers
+  ([en.platform.capability-register § The catalog](../features/platform/enablers/en.platform.capability-register.md#the-catalog)).
+  So a catalog entry can't be a typo or drift from the graph, and an entry is in the catalog only once what it gates is
+  built. Reserving an id ahead of its use-cases is deferred (Consequences); the catalog's append-only rule is
+  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 10's.
 - **Pick the grain coarser than a use-case.** One token *per* use-case would bloat the wire contract and the
   client gating, and most use-cases can't be disabled independently anyway. The **default grain is feature- or
   feature-cluster-level**; drop to a finer capability only when an operator has a real reason to toggle that slice
@@ -122,20 +122,16 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
   button doing nothing" into "your app and this server are incompatible — update one."
 - **Operators get a real off-switch** for optional features, enforced server-side, hidden client-side — without
   per-feature bespoke plumbing (one registry, one gate).
-- **`/api/setup` grows into the pre-auth manifest** it was already becoming (`suites` + `directTransport` were
-  the precedent). `suites` **stays as-is** for now; `directTransport` was **removed** (S3 is a hard
-  requirement, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md)) rather than folded in.
+- **`/api/setup` grows into the pre-auth manifest** it was already becoming. `suites` **stays as-is** for now.
 - **Deferred (each a later slice, none blocking this):** the **deprecation lifecycle** (`state`, `sunsetAt`,
-  `supersededBy`, the ~4-month sunset + non-dismissable warning); **per-user "new feature" notices/acks**;
+  `supersededBy`, the ~4-month sunset + non-dismissable warning), and with it **reserving an id** in the catalog ahead
+  of its use-cases, advertised only once they are built; **per-user "new feature" notices/acks**;
   **audience filtering** (`ALL_USERS` vs `SERVER_OWNER`); **client device self-capabilities** (NPU/WebCodecs,
   a separate direction); migrating `suites` into the unified manifest.
 - **Not a permission system.** This ADR deliberately does not touch per-scope/role authorization — it only adds
   the discovery + version layer above it. Conflating the two is the main modeling risk, called out
   in §3.
-- **The catalog is wired to the use-case index, not a parallel list.** Because every capability `serves` real,
-  built use-cases (§6, validated), the catalog can't grow orphan entries or outlive the behavior it gates — the
-  same guarantee `validate_feature_wiring` already gives the feature graph. The second modeling risk (treating
-  capabilities *as* use-cases 1:1) is closed by the coarser-grain rule in §6.
+- **The second modeling risk** (treating capabilities *as* use-cases 1:1) is closed by the coarser-grain rule in §6.
 
 ## Alternatives considered
 

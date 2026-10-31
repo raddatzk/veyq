@@ -22,7 +22,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
-  cover, banner), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
+  cover, banner), item favorites (the marks on media, [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md); the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
   `node_id` (measured: `grep -n "node_id" src/backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
@@ -37,6 +37,41 @@ Gradle module of its own; the web half is separated by import direction only (se
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, banners, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
+
+## Places and the map
+
+A place ([uc.memory.place](../features/memory/use-cases/uc.memory.place.md)) and the maps reach two outside services,
+both third parties a member's browser calls **directly** — never through the veyq backend, never an operator-run
+instance, so the veyq operator sees neither the viewport nor a coordinate
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md), [ADR 0018](../decisions/0018-map-tiles-provider-neutrality.md);
+[security-model](../crosscutting/security-model.md) lists the boundary):
+
+- **Map tiles** (`memories.map`): raster tiles from a tile-URL template, with its attribution, drawn by Leaflet — the
+  place editor's map, a level's map and a person's profile map. A tile request carries the viewport `{z,x,y}` and the
+  client address, no veyq identity and no Memory context.
+- **The reverse geocoder** (`memories.places`): a bare coordinate in, the address hierarchy out (road … country) in the
+  reader's locale; the member picks the level or types a name. There is no forward search.
+
+**The addresses are the Server Owner's.** A fresh instance comes configured with the reference providers —
+OpenStreetMap's standard tile server and public Nominatim — and the Server Owner may change or remove either
+([uc.admin.configure-external-services](../features/admin/use-cases/uc.admin.configure-external-services.md)). An entry
+is active only while its address is configured and its switches are on, and the served CSP names its origin only then
+([en.platform.capability-register § What "off" does](../features/platform/enablers/en.platform.capability-register.md#what-off-does)).
+
+**The consent, as built.** One consent covers both, because tiles gate geocoding. It is off by default and asked in
+context, by the place editor or a level's map before the first tile loads; it is kept per browser, not per account,
+and no request leaves before it. It cannot be withdrawn in the interface yet, and the opt-in in personal settings and a
+group's per-space consent are not built (ADR 0016). A member without it sees resolved names as text.
+
+**Request discipline** ([ADR 0016 § Request discipline](../decisions/0016-geocoding-provider-neutrality.md#request-discipline--the-providers-policy-is-part-of-the-decision-not-an-optimisation)):
+a resolved name is sealed into the node's meta (a photo's into its tier) and read from there. The client asks the
+provider once per place, keyed on the coordinate rounded to three decimals (about 110 m), queues requests at least one
+second apart, and resolves a failure to nothing, with no retry. The app shell's `Referrer-Policy` keeps the instance's
+origin in `Referer`, which is what identifies it to the provider.
+
+**Without the map** (`memories.map` off or not configured) there is nothing to consent to: the place editor opens with
+no map, a place is a typed name positioned by the photos' GPS or an earlier pin, and no geocoder is asked, since tiles
+still gate geocoding. With `memories.map` and `memories.places` both off a place still works, named by hand.
 
 ## What it uses from the platform
 
@@ -54,8 +89,8 @@ Gradle module of its own; the web half is separated by import direction only (se
 ## What a guest may do — the role matrix
 
 ADR 0080 decision 6 has each application write down what a link's role lets a guest do with its kinds; a kind with
-no declaration allows nothing. This is Memories' answer, measured from the code after cr-node-key-hierarchy 5a.5
-(2026-10-07), for a link rooted at a `MEMORY`, at a `CHAPTER`, and — for the Memories content it reaches — at core's
+no declaration allows nothing. This is Memories' answer, measured from the code, for a link rooted at a `MEMORY`, at a
+`CHAPTER`, and — for the Memories content it reaches — at core's
 `FOLDER`. The roles: `READ` (viewer, [ADR 0029](../decisions/0029-public-viewer-share.md)), `READ_WRITE`
 (contributor, [ADR 0030](../decisions/0030-contributor-public-share.md)), `WRITE_ONLY` (uploader,
 [ADR 0031](../decisions/0031-uploader-public-share.md)). ✓ allowed, ✗ refused (the answer in brackets).
@@ -69,7 +104,7 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 | Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
 | Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
 | Cover, banner, date, place of a node (`wrappedMeta`, cover and banner blobs) | ✗ (no guest operation; an upload start in `COVER`, `BANNER` or `BANNER_POSTER` is `invalid_request`) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
-| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` or a chapter (`illegal_scope`; owner decision 2026-10-14: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, `GuestCreatableKinds`, and Memories declares none) | ✗ (`share_not_contributable`) |
+| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` or a chapter (`illegal_scope`; ADR 0080 decision 6: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, `GuestCreatableKinds`, and Memories declares none) | ✗ (`share_not_contributable`) |
 | Move a node | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`; the root `illegal_structure`) | ✓ a `FOLDER` or `MEMORY` between folders of the subtree; ✗ a chapter out of or into a Memory (`illegal_scope`), anything out of the subtree | ✗ (`share_not_contributable`) |
 | Delete a node | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation, ADR 0080 decision 6) | ✗ |
 
@@ -84,8 +119,8 @@ What the cells rest on:
   `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from), and the web offers its link through the
   Memory's own dialogs (`shareable: true`, `register.ts`; ADR 0080 decision 13). `NodeKindRules` puts a chapter only
   directly inside a Memory, so a chapter link has no node below its root.
-- **A role applies to every node below the root as Memories allows it** (ADR 0080 decision 6, owner 2026-10-07;
-  cr-node-key-hierarchy 5a.5). A guest's start, every window and the completion name an optional target `nodeId`;
+- **A role applies to every node below the root as Memories allows it** (ADR 0080 decision 6;
+  uc.sharing.share-contributor:rights-inherit-below-a-folder). A guest's start, every window and the completion name an optional target `nodeId`;
   absent, it is the root, as before. Core checks a named target (`ShareGuestGate.target`): live, inside the share's
   subtree (else `404 node_not_found`, the same for a node outside as for none), the root live (else
   `share_not_contributable`); and core dispatches the writer (`ShareGuestWrites`), the per-link measure
@@ -109,7 +144,7 @@ What the cells rest on:
   `createGuestIdentity`, one identity per link). A folder link's guest who uploads into a Memory below, or a Memory
   link's into a chapter, therefore names itself under a key ABOVE the node its bucket is on: a member opens it with
   the node's key or an ancestor's, through the chain (`openBucketName`'s `ancestorKeys`, `contentKeyChain`; web,
-  cr-node-key-hierarchy 5b.4b).
+  uc.memory.buckets:guest-named-above-the-node).
 - **Tree operations are core's** (`ShareNodesHandler`, `READ_WRITE` only): inside a `FOLDER` core decides
   (`FolderGuestNodeRules`) — a move or a rename of any kind, a create of a `FOLDER` or of a kind its application declares
   guest-creatable (`GuestCreatableKinds`; Memories declares none, so no `MEMORY` or `CHAPTER` is `illegal_scope`) — and
@@ -127,7 +162,7 @@ What the cells rest on:
 for an upload into a chapter below a Memory link and the `WRITE_ONLY` root-only rule). The `FOLDER` column's
 upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSliceTest`, `ShareRootsSliceTest`,
 `ShareNodesSliceTest`, `ShareNodesCoreSliceTest`). A `READ` folder guest is served the media of a Memory below the folder (e2e `folderShare.e2e.test.ts`,
-2026-10-07). A folder guest's create of a `MEMORY` or a chapter under a folder answering `illegal_scope` is
+uc.sharing.share-public-viewer:folder-share-root). A folder guest's create of a `MEMORY` or a chapter under a folder answering `illegal_scope` is
 `ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder`. **UNVERIFIED by a test** (read from the code only): a `READ` ↔
 `READ_WRITE` flip on a folder link.
 
@@ -154,7 +189,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | share (and the uploader link) | the instance's `core.public-shares` (and, for the READ_WRITE role, `.contribute`; for the uploader link, `.drop-box`) | the same | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
-identity folder); a share guest creates none — the "New" menu offers a guest no Memory (owner decision 2026-10-14, ADR 0080 decision 6); every role that reads opens
+identity folder); a share guest creates none — the "New" menu offers a guest no Memory (ADR 0080 decision 6); every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). A level's selection
 (core's Select mode, inbox #421) reads the same matrix per Memory (`LevelRow.selection`): it moves with the selection where
@@ -192,8 +227,7 @@ then forgets the device's session.
 
 ## How far it is separated
 
-Measured 2026-10-05 (`ls src/backend/core/src/main/kotlin/me/raddatz/veyq/core src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):
-**the backend is.** Memories is the Gradle module `:apps:memories` (`src/backend/apps/memories`), depending on `:core`
+Held by `scripts/validate_backend_module_graph.py`: **the backend is.** Memories is the Gradle module `:apps:memories` (`src/backend/apps/memories`), depending on `:core`
 and never the reverse; the root `src/backend/` composes both into the one fast-jar. Every class lives in its owner's
 package — the platform in `me.raddatz.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
 Memories in `me.raddatz.veyq.memories` (`media`, `itemfavorites`, `node`) — and core reaches Memories only

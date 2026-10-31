@@ -124,6 +124,35 @@ sequenceDiagram
   Note right of S: stores ciphertext chunks + manifest + K_blob wrap only —<br>no plaintext byte, no content key
 ```
 
+## Reading back: playback and download
+
+Why each piece is shaped this way is [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md); what
+is built:
+
+- **Playback** of a video or audio goes through the media Service Worker (`src/web/src/sw/mediaSw.ts`), a key-free
+  range shim: the page registers an opaque per-playback handle with the blob's `{chunkCount, byteSize}` and a
+  `MessagePort`, sets `<video src="/__media/<handle>">`, and answers the worker's chunk requests with plaintext it
+  presigned, fetched and opened itself (the page-side chunk provider, `core/blob/transport.ts`). Every caller registers
+  the same way: the lightbox, a Memory's banner, Depot's file page (which registers the sniffed container, never the
+  claimed type). Without a worker the medium is decrypted whole first.
+- **What the shim serves is inert:** a handle is given only to one well-formed `video/<subtype>` or `audio/<subtype>`
+  essence (`isStreamableMediaType`, `src/web/src/sw/protocol.ts`); a navigation to `/__media/<handle>` is `404`; every
+  answer carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox; default-src 'none'`.
+- **A download** picks the first of three save targets (`src/web/src/shared/saveStream.ts`): a file picked through the
+  File System Access API; the worker's download route, `/__download/<handle>` (`src/web/src/sw/downloadRoute.ts`); an
+  in-memory `Blob`, capped at 512 MiB (`BLOB_SAVE_CAP`) — above it, with neither streaming target, the download is
+  refused with a message. The route answers one `GET` navigation per handle, which expires 30 s unfetched
+  (`DOWNLOAD_HANDLE_TTL_MS`); an unknown handle answers `204`, which leaves the tab where it is. The answer is an
+  attachment (`application/octet-stream`, a sanitised `filename` and the exact `filename*`, `nosniff`, the sandbox CSP,
+  `Cache-Control: no-store`, the exact `Content-Length`); a short or overlong stream, a page failure or an ended session
+  errors the body, and the worker reports every end and every refusal to the page. A ZIP download announces the built
+  file's length (`zipLength`).
+- **The file name** is core's one rule (`core/blob/meta.ts` `downloadName`): the name sealed in the original's blob meta,
+  else one derived on device (a Memory's medium: the Memory's name and its gallery position), the extension from the
+  blob meta's type, else `.bin`.
+- **The page and the worker** speak a versioned protocol (`PROTOCOL_VERSION`, 5); a worker of another version fails the
+  handshake and the page falls back as without one.
+
 ## Alternate / exception flows
 
 - **E1 — no object store set:** the instance boots, but refuses every upload with `store_unavailable` and creates no

@@ -90,7 +90,11 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   clean structure come first; speed-to-demo is explicitly **not** a goal.
 - **Legal duties win over what we wrote or built.** Where a legal obligation (DSA, GDPR, StGB, TCO, …) and an ADR,
   a CR or the code disagree, the obligation decides and the ADR or code is corrected — however settled it looked
-  (owner 2026-10-18). A question the law leaves open stays a named legal blocker in the ADR, never a guess either way.
+  (owner 2026-10-18). A question the law leaves open stays named in the ADR as our reading, not a reviewed answer — never
+  presented as settled. It blocks a CR or a release only where what is built would be unlawful on a plausible reading
+  and a cheap safe-side alternative exists; then the safe side is built.
+- **Every claim is `measured` or `remembered`**; a measured one names the command that proves it
+  ([ADR 0046](docs/decisions/0046-operative-lore-in-skills-and-agents.md), the `trust-chain` skill).
 - Scripts and utilities in **Python** (bash only for thin CI/hook glue).
 - **No deprecated / unmaintained dependencies.** Never add — and don't keep — a dependency that is EOL,
   archived, or abandoned by its maintainers, or whose only living successor is commercial/closed (that breaks

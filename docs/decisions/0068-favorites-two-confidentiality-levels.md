@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-09-20
-- Model: [Application: Memories](../apps/memories.md)
+- Model: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)
 
 ## Context
 
@@ -19,8 +19,8 @@ mine*. That request does not extend the existing object — it **collides** with
 
 - **It inverts a decision already taken.** [ADR 0014](0014-group-scopes-and-governance.md) §7 holds that a
   group's per-user favorites must seal under the member's **own** key, because `K_SC` is *shared* in a group and
-  today's blob is therefore **already readable by every member** — the enabler calls this a defect, and it is a
-  silent one: the data leaks, the UI merely does not display it. *"Everyone's favorites"* needs the exact
+  the blob sealed under it was therefore **readable by every member** — a defect, and a silent one: the data
+  leaked, the UI merely did not display it. *"Everyone's favorites"* needs the exact
   opposite: member-attributed sets every member **can** read. The two designs do not converge.
 - **Two confidentiality levels cannot share a blob.** A single sealed envelope carrying both
   (`{v, nodes[], items[]}`) has exactly one key and therefore exactly one audience. Proposed and rejected here.
@@ -28,7 +28,7 @@ mine*. That request does not extend the existing object — it **collides** with
   (last-write-wins). Node counts never stressed that; item counts do.
 
 **The ceiling, measured.** The contract caps `ciphertext` at **65 536** base64 chars → 49 152 sealed bytes; the
-`symWrap` frame (type byte + 12-byte nonce + 16-byte GCM tag) costs 29 (`packages/crypto/src/v1.ts:103`); a
+`symWrap` frame (type byte + 12-byte nonce + 16-byte GCM tag) costs 29; a
 `veyq_media.id` is a 36-char UUID string on the wire (a native `UUID` column, Memories baseline) costing **39 bytes** per entry in a JSON array.
 `measured` (a script over real `randomUUID()` ids + `JSON.stringify`, against this tree):
 
@@ -82,10 +82,9 @@ consumes item favorites outside a single gallery (§7), so nothing needs the sco
 **The ceiling is a whole Memory's.** A mark is a media id's **16 raw bytes** beside the self-tag (§1), and the contract
 caps the blob at **262 144** base64 characters (the column is `MEDIUMTEXT`), so one member's marks in one Memory stop at
 **12 284** — every photo of a 10 000-photo Memory, the size the gallery is built for
-([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)). `measured` (inbox
-#500, `src/web/src/features/memories/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
-12 000 marks round-trip; 12 284 seal to 262 140 characters, and the 12 285th is refused by the client before any write,
-with a message at the heart. A toggle uploads about 27 KB at 1 258 marks and 256 KB at the ceiling. In the JSON form
+([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)). Measured through
+the real seal: 21⅓ base64 characters a mark, so the 12 285th is refused by the client before any write, with a message
+at the heart; a toggle uploads about 256 KB at the ceiling. In the JSON form
 of the table above the ceiling was 1 257 — 12.6 % of such a Memory, reachable by one keen member, and the 1 258th
 was refused with a heart that sprang back silently; that is why the encoding changed, not the shape. The pin keeps the
 JSON form and the 65 536 cap: 1 259 pins in one scope's sidebar are past any list a person reads.
@@ -118,7 +117,8 @@ smaller upload is the bonus, not the argument.
   they are an accepted member of — what a Master-Key rotation re-tags (§9). The server already holds exactly these
   rows under the caller's id, so it learns nothing, and the caller learns only its own.
 
-Operator visibility does not change in kind: the same opaque rows, sizes and timestamps (`updated_at`, to the second).
+Operator visibility does not change in kind: the same opaque rows and their sizes. No row stores a time; when a row
+was written is only what the database and its logs see.
 
 **6. Presentation is aggregate only.** The gallery filter is *everyone's favorites* / *only mine*; the grid
 shows a **count** on the tile's heart. No faces, no names, no per-member attribution anywhere in the UI.
@@ -182,7 +182,8 @@ pseudonym inside the plaintext**, counting distinct pseudonyms, caps server-alon
 per Master-Key generation, but moves §6 from anonymous to pseudonymous per node (co-members could link every
 version of one member's set) and still leaves R1, R2 and R4 open. **Re-open (C)** once marks stop sealing under
 `E_0` (so a former member can no longer forge) **and** a freshness floor covers them: replay is then the last power
-over the count. The plaintext is JSON, so a later optional field is additive.
+over the count. The plaintext is the fixed binary `tag ‖ ids` (§1), so a later field needs a new encoding and its
+conformance vector.
 
 **10. The pin is core's, and covers every node.** The pin is a private preference about a *node*, and a node is
 core's: a folder, a file, a Memory and a drop box are all nodes, and the data already fitted any of them — a bare id
@@ -195,7 +196,7 @@ lives is [en.memory.favorites](../features/memory/enablers/en.memory.favorites.m
 - **A pinned id that no longer resolves is inert, not pruned.** The server cannot read the set, so a purged node's id
   stays in the blob and every view skips what the loaded tree does not hold; a *trashed* node's pin survives on
   purpose, so a restore hands the heart back. A client-side prune was rejected: it cannot tell "purged" from "not
-  loaded yet", and a prune on the wrong reading is a lost pin. The cost is the ceiling (about 1 600 ids).
+  loaded yet", and a prune on the wrong reading is a lost pin. The cost is the ceiling (1 259 ids, §4).
 - **A pending deletion keeps the heart.** A pin is the member's own sealed preference, not a write to the scope's
   tree, so its put takes the READ gate and a space waiting for its deletion still stores it.
 - **The mark stays Memories'** (`item-favorites`): it names a `veyq_media` id and lives only in a Memory's gallery.
@@ -207,7 +208,7 @@ lives is [en.memory.favorites](../features/memory/enablers/en.memory.favorites.m
   aggregate on our behalf; the client necessarily receives the **per-member blobs** and could name who marked
   what. Hiding that in the UI does not make it unknowable. So **no string in the UI or in `wiki/` may imply
   that nobody can see what you marked** — "only mine" is a *filter*, never a promise. This is the same trap as
-  the Memory-favorites defect one level down, and it is why §1 is being built now rather than deferred.
+  the Memory-favorites defect one level down, and it is why §1 was built rather than deferred.
 - **The same heart now carries two audiences, and two things carry the difference.** The per-tile **count**
   shows it continuously — but it fails in exactly the first-mark case, where "1" is the user's own mark and
   proves nothing about visibility. That case is carried by the **filter**: *everyone's / only mine* is present
@@ -226,21 +227,16 @@ lives is [en.memory.favorites](../features/memory/enablers/en.memory.favorites.m
   for the two objects sealed under it (the identity-pin store and the device register). A master-key-sealed pin
   set is the **third** rider on that path, and omitting it means a rotation silently empties every user's
   Favorites — a degradation, not a lockout, since an unreadable blob decodes to the empty set, but a silent one.
-  This is the cost of choosing the master key over `K_SC@E_0`, and it is stated here because no doc↔code delta
-  could find it: nothing is drifting, the rule simply would not have been written. The mark's self-tag (§9) is the
+  This is the cost of choosing the master key over `K_SC@E_0`. The mark's self-tag (§9) is the
   **fourth** rider: its key derives from the Master Key, so without a re-tag a rotation would empty *only mine* on
   every Memory and the first toggle on each would replace the old set.
-- **Cross-feature lifecycle is now owed on a second table.** Scope purge must reclaim the item-favorite rows,
-  node deletion must drop the rows under it, and a member whose grant is revoked leaves a blob that would keep
-  counting into the aggregate. These are named here because the doc↔code delta cannot find them: nothing is
-  drifting — the rule simply would not have been written.
-- **Contracts move first, and only here.** This is the one axis of the change with a new wire shape; backend
-  and web follow it.
+- **Cross-feature lifecycle on a second table.** A scope's erasure reclaims the item-favorite rows, a node's
+  erasure drops the rows under it, and a member who leaves the scope (or erases the account) takes their rows along —
+  otherwise a departed member's blob would keep counting into the aggregate.
 
 ## Related
 
-- Supersedes nothing; it **discharges** [ADR 0014](0014-group-scopes-and-governance.md) §7, whose open question
-  ("folded in when favorites reach group scopes") is answered by §1–§3 above.
+- Supersedes nothing; [ADR 0014](0014-group-scopes-and-governance.md) §7's per-member favorites are §1–§3 above.
 - Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [src/web/CLAUDE.md](../../src/web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
 - Enabler: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md) (both objects)
 - Use-case: [uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) (the filter + the aggregate)

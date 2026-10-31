@@ -98,7 +98,7 @@ Four documented gaps sit **outside** that guard, on purpose:
   still leaves owed.
 
 - the mutation **total-vs-per-glob** asymmetry: `mutation_meta_check.py` (crypto) asserts a **total** mutant
-  count > 0 (`:53-55`); the **backend** one is **per-glob** (`mutation_meta_check_backend.py:54-63`). (The
+  count > 0 (`:100-101`); the **backend** one is **per-glob** (`mutation_meta_check_backend.py:94-119`). (The
   remembered "total-count" claim held for the crypto check only — corrected here.) Pinning it would need a
   synthetic report fixture + a git tree (the web check gates on `git diff`), so it belongs to a
   mutation-job-local test, not the buildless glob — and it is self-documented in both meta-check docstrings,
@@ -139,7 +139,7 @@ each has a canonical home — point there, don't try to build past it:
    real (trash × sharing served trashed media). [`ai/README.md`](../../../docs/ai/README.md) § the pipeline,
    "what this step cannot see".
 4. **Scope-completeness** — a guard sees only the present tree, never history: a cited ADR that was deleted
-   (inbox #95), a CR number burned by a since-deleted CR (inbox #107). Green means nothing *currently*
+   (inbox #95). Green means nothing *currently*
    dangles. Reuse-checks must grep the working tree, not `git log`.
 
 ## The map (assembled from nowhere single)
@@ -151,7 +151,7 @@ each has a canonical home — point there, don't try to build past it:
   by a `dorny/paths-filter` on `scripts/**` and `.claude/skills/trust-chain/**` (`:74-99`) plus a nightly
   `schedule` (`:24-25`) — ADR 0091 decision 4, held by `validate_pipeline_shape.py` assertion 2. `ci.yml` —
   the one pipeline per commit (ADR 0091); its `guards` job runs the same glob minus `validate_guard_gaps.py`,
-  and `paths-ignore` includes `docs/**` (`:28-33`, `:38-43`), so a docs-only change is validated *only* by
+  and `paths-ignore` includes `docs/**` (`:28-31`, `:36-39`), so a docs-only change is validated *only* by
   trust-chain. `mutation.yml` / `mutation-backend.yml` — path-gated onto their scope files (`:16-49` /
   `:17-73`).
 - **The glob is the registry.** `trust-chain.yml:48-70` runs `for f in scripts/validate_*.py` with a
@@ -159,8 +159,8 @@ each has a canonical home — point there, don't try to build past it:
   `mutation_meta_check*.py` sit **outside** that glob (filename prefix) and run only from the mutation jobs.
   Run every guard locally the same way: `for f in scripts/validate_*.py; do python3 "$f"; done`.
 - **The one coupling that bites differently per surface:** **web coverage refs are path-bound, backend refs
-  are symbol-bound** (`validate_coverage.py`: web, crypto, admin-web `(root / ref).exists()` :666-673; backend
-  `ClassName.method` via the `KOTLIN_FUN` regex over masked source + stem map :223, :443-468). The same move
+  are symbol-bound** (`validate_coverage.py`: web, crypto, admin-web `(root / ref).exists()` :654-659; backend
+  `ClassName.method` via the `KOTLIN_FUN` regex over masked source + stem map :200, :420-449). The same move
   hits them differently — relocating a file breaks web refs; renaming a symbol breaks backend refs. This is
   what broke in cr-0175; carry it into any relocation's blast-radius grep.
 

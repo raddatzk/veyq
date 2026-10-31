@@ -150,7 +150,8 @@
   keeps the justified layout of the whole list but mounts only the rows near its viewport, so its DOM does not grow
   with the Memory, and keeps a bounded number of decrypted thumbnails, revoking the rest. A new view that renders every
   item, or opens a listed seal on the page at every render, is a defect against that record. The targets it is held to
-  are ADR 0105's (§ Targets), and the volume harness met every one at the V1 heavy stage (2026-10-24, a local
+  are ADR 0105's (§ Targets), judged by `scripts/measure_volume.py judge` over a stage's readings while the volume
+  harness exists, and the volume harness met every one at the V1 heavy stage (2026-10-24, a local
   production-recipe instance, Chromium, three runs per stage, no failed request in any): *viewport complete* after
   403–414 ms at 1,000 photos, 712–734 ms at 3,000 and 1,826–1,845 ms at 10,000 on the desktop, and 510–550 ms and
   876–910 ms at 1,000 and 3,000 under the 4× throttle, with no long task after it over 120 ms; *end complete* 117–122 ms;

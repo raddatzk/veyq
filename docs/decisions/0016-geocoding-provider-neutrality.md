@@ -1,9 +1,9 @@
 # ADR 0016 — Reverse geocoding: third-party-only, provider-neutral, consented per space (Nominatim reference)
 
 - Status: Accepted
-- Built: partly (not built: the per-space consent of a group, the tenant language for shared names)
+- Built: partly (not built: the opt-in in personal settings and its withdrawal, the per-space consent of a group, the tenant language for shared names)
 - Date: 2026-07-01
-- Model: [Applications](../apps/README.md)
+- Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
 
 ## Context
 
@@ -20,10 +20,10 @@ basemap tiles, [ADR 0018](0018-map-tiles-provider-neutrality.md)). The tensions:
 - **Which direction?** The flow is **coordinate-first** (the medoid, or a pin framed on the map) → name. There is
   never a "type a place name to search" step; the manual fallback is a **free-typed string**, not a geocoder
   search. So veyq needs **reverse** geocoding only, never forward autocomplete.
-- **Which provider?** **Nominatim** (OSM's canonical geocoder) offers reverse with a **`zoom`** parameter (0–18 →
-  country … building) mapping a chosen resolution to a name granularity (`Atlantik → Kanaren → Teneriffa`), and
-  localizes via `accept-language` with **graceful fallback** to the local name (never a hard error). Photon (the
-  earlier inbox pick) was for forward search-as-you-type, which we don't need.
+- **Which provider?** **Nominatim** (OSM's canonical geocoder) answers a reverse request with the coordinate's whole
+  address breakdown (road … country), from which a name of any granularity can be picked
+  (`Atlantik → Kanaren → Teneriffa`), and localizes via `accept-language` with **graceful fallback** to the local name
+  (never a hard error). Photon is built for forward search-as-you-type, which we don't need.
 - **Consent must be fair in a group.** "I won't expose my coordinate — someone else can" is, unlike a hardware/
   cost gate, a *"my privacy matters more than yours"* asymmetry. It cannot be imposed, and free-riding inside a
   committed group is unfair. Consent is therefore modelled **per space**, not silently global and not owner-decreed.
@@ -68,14 +68,17 @@ Considered and rejected:
     for new members** (joining = consenting). Binding does **not** revert — a member who no longer wants to
     consent **leaves the space** rather than staying as a text-only free-rider.
   - A **personal space** is just the user's own two-stage toggle (no group).
+  - **Built so far** is one consent per browser, given in context (the place editor or a level's map asks before the
+    first request) and applied in every space; it cannot be withdrawn yet. The rest of this model is not built.
 - **Tenant language for shared names.** A resolved name is sealed into the shared `wrappedMeta`
   ([ADR 0012](0012-content-key-hierarchy.md)) so members (incl. non-consenting ones) see it as text. To keep it
   **consistent** rather than in the random locale of whoever resolved it first, shared names resolve in the
   **tenant's configured language** (`accept-language`). `nameAnchor` is kept so an opted-in viewer can
   **re-resolve in their own language** on demand; a personal space uses the user's own locale.
-- **Operator-configurable provider, off until configured + consented.** Reference = **Nominatim** (OSM data,
-  vendor-neutral). With no provider configured or no consent, the reverse feature is **absent** (manual names on
-  the map still work). Manual name entry never makes an external call.
+- **Operator-configurable provider, gated by the member's consent.** Reference = **Nominatim** (OSM data,
+  vendor-neutral): a fresh instance comes configured with public Nominatim, and the Server Owner may point it at
+  another provider or remove it. Without the member's consent, or with no provider configured, the reverse feature is
+  **absent** (manual names on the map still work). Manual name entry never makes an external call.
 
 ### Request discipline — the provider's policy is part of the decision, not an optimisation
 
@@ -103,10 +106,11 @@ otherwise-desirable hardening — would silently put every instance outside the 
 tightens it owes this seam an explicit identifying header instead; the trap is also written on the fetch itself,
 where someone editing it will see it.
 
-**What this does not reopen.** [uc.memory.place](../features/memory/use-cases/uc.memory.place.md) rejected
-per-item geocoding for a Memory's medoid — N fetches for one answer, on every open. That rejection stands
-untouched. A per-photo name is a different shape: one name, once ever, for the photo in front of the user, sealed
-into the tier the medoid already reads.
+**What this does not reopen.** Reading each medium's sealed EXIF to compute a Memory's medoid was rejected — N fetches
+for one answer, on every open; the GPS rides the listed capture tier instead
+([uc.memory.place](../features/memory/use-cases/uc.memory.place.md)). That rejection stands untouched. A per-photo name
+is a different shape: one name, once ever, for the photo in front of the user, sealed into the tier the medoid already
+reads.
 
 ## Consequences
 

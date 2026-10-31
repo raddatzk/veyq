@@ -28,7 +28,7 @@ the defect"*): here nothing notices, which is the whole point.
 | **web crypto** (`v1.ts`, 361 LOC) | Already pinned by a **known-answer battery** — `v1.conformance.test.ts` asserts ~20 exact output bytes against `contracts/crypto/vectors/v1.json`. An identity mutant (`aeadSeal=pt`, `symWrap(k,x)=x`) dies by construction: the pinned `sym_master_key.blob` begins `02‖nonce‖tag`, never the plaintext. The place #99 feared weakest is the counter-example. A KAT is strictly stronger than mutation for what it covers. |
 | **backend** | Performs **no content crypto** (hard invariant, [`src/backend/CLAUDE.md`](../../src/backend/CLAUDE.md)) — only SHA-256 token verifiers, Ed25519 verify, CSPRNG. The security-critical logic is authz/share/scope/session **decisions**, already covered by strong `@QuarkusTest` slices (44 slice classes vs. 4 boot-free unit files). The mutation cost driver there is the **Quarkus boot per covering test**, not the mutant count (the decision logic is ~85 LOC). |
 
-No mutation tooling exists (web = vitest; backend = Gradle/Quarkus/Kotlin). This is greenfield.
+No mutation tooling existed (web = vitest; backend = Gradle/Quarkus/Kotlin); the choice was greenfield.
 
 ## Decision
 
@@ -37,7 +37,7 @@ No mutation tooling exists (web = vitest; backend = Gradle/Quarkus/Kotlin). This
 layer.**
 
 1. **Two tools, both vendor-neutral OSS.** Web: **StrykerJS** (vitest runner). Backend: **PIT**
-   (`info.solidsoft.pitest`) **alone — no Kotlin mutator plugin.** The OSS `pitest/pitest-kotlin` (the filter for
+   **alone — no Kotlin mutator plugin.** The OSS `pitest/pitest-kotlin` (the filter for
    Kotlin's null-check-intrinsic noise) was **archived read-only in 2023**, never left `0.1-SNAPSHOT`, and names the
    commercial **arcmutate** its successor — barred twice: unmaintained *and* successor-closed (CLAUDE.md's
    no-unmaintained-deps + *self-hostable by default*). It is not needed anyway, and that is **measured, not hoped**:
@@ -62,12 +62,13 @@ layer.**
    This requires **disentangling the fusion points** where decision logic leaked *down* into store methods that
    also write — `ScopesStore.rotate` (skip `pendingConsent`, re-grant to the remaining members) is the archetype;
    `TenantHandler`'s cascade already orchestrates *above* the stores and is closer to the target. Scoped to the
-   **rich** decisions (rotate/consent, last-owner `≤1` cascade, epoch, gate ordering, rate-limit arithmetic,
-   **and the share-access gates `canView`/`canUpload` — the who-may-see-what capability matrix**). The
-   discriminator is **redundancy and blast-radius, not line count**: `isScopeOwner` is a one-line `role == OWNER`
+   **rich** decisions — rotate/consent, the last-owner cascade, **the share-access gates `canView`/`canUpload`, the
+   who-may-see-what capability matrix** — and the scope itself is the curated list in
+   `src/backend/core/pitest.scope.json`, not this section. The discriminator is **redundancy and blast-radius, not
+   line count**: `isScopeOwner` is a one-line `role == OWNER`
    whose mutant is caught loudly and redundantly across many tests — lifting it buys nothing. `canView`/`canUpload`
    are *also* one-liners, but each is a three-role capability matrix whose single flipped `||`-arm silently admits
-   a write-only WRITE_ONLY share into the sealed gallery — a **confidentiality-invariant** breach pinned today by exactly
+   a write-only WRITE_ONLY share into the sealed gallery — a **confidentiality-invariant** breach that was pinned by exactly
    one slice, and slices are deliberately un-mutated (this §). A one-liner whose decay silently breaks a hard
    invariant under a single un-mutated oracle is **in**; one whose decay is loud and redundantly caught is **out**.
    Feature-by-feature, backed by the green slices as the refactor's safety net.
@@ -84,10 +85,10 @@ layer.**
 
    **And the widening is a curated logic tier, never a directory sweep — the frontend layers exactly as §2's
    backend does.** Its **file-pure** `.ts` modules — pure at *file* granularity, because Stryker mutates whole
-   files — are the mutate glob (the crypto ring, `epoch`/`naming`/`buckets` computation, the cold master-key
-   birth and the node-meta seal). It is **not the memory/tasks layer wholesale**: most of that layer is wiring —
-   `memoryLocation`/`memoryDate` import `contentApi`, the task workers import the network client — so a module
-   joins only when it imports no I/O. A network-importing worker that *happens* to score 100% under full mocks is
+   files — are the mutate scope, an explicit file list in each project's `stryker.mutate.json` (`src/web/` and
+   `src/packages/crypto/`). It is **not the memory/tasks layer wholesale**: most of that layer is wiring — a
+   Memory's date and location write through the node-meta writer, the task workers import the network client — so
+   a module joins only when it imports no I/O. A network-importing worker that *happens* to score 100% under full mocks is
    excluded on the same principle: its green is brittle placement, not earned assertion strength — the boundary is
    purity, not score. Its `.vue` components, `views/`, `components/` and side-effect stores are the
    rendering-and-wiring layer — the frontend's equivalent of §2's repository + slice — and are **excluded**. A mutant there dies for a render/wiring reason or survives as an
@@ -96,7 +97,7 @@ layer.**
    the boundary — it re-admits the wiring. The same forcing function as the backend holds: logic worth mutating is
    lifted out of a `.vue` into a `.ts` composable, where it joins the tier and the component stays thin.
 
-4. **CI shape: on PRs, path-gated, report-before-gate.** Web: Stryker's **incremental** cache
+4. **CI shape: on pull requests and pushes to `main`, path-gated, report-before-gate.** Web: Stryker's **incremental** cache
    (`incremental: true` + the cached report) is the cost control — it re-tests only mutants whose code *or
    covering tests* changed (⇒ ~1–3 min/PR), so a weakened assertion (a test edit, no source change) is caught,
    not missed. There is **no native git-`--since` in StrykerJS OSS** — that is arcmutate (§1, commercial), so do
@@ -119,8 +120,14 @@ layer.**
    *both* survivors in it. The two mutants were invisible for a reason that generalizes: a boundary is pinned only
    by a case where its two sides differ — `capacity - tokens` equals `capacity + tokens` from an *empty* bucket,
    and saturating vs. not-saturating leave identical state when the elapsed time divides *exactly*. The gate costs
-   ~20 s incremental, which is less than the claim it replaces. Whether the aggregate should gain a per-glob score
-   floor is open (inbox #116); that a scope move must be *run* is not.
+   ~20 s incremental, which is less than the claim it replaces.
+
+   **So the backend gate also holds each glob of the scope to a survivor budget of one**: at most one undetected
+   mutant per glob, and at least one detected, beside the aggregate threshold — the backend meta-check asserts it,
+   and its docstring carries the arithmetic. *Rejected: a per-glob score floor at the aggregate's 95 %.* The scoped
+   classes are small, so one survivor costs a glob several points (on 25 mutants, 96 %; on fewer, below 95 %): a
+   per-glob 95 % floor would mean 100 % for most of the scope and abolish the very headroom it was copied from. A
+   budget counts mutants, not percentages, so it holds a small glob and a large one to the same thing.
 
 This extends [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md): that decision fixed *a ref counts only
 when CI runs it*; this one adds *a test that runs proves only as much as its assertions pin* — the next link.
@@ -139,8 +146,8 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
     (crypto primitives vs. authz decisions) must keep the primitive score from masquerading as authz coverage;
     reporting them merged would be the same misleading-green it exists to prevent.
 - **Cost, split honestly by surface:**
-  - **Web is small** — a tool at an already-strong surface. tier1 `src/packages/crypto/src/**` ≈ 350–650 mutants, full run
-    minutes (Argon2id KDF mutants dominate), PR diff ~1–3 min.
+  - **Web is small** — a tool at an already-strong surface: a full run takes minutes (Argon2id KDF mutants
+    dominate), an incremental one on a pull request ~1–3 min.
   - **Backend is the real work** — a **scoped security-core refactor** (disentangle the fusion points, write the
     pure-policy unit tests), *not* "wire up PIT". The mutatable logic is tiny once boot-free, so PIT itself is
     cheap; the effort is the substrate. The extraction *pattern* is **spike-validated on rotate/consent**: the
@@ -177,8 +184,8 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   wrong-index or wrong-context test only re-asserts what those two already give — which is why `openFrame`'s
   *"a dropped, reordered or appended frame fails to open"* comment **is** backed, indirectly, and needs no test
   of its own. Measured, not argued: the package gate's `--force` run leaves **zero** frame-, wrap- or
-  AAD-survivors (the code now spans `v1.ts`, `primitives.ts` and `seal.ts`; the current mutant counts are stated
-  once, in `src/packages/crypto/stryker.config.mjs`, and not here, where a figure rotted from 134 to 186 unseen).
+  AAD-survivors (the current mutant counts are stated once, in `src/packages/crypto/stryker.config.mjs`, and not
+  here, where a figure rotted from 134 to 186 unseen).
   The one rejection **veyq makes itself** — `decodeKdfParams`'s length guard, a plain `if` with no primitive
   behind it — was the gate's only gap, and its test is what took `v1.ts` to 100%. That test pins the error
   *message*, and must keep doing so: unguarded, a short blob still throws (the `DataView` `RangeError` the guard

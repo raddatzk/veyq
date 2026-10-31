@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-07-09
+- Model: [Applications § How an application publishes a revisioned list](../apps/README.md#how-an-application-publishes-a-revisioned-list)
 
 ## Context
 
@@ -23,46 +24,39 @@ deletes (a count would miss a delete+add that nets zero; a set-hash catches it).
 real cost: the server recomputes that **O(N) id-scan + hash on every ~750 ms tick, per open gallery**, and holds
 a connection per viewer. We want the same **delete-robustness** without the per-tick O(N) cost, and simpler.
 
-Today the fresh stack has none of the pieces: `listNodeMedia` (`GET /api/scopes/{scopeId}/nodes/{nodeId}/media`)
-returns the full `MediaSummary[]` with **no timestamp, no cursor, no conditional**; `veyq_media` has only
-`created_at` (no `updated_at`, so an in-place meta edit touches no clock); there is no change signal on the node.
+When this was decided the gallery's list had none of the pieces: it returned every medium with no timestamp, no cursor
+and no conditional, an in-place meta edit touched no clock, and the node carried no change signal.
 
 ## Decision
 
 **A per-node media-revision counter is the cheap change signal; a conditional GET short-circuits the idle case;
 on a change the client pulls a keyset delta + reconciles deletes against the returned id-set. Short-poll v1.**
 
-1. **The node's item revision — a per-node counter, the cheap signal.** A monotonic `INT` per node in **core's**
-   `veyq_node_items_revision(node_id, revision, delete_revision)` (a `veyq_node` column until inbox #341, Memories'
-   own `veyq_media_revision` row until inbox #410; no row reading as 0, the first change birthing it), written only
-   through core's `NodeItemsRevisions.bump(scopeId, nodeId, deleted)`, which the writer calls **in its own
-   transaction** as it changes a record. For Memories' gallery it is **bumped on every media mutation**: attach
-   (curator + contributor/uploader upload complete), meta edit (`updateMediaMeta`, cr-0068), delete (the trash and
-   the share delete-own, cr-0102), restore, and the two re-bucketings that change a row's `bucketId`
-   (`deleteBucketReparent`, `moveMedia`). **Cover changes are excluded** —
-   `commitCover`/`clearCover` write no `veyq_media` row and never list, so a cover swap must not force a re-list.
-   Reading it is **O(1)** — this is what replaces the O(N)-per-tick hash. It is opaque operational metadata
-   (a number), so it is **operator-blind**.
+1. **The node's item revision — a per-node counter, the cheap signal.** A monotonic number per node, kept by
+   **core** (no row reads as 0, the first change births it) and written only through core's bump, which the writer
+   calls **in its own transaction** as it changes a record. For Memories' gallery it is **bumped on every media
+   mutation**: an attach (a member's upload and a link guest's), a meta edit, a delete (the trash and a guest's
+   delete of its own), a restore, and a re-bucketing that changes a row's bucket. **Cover changes are excluded** — a
+   cover is core's node attachment (`setNodeCover` / `removeNodeCover`), which writes no media row and is never
+   listed, so a cover swap must not force a re-list. Reading it is **O(1)** — this is what replaces the O(N)-per-tick
+   hash. It is opaque operational metadata (a number), so it is **operator-blind**.
 
 2. **Conditional GET on the list.** The response carries an **ETag derived from the revision**; a poll
-   sends `If-None-Match` (`listNodeMedia` for Memories; the wire pieces — the header, the `304`, the `since` and
-   `sinceDelete` parameters — are shared contract components in `_common.openapi.yaml`, and core's
-   `NodeItemsRevisions.read` is the one place that decides *304 / delta / delta + id set*). Unchanged ⇒ **`304 Not Modified`** (tiny, no body, no media query) — the common idle
-   case. Changed ⇒ `200` with the delta below. One endpoint covers both #48 sub-ideas (skip-when-unchanged +
-   fetch-on-change).
+   sends `If-None-Match`. The wire pieces are shared contract components every application's list `$ref`s, and one
+   place in core decides *304 / delta / delta + id set*. Unchanged ⇒ **`304 Not Modified`** (tiny, no body, no media
+   query) — the common idle case. Changed ⇒ `200` with the delta below. One endpoint covers both #48 sub-ideas
+   (skip-when-unchanged + fetch-on-change).
 
 3. **On change, a keyset delta — never a full re-list.** The client sends its cursor `(position, id)`; the
    server returns **only media past it** (tie-broken by id). A medium's **position** is the node's item revision its
-   last change bumped to: `bump` returns it, and the writer stamps it on the row (`veyq_media.item_position`) in the same
-   transaction, while the revision row's lock — which the bump holds to the commit — is still held. So positions become
-   visible in the order they were handed out, and a client that has passed one never sees a row land behind it. A
-   **timestamp cannot promise that**, and the keyset was one until 2026-10-19: `updated_at`, stamped before the revision
-   lock, let a writer that took its stamp first and committed last land behind a cursor a poll in between had already
-   passed — its change was never delivered (`MediaKeysetRaceSliceTest`, red on `updated_at` on H2, green on the position;
-   a millisecond tie broke the same way). Every writer that moves a medium to the end of the list stamps it — an attach,
-   a meta edit, a restore, a block or its lift; a move between buckets and a reparent bump the revision without moving
-   the row. `updated_at` stays the medium's change time (set at attach, bumped on the same writes; since inbox #398 its
-   only creation time) and is served as such. So an **active upload streams the handful of new items each poll**, not the
+   last change bumped to: the bump returns it, and the writer stamps it on the row in the same transaction, while the
+   revision row's lock — which the bump holds to the commit — is still held. So positions become visible in the order
+   they were handed out, and a client that has passed one never sees a row land behind it. **Rejected: a timestamp as the
+   keyset.** A change time stamped before the revision lock lets a writer that took its stamp first and committed last
+   land behind a cursor a poll in between had already passed — its change is never delivered, and a millisecond tie
+   breaks the same way. Every writer that moves a medium to the end of the list stamps it — an attach, a meta edit, a
+   restore, a block or its lift; a move between buckets and a reparent bump the revision without moving the row. The
+   medium's change time stays its own field and is served as such. So an **active upload streams the handful of new items each poll**, not the
    whole gallery every interval — the failure mode a full-re-list-on-change would have. The client upserts the delta by
    `mediaId` and continues from the `cursor` the server answered: opaque to it, never assembled from a row's fields.
 
@@ -79,58 +73,51 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    the same row, so a single read returns a **consistent pair** — no torn read can strand a delete.
 
 5. **Short-poll transport for v1.** A client with a Memory open polls on an interval, **gated on tab visibility**
-   (core's `createLivePoller`, `shared/state/livePoller.ts`, the loop the level views run on too: a `visibilitychange`
-   or focus event ticks immediately on foreground, the interval pauses when hidden — a background poll is pure
-   waste — and it is jittered ±20 % and backs off on errors). The cadence is 20 s (`ITEMS_POLL`), the one the
-   gallery already had; it replaced a fixed 20 s `createVisibilityPoller` and so gained the jitter, the back-off on
-   a failing server and the focus catch-up, and lost nothing. The conditional read, the delta merge and the cursor
-   are core's too (`core/items/itemsLive.ts`: `itemsPollTick`, `reconcileItems`), so an application supplies only
-   its fetch and its reducer. Stops when the
-   Memory closes; a poll still in flight then writes nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few seconds of latency is fine for a photo
-   grid; **long-poll / a push channel** (sub-second, shared later with #6 live journal) is a deferred upgrade.
+   (core's live poller, the loop the level views run on too: a return to the foreground or focus ticks at once, the
+   interval pauses when hidden — a background poll is pure waste — and it is jittered and backs off on errors). The
+   cadence is about 20 s. The conditional read, the delta merge and the cursor are core's too, so an application
+   supplies only its fetch and its reducer. It stops when the Memory closes; a poll still in flight then writes
+   nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few
+   seconds of latency is fine for a photo grid; **long-poll / a push channel** (sub-second, shared later with #6 live
+   journal) is a deferred upgrade.
 
 6. **The first load is the same keyset, in pages.** A list read without `since` is not special: it is a delta from the
-   beginning. Every read takes a `limit` (1–1000, absent = 1000; the response's `media` carries the cap as its
-   `maxItems`) and answers `more` when rows remain past the page, and the page's `cursor`; the client asks again with that
+   beginning. Every read takes a `limit` up to a fixed cap (the contract states it) and answers `more` when rows remain
+   past the page, and the page's `cursor`; the client asks again with that
    cursor, and without `If-None-Match`, until `more` is false. A poll whose delta is longer than a page pages the same
    way. **The revisions a client keeps are the first page's, the cursor the last page's.** The server reads the
    revisions before the rows (as ADR 0081 decision 3 orders it), so a change committed while the client pages moves the
    revision past the one it kept, and its next poll pulls that change as a delta; an edit to a row already paged moves
    the row to the end, where it is delivered again and upserted; a delete moves `delete_revision` past the kept one, so
-   the next poll carries the id set (`MediaListPagingSliceTest`, red when the client keeps the last page's revisions).
+   the next poll carries the id set; keeping the last page's revisions instead would lose that change.
    Each page is read with the same number of queries whatever it holds — its originals, their derivatives and every blob
-   they name, one query each (`MediaListQueryCountSliceTest`; one query per photo and per derivative cost 40,017 SELECTs
-   for 10,000 photos). Paging bounds one answer's size and the server's memory for it. It does not give the client its
+   they name, one query each, never one per photo. Paging bounds one answer's size and the server's memory for it. It does not give the client its
    first screen: the gallery's order is the sealed capture time, which only the device reads, so the page order is not
    the display order and the client needs every page before the order is final
    ([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md) decision 4). The
-   Trash tab's listing (`state=trashed`) pages on the same keyset, its order by `deletedAt` the client's once it holds
-   every page. **A guest's listing (`listShareMedia`) pages by the same rule on another key: the media id**, continued
-   `after` the last id it was given, and it lists the one node a guest has open (`nodeId`) rather than the whole shared
+   Trash tab's listing pages on the same keyset, its order by deletion time the client's once it holds
+   every page. **A guest's listing pages by the same rule on another key: the media id**, continued
+   after the last id it was given, and it lists the one node a guest has open rather than the whole shared
    subtree. A position is the order of the Memory's changes, and a guest is told no time of the Memory's activity (ADR
    0081 decision 4; it is served no `updatedAt` either), so its key is the one it already holds.
 
-7. **A guest polls too, on a tag of its own (inbox #497).** A share view equals the member view, so a guest's open
-   gallery picks up a second uploader's photo as a member's does, through the same client loop (`useMediaGalleryLive`,
-   core's `itemsPollTick`). Its tag is not the node's item revision: that moves on changes a guest is not shown (a medium
-   moved between buckets, an edit undone) and would tell an anonymous visitor when the Memory is worked on. It is ADR
-   0081 decision 4's rule — `listShareMedia`'s first page (no `after`) carries an `ETag` that is a truncated SHA-256 over
-   everything the read serves, every page of it, each medium as the generated model names it, and the identities beside
-   them (`ShareMediaTag`); `If-None-Match` with it answers `304`. A guest has no keyset into the Memory's changes (its
-   pages run by id), so a change answers the **whole listing**, and the client merges it with every id it holds as the id
-   set — adds insert, a medium gone from the link drops, by the one `reconcileItems` merge. The first page's tag is read
-   before its rows, so a medium added while the guest pages moves the tag past the kept one and the next poll re-reads.
-   **The idle poll is cheap because the digest is remembered** by what it is a function of (`ShareMediaTags`, per
-   instance, bounded): the asked nodes and their item revisions — every medium writer bumps one, and a medium's blobs are
-   written with it — and the content blocks that reach those nodes, which bump nothing. An idle guest poll reads the gate,
-   the blocks and the revisions and compares; only a changed key reads the whole listing, and serves the first page from
-   that read. Measured (H2 in the slice suite, a developer Mac at load 22, indicative): an idle guest poll is 11
-   statements and about 10 ms at 1,000 and at 10,000 photos (a member's `304`: 13 statements, 10–30 ms); a recompute
-   after a change 14 statements and about 0.5 s at 1,000, 41 and about 5 s at 10,000 — one per change per instance,
-   shared by every link onto the node (`ShareMediaLivePollSliceTest` pins the idle poll's statements at 1 and 1,001
-   media). Two guests that miss at once each recompute; nothing single-flights them.
+7. **A guest polls too, on a tag of its own.** A share view equals the member view, so a guest's open gallery picks up
+   a second uploader's photo as a member's does, through the same client loop. Its tag is not the node's item revision:
+   that moves on changes a guest is not shown (a medium moved between buckets, an edit undone) and would tell an
+   anonymous visitor when the Memory is worked on. It is ADR 0081 decision 4's rule — the listing's first page carries
+   an `ETag` that is a truncated SHA-256 over everything the read serves, every page of it, and the identities beside
+   the media; `If-None-Match` with it answers `304`. A guest has no keyset into the Memory's changes (its pages run by
+   id), so a change answers the **whole listing**, and the client merges it with every id it holds as the id set — adds
+   insert, a medium gone from the link drops, by the one merge. The first page's tag is read before its rows, so a
+   medium added while the guest pages moves the tag past the kept one and the next poll re-reads. **The idle poll is
+   cheap because the digest is remembered** by what it is a function of (per instance, bounded): the asked nodes and
+   their item revisions — every medium writer bumps one, and a medium's blobs are written with it — and the content
+   blocks that reach those nodes, which bump nothing. An idle guest poll reads the gate, the blocks and the revisions and
+   compares, with the same constant number of statements whatever the Memory holds; only a changed key reads the whole
+   listing, once per change per instance, shared by every link onto the node, and serves the first page from that
+   read. Two guests that miss at once each recompute; nothing single-flights them.
 
-How the server computes one `listNodeMedia` poll response (core's `NodeItemsRevisions.read` decides it) — the **O(1) revision compare short-circuits the idle
+How the server computes one poll response of the gallery's list — the **O(1) revision compare short-circuits the idle
 case** (no media query at all), and only a genuine change runs the two queries (keyset delta + current id-set):
 
 ```mermaid
@@ -192,14 +179,10 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   precondition** — it moves on every attach, trash, restore, move and meta change, so a compare-and-set on it would
   turn every concurrent upload into a date-edit conflict. The sealed meta blobs carry their own `metaRevision` for
   that ([ADR 0077](0077-a-write-carries-the-version-it-read.md)).
-- **New server state:** a `revision INT` + a `delete_revision INT` per node (columns on `veyq_node` then;
-  Memories' `veyq_media_revision` from inbox #341 to #410; core's `veyq_node_items_revision` now, with a foreign key
-  onto `veyq_node` that does not cascade — the node-subtree eraser at phase 300 and the scope's node eraser delete the
-  row before the node goes), an `updated_at
-  DATETIME(3)` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398), and
-  the keyset's `item_position INT` on `veyq_media` with the index `(node_id, item_position, id)` (decision 3, 6); `listNodeMedia` gains a conditional GET (`If-None-Match`
-  → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's
-  `delete_revision` lags** (a delete occurred). All opaque/operational — no key, no plaintext.
+- **New server state:** two counters per node (core's, erased with the node), a change time and a position per
+  record (decisions 3, 6); the list gains a conditional GET, a cursor and the id set on a `200` **only when the
+  client's delete counter lags**. All opaque/operational — no key, no plaintext. The tables are the current picture's
+  ([Applications § How an application publishes a revisioned list](../apps/README.md#how-an-application-publishes-a-revisioned-list)).
 - **Scope: own-node list only.** The gallery lists the open node's own media (chapters open to their own
   galleries), so a **per-node** revision suffices. A Memory+chapters **subtree** aggregation (inbox #16) would
   need a subtree-max revision — **out of scope**, a later slice. The scope's *node list* is a different signal
@@ -208,20 +191,13 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   moves the scope's tree revision only, so a member's gallery poll stays a `304` and the open Memory learns it through
   the host's tree poll, which runs on every opened node's page (ADR 0081 decision 5, inbox #503). A guest's tag, a digest
   of the rows (decision 7), carries both.
-- **Lock order, and why the table sits where it does.** `bump` runs after the writer's record rows and takes **no scope
-  lock** (unlike ADR 0081's `bumpTree`: gallery writers lock a media row, not the scope), so the first-bump insert is
-  decided under the **node row's** lock with the UPDATE asked again beneath it — `record rows -> node row -> revision
-  row`, the order every gallery writer already takes (`MediaLockOrderRaceSliceTest`), the revision row a leaf nothing
-  waits behind. `NodeItemsRevisionsCoreSliceTest` pins the arithmetic, the two racing first bumps, that a bump of an
-  existing row waits for no node lock, the read's three answers and the erasure; `NodeItemsRevisionBumpsTest` reads
-  Memories' sources and is red on a media writer that does not bump.
+- **Lock order, and why the table sits where it does.** The bump runs after the writer's record rows and takes **no
+  scope lock** (unlike ADR 0081's tree bump: gallery writers lock a media row, not the scope), so the first-bump insert
+  is decided under the **node row's** lock with the update asked again beneath it — record rows, then the node row,
+  then the revision row, the order every gallery writer already takes, the revision row a leaf nothing waits behind.
 - **Adding a second user.** An application with its own records inside a node (Expenses' entries, Inventory's items)
-  adds its keyset query, calls `bump` from each writer and a `NodeItemsRevisionBumpsTest` entry, `$ref`s the shared
-  contract components in its list operation and builds its view on `itemsPollTick`/`reconcileItems`: the recipe is in
-  [docs/apps/README.md](../apps/README.md). It owns no counter table of its own.
-- **A member-visible curator delete is a separate surface.** Today the only media-row deletes are the share
-  delete-own (cr-0102) and node-delete; there is no authenticated curator "delete my photo" endpoint. The
-  delete-reconcile works for the deletes that exist; a curator delete endpoint is net-new (not in this feature).
+  follows the recipe in [Applications § How an application publishes a revisioned list](../apps/README.md#how-an-application-publishes-a-revisioned-list).
+  It owns no counter table of its own.
 - **Rejected — an O(N) set-hash per tick:** correct + delete-robust, but recomputes the whole id-scan +
   SHA-256 every ~750 ms per open gallery; the revision counter delivers the same robustness at O(1). We
   keep the *set-not-count* insight (via the on-change id-set), drop the per-tick cost.

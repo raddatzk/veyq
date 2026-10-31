@@ -46,6 +46,14 @@ which would collide with a member's own group rows), split by sensitivity:
 3. **No display name on the account.** Display is the per-tenant username + sealed names, and the profile picture
    ([§ Profile picture](#profile-picture)).
 
+## The display name
+
+One rule names a member everywhere the interface names a person — a Memory's participants, an uploader, a file's
+uploader, the profile page: the **real name** when it opens on this device, else the **username**. One who left the
+scope is a "former member". (Cited as [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)
+decision 9; the code is `core/people/directory.ts`.) Not yet everywhere: a Memory's Contributions tab still names a
+member by the username ([uc.memory.buckets](../../memory/use-cases/uc.memory.buckets.md)).
+
 ## Main flow — build your tenant identity on join
 
 1. In the tenant-join flow the member picks a **username** (required, plaintext, on device) **and optionally a

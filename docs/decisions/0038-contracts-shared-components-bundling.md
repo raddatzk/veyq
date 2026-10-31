@@ -33,15 +33,12 @@ stays copied is held equal by a guard.**
 1. **A shared schema lives once in `_common`, aliased by name in each spec that uses it.** A response that `$ref`s
    the shared schema **directly** makes openapi-generator invent a per-operation model name
    (`GetAccountKeyMaterial401Response`), losing the type. So each spec keeps a **local alias** —
-   `components.schemas.ErrorResponse: {$ref: '_common…'}` — and every operation references the local name. The
-   backend maps every `_common` schema to core's one class (`schemaMappings`, `buildSrc`'s `SpecSets`), so a shared
-   schema has one generated type, core's; web additionally emits one unreferenced, unexported inline clone per module
-   in the gitignored generated tree, harmless and not worth fighting. The same holds for the shared `parameters`,
-   `headers` and `responses` (the revisioned item list of ADR 0033, the scope-access gate's answers). `_common` is a
-   `$ref` target, not a spec: the backend's spec glob excludes it and web's `generate:api` does not list it. Its own
-   header states the layout and lists what it holds.
-2. **`bearerAuth`, a path parameter more than one spec defines, and the shared inline enums stay copied**
-   (derivative-kind, membership-role, credential-method, suite-version). Extraction there is not free:
+   `components.schemas.ErrorResponse: {$ref: '_common…'}` — and every operation references the local name. On the
+   backend a shared schema has one generated type, core's. The same holds for the shared `parameters`, `headers` and
+   `responses`. `_common` is a `$ref` target, not a spec: no generator is fed it on its own. Its own header states the
+   layout and lists what it holds.
+2. **`bearerAuth`, a path parameter more than one spec defines, and the shared inline enums stay copied** (the
+   guard's docstring names the enum families). Extraction there is not free:
    `bearerAuth`'s `description`s carry real per-domain authorization nuance, and the enums are inline properties,
    so `$ref`-ing them would change the generated type (a nested `Parent.MethodEnum` → a named import) on both
    surfaces. A shared enum that is its own schema, not an inline property (`NodeKind`, `TenantStatus`), is a shared

@@ -1,7 +1,7 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: decision 3's 14-day window (inbox #811), decision 9's hand-over of the moderation key (inbox #812))
 - Date: 2026-10-18
 - Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
 
@@ -50,11 +50,14 @@ scope trash, shared ones cut, a sole-owned group handed on, links off). A modera
 epoch). The account address receives one mail, through the instance mail where it is set up: that erasure was requested,
 when it completes and who can stop it — a stolen session that erases an account is then seen by its owner.
 
-### 3. Erased after the scope trash's retention, by one purge
+### 3. Erased after a window of its own, by one purge
 
-The account row and every row keyed on it go when its own scopes go: after the scope trash's retention, 30 days, by
-the purge that already erases those scopes. Until then only the Server Owner can stop
-it, for a mistaken or coerced request; the person cannot sign in to do so. Thirty days stays inside Art. 12(3)'s month.
+The account row and every row keyed on it go after a window of **14 days** from the request, by the purge that
+erases its own scopes with it — a window of the erasure's own, no longer the scope trash's 30 days. Until then only
+the Server Owner can stop it, for a mistaken or coerced request; the person cannot sign in to do so. The request is
+confirmed at once, with its date, which answers Art. 12(3)'s month; the erasure itself owes Art. 17(1)'s "without
+undue delay", and a window for a mistaken or coerced request is bounded short for that reason. The 30 days were
+rejected: they are not inside every calendar month, and longer than a safeguard needs.
 
 ### 4. What goes
 
@@ -121,10 +124,13 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
   members**: the operator can admit nobody into a tenant's key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move
   3), so an owner it brought in from outside would wait forever for a key no member could vouch for; the member accepts
   it and becomes an owner, nothing is born and no key moves.
-- **The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down and a
-  removal are ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): with them
-  the key would be lost, and with it every report and hold sealed to it — the very records decision 7 keeps. Another
-  moderator holds it first.
+- **The last holder of the moderation key** is not refused: an erasure cannot wait on a third person (Art. 12(2)). At
+  the self-service door the erasure takes one step first — the person's own client hands the key to another moderator
+  or to the Server Owner ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+  § 5), so every report and hold sealed to it, the very records decision 7 keeps, stays readable. At the Server
+  Owner's door, where the person's client is not there to hand it over, the erasure proceeds after a warning that what
+  only this key opens becomes unreadable; admin-web shows an instance whose key one person alone holds. Refusing until
+  another moderator held the key was rejected: it made the erasure wait on someone else.
 
 ### 10. A tenant is deleted while active
 

@@ -55,9 +55,11 @@
   `HttpAuthenticationMechanism` + `IdentityProvider` resolve the token once into a `SecurityIdentity`; each
   resource method declares `@PermitAll` / `@Authenticated` / `@RolesAllowed(SERVER_OWNER)`. **Default-deny**
   (`deny-unannotated-endpoints=true`): an unannotated endpoint fails closed (401), so the annotation is the
-  single place the token-or-not decision is taken. The 401/403 body comes from two `ExceptionMapper`s, not a
-  per-resource `unauthorized()`. The one exception is the deliberately-lenient `logout`, which reads the token
-  manually so it stays a 204 no-op for any token.
+  single place the token-or-not decision is taken. The 401/403 body comes from the central `ExceptionMapper`s, not
+  a per-resource `unauthorized()`. The one exception is the deliberately-lenient `logout`, which reads the token
+  manually so it stays a 204 no-op for any token. The moderation operations' `MODERATOR` role is checked, with the
+  key proof, by one gate behind `@Authenticated`, never by `@RolesAllowed`
+  ([ADR 0099](../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 2).
 - **Fine-grained, content-level authorization stays a small domain guard** in the handler — a *different layer*
   from the HTTP role gate above (e.g. scope access — the membership boundary first, then the grant / key-holder
   check ([ADR 0042](../decisions/0042-http-failure-projection.md)); a containment guard; tenant-admin over a
@@ -72,6 +74,14 @@
 - **The OpenAPI spec under `contracts/api/` is the contract.** The build generates JAX-RS interfaces +
   Kotlin/TS models; resources implement the interfaces directly. Never hand-write a DTO that duplicates a
   generated model. The API is internal and may change with its consumers.
+- **A schema two specs (or two owners) share lives once in `contracts/api/_common.openapi.yaml`, aliased by name.**
+  Each spec that uses it keeps a local alias (`components.schemas.ErrorResponse: {$ref: '_common…'}`) and every
+  operation references the local name: a response that `$ref`s `_common` directly makes the generator invent a
+  per-operation model name. On the backend every `_common` schema is one generated type, core's (`buildSrc`'s
+  `SpecSets`, `schemaMappings`); `_common` is a `$ref` target, never fed to a generator on its own, and its header
+  lists what it holds. What stays copied — `bearerAuth`, a path parameter more than one spec defines, the inline
+  enums — is held equal by `scripts/validate_contracts_common.py`
+  ([ADR 0038](../decisions/0038-contracts-shared-components-bundling.md)).
 - **Every edit operation declares how it meets a second writer** — `x-veyq-concurrency` with `mode: revision` (a
   list of `fields`: each revision field the request carries, the fields that require it, and the conflict code its
   stale `409` answers) or `mode: last-writer-wins` with its reason
@@ -80,7 +90,7 @@
   `revision`; the client re-applies only its own change on the conflict body, and never seals a blob it could not
   open.
 - **A response property with no value is omitted, never sent as `null`** (`quarkus.jackson.serialization-inclusion=non-null`,
-  core's `application.properties`; cr-api-fuzzing Q7). So a response schema never lists such a property as
+  core's `application.properties`). So a response schema never lists such a property as
   `required` and never types it `[T, "null"]` — a description that says "`null` when …" means "absent when …" on
   the wire — and a client reads a missing field as none (`?? null` where its own code wants `null`). Requests are
   unchanged: a `null` a client sends still binds. The one property sent as an explicit `null` says so at its field
@@ -96,7 +106,9 @@
   request fields (`maxLength`/`minLength`, `pattern`, `format`, `minimum`/`maximum`, `required`).
   Required-field + structural validation is enforced by generated bean validation → a malformed body is
   rejected **before the handler** (400) — with the contract's `ErrorResponse{code: invalid_request}`, the same
-  body a handler's refusal carries (§7).
+  body a handler's refusal carries (§7). **Authentication runs before bean validation**, so an anonymous or
+  bogus-token request with a malformed body answers **401**, not 400, and learns nothing of the validation; an
+  authenticated caller's malformed body answers the 400 ([ADR 0008](../decisions/0008-centralized-http-auth.md)).
 - **Field-level validation AND sanitization are declared in the spec via `x-field-extra-annotation`.**
   The `kotlin` model generator ignores standard `maxLength`/`pattern`, but emits whatever
   `x-field-extra-annotation` holds onto the field. Use it to attach (a) **bean-validation** constraints
@@ -221,8 +233,9 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   matches a pattern.
   What makes it true here rests on two framework **defaults** nothing in this tree restates, so they are named
   once: `application.properties` sets `quarkus.flyway.migrate-at-start=true`, and validation is left at its
-  default on both layers — `quarkus.flyway.validate-on-migrate` (Quarkus 3.36.0: `true`) and Flyway's own
-  `validateOnMigrate` (12.0.0 `FlywayModel.defaults()`: `true`). Only `%dev` escapes, via
+  default on both layers — `quarkus.flyway.validate-on-migrate` and Flyway's own `validateOnMigrate`
+  (`FlywayModel.defaults()`), both `true` (read off Flyway 12.0.0, the version the build resolves, and Quarkus 3.36;
+  a Quarkus bump re-reads its default). Only `%dev` escapes, via
   `quarkus.flyway.repair-at-start=true` — which is exactly why a broken checksum passes a developer's machine
   unnoticed and stops a production start. `scripts/validate_migration_versions.py` turns such an edit red unless
   its pin line changes in the same diff, which before the first release is the one sanctioned way to change a
@@ -260,7 +273,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **A race test forces its overlap.** One writer's commit is held back (`whileUncommitted`, which takes a
   `MANDATORY`-transaction entry point) while the other writer runs; two threads released at a barrier mostly run one
   after the other, and stay green with the lock removed. So a race test is bitten by removing the lock it guards, and
-  asserts what the loser must not have done, not only what the winner did. What bought it: cr-moderation-review-and-measures'
+  asserts what the loser must not have done, not only what the winner did. What bought it: the moderation review's
   first decision/report races started both writers at a barrier and were green with every lock taken out.
 - **A held round counts only when its order was forced.** A 300 ms hold forces nothing when the other side reaches its
   lock later (under load a first call can take seconds), and that round tests the other order, green. So the hold
@@ -291,8 +304,8 @@ not documented; the code is the source of truth for that.
   needed again (invites, session tokens, …) are physically removed by a small `@Scheduled` bean that
   delegates to store delete-methods, on a config-driven interval (`*.purge.every`). Purge strictly past
   expiry/terminal-state so any reuse-detection window (e.g. a superseded refresh token, ADR 0004) is
-  preserved until it lapses; delete child rows before parents (FK order). First two: `TenantInvitePurge`
-  (cr-0009), `SessionPurge` (cr-0011).
+  preserved until it lapses; delete child rows before parents (FK order). First two: `TenantInvitePurge`,
+  `SessionPurge`.
 - **HTTP failure projection → `core/http/`.** A backend operation's sealed `…Outcome` failure variants project
   to the wire `ErrorResponse{code}` through the **single** `core/http/` envelope writer + status-bucket table;
   no `…Resource` constructs `ErrorResponse` or keeps a per-resource `error`/`forbidden`/`notFound` helper. The
@@ -304,7 +317,7 @@ not documented; the code is the source of truth for that.
   (grant-holder, owner) run **after** it and may answer 403: that caller is a member and already knows the resource
   exists. `OperatorBlindProbeTest` enforces this for every operation it derives from the contract — a new one is
   red until it is probed or named on the test's exclusion list with a reason.
-  ([ADR 0042](../decisions/0042-http-failure-projection.md); cr-0161 the projection, cr-0162 the ordering.)
+  ([ADR 0042](../decisions/0042-http-failure-projection.md))
 - **A single-use transition is a checked compare-and-set, first in its transaction.** A secret the docs call
   single-use (an invite, a recovery token, a pairing channel's delegation, a mailed confirmation) is spent by a
   guarded `UPDATE … where id = ? and status = <live>` whose row count the caller reads and branches on, and that
@@ -314,7 +327,7 @@ not documented; the code is the source of truth for that.
   tells an unknown secret from a dead one; it never authorizes. Checks that read what a concurrent redeem writes
   (the account it births, a profile, a parent's status) run after the spend, and a refusal there rolls the spend
   back. Examples: `PairingStore.markCollected`, `TenantStore.consumeLiveInvite`. Two corollaries, both measured
-  as real defects before they were rules (cr-one-time-secrets-spend-by-compare-and-set):
+  as real defects before they were rules:
   - **When the decision reads more than one row, the serializing write is a row lock on their parent, taken
     first.** `SessionService.rotate` locks the session family before it reads the presented and the `CURRENT`
     refresh token: their own row locks ordered only presentations of the same token, so an orphan and the current
@@ -336,7 +349,7 @@ not documented; the code is the source of truth for that.
   every column, so a write wrote back every value it had only read and undid what another transaction changed in
   between. Each was measured: a terms edit lifted a tenant suspension, a Memory rename wiped a WRITE_ONLY link's drop
   key, a consent toggle rolled back a password change's new auth key, and a tenant rotation's re-tag revived a
-  revoked invite (cr-managed-writes-flush-only-what-they-change). **Two writers of the same column still need the
+  revoked invite. **Two writers of the same column still need the
   compare-and-set rule above, and a check that decides a write is read where the write happens.** A rename's epoch
   gate is its update's own `and currentEpoch = ?` (`ScopesStore.renameGroup`): checked in an earlier read, a rotation
   committed between the check and the write, and a name sealed under the old epoch landed. A re-activation reads
@@ -357,7 +370,7 @@ not documented; the code is the source of truth for that.
   holds; a group create and a group add take the tenant root a tenant removal holds; a consent proposal's accept takes
   the group's row a tenant removal holds while it decides from that proposal, and asks under it whether the proposal is
   still there (inbox #599); a purge selects with
-  `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits). A sign-in, a device wrap
+  `FOR UPDATE` and a restore is a guarded update. A sign-in, a device wrap
   and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change, a
   key rotation and a sign-out everywhere else take first, and re-read under it what those change — the auth key, the
   caller's session (inbox #297, #316).
@@ -373,3 +386,18 @@ not documented; the code is the source of truth for that.
 
 This section fills as decisions are made; it intentionally starts nearly empty rather than with
 speculative rules.
+
+## 13. Response compression
+
+- **The application compresses its answers, the proxies do not** — Quarkus' own compression, configured in core's
+  `application.properties`, covers both deployment targets and the web bundle the backend serves
+  ([ADR 0103](../decisions/0103-the-application-compresses-its-answers-except-the-ones-that-carry-a-token.md)). By
+  media type (the text types, SVG, the web manifest), never a blob; gzip and deflate, no brotli; level 1, with the
+  measurement beside the property. Every key is build-time: a change is a new image. On the production recipe at
+  10,000 photos the media list goes out at about 0.6 of its body and the JavaScript bundle at about a third
+  (2.50 MB → 0.79 MB).
+- **An answer that carries a token is never compressed** (BREACH). The build derives the set from the contracts —
+  every operation whose success response holds a field marked `x-veyq-visibility: token`, presigned URLs included —
+  and marks each generated interface method `@Uncompressed` (`buildSrc`'s `TokenAnswersUncompressed`); an annotation
+  on the implementing `override` is not read. `TokenAnswersAreNotCompressedTest` derives the set again and calls each
+  endpoint with `Accept-Encoding: gzip`. So a new token field needs nothing but its marking in the contract.
