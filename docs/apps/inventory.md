@@ -4,40 +4,60 @@
 > ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)) as its template; an ADR
 > takes its decisions over when it is refined, and this page keeps the domain. The questions still open are at the end.
 
-Inventory (*Inventar*) keeps track of things a person or a group owns — climbing gear, camping kit, board games — and
-of who has them and who reserved them, with the platform's operator-blindness: the server never learns what anyone
-owns, who lent it to whom, or when it is due back.
+Inventory (*Inventar*) keeps track of the things the people of a space own — climbing gear, camping kit, board
+games — of who has them now, and of who asked to borrow them, with the platform's operator-blindness: the server
+never learns what anyone owns, who lent it to whom, or when it is due back.
 
 ## The domain
 
-- **An Inventory is a node** of its own kind (`INVENTORY`), like a Pot: at a space's root or in a folder, as many as
-  the space wants ("Climbing gear", "Games"), in the node trash, with its own key
-  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)). Who sees an
-  Inventory is who is in the space: a personal space is one's own stuff, a group a crew, a tenant a household or a club.
-- **An item** is one thing: a name, its tags, where it is (a location, typed — "cellar, box 3"), notes and pictures.
-  A location only describes; it is no folder and no boundary.
-- **Tags, managed by the Inventory's members.** No fixed categories: whoever may write adds, renames and removes the
-  Inventory's tags, and an item carries any number of them. The tag list is the Inventory's meta, written whole
+- **One pool per space.** Each space has one **pool** (*Pool*), created the first time someone opens Inventory in it:
+  a personal space's pool is one's own stuff, a group's a crew's, a tenant's a household's or a club's. Every member
+  of the space sees the pool and adds their own items to it; a space knows only owners and members, no reader, so
+  everyone writes alike.
+- **An item belongs to the member who added it.** Its **owner** (*Eigentümer*) is that member, for good. Its
+  **holder** (*Besitzer*) is who has it now — the owner, unless it is lent. A holder is a **member** of the space or a
+  **name** (someone outside it), the same two kinds as a Pot's participants (ADR 0108 decision 2). Every change of
+  holder stays in the item's history.
+- **What an item carries:** a name, its tags, where it is (a location, typed — "cellar, box 3"), its fields, notes and
+  pictures. A location only describes; it is no folder and no boundary.
+- **Fields, placed freely.** Whoever writes adds a field to an item: a label of their choosing and one of the field
+  types Inventory offers — text, number, yes/no, date, and a **due date**, a date the pool shows as due when it opens
+  ("use until", "next inspection"). The types are Inventory's, versioned in its entry format; the labels are the
+  members'. Labels already used in the pool are offered again, so "next inspection" stays one field across items and
+  filters by it; nothing forces a field on an item, and no category groups them.
+- **Tags, managed by the members.** No fixed categories: whoever writes adds, renames and removes the pool's tags, and
+  an item carries any number of them. The tag list is the pool's meta, written whole
   ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md)); an item names its tags by id, so a rename
   reaches every item at once.
 - **Notes and pictures per item.** A note is dated and kept: the item's notes are its history (a fall, an inspection,
   a repair, a missing piece). Pictures are images attached to the item.
-- **Lending is noted, not granted.** An item says who has it and since when, optionally until when: a **member** of the
-  space or a **name** (someone outside it), the same two kinds as a Pot's participants (ADR 0108 decision 2). Noting a
-  loan opens nothing to the borrower: a member already sees the Inventory, a name is a person veyq does not know.
-  Returning it ends the loan; the loans stay in the item's history.
-- **Reservations.** A member reserves an item for a span of days, for themselves or for a name — a guest's wish goes
-  through a member, as everything a person outside the space wants does. Two reservations of one item may not overlap:
-  the client checks it before writing, and the record's compare-and-swap below makes a second write over a stale view
-  fail instead of double-booking.
-- **No links.** An Inventory cannot be shared by a link: a link guest is anonymous and names itself, which is not who
-  should hold a club's rope. A person outside the space asks a member.
+- **A loan is asked for.** A member asks the owner to borrow an item, from a day and optionally until a day, for
+  themselves or for a name — a person outside the space asks through a member. The owner confirms or declines; on a
+  confirmation the borrower becomes the holder from that day. The owner lends their own item to someone directly.
+  Passing an item from one borrower to the next is a new request to the owner. **The return:** the holder reports
+  it, the owner confirms it came back, with a note on its state where it must be inspected after use; then the owner is
+  the holder again. A loan opens nothing to the borrower: a member already sees the pool, a name is a person veyq does
+  not know.
+- **Reservations** are loans asked for ahead, for a span of days. Two confirmed spans of one item may not overlap: the
+  client checks before writing, and the record's compare-and-swap below makes a second write over a stale view fail
+  instead of double-booking.
+- **An owner who leaves takes their items along.** When a member leaves the space, their items leave the pool and go
+  to the pool of their personal space, with their fields, notes, pictures and history; an item lent out at that
+  moment goes along still lent, its holder kept as the name it had. Items of others that the leaving member holds
+  stay in the pool, held by a former member, until their owner confirms them back. An account erased takes its items
+  with it.
+- **No links.** A pool cannot be shared by a link: a link guest is anonymous and names itself, which is not who should
+  hold a club's rope. A person outside the space asks a member.
 - **QR labels.** A printable label per item that holds only a URL with the item's id on the tenant's domain — never a
   key. Scanned by a member who is signed in, it opens the item; to anyone else it shows the sign-in.
 
+The app holds to the owner's confirmations, not the server: it cannot read the sealed records. Every member of the
+space holds the pool's key and could write a step the app would not offer; the history shows who wrote each one, as
+in a Pot. With no push, an open request shows when its owner opens the pool.
+
 **Not in the first cut:** packing lists (a list of items to tick off for a trip), a finder card (a label a stranger
 can read to reach the owner — it would need a public link, which Inventory otherwise has none of), reminders by
-notification (below), and import from a spreadsheet.
+notification (below), a field set per tag, and import from a spreadsheet.
 
 ## On the platform
 
@@ -45,29 +65,32 @@ What it takes from the platform as it stands:
 
 | Need | Today |
 |---|---|
-| The Inventory, its key, trash, moderation, the application switch | A node kind with `NodeKindRules` — Expenses' `ExpensesNodeKindRules` is the template; no share roles, so no link. |
-| Items, loans, reservations and notes as records with a history | ADR 0108's shape in Inventory's own table: one row per revision, the server takes `n + 1` only over `n` (`409 stale_revision`), tombstones, history kept, each revision under its own key wrapped under the Inventory's, bodies padded to size classes. |
-| A dropped or reordered revision is caught | ADR 0108 decision 5's graph of seen revisions, no signature (a seal under the Inventory's key already proves a key holder wrote it). |
-| Pictures per item | **The one new core piece:** a record with attachments, which ADR 0108 left until a third application needed it. Expenses' receipt table (`veyq_expenses_receipt`, the fourth `veyq_blob` arm) is where it is drawn from, so Inventory does not add a fifth arm of its own. |
-| Search and filter by tag, location, who has it | In the client, over the decrypted list — a few thousand items fit in memory, as a Pot's entries do. |
-| "Due back", "reserved by me" | Shown when the Inventory opens, computed on the device. |
+| The pool, its key, trash, moderation, the application switch | A node kind (`INVENTORY`) with `NodeKindRules` — Expenses' `ExpensesNodeKindRules` is the template — at most one per space, at its root; no share roles, so no link. |
+| Items, loans, reservations and notes as records with a history | ADR 0108's shape in Inventory's own table: one row per revision, the server takes `n + 1` only over `n` (`409 stale_revision`), tombstones, history kept, each revision under its own key wrapped under the pool's, bodies padded to size classes. |
+| A dropped or reordered revision is caught | ADR 0108 decision 5's graph of seen revisions, no signature (a seal under the pool's key already proves a key holder wrote it). |
+| Pictures per item | **New core piece:** a record with attachments, which ADR 0108 left until a third application needed it. Expenses' receipt table (`veyq_expenses_receipt`, the fourth `veyq_blob` arm) is where it is drawn from, so Inventory does not add a fifth arm of its own. |
+| An owner takes their items along | **New, Inventory's own:** the server knows an item's owner already — the writer of its first revision is operator-visible, as every revision's writer is — so it can hand a member who leaves their own items and nothing else. Their client re-seals them into their personal pool, and the server then drops them from the space's. An erased account's items go with it. |
+| Search and filter by tag, field, location, holder | In the client, over the decrypted list — a few thousand items fit in memory, as a Pot's entries do. |
+| "Due", "due back", "asked of me" | Shown when the pool opens, computed on the device. |
 
 What it does **not** need, unlike the earlier concept: a content key wrapped for one person (a loan is noted, not
 granted), a signed log (the graph of seen revisions), and a push service.
 
 ## What the operator sees
 
-The node `kind` `INVENTORY` and the Inventory's place in the tree, as for any node; the number of items, their
-revisions — each one's time, size class and writer — tombstones and erasures; the number and sizes of the pictures.
-From the times of writes: **when** the Inventory is used, and with that the rhythm of loans and reservations, but not
-which item, by whom or to whom. No item name, tag, location, borrower, date or note is readable by it.
+The node `kind` `INVENTORY` in each space that uses it; the number of items, their revisions — each one's time, size
+class and writer, and with the first revision's writer **whose item it is** — tombstones and erasures; the number and
+sizes of the pictures. From the times of writes: **when** the pool is used, and with that the rhythm of requests,
+loans and returns, but not which item, to whom, or until when. No item name, tag, field, location, holder, date or note
+is readable by it. That the owner is visible is the price of taking one's items along: the writer of every revision
+is visible in a Pot today already.
 
 ## Open questions
 
-- **Dates an item can carry.** Tags replace categories, so a climbing harness's manufacture date, its end of service
-  and its next inspection have no category to live in. The recommendation: every item may carry two optional dates —
-  *use until* and *next check* — that every item type needs alike, and the Inventory shows what is due when it opens.
-- **Reminders beyond opening the Inventory** — a local notification on a phone after a sync, as Expenses' #550 — wait
-  for the native clients (#438).
-- **Who may write.** The recommendation: every member who may write in the space, as in a Pot; a reader of the space
-  reads the Inventory and reserves nothing.
+- **A member removed rather than leaving.** The recommendation: they take their items along as well — removing
+  someone does not keep their things. Their client fetches them at its next sign-in, within a window; after it, the
+  items are gone from the space's pool all the same.
+- **An item changing owner** (sold or given to another member): no transfer, since the owner is fixed to who added it;
+  the new owner adds it again. The recommendation is to keep it so in the first cut.
+- **Reminders beyond opening the pool** — a local notification on a phone after a sync, as Expenses' #550 — wait for
+  the native clients (#438).
