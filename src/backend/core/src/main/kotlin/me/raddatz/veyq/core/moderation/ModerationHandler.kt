@@ -181,7 +181,7 @@ class ModerationHandler(
      * grant goes and the epoch is due for rotation, in the erasure's transaction. Logged as a step-down when the account
      * erases itself, as a removal when the Server Owner does. Not on the roster: nothing to do.
      *
-     * The last holder of the current epoch is not refused, an erasure may not wait on a third person (ADR 0101
+     * The last holder ([isLastHolder]) is not refused, an erasure may not wait on a third person (ADR 0101
      * decision 9, ADR 0099 § 5): at the person's own door ([ErasureDoor.Own]) the key goes to the Server Owner first
      * ([deliverToServerOwner]), and the erasure is refused (`moderation_delivery_required`) unless it then holds every
      * live epoch the person holds; at the Server Owner's ([ErasureDoor.ServerOwners]) the key is lost with them, once
@@ -192,78 +192,84 @@ class ModerationHandler(
     fun leaveForErasure(accountId: String, actorId: String, now: Instant, door: ErasureDoor): ModerationOutcome<Unit> {
         if (ModeratorEntity.findById(accountId)?.onRoster != true) return ModerationOutcome.Ok(Unit)
         val event = if (actorId == accountId) ModerationEvent.STEPPED_DOWN else ModerationEvent.REMOVED
+        val current = currentEpoch(lock = true)
         val keyMayGo = when (door) {
             is ErasureDoor.Own -> {
-                val delivered = deliverToServerOwner(accountId, door.delivery, now)
+                val delivered = deliverToServerOwner(accountId, door.delivery, current, now)
                 if (delivered is ModerationOutcome.Refused) return delivered
-                false
+                // Not the last holder, or the Server Owner now holds every live epoch the person held: nothing is lost.
+                true
             }
             is ErasureDoor.ServerOwners -> door.keyLossConfirmed
         }
-        return leave(accountId, actorId, event, now, ModerationFailures.notModeratorOnRoster, keyMayGo = keyMayGo)
+        return leave(accountId, actorId, event, now, ModerationFailures.notModeratorOnRoster, keyMayGo = keyMayGo, current = current)
     }
 
     /**
      * What [accountId]'s erasure must deliver to the Server Owner, or null where it delivers nothing: the account is not
-     * the last accepted holder of the current epoch, it is the Server Owner, or the Server Owner holds every live epoch
-     * it holds already (the erasure then only reappoints them). The preview serves it (`getOwnAccountErasurePreview`).
+     * the last holder ([isLastHolder]), it is the Server Owner, or the Server Owner holds every live epoch it holds
+     * already (the erasure then only reappoints them) — exactly where [deliverToServerOwner] asks for no grant. The
+     * preview serves it (`getOwnAccountErasurePreview`).
      */
     @Transactional
     fun serverOwnerDeliveryFor(accountId: String): ServerOwnerDelivery? {
-        val current = currentEpoch(lock = false) ?: return null
-        if (!isLastHolder(accountId, current.epoch)) return null
-        val ownerId = accounts.serverOwnerId()?.takeIf { it != accountId } ?: return null
-        val owner = VeyqUser.findById(ownerId) ?: return null
+        currentEpoch(lock = false) ?: return null
+        if (!isLastHolder(accountId)) return null
+        // Moderation is on only once first-run setup made the Server Owner its first holder (`enable`), and their
+        // account is never erased: a null here would hide a refusal the erasure gives, so it is no answer.
+        val ownerId = checkNotNull(accounts.serverOwnerId()) { "moderation is on without a Server Owner" }
+        if (ownerId == accountId) return null
+        val owner = checkNotNull(VeyqUser.findById(ownerId))
         val missing = epochsHeldBy(accountId) - epochsHeldBy(ownerId)
-        val head = keyChain.headOf(ownerId) ?: return null
-        return if (missing.isEmpty()) null else ServerOwnerDelivery(ownerId, owner.identityPublicKey, head, missing.sorted())
+        if (missing.isEmpty()) return null
+        return ServerOwnerDelivery(ownerId, owner.identityPublicKey, checkNotNull(keyChain.headOf(ownerId)), missing.sorted())
     }
 
     /**
      * The last holder's own erasure carries the key to the Server Owner (ADR 0101 decision 9, ADR 0099 § 5), in the
-     * erasure's transaction, before the holder leaves. Nothing to do unless [holderId] is the last accepted holder of the
-     * current epoch. Then [delivery] must be sealed to the Server Owner's identity as it is now (`identity_changed`),
+     * erasure's transaction, before the holder leaves. Nothing to do unless [holderId] is the last holder
+     * ([isLastHolder]). Then [delivery] must be sealed to the Server Owner's identity as it is now (`identity_changed`),
      * name only epochs the holder holds, and cover every one of them the Server Owner misses
      * (`moderation_delivery_required`) — checked before anything is written. The Server Owner is then an accepted
      * moderator holding them: reappointed by the delivery, with no acceptance (the Server Owner, whose own account is
      * never erased, is always there to receive it). Each grant is stored and logged as a holder's delivery is
      * ([deliver]); the reappointment is logged as an appointment and an acceptance by the holder, reason `DELIVERY`.
      *
-     * Lock order as [deliver]'s: the epoch row, then the Server Owner's moderator row (the holder's comes after, in
+     * Lock order as [deliver]'s: the epoch row ([current], locked by [leaveForErasure]), then the Server Owner's moderator row (the holder's comes after, in
      * [leave]), then the grants. The erasure locked the Server Owner's account row before the epoch's
      * (`AccountErasureHandler.eraseOwnIn`), so an identity rotation of the Server Owner either commits before the identity
      * is read here or waits for this transaction.
      */
-    private fun deliverToServerOwner(holderId: String, delivery: ServerOwnerDeliveryIn?, now: Instant): ModerationOutcome<Unit> {
-        val current = currentEpoch(lock = true) ?: return ModerationOutcome.Ok(Unit)
-        if (!isLastHolder(holderId, current.epoch)) return ModerationOutcome.Ok(Unit)
+    private fun deliverToServerOwner(
+        holderId: String, delivery: ServerOwnerDeliveryIn?, current: ModerationEpochEntity?, now: Instant,
+    ): ModerationOutcome<Unit> {
+        if (current == null || !isLastHolder(holderId)) return ModerationOutcome.Ok(Unit)
         val ownerId = accounts.serverOwnerId()?.takeIf { it != holderId }
             ?: return ModerationOutcome.Refused(ModerationFailures.deliveryRequired)
         val row = ModeratorEntity.findById(ownerId, LockModeType.PESSIMISTIC_WRITE)
         val held = epochsHeldBy(holderId)
-        val has = epochsHeldBy(ownerId).toMutableSet()
-        val grants = delivery?.grants ?: emptyList()
-        if (held.any { it !in has }) {
+        val missing = held - epochsHeldBy(ownerId)
+        // One grant per missing epoch; one the Server Owner already holds is skipped, as [deliver] skips it.
+        val grants = delivery?.grants.orEmpty().filter { it.epoch in missing }.distinctBy { it.epoch }
+        if (missing.isNotEmpty()) {
             if (delivery == null) return ModerationOutcome.Refused(ModerationFailures.deliveryRequired)
             if (VeyqUser.findById(ownerId)?.identityPublicKey != delivery.identityPublicKey) {
                 return ModerationOutcome.Refused(ModerationFailures.identityChanged)
             }
-            if (grants.any { it.epoch !in held } || !grants.map { it.epoch }.toSet().containsAll(held - has)) {
+            if (delivery.grants.any { it.epoch !in held } || grants.size != missing.size) {
                 return ModerationOutcome.Refused(ModerationFailures.deliveryRequired)
             }
         }
         if (row?.accepted != true) {
-            val appointed = if (row?.onRoster == true) row else upsertAppointment(ownerId, ownerId, now).also {
+            val appointed = if (row?.onRoster == true) row else upsertAppointment(ownerId, holderId, now).also {
                 log.append(ModerationEvent.APPOINTED, now, ownerId, holderId, reason = DELIVERY_REASON)
             }
             appointed.acceptedAt = now
             log.append(ModerationEvent.ACCEPTED, now, ownerId, holderId, reason = DELIVERY_REASON)
         }
         grants.forEach { g ->
-            if (g.epoch in held && has.add(g.epoch)) {
-                insertGrant(ownerId, g.epoch, g.sealedGrant, holderId)
-                log.append(ModerationEvent.DELIVERED, now, ownerId, holderId, epoch = g.epoch)
-            }
+            insertGrant(ownerId, g.epoch, g.sealedGrant, holderId)
+            log.append(ModerationEvent.DELIVERED, now, ownerId, holderId, epoch = g.epoch)
         }
         return ModerationOutcome.Ok(Unit)
     }
@@ -411,28 +417,39 @@ class ModerationHandler(
 
     // ── shared ───────────────────────────────────────────────────────────────────────────────────
 
-    /** [keyMayGo]: the last holder leaves all the same — only the Server Owner's erasure door, after its warning. */
+    /**
+     * [keyMayGo]: no last-holder refusal — the Server Owner's erasure door after its warning, and the person's own after
+     * its delivery to the Server Owner. [current]: the epoch row, locked; [leaveForErasure] passes the one it locked.
+     */
     private fun leave(
         accountId: String, actorId: String, event: ModerationEvent, now: Instant, unknown: HttpFailure, keyMayGo: Boolean = false,
+        current: ModerationEpochEntity? = currentEpoch(lock = true),
     ): ModerationOutcome<Unit> {
-        val current = currentEpoch(lock = true)
         val row = ModeratorEntity.findById(accountId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.onRoster }
             ?: return ModerationOutcome.Refused(unknown)
-        val holders = current?.let { holdersOf(it.epoch) } ?: emptySet()
-        val heldCurrent = row.acceptedAt != null && accountId in holders
-        // The key would be lost with the last one who holds it (ADR 0099 § 5).
-        if (!keyMayGo && heldCurrent && (holders - accountId).isEmpty()) return ModerationOutcome.Refused(ModerationFailures.lastHolder)
+        // The key, or a part of it, would be lost with the last one who holds it (ADR 0099 § 5).
+        if (!keyMayGo && isLastHolder(accountId)) return ModerationOutcome.Refused(ModerationFailures.lastHolder)
+        val heldCurrent = row.acceptedAt != null && current != null && current.epoch in epochsHeldBy(accountId)
         ModerationGrantEntity.delete("moderatorId", accountId)
         row.removedAt = now
         ModeratorAddress.clear(row)
-        if (heldCurrent && current != null && current.rotationDueAt == null) current.rotationDueAt = now
+        if (heldCurrent && current.rotationDueAt == null) current.rotationDueAt = now
         log.closeFor(accountId, now)
         log.append(event, now, accountId, actorId)
         return ModerationOutcome.Ok(Unit)
     }
 
-    /** Whether [accountId] is an accepted moderator holding [epoch] and no other accepted moderator does. */
-    private fun isLastHolder(accountId: String, epoch: Int): Boolean = holdersOf(epoch).let { accountId in it && it.size == 1 }
+    /**
+     * Whether [accountId] is an accepted moderator holding a live epoch no other accepted moderator holds: that part of
+     * the key would be lost with them (ADR 0099 § 5). Every live epoch, not the current one alone — a moderator accepted
+     * after epoch n holds n + 1 from its mint before a holder delivered them n.
+     */
+    private fun isLastHolder(accountId: String): Boolean {
+        val accepted = ModeratorEntity.list("removedAt is null and acceptedAt is not null").map { it.accountId }.toSet()
+        if (accountId !in accepted) return false
+        return ModerationGrantEntity.listAll().filter { it.moderatorId in accepted }
+            .groupBy({ it.epoch }, { it.moderatorId }).values.any { holders -> holders.all { it == accountId } }
+    }
 
     /** The live epochs [accountId] holds a grant of. */
     private fun epochsHeldBy(accountId: String): Set<Int> =
