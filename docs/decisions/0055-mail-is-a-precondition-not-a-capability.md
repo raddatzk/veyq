@@ -36,17 +36,21 @@ at the moment it cannot work.
 link to copy. Inviting — first mint and re-issue — is refused before any mint when the tenant cannot send, rather than
 minting an invitation that reaches nobody.
 
-**3. The Server Owner's invite to a tenant's first owner is the one surviving copy-link.** A `PENDING` tenant has no
-mail settings and no owner yet to configure them ([ADR 0048](0048-provider-neutral-smtp-mail-transport.md) § 5). The
-exception is bounded by that construction: `POST /api/tenants` and the resend or reassign of that invite, nothing else.
-The instance's own mail ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3)
+**3. The Server Owner's owner invites are the surviving copy-link.** Only the Server Owner can mint them, and each
+must work when the tenant cannot send: a `PENDING` tenant has no mail settings and no owner yet to configure them
+([ADR 0048](0048-provider-neutral-smtp-mail-transport.md) § 5), and an ownerless `ACTIVE` tenant
+([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) has nobody left who
+may repair its relay. So the invite is mailed through the tenant's own relay where that relay can send, and is returned
+to the Server Owner to hand over either way. The exception is bounded by that construction: the first owner's invite of
+a `PENDING` tenant (`POST /api/tenants`, its resend and its reassign) and the owner invite into an ownerless `ACTIVE`
+tenant, nothing else. The instance's own mail ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3)
 does not carry it (ADR 0097 decision 6): instance mail is optional, so the bootstrap must work without it.
 
-**4. `POST /api/recovery/request` answers `503 mail_unavailable` when it cannot send.** This narrows
-[ADR 0054 § Decision 6](0054-password-recovery-two-factor-release.md), where every outcome answered `202`.
-Non-enumerability protects *"does this address have an account here"*; *"can this tenant send mail"* is a property of
-the deployment, scoped to the tenant the request's `Host` resolves to, and which hosts map to tenants is public. So the
-sign-in screen may keep offering the reset and let it fail honestly.
+**4. A recovery request answers `503` when the tenant cannot send**, beside the one answer
+[ADR 0054 § Decision 6](0054-password-recovery-two-factor-release.md) gives every address. Non-enumerability protects
+*"does this address have an account here"*; *"can this tenant send mail"* is a property of the deployment, scoped to the
+tenant the request's `Host` resolves to, and which hosts map to tenants is public. So the sign-in screen may keep
+offering the reset and let it fail honestly.
 
 **5. The transport check runs before the rate limiter.** The limiter is charged before the account lookup so that a
 known and an unknown address stay indistinguishable. But once a mailer-less request answers `503` and a rate-limited
@@ -77,8 +81,8 @@ contract states per endpoint which values can occur.
   ([ADR 0054 § 4](0054-password-recovery-two-factor-release.md)), where a forgotten password is permanent loss; this
   makes that state loud instead of latent.
 - **Recovery is unchanged:** it already required mail; only its silence becomes a status code.
-- **Exercising member invites in development and tests needs a mailer** — Mailpit in the dev stack, GreenMail in the
-  backend slice tests ([cc.mail](../crosscutting/cc.mail.md) § Development).
+- **Exercising member invites in development and tests needs a mailer** ([cc.mail](../crosscutting/cc.mail.md)
+  § Development).
 - **Rejected — a `mail` capability on the setup manifest.** A capability is an off-switch for an optional feature, so
   shipping one would bless the configuration this decision refuses; and the client needs no advance answer.
 - **Rejected — a server-level SMTP fallback for tenant mail.** It would remove the last copy-link but put an

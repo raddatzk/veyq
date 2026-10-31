@@ -86,6 +86,10 @@ a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a
 - **N writes, not a batch.** A move is already one request that re-wraps one key, and node writes are not
   rate-limited, so several nodes are several writes; a batch endpoint would add a contract for no atomicity the
   user needs (owner decision 2026-10-14).
+- **One dialog for a member and a guest.** A `READ_WRITE` guest moves through core's one move dialog, the member's
+  own, offered only for a node a folder of the subtree holds; and a folder is shared through core's own share dialog,
+  never an application's ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  decision 6).
 - **The picker is a hint, the server the authority.** The client mirrors `NodeKindRules` and the guest rules so it
   offers only what would be taken; a disagreement surfaces as the server's refusal, explained by its code — never a
   silently different result.

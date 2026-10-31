@@ -38,9 +38,10 @@ structure, attachments and guests, and the user interface. What a verified uploa
   core object references (scope id + node id) only.
 - **Claims its URL route slug once.** A node of an application is addressed `#<path>/<slug>/<name>` in the URL
   fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md)): the application claims its slug in the web
-  registry (`claimRouteSlug`; a second claim throws; a platform word is refused), or declares that it has none
-  (`claimNoRouteSegment`) — Depot is the one that does. A claimed slug is reserved among folder and file names, which
-  are numbered around it (`memories-2`).
+  registry (`claimRouteSlug`; a second claim throws; a platform word, `RESERVED_ROUTE_SEGMENTS`, is refused), or
+  declares that it has none (`claimNoRouteSegment`) — Depot is the one that does. A claimed slug is reserved among
+  folder and file names, which are numbered around it (`memories-2`; the module is `core/node/location.ts`,
+  [en.memory.tree § Addressing](../features/memory/enablers/en.memory.tree.md#addressing-urls)).
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant

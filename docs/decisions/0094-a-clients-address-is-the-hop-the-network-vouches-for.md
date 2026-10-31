@@ -22,14 +22,14 @@ cannot choose on Kubernetes:
 
 - A proxy that **replaces** the header from an untrusted peer leaves one entry, the real client. Traefik, as shipped
   on Compose, deletes every incoming `X-Forwarded-*` header from a peer outside its `trustedIPs`, and Compose
-  sets none. **Compose is not forgeable today.**
+  sets none. **On Compose even the leftmost entry is not forgeable.**
 - A proxy that **appends** keeps the client's entries and adds the peer it saw on the right (Envoy-based
   gateways, a cloud load balancer). The leftmost entry is then the client's choice.
 - A peer that reaches the app **without a proxy** writes the whole header. Only the network stops that: Compose's
   separate networks and the chart's NetworkPolicy ([ADR 0071](0071-runtime-hardening-on-both-targets.md)).
 
-Nothing in the backend's main code reads the forwarded scheme, host or URI through Quarkus. `TenantHostResolver`
-reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket. Quarkus's forwarding fed only
+Nothing in the backend reads the forwarded scheme, host or URI through Quarkus: the tenant's host is read from
+`X-Forwarded-Host` directly and the admin channel reads the socket. Quarkus's forwarding fed only
 `remoteAddress()`, and through it only the rate limiter.
 
 ## Decision
@@ -44,10 +44,9 @@ reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket. Quarkus's f
    carries.**
    - The entries are every `X-Forwarded-For` line, in order, split on commas, each trimmed. With none, the client
      is the peer, with the socket's port.
-   - An entry is an IP address, with or without a port: `203.0.113.77`, `203.0.113.77:51234`, `[2001:db8::1]`,
-     `[2001:db8::1]:443`, or a bare `2001:db8::1`. **A bare IPv6 address never carries a port**: its colons are
-     never split (RFC 7239 § 6 writes a port only beside a bracketed one). A port is 1 to 65535. Anything else (a
-     hostname, `unknown`, an empty entry, port 0) is not an IP address.
+   - An entry is an IP address, with or without a port. **A bare IPv6 address never carries a port**: its colons are
+     never split (RFC 7239 § 6 writes a port only beside a bracketed one). Anything else is not an IP address; the
+     grammar is [cc.privacy.retention](../crosscutting/cc.privacy.retention.md) § A client's address.
    - `trusted-proxies` lists the hops **in front of** the gateway, such as a load balancer: IP addresses and CIDR
      ranges, nothing else. Empty, the default on both targets, means the gateway is the only hop, and the
      rightmost entry is the client. Each listed entry is skipped from the right, compared by its IP alone, so a
@@ -66,17 +65,16 @@ reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket. Quarkus's f
 4. **Quarkus's `proxy-address-forwarding` is off on both targets.** There is one reading of the header, not two.
    `request.remoteAddress()` then returns the peer: useless as a client address, but never forged. That is why no
    guard forbids calling it.
-5. **The setting is veyq's, not Quarkus's:** `veyq.http.trusted-proxies` (`VEYQ_HTTP_TRUSTED_PROXIES`). The chart
-   value `app.trustedProxies` renders it. Compose ships no knob: a proxy in front of Traefik would also need
+5. **The setting is veyq's, not Quarkus's:** `veyq.http.trusted-proxies`, which the chart's `app.trustedProxies`
+   renders. Compose ships no knob: a proxy in front of Traefik would also need
    Traefik's `trustedIPs`, and that combination stays outside the recipe, as `networking.md` already says. A
    malformed entry, such as a hostname, stops the app at startup.
 6. **Helm without an enforced NetworkPolicy is documented, not refused.** With `networkPolicy.enabled=false`, or
    with a CNI that enforces none, any pod can reach the app and write the whole header, and no list can tell it
    apart from the gateway. The chart's NOTES and the Run docs say so. Refusing to render would only push operators
    to list a pod range, which trusts every pod (ADR 0071 § 4).
-7. **Where the stop entry carries no port, one configured source may state it.** `veyq.http.client-port.source`
-   (`VEYQ_HTTP_CLIENT_PORT_SOURCE`) is `none` (the default), `proxy-protocol` or `header`; `veyq.http.client-port.header`
-   names the header, `X-Veyq-Client-Addr` by default.
+7. **Where the stop entry carries no port, one configured source may state it**: `none` (the default),
+   `proxy-protocol` or `header`, and for `header` a configured header name.
    - The walk of decision 3 is unchanged. The source speaks only when the stop entry carries no port, and only if
      its IP **equals** the stop entry's; otherwise the port stays unknown. A stop entry's own port wins, and the
      source never changes the address.
@@ -91,28 +89,25 @@ reads `X-Forwarded-Host` itself and `AdminChannel` reads the socket. Quarkus's f
      that sends its own address with another port would name another subscriber on the same carrier-grade NAT
      address; the IP check cannot stop that, only the edge's overwrite can. That is why the source is **configured,
      never detected**.
-   - The two settings agree or the app does not start: `proxy-protocol` exactly when
-     `quarkus.http.proxy.use-proxy-protocol=true` (`ClientPortSourceCheck`, a startup refusal naming both keys and no
-     address). The schema migration has run by then, as for every startup refusal.
-   - **The admin channel reads the connection's real addresses** (`localAddress(true)`, `remoteAddress(true)`).
-     Under PROXY the plain ones are the PROXY header's destination and source: a header naming the admin port
-     and a private client opened the Server-Owner operations on the public port.
-   - **Compose: `header`, a literal with no knob** (as decision 5). A local Traefik plugin, about thirty lines of Go,
-     deletes the configured header and sets it to the accepted connection's `address:port` on every request. It
-     travels in the release recipe as two flat files (`traefik-clientaddr.go` and its manifest), mounted read-only
-     and declared by `--experimental.localplugins`; nothing is fetched. The app's routing file attaches it to
-     every app router exactly when the app's own source is `header`, and hands it the header name the app reads —
-     one setting of one process, so the app never reads a header Traefik does not overwrite. Never on the store or
-     the admin router. `validate_compose_posture.py` rule 5 holds the recipe to it, and the stack lane's
-     `client port` stage forges the header through the release's own Traefik.
-   - **Helm: `app.clientPort.source`** (`none`, `proxyProtocol`, `header`) and `app.clientPort.header`.
-     `proxyProtocol` renders both keys and moves the three probes to the admin listener: a kubelet probe sends no
+   - The two settings agree or the app does not start: `proxy-protocol` exactly when Quarkus's PROXY protocol is
+     on, refused at startup naming both keys and no address.
+   - **The admin channel reads the connection's real addresses.** Under PROXY the plain ones are the PROXY header's
+     destination and source: a header naming the admin port and a private client would open the Server-Owner operations
+     on the public port.
+   - **Compose: `header`, a literal with no knob** (as decision 5). A local Traefik plugin deletes the configured
+     header and sets it to the accepted connection's `address:port` on every request. It travels in the release
+     recipe, mounted read-only; nothing is fetched. The app's routing file attaches it to every app router exactly
+     when the app's own source is `header`, and hands it the header name the app reads — one setting of one process,
+     so the app never reads a header Traefik does not overwrite. Never on the store or the admin router. A guard holds
+     the recipe to it, and the stack test forges the header through the release's own Traefik.
+   - **Helm: the same three sources, as chart values.** The PROXY protocol renders both keys and moves the three
+     probes to the admin listener: a kubelet probe sends no
      PROXY header, and the public port closes such a connection unanswered. The chart renders no gateway object; the
      operator aims PROXY at the app's routes, never at the store's, which speaks none.
 
 What each topology yields:
 
-| Topology | Arrives at the app | Leftmost (today) | This rule | Port |
+| Topology | Arrives at the app | Quarkus's leftmost (rejected) | This rule | Port |
 |---|---|---|---|---|
 | Compose (the plugin, decision 7) | `203.0.113.77` | client | client | the plugin's |
 | A Traefik gateway | `203.0.113.77` | client | client | unknown |
@@ -124,8 +119,8 @@ What each topology yields:
 | LB writing `ip:port` → appending gateway, `trusted-proxies=10.0.0.5` | `198.51.100.66, 203.0.113.77:51234, 10.0.0.5` | **forged** | client | `51234` |
 | A pod past an unenforced policy | `198.51.100.66` | **forged** | **forged** (decision 6) | the pod's choice |
 
-The rule never does worse than today, and where it falls short it yields the operator's own load balancer, never
-a third party. Where a port is unknown, it is because no hop wrote one and no configured source stated it, never
+The rule never does worse than the leftmost entry, and where it falls short it yields the operator's own load balancer,
+never a third party. Where a port is unknown, it is because no hop wrote one and no configured source stated it, never
 because veyq dropped it.
 
 ## Rejected alternatives
@@ -169,8 +164,8 @@ because veyq dropped it.
 ## Consequences
 
 - **The rate limiter changes on one topology.** Behind an appending chain without `trusted-proxies`, every client
-  shares the load balancer's bucket. Before it, each client had its own bucket, forgeable. No cluster has run the chart
-  yet (`networking.md` § How far this is proven), and the Run docs name the setting.
+  shares the load balancer's bucket. Under the leftmost entry each client had its own bucket, forgeable. The Run docs
+  name the setting.
 - **The record's address is only as strong as the network on Helm** (decision 6). On Compose it is strong by
   construction.
 - **A layer-4 load balancer in front of the gateway that rewrites the source address** makes the gateway see a
@@ -186,54 +181,13 @@ because veyq dropped it.
   change. A dropped feature fails loudly: a middleware naming a plugin Traefik did not load fails its routers, and
   the domain answers 404. A changed behaviour reddens the stack lane's `client port` stage.
 - **Under the PROXY protocol the probes prove the process and the database, not the public listener.** A public
-  bind failure still fails the boot (remembered: Quarkus fails startup on a bind failure; measured for the admin
-  listener only, uc.admin.admin-channel E2).
+  bind failure fails the boot too: Quarkus fails startup on a bind failure, which uc.admin.admin-channel E2 shows for
+  the admin listener.
 - **A port is only as good as the server's clock.** Carrier-grade NAT hands a port to the next subscriber quickly, so
   the record keeps its time in milliseconds UTC (ADR 0093 § 10) and the Run docs ask for NTP.
-- **The tests can no longer forge an address by accident.** The rate-limit tests send `X-Forwarded-For` from
-  loopback with an empty trust list, so their single entry is the rightmost. They keep working without turning on
-  Quarkus forwarding.
-
-## For the moderation CR
-
-The guest-write record reads the same resolver; its slice (`GuestWriteRecordCoreSliceTest`) and its stack scenario
-through the recipe's Traefik (`tests/e2e/tests/features/moderation/guest-write-record.spec.ts`) hold the forged-entry,
-port and no-address cases ([en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)).
-
-## Published
-
-- Run area of the docs site: [Networking and TLS](../../site/src/content/docs/run/networking.md) (the rule, the
-  topology table, the source port and its sources), [Hardening](../../site/src/content/docs/run/hardening.md) (what
-  `app.trustedProxies` lists), [Configuration](../../site/src/content/docs/run/configuration.md) (the client-port
-  settings), [Operations](../../site/src/content/docs/run/operations.md) (the probe under PROXY) and
+- The Run pages carry the rule for the operator: [Networking and TLS](../../site/src/content/docs/run/networking.md)
+  (the rule, the topology table, the source port and its sources),
+  [Hardening](../../site/src/content/docs/run/hardening.md) (what `app.trustedProxies` lists),
+  [Configuration](../../site/src/content/docs/run/configuration.md) (the client-port settings),
+  [Operations](../../site/src/content/docs/run/operations.md) (the probe under PROXY) and
   [Kubernetes](../../site/src/content/docs/run/kubernetes.md) (where PROXY is chosen).
-
-## Measurement ledger
-
-Only the entries code cites are kept.
-
-- **M10** Vert.x 4.5.27, Netty 4.1.133 and Quarkus 3.36.0 sources (the Gradle cache's `-sources.jar`s; substrate:
-  worktree `agent-a175d172daff841cf` at `6b67a082`):
-  - `HAProxyMessageCompletionHandler.decode`: a TCP4/TCP6 header sets both `REMOTE_ADDRESS_OVERRIDE` (source) and
-    `LOCAL_ADDRESS_OVERRIDE` (destination); `UNKNOWN` sets neither.
-  - `ConnectionBase.java:614-680`: `remoteAddress()`/`localAddress()` return the overrides, `remoteAddress(true)`/
-    `localAddress(true)` the channel's real addresses.
-  - `HttpServerWorker.java:103-121` and `HAProxyMessageDecoder.java:168-177, 233-260, 304-306`: with the protocol on,
-    a connection that does not open with a PROXY header is closed with no response.
-- **M13** the client-port-sources implementation:
-  - Before the fix, `PROXY TCP4 10.0.0.9 10.0.0.1 51234 <admin port>` and a Server-Owner call on the public port
-    answered `200` (`AdminChannelProxyProtocolSliceTest`, red on the untouched tree); after it, `404`.
-  - With the protocol off, a PROXY line is answered `HTTP/1.0 400 Bad Request`
-    (`ClientAddressDefaultSourceSliceTest.aProxyLineIsAMalformedRequestWhenTheProtocolIsOff`).
-  - The fast-jar against a closed database port never reaches a `StartupEvent` observer: Flyway's migrate-at-start
-    and the app shell's route registration (which reads the store setting) touch the database first. Against a
-    throwaway MariaDB the two disagreeing boots exit 1 naming both keys, the agreeing ones start.
-  - Envoy Gateway v1.9.2 pins `envoyproxy/envoy:distroless-v1.39.1` (`api/v1alpha1/shared_types.go:30`). Envoy
-    1.39.1's `DOWNSTREAM_DIRECT_REMOTE_ADDRESS` and `_PORT` read `directRemoteAddress()`, the physical peer
-    (`source/common/formatter/stream_info_formatter.cc:1905-1938`); its early header mutation formats values
-    (`source/common/http/header_mutation.cc:27`); and Envoy Gateway passes a header value through unescaped, on a
-    route and in a `ClientTrafficPolicy`'s `earlyRequestHeaders` (`internal/xds/translator/route.go:695-726`,
-    `header_mutation.go:99-130`). Not run on a cluster.
-  - Kubernetes' NetworkPolicy page: "traffic to and from the node where a Pod is running is always allowed,
-    regardless of the IP address of the Pod or the node" — so a kubelet probe reaches the admin port the policy
-    admits from the admin pod alone.

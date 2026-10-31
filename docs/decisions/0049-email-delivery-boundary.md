@@ -30,8 +30,8 @@ pretend mail is free:
 2. **No sealed field is reachable by a render; words an author types are that author's consented disclosure.** veyq
    never interpolates a scope, group or node name, a member list, a real name or any content — those are sealed and the
    renderer is never handed them, so a mail never becomes a side channel for what the database seals. A tenant's mail
-   is rendered over the closed set `{{link}}`, `{{domain}}`, `{{expiry}}` ([ADR 0048](0048-provider-neutral-smtp-mail-transport.md)
-   § 6); the instance's notices ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
+   is rendered over the closed variable set of [ADR 0048](0048-provider-neutral-smtp-mail-transport.md) § 6; the
+   instance's notices ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
    decision 3) are veyq-fixed texts filled only with values the server already holds in the clear. What an author
    **types** is different: a tenant owner's invite template, and a Server Owner's facts on their own moderation step
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 7), are disclosed
@@ -45,9 +45,9 @@ pretend mail is free:
 ## Consequences
 
 - **The model is honest.** The send-time concession and the provider boundary are named, not hidden.
-- **A hard rule on every renderer, now and later:** no sealed field is wired into a mail's render context.
-  `InviteMailRendererTest` pins the tenant render context to its three fields; the rule binds veyq's machinery, not an
-  author's literal words, which are out of its reach by decision.
+- **A hard rule on every renderer, now and later:** no sealed field is wired into a mail's render context, and a test
+  pins the tenant render context to its closed set; the rule binds veyq's machinery, not an author's literal words,
+  which are out of its reach by decision.
 - **Self-hosted vs SaaS.** Self-hosted, the provider boundary is the operator's own. SaaS, the operator's relay is a
   documented third party.
 - **Rejected — veyq assembling richer content from sealed data** ("invited to *the Smith Family* by *Alice*"). It would

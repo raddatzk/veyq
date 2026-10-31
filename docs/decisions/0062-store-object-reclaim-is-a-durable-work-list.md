@@ -22,11 +22,11 @@ production there was no leaked stock to measure: the structure was cheaper to co
 ## Decision
 
 **1. The keys to reclaim are written to a durable list in the same transaction as the row delete.** One row per
-storage key prefix on `veyq_store_reclaim`; the transaction is the whole guarantee that the knowledge of which bytes to
-delete cannot die with the row. It needs no bucket listing, which matters because a `storage_key` is a flat UUID and a
-listing is an unpartitionable full scan. **A recorded key is not due until no PUT signed for it can still land:** its
-first attempt waits `veyq.blob.upload.retention`, the bound the upload-session purge already derives as presign TTL plus
-one chunk still streaming — one number with one meaning. Several paths drop a row inside the TTL of the last window
+storage key prefix; the transaction is the whole guarantee that the knowledge of which bytes to delete cannot die with
+the row. It needs no bucket listing, which matters because a `storage_key` is a flat UUID and a listing is an
+unpartitionable full scan. **A recorded key is not due until no PUT signed for it can still land:** its first attempt
+waits the upload retention, the bound the upload-session purge already keys on, which must be longer than the presign
+TTL plus one chunk still streaming — one number with one meaning. Several paths drop a row inside the TTL of the last window
 signed for it, and S3 accepts a PUT on a still-valid URL onto a deleted key; without the wait that PUT would re-create
 bytes no row, reclaim row or quota names. The wait suffices because no URL is signed for a key after its row drop.
 
@@ -57,10 +57,9 @@ codebase does not have).
 
 ## Consequences
 
-- **The leak is countable with SQL** — `attempts > 0`, `abandoned_at IS NOT NULL` — on any instance, without a bucket
-  listing, a metrics stack or a log parser.
-- **The one-deleter rule is a permanent guard** (`scripts/validate_store_reclaim_arity.py`): it is the rule every future
-  reclaim path is tempted to bypass.
+- **The leak is countable with SQL** — failed and given-up deletions are columns of the list — on any instance, without
+  a bucket listing, a metrics stack or a log parser.
+- **The one-deleter rule is a permanent guard**: it is the rule every future reclaim path is tempted to bypass.
 - **Backup `verify` tolerates orphaned objects** because a capture between a row delete and the sweep holds objects
   whose rows are gone — reclaim pending, not deletion unreliable.
 - **A bucket-versus-database reconcile reports the objects no row claims, and reclaims them only through this list,
@@ -72,7 +71,7 @@ codebase does not have).
   never calls `delete`; each of its three conditions answers one way a wrong judgement would destroy someone's media: a
   bucket shared with another instance (the Server Owner's confirmation), a restore of the wrong dump whose orphans the
   right dump needs (a grace every restore restarts), and a table that keeps a key alive but is missing from the claim set
-  (`scripts/validate_store_reconcile_claims.py` derives the set from the migrations). How it lists, what claims an
+  (a guard derives the set from the migrations). How it lists, what claims an
   object and when the race is excluded: [cc.storage.object-lifecycle](../crosscutting/cc.storage.object-lifecycle.md)
   § The reconcile.
 - **Rejected — stay best-effort and add a failure log.** It cannot count the bytes, retry, see the `ScopePurge` rollback
@@ -80,8 +79,8 @@ codebase does not have).
 - **Rejected — keep an immediate delete at every call site, with the list as a safety net.** It removes Decision 3's
   latency, but the immediate delete was never complete (a PUT signed shortly before can re-create the bytes), two
   deleters are two bookkeeping paths, and the one-deleter rule becomes unstateable.
-- **Rejected — a `deleted_at` tombstone on `veyq_blob`.** Keys live in two tables, so the flag and sweep are needed
-  twice; it adds a state to a table many read paths query, the shape that once served trashed media through a share; a
+- **Rejected — a `deleted_at` tombstone on `veyq_blob`.** Keys live in several tables, so the flag and sweep are needed
+  in each; it adds a state to a table many read paths query, the shape that once served trashed media through a share; a
   surviving row keeps its group's scope and size, against Decision 6; and backup `verify` would count it as required.
 - **Rejected — a sweep that lists the bucket and deletes what no row claims, on its own judgement.** The reconcile keeps
   the listing but not the judgement: each of its three conditions answers one of the ways that judgement turns into

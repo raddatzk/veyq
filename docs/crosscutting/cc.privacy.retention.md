@@ -21,8 +21,8 @@ or pictures ([security-model](security-model.md)). What follows is what the serv
 - **Kept for a purpose, to a date the server computes, then deleted by a job** (GDPR Art. 5(1)(e)). Every stored time
   has a reader that acts on it (`EveryStoredTimeHasAReaderTest`).
 - **Logs are operational and name no person**: no address, no email address, no User-Agent, no client-supplied string;
-  pseudonymous ids only ([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) §§ 1, 3). Evidence
-  never rides a log; it lives in the guest-write record and the moderation records below.
+  pseudonymous ids only ([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) §§ 1, 3; how,
+  [§ Logs](#logs)). Evidence never rides a log; it lives in the guest-write record and the moderation records below.
 - **An account's erasure deletes what is its own and keeps only what the law needs**, under the opaque id and to a
   date ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)). It runs
   30 days after the request (`veyq.scope.delete.retention`), by `AccountPurge`
@@ -154,13 +154,80 @@ beside the key among what to carry; erasures made in the last sweep interval (a 
 the file are not re-applied. Whether ciphertext of reported content kept in a capture until B is possession under
 § 184b StGB is a question the law leaves open, not pursued (ADR 0093 § Legal basis, Still open 11).
 
+## Logs
+
+How [ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 4 keeps people out of every log, as
+built.
+
+- **A log-capture test per site that handles a person's value**, after `SmtpDeliveryLogTest`: the mail and invite
+  lines, the recovery worker, the unknown wrap method (by its length), Garage's admin errors (by status and code). Each
+  captures the root logger through `LogCapture`, whose own control record proves it is attached, so every framework's
+  lines are inside it; it asserts the line is emitted and does not carry the value. `ModerationLogSliceTest` and
+  `GuestWriteRecordCoreSliceTest` hold that no line carries a record's address or a moderation event.
+- **The catch-all**, `UnexpectedError`: a Vert.x failure handler ordered just ahead of Quarkus's `QuarkusErrorHandler`,
+  whose own line names the request URI with its query and logs the exception with its message. Quarkus REST hands an
+  exception no mapper matches to the routing context's failure, and a request filter leaves the matched resource's
+  template for it, so a JAX-RS resource and a Vert.x route both reach it. It logs at ERROR a random error id, the
+  method, the route template (`-` for a route that is no JAX-RS resource), the class chain, a SQLState and vendor code
+  where a `SQLException` is in it, and the first frame in `me.raddatz.veyq`, and answers 500 with `ErrorResponse`
+  (`internal_error`, the error id as `message`). The full exception goes to DEBUG under
+  `me.raddatz.veyq.core.http.unexpected.detail`, off by default — lower case, so an environment variable can raise it.
+  Held by `UnexpectedErrorLogSliceTest`.
+- **Hibernate's statement error log** (`org.hibernate.orm.jdbc.error`) is set to ERROR, so the WARN line that carries
+  the database driver's message — for a unique violation, the value, an email address — is not written.
+- **Narayana's commit-failure warning**: a constraint violation raised at commit is logged once more as `ARJUNA012125`
+  at WARN on `com.arjuna.ats.arjuna`, its exception's text carrying the driver's message. `CommitFailureLogFilter`, a
+  filter on that logger, so every handler gets the rewritten record, drops the exception and keeps the class chain,
+  SQLState and vendor code; the category's other warnings, the transaction reaper's timeouts among them, pass unchanged.
+  Held by `CommitFailureLogSliceTest`.
+- **The e2e sweep**, `scripts/e2e_sweeps.py`: sealed values and tokens in every log, and the `pii` set
+  ([cc.security.wire-assertion](cc.security.wire-assertion.md) § The `pii` needle set).
+- **The recipes**: `validate_compose_posture.py` rule 6 — every service's `json-file` log bounded, the store below
+  `info`, Traefik with no access log and at `ERROR` — and, on the chart, `chart_meta_check.py` (xxvii) for the store.
+  The e2e stacks alone keep the store at `info`: the wire sweep's per-run control is a key planted in its request log.
+
+## A client's address
+
+The one resolver of [ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md),
+`core/http/ClientAddress.kt`, which the rate limiter and the guest-write record read and nothing else does. Quarkus's
+`proxy-address-forwarding` is off on both targets.
+
+- **The walk** (decision 3): the entries are every `X-Forwarded-For` line, in order, split on commas, each trimmed;
+  with none, the client is the socket peer with its port. From the right, each entry `veyq.http.trusted-proxies`
+  (`VEYQ_HTTP_TRUSTED_PROXIES`; IP addresses and CIDR ranges, empty by default) lists is skipped, compared by its IP
+  alone; the entry the walk stops at is the client, and if every entry is listed, the leftmost is. A stop entry that is
+  no IP address gives no address: the record stores none and the rate limiter keys on the peer. The rate limiter keys
+  on the IP alone. `Forwarded` and `X-Real-Ip` are ignored. A malformed trust-list entry stops the app at startup.
+- **An entry**: `203.0.113.77`, `203.0.113.77:51234`, `[2001:db8::1]`, `[2001:db8::1]:443`, or a bare `2001:db8::1`,
+  whose colons are never split. A port is 1 to 65535; a hostname, `unknown`, an empty entry or port 0 is no IP address.
+- **The port** (decision 7): the stop entry's own; else the configured source's, only where its IP equals the stop
+  entry's; else unknown. The source is `veyq.http.client-port.source` (`VEYQ_HTTP_CLIENT_PORT_SOURCE`): `none` (the
+  default, the header never read), `proxy-protocol` (the PROXY header's source, which Vert.x hands out as the
+  connection's `remoteAddress()`) or `header` (`veyq.http.client-port.header`, `X-Veyq-Client-Addr` by default: exactly
+  one line holding one entry that carries a port). `proxy-protocol` exactly when `quarkus.http.proxy.use-proxy-protocol`
+  is true, or `ClientPortSourceCheck` refuses the start, naming both keys. The admin channel reads the connection's
+  real addresses, `localAddress(true)` and `remoteAddress(true)`.
+- **Compose**: `header`, a literal. A local Traefik plugin (`infra/docker/traefik-clientaddr.go` and its manifest,
+  mounted read-only and loaded by `--experimental.localplugins`) overwrites the header with the accepted connection's
+  `address:port` on every app router, never on the store's or the admin router. `validate_compose_posture.py` rule 5
+  holds the recipe to it, and the stack test's `client port` stage forges the header through the release's own Traefik.
+- **Helm**: `app.trustedProxies` renders the trust list; `app.clientPort.source` (`none`, `proxyProtocol`, `header`)
+  and `app.clientPort.header` the port's source. `proxyProtocol` renders both keys and moves the three probes to the
+  admin listener, since a kubelet probe sends no PROXY header and the public port closes such a connection unanswered.
+- **Read in the sources, not run on a cluster**: Vert.x 4.5.27 returns the PROXY header's addresses as
+  `remoteAddress()` and `localAddress()`, the channel's own with `(true)`, and with the protocol on closes a connection
+  that does not open with a PROXY header; Envoy Gateway v1.9.2's Envoy reads the physical peer for
+  `DOWNSTREAM_DIRECT_REMOTE_ADDRESS` and its `_PORT`, and passes a header value through unescaped; a kubelet probe
+  reaches the admin port the NetworkPolicy admits from the admin pod alone, since traffic from a pod's own node is
+  always allowed. How far the rest is proven is the Run area's
+  [Networking](../../site/src/content/docs/run/networking.md#how-far-this-is-proven); the tests of the walk, every
+  row of ADR 0094's topology table among them, are [cc.security.rate-limit](cc.security.rate-limit.md)'s.
+
 ## Decided, not built
 
 - **A case's records kept longer while proceedings are pending**, as a logged extension
   ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 11);
   a hold's extension is built.
-- **A child-sexual-abuse hold until the handover past 90 days** — not decided either (ADR 0093 § Legal basis, Still
-  open 1, not pursued).
 
 ## Known gaps
 

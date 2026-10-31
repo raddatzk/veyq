@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-06-28
 - Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
-- Replaced in part: § 2, § 5 by ADR 0111 (built); § 3 by ADR 0027 (built); § 7 by ADR 0068 (built)
+- Replaced in part: § 2, § 5 by ADR 0111 (built); § 3, § 5 by ADR 0027 (built); § 7 by ADR 0068 (built)
 
 ## Context
 
@@ -61,7 +61,9 @@ and which is confidential even from the tenant owner.**
    at ([ADR 0027](0027-group-invite-name-shared-key.md)). Only members, and an invitee handed that one key, decrypt
    it. The server — and anyone with server/DB access,
    including a self-hosting tenant owner — sees an **unnamed** group: opaque `scopeId`, `kind`, members. This is
-   what makes a group **private even from the tenant owner**.
+   what makes a group **private even from the tenant owner** — against a passive operator, and against an active one
+   only on a client it does not serve ([ADR 0026](0026-client-trust-tiers.md)): a self-hosting tenant owner who serves
+   the web client is that active operator.
 
 4. **Authority model.**
 
@@ -85,56 +87,54 @@ and which is confidential even from the tenant owner.**
      identity pubkeys are tenant-visible, [ADR 0023](0023-per-tenant-member-identity.md); the consent flag is the
      one honest low-sensitivity exception). The owner-gate is convenience, not confidentiality — code and contract
      must not present it as the latter.
-   - **Default = direct add.** The owner picks the member → the owner's client wraps the group's current epoch to
-     the target's key after the anchor check, and the server records the GROUP membership holding that grant, refusing
-     one at a stale epoch or naming another key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 3). They
-     simply find themselves in the group.
+   - **Default = direct add.** The owner picks the member and the owner's client wraps the group's current epoch to
+     them ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+     decision 4, what the server checks [ADR 0020](0020-grant-distribution-invite-wrap.md) move 3). They simply find
+     themselves in the group.
    - **Optional consent (a per-user "ask before adding me" toggle) makes the add a proposal.** A non-auto-join
-     member is *proposed*, held as a **soft** membership that **holds the grant** from the add on, exactly as a direct
-     add does; the server serves the group to the invitee only after **Accept**, and consenting changes nothing about
-     keys. Until then the proposal is no member to any role decision: it cannot be made an owner (`404
-     member_not_found`) and counts as no owner to the last-owner guard ([ADR 0007](0007-membership-role-grant-relation.md)). Because the target's key could open the grant from the add on, a **Decline** — or the owner rescinding the
-     proposal — queues the group's rotation, as a removal does (ADR 0111 decision 4).
-     To let them decide informed, the owner's device hands the invitee the group's **derived name-key `K_name`**
-     (wrapped to their identity, `asymWrap(inviteePub, K_name, "group-name-key")`) so the invitee opens the scope's
+     member is *proposed*, held as a **soft** membership; the server serves the group to the invitee only after
+     **Accept**. Until then the proposal is no member to any role decision: it cannot be made an owner and counts as
+     no owner to the last-owner guard ([ADR 0007](0007-membership-role-grant-relation.md)). What a proposal holds, and
+     the rotation a Decline or a rescind queues, are ADR 0111 decision 4's.
+     To let them decide informed, the owner's device hands the invitee the group's **derived name-key `K_name`**,
+     wrapped to their identity, so the invitee opens the scope's
      **canonical** sealed name — the same ciphertext the members read — and **cannot** be shown a divergent,
      owner-typed name; the derivation and the rejected alternatives are [ADR 0027](0027-group-invite-name-shared-key.md)'s. The invitee sees the (group-consistent) name +
      who added them.
    - **Threat:** a malicious operator could return a public key it controls (MITM) and read the group.
-     **Defense:** the **safety-number / fingerprint** of that identity. The verification stance is settled in
-     [ADR 0028](0028-identity-authenticity-tofu-verification.md): **TOFU-pin on first use**, a **change** is a UI
-     notice (accept → re-pin) or a **hard block for the human-less grant-delivery worker**, and out-of-band
-     **safety-number verification** (QR compare) elevates *pinned* → *verified*; a **hard gate** before the first
-     grant is available as an **opt-in strict mode**. The pin store is client-side + sealed (operator-blind).
+     **Defense:** the anchor check and the safety-number compare of that identity — the stance is
+     [ADR 0028](0028-identity-authenticity-tofu-verification.md) and
+     [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+     decision 15. A hard gate before the first grant (opt-in strict mode, ADR 0028 Decision 4) is decided, not
+     built.
 
 6. **Lifecycle** ([uc.spaces.delete-group](../features/spaces/use-cases/uc.spaces.delete-group.md)):
-   - **Owner delete = soft + grace.** Any GroupOwner deletes; the group enters **pending-deletion** (`deletedAt`
-     marker + a `purgeAfter` date) and is hard-purged by a scheduled job after a **30-day grace period**. **During
+   - **Owner delete = soft + grace.** Any GroupOwner deletes; the group enters **pending-deletion** and is
+     hard-purged by a scheduled job once a grace period (the scope trash's retention) has passed. **During
      grace the group stays
      viewable + downloadable but read-only, clearly marked as deleting** (members can see their pictures one last
      time); grants/memberships are untouched, so **any owner can restore** in-window (trivial: clear the marker).
-     The **hard-purge erases content + blob objects** from the store (reusing the blob-aware node-subtree delete),
-     not just DB rows — the erasure the [security-model](../crosscutting/security-model.md) mandates. Purge is a
-     **server job** (operator-blind-safe: it deletes only ciphertext + opaque rows + blobs, never a key/name),
+     The **hard-purge erases content + blob objects** from the store, not just DB rows — the erasure the
+     [security-model](../crosscutting/security-model.md) mandates. Purge is a **server job** (operator-blind-safe: it deletes only ciphertext + opaque rows + blobs, never a key/name),
      unlike removal's key rotation.
    - **Orphans = an automatic rule, not an admin power.** When a user is removed from a tenant, a group they are the
      **only accepted owner** of is **transferred** — ownership passes automatically to the **oldest remaining
-     accepted member** (by membership `createdAt`, promoted to OWNER); if **no** accepted member remains, it is
-     **grace-tombstoned** (same soft-delete as above). Either way its **open consent proposals expire** (the owner's
-     decision, 2026-10-28): a proposal is no member (ADR 0007), so it is never handed the group, and the group's
+     accepted member** (the earliest to join, promoted to OWNER); if **no** accepted member remains, it is
+     **grace-tombstoned** (same soft-delete as above). Either way its **open consent proposals expire**, as the owner
+     decided: a proposal is no member (ADR 0007), so it is never handed the group, and the group's
      governance starts afresh with whoever accepted. On a hand-over the group's queued rotation takes the proposals'
      key away with the departed owner's; a tombstoned group has nobody left to hold a key, so nothing rotates. A removed user who is only *proposed* to a group loses that proposal as a decline would, and
-     the group keeps its owner (inbox #598). A server rule, so no tenant-owner snooping power is needed.
+     the group keeps its owner. A server rule, so no tenant-owner snooping power is needed.
      Its trigger is **tenant member-removal** ([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md)):
-     removing a member cuts their **shared** access at once (ADR 0025 — no tenant rotation), but their **own** scopes
-     (personal + any solo group) are **grace-tombstoned with read access kept**, so they can read/export their own
-     memories for the window before erasure — their stuff isn't taken the instant they leave. The rotation of groups
-     they merely co-shared is client-driven and completed later by a remaining member (the async backstop).
+     removing a member cuts their **shared** access at once (whether the tenant re-keys is
+     [ADR 0025](0025-forward-secrecy-policy-per-scope.md) § 2's), but their **own** scopes (personal + any solo group)
+     are **grace-tombstoned with read access kept**, so they can read/export their own memories for the window before
+     erasure — their stuff isn't taken the instant they leave. Who rotates the groups they merely co-shared is
+     [keys, grants and trust § Rotating a scope](../crosscutting/keys-grants-and-trust.md#rotating-a-scope).
    - **Removal → rotation.** A removed member keeps the content key they already held; confidentiality of **new**
-     content is restored by **rotating the scope key forward into a new epoch** — re-grant it to the remaining
-     members, re-key every node below it, **nothing existing is re-encrypted** (the epoch chain,
-     [ADR 0024](0024-scope-key-rotation.md), [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md));
-     already-read content cannot be retracted (a stated limitation).
+     content is restored by rotating the scope forward ([ADR 0024](0024-scope-key-rotation.md) decision 4,
+     [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)); already-read content cannot be retracted (a
+     stated limitation).
 
 7. **A member's Memory favorites** are [ADR 0068](0068-favorites-two-confidentiality-levels.md)'s: `K_SC` is shared in a
    group, so a member's private favorites seal under their own master key, never under it.
@@ -144,12 +144,13 @@ and which is confidential even from the tenant owner.**
 - **Groups reuse the content stack.** The Memory tree ([ADR 0012](0012-content-key-hierarchy.md)), browse, and
   favorites work per-scope already — a group is "another scope" to them. Favorites are the one place that needed
   more than "another scope": see §7 and [ADR 0068](0068-favorites-two-confidentiality-levels.md).
-- **Confidential even from the tenant owner.** The strongest practical privacy statement veyq makes: a group's
-  *content and name* are sealed; only its *existence + membership* are visible to whoever runs the server, and
-  the product surfaces neither to the tenant owner.
+- **Confidential even from the tenant owner.** The product gives the tenant owner no power over a group and surfaces
+  neither its existence nor its membership to them. Cryptographically a group's *content and name* are sealed and only
+  its *existence + membership* are visible to whoever runs the server — against a passive operator, and against an
+  active one only on a client it does not serve ([ADR 0026](0026-client-trust-tiers.md)); a self-hosting tenant
+  owner who serves the web client is such an active operator.
 - **No new crypto, no new operator trust.** Member grants are the same hybrid KEM as the tenant's
   ([ADR 0020](0020-grant-distribution-invite-wrap.md)); the only new server state is the GROUP scope row's sealed name
   + the per-member grants + the pending-deletion lifecycle.
-- **Not built:** adding someone who is not yet a tenant member to a group by email.
 
 Explained for security researchers on the docs site: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

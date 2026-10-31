@@ -79,8 +79,11 @@ What the cells rest on:
   it, and the resolve, the media list and the blob GET all read the subtree under the share's root
   (`SharingStore.subtree`, `ShareGuestGate.viewGate`, `SharingStore.authorizedBlob`): a chapter guest is served the
   chapter (without its own entry, which lives under the Memory's key) and nothing of the Memory or a sibling
-  chapter (`ChapterShareSliceTest`, bite test 21). `NodeKindRules` puts a chapter only directly inside a Memory, so a
-  chapter link has no node below its root.
+  chapter (`ChapterShareSliceTest`, uc.sharing.share-public-viewer:chapter-share-root). A chapter is a share root for
+  every role through Memories' one share-root set (`MemoriesNodeKinds.SHARE_ROOTS`, which `MemoryShareRoots`,
+  `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from), and the web offers its link through the
+  Memory's own dialogs (`shareable: true`, `register.ts`; ADR 0080 decision 13). `NodeKindRules` puts a chapter only
+  directly inside a Memory, so a chapter link has no node below its root.
 - **A role applies to every node below the root as Memories allows it** (ADR 0080 decision 6, owner 2026-10-07;
   cr-node-key-hierarchy 5a.5). A guest's start, every window and the completion name an optional target `nodeId`;
   absent, it is the root, as before. Core checks a named target (`ShareGuestGate.target`): live, inside the share's

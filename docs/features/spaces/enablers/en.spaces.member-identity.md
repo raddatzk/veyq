@@ -13,7 +13,7 @@
   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
 - **Serves (use-cases/enablers):** the member directory of [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
   editing your own handle and name in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
-  the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md), G2),
+  the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §5),
   and the person/profile view (built at `#people/<userId>`, ADR 0083, not the `~username` of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
@@ -28,12 +28,11 @@
   directory returns username + (locally decrypted) names to every member and `email` only to an owner. The server
   never saw the real name.
 
-## What's new vs. today
+## The identity model
 
-Today a member is `veyq_user.display_name` (free-form, non-unique) + `email`, both plaintext on the **global
-account**. This enabler moves identity onto a **per-`(user, tenant)` profile row** (one per person per tenant,
-independent of how many scopes they're in — so it is **not** a per-membership column, which would collide with a
-member's own group rows) and splits it by sensitivity:
+The global account carries only `email` + keys. A member's identity lives on a **per-`(user, tenant)` profile row**
+(one per person per tenant, independent of how many scopes they're in — so it is **not** a per-membership column,
+which would collide with a member's own group rows), split by sensitivity:
 
 1. **`username` — per-(user, tenant), `UNIQUE(tenant_id, username)`, plaintext.** A chosen handle, charset-
    constrained (`[a-z0-9_.-]`-ish, no whitespace), **not a login credential** (email is). Chosen at **every**
@@ -44,8 +43,8 @@ member's own group rows) and splits it by sensitivity:
    content, not operational metadata — ciphertext the server never decrypts. Every tenant member holds
    `K_tenant`, so each decrypts any member's name **locally**; directory **search/sort over names is
    client-side**.
-3. **`veyq_user.display_name` is removed.** The account carries only `email` + keys; display is the per-tenant
-   username + sealed names.
+3. **No display name on the account.** Display is the per-tenant username + sealed names, and the profile picture
+   ([§ Profile picture](#profile-picture)).
 
 ## Main flow — build your tenant identity on join
 
@@ -71,7 +70,50 @@ member's own group rows) and splits it by sensitivity:
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
    **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`. A name saved under an
    earlier tenant epoch still opens after a rotation, and its member's own client moves it forward
-   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name).
+   ([§ The epoch of a sealed field](#the-epoch-of-a-sealed-field)).
+
+## The epoch of a sealed field
+
+The name and the picture are sealed under the tenant epoch current when their member saved them; the profile row
+records no epoch ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name holds
+why).
+- **Reading:** every reader opens them under every tenant epoch key it holds, newest first — the join record's rule,
+  `openUnderHeldEpochs` (`src/web/src/features/spaces/epochs.ts`). A grant at the current epoch peels the chain down to
+  `E_0`, so a newcomer reads every name; nothing opens under a key the reader does not hold.
+- **Carrying forward:** the member's own client moves its name and picture to the current epoch when it enters the
+  tenant (`src/web/src/features/account/profile/carryProfileForward.ts`): opened and sealed again, written only while the
+  stored blob (the name) or revision (the picture) is still the one it opened, so a save from another device in between
+  wins. In the steady state a read is then one open per member.
+
+## Profile picture
+
+A sealed attribute of the profile row ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)),
+read by tenant members only — never by a guest, never on a share page.
+- **Storage:** `veyq_tenant_profile.sealed_avatar` (`TEXT`, null = none) and `avatar_revision` (`INT`, default 0),
+  bumped by one guarded `UPDATE` on every set and clear, so the stored counter only moves up. The wire shows `0`
+  whenever there is no picture.
+- **Operations:** `setMyAvatar` (`PUT /api/account/profile/avatar`, `204`, overwrites and bumps) and `clearMyAvatar`
+  (`DELETE`, `204`, idempotent) act in the Host's tenant; `getMemberAvatar`
+  (`GET /api/tenants/{tenantId}/members/{userId}/avatar`) is gated on tenant membership and answers
+  `200 { sealedAvatar }` with an `ETag` of the stored revision, quoted, and `Cache-Control: private`, `304` on a
+  matching `If-None-Match`, `404 avatar_not_found` when there is none. `ScopeMember` and `MemberProfile` carry only
+  `avatarRevision`.
+- **The constant:** a 256 px WebP padded to 16 KiB (the tenant icon's pad, `src/packages/crypto/src/pad.ts`) seals as
+  a field envelope (purpose `member-avatar`, bound to `[scopeId, userId]`) to 16429 bytes (1 type + 16 salt + 12 nonce
+  + 16384 + 16 tag), **21908** base64 characters — the `maxLength` of every `sealedAvatar` in the contracts, which fits
+  the `TEXT` column (`scripts/validate_maxlength_storage.py`); `MemberAvatarSliceTest` pins the arithmetic. A client's
+  open refuses a plaintext of any other length and draws the letter.
+- **Join:** the accept and the register-and-accept take an optional `sealedAvatar` beside the name, from either role;
+  a profile born with one starts at revision 1. A joiner who skipped it gets the one-time "finish your profile" prompt
+  once the device holds the key.
+- **Removal:** the tenant member-removal cascade clears the picture and bumps the revision; the username stays.
+- **Client:** `features/account/profile/memberAvatar.ts` seals and opens; `ProfilePictureDialog.vue` crops with
+  `shared/ui/ImageCropper.vue` and encodes with `renderSpaceIcon`; `core/people/avatarCache.ts` keeps one
+  `{ revision, objectUrl }` per user, fetches only a non-zero revision it does not hold and revokes every URL on
+  `resetPeopleDirectory`; `core/people/PersonAvatar.vue` draws it. Name and picture are edited by one model and
+  component (`useNameAndPicture` / `NamePictureFields`) in Settings → Your profile and on one's own profile page only.
+- **Residual:** the operator sees a constant-size blob, the revision, and whether a member has a picture; the three
+  operations are in `OperatorBlindProbeTest`.
 
 ## Alternate / exception flows
 
@@ -80,8 +122,8 @@ member's own group rows) and splits it by sensitivity:
 - **E2 — name skipped, or no key on this device:** the name is optional at join; a member who skipped it, or whose
   tenant key does not open on this device (*waiting for the current key*), shows as just `@username` (+ owner-only
   email) until they seal a name from the profile with the key.
-- **E3 — username change:** re-checked for uniqueness in the tenant; re-slugs the member's `~username` path (old
-  bookmarks may miss — [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
+- **E3 — username change:** re-checked for uniqueness in the tenant. The profile view is addressed by user id
+  (`#people/<userId>`), so no link to it breaks.
 
 ## Quality notes
 
@@ -104,6 +146,9 @@ member's own group rows) and splits it by sensitivity:
 - Concepts: [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md),
   [Security Model](../../../crosscutting/security-model.md)
 - Decisions: [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) (the identity model),
+  [ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md) (the
+  profile picture),
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (membership = role + grant; email
   visibility), [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (the group member-add search
-  this feeds), [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (`~username` routing)
+  this feeds), [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment routing; the profile view
+  is `#people/<userId>`, ADR 0083)

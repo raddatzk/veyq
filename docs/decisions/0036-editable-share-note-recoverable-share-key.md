@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-07-10
 - Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
+- Replaced in part: point 2 by ADR 0093 (built)
 
 ## Context
 
@@ -32,20 +33,18 @@ The fields and gates as built are the model,
 2. **The curator note** is sealed under a field key derived from `K_share`
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9), optional,
    per locale, set at create and served by the anonymous resolve. It is rendered as markdown with the safe renderer of
-   the tenant terms ([ADR 0035](0035-server-terms-of-service.md)): for a `WRITE_ONLY` link it is the instruction above
-   the name field, otherwise a banner under the title. **The curator can ask the visitor to accept the note before
-   anything is shown**; the switch travels **inside** the sealed note, so the operator does not learn which links ask
-   for acceptance, and the acceptance is recorded **on the visitor's device only**, as the tenant terms' is. Rejected:
-   a server-stored acceptance gating the resolve — it gates nothing a visitor cannot send, and would make the server
-   tell visitors apart.
+   the tenant terms ([ADR 0035](0035-server-terms-of-service.md)), for a `WRITE_ONLY` link as its upload instruction.
+   **The curator can ask the visitor to accept the note before anything is shown**; the switch travels **inside** the
+   sealed note, so the operator does not learn which links ask for acceptance, and the acceptance is recorded **on
+   the visitor's device only**, as the tenant terms' is. Rejected: a server-stored acceptance gating the resolve — it
+   gates nothing a visitor cannot send, and would make the server tell visitors apart.
 
 3. **In-place edit.** An **owner-gated `updateShare`** — the link's owner, while still a member of its scope — replaces
    the note and the private label (full replace each), and the link stays valid. It also carries the link's **role**,
    restricted to **`READ` ↔ `READ_WRITE`**: a pure server-side authorization change, since both share one wrap of the
-   node key, so the wrap, `K_share` and the link are untouched. A change into or out of `WRITE_ONLY` is refused
-   (`422 invalid_role_change`): a drop box's "cannot see" promise cannot honestly be flipped on links already handed
-   out, and a `WRITE_ONLY` link carries the drop public key instead of that wrap
-   ([ADR 0031](0031-uploader-public-share.md) point 7).
+   node key, so the wrap, `K_share` and the link are untouched. A change into or out of `WRITE_ONLY` is refused: a
+   drop box's "cannot see" promise cannot honestly be flipped on links already handed out, and a `WRITE_ONLY` link
+   carries the drop public key instead of that wrap ([ADR 0031](0031-uploader-public-share.md) point 7).
 
 4. **The recovery copy is for the scope's members only — never for a link.** A `READ` or `READ_WRITE` link carries the
    node's key (it is what the link hands over), so a copy sealed under that key would let the link's holder, with a
@@ -54,8 +53,8 @@ The fields and gates as built are the model,
    in clear — the whole link. `K_SC` is the key no link carries ([ADR 0012](0012-content-key-hierarchy.md)), so
    sealing under it closes all four at once and keeps what a member does: reveal, edit, copy.
    - **The epoch is the scope's current one.** A create or a re-issue whose copy is not at the current epoch is
-     refused (`409 stale_epoch`, nothing written); the client re-opens its scope key and retries. `updateShare` and
-     re-activation do not touch the copy.
+     refused and writes nothing — no client writes under an epoch it knows is stale
+     ([ADR 0024](0024-scope-key-rotation.md) decision 6). `updateShare` and re-activation do not touch the copy.
    - **A copy that does not open degrades** to "no label, no note, no password, no link" in the manage list; it is not
      a refusal, and the link's guests are unaffected.
    - **The residual, stated.** `K_share` does not change for the life of a link, and every member can rebuild every
@@ -69,7 +68,7 @@ The fields and gates as built are the model,
      password into the key (the crypto gate [ADR 0037](0037-password-protected-shares.md) defers) answers a different
      threat and needs a new link format.
 
-**Roles and scopes.** All three roles carry a note, in every scope a link can live in — personal, group or tenant
+**Roles and scopes.** All three roles carry a note, in every scope a link can live in
 ([ADR 0029](0029-public-viewer-share.md) §6).
 
 ## Consequences

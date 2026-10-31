@@ -27,8 +27,7 @@ identity and a share-scoped upload path. How each is built is the model,
 
 1. **A `READ_WRITE` role on the share** = view + add (one of
    [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes). The curator opts in
-   at create. A manager role (edit and delete others' uploads) is not built; `WRITE_ONLY` is
-   [ADR 0031](0031-uploader-public-share.md).
+   at create; `WRITE_ONLY` is [ADR 0031](0031-uploader-public-share.md).
 
 2. **A mandatory, sealed display name → an anonymous share identity.** The visitor names itself at its first
    contribution, never in front of the content; a visitor who only looks is never asked. The client seals the name
@@ -59,9 +58,9 @@ identity and a share-scoped upload path. How each is built is the model,
    uploaded media is not retracted by a switch-off.
 
 7. **Client-integrity trust tier — same honesty as the viewer.** The no-install contributor page is operator-served
-   web code ([ADR 0026](0026-client-trust-tiers.md)), surfaced by the same footer link. A reported contributor link
-   carries the fragment key, so it is decryptable on report — and, with the database, so are its guests' names
-   (point 8).
+   web code ([ADR 0026](0026-client-trust-tiers.md)), surfaced by the same footer link. What a report of what it shows
+   hands the moderators is [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+   § 1's.
 
 8. **A guest's name is for the members.** No share link is served the name any guest gave; members read it through
    their bucket list.
@@ -78,15 +77,15 @@ identity and a share-scoped upload path. How each is built is the model,
 
 ## Consequences
 
-- **New server-visible surface, all opaque:** the identity row (opaque id, sealed name, token hash, share id) and an
-  identity stamp on each contributed medium. The server never learns *who* contributed, only that an opaque identity
-  did.
+- **New server-visible surface:** the identity row (opaque id, sealed name, token hash, share id) and an identity
+  stamp on each contributed medium. The server learns no name. Per guest write it keeps the client's address, source
+  port and time for N days, wherever a link lets a guest write
+  ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10) — evidence of
+  where a write came from, never of what it holds.
 - **Direct-append means spam is briefly live.** Until the curator deletes it or switches off the link, an unwanted
-  upload is visible to viewers; review-before-publish would be the mitigation and is not built.
+  upload is visible to viewers; review-before-publish would be the mitigation.
 - **Attribution is self-asserted, not verified.** Anyone with the link can create an identity with any name; the
   contributor token binds *subsequent* uploads to *that* identity, it does not authenticate the person.
-- **Per-uploader grouping needed no migration**, because each contribution carried a stable identity and a sealed
-  name from the start.
 
 ## Alternatives considered
 

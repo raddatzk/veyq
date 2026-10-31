@@ -8,14 +8,13 @@
 
 ## Context
 
-Deleting a node (a Memory, a Chapter, a folder) is today **immediate and irreversible**, and it reclaims only
-part of what it removes. `NodesStore.deleteSubtree` deletes the doomed subtree's node rows and its standalone
-**cover** blobs, and nothing else — the subtree's `veyq_media`, `veyq_media_derivative` and `veyq_bucket` rows
-survive, pointing at a `node_id` that no longer exists. They are then unreachable *and* unreclaimable: every
-read filters on `scopeId + nodeId`, they carry `deleted_at is null` so the media trash purge never sees them,
-and their blobs stay legitimately referenced so no unreferenced-blob predicate can reach them.
+Deleting a node (a Memory, a Chapter, a folder) was **immediate and irreversible**, and it reclaimed only part of
+what it removed: the subtree's node rows and its standalone **cover** blobs, and nothing else — the subtree's media,
+derivative and bucket rows survived, pointing at a node that no longer existed. They were then unreachable *and*
+unreclaimable: every read filters on scope and node, they were not trashed so the media trash purge never saw them,
+and their blobs stayed legitimately referenced so no unreferenced-blob predicate could reach them.
 
-Three forces meet here, and none of them had been written down:
+The forces that meet here:
 
 - **The crosscutting policy already fixes the shape of destruction.** The
   [security model](../crosscutting/security-model.md) § *Deletion & erasure* mandates **soft-delete → trash →
@@ -23,34 +22,27 @@ Three forces meet here, and none of them had been written down:
   one-step "delete forever" of another member's live content. A node delete is exactly that case: media carry an
   owner, and buckets are per-owner, so in a shared scope one member's node delete destroys another member's live
   uploads in one step.
-- **No refined state said what a node delete does to its media.** There was no use-case for node deletion at all
-  — it existed as a clause in [uc.memory.browse](../features/memory/use-cases/uc.memory.browse.md) and
-  [uc.memory.chapters](../features/memory/use-cases/uc.memory.chapters.md), and
-  [en.memory.tree](../features/memory/enablers/en.memory.tree.md) did not use the word *delete*. This is a
-  cross-feature gap, not doc drift: the node-delete work and the media-reclaim work never met, so the doc↔code
-  delta was empty while the defect was real.
 - **The bigger deletion is already reversible.** Deleting a whole group enters a grace period with a restore
   ([ADR 0014](0014-group-scopes-and-governance.md) §6). A group being recoverable for weeks while a single
   Chapter inside it is destroyed instantly is not a defensible product story.
 
 ## Decision
 
-**1. A node delete is a soft-delete.** `veyq_node` gains a nullable `deleted_at`; `deleteSubtree` marks the
-doomed subtree instead of removing it. Nothing is destroyed at the moment of the user's action, so the media,
+**1. A node delete is a soft-delete.** A node carries a nullable deletion instant, and a delete marks the doomed
+subtree instead of removing it. Nothing is destroyed at the moment of the user's action, so the media,
 derivatives, buckets and blobs under it are untouched and a restore is cheap.
 
 **2. A soft-deleted node is hidden, not shown as pending.** Every user-facing and guest-facing read carries
-`deletedAt is null`. This is the one point where the group-deletion precedent does **not** transfer:
-`ScopeEntity`'s soft-delete deliberately *surfaces* the marker (`listMine` returns pending-deletion scopes and
-the client renders them), which is right for a space you are still working in and wrong for a Memory the user
-believes they deleted. The closer template is the **media trash** — `MediaEntity`'s `deleted_at` with
-filter-on-read — and that is the one we follow.
+`deletedAt is null`. This is the one point where the group-deletion precedent does **not** transfer: a space's
+soft-delete deliberately *surfaces* the marker (the scope list returns pending-deletion scopes and the client
+renders them), which is right for a space you are still working in and wrong for a Memory the user believes they
+deleted. The closer template is the **media trash** — a deletion instant with filter-on-read — and that is the one
+we follow.
 
 **3. The node trash is per-scope, and that is what makes it work at all.** Trashed *media* live in a tab on
 their Memory; a trashed *node* cannot, because its own Memory is what was deleted. The node trash therefore
 hangs off the space, reachable without the node — which is also why soft-deleting a node's media into the
-per-Memory trash was never a real option (§ Rejected (b)). This settles the trash grain for **nodes only**; the
-media trash's grain is a separate open question and is not decided here.
+per-Memory trash was never a real option (§ Rejected (b)). This settles the trash grain for **nodes**.
 
 **4. Deletion takes the subtree out of public shares immediately.** Both share reads carry the predicate — the
 anonymous resolve *and* the blob authorization. Filtering only the listing leaves a Memory that is invisible in
@@ -75,20 +67,22 @@ carry a **re-sealed `encryptedName`**, in the *same* request. The retry is "put 
 and a name sent apart from the token derived from it leaves the node live, briefly, carrying a slug its own name
 does not produce; a failure in between leaves it that way for good.
 
-**6. The purge is a scheduled job, and the blobs must outlive the grace window.** A new node purge worker
-hard-erases subtrees whose `deleted_at` is older than the retention window: media, derivatives, buckets, cover
-blobs and the store objects. The cover-blob reclaim currently inside `deleteSubtree` **moves into it** — reclaiming
-covers at soft-delete time would make a restore return a Memory whose cover is gone. `purgeAfter` is **derived**
+**6. The purge is a scheduled job, and the blobs must outlive the grace window.** A node purge job hard-erases
+subtrees whose deletion is older than the retention window: media, derivatives, buckets, cover blobs and the store
+objects. The cover-blob reclaim belongs to it, never to the delete — reclaiming covers at soft-delete time would make
+a restore return a Memory whose cover is gone. `purgeAfter` is **derived**
 at the resource boundary from `deleted_at` plus the configured retention, not stored, matching both existing
 soft-delete precedents.
 
-**7. Row-then-object ordering, via the shared per-media body.** The purge routes through
-`MediaStore.purgeMediaRows` (rows in FK order inside the transaction, and the store objects recorded for reclaim
-in that same transaction, [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)) rather than the
-set-based shape of `ScopePurge.eraseScope`. `ScopePurge`'s own docstring says why it is the exception: it erases set-based *by scope*, and its final
-scope-row delete lets the database cascade the rest. A node subtree is not a scope — neighbouring nodes, buckets and the scope row all survive — so the
-FK-ordered shared body is the correct shape, and a set-based copy would be the fourth copy that docstring warns
-against.
+**7. Row-then-object ordering, per item.** Core's purge hands the subtree to each application's own eraser
+([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md); the `NodeSubtreeEraser` seam,
+[Applications](../apps/README.md)), and each erases its rows per item through its shared per-item body — Memories'
+per-media purge: rows in FK order inside the transaction, and the store objects recorded for reclaim in that same
+transaction ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)) — never by the set-based shape of the
+scope erase. That one is the exception because it erases *by scope* and its final scope-row delete lets the
+database cascade the rest. A node subtree is not a scope — neighbouring nodes, buckets and the scope row all
+survive — so the FK-ordered per-item body is the correct shape, and a set-based copy would be one more copy of
+logic that already exists.
 
 ## Consequences
 
@@ -97,30 +91,15 @@ against.
   just its covers.
 - **The policy is honoured rather than amended.** Node deletion joins the one mechanism the security model
   already mandates, instead of becoming a second, one-step destruction path beside it.
-- **The cost is a read-path sweep, and it is bounded and measured:** 11 call-sites across three stores
-  (`NodesStore`, `MediaStore`, `SharingStore`) gain the predicate, out of 25 that touch a node. Two bucket
-  handlers (`renameBucket`, `deleteBucket`) reach a node without passing the gate and must be closed explicitly.
-- **Four reads must deliberately *not* filter, and each is a trap.** The slug-uniqueness check must keep seeing
-  soft-deleted rows or validation passes and the database then rejects the insert — a clean rejection turned into
-  a 500. The subtree traversal inside the delete itself must reach descendants regardless of their own state and
-  **re-stamp** them: a subtree that ages out on two timestamps has its inner rows purged first, and the folder
-  around them is still sitting restorable in the trash when it happens. A re-stamped descendant that was such an
-  earlier delete's root holds that delete's freed token, so the restore of the folder around it leaves it — and
-  its subtree — in the trash on the one marker, a trash root again under the now-live folder, restorable on its own
-  with a fresh token (returning it would bring back a node with no name, beside a sibling that may hold its old
-  one). The delete's own scope binding is the
-  fourth, and it was found by building rather than by reasoning — gate it on liveness and re-deleting a trashed
-  subtree answers 404 instead of the no-op the flow promises, while a foreign node must keep answering the same
-  non-enumerable 404; so the delete takes a lookup that sees trashed rows and the *update* path keeps the one
-  that does not. The scope hard-erase must keep removing **all** node rows including soft-deleted ones.
-- **The web needs no change to hide anything.** The delete handler already refetches the whole tree rather than
-  splicing locally, so a filtered listing is enough. What the web does owe is the new surface: the space's trash
-  and its restore affordance.
-- **An existing code comment becomes wrong on the day this lands.** `NodesStore`'s cr-0107 note argues that no
-  revision bump is needed because "delete removes the node rows themselves … no open gallery can poll a deleted
-  node". Under a soft-delete the rows and their counters remain, so either the media listing gates on the node's
-  state or the delete must bump. The reasoning it supports — that no *surviving* node's gallery set changes —
-  still holds.
+- **The cost is a read-path sweep:** every read that reaches a node gains the predicate, the bucket operations
+  included.
+- **Four reads must deliberately *not* filter, and each is a trap** — slug uniqueness, the delete's own subtree
+  traversal (which re-stamps descendants, so a subtree ages out on one marker), the delete's own scope binding, and
+  the scope hard-erase. Each one's failure mode is in
+  [en.memory.tree § Delete](../features/memory/enablers/en.memory.tree.md#delete--soft-delete-trash-purge). A
+  re-stamped descendant that was an earlier delete's root holds that delete's freed token, so the restore of the
+  folder around it leaves it — and its subtree — in the trash, a trash root of its own restorable with a fresh token
+  (returning it would bring back a node with no name, beside a sibling that may hold its old one).
 - **A restore can fail, and that is correct.** If the name was taken in the meantime the client disambiguates,
   exactly as it does when creating. A restore that silently renamed, or one that refused forever, would both be
   worse.

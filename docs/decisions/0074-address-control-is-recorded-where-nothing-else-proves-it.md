@@ -16,7 +16,7 @@ an address, so this starts from the paths that exist, not from the generic "veri
 | Path that binds an address | Who types it | Address control proven? |
 |---|---|---|
 | Member invite, redeemed by a new or an existing account | the tenant owner | **Yes** — the invite travels by mail only ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) § 2), so the token that arrives is the proof. |
-| The tenant's first owner, redeeming the bootstrap invite | the Server Owner | **No** — the one copy-link (ADR 0055 § 3): whoever holds the link redeems it. |
+| The tenant's first owner, redeeming the bootstrap invite | the Server Owner | **No** — a copy-link (ADR 0055 § 3): whoever holds the link redeems it. |
 | First-run setup (the Server Owner) | the operator, for themselves | **No** — nothing is mailed to it. |
 | Changing an account's address | the account holder | **Yes** — the new address takes effect only when the link mailed to it is opened (Decision 8). |
 | Open self-registration | — | No such path exists. |
@@ -60,10 +60,9 @@ anyway, so an app-wide banner would speak to nobody else. **One gate is decided 
 create an account for an address, other than a mailed invite, must prove address control *before* the account exists,
 because creation binds the unique address and its auth salt and a squat cannot be undone by confirming later.
 
-**4. The confirmation token copies the recovery token's lifecycle** (ADR 0054): a random 256-bit token stored only as
-its hash, bound to the account and the address it was mailed to, a 24-hour expiry, superseded by a fresh request, used
-once, purged, and a per-account send budget ([cc.mail](../crosscutting/cc.mail.md) § Address control). A database dump
-yields no token that confirms anything — hygiene, not a boundary against the operator, who can write the column
+**4. The confirmation token copies the recovery token's lifecycle** (ADR 0054): random, stored only as its hash, bound
+to the account and the address it was mailed to, short-lived, used once, and bounded by a per-account send budget
+([cc.mail](../crosscutting/cc.mail.md) § Address control). A database dump yields no token that confirms anything — hygiene, not a boundary against the operator, who can write the column
 (Decision 7).
 
 **5. Confirming needs the account's own session**, and an address still equal to the one mailed. The proof is that *the
@@ -87,9 +86,8 @@ is the auth salt's input, so a change installs a new auth public key, derived by
 request carries both proofs a password change has — the current auth key's attestation and a Secret-Key proof — so a
 stolen session alone cannot move the address a reset is mailed to; the change stays **pending** until the link mailed
 to the new address is opened in the same account's session, then swaps address and key together and stamps the new
-address confirmed (Decision 2). The old address gets a fixed notice with no new address and no cancel link; every other
-session is revoked; the request answers alike for a free and a taken address. The flow is
-[uc.account.change-email](../features/account/use-cases/uc.account.change-email.md).
+address confirmed (Decision 2). The old address gets a fixed notice with no new address and no cancel link. The flow
+is [uc.account.change-email](../features/account/use-cases/uc.account.change-email.md).
 
 ## Consequences
 

@@ -74,6 +74,10 @@ removal counter). The per-link storage limit is the tenant's, not the link's (`v
 | `READ_WRITE` | read the subtree and write into it as its application allows | yes | yes |
 | `WRITE_ONLY` | send into the node without seeing anything of it | no — the resolve serves no node, the blob read is `404` | yes |
 
+A `WRITE_ONLY` resolve serves only what its client needs to send: the role, the scope, node and root kind, the root's
+epoch, the sealed drop public key in place of `wrap`, the sealed title and note, and N of the guest-write record — no
+node, no medium, no identity ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 1).
+
 **Which kind may be a share root with which role** is the kind's own answer (`ShareRoots`; none, or two answers, means
 no role): a `FOLDER` takes `READ` and `READ_WRITE` (core); a Memory and a Chapter take all three (Memories); a Depot
 `FILE` takes `READ` and `READ_WRITE`, a `DEPOT_DROPBOX` `WRITE_ONLY` only (Depot); an Expenses `POT` `READ` and
@@ -119,7 +123,9 @@ flowchart LR
   ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) point 1). Every member of the
   scope opens it, so any member can show, copy, edit and re-key any link of the scope; no link opens it, because no
   link carries `K_SC` (point 4). Create and re-issue refuse a copy below the current epoch (`409 stale_epoch`).
-- **The note, the private label and the root's name** are sealed under `K_share`. Any member re-seals the root's name
+- **The note, the private label and the root's name** are sealed under field keys derived from `K_share`, one per
+  write ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 9); the password's member copy directly under `K_share`. Any member re-seals the root's name
   on every link through the recovery copy when it renames the root (`setShareSealedName`, ADR 0080 decision 14).
 - **A password is not a key.** It gates what the server serves; the content stays under `K_share` (§ Gates).
 
@@ -188,7 +194,14 @@ the blob read and the terms read are not.
 - **The write proof.** Naming oneself also presents `X-Share-Write = HKDF-SHA256(K_share, "veyq/v1/share-write:" + shareId)`;
   the link stores only its `SHA-256` (`write_verifier`), set at every create and re-issue for every role. A missing or
   wrong token, and a link with no verifier, is `404` ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
-  Only that call is gated by it; reads by an id holder yield ciphertext.
+  Naming oneself and a guest's report are gated by it
+  ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 1); reads by an id holder yield ciphertext.
+- **The guest's device keeps its identity.** Once named, a guest's device keeps its identity per link — the display
+  name, the contributor token and, for an uploader, its own `K_up` — across reloads until the guest chooses "Not you?",
+  which forgets it there; the next visitor names itself afresh. It never keeps a handle to content: an uploader's
+  own-view (the ids and local previews of what it sent) lives only in its tab, so a reload shows nothing of earlier
+  uploads ([ADR 0031](../../../decisions/0031-uploader-public-share.md) points 2 and 3).
 - **Identity folders.** A `WRITE_ONLY` guest of a Depot drop box gets one core `FOLDER` per identity, marked by
   `share_identity_id` and sealed by the guest under `K_up`; it creates only inside its own. A drop box, an identity
   folder and everything below one are re-keyed by a scope **owner** only

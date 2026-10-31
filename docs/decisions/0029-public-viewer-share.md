@@ -22,10 +22,10 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 record, the key path and the lifecycle as built are the model,
 [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md).
 
-1. **The share resource (opaque server state).** A share record holds a **256-bit random `shareId`** (the id is half
-   the capability), the root's key wrapped under `K_share`, a plaintext **role** (`READ` here), the root's name
-   re-sealed under `K_share`, the root's `nodeId` (to gate blob reads), `enabled` and an optional expiry. The root is
-   a Memory, a chapter or a folder, and the kind's application says which roles it takes
+1. **The share resource (opaque server state).** A share record holds a **256-bit random id** (the id is half the
+   capability), the root's key wrapped under `K_share`, a plaintext **role** (`READ` here) and the root's name sealed
+   under `K_share`, beside the plain ids and switches the server gates on. The root is any node whose kind its
+   application declares a share root, and that application says which roles it takes
    ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 6, 9 and 13). The
    server never sees `K_share`, a node key, a name or the viewer.
 
@@ -34,7 +34,7 @@ record, the key path and the lifecycle as built are the model,
    key; one without the other is inert. For a guest **write** the server checks the second half too
    ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)).
 
-3. **Anonymous resolve.** `GET /api/shares/{shareId}` is **unauthenticated** and returns the record plus the sealed
+3. **Anonymous resolve.** The resolve is **unauthenticated** and returns the record plus the sealed
    subtree; the viewer opens the root's key with the fragment key and decrypts everything locally. It is a
    **parallel authorization path keyed on share state** — never a relaxed tenant or scope filter.
 
@@ -63,9 +63,9 @@ record, the key path and the lifecycle as built are the model,
    Neither re-keys anything: already-downloaded ciphertext and a saved link cannot be retracted
    ([ADR 0012](0012-content-key-hierarchy.md)); what a later rotation does to a link is ADR 0109 point 4.
 
-   **Deleting a link is a tombstone, not a row delete.** The row keeps id, scope, node, role and creation time; every
-   ciphertext column and the expiry are cleared and a `deleted` flag is set. The row stays because the link's guest
-   identities hang off it, and a `WRITE_ONLY` identity's wrapped key is the only way members open that guest's uploads
+   **Deleting a link is a tombstone, not a row delete.** The row keeps its plain ids and loses every ciphertext and
+   the expiry ([the model](../features/sharing/enablers/en.sharing.public-link.md) § Lifecycle). It stays because the
+   link's guest identities hang off it, and a `WRITE_ONLY` identity's wrapped key is the only way members open that guest's uploads
    ([ADR 0031](0031-uploader-public-share.md) point 7); so a delete never touches the node's content. The deletion is
    a flag, not a time: every reader asks only *whether* a link is deleted. Its owner deletes it at any time; another
    member only once the owner is no longer a member of the scope — deleting a co-member's parked link would destroy
@@ -87,14 +87,15 @@ record, the key path and the lifecycle as built are the model,
 
 - **Least-privilege is crypto-enforced**, not server-gated: a leaked link exposes exactly one subtree, never the scope
   or a sibling.
-- **Server-visible surface, all non-sensitive:** the opaque `shareId`, the wrapped key, the plaintext role and the
-  sealed name. A deleted link leaves its id, scope, node and role behind, and a flag, not when it was deleted.
+- **Server-visible surface, all non-sensitive:** opaque ids, ciphertext and a plaintext role — the whole record is
+  [the model](../features/sharing/enablers/en.sharing.public-link.md) § The share record. A deleted link leaves its
+  ids and role behind, and a flag, not when it was deleted.
 - **A rotation does not revoke a link.** It re-keys the node and the link follows (§6), including content added
   after a removal. Removing a member therefore switches off that member's links, and a link anyone who left could
   hold is re-issued — two surfaces, *scope rotation ≠ link revocation*, which breaks the naive expectation that
   "removing a member cuts their access to everything".
-- **T&S "decryptable-on-report" corollary** ([security model](../crosscutting/security-model.md)): an abuse report
-  carries the full URL, hence the fragment key, so an operator **can** decrypt a **reported public** link. Private,
+- **What a report opens is decided at the share boundary** — exactly what was reported, to the moderators
+  ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 1). Private,
   unshared content stays unscannable.
 
 ## Alternatives considered

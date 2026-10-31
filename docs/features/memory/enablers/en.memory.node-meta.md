@@ -71,7 +71,8 @@
   returns each node's `metaRevision` (born 0). An `updateNode` that carries `wrappedMeta` must also carry the
   `metaRevision` it was built from (else `400`); the server compare-and-sets it and stores `metaRevision + 1`, or
   writes nothing — a rename in the same request included — and answers `409 stale_revision` with the current blob
-  and revision. Only this write moves the counter.
+  and revision. Only this write moves the counter. The client's retry loop and the cover's one write:
+  [en.memory.tree § Sealed-meta writes](en.memory.tree.md#sealed-meta-writes).
 - **Schema** (core baseline): `veyq_node.wrapped_meta TEXT NULL` and `veyq_node.meta_revision`; the same counter
   on `veyq_media` (Memories baseline).
 

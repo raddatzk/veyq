@@ -9,9 +9,11 @@
 ## Context
 
 A tenant is created by a **Server Owner**, but the Server Owner must stay **operator-blind**: they may
-not hold any content key for the tenant. Tenant creation therefore cannot follow the documented
-**invite-wrap** onboarding (see [Scopes & Tenancy](../crosscutting/scopes-and-tenancy.md)), because the
-invite-wrap presupposes an **existing key-holder** who reseals the scope key to the invitee.
+not hold any content key for the tenant. Tenant creation therefore cannot follow the member onboarding
+(see [Scopes & Tenancy](../crosscutting/scopes-and-tenancy.md)), because a member invite presupposes an **existing
+key-holder**: an owner wraps the scope's current key to the invite, and the invitee grants itself from it
+([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+decisions 1-3).
 At the moment a tenant is created **no one holds its scope key** — it does not exist yet.
 
 The creation flow (see [uc.admin.create-tenant](../features/admin/use-cases/uc.admin.create-tenant.md))
@@ -35,27 +37,29 @@ from anyone.
 
 ## Consequences
 
-- **Server Owner is never a key-holder.** Operator-blindness holds by construction: there is no point in
-  the flow at which the operator could obtain a tenant content key.
+- **Server Owner is never a key-holder.** The protocol has no step at which the operator receives a tenant
+  content key. That holds against a passive operator, and against an active one only on a client it does not
+  serve: a client the operator serves could leak the key at birth
+  ([ADR 0026](0026-client-trust-tiers.md), [security-model § What holds today](../crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve)).
 - **A second cold-birth path exists**, parallel to `setup-server`'s cold **account** birth — here it is a
   cold **scope** birth. Both are roots of a key tree with no upstream wrap; both are distinct from
-  invite-wrap, which is for adding members to a scope that **already has** a key-holder.
+  a member invite, which adds members to a scope that **already has** a key-holder.
 - **`PENDING` tenants hold no content.** A tenant is a reserved domain mapping until its owner accepts;
   the scope key only comes into being at acceptance, so no content can exist before then.
 - **Tenant name + domain are operational cleartext.** At creation no key exists under which the name
   could be encrypted, and host-based routing needs the domain server-visible anyway.
 - **Rejected alternative — Server Owner pre-creates the scope key:** would require the operator to hold
   (even transiently) the tenant's content key, breaking operator-blindness. Rejected outright.
-- **Rejected alternative — invite-wrap from the Server Owner:** impossible, as the Server Owner holds no
-  scope key to reseal.
+- **Rejected alternative — a member-style invite from the Server Owner:** impossible, as the Server Owner holds
+  no scope key to wrap to the invite.
 - **The operator boundary follows directly.** Because content ownership is the scope-key grant (never an
-  operator-assignable role), a Server Owner can affect a tenant's **availability** (deactivate it, block
-  its owner) but never its **confidentiality**.
-- **Role vs. grant.** The owner *role* is server-side management and is **hollow without a grant** (no
-  read, and no invite — the invite-wrap needs the scope key). Therefore: promoting an existing
-  **grant-holding** member to owner is a full handoff with **no key transfer**; promoting a non-key-holder
-  (or the operator) yields a powerless title. This closes the "operator smuggles itself in as owner" path
-  by construction.
+  operator-assignable role), a Server Owner can affect a tenant's **availability** (suspend or delete it,
+  [ADR 0066](0066-tenant-suspension.md), [ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md))
+  but never its **confidentiality** — on the terms of the bullet above: on a client it does not serve
+  ([ADR 0026](0026-client-trust-tiers.md)).
+- **Role vs. grant** ([ADR 0007](0007-membership-role-grant-relation.md): role gates management, grant gates
+  content). So promoting a non-key-holder (or the operator) to owner yields a powerless title, which closes the
+  "operator smuggles itself in as owner" path by construction.
 - **The operator never selects a successor.** Operator-blindness withholds both the key *and* the
   identity view (opaque member IDs only), so the operator cannot choose a new owner even setting crypto
   aside. Promotion is **tenant-internal**: an existing owner makes a member an owner. The one exception is a tenant

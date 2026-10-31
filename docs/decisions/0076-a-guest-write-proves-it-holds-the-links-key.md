@@ -13,14 +13,14 @@ true: the server checked only the id.
 
 - **The share id is the one bearer secret stored raw.** Sessions, invites, recovery tokens, pairing handles,
   contributor tokens and share-password verifiers are all kept as hashes ([ADR 0004](0004-session-tokens.md)'s
-  shape); `veyq_share.id` is the primary key in clear.
-- **Exactly one guest call is opened by the id alone: naming yourself** (`createShareIdentity`). It mints a
-  contributor token, and every later guest write needs that token. A password-protected link was already closed —
-  its gate checks `SHA-256(token)` against a stored verifier ([ADR 0037](0037-password-protected-shares.md)).
+  shape); the share id is the row's key, in clear.
+- **Exactly one guest call is opened by the id alone: naming yourself.** It mints a contributor token, and every
+  later guest write needs that token. A password-protected link was already closed — its gate checks
+  `SHA-256(token)` against a stored verifier ([ADR 0037](0037-password-protected-shares.md)).
 - So **a database copy plus the live instance** named a guest on every enabled, password-less READ_WRITE or
   WRITE_ONLY link and uploaded. And the id rides every guest request path (`/s/{id}`, `/api/shares/{id}/…`), so any
-  reverse-proxy access log an operator turns on holds it too (none is on in the bundled stack, which a posture guard
-  holds, or in the chart; turning one on is the operator's own processing, [ADR 0092](0092-logs-are-operational-and-name-no-person.md) § 5).
+  reverse-proxy access log an operator turns on holds it too (veyq's targets keep none; turning one on is the
+  operator's own processing, [ADR 0092](0092-logs-are-operational-and-name-no-person.md) § 5).
 - **What that bought was junk and spent quota, never a read.** Without `K_share` the writer can seal neither under
   `K_node` (READ_WRITE) nor to the link's drop key (WRITE_ONLY, [ADR 0031](0031-uploader-public-share.md) point 7),
   so its uploads open for nobody. Bounded per link ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
@@ -30,27 +30,27 @@ true: the server checked only the id.
 
 1. **A write token derived from the link's key.** `writeToken = HKDF-SHA256(K_share, salt = ∅, info =
    "veyq/v1/share-write:" + shareId, 32)` — a label of its own, and the share id in the info so a token is bound
-   to the link it was derived for ([ADR 0072](0072-a-seal-binds-its-object.md)). Pinned by the `share_write_token`
-   conformance vector.
-2. **The server keeps only its hash.** Every create and every re-issue ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md))
-   carries `writeVerifier = SHA-256(writeToken)`, for **every** role — a READ link can be flipped to READ_WRITE
-   later and its key does not change, so an edit never takes a verifier. A deleted link's tombstone clears it with
-   the other key-derived columns (ADR 0029 §7).
-3. **Naming yourself presents the token** as `X-Share-Write`. The check runs after the share is found live and
-   after the password gate, before the role check — a missing, malformed or wrong token, and a link with **no**
-   verifier, answer the same non-enumerable `404 share_not_found` a password-protected link gives a write without
-   its password; a real guest always holds the key, so no guest ever sees it. Constant-time compare; no attempt
-   limiter — the token has 256 bits.
-4. **Only that call is gated.** Every later guest write already needs the contributor token, whose hash only is
-   stored. A read by an id holder yields ciphertext a database copy already holds — gating the resolve and blob
-   reads too stays a cheap later step if a read-side reason appears.
+   to the link it was derived for ([ADR 0072](0072-a-seal-binds-its-object.md)), pinned by the crypto vectors.
+2. **The server keeps only its hash.** Every create and every re-issue
+   ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)) carries `writeVerifier = SHA-256(writeToken)`,
+   for **every** role — a READ link can be flipped to READ_WRITE later and its key does not change, so an edit never
+   takes a verifier. A deleted link's tombstone clears it with the other key-derived columns (ADR 0029 §7).
+3. **Naming yourself presents the token.** The check runs after the share is found live and after the password
+   gate, before the role check — a missing, malformed or wrong token, and a link with **no** verifier, answer the
+   same non-enumerable `404` a password-protected link gives a write without its password; a real guest always holds
+   the key, so no guest ever sees it. Constant-time compare; no attempt limiter — the token has 256 bits.
+4. **Naming yourself and a guest's report are gated.** A report through a link
+   ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 1) presents the
+   token the same way, so the id alone reports nothing. Every later guest write already needs the contributor token,
+   whose hash only is stored. A read by an id holder yields ciphertext a database copy already holds — gating the
+   resolve and blob reads too stays a cheap later step if a read-side reason appears.
 5. **A link with no verifier fails closed.** The column is nullable; a link minted before this decision takes no
-   new guest until a curator re-issues it. An existing guest's token keeps working — only naming oneself is gated.
-   The manage list says which links those are: each guest-taking row carries `newGuestsRefused`, derived from the
-   missing verifier and the role — the same two facts the refusal decides on — and the panel marks it beside the
-   renew. Every row also carries the missing verifier on its own (`writeVerifierMissing`), because a READ link
-   without one becomes such a link the moment its role edit picks READ_WRITE, and point 2 keeps the edit from
-   fixing it: the role edit warns and offers the renew instead.
+   new guest until a curator re-issues it. An existing guest's token keeps working — the gate stands only before
+   naming oneself and a report. The manage list says which links those are, from the same two facts the refusal
+   decides on — the missing verifier and the role — and the panel marks them beside the renew. Every row also says
+   whether its verifier is missing on its own, because a READ link without one becomes such a link the moment its
+   role edit picks READ_WRITE, and point 2 keeps the edit from fixing it: the role edit warns and offers the renew
+   instead.
 
 ## Consequences
 

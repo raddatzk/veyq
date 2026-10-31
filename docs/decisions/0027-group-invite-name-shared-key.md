@@ -29,15 +29,14 @@ one-off name seal of [ADR 0014](0014-group-scopes-and-governance.md) §5; that s
 1. **`K_name` is derived from the name's content-epoch key** ([ADR 0024](0024-scope-key-rotation.md)):
    `K_name_e = HKDF-SHA256(E_e, salt = "", info = utf8("veyq/v1/group-name-key"), 32)`, where `E_e` is the epoch
    the name was last **set or renamed** under. The derivation, the name's seal and the key's wrap are pinned as
-   conformance vectors ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md): `group_name_key`,
-   `seal.sym.group-name`, `seal.asym.group-name-key`). The scope row carries a small **server-visible name-epoch index** — exactly like every
+   conformance vectors ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md)). The scope row carries a small **server-visible name-epoch index** — exactly like every
    node name already does (ADR 0024 §2). `E_e` is not recoverable from `K_name_e` (HKDF one-way), so handing out
    `K_name_e` leaks the name and nothing else (no content, no dedup key).
 2. **The group name seals under its epoch's `K_name`:** `encryptedName = symEncrypt(K_name_e, name)` on the scope
    row (not under the birth `K_SC`), under a seal purpose of its own bound to the group
    ([ADR 0072](0072-a-seal-binds-its-object.md)). A **rename re-seals under the current epoch** and updates
    the name-epoch index — its own operation, [uc.spaces.rename-group](../features/spaces/use-cases/uc.spaces.rename-group.md):
-   owner-gated, name-only (no `K_SC` rotation), and the server rejects a stale `nameEpoch` with `409`; a **plain
+   owner-gated, name-only (no `K_SC` rotation), and the server refuses one sealed at a stale name epoch; a **plain
    rotation does not touch the name** (it keeps its epoch). Members hold the latest
    epoch, peel the chain to `E_e`, derive `K_name_e` and read. The blind server is **agnostic** to which key
    `encryptedName` is under — the column stays opaque base64; only the small epoch index is new.
@@ -52,8 +51,7 @@ to their removal, but **not** for a later rename sealed under `E_n`+ — so they
 This makes the group's own name forward-secret **consistently** with the node names ADR 0024 §2 already protects,
 rather than the lone exception. (An `E_0`-anchored static key was rejected — see Consequences.)
 
-**Migration = clean break.** veyq is pre-production; there is no group data to preserve, so new groups seal the
-name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape / lazy-migration support.
+A group seals its name under `K_name` from birth (epoch 0).
 
 ## Consequences
 
@@ -63,10 +61,9 @@ name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape
 - **The group name is forward-secret, consistently with node names.** No new special case: the name rides the same
   "sealed under its epoch, carries an epoch index" model ADR 0024 §2 defines for the tree.
 - **Near-zero new server surface.** No stored name key (derivation, not storage); `encryptedName`'s key change is
-  invisible to the blind server. New server state: a small **name-epoch index** on the scope row; the membership's
-  `sealed_invite_name` column is repurposed to the wrapped `K_name` (`sealed_name_key`); `encryptedName` is
-  returned in the invitation payload (a bounded, ciphertext-only read-path widening to the pending invitee). The
-  one-off per-invitee name-seal and `inviteName.ts`'s name-sealing are removed.
+  invisible to the blind server. New server state: a small **name-epoch index** on the scope row and the wrapped
+  `K_name` on a pending invitee's membership; `encryptedName` is returned in the invitation payload (a bounded,
+  ciphertext-only read-path widening to the pending invitee).
 - **One fail-safe edge:** if the name is **renamed** between an invite and its accept, the invitee's `K_name_e`
   no longer opens the re-sealed name — the preview shows "unnamed" and they can still accept (then see the real
   current name). A plain rotation does **not** trigger this (the name keeps its epoch). Rare and harmless.

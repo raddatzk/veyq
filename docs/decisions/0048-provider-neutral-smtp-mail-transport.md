@@ -1,4 +1,4 @@
-# ADR 0048 — Tenant invites are sent over per-tenant SMTP, configured as runtime settings
+# ADR 0048 — A tenant's mail is sent over its own SMTP relay, configured as runtime settings
 
 - Status: Accepted
 - Built: yes
@@ -25,18 +25,18 @@ SMTP server, as the store works with any S3 store and geocoding with any provide
 1. **Generic SMTP, no vendor SDK.** Host, port, username, password, STARTTLS and from — over the `MailClient` the core
    `quarkus-mailer` extension brings.
 2. **Configuration is per-tenant runtime data**, written through an owner-gated resource as the tenant's terms are
-   ([ADR 0035](0035-server-terms-of-service.md)) — not deployment properties: no `quarkus.mailer.*` transport and no
-   `veyq.mail.*` group. A tenant owner reconfigures without a redeploy.
+   ([ADR 0035](0035-server-terms-of-service.md)) — not deployment properties. A tenant owner reconfigures without a
+   redeploy.
 3. **The password is a server-held secret, encrypted at rest** ([ADR 0050](0050-operator-config-secret-encryption.md)),
    write-only over the API and opened only at send time.
 4. **Per-tenant, with no server-level default for tenant mail.** A tenant's mail never falls back to another relay, so
    there is no instance-wide secret for tenant mail. The instance's own mail settings
    ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3) carry only the host's
-   notices and are never a tenant's default; a tenant that cannot send is refused, not degraded
-   ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)).
-5. **The owner-bootstrap invite stays a copy-link.** A `PENDING` tenant has no owner yet to configure SMTP and there is
-   no server-level fallback, so the Server Owner's invite to a tenant's first owner is copied by hand. It is the only
-   copy-link ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) § 3).
+   notices and are never a tenant's default. What a tenant that cannot send gets instead is
+   [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) § 1.
+5. **The owner-bootstrap invite cannot be mailed.** A `PENDING` tenant has no owner yet to configure SMTP and there is
+   no server-level fallback; how that invite travels instead is
+   [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) § 3.
 6. **An owner-authored bilingual body over a closed variable set, from the tenant's own address.** The invite's subject
    and body come from an optional owner-authored template (veyq ships a content-free EN + DE default) through a
    logic-less `{{variable}}` substitution over `{{link}}`, `{{domain}}` and `{{expiry}}` only — the mechanical half of

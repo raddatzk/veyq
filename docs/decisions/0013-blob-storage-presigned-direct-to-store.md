@@ -22,15 +22,13 @@ seals its `chunk_frame`s. It did not settle where the encrypted bytes live and h
 
 ### 1. Storage is S3-only
 
-`BlobStore` has one production implementation, `S3BlobStore`, on the **vendor-neutral AWS SDK for Java v2** — any
-S3-compatible store, or the bundled Garage (S3-compatible, AGPL, built for self-hosting; it replaced MinIO when that
-server was archived and its successor went commercial). A store is a **hard requirement of a working instance**: media
-is not an optional feature, so an instance without a byte path is misconfigured, not gracefully degraded — it refuses
-every upload with `store_unavailable` and creates no tenant until a store has passed its check. The store is a
-Server-Owner setting ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)), so the
-boot itself needs none. The in-memory store exists only for the `%test` slice suite, never as a fallback. Store
-credentials are held only sealed under the config-secret key ([ADR 0050](0050-operator-config-secret-encryption.md)),
-never logged or returned.
+The store has one production implementation, on the **vendor-neutral AWS SDK for Java v2** — any S3-compatible store,
+or the bundled Garage (S3-compatible, AGPL, built for self-hosting; it replaced MinIO when that server was archived and
+its successor went commercial). A store is a **hard requirement of a working instance**: media is not an optional
+feature, so an instance without a byte path is misconfigured, not gracefully degraded — it refuses every upload and
+creates no tenant until a store has passed its check. The in-memory store exists only for the `%test` slice suite, never
+as a fallback. Where the store is configured, when it takes effect and how its credentials are held is
+[ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) decisions 1, 4, 5 and 6.
 
 ### 2. Presigned direct-to-store is the only transport (no proxied fallback)
 
@@ -54,14 +52,14 @@ How an upload runs is [en.memory.media](../features/memory/enablers/en.memory.me
 
 The backend cannot see bytes mid-`PUT`, so it bounds them before and after:
 
-- **The frame size is a contract constant** (256 KiB of plaintext per frame but the last, in the crypto vectors beside
+- **The frame size is a contract constant** (every frame but the last is full, at the size the crypto vectors fix beside
   `chunk_frame`), so `chunkCount` follows from `byteSize` and `start` refuses any other pair. Range streaming
   ([ADR 0047](0047-inline-video-playback-range-streaming.md)) already depends on full frames.
 - **Every presigned `PUT` signs its chunk's exact `Content-Length`**, so a URL is good for one frame of one size and
   the store refuses any other — plain S3 signing, so it holds on a store veyq never provisions.
 - **`complete` stats every chunk** at its derived length — the line that still holds on a store that ignored the
   signed length — and purges a rejected item's staged objects.
-- **`veyq.blob.max-bytes` is a sanity ceiling per file**, not a limit anyone plans around; a total is the storage
+- **The per-file ceiling is a sanity bound**, not a limit anyone plans around; a total is the storage
   quota ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)).
 - **Abandoned uploads are reclaimed by the stale-session purge**, keyed on a session's last issued window: a `PUT` can
   only begin within the TTL of the window that signed it.
@@ -132,15 +130,15 @@ included ([ADR 0047](0047-inline-video-playback-range-streaming.md)).
 ## Consequences
 
 - The backend never streams media bytes.
-- **Backend-signed presigning needs the store secret in plaintext at signing time** (SigV4 is an HMAC under it). Fine in
-  both models: the backend is always the store's rightful owner, and holding S3 credentials never decrypts media.
+- **Backend-signed presigning needs the store secret in plaintext at signing time** (SigV4 is an HMAC under it). Fine on
+  every deployment: the backend is always the store's rightful owner, and holding S3 credentials never decrypts media.
 - **A leaked URL grants one object and one method** (and, for a `PUT`, one size) until it expires; access control is
   enforced at every window's issuance.
 - **The client streams**, one frame at a time, so its memory is bounded by the frames in flight rather than the file;
   holding the whole file would put the real ceiling in the browser tab, around 1–2 GiB.
-- **Development runs against a real store** — the bundled Garage, `--profile s3` — so the byte path is exercised in
-  normal development; only the `%test` slice suite uses the in-memory store, and an opt-in e2e (`VEYQ_S3_E2E=1`)
-  covers the byte transport.
+- **Development runs against a real store**, so the byte path is exercised in normal development; only the `%test`
+  slice suite uses the in-memory store ([cc.storage.object-lifecycle](../crosscutting/cc.storage.object-lifecycle.md)
+  § Development).
 - **The cost of declining scope-wide dedup:** the same file in two nodes, or twice in one gallery, is stored twice.
 - **Deferred: resuming an upload across a page reload.** Within a page a session already outlives any URL; surviving a
   reload would add persisting the session and its wrap, and finding the gaps by `stat` — additive, waiting for a need.

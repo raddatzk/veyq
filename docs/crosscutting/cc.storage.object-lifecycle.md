@@ -63,11 +63,20 @@ Bytes travel client ↔ store over presigned URLs; the backend only authorizes, 
 mechanism — batches, windows of `veyq.blob.presign-window` chunks (64), the 600 s TTL, declare-then-verify, the
 20 GiB per-file ceiling — is [en.memory.media](../features/memory/enablers/en.memory.media.md)'s.
 
-- **Where a URL points.** URLs are signed for `public-endpoint`. On Compose the bundled store shares each tenant's
-  origin: `TraefikFileIngressSink` renders a `` PathPrefix(`/<bucket>/`) `` route (with the trailing slash, from the
-  bucket setting) on every tenant domain, only while the store in use is the bundled one, and `S3BlobStore` signs for
-  the resolved tenant's domain. On Kubernetes the chart's opt-in Garage has a host of its own, so the browser crosses
-  origins and the provisioned CORS rule `*` applies. A store of the operator's own has its own origin and its own rule.
+- **Where a URL points.** Which origin a URL is signed for is a named mode, `SigningMode`
+  ([ADR 0067](../decisions/0067-store-provisioning-from-a-declared-type.md) decision 5), one per deployment shape:
+  - **`TENANT_DOMAIN`** — `public-endpoint` with its host swapped for the resolved tenant's domain. On Compose the
+    bundled store shares each tenant's origin: `TraefikFileIngressSink` renders a `` PathPrefix(`/<bucket>/`) `` route
+    (with the trailing slash, from the bucket setting) on every tenant domain, only while the store in use is the
+    bundled one. Only a recipe that brings the store and its proxy can promise this, so it is the bundled store's
+    default (`veyq.bundled-store.signing-mode`).
+  - **`STORE_ORIGIN`** — `public-endpoint` verbatim, for a store on an origin of its own: the chart's opt-in Garage
+    (`signing-mode=store-origin`), whose browser fetch crosses origins under the provisioned CORS rule `*`, and a store of
+    the operator's own that names a public endpoint, under its own rule.
+  - **`INTERNAL_ENDPOINT`** — the endpoint the backend itself uses, for a store already publicly reachable there.
+    A blank `public-endpoint` lands here whatever mode is configured, since nothing else is left to sign against.
+
+  In the latter two the tenant's domain never reaches the URL.
 - **Nothing the store serves is renderable.** Every presigned `GET` signs `response-content-type=application/octet-stream`
   and `response-content-disposition=attachment`; every presigned `PUT` signs `content-type: application/octet-stream`
   and its chunk's exact `Content-Length`. Where the store shares the app's origin, the route also sets
@@ -167,6 +176,13 @@ rotation, and a pool serves one instance
 store, or the pool, against the index before it writes anything. `verify` tolerates objects the index holds and no blob
 row names — pending reclaims and open uploads. A restore target is an instance holding no data; the app provisions its
 bucket ([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)).
+
+## Development
+
+The dev stack runs the bundled Garage (`--profile s3`, `infra/docker/docker-compose.yml`), so normal development
+exercises the byte path; only the `%test` slice suite uses `InMemoryBlobStore`, which holds no bytes and cannot presign.
+The backend's byte-transport e2e (`BlobBatchE2ETest`) runs only with `VEYQ_S3_E2E=1`, which no workflow sets
+([coverage](../coverage/README.md) names it as a gap).
 
 ## Decided, not built
 

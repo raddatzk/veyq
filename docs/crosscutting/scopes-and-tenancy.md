@@ -10,7 +10,10 @@
 
 The general **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
 operator-blind) are the enabler [en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md); a
-group is [en.spaces.group-scope](../features/spaces/enablers/en.spaces.group-scope.md); the tenant root scope is born
+group is [en.spaces.group-scope](../features/spaces/enablers/en.spaces.group-scope.md), its name sealed under a key
+derived from its epoch ([ADR 0027](../decisions/0027-group-invite-name-shared-key.md)); a member's per-tenant
+identity is [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md); the tenant root scope
+is born
 cold by its first owner at activation ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md)).
 
 Everything in this document is the **platform's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
@@ -80,9 +83,11 @@ domain, the same annotations on every route. On Compose the bundled Traefik also
 `X-Forwarded-Host`. On Helm the operator's gateway may pass it through, and that is the case this paragraph
 covers.
 
-Every scope — including personal and group — lives **within** a tenant, so there is no host-less scope:
-each is reached under its tenant's host like everything else. This is what keeps share links on the
-correct domain (see the scope kinds above and [ADR 0002](../decisions/0002-personal-scope-per-tenant.md)).
+Every scope — including personal and group — lives **within** a tenant, so there is no host-less scope: the
+shell enters each under its tenant's host, which is what keeps share links on the correct domain (see the scope
+kinds above and [ADR 0002](../decisions/0002-personal-scope-per-tenant.md)). The access gate itself is not
+host-bound: an operation reaches a scope by id from any of its member's domains, and membership alone decides it
+([ADR 0066](../decisions/0066-tenant-suspension.md)).
 
 ## How access works — keys, grants, shares
 
@@ -150,7 +155,7 @@ third scope role. The same shape repeats per scope kind:
 
 - **Role gates *management*, grant gates *content*.** Promoting a member who already holds a grant is a
   pure role change (no key moves); a role without a grant is a hollow title (can neither read nor invite —
-  inviting needs the scope key). See [ADR 0006](../decisions/0006-cold-tenant-scope-birth.md).
+  inviting needs the scope key). See [ADR 0007](../decisions/0007-membership-role-grant-relation.md).
 - **Several owners, never none.** A tenant and a group may have several owners; removing or demoting the last one
   is refused (`409 last_owner`), counting accepted owners only. A group whose only accepted owner is removed from the
   tenant passes to its oldest other accepted member, and its open proposals expire with a queued rotation; with no
@@ -197,7 +202,21 @@ an owner of the tenant's root scope. The mechanics behind a row — what a grant
 **Not built:** leaving a group or a tenant on one's own (a member declines a group proposal; an account can be
 erased), and email-inviting someone who is not yet a tenant member into a group.
 
-### Reaching a person — email for outsiders, username within the system
+### A tenant offline, a group's end
+
+- **A suspended tenant** ([ADR 0066](../decisions/0066-tenant-suspension.md)) refuses its members every operation that
+  acts on it, on whatever domain the request arrived, by the one scope-access gate and after membership, so a stranger
+  learns nothing. Its own domain also refuses every API request, sign-in included, and its ingress routes are
+  withdrawn. Keys, grants and content are untouched. The whole rule is
+  [uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md); the operator's flow
+  [uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md).
+- **A deleted group** ([ADR 0014](../decisions/0014-group-scopes-and-governance.md) §6) stays read-only and restorable
+  by any of its owners for the scope trash's retention, then a server job erases its content and blobs
+  ([uc.spaces.delete-group](../features/spaces/use-cases/uc.spaces.delete-group.md)). A group whose only accepted owner
+  is removed from the tenant passes or is tombstoned as the bullet *Several owners, never none* says
+  ([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md)).
+
+### Reaching a person — email into a tenant, username within it
 
 Who you can address depends on whether they already exist on the server:
 

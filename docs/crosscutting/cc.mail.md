@@ -51,6 +51,14 @@ tenant can send:
 | address confirmation | the account's address | [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) § 6, [uc.account.confirm-email-address](../features/account/use-cases/uc.account.confirm-email-address.md) |
 | address change: the link, and the notice | the new address; the old address | ADR 0074 § 8, [uc.account.change-email](../features/account/use-cases/uc.account.change-email.md) |
 
+**Through a tenant's relay, sent by the Server Owner:** the owner invite into an ownerless `ACTIVE` tenant
+(`POST /api/tenants/{tenantId}/owner-invite`, [ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
+decision 9), to the address of one of the tenant's members. It goes through that tenant's relay when the relay can send
+— never through the instance's ([ADR 0097](../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
+decision 3) — and the response always carries `bootstrapSecret` as well, so the Server Owner can hand the link over when
+`delivery` is `FALLBACK_COPYLINK` or `FAILED`: an ownerless tenant has nobody left who may repair its relay, so the
+invite cannot wait for mail ([ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md) § 3).
+
 **Through the instance's relay** (`InstanceNoticeMailer`):
 
 | Mail | To | Decided by |
@@ -70,10 +78,10 @@ goes ahead: what must happen does not wait for a mail, and a Server Owner's step
 (`statementDelivery`, ADR 0093 § 7).
 
 **No mail at all:** the Server Owner's invite to a tenant's first owner. A `PENDING` tenant has no relay and no owner
-to set one, and instance mail does not carry it (ADR 0097 decision 6), so it is the one copy-link
-([ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md) § 3): `POST /api/tenants` and the resend or
-reassign of that invite answer with `bootstrapSecret`, and `LoggingTenantInviteMailer` logs only that nothing was
-delivered — never the token, and it writes no file.
+to set one, and instance mail does not carry it (ADR 0097 decision 6), so it travels as a copy-link, the other half of
+[ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md) § 3's exception: `POST /api/tenants` and the
+resend or reassign of that invite answer with `bootstrapSecret`, and `LoggingTenantInviteMailer` logs only that nothing
+was delivered — never the token, and it writes no file.
 
 ## What a mail may carry
 

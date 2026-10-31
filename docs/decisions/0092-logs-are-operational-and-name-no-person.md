@@ -33,16 +33,18 @@ is needed for it. Which address a request has is
 - **The moderation log** is the record of what was reported and done about it (ADR 0093 § 11).
 
 A log never holds a record's address or a moderation event, and a log may name a moderation case by its id and nothing
-more. Built and held by `ModerationLogSliceTest` and `GuestWriteRecordCoreSliceTest`.
+more.
 
 ### 2. The guest-write record's retention period
 
 The record is ADR 0093 § 10's; which address it takes is ADR 0094's. This ADR fixes the period:
 
 - **An instance setting** ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
-  decision 1), set in admin-web and its CLI: **7 days** by default, **1 to 30**. Off is the capability switch's
-  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)), never a period of 0; the
-  server refuses any value outside the range. The disclosure renders the value current when the guest writes.
+  decision 1), set in admin-web and its CLI: **7 days** by default, **1 to 30**; the cap of 30 and its why are ADR 0093
+  § 10's. There is no period of 0: the record has no switch, and where no guest may write — the guest-write switches of
+  [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decide that — nothing is
+  recorded (ADR 0093 § 10). The server refuses any value outside the range. The disclosure renders the value current
+  when the guest writes.
 - **A change never extends a promise already made.** A row goes at the earlier of its write time plus the period then
   and its write time plus the period now: a shortening reaches every row at the next purge, a lengthening only new rows.
 - **The purge also runs at startup**, so a restored backup's stale rows go at boot.
@@ -70,40 +72,22 @@ always for an unexpected error, it is logged by its class chain.
 
 ### 4. Enforcement
 
-- **A log-capture test per site that handles a person's value**, after `SmtpDeliveryLogTest`: it asserts the line
-  **is** emitted (the positive control) and does not carry the value, on one capture of the root logger
-  (`LogCapture`, whose own control record proves it is attached). Built for every such site: the mail and invite
-  lines, the recovery worker, the unknown wrap method by its length, Garage's admin errors by status and code.
-- **A catch-all for unexpected errors**, one formatter (`UnexpectedError`) behind one Vert.x failure handler ordered
-  just ahead of Quarkus's own, so no failure reaches the default handler's line. A JAX-RS resource and a Vert.x
-  route both reach it: Quarkus REST hands an exception no mapper matches to the routing context's failure, and a
-  request filter leaves the matched resource's template for it. **Not a JAX-RS mapper for `Throwable`**, as first
-  planned: a mapper for a supertype of `NotFoundException` makes Quarkus REST answer an unmatched route itself instead
-  of passing it on, which the app shell's SPA fallback and the admin channel's unknown-route refusal depend on, and it
-  would receive every bodiless `WebApplicationException` the boundary's filters answer. It logs at ERROR a random
-  error id, the method, the route **template** (`-` for a route that is no JAX-RS resource), the class chain, a
-  SQLState and vendor code where a `SQLException` is in it, and the first frame in `me.raddatz.veyq`; never the URI,
-  the query or any message. It answers 500 with the existing `ErrorResponse` (`internal_error`, the error id as
-  `message`). The full exception goes to DEBUG under its own category, `me.raddatz.veyq.core.http.unexpected.detail`,
-  off by default — lower case, so an environment variable can raise it. Held by
-  `UnexpectedErrorLogSliceTest`.
-- **Hibernate's statement error log is silenced**: `org.hibernate.orm.jdbc.error` is set to ERROR, so the WARN line
-  that carries the driver's message is not written. The catch-all keeps the SQLState and vendor code.
-- **Narayana's commit-failure warning is rewritten, not silenced**: a constraint violation raised at **commit** (not
-  at an explicit flush) is logged once more by Narayana, as `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with
-  the converted exception whose text carries the driver's message — a colliding email address. That record loses its
-  exception and keeps the class chain, SQLState and vendor code (`CommitFailureLogFilter`, a filter on the logger, so
-  every handler gets the rewritten record); the category is not silenced, because its other warnings — the
-  transaction reaper's timeouts among them — pass unchanged.
-- **The e2e sweep.** `scripts/e2e_sweeps.py` fails a run on any sealed value or token in any log, and on its third
-  needle set, `pii`: every email address the run's suites signed up with, searched in every
-  boot and container log and nowhere else, since the database dump, the statement log, the HTTP recording and the
-  mailbox hold it by design. Its control: at least one address, and each found where the instance handled it — a mail
-  or a database dump of the run on the API lane, the statement log on lane L1, which reads no mailbox. A forged client
-  address is the slice tests', which capture the root logger and so every framework's lines too.
-- **`validate_compose_posture.py` assertion 6**: every service bounded, the store below `info`, and the proxy with no
-  access log, by flag or variable, and its own level, `ERROR`. The chart has no proxy; its store is
-  `chart_meta_check.py` (xxvii).
+- **A log-capture test per site that handles a person's value**: it asserts the line **is** emitted (the positive
+  control) and does not carry the value, on one capture of the root logger, whose own control record proves it is
+  attached — so every framework's lines are inside it too.
+- **A catch-all for unexpected errors**: one formatter behind one failure handler ordered just ahead of Quarkus's own,
+  so no failure reaches the default handler's line, which names the request URI with its query and the exception's
+  message. It logs a random error id, the route **template** and the class chain, never the URI, the query or any
+  message, and the full exception only under a DEBUG category off by default. **Not a JAX-RS mapper for
+  `Throwable`**: a mapper for a supertype of `NotFoundException` makes Quarkus REST answer an unmatched route itself
+  instead of passing it on, which the app shell's SPA fallback and the admin channel's unknown-route refusal depend
+  on, and it would receive every bodiless `WebApplicationException` the boundary's filters answer.
+- **A framework line that carries someone else's message is silenced or rewritten**, keeping the class chain, SQLState
+  and vendor code: rewritten rather than silenced where the same category's other warnings matter.
+- **The e2e sweep** fails a run on any sealed value, token or signed-up email address in any log
+  ([cc.security.wire-assertion](../crosscutting/cc.security.wire-assertion.md) § The `pii` needle set).
+- **The recipes are held** to bounded logs, a store below `info` and a proxy with no access log, on both targets.
+- How each is built and which test holds it is [cc.privacy.retention](../crosscutting/cc.privacy.retention.md) § Logs.
 - No static scan of log statements. A grep for `email` in a log call is easy to evade and would turn red on a comment.
   The tests above bite on the value instead, and for the same reason no `CLAUDE.md` line restates the rule.
 
@@ -111,8 +95,8 @@ always for an unexpected error, it is logged by its class chain.
 
 veyq bounds every log by size and keeps people out of them, so their age stops mattering for what veyq writes. The
 period each source keeps is stated as its criterion — size, and a container's recreation, which every upgrade does —
-because no container log driver offers a time bound on both targets. On Compose the recipe sets `json-file` with
-`max-size: 10m` and `max-file: 3` on every service; on Helm the kubelet rotates. The store logs at `warn`, Traefik at
+because no container log driver offers a time bound on both targets. On Compose the recipe bounds every service's
+`json-file` log; on Helm the kubelet rotates. The store logs at `warn`, Traefik at
 `ERROR` with no access log, and the admin nginx's access log keeps no client address, User-Agent or
 `X-Forwarded-For`; its error log keeps nginx's default, which names the hop (loopback or the container bridge on the
 recipe's binding). The rate limiters drop every full bucket each minute, so an address or an email address stays only
@@ -184,13 +168,3 @@ backup are **outside a hold's reach**, and the Run docs say so for each source. 
   [Data protection](../../site/src/content/docs/run/data-protection.md),
   [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
   [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).
-
-## Measurement ledger
-
-Only the entry code cites is kept.
-
-- **M6** Quarkus 3.36.0 sources in the Gradle cache: `unzip -p …/quarkus-vertx-http-3.36.0-sources.jar
-  io/quarkus/vertx/http/runtime/QuarkusErrorHandler.java | grep -n 'HTTP Request to'` → `:178`
-  `log.errorf(exception, "HTTP Request to %s failed, error id: %s", event.request().uri(), uuid)`; `unzip -p
-  …/resteasy-reactive-3.36.0-sources.jar org/jboss/resteasy/reactive/server/core/RuntimeExceptionMapper.java | grep -n
-  'Request failed'` → `:119`, reached only when no mapper matches.

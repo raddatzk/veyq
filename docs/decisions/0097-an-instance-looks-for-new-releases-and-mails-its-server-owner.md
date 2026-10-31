@@ -80,7 +80,7 @@ first kind. Moderation notices are the second (ADR 0099 § 7), and **rotation du
 Server Owner alone, mailed once per epoch. An erasure's notice reaches the account being erased (ADR 0101). Moderation
 and erasure notices are the ones that reach anyone but the Server Owner; who receives each kind is
 [cc.mail](../crosscutting/cc.mail.md) § Which mails exist's list. The first tenant owner's invite is
-not an instance notice and stays ADR 0048 § 5's copy-link: instance mail is optional, and the bootstrap must work
+not an instance notice and stays ADR 0055 § 3's copy-link: instance mail is optional, and the bootstrap must work
 without it.
 
 ## Consequences

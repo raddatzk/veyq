@@ -14,8 +14,8 @@ pin what a **token-less** fragment means: the first web slice simply defaulted a
 could open at the time — the shared `TENANT` scope, though born at activation
 ([ADR 0006](0006-cold-tenant-scope-birth.md)), had no client entry.
 
-We are now making the `TENANT` scope enterable ([en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md)).
-That forces the question ADR 0015 left open: with
+Making the `TENANT` scope enterable ([en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md))
+forced the question ADR 0015 left open: with
 **three** openable kinds, which one owns the **token-less** default — the clean `family.example.com/` with no
 bare `#`? veyq's product center is **memory-sharing**; a tenant *is* a domain, and its shared root scope is the
 commons that domain exists to serve. Two candidates:
@@ -37,7 +37,7 @@ The full grammar (extends, and revises the default of, [ADR 0015](0015-operator-
 |---|---|---|
 | **Tenant** (shared, default home) | `/` — token-less, **no bare `#`** | `/#urlaube` |
 | **Personal** | `/#~me` | `/#~me/urlaube` |
-| **Group** | `/#@<id>` | `/#@<id>/urlaube` |
+| **Group** | `/#@<slug>` (or `@<id>`) | `/#@<slug>/urlaube` |
 
 - **Token-less = tenant, and it stays clean.** A tenant child rides a bare fragment (`#urlaube`) with **no**
   `~me`/`@` prefix and **no** empty `#` at the root — `/` alone is the tenant root. The leading token is what

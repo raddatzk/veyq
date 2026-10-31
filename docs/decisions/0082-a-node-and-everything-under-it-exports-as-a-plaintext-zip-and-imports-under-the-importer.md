@@ -8,43 +8,39 @@
 ## Context
 
 A member wants their data **out** in a form that outlives veyq and that they can hand to someone, and wants such a file
-back **in** — a folder tree, a Depot folder, a Memory with its chapters. Inbox #379 asked it for a Memory alone ("a
-Memory's export is a file; dropping it into a Depot folder imports it"). The owner widened it on 2026-10-13: any node
-and everything under it, as a **core** feature, because the tree, names, covers and metadata are core's and only the
-*content* differs per kind.
+back **in** — a folder tree, a Depot folder, a Memory with its chapters. Asked first for a Memory alone ("a Memory's
+export is a file; dropping it into a Depot folder imports it"), it covers any node and everything under it, as a
+**core** feature, because the tree, names, covers and metadata are core's and only the *content* differs per kind.
 
 Three constraints shape it. **Operator-blind:** the server holds only ciphertext, so a readable export can only be
 produced where the keys are — the web client, on decrypted data. **Applications stay apart** ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)):
 a Depot folder may contain a Memory, but Depot must not import `features/memories`; core reaches each kind through the
-registry (`KindDescriptor`, as `createEntry` already does). **No dependency, no memory wall:** a subtree can be gigabytes;
-the client already streams downloads through `saveStream` (`src/web/src/core/blob/stream.ts`) and reads big files by
-`Blob.slice`, and the project takes no dependency it can avoid.
+registry. **No dependency, no memory wall:** a subtree can be gigabytes; the client already streams its downloads to
+the save target and reads big files a slice at a time, and the project takes no dependency it can avoid.
 
 Not this: a **tenant or instance** export that stays encrypted for moving a tenant between instances. That is a different
 object (never decrypted, operator-side keys, [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) already
-covers the instance backup) and is left to its own inbox row (#413).
+covers the instance backup) and is left to its own topic.
 
 ## Decision
 
-Decided by the owner, 2026-10-13.
-
 **1. Scope.** Export and import apply to **any node and everything under it** — folder tree, Depot, drop boxes, Memories
 with chapters. It is a **core** feature. **Core carries the tree, the names and the payload bytes; a kind's content
-carries everything else.** Each kind supplies and consumes its **content** through a hook on `KindDescriptor` (beside
-`createEntry`): `exportContent` yields a content object plus its payload streams, `importContent` creates the kind's
-content under a freshly created node. Depot supplies the file bytes; Memories the media originals with EXIF, GPS, place
+carries everything else.** Each kind supplies and consumes its **content** through a hook of its registration: one
+yields a content object plus its payload streams, the other creates the kind's content under a freshly created node
+([Applications](../apps/README.md) names them). Depot supplies the file bytes; Memories the media originals with EXIF, GPS, place
 and `capturedAt`. Core's walker neither reads nor writes a node's `cover` or `metadata` (the manifest fields stay in
 the schema), so a Memory's date, place, cover and participants travel inside its `content` (`memories.memory`), and **a
 chapter's media sit in the chapter's own content** (`memories.chapter`), not in the Memory's list: the chapter is a
-node of its own with its own key, and the Memory's hook returns before the chapter exists. A Memory export (#379) is simply a
+node of its own with its own key, and the Memory's hook returns before the chapter exists. A Memory export is simply a
 subtree rooted at a `MEMORY` node. Depot reaches Memories only through the registry; a kind the importing build lacks is
 skipped with its subtree and reported, never guessed.
 
 **2. Produced in the client, on decrypted data.** The server never sees plaintext and gets no export endpoint: the client
-walks the tree with the keys the member already holds, decrypts, and writes the archive through `saveStream`.
+walks the tree with the keys the member already holds, decrypts, and writes the archive through its streaming save.
 
 **3. The format.** A **store-only** (no compression — media is already compressed, and it keeps the writer trivial and
-streamable) ZIP that **reads as the tree when unpacked** (owner decision 2026-10-14): each node is a directory named after
+streamable) ZIP that **reads as the tree when unpacked**: each node is a directory named after
 the node as the downloading session shows it among its siblings (two drop-box guests named Anna: `Anna`, `Anna (2)`; equal
 names are listed in that order, so an import numbers each as its directory is named), its files under their own names (`Trip 2025/Lisbon/IMG_1.jpg`), and the manifest beside them at
 **`.veyq/manifest.json`**, so the same archive is an ordinary download and an importable export. Names are made safe for
@@ -56,30 +52,29 @@ node to its path; the path is a label, never an identity. The manifest — `form
 `exportedAt`, `appVersion`, the `applications` it carries (decision 9), and the tree (each node: archive-local `id`,
 `kind`, `name`, `path`, `cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
 [`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json); a worked example is
-below. The writer and reader are **hand-written and streaming**, with **no new dependency**: the writer emits local
-headers with the data-descriptor flag and a central directory at the end; the reader finds the central directory from the
-end and reads entries with `Blob.slice`, so an import never holds the file in memory. Payload paths come from the manifest
+below. The writer and reader are **hand-written and streaming**, with **no new dependency**, so an import never holds
+the file in memory. Payload paths come from the manifest
 only, lie at or under their node's path, and are refused when a segment is not a safe name or the path reaches into
 `.veyq/`; each payload's `sha256` is verified while streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
 The archive's exact length is known before its first byte (every record's length follows from a name and a size, the
-manifest's from fixed-width hashes and time stamp, `zipLength`), and that length, never the payloads' sum, is what the
-save target is opened with: the Service Worker's download route serves it as the exact `Content-Length` and fails a
-stream that differs ([ADR 0047](0047-inline-video-playback-range-streaming.md) § The download route; F11, 2026-10-24).
-This layout is format `version` 2; version 1 kept the manifest at the root and every payload under `data/<node id>/`, and
-a reader reads both while a writer writes only 2.
+manifest's from fixed-width hashes and time stamp), and that length, never the payloads' sum, is what the save target
+is opened with, as [ADR 0047](0047-inline-video-playback-range-streaming.md) § The download route requires. This layout
+is format `version` 2; a reader also reads version 1 (the manifest at the root, every payload under `data/<node id>/`),
+while a writer writes only 2.
 
-**4. It is a download, and is called one** (owner decision 2026-10-14). There is no "Export": a node offers
+**4. It is a download, and is called one.** There is no "Export": a node offers
 **Download** — a file as itself, a folder, a Memory, a chapter or a drop box as this ZIP (a drop box as a directory
 with each guest's folder under it; it imports as a plain folder, because nothing can rebuild a guest's folder or
-identity — owner decision 2026-10-14: the manifest keeps the kind it was, and that kind declares that it imports as a
-folder, so core names no application's kind). No plaintext warning and no
+identity: the manifest keeps the kind it was, and that kind declares that it imports as a folder, so core names no
+application's kind). No plaintext warning and no
 location option: a downloaded file is as plaintext as a downloaded archive, and a photo's coordinates sit in its own
 EXIF, which the archive keeps byte for byte, so an option that dropped only the manifest's copies promised more than it
 did. Re-encoding the originals to strip their GPS tags is deliberately not done: it would change the bytes the download
 promises to keep.
 
 **5. Rights.** Export needs **READ** on the node. Import is **a member flow only** (decisions 6 and 7): a guest — whatever
-the share role — never imports. A guest is otherwise the member view with rights removed (the principle of inbox #401): a
+the share role — never imports. A guest is otherwise the member view with rights removed (the share-view principle of
+[ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) § Consequences): a
 `READ` or `READ_WRITE` guest of a shared folder or Memory may **export** what they can see, a `WRITE_ONLY` drop-box guest
 neither exports nor imports.
 
@@ -98,15 +93,15 @@ seal a coordinate the file lacks. Participants are exported as display names and
 **7. Detected by content, offered only to members.** An archive is recognised by its **content** — the ZIP signature plus a
 `.veyq/manifest.json` whose `format` matches — never by file name. **A picked directory** that holds `.veyq/manifest.json`
 (the archive, unpacked) is recognised the same way and imported from its files; one without it is an ordinary folder
-upload (inbox #424). A directory is picked through the level's **New → Upload folder…**, or dropped; there is no separate
-"Import…" entry, because upload recognises an archive itself (owner decision 2026-10-14). Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Depot folder offers **Import** to
+upload. A directory is picked through the level's **New → Upload folder…**, or dropped; there is no separate
+"Import…" entry, because upload recognises an archive itself. Recognised, a member is offered **Import** or **Upload as a file**. A dropped archive in a Depot folder offers **Import** to
 members only: never on a guest view (any role), so for a guest — a `WRITE_ONLY` one included — it stays an ordinary upload.
 
 **8. Failure and atomicity.** The server offers no multi-node atomicity. An import is a sequence of ordinary writes; one
 that aborts or runs out of quota **rolls back what it created** (to the trash) and reports "N of M". A **dry-run** step
 reads the manifest and shows total size against the member's quota **before anything is written**.
 
-**9. Unknown applications and newer data are reported, never guessed** (owner decision 2026-10-14). The manifest names, per
+**9. Unknown applications and newer data are reported, never guessed.** The manifest names, per
 application whose kinds it carries, that application's id and the version of its `content` schema. The dry-run (decision 8)
 lists, before anything is written, every node this build cannot import: a kind of an application it does not have (an
 "Expenses" export into an instance without it), or a known application's content newer than it reads. The member then
@@ -120,10 +115,9 @@ inside the file, no overlapping entries, declared sizes equal to actual sizes, Z
 `sha256`; and text that is rendered (a note, a description) only through the safe markdown renderer. Being store-only, an
 archive cannot be a compression bomb.
 
-**11. A copy is the same walk, without the archive** (owner decision 2026-10-14, inbox #423,
-[uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)). **Copy to…** re-creates a node and
-its subtree at another place in the same space by this ADR's walk and the kinds' `exportContent` / `importContent`
-hooks, handing each payload from the walk to the import by chunk instead of through a ZIP: the client decrypts and
+**11. A copy is the same walk, without the archive**
+([uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)). **Copy to…** re-creates a node and
+its subtree at another place in the same space by this ADR's walk and the kinds' content hooks, handing each payload from the walk to the import by chunk instead of through a ZIP: the client decrypts and
 uploads every file again under fresh keys. It is a member flow, as the import is (decision 5), carries exactly what an
 import carries (decision 6), and reuses the import's quota question, `Name (2)`, progress and rollback (decision 8).
 Copying across spaces is not offered: the browser and the tree are one space's. **Rejected:** a server-side object copy
@@ -131,7 +125,7 @@ Copying across spaces is not offered: the browser and the tree are one space's. 
 object shared by the original and the copy (the operator would learn the same, and a copy is meant to stand on its own;
 a shared object is kept only inside one node, for a cover, a banner and a gallery original,
 [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5 - a copy and an import upload each blob as its own).
-**A Memory copies its derived tiers, not a re-derivation** (owner decision 2026-10-14): Memories' import decodes each
+**A Memory copies its derived tiers, not a re-derivation:** Memories' import decodes each
 original whole to derive its tiers — a video held whole in memory. So for a copy only, never in an archive, Memories'
 hooks hand over each medium's existing thumbnail and preview tiers as payloads read by frame, and its sealed per-medium
 facts (capture time and its correction, coordinates, place name) as plaintext content; the copy uploads those tiers
@@ -162,7 +156,7 @@ shows it:
   "exportedAt": "2026-10-14T09:30:00Z",
   "appVersion": "0",
   "applications": [
-    { "id": "files", "contentSchema": 1 },
+    { "id": "depot", "contentSchema": 1 },
     { "id": "memories", "contentSchema": 1 }
   ],
   "root": {
@@ -209,10 +203,8 @@ shows it:
 
 ## Consequences
 
-- **A new core surface in the web**: the zip writer/reader, the walk, the dialogs (download, which asks nothing for a
-  single file; import with the dry-run; copy), the `KindDescriptor` hook, and the drop detection in the Depot level.
-  Nothing in the backend or `contracts/api/` — the client uses the existing node, blob and quota endpoints. The schema
-  under `contracts/export/` is the one new contract artefact.
+- **Nothing in the backend or `contracts/api/`** — the client uses the existing node, blob and quota endpoints. The
+  schema under `contracts/export/` is the one contract artefact.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
   own `content.schema`, named per application in `applications`. A reader that tolerates additions keeps old files
   importable, and a reader keeps every older `version` it ever wrote: the tree layout (2) replaced `data/<id>/` (1), and
@@ -228,5 +220,3 @@ shows it:
   with a Memory in it unexportable; a server-side export — breaks operator-blindness; a compressed ZIP or a library such
   as a zip package — a dependency for no gain on already-compressed media; carrying ids and keys — turns an import into
   a restore that must fight the live tree.
-- **Open (not decided here):** the exact ZIP64/data-descriptor details and the `exportContent`/`importContent` signatures
-  belong to the build.

@@ -70,8 +70,6 @@ serves the full fixed texts, and a value the Server Owner leaves empty shows as 
 - A field on its own other than a node's name as a report's item (inbox #516), and the reporter's handover of a guest's
   identity key (inbox #515) — ADR 0093 § 1.
 - A case's records kept longer while proceedings are pending, as a logged extension — ADR 0093 § 11.
-- A hold until the handover past 90 days and an authority's link to a held copy (ADR 0093 § Legal basis, Still open 1
-  and 2) — questions the law leaves open, not pursued (owner 2026-10-28), so neither is built.
 
 ## Use-cases
 

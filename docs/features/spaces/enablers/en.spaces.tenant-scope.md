@@ -80,7 +80,7 @@ sequenceDiagram
   participant S as Server<br>(blind)
   C->>S: GET /api/scopes
   S-->>C: [{ id, kind:TENANT, tenantId, wrappedGrant }, { kind:PERSONAL, .. }]
-  Note right of C: the TENANT scope + its grant were<br>born cold at activation (cr-0010) —<br>the client never mints one
+  Note right of C: the TENANT scope + its grant were<br>born cold at activation (ADR 0006) —<br>the client never mints one
   C->>C: scopeKey = asymUnwrap(identity, wrappedGrant, "scope-grant")  (in memory)
   U->>C: enter the shared space (token-less home, or the sidebar entry)
   C->>C: reset tree + favorites, browse the tenant Memory tree

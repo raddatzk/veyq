@@ -46,9 +46,8 @@ CLI on a shell — an image no release published.
    exactly one arm ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) Decision 3) that provisioning must
    not become a second of.
 
-3. **Neither the store configuration nor the network work gates the boot.** The store is a Server-Owner setting
-   ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)), so at boot there may be
-   none: the instance starts, answers `/api/setup` and refuses uploads until a store has passed its check. The boot
+3. **Neither the store configuration nor the network work gates the boot.** At boot there may be no store at all
+   ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) decision 5); the boot
    refuses only local, instant facts about the environment's own part. Provisioning reaches another container over the
    network, and a startup observer that can fail on an unreachable dependency is how
    [ADR 0063](0063-database-driven-tenant-ingress.md) restart-looped a stack into serving nothing; so provisioning runs
@@ -74,18 +73,16 @@ E2EE either way.
 
 ## Consequences
 
-- **No image for provisioning** joins the release. (A later image, `veyq-tools`, exists for a different job — the
-  cluster's backup gate, [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md), which runs on
-  every release change.)
+- **No image for provisioning** joins the release; the tools image
+  [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) adds has a different job.
 - **The backend gains Garage-specific code, bounded structurally:** under `type: s3` no provisioner is constructed, so
   there is no branch for an `s3` instance to fall down. The data path stays the vendor-neutral S3 client.
-- **The Garage admin token has two homes:** the bundled stack's stays in the environment (Garage needs it at its start,
-  and the bundled key pair is derived from it); a Garage the Server Owner enters has its token sealed under the
-  config-secret key ([ADR 0050](0050-operator-config-secret-encryption.md)).
+- **The Garage admin token has two homes**, the bundled stack's environment and a sealed setting
+  ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md) decisions 3 and 4).
 - **A per-tenant store later has a trap:** a reclaim row carries no store, so with several stores the sweep would not
   know where to delete — and a store column that is one-to-one with a tenant is exactly the residue
   [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) Decision 6 forbids. Whoever takes #41 owes a design
-  that satisfies both; the trap is recorded at `StoreReclaimStore` in the code.
+  that satisfies both; the trap is also recorded in the code, where a reclaim row is written.
 - **A restore target is an instance that holds no data, not one with no tables.** With the backend as the only
   provisioner, a bucket exists only after the app started, and that start migrates the schema, so "empty" can no longer
   mean "no tables" ([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
@@ -93,8 +90,6 @@ E2EE either way.
 - **The bundled bucket's name is fixed once an instance is installed.** The provisioner creates whatever the setting
   names, so a changed default would hand every upgraded install an empty bucket whose old objects nothing reads or
   reclaims. An install that must change it pins the old name, which every route follows.
-- **The store is runtime-editable, so nothing caches its connection** beyond a delegate rebuilt when the setting
-  changes; once the first blob exists, type, endpoint and bucket are fixed (ADR 0089 decision 6).
 - **Rejected — publish the init image as a third release artifact.** A permanent signed artifact for a container whose
   only contribution is owning a shell.
 - **Rejected — bundle the `garage` binary or speak Garage's RPC.** A vendor-locked client in the data path, and the

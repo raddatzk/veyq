@@ -7,7 +7,7 @@
 
 ## Context
 
-Nothing bounded how much a tenant, a member or a share link stores. `veyq.blob.max-bytes` bounds **a file**, never a
+Nothing bounded how much a tenant, a member or a share link stores. The per-file ceiling bounds **a file**, never a
 total ([ADR 0013 §3](0013-blob-storage-presigned-direct-to-store.md)). Contributor and uploader links
 ([ADR 0030](0030-contributor-public-share.md), [ADR 0031](0031-uploader-public-share.md)) are anonymous and often shared
 widely, so anyone holding one could fill the store until the disk runs out.
@@ -37,8 +37,8 @@ instance's ([ADR 0067](0067-store-provisioning-from-a-declared-type.md)); a SaaS
    in the database is not counted: the contract bounds each field. The size is the declared one, which `complete` makes
    the stored one (ADR 0013 §3).
 
-3. **Usage is derived at the check, never counted.** Six paths delete blobs or sessions; a counter each must decrement
-   correctly is one that drifts.
+3. **Usage is derived at the check, never counted.** Many paths delete blobs or sessions, and more arrive with every
+   application; a counter each must decrement correctly is one that drifts.
 
 4. **The per-link limit is the Tenant Owner's first distribution.** One value per tenant applies to every link that
    takes uploads, separately. **Default: 10 GiB** — enough for an event's photos, too little for a leaked link to eat a
@@ -54,8 +54,8 @@ instance's ([ADR 0067](0067-store-provisioning-from-a-declared-type.md)); a SaaS
    the tenant row, held for the check and the inserts, not for presigning — without it, N parallel starts through one
    link each see the same remainder.
 
-6. **What the uploader is told.** A per-item `quota_exceeded`, distinct from `budget_exceeded` (the per-file ceiling)
-   and `shape_invalid`, with no retry, since one cannot help. A link visitor reads that the link takes no more uploads
+6. **What the uploader is told.** A per-item refusal of its own, distinct from a file over its size ceiling and from a
+   malformed declaration, with no retry, since one cannot help. A link visitor reads that the link takes no more uploads
    and is never told which limit was hit, so an anonymous visitor learns nothing about the tenant's usage. A member reads
    that no space is left and that trash counts. The Tenant Owner sees their tenant's total and quota, the Server Owner
    every tenant's; nobody sees a figure per member or per scope.
@@ -74,7 +74,7 @@ instance's ([ADR 0067](0067-store-provisioning-from-a-declared-type.md)); a SaaS
   its own link for a while: conservative, and it heals itself.
 - **Limits can be overbooked.** A lowered limit deletes nothing, and one tenant's link limits may add up to more than its
   quota; first come, first served, and the quota still holds.
-- **`max-bytes` stays:** it bounds a file, the quota a total. The reservation is also what bounds open sessions, for
+- **The per-file ceiling stays:** it bounds a file, the quota a total. The reservation is also what bounds open sessions, for
   every link and every tenant with a quota; a member of a tenant without one is bounded per file only — the default's
   price.
 - **Rejected:** a maintained counter (3); a check at `complete` (5); item-by-item admission (5); not counting trash or

@@ -117,7 +117,7 @@ Server Owner, has no recovery until it joins one. That is the no-SMTP rule above
 
 The same reasoning reaches the member-invite copy-link, which handed a tenant owner a token minted for somebody
 else. That is decided in [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md), which retires it and makes
-a working mailer a precondition rather than a hope, except for the one copy-link its decision 3 keeps.
+a working mailer a precondition rather than a hope, except for the Server Owner's owner invites its decision 3 keeps.
 
 **5. The mail obeys [ADR 0049](0049-email-delivery-boundary.md) unchanged** — link, domain, expiry, and nothing
 else. It may not name the user, the tenant beyond its domain, or what is being recovered. Recovery copy is

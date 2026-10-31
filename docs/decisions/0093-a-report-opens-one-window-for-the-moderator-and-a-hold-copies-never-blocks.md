@@ -2,8 +2,7 @@
 
 - Status: Accepted
 - Built: partly (not built: § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
-  identity key; § 11 the records' extension while proceedings are pending; § Legal basis, Still open 1 a hold until
-  the handover beyond 90 days, and Still open 2 an authority's link to a snapshot)
+  identity key; § 11 the records' extension while proceedings are pending)
 - Date: 2026-10-16
 - Model: [Moderation](../features/moderation/_index.md)
 
@@ -15,19 +14,18 @@ link, so the operator can decrypt a reported public share, verify, quarantine, p
 there is neither half: no report intake, no operator action on a single share, and the one lever is suspending a
 whole tenant ([ADR 0066](0066-tenant-suspension.md)).
 
-**Who runs an instance.** veyq assumes an instance is hosted not only for a family but also by a club or a
-company. Such an operator is a **hosting service** under the DSA, bound by Art. 11–18, and not
-an online platform as long as a share's audience is chosen by its sender (recital 14); a **controller** under the
-GDPR; a hosting service provider under the terrorist-content Regulation (EU) 2021/784 ("TCO"); and a provider who
-identifies itself under § 5 DDG or § 18 MStV. A household instance is the subset where some of these duties
-may not apply. **The design never relies on that**: every mechanism below is built for every instance, and it costs
-nothing until someone reports. What a household operator may leave out is **their own call**, and it is made by
-leaving values empty, not by a mode (§ 14): every instance serves the full texts, and an unset value
-shows as not stated — never by leaving off the guest-write record (§ 10, kept wherever a guest may write), and never the report, the hold, the block or the moderators, since criminal law and the hosting privilege's
-"once known, act" reach every operator (§ 7 DDG covers unpaid services too). The choice says plainly that it is
-the operator's assessment and not veyq's. The hosting-not-platform reading holds while a share has no directory, no search
-and its key in the fragment; a feature that changes any of these (a public gallery, a listing of public shares, a
-link without a fragment key) needs its own ADR.
+**Who runs an instance.** veyq assumes an instance is hosted not only for a family but also by a club or a company. Such
+an operator is a hosting service under the DSA (not an online platform), a controller under the GDPR, a hosting service
+provider under the terrorist-content Regulation (EU) 2021/784 ("TCO") and a provider who identifies itself under § 5 DDG
+or § 18 MStV ([legal register](../crosscutting/legal-register.md) L1). A household instance is the subset where some of
+these duties may not apply. **The design never relies on that**: every mechanism below is built for every instance, and
+it costs nothing until someone reports. What a household operator may leave out is **their own call**, and it is made by
+leaving values empty, not by a mode (§ 14): every instance serves the full texts, and an unset value shows as not stated
+— never by leaving off the guest-write record (§ 10, kept wherever a guest may write), and never the report, the hold,
+the block or the moderators, since criminal law and the hosting privilege's "once known, act" reach every operator (§ 7
+DDG covers unpaid services too). The choice says plainly that it is the operator's assessment and not veyq's. The
+hosting-not-platform reading holds while a share has no directory, no search and its key in the fragment; a feature that
+changes any of these (a public gallery, a listing of public shares, a link without a fragment key) needs its own ADR.
 
 Five facts shape the design:
 
@@ -37,12 +35,11 @@ Five facts shape the design:
   block within an hour on a terrorist-content removal order and keep what was blocked for six months (TCO Art. 3,
   6), and never copy child sexual abuse material to "collect evidence" (§ 184b StGB). veyq's part is to make an
   operator able to do this without reading anything nobody reported.
-- **Attribution is partial.** The server records who uploaded a medium (`veyq_media.created_by` /
-  `share_identity_id`, `owner_key`, [ADR 0034](0034-media-uploader-buckets.md)), a Depot file's current content
-  (`veyq_node_attachment.uploader_user_id` / `share_identity_id`,
-  [ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 8), a guest's identity
-  folder (`veyq_node.share_identity_id`) and a share's creator (`veyq_share.owner_account`). It records nobody for
-  a node's name or meta, a share's note or name, a bucket's name, or a space's name and icon.
+- **Attribution is partial.** The server records who uploaded a medium (a member or a share identity, and its
+  bucket's owner, [ADR 0034](0034-media-uploader-buckets.md)), a Depot file's current content
+  ([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 8), a guest's identity
+  folder and a share's creator. It records nobody for a node's name or meta, a share's note or name, a bucket's name,
+  or a space's name and icon.
 - **A seal opens with its object's key, and that key opens more.** Before § 9 a field was sealed with AES-GCM
   directly under its object's key ([`seal.ts`](../../src/packages/crypto/src/seal.ts)): a node's name with its
   parent's key, a node's meta and a bucket's name with `K_node`, a share's note and names with `K_share`. Only a
@@ -55,8 +52,8 @@ Five facts shape the design:
 - **Data is destroyed on many paths, some at once**: a share delete or re-issue nulls every sealed column and
   key wrap; every edit of a name, meta, note, password, bucket name or space name and icon overwrites in place; a
   Depot replace or cover replace drops the old blob row; a guest's delete of an own upload and a member's
-  expedited purge skip the 30-day trash; `abandonShareNode` erases an empty guest placeholder at once. Every store
-  object goes through one choke point, `StoreReclaimSweep`, about an hour after its row
+  expedited purge skip the 30-day trash; a guest's abandoned empty placeholder goes at once. Every store object goes
+  through one choke point, the reclaim sweep, about an hour after its row
   ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)).
 - **No log holds evidence.** No table stores an address; logs are operational and name no person
   ([ADR 0092](0092-logs-are-operational-and-name-no-person.md) § 1). A guest has no account and no address, so
@@ -133,14 +130,13 @@ state what it means here.
 - **src/web/'s moderation surface**, a route on every tenant host reachable only with the `MODERATOR` role and the key
   proof ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6), shows the
   instance-wide queue (clear fields only) and opens `https://<tenant domain>/s/<case id>#moderation` on the reported
-  tenant's host (as built: the fragment names the mode and carries no key; the case's reports and report shares come
-  sealed through the key-proved review reads, uc.moderation.review-a-case).
-- **src/web/'s share viewer in moderation mode** signs the moderator in and unlocks their vault **only to open their
-  moderation grants** — no member shell, no scope grant fetched — keeps the moderation key and drops the Master Key
-  and the identity private key before any reported content opens. It then opens the report, proves the moderation
-  key to fetch the report share, and shows it **with the guest viewer** plus the report's details, read-only. It
-  needs no membership in the reported tenant; this is the only flow where an account acts on a tenant host it does
-  not belong to. The surface never offers to keep a trusted device there (0099 § 6).
+  tenant's host. The fragment names the mode and carries no key; the case's reports and report shares come sealed
+  through the key-proved review reads.
+- **src/web/'s share viewer in moderation mode** holds the moderation key and nothing of the vault ([ADR
+  0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6). It opens the report,
+  proves the moderation key to fetch the report share, and shows it **with the guest viewer** plus the report's details,
+  read-only. It needs no membership in the reported tenant; this is the only flow where an account acts on a tenant host
+  it does not belong to.
 - **Every decision is a moderator operation** in that surface — dismissing, the steps of § 6 within a moderator's
   reach, the statement of reasons and its deferral, objection decisions, hold extensions, the order path (§ 12), the
   CSAM flow and the BKA export (§ 13) — gated by the `MODERATOR` role and the key proof on the public listener.
@@ -202,25 +198,24 @@ admin-web or `veyq-admin` ([ADR 0099](0099-moderators-share-one-instance-moderat
 § 6). Blocking a member's sign-in and taking a tenant offline reach content and people nobody reported, while blocking the share and the content already stops what was reported from being served.
 
 Blocking deletes nothing, so every step can be lifted. Every step hangs on ids, never on a report or a key, so an
-authority's order (§ 12) takes the same steps. **A step ends with its target** (GDPR Art. 5(1)(e)):
-when what it stands on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an
-account or a tenant purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on
-nothing it would block nothing and still hold its case's records forever (§ 11). A step taken on a target already
-erased is **taken and ends at once, not refused**: the decision and its statement stay, and the hold
-stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
-the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
-was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
-copy a member made (Depot's "Copy to…") is a new blob under a new key; the server cannot know it, and a block reaches
-only the reported copy. Where blob rows share one stored object inside a node (a cover, a banner, a gallery original,
-[ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5), **a block hangs on the stored object**: a block on one reaches every row on the object - the same bytes under another id, refused `451` - and
-erasing the blocked item does not end it while another row still holds the object. It then stands on that object alone
-(`veyq_moderation_block.held_objects`) and ends when the object's last row goes (`MeasureTargets.objectsGone`, from
-`BlobUploadStore.deleteBlobRow` and `ScopePurge`) or a moderator lifts it. So deleting a blocked photo never serves it
-again as the Memory's cover or banner. The same holds for a step taken **after** the item was erased:
-it does not end at once where another row still holds the item's object — it hangs on that object, read from its
-case's hold since the item's own rows are gone (`MeasureTargets.survivingObjects`), so deleting a reported photo before
-the decision does not leave its bytes served as the banner either. Where no hold holds the item, nothing names its
-objects, and the step ends at once. The review and the steps are
+authority's order (§ 12) takes the same steps. **A step ends with its target** (GDPR Art. 5(1)(e)): when what it stands
+on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an account or a tenant
+purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on nothing it would block
+nothing and still hold its case's records forever (§ 11). A step taken on a target already erased is **taken and ends at
+once, not refused**: the decision and its statement stay, and the hold stays as the evidence it is. The hold is not
+ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown — the case, the affected's statement, the Art.
+18 export — one that ended with its target says so ("ended when the content was erased"), never plain "lifted": nobody
+lifted it. **An address is evidence, never the ground of a block.** A copy a member made (Depot's "Copy to…") is a new
+blob under a new key; the server cannot know it, and a block reaches only the reported copy. Where blob rows share one
+stored object inside a node (a cover, a banner, a gallery original, [ADR
+0013](0013-blob-storage-presigned-direct-to-store.md) § 5), **a block hangs on the stored object**: a block on one
+reaches every row on the object — the same bytes under another id, refused alike — and erasing the blocked item does not
+end it while another row still holds the object. It then stands on that object alone and ends when the object's last row
+goes or a moderator lifts it. So deleting a blocked photo never serves it again as the Memory's cover or banner. The
+same holds for a step taken **after** the item was erased: it does not end at once where another row still holds the
+item's object — it hangs on that object, read from its case's hold since the item's own rows are gone, so deleting a
+reported photo before the decision does not leave its bytes served as the banner either. Where no hold holds the item,
+nothing names its objects, and the step ends at once. The review and the steps are
 [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md) and
 [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md).
 
@@ -237,25 +232,26 @@ objects, and the step ends at once. The review and the steps are
   reporter who left a contact gets the decision on their report as § 2 sends the receipt. A guest is told nothing in the app for a moderator's measure: it has no account, so a guest uploader counts as
   nobody to tell (DSA Art. 17(2)); an authority's removal order is the exception (§ 12).
   There is one form on every instance (§ 14), so a moderator always states the facts and the provision or clause.
-- **The facts are sealed once, and per affected member only their key**. The moderator's browser
-  seals the facts under a fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
+- **The facts are sealed once, and per affected member only their key**. The moderator's browser seals the facts under a
+  fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
   (`moderation-statement-facts` [caseId, statementId]; [ADR 0072](0072-a-seal-binds-its-object.md) Decision 3), and
-  wraps `K_facts` to each affected member's identity (`moderation-facts-key` [caseId, statementId, accountId]): a
-  fixed 1,181 bytes per member whatever the facts' length, where a copy of the facts per member was up to 9,341. The
-  wrap binds the statement as well as the member because the member addresses it by both (ADR 0072 Decision 1). The
-  log keeps its own copy sealed to the moderation key (`moderation-note` [epoch, caseId]) rather than a wrap of
-  `K_facts`: it stays with the case's records for their whole retention (§ 11) and opens as every other note does,
-  independent of the members' copy, and one more copy per measure costs nothing beside the wraps. All wraps travel in
-  the measure's one request, taken whole or refused: at most **6,000 members** (`StatementRecipients.MAX_SEALED`, what
-  the server's 10,240 KiB request limit holds at 1,650 bytes a member beside every other field of the request at its
-  largest), past which a step with facts is refused by name, never cut. That wall no longer moves with the facts'
-  length; only paging the upload would remove it.
+  wraps `K_facts` to each affected member's identity (`moderation-facts-key` [caseId, statementId, accountId]): a fixed
+  size per member whatever the facts' length, where a copy of the facts per member would grow with them. That identity
+  is the one the server serves, unpinned, since the moderation surface holds no pin store: the one exception [ADR
+  0028](0028-identity-authenticity-tofu-verification.md) names to its check. The wrap binds the statement as well as the
+  member because the member addresses it by both (ADR 0072 Decision 1). The log keeps its own copy sealed to the
+  moderation key (`moderation-note` [epoch, caseId]) rather than a wrap of `K_facts`: it stays with the case's records
+  for their whole retention (§ 11) and opens as every other note does, independent of the members' copy, and one more
+  copy per measure costs nothing beside the wraps. All wraps travel in the measure's one request, taken whole or
+  refused: at most **6,000 members**, what the server's request limit holds beside every other field of the request at
+  its largest, past which a step with facts is refused by name, never cut. Only paging the upload would remove that
+  bound.
 - **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in
   block (Art. 17(1)(d)), a tenant taken offline or deleted (Art. 17(1)(c)) — in the same template and form, entered
   with the step in admin-web or `veyq-admin` (a step from a case's proposal always; a step without a case, when the
-  Server Owner says it is over content); a tenant's deletion over content is recorded as a step of its own
-  (`TENANT_DELETED`), which stopping the deletion lifts and the tenant's purge ends. Its recipients are the blocked member, and the tenant's owners for a tenant;
-  a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
+  Server Owner says it is over content); a tenant's deletion over content is recorded as a step of its own,
+  which stopping the deletion lifts and the tenant's purge ends. Its recipients are the blocked member, and the
+  tenant's owners for a tenant; a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
   address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
   moderation key for the log — and the objection goes to the instance contact (facts
   by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
@@ -263,7 +259,7 @@ objects, and the step ends at once. The review and the steps are
   has no route but the courts the statement names: accepted, so a Server Owner's step does
   not offer the in-app objection a moderator's measure has. The mail goes once: the server keeps no clear copy to
   retry.
-  **So the step reports what the mail reached**: its answer's `statementDelivery` says whether the
+  **So the step reports what the mail reached**: its answer says whether the
   mail reached everyone, and names the address of each one it did not reach — the instance mail is not set up, or the
   send failed; a step with nobody to tell (a tenant without an owner, an account erased before the send) says so, and
   one whose recipients could not be read after the commit says it cannot tell. It is an outcome, not counts: the
@@ -271,7 +267,7 @@ objects, and the step ends at once. The review and the steps are
   beside it, so they tell those through the instance contact while the words are still on their screen, and warns
   before the step while no instance mail is set up; `veyq-admin` prints it and warns on stderr, exiting 0. A step over
   content is never refused for want of mail: what must go does not wait on the mail. The report is the answer's alone;
-  what is stored stays each recipient's `mailedAt`.
+  what is stored stays each recipient's mail time.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
   report again with more information, the instance contact, that they may go to court, and that, where the DSA reaches
   this instance, they may complain to the Digital Services Coordinator of the Member State where they live or are
@@ -285,11 +281,8 @@ objects, and the step ends at once. The review and the steps are
 - **Objection in the app**, for the affected only, on the placeholder and the statement: free text sealed to the
   moderation key, reopening the case; one per measure, then the courts. A guest uses the instance contact. A
   reporter has no objection to a dismissal; they may report again with more.
-- **Another moderator reviews the objection**
-  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): the server
-  refuses a decision on it from the account that took the measure while another accepted moderator holds the key,
-  and the log records the reviewer. With one moderator the objection does not wait: the decider reviews it, the log
-  marks the review as theirs, and the answer to the objector says so. The flow is
+- **Another moderator reviews the objection**, and with one moderator the decider does, saying so
+  ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5). The flow is
   [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md).
 
 ### 8. Every sealed field records its last editor
@@ -307,25 +300,23 @@ on. The editor is the authenticated caller of the write, never a request field, 
 ### 9. A text or icon field seals under a key of its own
 
 `node-name`, `node-meta`, `media-meta`, `media-exif`, `bucket-name`, `share-note`, `share-name`, `share-memory-name`,
-`share-identity-name`, `member-name` and `member-avatar` seal under `K_field = HKDF(K_parent, salt,
-"veyq/v1/field/<purpose>")`, the 16-byte salt drawn fresh **per write** and carried inside the field's own envelope
-(`0x03 ‖ salt ‖ nonce ‖ aead`). A report hands over `K_field`: it opens that one revision of that one field, and the
-operator verifies by opening the held ciphertext, whose AAD binds the object or whose key is unique to it
-([ADR 0072](0072-a-seal-binds-its-object.md) Decisions 1 and 2; the three share fields bind only their purpose, and
-`K_share` is one share's). `media-meta` and `media-exif` are fields although § 1 hands a medium over by its
-`K_blob`s: they belong under the Memory's key, so without a key of their own a moderator would see a picture
+`share-identity-name`, `member-name` and `member-avatar` seal under a `K_field` derived from their parent's key with a
+salt drawn fresh **per write** and carried inside the field's own envelope. A report hands over `K_field`: it opens that
+one revision of that one field, and the operator verifies by opening the held ciphertext, whose AAD binds the object or
+whose key is unique to it ([ADR 0072](0072-a-seal-binds-its-object.md) Decisions 1 and 2; the three share fields bind
+only their purpose, and `K_share` is one share's). `media-meta` and `media-exif` are fields although § 1 hands a medium
+over by its `K_blob`s: they belong under the Memory's key, so without a key of their own a moderator would see a picture
 without its date or place; which keys a medium report carries is the report's own decision. `group-name` and
-`space-icon` are not fields: they derive their key per (scope, epoch), so a key opens every revision of that epoch,
-and they stay so because a pending invitee is handed `K_name`, only the scope's members read either, and a group's
-name is not on § 1's list. A medium's `blob-meta` is covered by its `K_blob`. veyq is not live, so this is a
-stored-format change with a reset, not a suite v2. AES-GCM is not key-committing: only a field's own writer could
-craft a ciphertext that opens differently under two keys, and § 8 attributes it to them. The model, the envelope and
-the tests are [en.platform.field-key](../features/platform/enablers/en.platform.field-key.md).
+`space-icon` are not fields: they derive their key per (scope, epoch), so a key opens every revision of that epoch, and
+they stay so because a pending invitee is handed `K_name`, only the scope's members read either, and a group's name is
+not on § 1's list. A medium's `blob-meta` is covered by its `K_blob`. AES-GCM is not key-committing: only a field's own
+writer could craft a ciphertext that opens differently under two keys, and § 8 attributes it to them. The model, the
+envelope and the tests are [en.platform.field-key](../features/platform/enablers/en.platform.field-key.md).
 
 ### 10. The guest-write record
 
-Taken over from [ADR 0092](0092-logs-are-operational-and-name-no-person.md), which keeps the retention period's
-range and its no-extension rule (§ 2 there).
+The retention setting's form and its no-extension rule are [ADR 0092](0092-logs-are-operational-and-name-no-person.md)
+§ 2's; the cap of 30 days and its why are this section's.
 
 - **One core table, one row per guest write that enters a guest as last editor (§ 8)** — upload commit, identity
   creation, folder creation, rename, meta: the client's address, its source port where known, the server time in
@@ -345,10 +336,10 @@ range and its no-extension rule (§ 2 there).
   own would let an operator drop the trace exactly where a write link reached strangers — what an operator-blind Server
   Owner cannot see — and a default per mode made the mode a second source of truth for it
   ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14).
-- **Retention is an instance setting** (0092 § 2: N days, 7 by default, 1 to 30). Seven days is the supervisory
+- **Retention is N days, at most 30, 7 by default**, an instance setting (0092 § 2). Seven days is the supervisory
   practice and roughly what an access provider keeps, past which a host's address resolves to nobody; a value above
-  seven needs a reason the operator writes into their record of processing. A shortening reaches every row, a
-  lengthening only new ones: no guest is kept longer than the page told them.
+  seven needs a reason the operator writes into their record of processing. The cap is what bounds the legitimate
+  interest (§ Rejected alternatives), and no guest is kept longer than the page told them (0092 § 2).
 - **Backups leave the rows out** ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)): what is lost
   is at most 30 days old and expiring anyway, and what was reported lives in the hold tables, which are backed up.
 - **Disclosure (GDPR Art. 13, at collection), from the Server Owner, never from a tenant's terms**: one first-layer
@@ -363,16 +354,15 @@ range and its no-extension rule (§ 2 there).
 
 ### 11. The moderation log, and the instance contact
 
-- **An append-only table** of case events and of instance events (a moderator appointed, accepted, delivered the key,
-  removed; an epoch minted — [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-  § 4): structured fields in the clear (event, time, moderator account, ids, step), every free text sealed to the
-  moderation key, no content and no key. A log line names a case id and nothing more (0092 § 1). Not tamper-evident:
-  the operator owns the database, and the log is for accountability to the affected and within a team, not a control.
+- **An append-only table** of case events and of instance events ([ADR
+  0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4): structured fields in the
+  clear (event, time, moderator account, ids, step), every free text sealed to the moderation key, no content and no
+  key. A log line names a case id and nothing more (0092 § 1). Not tamper-evident: the operator owns the database, and
+  the log is for accountability to the affected and within a team, not a control.
 - **A case's events are kept to 31 December of the third year after the case closes** — the civil limitation period
   from year's end, and the one for the DSA's fines (§ Legal basis, 3) — dismissed cases included, since a dismissal is
   what an injured party may later contest. An instance event is kept the same way from the later of the event and its
-  moderator's removal. Longer only while proceedings are pending, as a logged extension (not built for the records; a
-  hold's is).
+  moderator's removal. Longer only while proceedings are pending, as a logged extension.
 - **No case closes itself** — that would be a decision no person took. A case closes when its last hold has ended and
   no objection is open; an undecided one stays in the queue, and the moderators are reminded at 30, 75 and 90 days
   (DSA Art. 16(6), "timely"; [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md)).
@@ -398,8 +388,7 @@ range and its no-extension rule (§ 2 there).
 
 - **A removal order names a URL**, which the server cannot read and for which no report share exists. So the order
   path is separate from the report flow, entered by a moderator in the moderation surface with the key proof, or by
-  the Server Owner in admin-web **and** in `veyq-admin` without a key — two operations, because the admin channel's
-  marker names a door per operation
+  the Server Owner in admin-web **and** in `veyq-admin` without a key
   ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6): in goes the
   share URL or share id, the authority's reference and the time of receipt; at once, with no review of its own (the authority has
   reviewed), the server **blocks the share and the content it reaches** by id (§ 6) and opens a case with a **hold
@@ -423,7 +412,7 @@ range and its no-extension rule (§ 2 there).
 ### 13. Art. 18 reports, and child sexual abuse material
 
 - **Where an Art. 18 report goes**: in Germany to the BKA as the central office (§ 13 DDG), through its portal
-  `u-entrance.bka.de` after registering by mail (the Run docs say to register **before** an emergency); without a
+  after registering by mail (the Run docs name it and say to register **before** an emergency); without a
   registration, a criminal complaint with the police; in acute danger, 110. Terrorist content already reported
   under TCO Art. 14(5) needs no second report. The moderation surface exports the clear fields the BKA form asks for — case id,
   times in UTC, the uploader's account or share identity, the address from a held guest-write record, the category —
@@ -457,25 +446,25 @@ contact details (Art. 13(1)(a) GDPR). It covers every tenant on the instance: th
 them (ADR 0099 § 1), and cannot see whether a tenant owner posted a link publicly, so a friend's tenant stays private
 only as long as its links do. *This is your own assessment, not veyq's.*
 
-**Why no mode.** A mode *private* or *club, organisation or company*, chosen at
-setup, decided four things: a reduced statement and operator section, whether admin-web warned about empty values,
-and — as a preset — the guest-write record's switch. Once the record had no switch (§ 10) and warnings had no reader
-an operator would not ignore, the mode decided only how long the texts were, and its reduced texts left out what veyq
-does on every instance anyway (the report path, the order path, the Art. 18 export are built everywhere and refused
-nowhere, "it costs nothing until someone reports"). So the full texts describe every instance more truly than the
-reduced ones did, and one form of each is one state to test instead of two. A sentence in them that grants a right
-only the DSA gives says *where the DSA reaches this instance* in its own words (§ 7's reporter redress).
+**Why no mode.** A mode *private* or *club, organisation or company*, chosen at setup, would decide only how long the
+texts are: the guest-write record has no switch (§ 10), and a warning about empty values has no reader an operator would
+not ignore. Its reduced texts would leave out what veyq does on every instance anyway (the report path, the order path,
+the Art. 18 export are built everywhere and refused nowhere, "it costs nothing until someone reports"). So the full
+texts describe every instance more truly, and one form of each is one state to test instead of two. A sentence in them
+that grants a right only the DSA gives says *where the DSA reaches this instance* in its own words (§ 7's reporter
+redress).
 
 ## Consequences
 
 - The operator can act on one share, one item or one uploader instead of a whole tenant, and reads only what was
-  reported. Unreported content stays unreadable; the T&S target in the security model becomes buildable as written.
+  reported: this mechanism opens nothing unreported. Against an operator who serves the client it holds no more than
+  [ADR 0026](0026-client-trust-tiers.md) says. The T&S target in the security model becomes buildable as written.
 - Costs: a new share kind (medium-scoped and field-scoped), hold tables and the sweep's skip, a moderation mode in
   the share viewer, src/web/'s moderation surface with the queue, admin-web's and the CLI's Server-Owner steps, the
   moderator role and key ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)),
-  an editor column per field group (built), per-field keys in the crypto suite with new vectors (built), the
-  guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest` needs a reader for each new time: the purge
-  for records, holds and the log (each hold's and each case's own end).
+  an editor column per field group, per-field keys in the crypto suite with new vectors, the guest-write record, the
+  moderation log, and a reader for each new stored time: the purge for records, holds and the log (each hold's and
+  each case's own end).
 - Further costs from the operator premise: the order path in the moderation surface, admin-web and the CLI with a
   hold that has no report and an end the order sets (§ 12); per-trigger hold ends and logged extensions (§ 4); the deferral switch (§ 7);
   the report dialog's fields and categories (§ 1); the CSAM flow and the BKA export (§ 13); the backup dump without
@@ -501,7 +490,7 @@ only the DSA gives says *where the DSA reaches this instance* in its own words (
   leave the household exemption), which values each kind of operator owes (§ 14), and that veyq meets a hosting
   service's duties on every instance once those values are set.
 - **Docs:** the Run area's [moderation](../../site/src/content/docs/run/moderation.md) page carries an emergency
-  page (110, the BKA portal registered ahead, `TCO@bka.bund.de`, what never to do); the terms template's clause 9
+  page (110, the BKA portal registered ahead, the BKA's TCO contact, what never to do); the terms template's clause 9
   points to the operator section ([ADR 0035](0035-server-terms-of-service.md) decision 6), and its clauses 2 and 7
   say what the host keeps about a guest write.
 
@@ -527,7 +516,7 @@ only the DSA gives says *where the DSA reaches this instance* in its own words (
 - **Handing over `K_share` or a parent key for a text field.** Opens the whole subtree or the siblings.
 - **Every editor's history** instead of the last editor. More metadata for what the hold already freezes.
 - **Blocking by address.** Addresses change, and the record would become more than evidence.
-- **For the guest-write record** (from 0092): hashing the address (an IPv4 hash falls to 2³² guesses) or truncating
+- **For the guest-write record**: hashing the address (an IPv4 hash falls to 2³² guesses) or truncating
   it (a /24 loses the evidence); sealing it to a hold key (the operator sees every address live at their own proxy);
   columns on the identity and upload tables (each write overwrites the last, and the purge would touch two
   applications); a tenant owner's switch (the operator answers for the server); an access log (0092).
@@ -554,7 +543,7 @@ only the DSA gives says *where the DSA reaches this instance* in its own words (
 The research behind this ADR — the law, its primary sources and the reading taken — is the
 [legal register](../crosscutting/legal-register.md): research, not legal advice.
 
-**veyq does not have the texts it ships legally reviewed** (owner 2026-10-29): the operator section of the terms and
+**veyq does not have the texts it ships legally reviewed**: the operator section of the terms and
 the privacy notice ([ADR 0035](0035-server-terms-of-service.md) decisions 6 and 8), the statement of reasons and its
 redress (§ 7), the guest-write disclosure (§ 10), the order forms (§ 12) and the child-sexual-abuse warning (§ 13).
 veyq is software a Server Owner runs, and a host's duties are theirs, not veyq's authors' (Context), so having the
@@ -564,19 +553,14 @@ simply the text veyq ships.
 
 What the register concluded, and where this ADR applies it:
 
-1. **Which law reaches an instance** (L1): a hosting service, not an online platform, while a share has no directory,
-   no search and its key in the fragment; whether the DSA reaches an unpaid private instance is uncertain, so § 14
-   leaves the assessment to the operator.
-2. **The terms** (L2): the moderation policy, the TCO policy and the record's Art. 13 information fall on the Server
-   Owner — hence [ADR 0035](0035-server-terms-of-service.md) decisions 6–8.
-3. **Hold and log durations** (L3): no law sets one for a host; six months, 60 + 30 days and three years from year's
-   end are the anchors of § 4 and § 11.
-4. **The guest-write record** (L4): Art. 6(1)(f), seven days by default and at most 30, erasures re-applied after a
-   restore — § 10.
-5. **Art. 18 and child sexual abuse material** (L5): a hold that ends at the handover serves the reporting duty — § 13.
-6. **Terrorist content** (L6): one hour, no exemption for a small host, a `READ` link treated as reached — § 12.
-7. **IP retention in Germany** (L7): no duty on a host today, and the bill reaches access providers only.
-8. **Transparency reports** (L8): up to three, the operator's duty, not built — Consequences.
+1. **Which law reaches an instance** (L1) — Context, § 14.
+2. **The terms** (L2) — [ADR 0035](0035-server-terms-of-service.md) decisions 6–8.
+3. **Hold and log durations** (L3) — §§ 4, 11.
+4. **The guest-write record** (L4) — § 10.
+5. **Art. 18 and child sexual abuse material** (L5) — § 13.
+6. **Terrorist content** (L6) — § 12.
+7. **IP retention in Germany** (L7) — § 10, and Rejected alternatives.
+8. **Transparency reports** (L8) — Consequences.
 
 ### Still open
 

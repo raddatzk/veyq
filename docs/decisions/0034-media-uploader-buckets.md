@@ -51,9 +51,6 @@ model, [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md); th
    membership, not `owner_key == caller`, so a curator can tidy a contributor's uploads; no reader may infer an
    owner-only guarantee.
 
-7. **The organizer is always available** in the Memory: your primary and sub-buckets, create, rename and delete
-   sub-buckets, move media between your own buckets.
-
 ## Consequences
 
 - **Operator-visible surface, all opaque:** `owner_key`s, the bucket structure (node, parentage, `is_primary`, counts)

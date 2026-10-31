@@ -126,20 +126,12 @@ device finishes it (point 7).
 - **The whole scope read-only during the re-key**: simpler on the server, but a large space stops
   taking writes for the whole run, and a crashed run keeps it stopped.
 
-## Bite tests (each must fail if the rule is wrong)
+## Bite tests
 
-1. After a rotation and its re-key, a medium added to a Memory that existed before does not open with any key of the
-   epoch before (the old `K_SC` chain, the old `K_node`); a positive control opens it with the new epoch.
-2. Every live and trashed node of the scope carries the current epoch once the rotation is *secured*; a queued job's
-   completion is refused while one lags.
-3. A write stating a node's old epoch → `409 stale_epoch`; into a node not yet re-keyed → `409 node_rekey_pending`;
-   into a re-keyed one → accepted.
-4. A re-key interrupted after the parent's commit: the tree opens from the new epoch, and resuming finishes it.
-5. A link minted before keeps showing a medium added after the re-key, and is marked `reissueRequired`; its re-issue's
-   `K_share` does not open what the old recovery copy's `K_share` reaches.
-6. An upload to a drop box after the re-key does not open with the drop private key from before.
-7. A trashed node restored after a rotation opens only from the new epoch.
-8. No store object is written or read by a re-key.
+The cases that must fail if a rule here is wrong are acceptance criteria of
+[uc.spaces.rekey-after-rotation](../features/spaces/use-cases/uc.spaces.rekey-after-rotation.md), each held by the test
+that implements it: `every-node-rekeyed`, `writes-wait-per-node`, `resumable`, `links-follow-and-stay-marked`,
+`drop-key-replaced` and `blobs-rewrapped-not-reencrypted` (coverage under [`docs/coverage/`](../coverage/README.md)).
 
 Explained for security researchers on the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md),
 [Known limitations](../../site/src/content/docs/security/known-limitations.md),

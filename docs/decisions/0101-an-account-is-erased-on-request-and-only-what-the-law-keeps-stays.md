@@ -5,63 +5,55 @@
 - Date: 2026-10-18
 - Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
 
-Provenance: **(M)** measured with the command or line named when this was decided; **(A)** the legal audit behind it
-(research, not legal advice; the GDPR articles it cites were read in their primary text). That an account and an active
-tenant can be erased is not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided
-or built disagree, the duty decides (`CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were the owner's
-choices among the shapes.
+That an account and an active tenant can be erased is not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a
+legal duty and what veyq decided or built disagree, the duty decides (`CLAUDE.md`). The shape is this ADR's; the legal
+research behind it is the [legal register](../crosscutting/legal-register.md) L10 — research, not legal advice.
 
 ## Context
 
-- **Nothing erases an account.** `AccountEmailResource.kt:34-35` says so ("no path deletes one"), inbox #316 measured it
-  (`grep -rnE 'VeyqUser\.(delete|deleteById)' backend/*/src/main backend/apps/*/src/main` → nothing), and no contract
-  operation deletes a user (`grep -n operationId contracts/api/account.openapi.yaml`; the one delete is a device wrap)
-  (M). Twelve tables reference `veyq_user` and none with `ON DELETE`
-  (`grep -rn 'REFERENCES veyq_user' backend/core/src/main/resources/db/migration`), so a bare row delete fails; a
-  further set of columns carries a user id with no foreign key on purpose — editors, uploaders, bucket owners
-  (`user:{id}`), the moderation tables' actors (M, the baselines' own comments, e.g. "a member who left stays named").
-- **Removing a member erases little.** A tenant owner's removal (`RemovalPolicy.plan`, `RemovalPolicy.kt:50-66`) puts
-  the member's personal scope and solo groups into the scope trash, hands a sole-owned shared group on, cuts the
-  shared ones, switches their links off and clears the picture; the tenant profile "outlives it"
-  (`TenantHandler.kt:497`) and the terms acceptance rows stay (M).
-- **An active tenant cannot be deleted.** `revokeTenant` deletes a `PENDING` tenant only
-  (`contracts/api/tenants.openapi.yaml:705`, `TenantHandler.kt:243-252`, `TenantStore.deleteTenant` touches invites and
-  the row); suspension "preserves everything" ([ADR 0066](0066-tenant-suspension.md)) (M).
-- **A tenant had one owner in practice.** The model allows several owners at every level
-  ([ADR 0007](0007-membership-role-grant-relation.md)), but an owner invite existed only while the tenant was `PENDING`,
-  a member invite is `MEMBER` only (`inviteTenantMember`), and a role change was for groups only, so the last owner of
-  an active tenant could not hand it on (M). `RemovalPolicy` refuses the last owner (`last_owner`). Decision 9 adds the
-  tenant's "make owner" and the Server Owner's owner invite to a member.
-- **The law** (A): erasure "without undue delay" (Art. 17(1)); the controller facilitates it (Art. 12(2)) and acts
-  within one month (Art. 12(3)); erasure does not reach what is needed for a legal obligation or for legal claims
-  (Art. 17(3)(b), (e)), and a hold is a restriction of processing (Art. 18, ADR 0093 § 4). The Server Owner is the
-  controller veyq builds for; whether a tenant owner is a joint controller is open (ADR 0093 Still open 6).
+- **Nothing erased an account**: no code path and no contract operation deleted a user. Twelve tables reference the
+  user row and none with `ON DELETE`, so a bare row delete fails; a further set of columns carries a user id with no
+  foreign key on purpose — editors, uploaders, bucket owners (`user:{id}`), the moderation tables' actors ("a member
+  who left stays named").
+- **Removing a member erases little.** A tenant owner's removal puts the member's personal scope and solo groups into
+  the scope trash, hands a sole-owned shared group on, cuts the shared ones, switches their links off and clears the
+  picture; the tenant profile outlives it and the terms acceptance rows stay.
+- **An active tenant could not be deleted.** Revoking a tenant deleted a `PENDING` one only, its invites and its
+  row; suspension "preserves everything" ([ADR 0066](0066-tenant-suspension.md)).
+- **A tenant had one owner in practice.** The model allows several owners at every level ([ADR
+  0007](0007-membership-role-grant-relation.md)), but an owner invite existed only while the tenant was `PENDING`, a
+  member invite is `MEMBER` only, and a role change was for groups only, so the last owner of an active tenant could not
+  hand it on, and a removal refuses the last owner. Decision 9 adds the tenant's "make owner" and the Server Owner's
+  owner invite to a member.
+- **The law** ([legal register](../crosscutting/legal-register.md) L10): erasure "without undue delay" (Art. 17(1)); the
+  controller facilitates it (Art. 12(2)) and acts within one month (Art. 12(3)); erasure does not reach what is needed
+  for a legal obligation or for legal claims (Art. 17(3)(b), (e)), and a hold is a restriction of processing (Art. 18,
+  ADR 0093 § 4). The Server Owner is the controller veyq builds for; whether a tenant owner is a joint controller is
+  open (ADR 0093 Still open 6).
 
 ## Decision
 
 ### 1. Two doors, one erasure
 
-A member erases their own account in the settings, proving their password the way a password change does: a
-signature with the account's auth key over the account and a login challenge minted for its address, spent by the
-request (`AuthAttestation.eraseAccountStatement`, the `auth_attestation.erase_account` vector) — the password, not the
-Secret Key, since erasing mints no credential. The Server
-Owner erases an account by its address on the admin channel — admin-web and `veyq-admin account erase` — for a request
-that reached them another way (a mail, a letter, a person who lost their password). Both doors start the same erasure.
+A member erases their own account in the settings, proving their password the way a password change does: a signature
+with the account's auth key over the account and a login challenge minted for its address, spent by the request — the
+password, not the Secret Key, since erasing mints no credential. The Server Owner erases an account by its address on
+the admin channel — admin-web and `veyq-admin account erase` — for a request that reached them another way (a mail, a
+letter, a person who lost their password). Both doors start the same erasure.
 
 ### 2. At the request, the account stops at once
 
-In one transaction: every session ends (`SessionService.revokeAllForUser`), sign-in is refused, every pending
-invite, pairing, recovery and address change of the account is dropped, and in each tenant the member removal runs as
-it does today (§ Context: own scopes into the scope trash, shared ones cut, a sole-owned group handed on, links off).
-A moderator leaves the roster as a removal does ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md):
-grants deleted, a new epoch). The account address receives one mail, through the instance mail where it is set up:
-that erasure was requested, when it completes and who can stop it — a stolen session that erases an account is then
-seen by its owner.
+In one transaction: every session ends, sign-in is refused, every pending invite, pairing, recovery and address change
+of the account is dropped, and in each tenant the member removal runs as it does today (§ Context: own scopes into the
+scope trash, shared ones cut, a sole-owned group handed on, links off). A moderator leaves the roster as a removal does
+([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md): grants deleted, a new
+epoch). The account address receives one mail, through the instance mail where it is set up: that erasure was requested,
+when it completes and who can stop it — a stolen session that erases an account is then seen by its owner.
 
-### 3. Erased after the scope trash's retention, by one purge (Q)
+### 3. Erased after the scope trash's retention, by one purge
 
-The account row and every row keyed on it go when its own scopes go: after `veyq.scope.delete.retention` (`P30D`,
-`application.properties:99`), by the purge that already erases those scopes. Until then only the Server Owner can stop
+The account row and every row keyed on it go when its own scopes go: after the scope trash's retention, 30 days, by
+the purge that already erases those scopes. Until then only the Server Owner can stop
 it, for a mistaken or coerced request; the person cannot sign in to do so. Thirty days stays inside Art. 12(3)'s month.
 
 ### 4. What goes
@@ -74,14 +66,14 @@ every membership, the favorites (core's and Memories'), the moderator row and it
 rows except as decision 6 keeps them. The browser that erased clears its own records for the address (session vault,
 remembered and trusted device, trust marks); another device finds its wraps gone at its next sign-in.
 
-### 5. What stays with the scope, naming no account (Q)
+### 5. What stays with the scope, naming no account
 
 Content the person put into a scope they did not own alone — uploads, nodes, buckets, attachments — belongs to that
 scope, as a guest's photos belong to the Memory ([security model](../crosscutting/security-model.md) § Deletion &
-erasure). Its attribution keeps the opaque id, which the client shows as a former member
-(`web/src/core/people/directory.ts:132`); the person's sealed name goes with their profile. Their links in shared
-scopes are switched off, as at a removal, and the scope's members may delete or re-issue them. The confirmation tells
-the person, before they erase, to delete what they want gone from shared scopes while they are still a member.
+erasure). Its attribution keeps the opaque id, which the client shows as a former member; the person's sealed name goes
+with their profile. Their links in shared scopes are switched off, as at a removal, and the scope's members may delete
+or re-issue them. The confirmation tells the person, before they erase, to delete what they want gone from shared scopes
+while they are still a member.
 
 ### 6. The terms acceptance history goes, unless a case needs it
 
@@ -90,10 +82,10 @@ kept names the account — a measure on it in force, a case about its content op
 December of the third year after it closes, ADR 0093 § 11), or a Server Owner's step on no case (ADR 0093 § 7) inside
 its own (31 December of the third year after its lift): then its rows stay under the opaque id until that record's
 date, as the evidence of which terms a breach was measured against (Art. 17(3)(e)). No new period. The erasure asks the
-question its later sweep of kept rows asks (owner, the safe side): an account erased the day after its case closed is
+question its later sweep of kept rows asks, on the safe side: an account erased the day after its case closed is
 named by that case's records as long as one erased the day before, and a dispute over a kept record needs the terms it
 was measured against. A step on a tenant (taken offline or deleted over content) names the tenant's owners at the time
-of the step — the recipients of its statement — and is then a measure on each of them (owner, the safe side): it
+of the step — the recipients of its statement — and is then a measure on each of them, again on the safe side: it
 targets the tenant id and often answers no case, so without this a tenant deleted over its content would lose its
 owners' rows at its purge while the step's record stays to its date. A tenant's erasure (decision 10) keeps them by the
 same rule, asked when it starts: the evidence is the account's, and erasing the space it was given in does not settle
@@ -119,9 +111,9 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
 
 ### 9. A refusal, and the last owner's choice
 
-- **The Server Owner's own account** is refused (`server_owner_account`): erasing it leaves nobody on the admin
+- **The Server Owner's own account** is refused: erasing it leaves nobody on the admin
   channel, and moving the server role to another account is not built (inbox #43).
-- **The last owner of a tenant** with other members chooses at the self-service door (owner, Q18): **delete the tenant
+- **The last owner of a tenant** with other members chooses at the self-service door: **delete the tenant
   along** (decision 10, its window) **or name a new owner** from its members first; the erasure proceeds after either. A
   tenant with no other member is deleted with the account (decision 10), and the dialog names it. **The Server Owner's door does not refuse**: an erasure cannot wait on a third person
   (Art. 12(2)). The tenant then has no owner; admin-web shows it so, and the Server Owner invites a new owner into the
@@ -138,26 +130,22 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
 
 The Server Owner deletes an `ACTIVE` or `SUSPENDED` tenant in admin-web and with `veyq-admin tenant delete`. At once it
 is offline exactly as a suspension takes it (ADR 0066: every request refused, ingress withdrawn, links dead); after the
-same `P30D` the Server Owner can still stop (Q), one purge erases every scope through `ScopePurge.eraseScope` (its blobs
-onto the reclaim list), the tenant profiles, the terms rows (except as decision 6 keeps them), the mail settings, the invites, the
-capability switches and quota, and the tenant row. Holds and the moderation records survive: their tables hang on
-cases, not tenants (`grep -n REFERENCES backend/core/src/main/resources/db/migration/V202610172000__core_moderation_holds.sql`).
-Members keep their accounts, also one the deletion leaves in no tenant (owner, Q20): nothing erases an account its
-person did not ask to erase; they are told by mail and may erase it themselves. Deleting a tenant over its content is a termination of the service for its owners
-(DSA Art. 17(1)(c)) and carries their statement of reasons (ADR 0093 § 7): a `TENANT_DELETED` record, as a
-suspension's `TENANT_OFFLINE` is, which a stop lifts and the purge ends.
+same 30 days, which the Server Owner can still stop, one purge erases every scope (its blobs onto the reclaim list), the
+tenant profiles, the terms rows (except as decision 6 keeps them), the mail settings, the invites, the capability
+switches and quota, and the tenant row. Holds and the moderation records survive: their tables hang on cases, not
+tenants. Members keep their accounts, also one the deletion leaves in no tenant: nothing erases an account its person
+did not ask to erase; they are told by mail and may erase it themselves. Deleting a tenant over its content is a
+termination of the service for its owners (DSA Art. 17(1)(c)) and carries their statement of reasons (ADR 0093 § 7): a
+step of its own, as a suspension's is, which a stop lifts and the purge ends.
 
 ### 11. The guard
 
-Like the scope's (`scripts/validate_scope_erasure_arity.py`): the foreign-key closure below `veyq_user` and below
+Like the scope's erasure guard: the foreign-key closure below `veyq_user` and below
 `veyq_tenant`, read from the migrations, each table erased by the eraser or cascading; and every column that carries a
 user id without a foreign key classified in the eraser's code as erased or kept, with the reason for keeping.
 
 ## Consequences
 
-- New: two erasure operations (self and admin channel), a tenant deletion for active tenants, an owner's "make owner"
-  for a tenant member, an owner invite into an active tenant, a pending-erasure state on the account and the tenant,
-  one eraser per account and per tenant with its guard, the erasure mail, and admin-web's view of an ownerless tenant.
 - The privacy notice, the Use pages (account, space owners) and the Run pages (moderation, tenants) say what goes and
   what stays.
 - **Limit:** an opaque id stays in content attribution and in kept moderation records; with the account row gone it
@@ -165,11 +153,11 @@ user id without a foreign key classified in the eraser's code as erased or kept,
 - **A stop restores the account, not its memberships.** The member removal runs at the request (decision 2), so a
   stopped erasure gives back an account that can sign in, keeps its own scopes in the scope trash until their retention
   ends, and needs a new invite to the shared scopes and tenants it was cut from; a tenant deleted along is stopped on its
-  own (`stopTenantDeletion`).
-- **The erasure ledger** (decision 8): `AccountPurge.eraseRows` and `TenantPurge.eraseTenant` write the line, before
-  the row goes; at a start after a restore, `AccountPurge.reapply` and `TenantPurge.reapply` erase the account or tenant
-  again (a pending row made again, due now), mailing nobody. The statement of reasons a
-  deletion over content carries (decision 10) is built on `cr-statement-legal-gaps`' Server Owner path.
+  own.
+- **The erasure ledger** (decision 8): the account's and the tenant's erasure write their line before the row goes,
+  and a start after a restore erases them again, mailing nobody
+  ([cc.privacy.retention](../crosscutting/cc.privacy.retention.md) § Backups and the erasure ledger). The statement of
+  reasons a deletion over content carries (decision 10) is the Server Owner's of ADR 0093 § 7.
 
 ## Rejected alternatives
 
