@@ -294,7 +294,7 @@ class ModerationSliceTest {
         enable(OWNER, key, IDENTITY_PUBLIC_KEY)
         appointAndAccept(OWNER, deputyAddress, deputy)
         deliverAsOwner(deputy, 1)
-        QuarkusTransaction.requiringNew().run { handler.onIdentityRotated(deputy) }
+        QuarkusTransaction.requiringNew().run { check(handler.onIdentityRotated(deputy, mapOf(1 to null))) }
         assertEquals(0L, QuarkusTransaction.requiringNew().call { ModerationGrantEntity.count("moderatorId", deputy) })
         asUser(OWNER).headers(proof(OWNER, "listPendingModerationDeliveries", key)).get("/api/moderation/deliveries")
             .then().body("deliveries[0].accountId", equalTo(deputy))

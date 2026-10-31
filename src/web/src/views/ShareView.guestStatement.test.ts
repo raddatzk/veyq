@@ -45,6 +45,7 @@ const told: ShareGuestNotice = {
       covers: [],
       ground: 'TERMS_BREACH',
       provision: 'Space terms, clause 4',
+      basis: 'REPORT',
       takenAt: new Date('2026-10-18T09:00:00Z'),
     },
   ],
@@ -84,6 +85,8 @@ describe('a guest uploader’s statement of reasons on its blocked link (ADR 009
     expect(passage('measure').text()).not.toContain(TEMPLATE.measures.GUEST_IDENTITY.en.measure)
     expect(passage('roles').text()).toContain(TEMPLATE.roles.UPLOADER.en)
     expect(passage('provision').text()).toBe('It relies on Space terms, clause 4.')
+    // A report opened its case: the measure was taken after it (inbox #820).
+    expect(passage('basis').text()).toBe(`The measure was taken after ${TEMPLATE.basis.REPORT.en}.`)
     // The facts open only with a member's identity key: where to ask for them stands in their place.
     expect(passage('facts').text()).toBe(TEMPLATE.guest.facts.en.replace('{contact}', 'abuse@example.org'))
     expect(notice.find('.statement-facts').exists()).toBe(false)
@@ -94,6 +97,15 @@ describe('a guest uploader’s statement of reasons on its blocked link (ADR 009
     // No removal order in the answer: the § 12 notice says nothing.
     expect(w.find('[data-testid="order-notice"]').exists()).toBe(false)
     expect(authenticatedCalls).toEqual([])
+  })
+
+  it('words the basis the read carries: on a case no report opened, their own finding, naming no order (inbox #820)', async () => {
+    saveGuestSession(SHARE_ID, { identityId: IDENTITY, contributorToken: 'tok-1' })
+    stubApi(publicSharesApi, { getShareGuestNotice: { ...told, statements: [{ ...told.statements[0]!, basis: 'OWN_FINDING' }] } })
+    const w = await mountPage()
+    const basis = w.find('[data-testid="guest-statement"] [data-passage="basis"]')
+    expect(basis.text()).toBe('The measure was taken after their own finding.')
+    expect(basis.text()).not.toContain(TEMPLATE.basis.REPORT.en)
   })
 
   it('asks nothing and shows nothing on a device that holds no session for the link', async () => {

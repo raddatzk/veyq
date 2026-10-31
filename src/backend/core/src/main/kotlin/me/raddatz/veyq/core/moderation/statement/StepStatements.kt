@@ -13,7 +13,6 @@ import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseFailures
 import me.raddatz.veyq.core.moderation.cases.SealedNote
-import me.raddatz.veyq.core.moderation.report.CaseOrigin
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -86,7 +85,7 @@ class StepStatements(private val log: ModerationLog) {
 
     /**
      * Write [input]'s statement on [measure], **in the caller's transaction** (the step's), with [by] the Server Owner: the
-     * row, its recipients, and `STATEMENT_SENT` where anybody is told. The basis is the case's origin, or their own finding.
+     * row, its recipients, and `STATEMENT_SENT` where anybody is told. The basis is the case's origin ([StatementBasis.ofCase]), or their own finding.
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun write(measure: ModerationBlockEntity, input: StepStatementInput, by: String, now: Instant) {
@@ -99,11 +98,7 @@ class StepStatements(private val log: ModerationLog) {
             caseId = case?.id
             ground = input.ground.name
             provision = input.provision?.trim()?.takeIf { it.isNotEmpty() }
-            basis = when (case?.origin) {
-                null -> StatementBasis.OWN_FINDING.name
-                CaseOrigin.ORDER.name -> StatementBasis.ORDER.name
-                else -> StatementBasis.REPORT.name
-            }
+            basis = StatementBasis.ofCase(case?.origin).name
             epoch = input.factsForLog?.epoch
             sealedFacts = input.factsForLog?.sealed
             this.sentAt = sentAt

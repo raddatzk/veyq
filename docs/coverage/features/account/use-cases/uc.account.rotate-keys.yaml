@@ -147,6 +147,32 @@ acceptanceCriteria:
           - RotationSliceTest.anExpiredOrMissingStageIsRefused
           - RotationSliceTest.anUnreadableScopeKeepsItsGrantAndGetsNoRow
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: a-holder-keeps-the-moderation-key
+    # uc §E6, ADR 0099 § 4. Bitten: the server's held-set check dropped, the hook deleting after it writes, the held set
+    # read before the epoch lock (red only in the delivery-first race), the client's re-seal dropped or declared, and
+    # its bundle check dropped — each reddened a case below. The races are the delivery's two orders against the publish.
+    text: >
+      A holder of the instance moderation key keeps it through securing the account: the client stages every live epoch
+      it holds a grant of, opened with the outgoing identity, checked against the published bundle and re-sealed to the
+      new identity, and the publish writes them in place of the grants sealed to the old one. A holder's publish without
+      every such epoch staged — re-sealed or declared — is 409 rotation_plan_changed with nothing written, a delivery
+      between stage and publish included, so a sole holder (the Server Owner after first-run setup) still holds a
+      pre-rotation epoch and the current one afterwards. An epoch the device cannot open, or whose key the published
+      bundle disowns, is declared and its grant goes; a staged epoch the account no longer holds is not written; an
+      account that holds no grant stages nothing and its publish is unchanged.
+    coverage:
+      backend:
+        integration:
+          - RotationModerationKeySliceTest.aSoleHolderSecuresTheirAccountAndStillHoldsAPreRotationEpochAndTheCurrentOne
+          - RotationModerationKeySliceTest.aHoldersPublishWithoutEveryEpochReSealedIsRefusedAndWritesNothing
+          - RotationModerationKeySliceTest.aDeclaredEpochIsDeletedAndTheReSealedOneKept
+          - RotationModerationKeySliceTest.aStagedEpochTheCallerNoLongerHoldsIsNotWritten
+          - RotationModerationKeySliceTest.aNonHoldersPublishIsUnaffectedAndStagesNoEpoch
+          - RotationModerationKeySliceTest.anAcceptedModeratorWaitingForTheKeySecuresWithNothingStaged
+          - RotationModerationKeyRacesSliceTest.aPublishCommittedFirstRefusesTheDeliverySealedToTheIdentityItRetired
+          - RotationModerationKeyRacesSliceTest.aDeliveryCommittedFirstRefusesThePublishUntilItReSealsTheDeliveredEpoch
+          - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationAfterTheDeliveryIsRefusedUntilItReSealsTheKeyItWasHanded
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: the-account-mints-every-next-epoch
     text: >
       The account mints each re-granted scope's next epoch itself, from any of its unlocked devices — the rotating one

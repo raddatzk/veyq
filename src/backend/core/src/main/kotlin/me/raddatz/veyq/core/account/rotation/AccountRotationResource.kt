@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.generated.model.RotationPlanJoinRecord
 import me.raddatz.veyq.core.generated.model.RotationStageGrants
 import me.raddatz.veyq.core.generated.model.RotationStageInvites
 import me.raddatz.veyq.core.generated.model.RotationStageJoinEndorsements
+import me.raddatz.veyq.core.generated.model.RotationStageModerationGrants
 import me.raddatz.veyq.core.account.identitypins.PinWrite
 import me.raddatz.veyq.core.account.identitypins.toPinWrite
 import me.raddatz.veyq.core.http.Failures
@@ -43,7 +44,8 @@ import java.util.UUID
         "Authenticated, and it acts only on the caller's own account. A publish is a once-in-an-incident operation whose " +
             "cost is bounded by what it rewrites — the caller's own wraps and one grant per scope they hold — not by " +
             "request volume, and it needs the Secret Key. The stage holds at most one row per scope the caller holds a " +
-            "grant on, per open invite they signed and per join record they rooted (upserts, 256 a chunk) and is " +
+            "grant on, per open invite they signed, per join record they rooted and per live moderation-key epoch they " +
+            "hold (upserts, 256 a chunk) and is " +
             "replaced by the next open and purged at its expiry; the plans and the states read only the caller's own rows.",
 )
 class AccountRotationResource(
@@ -157,6 +159,14 @@ class AccountRotationResource(
         }
         return when (val outcome = handler.stageEndorsements(identity.principal.name, stageId.toString(), entries)) {
             StageEndorsementsOutcome.Staged -> Response.noContent().build()
+            is HttpFailure -> httpError(outcome)
+        }
+    }
+
+    override fun putRotationStageModerationGrants(stageId: UUID, rotationStageModerationGrants: RotationStageModerationGrants): Response {
+        val entries = rotationStageModerationGrants.grants.map { StagedModerationGrantInput(it.epoch.validated(), it.sealedGrant) }
+        return when (val outcome = handler.stageModerationGrants(identity.principal.name, stageId.toString(), entries)) {
+            StageModerationGrantsOutcome.Staged -> Response.noContent().build()
             is HttpFailure -> httpError(outcome)
         }
     }

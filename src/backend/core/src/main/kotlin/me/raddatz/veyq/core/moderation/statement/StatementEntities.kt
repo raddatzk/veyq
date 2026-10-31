@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.statement
 
+import me.raddatz.veyq.core.moderation.report.CaseOrigin
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
@@ -22,10 +23,29 @@ enum class StatementRole { SHARE_CREATOR, UPLOADER, SCOPE_OWNER, ACCOUNT_HOLDER,
 enum class RecipientKind { ACCOUNT, GUEST }
 
 /**
- * What led to a measure: a report, an authority's order (ADR 0093 § 12), or — for a Server Owner's step on no case —
- * their own finding ([OWN_FINDING], DSA Art. 17(3)(b)'s own-initiative investigation).
+ * What led to a measure (ADR 0093 § 7, DSA Art. 17(3)(b): an Art. 16 notice, or the host's own initiative): [REPORT], a
+ * measure the host took on a case a report opened; [ORDER], an authority's removal order's own block — written only by
+ * the order ([AuthorityOrderHandler][me.raddatz.veyq.core.moderation.order.AuthorityOrderHandler]); [OWN_FINDING], the
+ * host's own initiative — every other measure: a Server Owner's step on no case, and a moderator's or a Server Owner's
+ * measure on a case an authority's order opened (inbox #820; an order is no Art. 16 notice, and a confidential order —
+ * e-Evidence, §§ 100j–100k StPO — is never revealed by the statement).
  */
-enum class StatementBasis { REPORT, ORDER, OWN_FINDING }
+enum class StatementBasis {
+    REPORT, ORDER, OWN_FINDING;
+
+    companion object {
+        /**
+         * The basis of a measure the host takes — a moderator's or a Server Owner's, never an order's own block — on a
+         * case opened as [origin] (`ModerationCaseEntity.origin`; null for a step on no case): a report's case reads
+         * [REPORT], everything else the host's own initiative — a case an order opened too. A restored case's stub
+         * ([CaseOrigin.RESTORED]) reads as a report's, as it did.
+         */
+        fun ofCase(origin: String?): StatementBasis = when (origin) {
+            null, CaseOrigin.ORDER.name -> OWN_FINDING
+            else -> REPORT
+        }
+    }
+}
 
 /** The ground a measure rests on: a report category's value — the law, or the terms (`TERMS_BREACH`). */
 enum class StatementGround { CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH }

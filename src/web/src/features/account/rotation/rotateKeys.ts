@@ -20,11 +20,17 @@
 // of every join record it rooted — so the invites keep working, the members they brought in keep counting, and the
 // retired key roots nothing afterwards. What the server lists that the outgoing key never signed is declared, never
 // vouched for.
+//
+// **A holder of the instance moderation key keeps it** (ADR 0099 § 4): the same stage holds every live epoch this account
+// holds a grant of, opened with the OUTGOING identity and re-sealed to the new one, and the publish writes them in place
+// of the grants it deletes — or refuses. A sole holder (the Server Owner right after first-run setup) has nobody else to
+// deliver the key again, so leaving them out would lose every report and hold sealed to it.
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { accountApi, accountRotationApi, loginApi } from '../../../api/client'
+import { accountApi, accountRotationApi, loginApi, moderationApi } from '../../../api/client'
+import type { ModerationEpochGrant } from '../../../api/generated/moderation'
 import type {
   RotationPlanInvite,
   RotationPlanJoinRecord,
@@ -32,6 +38,7 @@ import type {
   RotationScopeState,
   StagedInviteResign,
   StagedJoinEndorsement,
+  StagedModerationGrant,
   StagedSelfGrant,
 } from '../../../api/generated/account'
 import { account } from '../../../app/account'
@@ -61,8 +68,9 @@ const ARGON = v1.ARGON
 const MAX_PUBLISH_ATTEMPTS = 5
 
 /** At most this many self-grants go up in one `putRotationStageGrants` (the contract's `maxItems`: 256 × 8,501 bytes at
- *  every field cap ≈ 2.2 MB, a fifth of the request limit — ADR 0111 decision 6) — and as many re-signed invites or join-record
- *  endorsements in one `putRotationStageInvites` / `putRotationStageJoinEndorsements` (their own `maxItems`). */
+ *  every field cap ≈ 2.2 MB, a fifth of the request limit — ADR 0111 decision 6) — and as many re-signed invites, join-record
+ *  endorsements or moderation-key epochs in one `putRotationStageInvites` / `putRotationStageJoinEndorsements` /
+ *  `putRotationStageModerationGrants` (their own `maxItems`). */
 export const STAGE_CHUNK = 256
 
 /** Why a rotation refused before it wrote anything. Each maps to one of uc.account.rotate-keys' exception flows. */
@@ -236,9 +244,10 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
 
     const stage = new SelfGrantStage(self.userId, identity, identityPublicKeyB64)
     const rooted = new RootedStage(self, identity)
+    const moderationKey = new ModerationKeyStage(currentPriv, identity)
     const plan = await readRotationPlan()
     await stage.stageAll(plan)
-    await stageRooted(stage, rooted, plan)
+    await stageRooted(stage, rooted, moderationKey, plan)
     // The outgoing key's verifications, per tenant (ADR 0111 decision 13): read NOW, while the old identity is still the
     // account's, so a statement a thief signs with it after the publish is never among them; re-signed by the new
     // identity once the publish committed. A tenant this device cannot open carries none.
@@ -306,8 +315,9 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
         if (retry && (await isCodedError(e, HttpStatus.conflict, 'rotation_plan_changed'))) {
           const now = await readRotationPlan()
           const rootedNow = await rooted.read()
-          await stage.restage(now, rooted.moved(stage.id, rootedNow))
-          await stageRooted(stage, rooted, now, rootedNow)
+          const heldNow = await moderationKey.read()
+          await stage.restage(now, rooted.moved(stage.id, rootedNow) || moderationKey.moved(stage.id, heldNow))
+          await stageRooted(stage, rooted, moderationKey, now, rootedNow, heldNow)
           continue
         }
         // By status alone: a proxy in front answers its own limit with a bare 413 and no veyq body, and the remedy
@@ -411,7 +421,8 @@ class SelfGrantStage {
   /**
    * After `409 rotation_plan_changed`: only what moved goes up again — a scope not staged (a membership that arrived),
    * one whose epoch moved on (a rotation since), one declared unreadable before (re-judged). When nothing moved — here
-   * nor among the invites and join records ([rootedMoved], {@link RootedStage.moved}) — the stage itself is what the
+   * nor among the invites, the join records and the moderation-key epochs ([rootedMoved], {@link RootedStage.moved},
+   * {@link ModerationKeyStage.moved}) — the stage itself is what the
    * server no longer has (expired, or replaced by another tab's open), and so is a stage that answers `404
    * rotation_stage_not_found`: then a fresh stage is opened and everything staged into it.
    */
@@ -634,19 +645,101 @@ function endorsedUnder(signPublicKey: Uint8Array, statement: invite.JoinEndorsem
 }
 
 /**
- * Stage what this account rooted ({@link RootedStage}) into [stage]'s current stage. A stage the server no longer holds
- * (`404 rotation_stage_not_found`) is opened afresh with every self-grant, and both lists go up whole; a list that
- * changed under a chunk (`409 rotation_plan_changed`: an invite consumed, a record written, nothing of the chunk kept)
- * is read again and its delta staged — each bounded by {@link MAX_PUBLISH_ATTEMPTS}. [now] is a read the caller holds.
+ * The instance moderation key this account holds, carried to the NEW identity in the rotation's stage (ADR 0099 § 4).
+ * Every live epoch the server serves this account a grant of is opened with the OUTGOING identity (the vault's, until the
+ * publish), checked against the epoch's published bundle as the moderation surface checks it (§ 3), and its `M_n`
+ * re-sealed to the new identity (`moderation-grant` [epoch]); a grant that does not open, or whose key the published
+ * bundle disowns, is declared (`sealedGrant: null`) — it was already closed to this account, and the publish deletes it.
+ * An account that is no moderator holds nothing and stages nothing. Mirrors what the server's stage holds by the grant
+ * each epoch was judged from, so a re-read after `409 rotation_plan_changed` (an epoch delivered meanwhile) puts up only
+ * what moved; a stage the self-grants re-opened starts it over.
  */
-async function stageRooted(stage: SelfGrantStage, rooted: RootedStage, plan: RotationPlanScope[], now?: RootedPlan): Promise<void> {
+class ModerationKeyStage {
+  private stageId = ''
+  private readonly staged = new Map<number, string>()
+
+  constructor(
+    private readonly outgoing: v1.Identity['priv'],
+    private readonly next: v1.Identity,
+  ) {}
+
+  /** The live epochs this account holds a grant of, as the server serves them now — none for a non-moderator. */
+  async read(): Promise<ModerationEpochGrant[]> {
+    try {
+      const grants = await withRefresh(() => moderationApi().listMyModerationGrants())
+      return grants.epochs.filter((e) => !!e.sealedGrant)
+    } catch (e) {
+      if (await isCodedError(e, HttpStatus.forbidden, 'not_moderator')) return []
+      throw e
+    }
+  }
+
+  /** Whether [now] holds an epoch the stage [stageId] does not hold as judged — something to stage again. */
+  moved(stageId: string, now: ModerationEpochGrant[]): boolean {
+    if (stageId !== this.stageId) return now.length > 0
+    return now.some((e) => this.staged.get(e.epoch) !== e.sealedGrant)
+  }
+
+  /** Stage every epoch of [now] the stage [stageId] does not hold as judged, in chunks of {@link STAGE_CHUNK}. */
+  async put(stageId: string, now: ModerationEpochGrant[]): Promise<void> {
+    if (stageId !== this.stageId) {
+      this.stageId = stageId
+      this.staged.clear()
+    }
+    const todo = now.filter((e) => this.staged.get(e.epoch) !== e.sealedGrant)
+    for (let i = 0; i < todo.length; i += STAGE_CHUNK) {
+      const chunk = todo.slice(i, i + STAGE_CHUNK)
+      const grants = chunk.map((e) => this.resealOrDeclare(e))
+      await withRefresh(() =>
+        accountRotationApi().putRotationStageModerationGrants({ stageId, rotationStageModerationGrants: { grants } }),
+      )
+      for (const e of chunk) this.staged.set(e.epoch, e.sealedGrant!)
+    }
+  }
+
+  /** [e]'s `M_n`, opened with the outgoing identity and sealed to the new one — or declared. Never a throw: every byte
+   *  here is the server's. */
+  private resealOrDeclare(e: ModerationEpochGrant): StagedModerationGrant {
+    const context = { purpose: 'moderation-grant', epoch: e.epoch } as const
+    let m: Uint8Array
+    try {
+      m = v1.openAs(context, this.outgoing.kemSeed, fromB64std(e.sealedGrant!))
+    } catch {
+      return { epoch: e.epoch, sealedGrant: null }
+    }
+    try {
+      const published = { kem: fromB64std(e.kemPublicKey), sign: fromB64std(e.signPublicKey) }
+      if (!v1.moderationBundleEquals(v1.moderationBundle(m), published)) return { epoch: e.epoch, sealedGrant: null }
+      return { epoch: e.epoch, sealedGrant: b64std(v1.sealTo(context, this.next.pub.kem, m)) }
+    } catch {
+      return { epoch: e.epoch, sealedGrant: null }
+    } finally {
+      m.fill(0)
+    }
+  }
+}
+
+/**
+ * Stage what this account rooted ({@link RootedStage}) and the moderation key it holds ({@link ModerationKeyStage}) into
+ * [stage]'s current stage. A stage the server no longer holds (`404 rotation_stage_not_found`) is opened afresh with
+ * every self-grant, and every list goes up whole; a list that changed under a chunk (`409 rotation_plan_changed`: an
+ * invite consumed, a record written, an epoch gone, nothing of the chunk kept) is read again and its delta staged — each
+ * bounded by {@link MAX_PUBLISH_ATTEMPTS}. [now] and [heldNow] are reads the caller holds.
+ */
+async function stageRooted(
+  stage: SelfGrantStage, rooted: RootedStage, moderationKey: ModerationKeyStage, plan: RotationPlanScope[],
+  now?: RootedPlan, heldNow?: ModerationEpochGrant[],
+): Promise<void> {
   let read = now
+  let held = heldNow
   for (let attempt = 1; ; attempt++) {
     try {
-      return await rooted.put(stage.id, plan, read ?? (await rooted.read()))
+      await rooted.put(stage.id, plan, read ?? (await rooted.read()))
+      return await moderationKey.put(stage.id, held ?? (await moderationKey.read()))
     } catch (e) {
       const retry = attempt < MAX_PUBLISH_ATTEMPTS
       read = undefined
+      held = undefined
       if (retry && (await isCodedError(e, HttpStatus.notFound, 'rotation_stage_not_found'))) {
         await stage.stageAll(plan)
         continue

@@ -47,10 +47,11 @@ acceptanceCriteria:
   - id: server-owner-steps-are-proposals-on-the-admin-channel
     text: >-
       A moderator proposes a member's sign-in block or the tenant's suspension; only the Server Owner, on the admin
-      channel, lists the proposals and takes or declines them, and a moderator's session reaches none of it.
+      channel, lists the proposals and takes or declines them, and a moderator's session reaches none of it — nor
+      lifts such a step once it stands on the case (404 measure_not_found).
     coverage:
       backend:
-        integration: [ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly, AdminChannelGateSliceTest.everyRoleGatedMarkedOperationIsAnUnknownRouteOnThePublicPortAndAnswersOnTheAdminListener]
+        integration: [ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly, ServerOwnerStatementSliceTest.aModeratorCannotLiftTheServerOwnersStepOnTheirCase, AdminChannelGateSliceTest.everyRoleGatedMarkedOperationIsAnUnknownRouteOnThePublicPortAndAnswersOnTheAdminListener]
       web:
         unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
   - id: a-sign-in-block-ends-every-session

@@ -358,16 +358,20 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
    signatures verify under the outgoing key and declared otherwise (`putRotationStageInvites`; the server verifies the
    re-signed invite key and anchor grant under the stage's identity, `422 invite_resign_invalid`), and every join
    record it rooted, endorsed by the new identity when the record names it and its outgoing key (or an endorsement by that key),
-   declared otherwise (`putRotationStageJoinEndorsements`).
+   declared otherwise (`putRotationStageJoinEndorsements`). A holder of the instance moderation key also stages every live
+   epoch it holds: `M_n` opened with the outgoing identity, checked against the published bundle and re-sealed to the new
+   one, or declared (`putRotationStageModerationGrants`, ADR 0099 § 4).
 5. **Collect** this account's verifications that still count, per tenant it can open (`collectMyVerifications`).
 6. **One publish** (`POST /api/account/rotation`, one transaction): the server checks the stage and its digest, rebuilds
    the chain step and verifies both signatures, the Secret-Key proof under the stored proof key, possession of the new
    proof key and the old auth key's attestation of the new one. It then requires every grant-carrying membership to be
-   staged at its scope's **current** epoch or declared — and every open invite it signed and every join record it rooted
-   staged — else `409 rotation_plan_changed` and the client re-stages the delta. It writes the new identity, the identity private key under the new Master Key, the `PASSWORD` and `RECOVERY`
+   staged at its scope's **current** epoch or declared — and every open invite it signed, every join record it rooted and,
+   under the current moderation epoch's lock, every live moderation epoch it holds staged — else `409
+   rotation_plan_changed` and the client re-stages the delta. It writes the new identity, the identity private key under the new Master Key, the `PASSWORD` and `RECOVERY`
    wraps under the **new** Secret Key (every other wrap deleted), the new auth and proof keys, the pin store and device
    register re-sealed under the new Master Key, the self-grants, **one pending re-key row per re-granted scope**, the
-   chain step, the re-signed invites (a declared one ends) and the endorsements; and it clears the delivery declines that
+   chain step, the re-signed invites (a declared one ends), the endorsements and the re-sealed moderation grants in place
+   of the ones sealed to the old identity; and it clears the delivery declines that
    target the account, voids every open sign-in-address change (its proof was taken under the old proof key) and
    revokes its other sessions. The publish is one body, bounded by the contract's caps with the whole pin store inside
    it; `scripts/validate_rotation_shape.py` computes that bound from the contract and is red on an uncapped field or a

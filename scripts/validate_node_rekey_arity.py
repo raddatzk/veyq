@@ -80,6 +80,9 @@ EXCLUSIONS = {
     "ReportShareEntity.sealed_keys": "the keys a report hands over, under K_report: they keep opening what was reported "
                                      "(ADR 0109 point 8)",
     "ModerationGrantEntity.sealed_grant": "the moderation key sealed to a moderator",
+    "RotationStageModerationGrantEntity.sealed_grant": "the moderation key sealed to the identity a moderator's securing of "
+                                                       "the account will publish, staged until its publish applies it "
+                                                       "(ADR 0099 § 4)",
     "ModerationEventEntity.sealed_text": "a moderation note under the moderation epoch key",
     "ModerationObjectionEntity.sealed_objection": "under the moderation epoch key",
     "ModerationStatementEntity.sealed_facts": "under a statement's facts key",

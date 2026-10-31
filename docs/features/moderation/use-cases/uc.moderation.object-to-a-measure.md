@@ -102,7 +102,8 @@
   even while the link is blocked, only while the measure stands, and nothing while an authority's deferral holds the
   statement back. It reads the clear fields in the template's guest words: the measure (as the uploader, never as the
   link's creator; a blocked link is "a link to something you uploaded", true whether or not it is the link the guest
-  came through, inbox #821), the ground and the provision, the date the measure was taken, the scope, the courts. **Not the
+  came through, inbox #821), what led to it (the report that opened the case, else their own finding, inbox #820), the
+  ground and the provision, the date the measure was taken, the scope, the courts. **Not the
   facts**: they are sealed under a key wrapped to members' identity keys, and a guest identity has none, so the facts
   passage says the instance contact gives them on request; the objection goes to the instance contact too. Where the
   instance names no contact, both passages say so in sentences of their own rather than ask the guest to write to the

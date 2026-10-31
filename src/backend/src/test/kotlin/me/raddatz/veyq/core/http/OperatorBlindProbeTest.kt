@@ -386,6 +386,13 @@ class OperatorBlindProbeTest {
             "putRotationStageJoinEndorsements",
         )
         reason(
+            "securing the account keeps the moderation key its holder holds (ADR 0099 § 4): addresses the caller's own " +
+                "account and the instance-wide moderation epochs, no space. An epoch the caller holds no grant of — live " +
+                "or not — answers `409 rotation_plan_changed`, so nothing here is an existence oracle beyond what " +
+                "`listMyModerationGrants` already serves a moderator; RotationModerationKeySliceTest owns these answers.",
+            "putRotationStageModerationGrants",
+        )
+        reason(
             "person-addressed (ADR 0111 decision 7): names an account, not a space. Its gate is shared tenancy — a " +
                 "person who shares no tenant with the caller answers the unknown user's `404 not_found` (ADR 0042) — and " +
                 "a suspended tenant does not hide public keys a person's other tenants serve too; the key-chain read's " +

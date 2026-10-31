@@ -104,8 +104,8 @@ object StatementTemplate {
         "TENANT_OWNER" to Texts("an owner of the space", "Person, der der Bereich gehört"),
     )
     val BASIS: Map<String, Texts> = linkedMapOf(
-        "REPORT" to Texts("a report by someone who could see it", "eine Meldung von jemandem, der es sehen konnte"),
-        "ORDER" to Texts("an order of an authority", "eine Anordnung einer Behörde"),
+        "REPORT" to Texts("a report by someone who could see it", "einer Meldung von jemandem, der es sehen konnte"),
+        "ORDER" to Texts("an order of an authority", "einer Anordnung einer Behörde"),
         "OWN_FINDING" to Texts("their own finding", "eigener Feststellung"),
     )
     val GROUNDS: Map<String, Texts> = linkedMapOf(

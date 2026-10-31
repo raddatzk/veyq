@@ -1119,7 +1119,9 @@ paths:
       summary: Save the instance mail settings and send the test mail that carries the confirmation code.
       description: >
         Replaces the settings (the password excepted: omit it to keep the stored one; a supplied one is sealed under
-        the config-secret key with that key's fingerprint, never returned or logged). Every save asks again (ADR 0097
+        the config-secret key with that key's fingerprint, never returned or logged). A kept password only goes to
+        the server it was entered for: changing `host`, `port` or `tls` while one is stored needs it again
+        (`400 mail_password_required`). Every save asks again (ADR 0097
         decision 5): the confirmation is cleared, and with a host set, a test mail carrying a short one-time code goes
         to the caller's account address — the code is then typed into `POST /api/instance/mail-settings/confirmation`.
         One mail proves both that the settings work and that the address reaches its owner. `confirmation` says
@@ -1157,7 +1159,10 @@ paths:
                 confirmation: CODE_SENT
                 confirmedAt: null
         "400":
-          description: The request was malformed (invalid host, port, from or username), or a host was given without a from address. Nothing is stored.
+          description: >-
+            The request was malformed (invalid host, port, from or username), or a host was given without a from
+            address, or `host`, `port` or `tls` changed while a password is stored and none was supplied
+            (`mail_password_required`). Nothing is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -3394,7 +3399,8 @@ components:
       type: object
       description: >
         The instance mail settings to store. The password is write-only (sealed at rest, ADR 0050) — omit it to keep
-        the stored one; every other field is a full replace. A host needs a from address (the instance has no
+        the stored one, as long as `host`, `port` and `tls` stay as they are (otherwise `400 mail_password_required`);
+        every other field is a full replace. A host needs a from address (the instance has no
         address of its own to fall back on).
       required: [tls]
       properties:
@@ -3435,7 +3441,8 @@ components:
           type: [string, "null"]
           description: >
             WRITE-ONLY SMTP password; sealed at rest under the config-secret key with that key's fingerprint (ADR 0050),
-            never returned or logged. Omit (or null) to keep the stored one.
+            never returned or logged. Omit (or null) to keep the stored one — required again whenever `host`, `port` or
+            `tls` change.
           maxLength: 256
           example: example-password
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'

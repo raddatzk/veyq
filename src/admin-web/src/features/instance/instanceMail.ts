@@ -17,7 +17,9 @@ export function getInstanceMail(): Promise<InstanceMailSettings> {
  * Save the settings. Every save asks again: with a host set, the server mails a one-time code to the Server Owner's
  * address, and `confirmation` says whether it went out (`CODE_SENT`) or could not be delivered (`SEND_FAILED`). The
  * password is write-only — omit it to keep the stored one. Refusals: 400 `invalid_request` (a malformed field, or a
- * host without a from address), 503 `mail_secret_unavailable` (a password but no config-secret key to seal it).
+ * host without a from address), 400 `mail_password_required` (host, port or TLS changed and the stored password was
+ * omitted: it only goes to the server it was entered for), 503 `mail_secret_unavailable` (a password but no
+ * config-secret key to seal it).
  */
 export function updateInstanceMail(update: InstanceMailSettingsUpdate): Promise<InstanceMailSettings> {
   return instanceApi().updateInstanceMailSettings({ instanceMailSettingsUpdate: update })

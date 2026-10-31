@@ -109,7 +109,11 @@ epoch, and the account then mints each scope's next epoch itself; how is
 [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decisions 6 and 8–11. What this record chooses is that no retired private key is kept and no state after the publish
 can lose access: a lost answer, a closed tab, a failed next epoch or a space in another tenant leaves each space
-readable by the published identity, and the next device that unlocks finishes it (alternatives (j)–(l)).
+readable by the published identity, and the next device that unlocks finishes it (alternatives (j)–(l)). The same
+holds for the instance moderation key: a moderator's client re-seals every live epoch it holds to the new identity in
+the same stage, and the publish refuses a holder whose epochs are not all there, so securing the account never loses
+the key — a sole holder has nobody else to deliver it again
+([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4).
 
 The danger of a self-service re-grant is an attacker holding the old identity minting the new epoch for their **own**
 new key and excluding the legitimate owner. The key-chain step closes it: it is signed by the old identity **and** the

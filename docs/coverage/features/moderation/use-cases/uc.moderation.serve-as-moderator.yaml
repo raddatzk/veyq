@@ -63,15 +63,18 @@ acceptanceCriteria:
         unit: [src/views/ModerationView.test.ts]
   - id: identity-rotation-exposes-the-grants
     text: >-
-      A moderator's identity rotation deletes their grants and makes their delivery pending again.
+      A moderator's identity rotation replaces the grants their old identity opened: the epochs their own client
+      re-sealed to the new identity in the securing publish are written in their place (refused without every live
+      epoch they hold), an epoch they declared is deleted and its delivery pending again, and a rotation of the key is
+      due where they held the current epoch.
     coverage:
       backend:
-        integration: [ModerationSliceTest.anIdentityRotationDeletesTheGrantsAndMakesTheDeliveryPendingAgain]
-    gaps:
-      - surface: backend
-        reason: >-
-          The test calls the hook RotationHandler calls under the account lock; that the rotation endpoint reaches it
-          is the one call line in RotationHandler.rotate, read, not driven through a full key rotation.
+        integration:
+          - ModerationSliceTest.anIdentityRotationDeletesTheGrantsAndMakesTheDeliveryPendingAgain
+          - RotationModerationKeySliceTest.aSoleHolderSecuresTheirAccountAndStillHoldsAPreRotationEpochAndTheCurrentOne
+          - RotationModerationKeySliceTest.aDeclaredEpochIsDeletedAndTheReSealedOneKept
+      web:
+        unit: [src/features/account/rotation/rotateKeys.test.ts]
   - id: every-instance-event-is-logged-and-kept-to-its-date
     text: >-
       Every appointment, acceptance, delivery, removal, step-down and mint writes its instance event in the same

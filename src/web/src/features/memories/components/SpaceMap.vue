@@ -22,6 +22,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MapConsentPrompt from './MapConsentPrompt.vue'
 import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
+import { escapeHtml } from '../../../shared/markdown'
 
 // `covers` maps a node id → the node's chosen cover (a decrypted thumbnail URL + its crop, loaded by the host,
 // cr-0072); a pin with one shows that cropped cover via the shared `coverImageStyle` formula, the rest fall back to
@@ -225,7 +226,8 @@ function fitPins() {
 function initMap() {
   if (map || !el.value) return
   map = L.map(el.value).setView([20, 0], 2)
-  L.tileLayer(tileUrl.value, { attribution: tileAttribution.value, maxZoom: tileMaxZoom }).addTo(map)
+  // Leaflet writes the attribution as HTML; the Server Owner's text is shown as text, never as markup.
+  L.tileLayer(tileUrl.value, { attribution: escapeHtml(tileAttribution.value), maxZoom: tileMaxZoom }).addTo(map)
   map.on('zoomend moveend', renderClusters) // re-cluster + collapse when the projection changes
   map.on('click', collapse) // a tap on empty map closes an open fan (touch + desktop)
   fitPins()

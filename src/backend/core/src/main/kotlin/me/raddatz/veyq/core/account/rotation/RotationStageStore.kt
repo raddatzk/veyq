@@ -104,13 +104,30 @@ class RotationStageStore {
         RotationStageEndorsementEntity.find("stageId", stageId).list()
             .associate { (it.tenantId to it.userId) to StagedEndorsementRow(it.tenantId, it.userId, it.recordDigest, it.endorsement) }
 
+    /** Upsert [grants] — epoch to its re-sealed grant, or null (declared) — into [stageId] by epoch. */
+    fun upsertModerationGrants(stageId: String, grants: Map<Int, String?>) {
+        val existing = RotationStageModerationGrantEntity.find("stageId = ?1 and epoch in ?2", stageId, grants.keys)
+            .list().associateBy { it.epoch }
+        grants.forEach { (epoch, sealed) ->
+            (existing[epoch] ?: RotationStageModerationGrantEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.stageId = stageId
+                this.epoch = epoch
+            }).apply { sealedGrant = sealed }.persist()
+        }
+    }
+
+    /** The moderation-key epochs staged into [stageId]: epoch to its re-sealed grant, or null where it was declared. */
+    fun moderationGrants(stageId: String): Map<Int, String?> =
+        RotationStageModerationGrantEntity.find("stageId", stageId).list().associate { it.epoch to it.sealedGrant }
+
     /** The grants staged into [stageId], by scope. */
     fun grants(stageId: String): Map<String, StagedSelfGrantRow> =
         RotationStageGrantEntity.find("stageId", stageId).list()
             .associate { it.scopeId to StagedSelfGrantRow(it.scopeId, it.epoch, it.wrappedGrant, it.grantSignature) }
 
-    /** Delete [userId]'s stage and its grants, invites and endorsements (the database cascades them) — the publish's last step, and a re-open's
-     *  first. */
+    /** Delete [userId]'s stage and its grants, invites, endorsements and moderation-key epochs (the database cascades
+     *  them) — the publish's last step, and a re-open's first. */
     fun deleteFor(userId: String) {
         RotationStageEntity.delete("userId", userId)
     }

@@ -4,7 +4,10 @@ import me.raddatz.veyq.core.crypto.GrantSignature
 import me.raddatz.veyq.core.crypto.KeyChainStatements
 import me.raddatz.veyq.core.crypto.RotationStageDigest
 import me.raddatz.veyq.core.crypto.SecretKeyProof
+import me.raddatz.veyq.core.account.identitypins.toPinWrite
+import me.raddatz.veyq.core.generated.model.RotateAccountKeysRequest
 import me.raddatz.veyq.core.membership.TestGrants
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
@@ -101,6 +104,30 @@ data class Publish(
     """.trimIndent()
 }
 
+/** [this] publish as the handler takes it — the wire body read by the generated model, mapped as `AccountRotationResource`
+ *  maps it: what a race test hands `RotationHandler.rotateIn` to hold the publish uncommitted. */
+fun Publish.toRequest(mapper: ObjectMapper): RotationRequest {
+    val r = mapper.readValue(json(), RotateAccountKeysRequest::class.java)
+    return RotationRequest(
+        identityPublicKey = r.identityPublicKey,
+        wrappedIdentityPrivateKey = r.wrappedIdentityPrivateKey,
+        passwordWrap = RewrittenWrap(r.passwordWrap.wrappedKey, r.passwordWrap.kdfParams),
+        recoveryWrap = RewrittenWrap(r.recoveryWrap.wrappedKey, r.recoveryWrap.kdfParams),
+        secretKeyProofSignature = r.secretKeyProofSignature,
+        pins = r.identityPins.toPinWrite(),
+        register = ResealedDocument(r.deviceRegister.blob, r.deviceRegister.revision!!),
+        stepIdentitySignature = r.keyChainStep.identitySignature,
+        stepProofSignature = r.keyChainStep.proofSignature,
+        stageId = r.stageId.toString(),
+        stagedGrantsDigest = r.stagedGrantsDigest,
+        unreadableScopeIds = r.unreadableScopeIds.map { it.toString() }.toSet(),
+        authPublicKey = r.authPublicKey,
+        attestationSignature = r.attestationSignature,
+        secretKeyProofPublicKey = r.secretKeyProofPublicKey,
+        secretKeyProofPossession = r.secretKeyProofPossession,
+    )
+}
+
 /**
  * A rotation of [userId] from [current] to [next], driven through the real routes the way a client drives it
  * (cr-secure-the-account): read the plan, open a stage declaring [next]'s identity, stage a self-grant per scope signed
@@ -143,6 +170,15 @@ class TestRotation(
         given().header("Authorization", bearer()).contentType(ContentType.JSON)
             .body("""{"grants":[${grants.joinToString(",") { it.json() }}]}""")
             .`when`().put("/api/account/rotation/stage/$stageId/grants")
+
+    /** Stage the account's moderation-key epochs: each epoch's `M_n` re-sealed to [next]'s identity (opaque here), or
+     *  null — declared. */
+    fun stageModeration(stageId: String, grants: Map<Int, String?>): Response =
+        given().header("Authorization", bearer()).contentType(ContentType.JSON)
+            .body(
+                """{"grants":[${grants.entries.joinToString(",") { (e, g) -> """{"epoch":$e,"sealedGrant":${g?.let { "\"$it\"" } ?: "null"}}""" }}]}""",
+            )
+            .`when`().put("/api/account/rotation/stage/$stageId/moderation-grants")
 
     /** The account's chain head and newest index, read from the server. */
     fun head(): Pair<ByteArray, Int> {

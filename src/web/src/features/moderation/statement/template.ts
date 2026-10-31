@@ -54,8 +54,8 @@ export const TEMPLATE = {
   rolesJoiner: { en: ' and ', de: ' und ' },
   gap: { en: 'not stated by this operator', de: 'von der Betreiberseite nicht angegeben' },
   basis: {
-    REPORT: { en: 'a report by someone who could see it', de: 'eine Meldung von jemandem, der es sehen konnte' },
-    ORDER: { en: 'an order of an authority', de: 'eine Anordnung einer Behörde' },
+    REPORT: { en: 'a report by someone who could see it', de: 'einer Meldung von jemandem, der es sehen konnte' },
+    ORDER: { en: 'an order of an authority', de: 'einer Anordnung einer Behörde' },
     OWN_FINDING: { en: 'their own finding', de: 'eigener Feststellung' },
   },
   grounds: {

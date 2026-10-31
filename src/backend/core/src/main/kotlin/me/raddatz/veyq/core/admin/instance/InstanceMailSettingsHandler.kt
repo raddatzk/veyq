@@ -40,6 +40,10 @@ sealed interface InstanceMailUpdateOutcome {
 
     /** A password was supplied but no config-secret KEK can seal it (ADR 0050); refused rather than stored in the clear. */
     data object SealUnavailable : InstanceMailUpdateOutcome, HttpFailure by httpFailure("mail_secret_unavailable", FailureStatus.SERVICE_UNAVAILABLE)
+
+    /** host/port/tls changed while a password is stored and none was supplied: a kept password only goes to the server
+     *  it was entered for (the save's own test mail would log in to the new one at once). Nothing is stored. */
+    data object PasswordRequired : InstanceMailUpdateOutcome, HttpFailure by httpFailure("mail_password_required", FailureStatus.BAD_REQUEST)
 }
 
 sealed interface InstanceMailConfirmOutcome {
@@ -87,7 +91,8 @@ object InstanceMailConfirmation {
  * reads and writes its own row only, and nothing here is ever a tenant's default or fallback (ADR 0048 §4).
  *
  * The password is never stored, returned or logged in plaintext: a supplied one is sealed, an omitted one keeps the
- * stored ciphertext, a read exposes `passwordSet` only.
+ * stored ciphertext — while host, port and TLS stay as they are, so it never reaches a server it was not entered
+ * for — and a read exposes `passwordSet` only.
  */
 @ApplicationScoped
 class InstanceMailSettingsHandler(
@@ -115,6 +120,12 @@ class InstanceMailSettingsHandler(
 
         val existing = store.find()?.transport
         val supplied = password.blankToNull()
+        // Clearing the host sends nothing; a later host is a change from null, so it needs the password again anyway.
+        if (supplied == null && cleanHost != null && existing?.passwordSet == true &&
+            (existing.host != cleanHost || existing.port != port || existing.tls != tls)
+        ) {
+            return InstanceMailUpdateOutcome.PasswordRequired
+        }
         val sealed = if (supplied != null) {
             val current = keyState.currentFingerprint()
             if (!seal.configured || current == null) return InstanceMailUpdateOutcome.SealUnavailable

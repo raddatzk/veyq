@@ -38,8 +38,8 @@ const SESSION: DropGuestSession = { identityId: 'id-1', contributorToken: 'tok-1
 const TOLD: ShareGuestNotice = {
   removals: [],
   statements: [
-    { id: 'a1', measureKind: 'CONTENT', targetId: 'file-1', covers: [], ground: 'TERMS_BREACH', takenAt: new Date('2026-10-18T09:00:00Z') },
-    { id: 'a2', measureKind: 'CONTENT', targetId: 'file-2', covers: [], ground: 'ILLEGAL_CONTENT', takenAt: new Date('2026-10-17T09:00:00Z') },
+    { id: 'a1', measureKind: 'CONTENT', targetId: 'file-1', covers: [], ground: 'TERMS_BREACH', basis: 'REPORT', takenAt: new Date('2026-10-18T09:00:00Z') },
+    { id: 'a2', measureKind: 'CONTENT', targetId: 'file-2', covers: [], ground: 'ILLEGAL_CONTENT', basis: 'REPORT', takenAt: new Date('2026-10-17T09:00:00Z') },
   ],
   contactAddress: undefined,
 }

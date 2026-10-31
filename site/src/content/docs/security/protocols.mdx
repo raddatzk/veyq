@@ -794,7 +794,9 @@ members of each scope.
    otherwise), and every join record it rooted, which the new identity endorses (`join-endorsement` over the sealed
    record as stored) when the record verifies, names the account and names its outgoing key or carries an endorsement
    by it (declared otherwise). The server verifies each under the stage's identity (`422 invite_resign_invalid`,
-   `422 join_endorsement_invalid`).
+   `422 join_endorsement_invalid`). A holder of the instance moderation key also stages every live epoch it holds: the
+   key opened with the old identity, checked against the published bundle and sealed to the new one (declared when it
+   does not open or the bundle disowns it).
 5. **Publish, one transaction.** The request carries the new identity and its wrapped private key, both wraps, the
    re-sealed pin store and device register, the step's two signatures, the stage's id and the digest of the staged
    grants, the unreadable scopes, the new auth key with the old auth key's signature over it, the new proof public key,
@@ -804,10 +806,12 @@ members of each scope.
    identity and proof key with the stored head as its predecessor, both proof signatures and the auth signature. Then,
    locking each scope in ascending order, it requires every membership that carries a grant to be staged at its
    current epoch or declared unreadable, every open invite the account signed to be staged at its current anchor
-   epoch, and every join record it rooted to be staged against the record stored now (`409 rotation_plan_changed`
-   otherwise — an accept between stage and publish included; the client re-stages only what moved and retries). It
+   epoch, every join record it rooted to be staged against the record stored now, and, under the current moderation
+   epoch's lock, every live moderation epoch it holds to be staged (`409 rotation_plan_changed` otherwise — an accept or
+   a delivery between stage and publish included; the client re-stages only what moved and retries). It
    writes the account, appends the step, applies each staged self-grant with a *waiting* row, writes the re-signed
-   invites under the new key (a declared one ends) and the endorsements, deletes
+   invites under the new key (a declared one ends), the endorsements and the re-sealed moderation grants in place of
+   those sealed to the old identity, deletes
    the stage and every wrap but the two cold ones, voids every open change of the sign-in address, clears the
    grant-delivery declines aimed at the account, and revokes every other session. A refused publish writes nothing.
 6. **Next epochs, from any device.** Every device of the account, one signed in with the new kit included, first

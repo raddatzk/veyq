@@ -1394,6 +1394,7 @@ const en = {
     saveFailed: 'Couldn’t save the email settings.',
     invalidTemplate: 'Your template uses a placeholder that isn’t allowed. Only {vars} can be used.',
     kekUnavailable: 'This server’s config-secret key is not available, so the password can’t be saved. Whoever runs this server has to make it available first.',
+    passwordRequired: 'You changed the server, port or encryption setting. Enter the SMTP password again — a saved password is only ever sent to the server it was entered for.',
     keyMismatch: 'The server’s config-secret key has changed, so your saved SMTP password can’t be opened any more. Enter the password again below to save it under the new key, or ask whoever runs this server to put the original key file back. Until then, no invitations or password-reset emails can be sent.',
   },
   tenantCapabilities: {
@@ -3400,6 +3401,7 @@ const de: typeof en = {
     saveFailed: 'E-Mail-Einstellungen konnten nicht gespeichert werden.',
     invalidTemplate: 'Deine Vorlage nutzt einen nicht erlaubten Platzhalter. Nur {vars} sind möglich.',
     kekUnavailable: 'Der Konfigurationsschlüssel dieses Servers ist nicht verfügbar, daher lässt sich das Passwort nicht speichern. Wer diesen Server betreibt, muss ihn zuerst verfügbar machen.',
+    passwordRequired: 'Du hast Server, Port oder Verschlüsselung geändert. Gib das SMTP-Passwort noch einmal ein — ein gespeichertes Passwort wird nur an den Server geschickt, für den es eingegeben wurde.',
     keyMismatch: 'Der Konfigurationsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr öffnen. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder bitte die Person, die diesen Server betreibt, die ursprüngliche Schlüsseldatei zurückzulegen. Bis dahin lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
   },
   tenantCapabilities: {

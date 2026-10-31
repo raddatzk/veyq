@@ -23,7 +23,7 @@ const RECEIVED = new Date('2026-10-18T07:12:00Z')
 const stubs = { Message: { template: '<div class="msg"><slot /></div>' } }
 const STATEMENT = {
   id: '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e', measureKind: 'CONTENT' as const, targetId: 'node-1', covers: [],
-  ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', takenAt: new Date('2026-10-17T12:00:00Z'),
+  ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', basis: 'REPORT' as const, takenAt: new Date('2026-10-17T12:00:00Z'),
 }
 
 beforeEach(() => {

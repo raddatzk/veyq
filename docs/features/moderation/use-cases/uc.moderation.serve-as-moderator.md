@@ -57,8 +57,10 @@
 - **A7 — A stolen session.** Without the moderation key every key-proved operation is refused; with a removed
   moderator's session there is no role at all.
 - **A8 — The moderator rotates their identity** ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)).
-  The grants their old identity opened are treated as exposed and deleted; a holder delivers the live epochs again at
-  the new identity, and the Server Owner is told rotation is due.
+  The grants their old identity opened are treated as exposed and replaced: their own client re-seals every live epoch
+  it holds to the new identity inside the securing publish, which the server refuses without them (ADR 0099 § 4), so
+  they keep the key — a sole holder included. An epoch their device cannot open is declared and goes; a holder delivers
+  it again at the new identity. The Server Owner is told rotation is due.
 
 ## Quality notes
 

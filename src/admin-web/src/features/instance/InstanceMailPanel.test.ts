@@ -89,6 +89,17 @@ describe('InstanceMailPanel (uc.admin.learn-of-new-releases, admin-web)', () => 
     expect(w.find('.mail-code').exists()).toBe(false) // nothing left to enter
   })
 
+  it('asks for the password again when a changed server is refused (400 mail_password_required)', async () => {
+    vi.mocked(getInstanceMail).mockResolvedValue({ ...configured, confirmation: 'CONFIRMED', confirmedAt: new Date() })
+    vi.mocked(updateInstanceMail).mockRejectedValue(httpError(400, 'mail_password_required'))
+    const w = await mountPanel()
+    await w.find('.mail-host').setValue('smtp2.example.com')
+    await w.find('.mail-save').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain(i18n.global.t('instanceMail.passwordRequired'))
+    expect(w.text()).not.toContain(i18n.global.t('instanceMail.invalid'))
+  })
+
   it('refuses a wrong code in words and keeps the entry open', async () => {
     vi.mocked(getInstanceMail).mockResolvedValue({ ...configured, confirmation: 'CODE_SENT' })
     vi.mocked(confirmInstanceMail).mockRejectedValue(httpError(409, 'mail_code_invalid'))

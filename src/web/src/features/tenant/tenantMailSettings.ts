@@ -17,7 +17,8 @@ export function getTenantMailSettings(tenantId: string): Promise<TenantMailSetti
 /** Owner-only: set/replace the tenant's mail settings. The password is write-only — the caller **omits** it (leaves
  *  it out of `update`) to keep the stored one; a supplied one is sealed at rest (ADR 0050). A template referencing a
  *  `{{tag}}` outside `{{link}}`/`{{domain}}`/`{{expiry}}` is rejected 400 `invalid_mail_template`; a supplied password
- *  with no server KEK is 503 `mail_secret_unavailable`. */
+ *  with no server KEK is 503 `mail_secret_unavailable`; a changed host, port or TLS with the password omitted while
+ *  one is stored is 400 `mail_password_required` (a kept password only goes to the server it was entered for). */
 export function updateTenantMailSettings(
   tenantId: string,
   update: TenantMailSettingsUpdate,

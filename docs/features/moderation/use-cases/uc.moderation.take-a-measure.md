@@ -48,7 +48,8 @@
 6. Each step takes an optional note sealed to the moderation key. A moderator's step (2–4) also takes its **statement
    of reasons** — the ground, the provision or clause it relies on, and the facts sealed to the moderation key and, once,
    for the affected members, under a key wrapped to each one's identity key —
-   sent with it ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) steps 1–6); a reporter who
+   sent with it, its basis the report that opened the case, else their own finding — a case an authority's order
+   opened included, which the statement never names (ADR 0093 § 7, inbox #820) ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) steps 1–6); a reporter who
    left a contact is told the decision. The case is *decided*, and its hold now ends six months after the statement is
    sent (from the decision where nobody can be told).
 7. **Lift.** Any moderator lifts a measure of a case; the Server Owner lifts a sign-in block. A lift records when it was
