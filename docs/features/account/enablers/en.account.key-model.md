@@ -31,7 +31,7 @@
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
 > companion: [docs site: Your Emergency Kit](../../../../site/src/content/docs/getting-started/emergency-kit.mdx). Built as
-> stated, except the passkey method and the idle-timeout re-lock, each marked **not built** where it appears.
+> stated, except the passkey method, marked **not built** where it appears.
 
 ## Principle: one Master Key, many wraps
 
@@ -186,9 +186,8 @@ for remembering devices is off, the server withholds the `DEVICE` / `DEVICE_KEY`
 without deleting them ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
 decision 5).
 
-**Re-lock, as built:** the vault closes when the session ends ([§ Session ending](#session-ending)), and the session
-tier dies with the browser session. The **idle-timeout re-lock** ADR 0005 §6 decides is **not built**: nothing
-locks an open, idle tab.
+**Re-lock:** the vault closes when the session ends ([§ Session ending](#session-ending)), and the session tier
+dies with the browser session. Nothing locks an open, idle tab: ADR 0005 §6 dropped an idle timeout (inbox #808).
 
 ## Device linking
 

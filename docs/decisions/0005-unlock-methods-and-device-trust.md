@@ -1,7 +1,7 @@
 # ADR 0005 — Account unlock: one Master Key, many wraps; device trust, re-lock & method precedence
 
 - Status: Accepted
-- Built: partly (not built: § 1's PASSKEY wrap, § 6's idle-timeout re-lock)
+- Built: partly (not built: § 1's PASSKEY wrap)
 - Date: 2026-06-25
 - Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 - Replaced in part: § 16 by ADR 0059 (built)
@@ -52,12 +52,13 @@ Key, ideally passwordless on trusted devices); **reload ≠ session end**.
    keeps the password as a real factor. This is stated so the guarantee is never overclaimed — the wrap is as
    strong as the browser's key store and the password, and the key store is a software promise.
 
-6. **Re-lock policy — two triggers, no periodic expiry.** The unlocked Master Key is held in the page's
+6. **Re-lock policy — the session end, no timer.** The unlocked Master Key is held in the page's
    memory only, never persisted, and is gone on a reload; a reload re-opens it from the device's own tier
    without a prompt (§22: the session vault when "remember me" is off, the `DEVICE_KEY` wrap when it is on), so
-   **reload ≠ session end**. Re-lock on
-   **(a) idle timeout** — decided, **not built** — and **(b) session end** (sign-out, browser close; ADR 0070).
-   (Periodic trusted-device expiry was considered and **dropped**.)
+   **reload ≠ session end**. It re-locks on **session end** (sign-out, browser close; ADR 0070). Periodic
+   trusted-device expiry was considered and **dropped**. An **idle-timeout re-lock** was dropped too: on the "on"
+   tier the `DEVICE_KEY` wrap re-opens the vault without a prompt, so a timer binds only with a prompt of its own,
+   which is a further unlock level, not a timeout ([inbox #808](../inbox.md)).
 
 7. **Method choice is client-side; the server never picks.** The client offers the wraps it can open
    **locally** — at most one convenience wrap per device (§9) and the floor — and the **password + Secret Key
