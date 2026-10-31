@@ -136,11 +136,11 @@ keeps inside a major reaches the operators who have not left the previous major 
   release, cut before any fix release — is proved once. `upgrade_proof_selftest.py` holds the derivation on a
   fabricated history with a `release/1.x` branch. Like the whole upgrade proof, the second run is disabled until the
   first release, and no CI run has executed either.
-- **Not built.** Each is open work tracked in the inbox (#436):
-  - **lane L3's archive holding the major entry** (ADR 0096): the previous major's last release archived, so that a
-    backup of it restores into the new major. L3 has no lane yet (ADR 0091 decision 6). Needed before the first branch
-    release, so not before the first train;
-  - no CI job runs a client against older server majors. None can be needed before a native client exists.
+- **Not built.** Each is open work tracked in the inbox:
+  - **lane L3's archive holding the major entry** (ADR 0096, inbox #461): the major entry's backup archived, so that it
+    restores into the new major. L3 has no lane yet (ADR 0091 decision 6), and its archive needs the first release.
+    Needed before the first branch release, so not before the first train;
+  - no CI job runs a client against older server majors (#436). None can be needed before a native client exists.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
   adapter, and at V1 `VERSION` and the advertised major both become `1`. Until then the advertised major is `0`,
   not floored to `1`: a floor would be a second rule, the two counters this decision removes.

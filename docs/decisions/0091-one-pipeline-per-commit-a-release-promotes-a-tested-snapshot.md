@@ -52,7 +52,7 @@ Three structural costs sat on top of what a run took:
    | **Mutation** (ADR 0045) | assertion strength of the scoped files | 30 min per gate, path-gated |
 
    The jobs that are no stage carry a budget too, so that no job runs on GitHub's 360-minute default: reading the
-   version 5 min; the dispatch publish 15; the jar-level upgrade proof 15, the API end-to-end run's; a path-filter job
+   version 5 min; the dispatch publish 15; the jar-level upgrade proof 15 per leg, the API end-to-end run's (one leg per predecessor, the default and the major entry, so the second proof of ADR 0085 decision 10 adds a leg, not minutes to one); a path-filter job
    5; CodeQL's analysis 30; the site's check 10 and its deploy 5. A value no run has measured is an estimate until the
    first CI run replaces it. `scripts/validate_pipeline_shape.py` holds that every job of every workflow has a budget;
    this table is where the values live, and the one stage map
@@ -123,9 +123,11 @@ Three structural costs sat on top of what a run took:
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact
    beside its images. L3 restores every archived backup of the current major — within a major,
-   everything older must open ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)) — and the previous major's
-   last release, the only one [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §5 enters a new
-   major from. Before the first release the
+   everything older must open ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)) — and the candidate's **major
+   entry**, the only release [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §5 enters a new
+   major from: the newest release of the previous major among every tag, a `release/<old>.x` fix included, which
+   `run_web_e2e.major_entry_ref()` derives and the manifest names as `majorEntry` (ADR 0085 decision 10) — not the
+   previous major's last release on `main`, which a later fix release no longer is. Before the first release the
    archive is empty, L2 upgrades from the previous snapshot, and both inform and gate nothing, as ADR 0057 §7 says
    for the upgrade proof today.
 

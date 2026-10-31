@@ -204,7 +204,7 @@ check is logged and retried with a back-off, and blocks nothing.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
-- **Lane L3 holding the major entry** (ADR 0085 decision 10, ADR 0096): the previous major's last release in L3's
+- **Lane L3 holding the major entry** (ADR 0085 decision 10, ADR 0096, inbox #461): the major entry's backup in L3's
   archive. What moves the entry is built — a `release/<old>.x` publish, and every release of the current major proved
   from the newest release of the previous major among every tag, a branch's included, baking it for its gate (ADR
   0098 decision 3) and naming it as its manifest's `majorEntry`, which `veyqctl` routes by (ADR 0096 decision 5;

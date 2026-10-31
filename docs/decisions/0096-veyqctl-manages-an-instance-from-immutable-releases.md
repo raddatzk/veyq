@@ -93,8 +93,9 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
   `--unsigned-local`, refused unless both images are local references. Lanes L2 and L3 are `veyqctl upgrade` and
   `veyqctl restore`.
 - **Each Run page keeps what the tool runs**, so an operator can do any step by hand.
-- **The L3 archive holds the previous major's last release too** — the one release a new major is entered from;
-  within a major, every archived backup still opens.
+- **The L3 archive holds the major entry too** — the one release a new major is entered from, the newest release of the
+  previous major when the candidate is cut (decision 5, `majorEntry`); within a major, every archived backup still
+  opens.
 - **Immutable releases are a repository setting** the owner switches on once the repository has its remote; until
   then nothing is published and nothing here can run against GitHub.
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and still

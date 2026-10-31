@@ -257,7 +257,7 @@ included, beside its default predecessor, its tools image bakes that release as 
 major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters the new major from
 (`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
 `release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). Until that release exists, an instance on
-the fix release cannot enter the new major. Not built is lane L3's archive holding that release (ADR 0096).
+the fix release cannot enter the new major. Not built is lane L3's archive holding that release (ADR 0096, inbox #461).
 
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
 held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
