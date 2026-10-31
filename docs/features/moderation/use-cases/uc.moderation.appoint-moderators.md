@@ -45,8 +45,8 @@
 - **A3 — A mint that leaves someone out.** An accepted moderator who appeared between admin-web's roster read and the
   mint, or a grant dropped by mistake: the server refuses with `moderation_grants_incomplete`, nothing is stored, and
   admin-web shows the refusal and reads the roster again.
-- **A4 — Removing the last holder.** Refused (`moderation_last_holder`) while it would leave no accepted moderator
-  holding the current epoch: the key would be lost with them (ADR 0099 § 5).
+- **A4 — Removing the last holder.** Refused (`moderation_last_holder`) while it would leave a live epoch no accepted
+  moderator holds: the key, or that part of it, would be lost with them (ADR 0099 § 5).
 - **A5 — A moderator steps down, or rotates their identity.** Their grants are gone at once, but reports keep sealing
   to the current epoch, which they held, until the Server Owner rotates (owner decision Q3 (a), 2026-10-17). The panel
   and one instance mail to the Server Owner say **rotation due** ([ADR 0097](../../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
