@@ -92,7 +92,7 @@ class ErasureReapplication(
         var reblocked = 0
         var relifted = 0
         lines.filter { it.kind == ErasureKind.BLOCK.name || it.kind == ErasureKind.LIFT.name }
-            .associateBy { "${it["item"]}:${it["target"]}" }.values
+            .associateBy(::measureKey).values
             .forEach { last ->
                 if (last.kind == ErasureKind.BLOCK.name) { if (tx { reblock(last) }) reblocked++ } else { if (tx { relift(last) }) relifted++ }
             }
@@ -108,7 +108,7 @@ class ErasureReapplication(
                     ErasureKind.SHARE -> tx { sharing.delete(line.id) }
                     ErasureKind.STORAGE_KEY -> { erasedKeys += line.id; false }
                     ErasureKind.HOLD_ENDED -> tx { reendHold(line) }
-                    // Applied above, last line per item or case.
+                    // Applied above, last line per measure (an uploader's per space) or case.
                     ErasureKind.BLOCK, ErasureKind.LIFT, ErasureKind.CASE -> false
                 }
             } else {
@@ -203,6 +203,13 @@ class ErasureReapplication(
             expiresAt = if (open) null else retainUntil ?: ModerationLog.retentionEnd(now)
         }.persist()
         return true
+    }
+
+    /** The measure a block or lift line is about, as [ModerationBlockEntity.activeKeyOf] keys it: an uploader's block is
+     *  one per space, so a line in one space must never stand in for another space's last line. */
+    private fun measureKey(line: LedgerLine): String {
+        val kind = line["item"]?.let { k -> BlockKind.entries.firstOrNull { it.name == k } }
+        return if (kind != null) ModerationBlockEntity.activeKeyOf(kind, line["target"].orEmpty(), line["scope"]) else "${line["item"]}:${line["target"]}"
     }
 
     /** The item's last line is a block, and the database does not block it: block it again, on the case if it is there. */
