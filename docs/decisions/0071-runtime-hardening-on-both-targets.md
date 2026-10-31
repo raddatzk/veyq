@@ -8,12 +8,12 @@
 ## Context
 
 [ADR 0064](0064-kubernetes-helm-deployment-target.md) made every chart pod pass the `restricted` Pod Security
-Standard. The compose recipe never followed: no service sets `user:`, `cap_drop`, `no-new-privileges` or
-`read_only`, and Garage runs as uid 0 under compose but as 1000 in the chart. **Reachability** is open on both
-targets. Every compose service shares one network, so the internet-facing proxy can open a connection to the
-database. The chart has no NetworkPolicy, so any pod in the cluster can reach the app directly. The per-IP
+Standard. The compose recipe had not followed: no service set `user:`, `cap_drop`, `no-new-privileges` or
+`read_only`, and Garage ran as uid 0 under compose but as 1000 in the chart. **Reachability** was open on both
+targets. Every compose service shared one network, so the internet-facing proxy could open a connection to the
+database. The chart had no NetworkPolicy, so any pod in the cluster could reach the app directly. The per-IP
 rate limiter keys on a client address taken from `X-Forwarded-For`, so such a pod, which writes the whole header,
-can also forge it ([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md),
+could also forge it ([cc.security.rate-limit](../crosscutting/cc.security.rate-limit.md),
 [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 6). The proxy's own Docker socket, the
 worst of it, is answered by [ADR 0063](0063-database-driven-tenant-ingress.md): Traefik runs the file provider
 only.
@@ -53,10 +53,7 @@ Forces:
    (`depends_on: … service_completed_successfully`) and holds only `CAP_CHOWN`. It changes a volume root only
    when that root is not already owned by the target uid: a no-op after the first run, and it never walks a
    store's data tree. Its image is a digest-pinned `busybox`, which carries the three tools the step runs and
-   nothing else. Reusing an image the recipe already pins (Traefik's, which has a shell) would add no
-   supply-chain input, and was the first form. It was rejected because a service named for ownership that runs
-   the proxy's image reads as part of the proxy. One more pinned image, kept current like the rest, is the
-   cheaper cost.
+   nothing else.
 3. **Reachability is default-deny on both targets, then exactly the paths the stack uses.**
    - **Compose: separate networks.** The proxy shares one with the app and the store; the database shares one
      with the app alone; the admin container shares one with the app and the proxy, which routes to it when
@@ -105,9 +102,12 @@ Forces:
   container that shares a network with the app. [ADR 0065](0065-admin-ui-cli-separate-service.md) residual
   (i) names that and why it costs nothing. Only the Helm policy separates the two ports.
 - **Commands that join a stack network name a network.** A backup capture that reaches the store joins the
-  network the store is on, so the backup runbook changes with the network names.
+  network the store is on, so the backup tool reads that network from the recipe rather than assume one.
 - **Rejected — Garage and Traefik at uid 0 with only capabilities dropped.** It avoids the init step, but it
   gives up parity with the chart and leaves the internet-facing process root inside its container.
+- **Rejected — the init step on an image the recipe already pins** (Traefik's, which has a shell). It would add no
+  supply-chain input, but a service named for ownership that runs the proxy's image reads as part of the proxy. One
+  more pinned image, kept current like the rest, is the cheaper cost.
 - **Rejected — a derived image per third-party service,** to bake the ownership in. The recipe builds nothing
   ([ADR 0057](0057-release-identity-and-deployment-recipe.md),
   [ADR 0067](0067-store-provisioning-from-a-declared-type.md)).

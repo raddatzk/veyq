@@ -29,9 +29,11 @@ host, and its own Helm chart drops it for that reason, losing updates and backup
 Owner does *inside* a running instance through the Admin API — [admin-web](0065-admin-ui-cli-separate-service.md) and
 its CLI. Management is the instance's lifecycle *on the host*: install, start and stop, upgrade, backup and restore,
 rollback, verify, self-update. The two never merge: `veyqctl` holds no Admin API credential, and admin-web gains no
-host access. The commands are the Run area's (and `veyqctl`'s own docstring); `rollback` returns in place to the
-release a capture was taken under, the Compose form of [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
-decision 9's rollback.
+host access. The commands are the Run area's (and `veyqctl`'s own docstring). `rollback` returns **in place** to the
+release a capture was taken under: it empties the database, starts that release once and restores with the object
+check only, so the objects never leave the store — enough because a capture holds no object and an upgrade rewrites
+none ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §7). It is the Compose form of
+[ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9's rollback.
 
 **2. Python, standard library only, one file.** The repository's rule for scripts, and the host already needs
 `python3` for backups. One file because the operator fetches it with `curl`: no `pip`, no virtualenv.
@@ -50,15 +52,13 @@ nothing), a major (its newest release), or `latest` (the newest, crossing majors
 
 **5. `upgrade` runs only by hand.** No timer, no unattended mode: an upgrade replaces the web client that holds the
 keys, so it stays a deliberate act. In order, and nothing is stopped before step 4:
-1. resolve the release `VEYQ_RELEASE` selects; stop if it is the running one. **A major is entered only from the
-   release its upgrade was proved from:** the release of the next major this run goes to (the selected one, or that
-   major's newest when the selection lies beyond it) names its entry as `majorEntry` in its signed manifest — the
-   newest release of the previous major when it was cut, a `release/<major>.x` fix included, the one its upgrade proof
-   ran from and its tools image bakes ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 10). Running
-   that entry, this run enters the next major; running an older release, it upgrades to the entry first and says that
-   the next `upgrade` enters the next major; running a later one (a fix release cut after that release), it refuses,
-   since no path from it was proved and a later release of the next major is entered from it — and no run crosses
-   more than one major. That entry is the path the lanes test
+1. resolve the release `VEYQ_RELEASE` selects; stop if it is the running one. **A major is entered only from its
+   major entry** ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 10), which the release of the next
+   major this run goes to (the selected one, or that major's newest when the selection lies beyond it) names in its
+   signed manifest (decision 3). Running that entry, this run enters the next major; running an older release, it
+   upgrades to the entry first and says that the next `upgrade` enters the next major; running a later one (a fix
+   release cut after that release), it refuses, since no path from it was proved and a later release of the next
+   major is entered from it — and no run crosses more than one major. That entry is the path the lanes test
    ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6). Not the running
    major's newest release: a fix release published after the next major's release is one nobody proved it from;
 2. verify the manifest's signature, then both images' signatures by the manifest's digests, then download its assets
@@ -87,16 +87,13 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
 
 ## Consequences
 
-- **The operator's path is the tested path.** Lane L1 installs the candidate with `veyqctl install` from its own
-  release assets, served as a local source; a local, unsigned candidate passes the signature check only with
-  `--unsigned-local`, refused unless both images are local references. Lanes L2 and L3 are `veyqctl upgrade` and
-  `veyqctl restore`.
+- **The operator's path is the tested path.** The stack lanes drive `veyqctl` against the candidate's own release
+  assets served as a local source ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+  decision 3). A local, unsigned candidate passes the signature check only by an explicit flag, refused unless both
+  images are local references, so the way past the signatures cannot be pointed at a registry.
 - **Each Run page keeps what the tool runs**, so an operator can do any step by hand.
-- **The L3 archive holds the major entry too** — the one release a new major is entered from, the newest release of the
-  previous major when the candidate is cut (decision 5, `majorEntry`); within a major, every archived backup still
-  opens.
-- **Immutable releases are a repository setting** the owner switches on once the repository has its remote; until
-  then nothing is published and nothing here can run against GitHub.
+- **The backup archive must hold the major entry**, since decision 5 enters a new major from it alone; which backups
+  lane L3 restores is ADR 0091 decision 6's.
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and still
   leaves the operator needing the repository for backups.
 - **Rejected — fetch the recipe at the commit the image names (`VEYQ_REVISION`).** Binds recipe to image without a
@@ -109,8 +106,8 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
   order whatever the starting release, and L3 restores every archived backup of the major into the candidate, so a
   skip is a tested path; stepping would only multiply downloads, backups and restarts.
 - **Rejected — any release straight into a newer major.** One run fewer, but no lane covers the data path from an
-  arbitrary older release across a major's removals; entering through the previous major's last release costs one
-  upgrade and keeps every path tested.
+  arbitrary older release across a major's removals; entering through the major entry costs one upgrade
+  and keeps every path tested.
 - **Rejected — unattended upgrades.** Convenient, and they roll a compromised publish out with nobody looking.
 - **Rejected — Bash.** Asked for first; the upgrade logic (signatures, template check, backup) is not thin glue, and
   the backup tool is already Python.

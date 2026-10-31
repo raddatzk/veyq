@@ -45,7 +45,8 @@ KEK access. The backend answers that API only through it (the *admin channel*, b
   `@veyq/crypto` (`src/packages/crypto/`): the `v1` suite, the account birth and the Emergency Kit codec — the one place
   duplication would be a security defect rather than a maintenance nuisance. Nothing else is shared on purpose: the
   workspace exists for that one module, not for general code-sharing.
-  - **What moves**: the Server-Owner-only administration — tenant CRUD and release info — **and** first-run setup.
+  - **What moves**: every operation whose backend gate is the Server-Owner gate, by the rule below, **and** first-run
+    setup.
   - **What stays in `src/web/`**: the tenant-invite **accept** side (an anonymous invitee), the terms **accept** side
     (any member), and **per-tenant mail settings and terms authoring**: the backend gates both with
     `403 not_tenant_owner`, not the Server-Owner gate, and a tenant owner is an ordinary user who accepted an invite;
@@ -59,13 +60,13 @@ KEK access. The backend answers that API only through it (the *admin channel*, b
     public listener, so the moderation surface stays in `src/web/`, while the roster and the moderation key's minting
     and rotation are Server-Owner operations and live here.
   - **`src/web/` carries no "is this caller a Server Owner" probe**: under the admin channel it could only ever 404.
-  It reverse-proxies `/api/*` to the backend's **admin listener** from **its own origin** — nginx serving the built
-  assets, the backend's address templated in at container start — so the session stays same-origin wherever the
-  container is reached from, avoiding the cross-origin refresh-cookie cost. Authentication is the existing Server-Owner
-  session; setup is the one Admin API call that needs none. **It carries its own minimal sign-in** (the same
-  challenge/verify endpoints and key derivation from the shared package) and deliberately none of `src/web/`'s
-  passkeys, remembered devices, session vault or recovery: it has no vault to unlock, and each would be another place
-  touching key material.
+  - **admin-web reverse-proxies `/api/*`** to the backend's **admin listener** from **its own origin** — nginx serving
+    the built assets, the backend's address templated in at container start — so the session stays same-origin
+    wherever the container is reached from, avoiding the cross-origin refresh-cookie cost. Authentication is the
+    existing Server-Owner session; setup is the one Admin API call that needs none. **It carries its own minimal
+    sign-in** (the same challenge/verify endpoints and key derivation from the shared package) and deliberately none
+    of `src/web/`'s passkeys, remembered devices, session vault or recovery: it has no vault to unlock, and each would
+    be another place touching key material.
 - **CLI — Node.js, in the same image.** It is also an HTTP client of the Admin API and imports the **same generated
   client** the UI uses — "no duplicated business logic" means the same code, not merely the same wire contract — which
   is why it departs from the repository's Python convention: it is a shipped product feature, not dev tooling. A
@@ -94,11 +95,11 @@ KEK access. The backend answers that API only through it (the *admin channel*, b
 - **The backend answers the Server-Owner surface only on the admin channel** — held where every deployment has it in
   common rather than at an edge a self-hoster may replace. The behaviour, its failure modes and its acceptance criteria
   are [uc.admin.admin-channel](../features/admin/use-cases/uc.admin.admin-channel.md)'s; what is decided here:
-  - **The channel is a second backend listener, read from the socket.** One more Vert.x HTTP server (default port
-    `8090`) whose handler is Quarkus' own root handler, so it runs the identical pipeline — forwarding, security,
-    JAX-RS. A request is on the admin channel **iff** it arrived on that listener **and** its socket peer is not
-    globally routable, read from the connection's local and remote socket addresses, never from a header or the
-    forwarding-rewritten address. The peer rule is a belt for topologies the shipped targets do not use.
+  - **The channel is a second backend listener, read from the socket.** One more Vert.x HTTP server whose handler is
+    Quarkus' own root handler, so it runs the identical pipeline — forwarding, security, JAX-RS. A request is on the
+    admin channel **iff** it arrived on that listener **and** its socket peer is not globally routable, read from the
+    connection's local and remote socket addresses, never from a header or the forwarding-rewritten address. The peer
+    rule is a belt for topologies the shipped targets do not use.
   - **Which operations: every operation whose backend gate is the Server-Owner gate, plus `createServerOwner`**, the one
     this decision exists for. `getSetupStatus` and sign-in stay on both channels.
   - **Declared per operation in `contracts/` (`x-veyq-channel: admin`), derived — never listed — by the backend, and

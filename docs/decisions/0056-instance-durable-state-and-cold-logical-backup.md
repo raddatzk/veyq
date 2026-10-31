@@ -23,24 +23,19 @@ Four properties of the built system constrain the answer.
 
 **1. There are three durable locations, and the third is a file on the app's filesystem.** The database and the
 object store are the two anyone names. The third is the config-secret key: [ADR 0050](0050-operator-config-secret-encryption.md)
-makes the server generate and manage it as a `0600` file, defaulting to the process working
-directory, and it is the KEK under which every per-tenant SMTP password is sealed. Its loss is detected — the
-instance row carries an HKDF fingerprint — and detection is the whole of the remedy: a server that boots
-without its key reports `configSecretState: MISMATCH` and **refuses member invites and password resets**. A
-restore that captures the database and the store therefore starts cleanly and is still broken, in exactly the
-two flows [ADR 0054](0054-password-recovery-two-factor-release.md) and [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)
+makes the server generate and manage it as a `0600` file, defaulting to the process working directory, and it is the KEK
+under which the server's config secrets are sealed, every tenant's SMTP password among them. Its loss is detected — each
+sealed value carries an HKDF fingerprint of the key that sealed it — and detection is the whole of the remedy: a server
+that boots without its key reports `configSecretState: MISMATCH` and **refuses member invites and password resets**. A
+restore that captures the database and the store therefore starts cleanly and is still broken, in exactly the two flows
+[ADR 0054](0054-password-recovery-two-factor-release.md) and [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)
 exist to protect.
 
-**2. The read path tolerates one skew and not its mirror.** An object with no row is an ordinary steady state,
-but the reason changed with [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md): the keys go onto
-`veyq_store_reclaim` in the same transaction as the row delete and one sweep drains it, so what a reader meets
-between those two moments is a reclaim **pending**, not a delete that failed unrecorded. Orphans therefore no
-longer accumulate silently — a refused delete keeps its row and its `attempts`, and a permanently refused one
-is `abandoned_at`, which is countable in SQL — and an object no row names at all, reclaim row included, is counted
-by the bucket reconcile, and reclaimed after its grace where the Server Owner allows it
-([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) § Consequences). (Abandoned upload *sessions*
-themselves are reclaimed, by `UploadSessionPurge`; `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
-handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
+**2. The read path tolerates one skew and not its mirror.** An object with no row is an ordinary steady state: by
+[ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) it is a reclaim **pending**, or an object the bucket
+reconcile counts and reclaims after its grace where the Server Owner allows it — never an orphan that accumulates
+unrecorded ([cc.storage.object-lifecycle](../crosscutting/cc.storage.object-lifecycle.md) § Reclaim). The mirror case
+is handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
 object is missing becomes a valid URL that 404s, with no server-side signal and a broken picture as the only
 symptom.
 
@@ -63,7 +58,7 @@ capture holds leg (b) as its index, and the objects themselves are kept by the s
 
 **Leg (c) is captured, but never beside legs (a) and (b).** ADR 0050's key file defends a leaked database
 backup only while the key is somewhere else. A capture directory that holds the dump *and* the key is
-precisely a leaked backup that opens every tenant's SMTP password. So the capture writes the key to a
+precisely a leaked backup that opens every config secret the key seals. So the capture writes the key to a
 destination of its own and refuses one inside the capture directory. Putting it beside the dump takes an
 explicit flag, and the manifest records which of the two was done, or that leg (c) is absent. A restore reads
 the key from wherever the manifest says it went. If it was captured separately and is not supplied, the
@@ -73,7 +68,7 @@ the host and to keep the key on a different medium.
 
 Three things inside the database are worth naming because losing them is not obviously recoverable: the
 instance salt, which every client folds into its auth salt — an instance that loses it can authenticate nobody;
-the config-secret fingerprint, which is what turns leg (c)'s absence into a detected fault rather than a silent
+the config-secret fingerprints, which are what turn leg (c)'s absence into a detected fault rather than a silent
 one; and the tenant's domain, which decides who can reach the instance at all (Decision 4).
 
 **2. The capture is cold, and *cold* means the writer is stopped — not that the stores are.** Stop the
@@ -93,15 +88,15 @@ blocks — and its two plausible orderings differ in which direction of corrupti
 whose correctness rests on an argument that subtle is a procedure that gets executed wrong. The price is
 downtime equal to the capture, which for a household instance is the cheaper side of that trade.
 
-**3. The store leg is captured logically, as its index; the objects go into an object pool only when one is
-named.** The backup reads the object namespace through the S3 API, never the store's data directories, and on
-every target it records that namespace as an **index**: every object's key, size and MD5, in one listing, in the
-manifest (`backupFormat` 3). The objects stay in the store: keeping the objects is the store operator's job (its versioning, replication or snapshots),
-and a backup that copied the whole bucket every time would make each capture, and each upgrade's downtime, as
-large as the store. Two properties of the built system make the index enough for what veyq's own backup is for:
-an upgrade migrates the schema and **never rewrites an object** — every object is an immutable ciphertext blob,
-written once by one presigned PUT — so the database plus the index is a complete way back from an upgrade; and
-the index is exactly what lets a restore *check* the objects without holding them.
+**3. The store leg is captured logically, as its index; the objects go into an object pool only when one is named.** The
+backup reads the object namespace through the S3 API, never the store's data directories, and on every target it records
+that namespace as an **index**: every object's key, size and MD5, in one listing, in the manifest. The objects stay in
+the store: keeping the objects is the store operator's job (its versioning, replication or snapshots), and a backup that
+copied the whole bucket every time would make each capture, and each upgrade's downtime, as large as the store. Two
+properties of the built system make the index enough for what veyq's own backup is for: an upgrade migrates the schema
+and **never rewrites an object** — every object is an immutable ciphertext blob, written once by one presigned PUT — so
+the database plus the index is a complete way back from an upgrade; and the index is exactly what lets a restore *check*
+the objects without holding them.
 
 Logical, for three reasons, in order of weight:
 
@@ -121,28 +116,27 @@ Logical, for three reasons, in order of weight:
   [A5](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md) means **holding no data** rather
   than **holding no tables**.
 
-**The object pool is optional and named per run** (`--objects-to <target>`: a directory, or a bucket of another
-S3-compatible store whose credentials come from the environment, never an argument). It is **copied into, never
-synced**: rclone `copy --immutable`, never `sync` or `move` — a key whose bytes differ from the pool's copy fails the
-capture instead of replacing it (objects are immutable, so a differing copy is a fault, never an update; measured
-with the pinned rclone 1.75.0: `copy --immutable` exits 6, *"immutable file modified"*, and leaves the pool's copy).
-It is **incremental by construction**: a key the pool holds is not copied again. The capture records the pool's
-target (never a credential) beside the index, and **the index is what ties the two**: a restore copies exactly the
-index's keys out of the pool, whatever else the pool holds. The pool holds ciphertext only, as the store does, so it
-changes nothing about what the operator can read.
+**The object pool is optional and named per run** (a directory, or a bucket of another S3-compatible store whose
+credentials come from the environment, never an argument). It is **copied into, never synced**: rclone
+`copy --immutable`, never `sync` or `move` — a key whose bytes differ from the pool's copy fails the capture instead of
+replacing it (objects are immutable, so a differing copy is a fault, never an update; measured with the pinned rclone
+1.75.0: `copy --immutable` exits 6, *"immutable file modified"*, and leaves the pool's copy). It is **incremental by
+construction**: a key the pool holds is not copied again. The capture records the pool's target (never a credential)
+beside the index, and **the index is what ties the two**: a restore copies exactly the index's keys out of the pool,
+whatever else the pool holds. The pool holds ciphertext only, as the store does, so it changes nothing about what the
+operator can read.
 
-**The pool keeps exactly what its retained captures need.** An object is deleted from the pool as
-soon as no retained capture's index names it, and captures rotate by `keep` — so a deletion, a member's erasure
-included, reaches the pool within the backup rotation window [security-model](../crosscutting/security-model.md)
-promises, and an object an earlier, still-retained capture needs is never deleted. The retained captures are the
-pool's own: every capture that named the pool writes its index's keys into the pool's ledger (`veyq-pool/captures/`)
-once every one of them is in the pool, and the ledger keeps the newest `keep` (`--pool-keep`, default 3, as the
-gate's `backup.keep`) and none older than B (§8) — not the capture directories, which an operator moves, encrypts or
-keeps off the host, and which §8 prunes only where veyq's own tooling wrote them. The prune is the pool's one delete (`delete --files-from` the computed list), runs only after
-the new capture's entry is written, and refuses when the ledger it reads lacks that entry, since a ledger read that
-came back empty would otherwise name nothing and delete everything. A capture outside the newest `keep` still
-restores without a source, its objects being in the store; from the pool it refuses by name whatever the pool no
-longer holds. A pool therefore serves one instance.
+**The pool keeps exactly what its retained captures need.** An object is deleted from the pool as soon as no retained
+capture's index names it, and captures rotate by `keep` — so a deletion, a member's erasure included, reaches the pool
+within the backup rotation window [security-model](../crosscutting/security-model.md) promises, and an object an
+earlier, still-retained capture needs is never deleted. The retained captures are the pool's own: every capture that
+named the pool writes its index's keys into the pool's ledger once every one of them is in the pool, and the ledger
+keeps a bounded number of the newest and none older than B (§8) — not the capture directories, which an operator moves,
+encrypts or keeps off the host, and which §8 prunes only where veyq's own tooling wrote them. The prune is the pool's
+one delete, of a computed list, runs only after the new capture's entry is written, and refuses when the ledger it reads
+lacks that entry, since a ledger read that came back empty would otherwise name nothing and delete everything. A capture
+outside the newest `keep` still restores without a source, its objects being in the store; from the pool it refuses by
+name whatever the pool no longer holds. A pool therefore serves one instance.
 
 **The bundled store keeps no history of its own.** Garage, the pinned v2.0.0, has no object versioning (measured
 against a throwaway node through the pinned rclone: `GetBucketVersioning` answers `Unversioned`,
@@ -152,16 +146,15 @@ copy of the store keeps an object the store loses, and `veyqctl status` says so 
 ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)). On Kubernetes the gate takes no pool
 ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 4).
 
-**Every capture is `backupFormat` 3.** A capture that holds its objects itself (`objects/`, `backupFormat` 2, what
-Compose wrote before this decision) is written by nothing and stays readable: it verifies against its own
-`objects/` and restores by copying them, which, like any restore that writes objects, goes only into an empty store
-(§7).
+**Every capture is an index capture.** A capture that holds its objects itself (the format before this decision) is
+written by nothing and stays readable: it verifies against its own `objects/` and restores by copying them, which, like
+any restore that writes objects, goes only into an empty store (§7).
 
-**The tool is invoked, not vendored:** the procedure shells out to `rclone`. `scripts/` carries no third-party
-Python dependency today and this decision does not add one, in the same shape as the e2e orchestrator shelling
-out to `docker compose`. Rejected: a boto3-based script, which would make one procedure the reason for the
-script tree's first dependency; and hand-rolled SigV4 signing, which would have us own signing code no one else
-reviews.
+**The tool is invoked, not vendored:** the procedure shells out to `rclone`. The capture tool ships alone, on the
+standard library only ([ADR 0106](0106-deployment-under-infra-tests-under-tests.md) decision 8), and this decision adds
+no dependency to it, in the same shape as the e2e orchestrator shelling out to `docker compose`. Rejected: a boto3-based
+tool, which would make one procedure the reason for its first dependency; and hand-rolled SigV4 signing, which would
+have us own signing code no one else reviews.
 
 A **volume copy remains documented as the fast path** for a same-host, same-version rollback — it is not the
 procedure the durability bar is measured against. Note that the store's own tooling does not fully serve even
@@ -191,13 +184,12 @@ decision rather than to the runbook's discretion.
 
 **7. A restore accepts a backup of the target's schema or an older one, and refuses a newer one; it checks the
 objects, and writes them only into an empty store.** The restore
-compares the manifest's `database.schemaVersion` with the Flyway version the freshly installed target is at
+compares the backup's schema version with the Flyway version the freshly installed target is at
 (Flyway's own version order, never a string comparison), before anything is written:
 
-- **Newer than the target:** refused. The message names the release the backup came from
-  (`app.version`). The older image would refuse to start on a history holding migrations it does not know
-  (measured: ADR 0098 M9 — Quarkus hands Flyway no ignore pattern), so loading first and failing at boot would leave
-  the operator with neither instance.
+- **Newer than the target:** refused. The message names the release the backup came from. The older image would refuse
+  to start on a history holding migrations it does not know (measured: ADR 0098 M9 — Quarkus hands Flyway no ignore
+  pattern), so loading first and failing at boot would leave the operator with neither instance.
 - **The same or older:** the restore first drops **every** table of the target and then loads the dump. Dropping
   is safe only because the target is proven to hold no data (A5 of the use-case). It is needed because the dump
   drops and recreates only the tables *it* names: a table a later migration added would otherwise survive under
@@ -205,18 +197,16 @@ compares the manifest's `database.schemaVersion` with the Flyway version the fre
   the version it was captured at, and the target's application **migrates it up at its next start**. That is the
   same forward migration every upgrade runs, not a second path.
 
-This turns "install the backup's release, restore, upgrade" into "restore, start". It also means **the
-target's release decides the outcome**. A rollback after a failed upgrade (§6) therefore still starts by
-installing the release the backup came from. Restoring the pre-upgrade backup onto the new release would only
-run the failed upgrade again. The restore says this when the backup is older than its target. On Compose the
-rollback is **in place**: the capture holds no object and an upgrade rewrites none, so `veyqctl
-rollback` empties the database, starts the capture's release once, and restores with the check only — the objects
-never leave the store ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), the cluster's
-rollback in [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9 in Compose's
-form). The uploads of the failed release stay in the store with no row; the bucket reconcile counts them, and every
-restore — a rollback's included — empties its state, so their grace starts at the rollback and nothing is deleted
-before the Server Owner confirms the bucket again ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)
-§ Consequences).
+This turns "install the backup's release, restore, upgrade" into "restore, start". It also means **the target's release
+decides the outcome**. A rollback after a failed upgrade (§6) therefore still starts by installing the release the
+backup came from. Restoring the pre-upgrade backup onto the new release would only run the failed upgrade again. The
+restore says this when the backup is older than its target. On Compose the rollback is **in place**: the capture holds
+no object and an upgrade rewrites none, so the objects never leave the store and the restore runs the check only —
+[ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 1 says how, and
+[ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9 is the cluster's rollback. The
+uploads of the failed release stay in the store with no row; the bucket reconcile counts them, and every restore — a
+rollback's included — empties its state, so their grace starts at the rollback and nothing is deleted before the Server
+Owner confirms the bucket again ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) § Consequences).
 
 **Rejected — refusing every backup that is not exactly the target's version.** It is safe, but it makes the
 operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the
@@ -225,16 +215,16 @@ wrong image, and it buys nothing that the forward migration does not already hav
 **A restore also checks the objects before it writes, and it writes objects only into an empty store**. Both forms run before the dump is loaded, and a refusal writes nothing:
 
 - **Without a source — the check only.** Every object the dump's rows require must be in the **live store** with
-  the size and MD5 the index recorded (A4). A missing or different one refuses the restore, naming each; an object
-  the store holds and the index does not is tolerated (an upload after the capture). `--accept-missing-objects`
-  restores knowingly without the named ones, each a Memory whose picture yields a valid URL and a `404`. Nothing is
-  written to the store. This is the way back from an upgrade, whose objects never left the store.
-- **With a source — `--objects-from <pool>` — data, onto a fresh instance only.** The target's database holds no
-  data (A5) **and its store holds no object**; anything else is refused, because copying objects into a store that
-  is in use is reconciling two populated instances, which nothing describes. Every object the rows require must be
-  in the source with the indexed size and MD5, refused by name otherwise as above. Then exactly the index's keys are
-  copied (`copy`, never `sync`), and the store is checked once more against the index before the dump is loaded.
-  A capture that holds its own objects (`backupFormat` 2) is this form with its `objects/` as the source.
+  the size and MD5 the index recorded (A4). A missing or different one refuses the restore, naming each; an object the
+  store holds and the index does not is tolerated (an upload after the capture). Only an explicit flag restores
+  knowingly without the named ones, each a Memory whose picture yields a valid URL and a `404`. Nothing is written to
+  the store. This is the way back from an upgrade, whose objects never left the store.
+- **With a source — a pool — data, onto a fresh instance only.** The target's database holds no data (A5) **and its
+  store holds no object**; anything else is refused, because copying objects into a store that is in use is reconciling
+  two populated instances, which nothing describes. Every object the rows require must be in the source with the indexed
+  size and MD5, refused by name otherwise as above. Then exactly the index's keys are copied (`copy`, never `sync`), and
+  the store is checked once more against the index before the dump is loaded. A capture that holds its own objects is
+  this form with those objects as the source.
 - **Never onto a running instance.** The application is stopped for every restore (§2's writer), and `veyqctl`
   stops it itself.
 
@@ -270,19 +260,16 @@ are [cc.privacy.retention](../crosscutting/cc.privacy.retention.md) § Backups a
 - **The operator page gains a leg.** Its two-halves framing — the server's ciphertext against the users' keys —
   stays exactly as it is; what changes is that the server's half is stated as three things, with the key file
   named as the one that fails quietly.
-- **Every deployment artifact must persist leg (c), and the obligation outlives the one that first met it.**
-  A container that is recreated without a persisted key path regenerates the key and walks into the `MISMATCH`
-  state on its own — an instance that boots, serves every page, and can admit nobody. `infra/docker/docker-compose.prod.yml`
-  mounts a named volume for it and `scripts/validate_config_secret_persistence.py` holds the three files that
-  have to agree about that path — the `Dockerfile`'s `WORKDIR`, `VeyqConfig`'s default, and the compose mount —
-  to each other. That guard sees compose files in this tree only: for Kubernetes, a bare `docker run` or a
-  systemd unit the obligation is the operator's, and the `veyq_instance` fingerprint tripwire is the only
-  detection. Note what the fix is NOT: a `VOLUME` in the image, which would create an *anonymous* volume when
-  nothing is mounted — persistence-shaped, discarded by `--rm` and `down -v`, under a name no `docker volume ls`
-  identifies. The defect must stay visible where nothing mounts the path.
+- **Every deployment artifact must persist leg (c), and the obligation outlives the one that first met it.** A container
+  that is recreated without a persisted key path regenerates the key and walks into the `MISMATCH` state on its own — an
+  instance that boots, serves every page, and can admit nobody. The Compose recipe persists it on a named volume and the
+  chart on a claim of its own, each held by a guard; for a bare `docker run` or a systemd unit the obligation is the
+  operator's, and the sealed values' fingerprints are the only detection. Note what the fix is NOT: a `VOLUME` in the
+  image, which would create an *anonymous* volume when nothing is mounted — persistence-shaped, discarded by `--rm` and
+  `down -v`, under a name no `docker volume ls` identifies. The defect must stay visible where nothing mounts the path.
 - **The durability bar becomes executable.** Its sentence turns into an acceptance criterion with an owner:
-  [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md).
-  Until a test carries it, §10 keeps saying *half held* — the bar follows the proof, never the intention.
+  [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md);
+  the bar follows the proof, never the intention.
 - **The backup inherits the instance's garbage.** Abandoned upload sessions and their partial chunks, and
   orphaned objects whose rows are gone, are captured as they are. They are what a running instance already
   accumulates (Context 2), not something the procedure introduces, and a restore is not the place to start

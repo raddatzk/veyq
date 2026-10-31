@@ -220,7 +220,7 @@ rates' date.
   [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)), while the SMTP **password is a server-held secret sealed at rest** (AES-256-GCM
   under a server-managed KEK — ciphertext + nonce only, [ADR 0050](../decisions/0050-operator-config-secret-encryption.md):
   the KEK is a `0600` key **file** generated on first start, plus a non-invertible HKDF **fingerprint**
-  of it on the instance singleton so a lost/changed key is detected, never a silent unseal — the fingerprint is a
+  of it beside every sealed value so a lost/changed key is detected, never a silent unseal — the fingerprint is a
   hash of a full-entropy key, not the key, so the "no usable secret in a DB dump" property holds); a mail itself
   carries only link + domain + expiry + neutral copy, never sealed metadata
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md)).

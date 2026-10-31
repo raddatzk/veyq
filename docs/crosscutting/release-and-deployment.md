@@ -26,9 +26,11 @@ A release is `<major>.<minor>`, a function of the commit ([ADR 0057](../decision
 - **Major `0` is pre-release:** it exercises the publish path and promises no upgrade path. The migration set is
   frozen by the first release of a major ≥ 1, which sets the `release:` line ([src/backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations).
 - **The release major is the protocol major** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
-  decision 1). The precise release is operator information, never pre-auth (ADR 0057 § 4): it is stamped as `ENV` into
-  the runtime stage of an image only, never into a stage that compiles a client, and the Server Owner reads it in
-  admin-web ([uc.admin.identify-instance-release](../features/admin/use-cases/uc.admin.identify-instance-release.md)).
+  decision 1). `VERSION`'s major is compiled into the backend, which advertises it in `GET /api/setup`, and into the web
+  build; no runtime setting names it, so no instance can advertise a major its code does not speak. The precise release
+  is operator information, never pre-auth (ADR 0057 § 4): it is stamped as `ENV` into the runtime stage of an image
+  only, never into a stage that compiles a client, and the Server Owner reads it in admin-web
+  ([uc.admin.identify-instance-release](../features/admin/use-cases/uc.admin.identify-instance-release.md)).
 
 ## The pipeline
 
@@ -101,20 +103,38 @@ paths from `scripts/repo_layout.py`.
 |---|---|---|
 | Recipe | `docker-compose.prod.yml`, project `veyq`: `traefik`, `app`, `admin`, `mariadb`, `garage` | the chart: the `Gateway`, `app` (one pod, `strategy: Recreate`), `admin`, `mariadb` (`mariadb.enabled: false` for the operator's own), `garage` (opt-in) |
 | Managed by | `veyqctl` on the host (below) | `helm upgrade` by exact version or digest, and the operator's GitOps tooling; no in-cluster operator ([ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 8) |
-| Tenant routing | the backend writes Traefik's dynamic file from the database ([ADR 0063](../decisions/0063-database-driven-tenant-ingress.md)) | the same projector's Gateway API sink: per domain an `HTTPRoute` and, under `per-domain`, a `ListenerSet`, labelled `managed-by: veyq-tenant-ingress`, through a namespace-local Role on those two kinds only — nothing on `gateways` |
+| Tenant routing | the backend's projector writes Traefik's dynamic file from the database ([ADR 0063](../decisions/0063-database-driven-tenant-ingress.md)), the bootstrap domain's routers from configuration | the same projector's Gateway API sink: per domain an `HTTPRoute` and, under `per-domain`, a `ListenerSet`, labelled `managed-by: veyq-tenant-ingress`, through a namespace-local Role on those two kinds only — nothing on `gateways`; the bootstrap domain is the chart's own route |
 | TLS | Traefik's ACME resolver, referenced on every router | `veyq.tenant.ingress.kubernetes.tls.*`: `none` (default), `per-domain`, `shared`; an opt-in namespaced cert-manager `Issuer` (`gateway.tls.acme`, `per-domain` only) |
-| Bundled store | on, on the app's origin ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md) § 4) | opt-in (`garage.enabled`), on a host of its own with a CORS policy written at runtime ([ADR 0067](../decisions/0067-store-provisioning-from-a-declared-type.md)) |
+| Bundled store | on, on the app's origin ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md) § 4): a URL is presigned for the tenant's domain | opt-in (`garage.enabled`), on a host of its own with a CORS policy written at runtime ([ADR 0067](../decisions/0067-store-provisioning-from-a-declared-type.md)): a URL is presigned for the store's own host (decision 5) |
 | Admin console | the `admin` container, reachable on the host's loopback; `ADMIN_DOMAIN` optional, set after setup | the same image, its own `HTTPRoute` only when `admin.domain` is set |
 | Hardening | every container unprivileged, reachable only by its peers ([ADR 0071](../decisions/0071-runtime-hardening-on-both-targets.md)) | every pod passes `restricted`; a default-deny NetworkPolicy set (ADR 0071) |
 | Backup before a migrating start | `veyqctl upgrade` | the `backup-gate` init container ([ADR 0098](../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)) |
+
+**Tenant routing is one projection with a sink per target**
+([ADR 0063](../decisions/0063-database-driven-tenant-ingress.md)). The projector regenerates the whole routing from the
+`tenant` table on every tenant create, domain change and deactivation, and once at startup before serving, never as a
+patch; which proxy it tells is named by `veyq.tenant.ingress.sink`, never inferred. A sink never throws: a failed
+projection fails neither the tenant operation that triggered it nor the start.
 
 **The chart generates no secret**: every value is the operator's, enforced by `values.schema.json`, except the
 config-secret KEK, which the app generates onto its own claim ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)).
 The app migrates its schema at start, which is why it is one pod under `Recreate`. Two checks need `helm` and sit
 outside the guard glob, in `ci.yml`'s `chart` job: `scripts/chart_meta_check.py` holds the rendered manifests to these
 rules, and `scripts/chart_upgrade_check.py` renders the predecessor's chart and the candidate's with the same values and
-fails on a change to a field Kubernetes refuses to change, or an operator's values the new schema refuses. It renders,
-never installs; until the first release it informs and gates nothing.
+fails on a change to a field Kubernetes refuses to change, or an operator's values the new schema refuses. With
+`--upgrade-major-entry` it renders the same comparison from the release's major entry
+([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), and says why and passes when there is
+none or it is the default predecessor. It renders, never installs; until the first release it informs and gates
+nothing.
+
+**The config-secret key** ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)) is a file the app
+generates at its first start onto its own persistent volume (a named volume under Compose, a claim of its own under
+Kubernetes), never in the database and never a Kubernetes `Secret`. It seals three holders: the tenants' SMTP passwords,
+the instance mail password and the object store's setting. Each sealed value carries the fingerprint of the key that
+sealed it, so a missing or replaced key is detected per value; it degrades and never bricks: what it cannot open is
+named in admin-web and only what needs it stops, until that value is entered again. A capture keeps the key apart from
+the dump ([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) § 1); what it protects
+against, and what not, is the [security model](security-model.md)'s.
 
 **Administration is not management.** Administration is what the Server Owner does inside a running instance, through
 the Admin API: admin-web and its Node CLI, one image, `veyq-admin` ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)).
@@ -132,9 +152,12 @@ lives in `--home` (default `/opt/veyq`): `releases/<release>/`, `.env`, `backups
 `compose.override.yml`, laid over the recipe on every command.
 
 - **Which release:** `.env`'s `VEYQ_RELEASE` — an exact release (pinned), a major (its newest release) or `latest`.
-  **A major is entered only from the release its upgrade was proved from** — `majorEntry` in the next major's signed
-  manifest, the newest release of the previous major when that release was cut — and no run crosses more than one
-  major.
+  **A major is entered only from its major entry** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
+  decision 10), which the next major's signed manifest names as `majorEntry`. An instance on an older release of its
+  major upgrades to the entry first and is told that the next `upgrade` enters the new major; one on a later release of
+  the old major (a fix cut after the entry) is refused until a release of the new major entered from it exists. No
+  run crosses more than one major ([ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)
+  decision 5).
 - **What it trusts:** it verifies `manifest.json.bundle` before it reads any digest or sha256 the manifest names, then
   both images' signatures by those digests, then each asset against its sha256. So a source — GitHub by default, a
   mirror or a directory (`--source`) — decides which releases are offered, never what one contains. `--unsigned-local`
@@ -156,23 +179,35 @@ store's **index** (never the objects, which an upgrade does not rewrite) and, ap
 one tool takes it on both targets, `instance_backup.py`, in one format.
 
 - **Compose** — `veyqctl upgrade` captures with the app stopped, before it switches releases; with an object pool
-  configured it copies the new objects there first. `veyqctl rollback` returns to the release a capture was taken
-  under, in place.
+  configured it copies the new objects there before the app stops and tops the copy up after, so the downtime grows by
+  the newest uploads only. `veyqctl rollback` returns to the release a capture was taken under, in place.
 - **Kubernetes** — the `backup-gate` init container of the app pod runs `instance_backup.py gate` in the release's
   `veyq-tools` image. Under `Recreate` the old pod has ended before it starts, so the capture is cold, and it runs the
-  same under `helm`, Argo CD, Flux or `kubectl apply`. It captures when the target release differs from the one its
-  record (`state.json` on the backup claim) names, or when `backup.request` changed; it refuses a downgrade, a jump of
-  more than one major and a major entered from any release but the one the tools image names. It never mounts the
-  key. The claim is the operator's (`backup.existingClaim`); the schema refuses an install that names neither a claim
-  nor `backup.enabled: false`. A failed or refused gate keeps the app from starting, with nothing migrated. A restore
-  is a one-off Job, never automatic, run with the tools image of the release that wrote the capture
-  ([Backup and restore](../../site/src/content/docs/run/backup-and-restore.md), [Kubernetes](../../site/src/content/docs/run/kubernetes.md)).
+  same under `helm`, Argo CD, Flux or `kubectl apply`. The target release is the app image's tag, which the chart
+  renders into the gate's environment. It captures when the target differs from the release its record (`state.json` on
+  the backup claim) names, or when `backup.request` changed; it refuses a downgrade, a jump of more than one major and a
+  major entered from any release but the major entry the tools image bakes. It takes the store's index only and no
+  object pool ([ADR 0098](../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 4),
+  and never mounts the key. A capture is written under `.partial` and renamed when complete; then the gate prunes beyond
+  `backup.keep` complete captures and every unfinished one, and at every start whatever is older than the retention
+  bound ([cc.privacy.retention](cc.privacy.retention.md) § Backups and the erasure ledger). The claim is the operator's
+  (`backup.existingClaim`); the schema refuses an install that names neither a claim nor `backup.enabled: false`. A
+  failed or refused gate keeps the app from starting, with nothing migrated. A restore is a one-off Job, never
+  automatic, run with the tools image of the release that wrote the capture
+  ([Backup and restore](../../site/src/content/docs/run/backup-and-restore.md),
+  [Kubernetes](../../site/src/content/docs/run/kubernetes.md)).
 
 **The upgrade is proven before a release** (ADR 0057 § 7): `scripts/run_web_e2e.py --upgrade` lets the predecessor's
 own build write sealed content, captures it, restores it onto the candidate, which migrates it, and has the
-candidate's suites open it. The predecessor is the first parent until `release:` is set, then the newest `v*` tag. Its
-CI job, `upgrade-proof`, is written and switched off (`if: false`) until the first release, which switches it on in the
-same change that sets `release:`.
+candidate's suites open it. The default predecessor is the commit's first parent until `release:` is set, then the
+newest release tag that first parent reaches. **A release is proved a second time from its major entry**
+([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), `--upgrade-major-entry`, when that is
+a release other than the default predecessor. The entry is derived once, `run_web_e2e.major_entry_ref()`; the same
+release is what `release_assets.py --major-entry` bakes into the tools image for the gate and names as the signed
+manifest's `majorEntry`, by which `veyqctl` routes, so neither target enters a major from a release the pipeline did
+not prove. The CI job, `upgrade-proof`, runs one leg per predecessor, each on its own budget; a leg asks `--resolve`
+first and builds nothing when it has nothing to prove. The job is written and switched off (`if: false`) until the first
+release, which switches it on in the same change that sets `release:`.
 
 ## The release check
 
@@ -197,15 +232,11 @@ check is logged and retried with a back-off, and blocks nothing.
   promoted one.
 - **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
   with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
-  When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7). Until then the release a
-  major is entered from is the one `--major-entry` derives, not an attested L2 input.
+  When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
 - **Immutable releases and the first publish** (ADR 0096 decision 3): the repository setting and the first dispatch
   wait on the remote. The staged order of the first runs is in [`infra/README.md`](../../infra/README.md) § Cutting a release.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
-- **Lane L3 holding the major entry** (ADR 0085 decision 10, ADR 0096, inbox #461): the major entry's backup in L3's
-  archive. What moves the entry is built — a `release/<old>.x` publish, and every release of the current major proved
-  from the newest release of the previous major among every tag, a branch's included, baking it for its gate (ADR
-  0098 decision 3) and naming it as its manifest's `majorEntry`, which `veyqctl` routes by (ADR 0096 decision 5;
-  `run_web_e2e.major_entry_ref()`, one derivation).
+- **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
+  archive lane L3 restores.

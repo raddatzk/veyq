@@ -54,21 +54,21 @@ A publish is dispatched by hand from `main` or `release/<major>.x`, as one of tw
 
 **Major `0` is pre-release.** A `0.<minor>` release exercises the publish path end to end — signature, git ref, the
 refusal to republish — and promises no upgrade path. The migration set is frozen by the first release of a major ≥ 1,
-which the owner declares on the `release:` line of `scripts/applied_migrations.sha256`
+which the owner declares on the migration pin file's `release:` line
 ([backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations); a `0.x` release does not move that line.
 
 **2. A release has exactly one git ref, `v<major>.<minor>`,** created by its publish. One release, one name, one tree.
 A snapshot has none: it names a build, not a release.
 
 **3. The deployment recipe is the release's assets; the binding is the release, not the image.** A release carries
-its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`, beside `veyqctl`, the backup tool and a
-manifest naming the images by `tag@digest` and every asset by its sha256
-([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 3). No image carries a recipe.
+its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`, beside a signed manifest; what the release
+carries is [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 3. No image carries a
+recipe.
 
 - **The recipe cannot drift from the images it describes.** The manifest names the digests that release deploys, and
   an immutable release changes neither after it is published.
-- **The images' signatures bind the images; the manifest's signature binds the files.** A source (GitHub, a mirror, a
-  directory) then decides which releases are offered, never what one contains.
+- **The images' signatures bind the images; the manifest's signature binds the files**, so a source decides which
+  releases are offered, never what one contains (ADR 0096 decision 7).
 - **A verification is only as narrow as the identity it pins.** The documented `cosign verify` pins the certificate
   identity to the workflow that publishes, in `raddatzk/veyq`, on `main` or `release/<major>.x`, with GitHub's OIDC
   issuer. A regex over the repository accepts a signature from any workflow on any ref, and a placeholder for the
@@ -115,14 +115,15 @@ predecessor; a run shows it ([Upgrade](../../site/src/content/docs/run/upgrade.m
 
 - **The proof.** The predecessor's own build writes sealed content into a fresh instance; ADR 0056's tool captures it;
   the capture is restored onto the **candidate**, which migrates it up at its start (ADR 0056 §7); the candidate must
-  then report `configSecretState: OK`, and the **candidate's** suites must open the predecessor's content and assert it
-  — names, media, files — not merely that nothing failed, because a misread sealed field degrades to empty, not to an
-  error.
+  then open the restored config-secret key, and the **candidate's** suites must open the predecessor's content and
+  assert it — names, media, files — not merely that nothing failed, because a misread sealed field degrades to
+  empty, not to an error.
 - **The predecessor** is the commit's first parent until the `release:` line is set, and from then on the newest
   `v<major>.<minor>` tag the first parent contains. `release:` names a migration, not a tag, so a set release with no
-  such tag refuses the run rather than guess.
+  such tag refuses the run rather than guess. A release is proved a second time from its major entry
+  ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 10) when that is not the predecessor already.
 - **Before the first release it gates nothing.** A baseline migration may still change then, so a red proof informs;
-  the CI job is written and off, and the change that sets `release:` turns it on.
+  the change that sets `release:` makes it gate.
 - **The Helm path is a check of its own**: what breaks a `helm upgrade` is an immutable field, not the data
   ([ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart-upgrade check, against the same predecessor).
 
@@ -142,9 +143,6 @@ predecessor; a run shows it ([Upgrade](../../site/src/content/docs/run/upgrade.m
   digest-pinned one does not until the release bumps it. That is the intended trade: the same silent path would deliver
   a compromised tag just as quietly. An updater proposes the bumps; what none reaches is bumped by hand, and a guard
   holds one `repo:tag` to one digest everywhere.
-- **Nothing here is observed until a publish runs** ([ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md)): what a
-  publish does is a statement about a workflow file until one runs. The tree-side half — the version, the images, the
-  assets, an instance installed from them — is provable locally.
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own
   name, which is circular; it cannot be checked without the network; and its error path republishes silently
   (Context 3). A version that a `git checkout` cannot answer is not an identity.

@@ -7,18 +7,18 @@
 
 ## Context
 
-An instance is configured today almost entirely through environment variables: the compose recipe passes about
-two dozen (`infra/docker/.env.example`), the Helm chart as many values, and the backend reads them once at boot
-(`VeyqConfig.kt`). The object store is the largest block — type, endpoint, public endpoint, signing mode, bucket,
-region, access key, secret key, and Garage's admin endpoint and token — and it is also the one an operator is most
-likely to get wrong, because a wrong value shows only when a photo will not upload.
+An instance was configured almost entirely through environment variables: the compose recipe passed about two
+dozen, the Helm chart as many values, and the backend read them once at boot. The object store was the largest
+block — type, endpoint, public endpoint, signing mode, bucket, region, access key, secret key, and Garage's admin
+endpoint and token — and it is also the one an operator is most likely to get wrong, because a wrong value shows only
+when a photo will not upload.
 
 Three things push the other way. [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
 already moved the capability switches out of a boot-time config list and into the database, switched by the Server
 Owner in admin-web. An environment variable can be changed only by someone with shell access to the host, set only
 before the start, and checked only by reading logs. And the backend supports any S3-compatible store
 ([ADR 0067](0067-store-provisioning-from-a-declared-type.md) decision 1), but the recipes hardcode the bundled
-Garage, so using one means editing the compose file, and under Helm it is not possible at all.
+Garage, so using one meant editing the compose file, and under Helm it was not possible at all.
 
 ## Decision
 
@@ -31,8 +31,9 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    **Garage** (the same, plus its admin endpoint and token, because veyq provisions it) — and then **checks** it.
    The check for S3-compatible **changes no store configuration**: the bucket exists; one fixed probe object
    under a `veyq-check/` key is written through a presigned PUT against the public endpoint and read back through
-   a presigned GET (overwritten by every check and never deleted, so object deletion keeps its one arm,
-   `StoreReclaimSweep`); and a CORS preflight sent with the instance's public origin is answered with that origin.
+   a presigned GET (overwritten by every check and never deleted, so object deletion keeps its one arm, the reclaim
+   work list of [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)); and a CORS preflight sent with the
+   instance's public origin is answered with that origin.
    Writing an object into the bucket veyq was pointed at is its ordinary data plane; creating a bucket or writing a
    CORS policy is provisioning, which ADR 0067 decision 1 keeps away from an unknown store, and stays away. S3 has no
    portable way to ask what a key *may* do, so the probe is how the check learns it. For Garage, veyq provisions
@@ -56,8 +57,10 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    *preconfigured* says nobody has to type anything, not that the public endpoint, the certificate or the CORS rule
    in front of the store work, and decision 6 still gates a tenant on it. The condition is read at every boot and
    nothing marks it done, so a Server Owner who discarded a pending store of their own and left nothing saved gets
-   the bundled store back at the next start; a store of their own replaces it through A2 until the first blob fixes
-   it (decision 6). A restore replaces the setting wholesale while the app is stopped, so the restored setting wins.
+   the bundled store back at the next start; a store of their own replaces it as any checked setting does
+   ([uc.admin.configure-object-store](../features/admin/use-cases/uc.admin.configure-object-store.md) A2) until the
+   first blob fixes it (decision 6). A restore replaces the setting wholesale while the app is stopped, so the
+   restored setting wins.
 4. **Store credentials are sealed under the config-secret key** ([ADR 0050](0050-operator-config-secret-encryption.md)),
    as the tenants' SMTP passwords are, and each sealed value records the fingerprint of the key that sealed it.
    When the key is absent or is not the one that sealed a value, the console says which values cannot be opened and
@@ -84,17 +87,13 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 - The compose file, `.env.example` and the Helm values lose every store variable except the bundled hint; the
   run configuration, the dev and e2e profiles and the e2e orchestrator set the store through the same API the
   console uses, or through the hint.
-- **The external services are the second setting moved**: the map tiles, the geocoder
-  and the breached-password check were build-time variables or a fixed origin; they are Server-Owner settings in
-  `veyq_external_service` (admin-web's **Server → External services**, `veyq-admin services`), applied without a restart,
-  seeded with the old defaults, and followed by the served CSP
-  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7). Expenses' day
-  exchange rates joined them later as a fourth, seeded with Frankfurter's ECB endpoint
-  ([ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 8).
+- **The external services are the second setting moved**, under the same rule: Server-Owner settings applied without
+  a restart and followed by the served CSP
+  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 7).
 - Configuration-as-code ([inbox #444](../inbox.md)) is a later, optional layer over these settings — a declared
   value that wins and shows as fixed in admin-web — not a second place to keep them.
 - ADR 0050's single global fingerprint becomes a per-value one, so re-entering one secret cannot hide that another
-  is still sealed under a lost key; ADR 0050 and ADR 0067 decision 3 were edited when this was built.
+  is still sealed under a lost key.
 - The backup tool's store credentials and the restore procedure change: a restored instance carries its store
   setting in the database, sealed under the restored key; a bundled one reads the new install's hint.
 - **Rejected:** keeping the store in environment variables (shell access to change, a restart to apply, a log to
@@ -105,8 +104,6 @@ Garage, so using one means editing the compose file, and under Helm it is not po
   URLs (the capture is cold, so no app is running to sign); an admin endpoint that hands out store credentials
   (a surface whose only job is to leak a secret).
 
-For Server Owners, on the docs site: [First-run setup and the admin console](../../site/src/content/docs/run/first-run.mdx).
-
-For Server Owners, on the docs site: [Configuration reference](../../site/src/content/docs/run/configuration.md).
-
-For Server Owners, on the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md).
+For Server Owners, on the docs site: [First-run setup and the admin console](../../site/src/content/docs/run/first-run.mdx),
+[Configuration reference](../../site/src/content/docs/run/configuration.md) and
+[Storage and email](../../site/src/content/docs/run/storage-and-email.md).

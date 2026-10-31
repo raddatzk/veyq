@@ -30,11 +30,11 @@ Forces:
 
 ## Decision
 
-**A Helm chart (`infra/kubernetes/charts/veyq`) ships alongside the Compose recipe, covering the same services**: `app`,
-`mariadb` (with `mariadb.enabled: false` for an operator-managed database, which clusters commonly have), `garage`
-(opt-in, below), an implementation-neutral **Gateway API** resource set, and the admin container. How each part looks
-on both targets is [release-and-deployment](../crosscutting/release-and-deployment.md) § The two deployment targets;
-the operator's preconditions and values are the Run area's [Kubernetes](../../site/src/content/docs/run/kubernetes.md).
+**A Helm chart ships alongside the Compose recipe, covering the same services**: `app`, `mariadb` (with
+`mariadb.enabled: false` for an operator-managed database, which clusters commonly have), `garage` (opt-in, below), an
+implementation-neutral **Gateway API** resource set, and the admin container. How each part looks on both targets is
+[release-and-deployment](../crosscutting/release-and-deployment.md) § The two deployment targets; the operator's
+preconditions and values are the Run area's [Kubernetes](../../site/src/content/docs/run/kubernetes.md).
 
 **The store's bring-up is not this chart's to solve.** Helm builds nothing, so a locally built init image cannot ship;
 [ADR 0067](0067-store-provisioning-from-a-declared-type.md) has the backend provision the store from a declared type,
@@ -117,12 +117,12 @@ so where the chart deploys `garage` it deploys nothing beside it.
   the recipe's `app` → `garage` dependency is `required: false` so the override needs nothing more. *Rejected:* a
   Compose profile off by default — an instance upgraded with its old `.env` would lose the Garage its store is.
 
-  **Backup and restore take the own store's key pair on both targets** (ADR 0089 Decision 7): the pair the console
-  holds is sealed under the KEK the backup never reads. *Rejected:* a schema rule requiring the backup's store secret
-  with `garage.enabled: false` — the store is set after the install, and the backup's refusal at the first capture names
-  the value. **Turning Garage off under an instance whose store is the bundled one is not guarded**: Helm cannot read
-  the store setting (`lookup` is blind under `helm template` and GitOps). Nothing is lost — the claims outlive the
-  StatefulSet, so turning it on again restores the instance, which names the cause meanwhile.
+  **Where a backup gets an own store's credentials is ADR 0089 Decision 7's**, the same on both targets. *Rejected:* a
+  schema rule requiring the backup's store secret with `garage.enabled: false` — the store is set after the install,
+  and the backup's refusal at the first capture names the value. **Turning Garage off under an instance whose store is
+  the bundled one is not guarded**: Helm cannot read the store setting (`lookup` is blind under `helm template` and
+  GitOps). Nothing is lost — the claims outlive the StatefulSet, so turning it on again restores the instance, which
+  names the cause meanwhile.
 - **The chart is released the same way the image is**: an OCI artifact in the same registry, by the same publish,
   with the same version, signed the same way — ADR 0057's release identity extended to a second artifact type rather
   than a separate channel. Its `version` and `appVersion` are **both** the release version, set at packaging, never by
@@ -140,15 +140,11 @@ so where the chart deploys `garage` it deploys nothing beside it.
   exception: the app generates it onto its own claim. The app runs one pod with `strategy: Recreate`, because the
   schema migrates at boot with no gate and a rolling update would start the new migrator before the old one stops.
 - **A chart upgrade is checked by rendering both versions.** The app-level upgrade proof
-  ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Decision 7) proves the data; what breaks a `helm upgrade`
-  is an **immutable field** (a selector, a StatefulSet's fields outside the mutable set, its `volumeClaimTemplates`, a
-  PVC's access modes or class or a shrinking size, a `roleRef`, a kind changing under a name), an object disappearing
-  with the data behind it, or an operator's values no longer passing the new schema. All of these are visible **without
-  a cluster**, so `scripts/chart_upgrade_check.py` renders the predecessor's chart and the candidate's with the same
-  values and compares them. The predecessor is the upgrade proof's; the check is **information until the first release
-  and red from it**, so from then on it gates the publish.
-- **Backup/restore is not this ADR's decision.** [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
-  decides it.
+  ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Decision 7) proves the data; what breaks a
+  `helm upgrade` is an **immutable field**, an object disappearing with the data behind it, or an operator's values no
+  longer passing the new schema. All of these are visible **without a cluster**, so the check renders the
+  predecessor's chart and the candidate's with the same values and compares them. The predecessor is the upgrade
+  proof's; the check is **information until the first release and red from it**, so from then on it gates the publish.
 
 ## Consequences
 
@@ -171,6 +167,7 @@ so where the chart deploys `garage` it deploys nothing beside it.
 - [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md),
   [ADR 0057](0057-release-identity-and-deployment-recipe.md) (the compose-side precedents this generalizes).
 - [ADR 0065](0065-admin-ui-cli-separate-service.md) (the admin container the chart also deploys).
+- [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) (backup and restore on this target).
 - The Run area of the docs site: [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx) (the
   `helm install` beside the compose one) and [Kubernetes](../../site/src/content/docs/run/kubernetes.md).
 - [inbox #26](../inbox.md) (the reversed scope cut).

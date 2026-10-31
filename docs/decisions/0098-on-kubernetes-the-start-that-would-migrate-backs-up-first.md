@@ -37,9 +37,9 @@ does not change between upgrades.
 gateway and the app pod alone. A component that dials the database or the store needs a policy change; one that scales
 the app needs a Role of its own.
 
-**5. The capture tool exists and is Compose-shaped.** `instance_backup.py` captures the three legs and refuses a
+**5. The capture tool existed and was Compose-shaped.** `instance_backup.py` captured the three legs and refused a
 populated restore target, reaching the database and the store through Docker or binaries on `PATH`, and reading the
-running release through Docker. It ships as a release asset beside `veyqctl`, in no image.
+running release through Docker. It shipped as a release asset beside `veyqctl`, in no image.
 
 ## Decision
 
@@ -54,7 +54,7 @@ peer (Context 4). The price: a failed gate is an outage (decision 6), paid only 
 watching anyway.
 
 **2. The gate captures when, and only when, the pod is about to start a different release.** It keeps one record on
-the backup volume, `state.json`: the release whose data the database holds, and the last capture request it served
+the backup volume: the release whose data the database holds, and the last capture request it served
 (decision 7). On each start:
 - the database holds no data → nothing to capture; the record is written with the target release — the first install;
 - the target release equals the record and no new request is pending → nothing happens: a restart, a rescheduled pod,
@@ -76,36 +76,32 @@ names as `app.version` is the record's, since there is no Docker to ask (Context
   release carries the release it enters its major from, baked into its tools image. It never asks the release source,
   which would make a deploy depend on GitHub being reachable.
 
-**4. The legs.** (a) The database is dumped into the capture. (b) **The store leg is its index only**: the object keys
-with their sizes and MD5s, read through the S3 API in one listing, never the objects. An upgrade migrates the schema;
-it does not rewrite an object — every object is an immutable ciphertext blob — so the database plus the index is the
-whole rollback point. Before a restore writes, the index is checked against the live store: every object the dump
-references must still be there. Keeping the objects is the store's own promise (its versioning, replication or
-snapshots), the operator's part; this gate is an upgrade's way back, not a disaster backup of the store. This is every
-target's store leg ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3). **The optional object pool
-(`--objects-to`) does not apply to the gate**: a copy in an init container lengthens every release change by the new
-objects, and a pool outside the cluster is a new egress peer for the default-deny set (Context 4). A restore Job may
-still name `--objects-from`, only into an empty store (ADR 0056 §7). (c) **The gate never touches the key.** It does
+**4. The legs.** (a) The database is dumped into the capture. (b) **The store leg is its index only**, as on every
+target ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3 says why that is a whole way back from an
+upgrade, and §7 how a restore checks it against the live store). Keeping the objects is the store's own promise, the
+operator's part; this gate is an upgrade's way back, not a disaster backup of the store. **The optional object pool
+does not apply to the gate**: a copy in an init container lengthens every release change by the new objects, and a
+pool outside the cluster is a new egress peer for the default-deny set (Context 4). A restore Job may still restore
+from a pool, only into an empty store (ADR 0056 §7). (c) **The gate never touches the key.** It does
 not mount the key's claim, so a capture cannot hold the KEK, and ADR 0056 §1's *never beside the dump* holds by
 construction. The key, which does not change between upgrades (Context 3), is kept on its claim and on the operator's
-own medium, exported once after the first start; the manifest records leg (c) as `separate`, so a restore asks for it.
+own medium, exported once after the first start; the capture records leg (c) as kept apart, so a restore asks for it.
 
-**5. The volume is the operator's.** `backup.existingClaim` names a claim the operator created; the chart creates none,
-so `helm uninstall` cannot take the backups with it, and size, class and encryption at rest are the operator's. **The
-backup is an explicit choice**: the schema refuses an install that neither names a claim nor says
-`backup.enabled: false` — the backup is the only way back (ADR 0056 §6), and the chart does not guess a size or a
-class. A capture is written to a `.partial` directory and renamed when complete; after a complete capture the gate
-prunes beyond `backup.keep` (default 3) and every leftover `.partial`, and at every start every capture older than
-ADR 0056 decision 8's bound (a daily CronJob on the same image and claim prunes between starts). A full volume fails
-the gate — it never prunes to make room.
+**5. The volume is the operator's.** The gate writes to a claim the operator created; the chart creates none, so
+`helm uninstall` cannot take the backups with it, and size, class and encryption at rest are the operator's. **The
+backup is an explicit choice**: the schema refuses an install that neither names a claim nor switches the backup off —
+the backup is the only way back (ADR 0056 §6), and the chart does not guess a size or a class. A capture becomes
+complete only by a rename, so an interrupted one is never taken for a capture; the gate keeps a bounded number of
+complete captures and none older than ADR 0056 decision 8's bound. A full volume fails the gate — it never prunes to
+make room.
 
 **6. A failed or refused gate keeps the app from starting, and that is the failure mode.** Nothing has migrated, the
 record has not moved, and the old pod is already gone: the instance is down until the operator acts, with its data
 untouched. Pinning the previous release back starts it again — the record still names it. Kubernetes retries a failed
 init container with backoff; the gate is idempotent. Who sees it: `helm upgrade` only with `--wait` (its default waits
 for hooks alone); Argo CD as a progressing application past the Deployment's progress deadline; Flux within its
-timeout, past which remediation rolls back and ends the gate mid-capture — the `.partial` is swept on the next start.
-The Run area tells the operator to set those timeouts above the capture time.
+timeout, past which remediation rolls back and ends the gate mid-capture — the unfinished capture is swept on the next
+start. The Run area tells the operator to set those timeouts above the capture time.
 
 **7. A capture can also be asked for, the GitOps way.** `backup.request` is an opaque value rendered into the pod
 template; changing it in git is a new revision, so Kubernetes stops the old pod first (Context 2), and the gate
@@ -113,9 +109,9 @@ captures because the request differs from the record's. A scheduled backup is th
 gate never captures because one is "due": a pod replaced outside a revision change has no termination guarantee, so a
 due capture could be a hot one.
 
-**8. The gate runs `instance_backup.py`, the one capture implementation**, in a third released image, `veyq-tools`:
-Python, the MariaDB client and `rclone`, pinned, released and signed with the other two
-([ADR 0057](0057-release-identity-and-deployment-recipe.md)). The tool gains a mode for running inside the pod
+**8. The gate runs `instance_backup.py`, the one capture implementation**, in a third released image, `veyq-tools`,
+pinned, released and signed with the other two ([ADR 0057](0057-release-identity-and-deployment-recipe.md)). The tool
+has a mode for running inside the pod
 (database and store by address, no Docker); its format is the one every capture writes (ADR 0056 §3), so a capture
 taken in a cluster restores onto Compose and back (same domain, ADR 0056 §4) — onto the other target's store only with
 its objects, from a pool (ADR 0056 §7).
@@ -142,7 +138,6 @@ cluster-scoped object.
   reads what the app already reads, and less.
 - **ADR 0056's guard gap narrows, not closes**: the cluster backup is the gate's, but that a key export happened is
   still the operator's to know; the fingerprint tripwire remains the only detection of a lost key.
-- **No lane boots the chart**: ADR 0091's lanes drive Compose through `veyqctl`; a cluster lane is inbox #430's.
 
 ## Rejected alternatives
 

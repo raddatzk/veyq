@@ -148,7 +148,7 @@ there too, without anyone reconfiguring the server.
 - Decisions: [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md) (the routing is generated
   from the database, never hand-edited — and why the wildcard shortcut was rejected),
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) §4 (same-origin blob transport,
-  amended by 0063 to per-request signing, and the measured limits of the CORS policy A5's second shape needs),
+  replaced in part by 0063 with per-request signing, and the measured limits of the CORS policy A5's second shape needs),
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5 (the signing mode
   itself — one named mechanism, so a store on its own address is not a deployment's special case),
   [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink and the chart that

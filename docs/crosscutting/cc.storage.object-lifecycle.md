@@ -156,10 +156,17 @@ produces (ADR 0056 § 7), since it restores a capture over a store that kept the
 A capture holds the store as its **index**, not its objects ([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
 § 3): every object's key, size and MD5 in the manifest's `store.index`, `backupFormat` 3
 (`src/tools/instance_backup.py`). The objects stay in the store, whose own versioning or replication keeps them; a
-capture copies them into an object pool only when one is named (`--objects-to`). A restore holds the live store, or the
-pool, against the index before it writes anything. `verify` tolerates objects the index holds and no blob row names —
-pending reclaims and open uploads. A restore target is an instance holding no data; the app provisions its bucket
-([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)).
+capture copies them into an object pool only when one is named (`--objects-to`). A pool is **copied into, never synced**
+— rclone `copy --immutable`, so a key whose bytes differ from the pool's copy fails the capture instead of replacing it
+— and incrementally: a key it holds is not copied again. It **keeps exactly what its retained captures need**: each
+capture that named it writes its index's keys into the pool's ledger once all of them are in the pool, the ledger keeps
+the newest `--pool-keep` captures (3 by default) and none older than the backup bound B, and the prune deletes from the
+pool what no kept entry names, never before the new entry is written. So an erasure reaches the pool within the
+rotation, and a pool serves one instance
+([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) § 3 says why). A restore holds the live
+store, or the pool, against the index before it writes anything. `verify` tolerates objects the index holds and no blob
+row names — pending reclaims and open uploads. A restore target is an instance holding no data; the app provisions its
+bucket ([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)).
 
 ## Decided, not built
 

@@ -29,7 +29,7 @@
 
 - **A1 — The check is switched off.** Server → Release has the switch; off, the instance makes no request and shows
   that it does not look. The source can be pointed at a mirror instead.
-- **A2 — The source cannot be reached.** Logged, retried the next day; nothing else changes and nothing is blocked.
+- **A2 — The source cannot be reached.** Logged, retried by a later run at a growing interval of at most a day; nothing else changes and nothing is blocked.
   The panel shows when the last check succeeded.
 - **A3 — No instance mail, or an unconfirmed address.** Notices appear in the console only, and Server → Release says
   so beside the switch — not set up, or set up but unconfirmed, with the way to Server → Mail — so that switching the check on is

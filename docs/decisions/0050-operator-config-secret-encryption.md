@@ -27,42 +27,40 @@ slice the mailer needs, without pre-empting #43's key hierarchy.
 **A server-held config secret that must be persisted is encrypted at rest with AES-256-GCM under a
 Key-Encryption-Key the server manages as a file.** Concretely:
 
-- **The KEK is a 32-byte key in a server-managed file.** On first start the server generates one, writes it
-  `0600`, and logs loudly that it must be backed up; an operator who supplies their own mounts it and points
-  `veyq.security.config-secret-file` at it — the K8s/Docker-secret shape. It is the same trust tier as the
-  datasource credentials, never committed, never in the DB. The name is deliberately generic
-  (not mail-specific): it seals *any* server-held config secret.
+- **The KEK is a 32-byte key in a server-managed file.** On first start the server generates one, writes it `0600`,
+  and logs loudly that it must be backed up; an operator who supplies their own mounts it and points the server at it
+  — the K8s/Docker-secret shape. It is the same trust tier as the datasource credentials, never committed, never in
+  the DB. The name is deliberately generic (not mail-specific): it seals *any* server-held config secret.
 - The secret is sealed with **AES-256-GCM via standard JCA** (no new dependency, no home-grown crypto); the DB
   stores only `ciphertext + a per-record random 12-byte nonce`. The server unseals on demand (at send time).
-- **Every sealed value carries the fingerprint of the key that sealed it, as a tripwire.** The fingerprint is
-  `HKDF-SHA256(ikm=KEK, info="veyq/v1/config-secret-key-fingerprint")`, stored in the same row as the ciphertext
-  and nonce it belongs to. A value is born with its fingerprint, so **nothing is adopted and a read writes
-  nothing**; a later **mismatch** means the loaded key is not the one that sealed *that* value. It is per value
-  and not one server-global row because one fingerprint, advanced by every reseal, would let re-entering one secret
-  report OK while another stayed sealed under the lost key. The instance-wide state is the worst of the values
-  (`ConfigSecretKeyGuard.readState`, over every holder of a sealed column). Storing it is safe, and for a specific
-  reason rather than by assertion: a 256-bit full-entropy key is **not** brute-forceable from its hash — unlike a
-  password, which would need a salt and a slow KDF — so "a DB dump yields no usable secret" still holds. The DB
-  gains fingerprints, never the key.
+- **Every sealed value carries the fingerprint of the key that sealed it, as a tripwire.** The fingerprint is an
+  HKDF-SHA256 derivation of the KEK, stored in the same row as the ciphertext and nonce it belongs to. A value is born
+  with its fingerprint, so **nothing is adopted and a read writes nothing**; a later **mismatch** means the loaded key
+  is not the one that sealed *that* value. It is per value and not one server-global row because one fingerprint,
+  advanced by every reseal, would let re-entering one secret report OK while another stayed sealed under the lost key.
+  The instance-wide state is the worst of the values, over every holder of a sealed column. Storing it is safe, and
+  for a specific reason rather than by assertion: a 256-bit full-entropy key is **not** brute-forceable from its hash
+  — unlike a password, which would need a salt and a slow KDF — so "a DB dump yields no usable secret" still holds.
+  The DB gains fingerprints, never the key.
 - This is **operator-side** crypto, distinct from the client-side content E2EE ([ADR 0012](0012-content-key-hierarchy.md)):
   it protects an operator's *own* infrastructure secret, not user content, so it does **not** touch
   operator-blindness — the server was always allowed to hold its own infra creds; this only stops them sitting
   in the DB in the clear.
-- **Scope: the tenants' mail passwords and the object store's secrets** (the S3 secret key and the Garage admin
-  token a Server Owner enters; the bundled store's pair is derived from its admin token and seals nothing), and the
-  same envelope is the pattern for any future server-held config secret. The seal carries no AAD yet, so a
-  ciphertext is not bound to its column. **Not** the full #43 (no multi-ServerOwner, no per-tenant server-scope key).
-- **Mismatch posture: degrade, don't brick.** The operator-blind rest of veyq needs no KEK, so only the
-  config-secret subsystem degrades, and a loud startup log names the recovery.
-  [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) fixes what that degradation means in practice: a
-  tenant whose SMTP carries a `username` is simply **non-sendable** without an openable KEK, so member invites
-  and password recovery are **refused** with `503` (§2/§4) rather than degraded, and only the Server-Owner's
-  bootstrap invite still falls back to a copy-link (§3). An unopenable KEK therefore costs the tenant those two
-  actions outright. The owner recovers by re-entering the SMTP password: the reseal happens under the current
-  key and the value's fingerprint becomes the current one again. A stored fingerprint is **never**
-  auto-overwritten — that would defeat the detection it exists for; it changes only on a deliberate reseal of
-  that value. For the store, an unreadable credential is named in the admin console and its check stops at the
-  credentials step; media are unreachable until the Server Owner re-enters them, and nothing else is lost.
+- **Scope: the tenants' mail passwords, the instance's own mail password
+  ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)) and the object store's secrets**
+  (the S3 secret key and the Garage admin token a Server Owner enters; the bundled store's pair is derived from its
+  admin token and seals nothing), and the same envelope is the pattern for any future server-held config secret. The
+  seal carries no AAD yet, so a ciphertext is not bound to its column. **Not** the full #43 (no multi-ServerOwner, no
+  per-tenant server-scope key).
+- **Mismatch posture: degrade, don't brick.** The operator-blind rest of veyq needs no KEK, so only the config-secret
+  subsystem degrades, and a loud startup log names the recovery. A tenant whose SMTP carries a `username` cannot send
+  without an openable KEK, and what an action that needs mail then does is
+  [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)'s (decisions 2–4). The owner recovers by re-entering the
+  SMTP password: the reseal happens under the current key and the value's fingerprint becomes the current one again. A
+  stored fingerprint is **never** auto-overwritten — that would defeat the detection it exists for; it changes only on
+  a deliberate reseal of that value. For the store, an unreadable credential is named in the admin console and its
+  check stops at the credentials step; media are unreachable until the Server Owner re-enters them, and nothing else
+  is lost.
 - **No KEK rotation in v1**, a documented limitation: rotation means re-sealing every record under a new KEK.
   Loss is no longer silent — the fingerprint names it — but rotation itself stays a later concern, cleanly
   signalled by that same fingerprint. Re-entering recovers per value, and the console names which values are unreadable; that scales
@@ -86,9 +84,9 @@ Key-Encryption-Key the server manages as a file.** Concretely:
 - **The sealed secret never leaves sealed.** Write-only over the API (never returned or logged); a DB dump,
   backup, or subpoena of data-at-rest sees ciphertext.
 - **The key file is durable state, and the third leg of a backup.**
-  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) captures it alongside the database and the
-  store objects precisely because an instance restored without it starts cleanly and is still broken, in exactly
-  the two flows above. `scripts/validate_config_secret_persistence.py` holds the compose side of that.
+  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) § 1 makes it the third leg beside the database
+  and the store's contents precisely because an instance restored without it starts cleanly and is still broken,
+  wherever a sealed value is needed.
 - **Rejected — the KEK as an env value.** The original shape was `VEYQ_SECURITY_CONFIG_SECRET_KEY`, base64,
   supplied by the operator. It was dropped while still greenfield — wired only in test properties and docs,
   never deployed — for two reasons. A self-hoster who simply omitted it hit a silent fallback rather than a
@@ -102,6 +100,5 @@ Key-Encryption-Key the server manages as a file.** Concretely:
 - **Rejected — keeping the password in env, keyed per tenant.** Cannot self-service (a tenant can't edit env at
   runtime) and does not scale to many tenants; the whole point of per-tenant settings is runtime configuration.
 
-For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md).
-
-For Server Owners, on the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md).
+For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md),
+[Storage and email](../../site/src/content/docs/run/storage-and-email.md).

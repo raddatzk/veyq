@@ -25,12 +25,12 @@ at first-run setup ([uc.admin.setup-server](../features/admin/use-cases/uc.admin
 
 ## Decision
 
-**1. The backend looks for new releases, on by default, and the Server Owner can switch it off.** Once a day it reads
-the published releases from the same source `veyqctl` uses (ADR 0096 decision 3: the immutable GitHub Releases, or
-the operator's mirror) and compares them with its own `VEYQ_VERSION` **locally**. The request is anonymous and names
-no version, so the source learns that this address polls veyq — not which release it runs. The switch and the source
-are instance settings in admin-web ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
-A failed check is logged and retried the next day; it never blocks anything.
+**1. The backend looks for new releases, on by default, and the Server Owner can switch it off.** Daily by default,
+it reads the published releases from the same source `veyqctl` uses (ADR 0096 decision 3: the immutable GitHub
+Releases, or the operator's mirror) and compares them with its own `VEYQ_VERSION` **locally**. The request is anonymous
+and names no version, so the source learns that this address polls veyq — not which release it runs. The switch and
+the source are instance settings in admin-web ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
+A failed check is logged and a later run retries it; it never blocks anything.
 
 **2. What it finds is a notice, never an action.** Nothing is pulled; upgrading stays `veyqctl`'s, by hand. A forged
 release list can at worst produce a false notice. admin-web shows, and the mail of decision 4 sends:
@@ -67,22 +67,19 @@ Owner's address carrying a short one-time code, which the Server Owner types int
 mailed only after that. One mail proves both that the SMTP settings work and that setup's address — collected there,
 never confirmed — reaches its owner. A changed address or changed settings ask again. A code and not a link, because
 the admin console is reachable on localhost only ([ADR 0065](0065-admin-ui-cli-separate-service.md)) and the instance
-has no address of its own: a link opened on another device would reach nothing. **A moderator's address is confirmed
-the same way, where they can reach it:** accepting the appointment sends the code to their account address, and they
-type it into src/web/'s moderation surface (ADR 0099 § 7); moderation notices reach that address only once it is
-confirmed, and a changed address asks again. **The instance contact's notification address too** (ADR 0093 § 11):
-saving it sends the code through instance mail — only once the Server Owner's own address is confirmed, which admin-web
-says until then — and the Server Owner types it into admin-web's Server → Operator; moderation notices reach it only
-once confirmed, and a changed address asks again.
+has no address of its own: a link opened on another device would reach nothing. **Every other address an instance
+notice reaches is confirmed by the same rule:** a moderator's (where and when they type the code is ADR 0099 § 7's)
+and the instance contact's notification address (ADR 0093 § 11). Each receives notices only once confirmed, and a
+changed address asks again. The contact's code is sent only once the Server Owner's own address is confirmed, because
+it goes through instance mail.
 
 **6. The channel is built for instance notices, and carries release notices and moderation notices.** Nothing in
 decisions 3–5 is specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is
-one decision away — but each needs its own, because each is a new thing the instance watches. Moderation notices —
-a new case — are the second kind, decided by ADR 0099 § 7, and the first that reaches anyone but the Server Owner;
-an erasure's notice (ADR 0101) is the other.
-**Rotation due** is the third, to the Server Owner alone: after a moderator steps down or rotates their identity, reports
-keep sealing to an epoch that moderator held until the Server Owner mints the next one in admin-web, which shows the same
-warning (ADR 0099 § 4); it is mailed once per epoch. The first tenant owner's invite is
+one decision away — but each needs its own, because each is a new thing the instance watches. Release notices are the
+first kind. Moderation notices are the second (ADR 0099 § 7), and **rotation due** the third (ADR 0099 § 4), to the
+Server Owner alone, mailed once per epoch. An erasure's notice reaches the account being erased (ADR 0101). Moderation
+and erasure notices are the ones that reach anyone but the Server Owner; who receives each kind is
+[cc.mail](../crosscutting/cc.mail.md) § Which mails exist's list. The first tenant owner's invite is
 not an instance notice and stays ADR 0048 § 5's copy-link: instance mail is optional, and the bootstrap must work
 without it.
 
@@ -92,15 +89,16 @@ without it.
   configure. *Self-hostable by default* holds because it can be switched off and pointed at a mirror, and nothing
   depends on it; the owner chose default-on over opt-in so that forgotten instances hear of fixes.
 - **The GitHub source needs a published manifest.** It reads each candidate major's `manifest.json` release asset,
-  which exists once `veyqctl`'s publish uploads it ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md));
-  until then a new major on GitHub is a failed check, a mirror is not.
+  which a release's publish uploads ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision
+  3); without one, a new major on GitHub is a failed check.
 - **A second server-held mail secret**, the instance's own; tenant mail still has no instance-wide one
   (ADR 0048 § 4).
 - **The window reminders count only once a store-shipped client exists.** The web client and admin-web always match
-  their server (ADR 0085), and the window itself is not built yet (ADR 0085 § Consequences). Until then the
-  planned-major notice is the one that matters, and its date says when the window *would* close.
-- **Offline runs switch it off.** The end-to-end lanes ([ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md))
-  boot with no internet; the check must stay quiet there, and a run must not count its failure as a defect.
+  their server (ADR 0085 decision 6), and the window is ADR 0085 decision 5's. Until then the planned-major notice is
+  the one that matters, and its date says when the window *would* close.
+- **Offline runs stay quiet without a switch.** The end-to-end lanes ([ADR 0090](0090-end-to-end-tests-boot-the-release-candidate.md))
+  boot with no internet, and a run must not count a failed check as a defect. An image without a release stamp never
+  checks; a lane that stamps one points the check at a local mirror.
 - **Rejected — opt-in.** No outbound call unless asked, but the instances that most need the notice are the ones
   nobody configures.
 - **Rejected — `veyqctl check` only.** No outbound call from the instance at all, but nobody is told unless they run it.

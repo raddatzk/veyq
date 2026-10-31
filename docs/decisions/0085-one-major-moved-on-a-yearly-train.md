@@ -12,15 +12,15 @@
 client is served by the backend it talks to ([ADR 0069](0069-backend-serves-the-web-app-shell.md)), and
 `admin-web` ships in the same release, so neither can drift from its server.
 
-Native clients change that. The direction the owner set (native work itself stays parked until the web V1 stands) is one installable app per application, each able to talk to **several instances** at once. A store
-ships the app, and every operator upgrades on their own schedule. Under equality two things break: an app update
-locks its user out of every instance that has not upgraded yet, and one operator who upgrades late blocks users
-who also use other instances. The cost of drift lands on the people who cannot fix it.
+Native clients change that. The direction the owner set is one installable app per application, each able to talk to
+**several instances** at once. A store ships the app, and every operator upgrades on their own schedule. Under
+equality two things break: an app update locks its user out of every instance that has not upgraded yet, and one
+operator who upgrades late blocks users who also use other instances. The cost of drift lands on the people who
+cannot fix it.
 
-Two majors exist today and answer the same question, *"did something an older side relies on go away?"*:
-`VERSION` holds the release major ([ADR 0057](0057-release-identity-and-deployment-recipe.md) §1), and
-`veyq.version.major` the protocol major. Measured
-(`cat VERSION; grep -n 'veyq.version.major' backend/core/src/main/resources/application.properties`): `0` and `1`.
+Two majors existed when this was decided, and they answered the same question, *"did something an older side
+relies on go away?"*: `VERSION` held the release major ([ADR 0057](0057-release-identity-and-deployment-recipe.md)
+§1), and a `veyq.version.major` setting the protocol major. Measured then, they were `0` and `1`.
 
 Sealed payloads add a third axis. The server cannot migrate ciphertext, so every format ever written stays
 readable ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 7). Writing a new
@@ -30,11 +30,11 @@ read has broken a shared object without any server noticing.
 ## Decision
 
 **1. One major.** `VERSION` holds the platform's only major: it is the release major of ADR 0057 and the protocol
-major of ADR 0032 at once, and `veyq.version.major` is derived from it rather than set by hand. Only the major
-is bundled. The pre-auth `/api/setup` still advertises the major and nothing more precise. The release
-`<major>.<minor>` stays Server-Owner information, because a precise release number tells any visitor which
-CVEs an instance still carries (ADR 0057 §4, unchanged). `build` stays what ADR 0057 §4 makes it, a hand-kept
-diagnostic that gates nothing.
+major of ADR 0032 at once. The server and the web client compile it in from the same file, and no setting holds it,
+so no instance can be configured to advertise a major its code does not speak. Only the major is bundled. The
+pre-auth `/api/setup` still advertises the major and nothing more precise. The release `<major>.<minor>` stays
+Server-Owner information, because a precise release number tells any visitor which CVEs an instance still carries
+(ADR 0057 §4, unchanged). `build` stays what ADR 0057 §4 makes it, a hand-kept diagnostic that gates nothing.
 
 **2. The major moves only when something is removed.** Everything additive is a minor. Once a removal is decided,
 what will go is marked `deprecated: true` in its contract, so the generated clients flag every use of it, and it
@@ -89,58 +89,42 @@ a scope's tree revision ([ADR 0081](0081-a-scopes-tree-revision-is-the-level-vie
 database migrations. They answer other questions and stay independent of the major
 ([ADR 0086](0086-one-word-per-meaning.md) names them revisions).
 
-**10. The previous major keeps a release branch until the next train** (owner 2026-10-30). A security fix decision 4
+**10. The previous major keeps a release branch until the next train.** A security fix decision 4
 keeps inside a major reaches the operators who have not left the previous major yet, without an upgrade:
 - **When:** the old major's last commit on `main` is released before `VERSION` is bumped, so that release is the
   bump's parent. `release/<old>.x` is cut from its tag `v<old>.<n>`. The branch counts its own history since `VERSION`
   last changed (ADR 0057 § 1), so its first fix is `<old>.<n+1>`, a number `main` never reached in that major, and no
-  unreleased work of `main` rides along with a fix. `ci.yml` already publishes from `release/<major>.x`, signed, with
-  `<major>` and without `latest`.
+  unreleased work of `main` rides along with a fix.
 - **What:** only a fix decision 4 allows inside a major — never a feature, never a removal. It lands on `main` first
-  and is cherry-picked onto the branch (`git cherry-pick -x`). **It carries no migration.** An instance on the fix
-  release would hold a migration the new major's schema history does not have at that place, and its upgrade would
-  meet a history no tested path covers. A fix that needs one is made in the current major only, and the old major's
+  and is cherry-picked onto the branch. **It carries no migration.** An instance on the fix release would hold a
+  migration the new major's schema history does not have at that place, and its upgrade would meet a history no
+  tested path covers. A fix that needs one is made in the current major only, and the old major's
   operators upgrade to get it.
 - **How long:** until the next train. A train ends every branch cut before it and cuts the new one, so one branch
   is maintained beside `main`. An unscheduled major (decision 4) cuts a branch too, kept until the same train, so a
   year with one has two. The client window (decision 5) is longer and stays so: an app keeps talking to an N-2
   server, but that server gets no more fixes.
-- **The release order:** the branch release first, then a release of the current major. Each fix release moves the
-  release the new major is entered from (ADR 0096 decision 5; ADR 0098 decision 3: the gate admits a major entered
-  only from the release the target was tested from). The current major's next release is proved from the fix release
-  and bakes it as its major entry. Until it exists, an instance on the fix release cannot enter the new major, but it
-  runs the fixed release while it waits.
+- **The major entry:** the release major N is entered from is the newest release tag of major N−1 among all the
+  repository's tags, `main`'s and every `release/<old>.x` branch's, by version order, as it stands when a release of
+  major N is cut. That release of major N is proved from its entry, and an instance enters major N only from it (how
+  the gate and `veyqctl` hold that: [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
+  decision 3, [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 5). So every fix
+  release on the branch moves the entry.
+- **The release order:** the branch release first, then a release of the current major, which is proved from the fix
+  release and names it as its major entry. Until that release exists, an instance on the fix release cannot enter the
+  new major, but it runs the fixed release while it waits.
 
 ## Consequences
 
-- **Built: one major (decision 1).** buildSrc's `GeneratePlatformMajor` compiles `VERSION` into `:core`'s
-  `PlatformMajor.MAJOR`, which `GET /api/setup` advertises; there is no `veyq.version.major` setting any more, so no
-  instance can be configured to advertise a major its code does not speak, and neither runtime target needs a value.
-  The web client's `EXPECTED_MAJOR` is read from the same file at build time (`src/web/vite.config.ts`); its gate still
-  compares for equality (decision 6). `CapabilityManifestSliceTest` and `src/web/src/shared/state/capabilities.test.ts`
-  each read `VERSION` from disk and hold the served and the compiled major to it. The `setup.openapi.yaml`
-  `Version.major` text names the train and the window.
-- **Written into the release procedure (decisions 2, 3 and 10):** the 1 May train, its release order and the release
-  branch, in [`infra/README.md`](../../infra/README.md) § Cutting a release. The manifest's deprecation lifecycle stays
-  deferred (ADR 0032 § Consequences) and is not needed for this.
-- **Built: a fix release moves the major entry (decision 10).** Every release of major N is proved from its MAJOR
-  ENTRY — the newest release tag of major N−1 among all the repository's tags, `main`'s and every `release/<old>.x`
-  branch's, by version order — beside its default predecessor (the newest tag its first parent reaches, which never
-  sees a branch's tag), and its tools image bakes that entry for the gate (ADR 0098 decision 3). One derivation,
-  `run_web_e2e.major_entry_ref()`: `ci.yml`'s `upgrade-proof` runs `run_web_e2e.py --upgrade-major-entry`, its `chart`
-  job `chart_upgrade_check.py --upgrade-major-entry`, `release_assets.py --major-entry` stamps the tools image, and
-  `release_assets.produce` names it as the signed manifest's `majorEntry`, by which `veyqctl` enters major N only from
-  that release (ADR 0096 decision 5) — so neither the gate nor a Compose upgrade takes an entry the pipeline did not
-  prove; an instance already past it (on a fix release cut later) is refused until a release entered from it exists. No tag of major N−1 (major 0, or while the pin file
-  says `release: none`): no entry and no second run; an entry equal to the default predecessor — a major's first
-  release, cut before any fix release — is proved once. `upgrade_proof_selftest.py` holds the derivation on a
-  fabricated history with a `release/1.x` branch. Like the whole upgrade proof, the second run is disabled until the
-  first release, and no CI run has executed either.
-- **Not built.** Each is open work tracked in the inbox:
-  - **lane L3's archive holding the major entry** (ADR 0096, inbox #461): the major entry's backup archived, so that it
-    restores into the new major. L3 has no lane yet (ADR 0091 decision 6), and its archive needs the first release.
-    Needed before the first branch release, so not before the first train;
-  - no CI job runs a client against older server majors (#436). None can be needed before a native client exists.
+- **Nothing to configure (decision 1).** Neither runtime target sets a major. The web client's gate, compiled from
+  the same `VERSION`, still compares for equality (decision 6).
+- **The train is a procedure (decisions 2, 3 and 10)**, written in [`infra/README.md`](../../infra/README.md) § Cutting
+  a release. The manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for
+  this.
+- **One derivation of the major entry (decision 10).** The upgrade proof, the gate's tools image and the signed
+  manifest that `veyqctl` routes by take the entry from the same place, so neither the gate nor a Compose upgrade takes
+  an entry the pipeline did not prove. Before major N−1 has a release there is no entry and nothing to prove from it;
+  an entry that is also the default predecessor (a major's first release, cut before any fix release) is proved once.
 - **Major 0 is pre-release** (ADR 0057). The window counts released majors only, so no client carries a `0`
   adapter, and at V1 `VERSION` and the advertised major both become `1`. Until then the advertised major is `0`,
   not floored to `1`: a floor would be a second rule, the two counters this decision removes.
@@ -148,7 +132,7 @@ keeps inside a major reaches the operators who have not left the previous major 
   required variable, a removed service) waits for the train like a protocol removal, or forces an unscheduled
   major. When the protocol is unchanged, that major's adapter is an alias of the previous one and costs nothing.
 - **What it costs:** one adapter and one older server image in the client's test matrix per major inside the
-  window. Every major is a signed image (ADR 0057), so the older images exist. The job does not exist yet.
+  window. Every major is a signed image (ADR 0057), so the older images exist.
 - **One platform major, not one per application.** With a two-year window a removal in one application costs the
   others an alias, not a lockout. A major per application would multiply the window logic for every application and gain
   nothing a user can notice.
@@ -165,15 +149,15 @@ keeps inside a major reaches the operators who have not left the previous major 
 - **The whole release version on the pre-auth surface.** Rejected for ADR 0057 §4's reason: it publishes every
   instance's patch level, and with it the CVEs it still carries.
 - **The two majors kept apart.** Rejected: both count the same event, a removal, and two counters for one event
-  drift. They already differ (`0` and `1`).
+  drift. They had already drifted apart (`0` and `1`).
 - **A client denylist of servers with a known flaw.** Rejected: it decides for operators what is theirs to decide
   (decision 7). Where the flaw is the client's own, the fix is in the client, not a list.
 - **A minimum deprecation period (six months, with a cutoff date for the next train).** Rejected: it buys an
   operator nothing, since they upgrade either way, and the clients are already covered by the window. The only
   ordering that matters is that clients ship before the server (decision 2).
-- **No release branch: an old major is fixed only by upgrading.** Rejected (owner 2026-10-30): a security fix
+- **No release branch: an old major is fixed only by upgrading.** Rejected: a security fix
   would then cost an operator a major upgrade, with its removals, on the day the fix is published.
-- **A release branch for every major in the client window (N-1 and N-2).** Rejected (owner 2026-10-30): two
+- **A release branch for every major in the client window (N-1 and N-2).** Rejected: two
   branches beside `main`, each with every lane on both architectures and every backport, for operators who have had a
   year since their major stopped being current. The client window stays longer because updating an app costs its user
   nothing, and that does not hold for an operator's server.
