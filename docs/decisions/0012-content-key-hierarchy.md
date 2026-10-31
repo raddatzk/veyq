@@ -122,5 +122,5 @@ holds one more opaque wrap and nothing else.
   (one-key-many-wraps), [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) (vectors are the byte
   contract).
 - Feature: [Memory](../features/memory/_index.md); the foundation enabler
-  [en.memory.tree](../features/memory/enablers/en.memory.tree.md).
+  [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md).
 - Security area of the docs site: [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md)

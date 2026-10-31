@@ -101,7 +101,7 @@ sealed interface ListTrashOutcome {
 }
 
 /**
- * Use-case logic for the node tree (en.memory.tree, cr-0027). Scope access is the one gate, [ScopeAccess],
+ * Use-case logic for the node tree (en.platform.node-tree). Scope access is the one gate, [ScopeAccess],
  * asked first by every operation (uc.spaces.scope-access): a non-member sees a 404, not a reveal. Structural rules:
  * a parent that is missing, trashed or in another scope refuses every kind; where a kind may live is the one
  * [NodeKindRules] that handles it (core's `FOLDER`, an application's own kinds — ADR 0079), none or several →

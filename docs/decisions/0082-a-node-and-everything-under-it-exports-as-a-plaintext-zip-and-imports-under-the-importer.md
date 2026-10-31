@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-10-13
-- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 
 ## Context
 

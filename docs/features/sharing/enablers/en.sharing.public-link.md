@@ -19,7 +19,7 @@
   [uc.sharing.share-link-storage-limit](../use-cases/uc.sharing.share-link-storage-limit.md),
   [uc.sharing.share-accept](../use-cases/uc.sharing.share-accept.md).
 - **Depends on:** [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the chain a link hangs
-  off: `K_SC` epochs, node keys, the re-key after a rotation), [en.memory.tree](../../memory/enablers/en.memory.tree.md)
+  off: `K_SC` epochs, node keys, the re-key after a rotation), [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)
   (the node tree and its keys), [scopes and tenancy](../../../crosscutting/scopes-and-tenancy.md) (who is a member,
   who owns a scope). What each application lets a guest do inside its own kinds is its role matrix
   ([Memories](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix), [Depot](../../../apps/depot.md),
@@ -286,7 +286,7 @@ stateDiagram-v2
 - **Feature:** [sharing](../_index.md)
 - **Serves:** every `uc.sharing.*` (listed in the header).
 - **Depends on:** [keys-grants-and-trust](../../../crosscutting/keys-grants-and-trust.md),
-  [en.memory.tree](../../memory/enablers/en.memory.tree.md), [scopes-and-tenancy](../../../crosscutting/scopes-and-tenancy.md).
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md), [scopes-and-tenancy](../../../crosscutting/scopes-and-tenancy.md).
 - **Decisions:** [ADR 0029](../../../decisions/0029-public-viewer-share.md) (the link and the anonymous access path),
   [ADR 0030](../../../decisions/0030-contributor-public-share.md) (`READ_WRITE` and guest identities),
   [ADR 0031](../../../decisions/0031-uploader-public-share.md) (`WRITE_ONLY` and the drop key),

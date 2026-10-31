@@ -25,7 +25,7 @@ Four different kinds of record — keep them distinct:
 | Durable state? | yes (durable truth) | yes (durable truth) | yes (durable truth) | **a record** of work, not state — links to the truth, never copies it |
 | Site source? | **yes** (a Use page names it in `sources:`) | rarely (a Security or Run page may) | yes (Security, Run) | no |
 | Test/trust-chain unit? | yes | yes (still verified) | no (a rationale, not a flow) | no — it *produces* the tested `uc.`/`en.` |
-| Example | log in, set device security, share a Memory | `en.spaces.personal-scope`, `en.memory.tree` | unlock methods (ADR 0005), content-key hierarchy (ADR 0012) | cr-0026 (builds `en.spaces.personal-scope`), cr-0027 (builds `en.memory.tree`) |
+| Example | log in, set device security, share a Memory | `en.spaces.personal-scope`, `en.platform.node-tree` | unlock methods (ADR 0005), content-key hierarchy (ADR 0012) | cr-0026 (builds `en.spaces.personal-scope`), cr-0027 (builds `en.platform.node-tree`) |
 
 **Litmus for UC vs enabler:** does the user have a conscious goal with perceived value from *this* step
 alone (UC), or is it the substrate another flow needs (enabler)? An empty per-tenant scope or an empty named
@@ -91,7 +91,7 @@ standalone end-user story; its value surfaces through the use-cases it serves). 
 where that section would be.
 
 **An enabler owes no `## Main flow` — because enablers come in two kinds.** Nine of the thirteen describe a
-*flow* (`en.memory.media`, `en.memory.tree`, the scope enablers) and carry one. Four describe a **model** — a
+*flow* (`en.memory.media`, `en.platform.node-tree`, the scope enablers) and carry one. Four describe a **model** — a
 key inventory (`en.account.key-model`), a table layout (`en.memory.buckets`), an envelope shape
 (`en.memory.node-meta`) — where there is no sequence to state and forcing one would mean inventing it. This
 page used to demand "the same Main-flow / exceptions" from both; it was never true. **If an enabler does have

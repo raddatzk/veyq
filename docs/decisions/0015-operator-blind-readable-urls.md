@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-06-28
-- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 - Replaced in part: a foreign `~username` as the profile view by ADR 0083 (built)
 
 ## Context
@@ -72,7 +72,7 @@ routes stay history-mode.**
   group slug token), so a group's token is its name's slug only while no other of the member's groups shares it, else
   its scope id; a slug that two of them share resolves to **no** group, never to whichever comes first — guessing
   could open the wrong group's content. Where each piece lives in the client:
-  [en.memory.tree § Addressing](../features/memory/enablers/en.memory.tree.md#addressing-urls).
+  [en.platform.node-tree § Addressing](../features/platform/enablers/en.platform.node-tree.md#addressing-urls).
 - **The grammar of a node's path: a folder ends in a slash, an application puts its slug before its nodes,
   Depot has none.** The path stays in the fragment, readable and resolved client-side exactly as above, after the
   scope token (token-less tenant, `~username`, `@group`). What follows the token is:

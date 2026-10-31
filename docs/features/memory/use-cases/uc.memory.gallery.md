@@ -202,7 +202,7 @@ slideshow — with everything decrypted only on your own device.
 - Enablers: [en.memory.derivatives](../enablers/en.memory.derivatives.md) (the three tiers),
   [en.memory.media](../enablers/en.memory.media.md) (the blob transport),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the Memory pin **and** the item mark),
-  [en.memory.tree](../enablers/en.memory.tree.md) (`K_node`)
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (`K_node`)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (direct-to-store
   media), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_node` → `K_blob`),
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two favorite objects, the

@@ -23,9 +23,9 @@ seals its name under a field key derived from the folder's key instead of from `
 
 ## Enablers
 
-- ★ [en.memory.tree](enablers/en.memory.tree.md) — **built (web + backend)** (the encrypted node tree: FOLDER/MEMORY/CHAPTER,
-  encrypted names, blinded slugs, per-Memory `K_node` birth/open — the substrate the use-cases below build on;
-  [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
+The tree these build on — encrypted names, blinded slugs, a key on every node, for every kind — is core's:
+[en.platform.node-tree](../platform/enablers/en.platform.node-tree.md), in the [Platform](../platform/_index.md) feature.
+
 - ★ [en.memory.media](enablers/en.memory.media.md) — **built (web + backend)** (the encrypted media data layer: a blob sealed
   as chunked AEAD under a random `K_blob` wrapped under `K_node`, transferred direct-to-store via presigned URLs,
   attached to a node; **no scope-wide dedup** — operator-blind trade-off; a cover, a banner and a gallery original equal

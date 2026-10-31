@@ -3,7 +3,7 @@ info:
   title: veyq Content API
   version: 0.1.0
   description: >
-    The encrypted node tree inside a scope (en.memory.tree, cr-0027). Nodes of a `kind` — core's FOLDER
+    The encrypted node tree inside a scope (en.platform.node-tree). Nodes of a `kind` — core's FOLDER
     (organization only) or an application's kind — addressed by opaque ids, under the scope resolved from the
     path `scopeId`. **Operator-blind:** the server stores only ciphertext (`encryptedName`, `wrappedContentKey`,
     `wrappedMeta`) + opaque `parentId`/`kind`/`orderIndex` + the **blinded `slugToken`**; it never sees a name, a

@@ -17,7 +17,7 @@
   a level and in every node's header, and the sidebar Favorites section) — a shortcut to frequently-opened nodes, and
   a way to single out the good pictures inside a Memory.
 - **Depends on:** [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (the `K_SC` the
-  **item** set is sealed under) + the account **master key** (the **pin** set) + [en.memory.tree](en.memory.tree.md)
+  **item** set is sealed under) + the account **master key** (the **pin** set) + [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)
   (the nodes pinned) + [en.memory.media](en.memory.media.md) (the items marked).
 - **Preconditions:** An **authenticated, unlocked** member with the scope open (so `K_SC` and the master key are
   in memory); for item marks, an **open Memory**.
@@ -156,7 +156,7 @@ Neither table stores a time: the operator sees the rows and their sizes.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Siblings: [en.memory.tree](en.memory.tree.md) (the nodes pinned),
+- Siblings: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the nodes pinned),
   [en.memory.media](en.memory.media.md) (the items marked)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (operator-blind metadata boundary)
 - Decisions: [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two objects —

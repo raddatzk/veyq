@@ -41,7 +41,7 @@ structure, attachments and guests, and the user interface. What a verified uploa
   registry (`claimRouteSlug`; a second claim throws; a platform word, `RESERVED_ROUTE_SEGMENTS`, is refused), or
   declares that it has none (`claimNoRouteSegment`) — Depot is the one that does. A claimed slug is reserved among
   folder and file names, which are numbered around it (`memories-2`; the module is `core/node/location.ts`,
-  [en.memory.tree § Addressing](../features/memory/enablers/en.memory.tree.md#addressing-urls)).
+  [en.platform.node-tree § Addressing](../features/platform/enablers/en.platform.node-tree.md#addressing-urls)).
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant

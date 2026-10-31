@@ -21,7 +21,7 @@
   [uc.platform.switch-application-off](../use-cases/uc.platform.switch-application-off.md),
   [uc.platform.erase-switched-off-application](../use-cases/uc.platform.erase-switched-off-application.md).
 - **Depends on:** [en.account.key-model](../../account/enablers/en.account.key-model.md) (the `DEVICE` and `DEVICE_KEY`
-  wraps a device switch withholds); [en.memory.tree](../../memory/enablers/en.memory.tree.md) (the node kinds an
+  wraps a device switch withholds); [en.platform.node-tree](en.platform.node-tree.md) (the node kinds an
   application switch refuses by).
 
 ## The catalog

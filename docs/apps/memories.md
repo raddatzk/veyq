@@ -77,7 +77,7 @@ still gate geocoding. With `memories.map` and `memories.places` both off a place
 
 | Platform primitive | Where it is described |
 |---|---|
-| The node tree (create, rename, move, slug uniqueness) | [en.memory.tree](../features/memory/enablers/en.memory.tree.md), today filed under the memory feature but a platform concern |
+| The node tree (create, rename, move, slug uniqueness) | [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md) (core's) |
 | Node trash | [ADR 0061](../decisions/0061-node-deletion-reversible-node-trash.md) |
 | Scopes, memberships, grants, key epochs | [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md) |
 | Public shares (viewer, contributor, uploader) | [`docs/features/sharing/`](../features/sharing/_index.md) |

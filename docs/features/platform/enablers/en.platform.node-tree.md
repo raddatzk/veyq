@@ -1,17 +1,19 @@
-# Enabler: The Memory tree (encrypted folder/Memory nodes)
+# Enabler: The node tree — core's encrypted tree of every kind's nodes
 
-- **ID:** en.memory.tree
+- **ID:** en.platform.node-tree
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-- **Provides:** the **encrypted node tree** inside a scope — **folders** (organization only) and **Memories**
-  (the content unit, nested **Chapters**) — with **encrypted names**, **blinded slug tokens** for permalinks,
+- **Provides:** core's **encrypted node tree** inside a scope, for the nodes of every kind — core's **folders**
+  (organization only) and each application's kinds: **Memories** (the content unit, nested **Chapters**), Depot's
+  files and drop boxes ([Depot](../../../apps/depot.md)), Expenses' Pots ([Expenses](../../../apps/expenses.md)) —
+  with **encrypted names**, **blinded slug tokens** for permalinks,
   and a **content key on every node**, born on creation. Tree + names + keys, and what every node shares: its
   address, its sealed-meta writes, its trash, the guests' tree operations, the live refresh and the download.
-- **Serves (use-cases):** [uc.memory.browse](../use-cases/uc.memory.browse.md) (tree navigation + node CRUD),
-  [uc.memory.gallery](../use-cases/uc.memory.gallery.md), [uc.memory.chapters](../use-cases/uc.memory.chapters.md),
-  [uc.memory.delete-node](../use-cases/uc.memory.delete-node.md) (the node lifecycle — delete, trash, restore, purge).
+- **Serves (use-cases):** [uc.memory.browse](../../memory/use-cases/uc.memory.browse.md) (tree navigation + node CRUD),
+  [uc.memory.gallery](../../memory/use-cases/uc.memory.gallery.md), [uc.memory.chapters](../../memory/use-cases/uc.memory.chapters.md),
+  [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the node lifecycle — delete, trash, restore, purge).
   Media, the sealed node-meta (date / place), journal and sharing build on it **indirectly**, through
-  [en.memory.media](en.memory.media.md) / [en.memory.node-meta](en.memory.node-meta.md). Creating an empty named
+  [en.memory.media](../../memory/enablers/en.memory.media.md) / [en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md). Creating an empty named
   node is not itself a user goal; it is the substrate those carry.
 - **Depends on:** [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (content lives
   in a scope) → and through it `uc.account.unlock` (the identity + scope key).
@@ -107,7 +109,7 @@ sequenceDiagram
 
 A node delete is **reversible** and takes the **whole subtree** with it
 ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md),
-[uc.memory.delete-node](../use-cases/uc.memory.delete-node.md)). It is the same
+[uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md)). It is the same
 **soft-delete → trash → retention → scheduled hard-purge** mechanism the
 [security model](../../../crosscutting/security-model.md) mandates for every destruction — a node is not an
 exception to it.
@@ -181,7 +183,7 @@ server, a miss `409 stale_revision` with the current blob and revision (`StaleSe
 `409 cover_stale` when the slot holds another blob than the one stated). Every edit operation declares its
 concurrency in the contract (`x-veyq-concurrency`: `revision`, `last-writer-wins` with a reason, or `node-epoch`),
 which `scripts/validate_write_concurrency.py` checks. The payload's fields, columns and self-heals:
-[en.memory.node-meta](en.memory.node-meta.md).
+[en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md).
 
 ## Guest tree operations
 
@@ -219,7 +221,7 @@ answers the revision as its `ETag` and a `304` to a matching `If-None-Match`; a 
 guest's poll for a share page; a re-read tree keeps the page's node by id and its key object while it is the same key
 (`sameKeyOr`). A moderator's block rides this revision (`CaseDecisions.announce`), not a node's item revision; an idle
 tree poll costs the same statements whatever the scope holds (`OpenMemoryTreePollSliceTest`). What the user sees:
-[uc.memory.browse](../use-cases/uc.memory.browse.md#live-refresh).
+[uc.memory.browse](../../memory/use-cases/uc.memory.browse.md#live-refresh).
 
 ## Out and in (download, import, copy)
 
@@ -233,8 +235,8 @@ with), the safe names (`archiveName.ts`) and the manifest (`manifest.ts`, format
 kind brings its content through its registration (`exportContent`, `importContent`, `contentSchema`,
 `downloadsAsFile`, `importsAsFolder`). The manifest's schema is
 [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json); the flows are
-[uc.platform.export-import](../../platform/use-cases/uc.platform.export-import.md) and
-[uc.platform.copy-node](../../platform/use-cases/uc.platform.copy-node.md).
+[uc.platform.export-import](../use-cases/uc.platform.export-import.md) and
+[uc.platform.copy-node](../use-cases/uc.platform.copy-node.md).
 
 ## Alternate / exception flows
 
@@ -265,7 +267,9 @@ kind brings its content through its registration (`exportContent`, `importConten
 
 ## Related
 
-- Feature: [Memory](../_index.md)
+- Feature: [Platform](../_index.md) — core's, for every kind ([Applications](../../../apps/README.md)); the
+  FOLDER / MEMORY / CHAPTER examples above are Memories', the first application's
+  ([Memory feature](../../memory/_index.md))
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (key hierarchy, blinded tokens),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md) (navigation contract; content in a scope),
   [Account & Key Model](../../account/enablers/en.account.key-model.md)
@@ -279,4 +283,4 @@ kind brings its content through its registration (`exportContent`, `importConten
   [ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)
 - Related: [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (the enabler this
   builds on — where the first tree lives), and the planned add-media / journal / share-a-Memory use-cases
-  ([Memory feature](../_index.md)) this serves
+  ([Memory feature](../../memory/_index.md)) this serves

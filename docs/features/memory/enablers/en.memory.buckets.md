@@ -13,7 +13,7 @@
   also **grounds the grouping** the contributor share earmarked
   ([uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md), ADR 0030).
 - **Depends on:** [en.memory.media](en.memory.media.md) (the media rows a bucket groups + the upload/attach path),
-  [en.memory.tree](en.memory.tree.md) (a **Memory** owns a `K_node` — the key the sealed names wrap under), and the
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (a **Memory** owns a `K_node` — the key the sealed names wrap under), and the
   anonymous **share identity** ([ADR 0030](../../../decisions/0030-contributor-public-share.md)) for the
   guest `owner_key`.
 - **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped (bucket names + any
@@ -96,7 +96,7 @@
 - **Feature:** [memory](../_index.md)
 - **Serves:** [uc.memory.buckets](../use-cases/uc.memory.buckets.md) (primary grouping) + later sub-bucket
   management; grounds [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md).
-- **Depends on:** [en.memory.media](en.memory.media.md), [en.memory.tree](en.memory.tree.md),
+- **Depends on:** [en.memory.media](en.memory.media.md), [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md),
   [ADR 0030](../../../decisions/0030-contributor-public-share.md) (the guest identity).
 - **Decisions:** [ADR 0034](../../../decisions/0034-media-uploader-buckets.md) (the bucket model + the
   reparent/authz rules).

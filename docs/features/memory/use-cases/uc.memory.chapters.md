@@ -13,7 +13,7 @@
 
 A chapter is itself a content unit, so it carries its **own** `K_node` (wrapped under the parent Memory's
 `K_node`) — **recursive `K_node`**, which is what makes per-chapter sharing possible later without a re-encryption
-migration. The key layout lives in [en.memory.tree](../enablers/en.memory.tree.md); the decision + rationale
+migration. The key layout lives in [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md); the decision + rationale
 in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
 
 ## Main flow
@@ -60,7 +60,7 @@ one part without exposing the rest.
 - Use-cases: [uc.memory.browse](uc.memory.browse.md) (the tree + node CRUD this builds on),
   [uc.memory.gallery](uc.memory.gallery.md) (opening a Memory/chapter gallery; the **aggregated** timeline is
   a later CR), [uc.memory.upload](uc.memory.upload.md) (media into a node)
-- Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (`K_node`, node CRUD),
+- Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (`K_node`, node CRUD),
   [en.memory.media](../enablers/en.memory.media.md) (`K_blob` under the parent's `K_node`)
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy — this UC
   applies its **recursive `K_node`** decision for chapters)

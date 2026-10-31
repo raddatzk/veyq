@@ -16,7 +16,7 @@
   [change-password](../use-cases/uc.account.change-password.md),
   [rotate-keys](../use-cases/uc.account.rotate-keys.md); and downstream
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
-  [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on it.
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) build their scope/content keys on it.
 - **Depends on:** the crypto strategy ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md))
   + the operator-blind auth/unlock split ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md),
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
@@ -329,7 +329,7 @@ a tenant grants the account the tenant's key from its invite
   [recover-access](../use-cases/uc.account.recover-access.md),
   [change-password](../use-cases/uc.account.change-password.md), [rotate-keys](../use-cases/uc.account.rotate-keys.md)
 - Downstream: [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
-  [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on this root
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) build their scope/content keys on this root
 - Concepts: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the keys this root opens, rotation
   and identity trust), [security-model](../../../crosscutting/security-model.md) (the whole-system boundary),
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md) (scopes and membership)

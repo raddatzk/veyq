@@ -19,7 +19,7 @@
    ([en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md)); if no personal scope
    exists yet, it is **auto-birthed** first (operator-blind: a fresh `K_SC` sealed to the user's own
    identity).
-2. The client **lists the whole tree** ([en.memory.tree](../enablers/en.memory.tree.md)) and **decrypts
+2. The client **lists the whole tree** ([en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)) and **decrypts
    names** on device down the key chain — a scope-root entry with `K_SC`, every other with its parent's key
    ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) — assembling
    the tree from the opaque rows (`id`, `parentId`, `kind`).
@@ -37,7 +37,7 @@
 5. **Organize:** *create folder* / *create Memory* seal the name (under a field key derived from the parent's key) + blinded slug (under the parent's key) (`K_SC` at
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
-   ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
+   ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md).
 6. **Select** (owner decisions 2026-10-14, inbox #421): **Select** in the level's toolbar, beside "New" and the trash,
    turns on a selection mode: each row gets a labelled checkbox (a row's own click still opens it), the bar offers
    **All** / **None**, a count (announced to a screen reader) and the actions **Move to…** and **Delete**, and leaving
@@ -128,7 +128,7 @@ every name is read only on your own device, never by the server.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the encrypted node tree this browses),
+- Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),
   [en.memory.media](../enablers/en.memory.media.md) (media — displayed by [uc.memory.gallery](uc.memory.gallery.md)),
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the heart on every row, and the sidebar Favorites section)

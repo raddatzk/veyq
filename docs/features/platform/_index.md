@@ -1,8 +1,8 @@
 # Feature: Platform
 
 The **cross-feature substrate** every application stands on, as far as it is a feature of its own: what this instance
-serves and which version it speaks, the capability register its operator and tenant owners switch, and the node
-features core owns for every kind (a cover, export and import, a copy). The platform as a whole — what core owns, what
+serves and which version it speaks, the capability register its operator and tenant owners switch, the node tree, and
+the node features core owns for every kind (a cover, export and import, a copy). The platform as a whole — what core owns, what
 an application owns and how the two meet — is [Applications](../../apps/README.md).
 
 - **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (the pre-auth manifest is identity-free and
@@ -42,6 +42,11 @@ an application owns and how the two meet — is [Applications](../../apps/README
 
 ## Enablers
 
+- [en.platform.node-tree](enablers/en.platform.node-tree.md) — **built (web + backend)** (core's encrypted node tree,
+  for every kind — core's FOLDER and each application's kinds: encrypted names, blinded slugs, a random content key on
+  every node wrapped under its parent's, the address, sealed-meta writes, the trash, the guests' tree operations, the
+  live refresh and the download; [ADR 0012](../../decisions/0012-content-key-hierarchy.md),
+  [ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md))
 - [en.platform.capability-register](enablers/en.platform.capability-register.md) — **built** (ADR 0032, ADR 0088: the
   catalog of ids as a tree, the AND along the path and across the instance and tenant levels, the pre-auth and the
   tenant delivery, what each kind of switch does to what is new and what exists, requirements, external services, and

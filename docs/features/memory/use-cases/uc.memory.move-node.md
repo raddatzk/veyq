@@ -6,7 +6,7 @@
   without the server learning a name or a key.
 - **Preconditions:** The member's scope is open (its epoch keys held) and not pending deletion; a guest holds a
   `READ_WRITE` link and the keys of its subtree (the link's `#k=` and the chain below it). The node tree and its
-  placement write exist ([en.memory.tree](../enablers/en.memory.tree.md),
+  placement write exist ([en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3).
 - **Postconditions (success):** the node lists under its new parent, its own content key unchanged — so every key, name
   and blob below it opens as before — its key re-wrapped and its slug token recomputed under the destination's
@@ -104,7 +104,7 @@ everything inside coming along and staying readable.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the placement write)
+- Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the placement write)
 - Use-cases: [uc.memory.browse](uc.memory.browse.md) (the tree a move acts on, its rename the same write),
   [uc.memory.delete-node](uc.memory.delete-node.md) (the other way a node leaves its place),
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a guest's folder moved out),

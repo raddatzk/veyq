@@ -15,7 +15,7 @@
   A8: the report hands over that name's `K_field` alone, `fieldKeyOf`, and the moderator opens it with `openFieldWith`).
   Every other field is still reported with its object; every reader derives the field's key from the key it already
   holds.
-- **Depends on:** [en.memory.tree](../../memory/enablers/en.memory.tree.md) (the key chain a node's name and meta sit
+- **Depends on:** [en.platform.node-tree](en.platform.node-tree.md) (the key chain a node's name and meta sit
   in); [en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md) (`K_tenant`, which a member's
   name and picture sit under).
 

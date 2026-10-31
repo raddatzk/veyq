@@ -15,7 +15,7 @@
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) E9 — a guest takes back only a placeholder its own
   identity named ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decision 6). Next, the moderation hold (ADR 0093 § 4), which freezes a reported revision with its editor.
-- **Depends on:** [en.memory.tree](../../memory/enablers/en.memory.tree.md) (the node model whose seals it attributes);
+- **Depends on:** [en.platform.node-tree](en.platform.node-tree.md) (the node model whose seals it attributes);
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (the share identity a guest
   writes as, from its contributor token).
 

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-10-06
-- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 - Replaced in part: Decision 2, Decision 4, Decision 5 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
 
 ## Context
@@ -198,7 +198,7 @@ Memory, an expense and a file side by side).
    **Rejected: a slug library** — a dependency's table change would silently break uniqueness. Both foldings are
    pinned by the `name_folding` vectors in `contracts/crypto/vectors/v1.json`; changing either is a stored-format
    change ([ADR 0072](0072-a-seal-binds-its-object.md)). Where each piece lives in the client:
-   [en.memory.tree § Names and slugs](../features/memory/enablers/en.memory.tree.md#names-and-slugs).
+   [en.platform.node-tree § Names and slugs](../features/platform/enablers/en.platform.node-tree.md#names-and-slugs).
 
 **What the server stores and learns.** One more opaque wrap per folder and an integer placement revision.
 It already sees the tree, kinds, moves and timestamps; it holds no new key.

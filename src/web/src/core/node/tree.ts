@@ -1,4 +1,4 @@
-// en.memory.tree (web) — the encrypted Memory tree data layer. Operator-blind: EVERY node — FOLDER included
+// en.platform.node-tree (web) — the encrypted node tree data layer. Operator-blind: EVERY node — FOLDER included
 // (ADR 0080 Decision 1) — carries a fresh random content key wrapped under its PARENT's content key: K_SC for a
 // scope-root node, the parent node's key below it, whatever the parent's kind (a folder's, a Memory's, a
 // chapter's). Recursive keys, the share grain (ADR 0012, cr-0060, ADR 0080). A node's **directory entry** lives

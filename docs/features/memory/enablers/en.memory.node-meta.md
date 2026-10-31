@@ -16,7 +16,7 @@
   [uc.memory.place](../use-cases/uc.memory.place.md) (the `location` sub-object),
   [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md) (every writer of the blob,
   revision-checked).
-- **Depends on:** [en.memory.tree](en.memory.tree.md) — the node model + `K_node` birth/open this derives its field key from;
+- **Depends on:** [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) — the node model + `K_node` birth/open this derives its field key from;
   through it `uc.account.unlock` (identity → `K_SC` → `K_node`). Applies
   [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) ("capture time, location" as `K_node` content) at
   the **node** level.
@@ -72,7 +72,7 @@
   `metaRevision` it was built from (else `400`); the server compare-and-sets it and stores `metaRevision + 1`, or
   writes nothing — a rename in the same request included — and answers `409 stale_revision` with the current blob
   and revision. Only this write moves the counter. The client's retry loop and the cover's one write:
-  [en.memory.tree § Sealed-meta writes](en.memory.tree.md#sealed-meta-writes).
+  [en.platform.node-tree § Sealed-meta writes](../../platform/enablers/en.platform.node-tree.md#sealed-meta-writes).
 - **Schema** (core baseline): `veyq_node.wrapped_meta TEXT NULL` and `veyq_node.meta_revision`; the same counter
   on `veyq_media` (Memories baseline).
 
@@ -141,6 +141,6 @@ open).
 
 - Use-cases: [uc.memory.date](../use-cases/uc.memory.date.md), [uc.memory.place](../use-cases/uc.memory.place.md),
   [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md)
-- Enablers: [en.memory.tree](en.memory.tree.md) (the node + `K_node` substrate this builds on)
+- Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the node + `K_node` substrate this builds on)
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy; `K_node` seals
   "capture time, location")

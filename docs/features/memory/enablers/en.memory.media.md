@@ -12,7 +12,7 @@
   flow + UI) and [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (reads the blobs back), plus later
   *journal attachments* / *places & tracks* media. Storing one encrypted blob is not itself a user goal; it is
   the substrate those carry.
-- **Depends on:** [en.memory.tree](en.memory.tree.md) (a **Memory** exists and owns a `K_node`) → through it
+- **Depends on:** [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (a **Memory** exists and owns a `K_node`) → through it
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) and `uc.account.unlock`
   (identity → scope key → `K_SC` → `K_node`).
 - **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped (the blob keys wrap
@@ -76,7 +76,7 @@
 > this enabler describes a **single** blob for clarity, and the first slice sends length-1 lists. A
 > gallery later sends longer lists — same shape, no contract change.
 
-1. The client has the Memory open: `K_node` is unwrapped (via `K_SC`, en.memory.tree).
+1. The client has the Memory open: `K_node` is unwrapped (via `K_SC`, en.platform.node-tree).
 2. **Key:** mint the media's and the blob's ids (UUIDv4 — the client names what it seals,
    [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
    under `K_node` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
@@ -210,5 +210,5 @@ is built:
   `K_node`), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` vector)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (key hierarchy),
   [Account & Key Model](../../account/enablers/en.account.key-model.md)
-- Related enablers: [en.memory.tree](en.memory.tree.md) (the Memory + `K_node` this attaches media to),
+- Related enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the Memory + `K_node` this attaches media to),
   [en.memory.derivatives](en.memory.derivatives.md) (the thumbnail/preview/original tiers built on this transport)

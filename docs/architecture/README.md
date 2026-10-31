@@ -158,7 +158,7 @@ Where each level is owned: **unlock + Master Key + identity** →
 ([ADR 0005](../decisions/0005-unlock-methods-and-device-trust.md)) · **K_SC / grants** →
 [scopes & tenancy](../crosscutting/scopes-and-tenancy.md)
 ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)) · **K_node / K_blob / recursion / sharing** →
-[en.memory.tree](../features/memory/enablers/en.memory.tree.md) +
+[en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md) +
 [en.memory.media](../features/memory/enablers/en.memory.media.md)
 ([ADR 0012](../decisions/0012-content-key-hierarchy.md)) · **wrappedMeta** →
 [en.memory.node-meta](../features/memory/enablers/en.memory.node-meta.md) · the primitives that realize it →

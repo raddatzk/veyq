@@ -12,7 +12,7 @@
 - **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (grid = thumbnail, lightbox =
   preview, download = original); the **add-media** upload flow is where the derivatives are generated.
 - **Depends on:** [en.memory.media](en.memory.media.md) — a derivative is **just another blob**, sealed by the
-  exact same `K_blob`-under-`K_node` chunked-AEAD transport; through it [en.memory.tree](en.memory.tree.md) +
+  exact same `K_blob`-under-`K_node` chunked-AEAD transport; through it [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) +
   `uc.account.unlock` (identity → `K_SC` → `K_node`).
 - **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_node` is unwrapped; a configured object
   store — a **hard instance requirement** ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md),
@@ -137,7 +137,7 @@ video.
 
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.media](en.memory.media.md) (the blob transport this reuses),
-  [en.memory.tree](en.memory.tree.md) (the Memory + `K_node`)
+  [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the Memory + `K_node`)
 - Use-cases: [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (consumes the three tiers)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (deferred
   thumbnails/previews — **this enabler is where they land**),

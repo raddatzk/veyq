@@ -9,7 +9,7 @@
   the content flows fill. No content (folders / memories) here — only the scope itself.
 - **Serves (use-cases/enablers):** [uc.memory.browse](../../memory/use-cases/uc.memory.browse.md) (the tree
   lives in this scope) + [uc.spaces.switch-spaces](../use-cases/uc.spaces.switch-spaces.md) (lists & opens it),
-  and the enabler [en.memory.tree](../../memory/enablers/en.memory.tree.md) built on it — all need a scope to
+  and the enabler [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) built on it — all need a scope to
   live in. Generalising scope identity (scopeId + kind) here also unblocks **groups**.
 - **Depends on:** `uc.account.unlock` (the identity that seals/opens the grant) +
   [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the tenant it lives within).

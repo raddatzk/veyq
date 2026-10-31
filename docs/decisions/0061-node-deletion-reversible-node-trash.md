@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: yes
 - Date: 2026-08-17
-- Model: [en.memory.tree](../features/memory/enablers/en.memory.tree.md)
+- Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 - Replaced in part: decision 7 by ADR 0062 (built)
 
 ## Context
@@ -96,7 +96,7 @@ logic that already exists.
 - **Four reads must deliberately *not* filter, and each is a trap** — slug uniqueness, the delete's own subtree
   traversal (which re-stamps descendants, so a subtree ages out on one marker), the delete's own scope binding, and
   the scope hard-erase. Each one's failure mode is in
-  [en.memory.tree § Delete](../features/memory/enablers/en.memory.tree.md#delete--soft-delete-trash-purge). A
+  [en.platform.node-tree § Delete](../features/platform/enablers/en.platform.node-tree.md#delete--soft-delete-trash-purge). A
   re-stamped descendant that was an earlier delete's root holds that delete's freed token, so the restore of the
   folder around it leaves it — and its subtree — in the trash, a trash root of its own restorable with a fresh token
   (returning it would bring back a node with no name, beside a sibling that may hold its old one).
@@ -139,7 +139,7 @@ logic that already exists.
   decides), [uc.memory.delete-media](../features/memory/use-cases/uc.memory.delete-media.md) (the media trash
   this follows), [uc.spaces.delete-group](../features/spaces/use-cases/uc.spaces.delete-group.md) (the
   precedent one level up, and where it stops transferring)
-- Enablers: [en.memory.tree](../features/memory/enablers/en.memory.tree.md) (the node lifecycle),
+- Enablers: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md) (the node lifecycle),
   [en.memory.media](../features/memory/enablers/en.memory.media.md) (what the purge reclaims)
 - Cross-cutting: [security model](../crosscutting/security-model.md) § *Deletion & erasure* — the mechanism this
   decision joins rather than amends

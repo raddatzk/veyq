@@ -27,7 +27,7 @@ import java.util.UUID
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
- * HTTP adapter for the node tree (en.memory.tree, cr-0027). Implements the generated [ContentApi]; thin
+ * HTTP adapter for the node tree (en.platform.node-tree). Implements the generated [ContentApi]; thin
  * (ADR 0001) — delegates to [NodesHandler]. `@Authenticated`; the caller (from the `SecurityIdentity`
  * principal) must hold a grant for the scope (a non-member gets 404). Operator-blind: only ciphertext +
  * opaque tokens cross. The scope root's parent slot is the scope id; the API surfaces it as `parentId = null`.

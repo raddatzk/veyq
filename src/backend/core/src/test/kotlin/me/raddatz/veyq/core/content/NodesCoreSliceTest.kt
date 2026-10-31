@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 /**
- * Slice tests for the Memory tree (en.memory.tree, cr-0027): create folder/Memory/chapter + list; slug
+ * Slice tests for the node tree (en.platform.node-tree): create folder/Memory/chapter + list; slug
  * uniqueness per parent (409); structural rules (422 — a chapter only lives in a Memory); scope-access
  * (non-member 404); rename + delete-subtree; operator-blind (the server stores only the ciphertext the
  * client sent). UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.

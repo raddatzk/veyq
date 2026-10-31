@@ -10,7 +10,7 @@
   key.
 - **Preconditions:** The vault is unlocked and the scope is open (`K_SC` is held); the caller **belongs to the
   scope**, and the scope is not itself pending deletion. The node tree exists
-  ([en.memory.tree](../enablers/en.memory.tree.md)) and the media data layer the purge reclaims from
+  ([en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)) and the media data layer the purge reclaims from
   ([en.memory.media](../enablers/en.memory.media.md)).
 - **Postconditions (success):** The node and every descendant are gone from the tree on the next load, gone from
   the anonymous share resolve, and their blobs are no longer authorized for a presign. The subtree sits in the
@@ -127,7 +127,7 @@ complete until the waiting period ends.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the node lifecycle this defines),
+- Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the node lifecycle this defines),
   [en.memory.media](../enablers/en.memory.media.md) (what the purge reclaims)
 - Use-cases: [uc.memory.browse](uc.memory.browse.md) (the tree the delete acts on),
   [uc.memory.chapters](uc.memory.chapters.md) (a chapter is deleted the same way),
