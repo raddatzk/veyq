@@ -14,8 +14,10 @@ import type {
   RotationPlanJoinRecord,
   StagedInviteResign,
   StagedJoinEndorsement,
+  StagedModerationGrant,
   StagedSelfGrant,
 } from '../../../api/generated/account'
+import type { ModerationApi } from '../../../api/generated/moderation'
 import { emptyPinStore, fakePinServer, identityKey, pinIdOf, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
 import type { KeyChain, KeyChainApi, KeyChainStep, ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 import type { TasksApi } from '../../../api/generated/tasks'
@@ -49,6 +51,7 @@ vi.mock('../../../api/client', () => ({
   loginApi: vi.fn(),
   keyChainApi: vi.fn(),
   tenantsApi: vi.fn(),
+  moderationApi: vi.fn(),
 }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 // A vault that holds what it is handed, as the real one does — so the published identity a rotation swaps in is the one
@@ -107,6 +110,7 @@ import {
   accountRotationApi,
   keyChainApi,
   loginApi,
+  moderationApi,
   scopesApi,
   tasksApi,
   tenantsApi,
@@ -273,7 +277,19 @@ type ServerOpts = {
   invites?: RotationPlanInvite[]
   /** The join records the server says this account rooted (`getRotationPlanJoinRecords`). */
   records?: RotationPlanJoinRecord[]
+  /** The live epochs of the instance moderation key, and which of them this account holds a grant of — none: the
+   *  account is no moderator (`listMyModerationGrants` answers `403 not_moderator`). */
+  moderation?: ModerationEpoch[]
 }
+
+/** One live epoch of the moderation key: its `M_n` (the test's oracle) and the grant the account holds of it, sealed to
+ *  its identity at the time — or none, an epoch it waits for. `published` overrides the bundle the server publishes. */
+type ModerationEpoch = { epoch: number; m: Uint8Array; sealedGrant: string | null; published?: v1.ModerationBundle }
+/** `M_n` sealed to `bundle`'s identity, as a holder's delivery seals it. */
+const moderationGrantTo = (epoch: number, m: Uint8Array, bundle: string) =>
+  b64std(v1.sealTo({ purpose: 'moderation-grant', epoch }, v1.deserializeIdentityPublic(fromB64std(bundle)).kem, m))
+/** An epoch this account holds, its grant sealed to the identity it is about to retire. */
+const heldEpoch = (epoch: number, m = v1.randomBytes(32)): ModerationEpoch => ({ epoch, m, sealedGrant: moderationGrantTo(epoch, m, OLD_PUB) })
 
 function fakeServer(opts: ServerOpts = {}) {
   const scopes = new Map((opts.scopes ?? []).map((s) => [s.id, s]))
@@ -349,12 +365,43 @@ function fakeServer(opts: ServerOpts = {}) {
   let stage: {
     id: string; bundle: string; rows: Map<string, StagedSelfGrant>
     invites: Map<string, StagedInviteResign>; endorsements: Map<string, StagedJoinEndorsement>
+    moderation: Map<number, string | null>
   } | null = null
   const openRotationStage = vi.fn<AccountRotationApi['openRotationStage']>(async ({ openRotationStageRequest }) => {
     online()
-    stage = { id: crypto.randomUUID(), bundle: openRotationStageRequest.identityPublicKey, rows: new Map(), invites: new Map(), endorsements: new Map() }
+    stage = {
+      id: crypto.randomUUID(), bundle: openRotationStageRequest.identityPublicKey, rows: new Map(), invites: new Map(), endorsements: new Map(),
+      moderation: new Map(),
+    }
     return { stageId: stage.id, expiresAt: new Date(Date.now() + 3_600_000) }
   })
+
+  // The instance moderation key (ADR 0099 § 4), as the server serves, stages and applies it: the grants are opaque to it,
+  // so a staged epoch is checked only for being one the account holds.
+  const moderation = opts.moderation
+  const heldEpochs = () => (moderation ?? []).filter((e) => e.sealedGrant !== null)
+  const listMyModerationGrants = vi.fn<ModerationApi['listMyModerationGrants']>(async () => {
+    online()
+    if (!moderation) throw httpError(403, 'not_moderator')
+    return {
+      currentEpoch: Math.max(...moderation.map((e) => e.epoch)),
+      epochs: moderation.map((e) => {
+        const published = e.published ?? v1.moderationBundle(e.m)
+        return { epoch: e.epoch, kemPublicKey: b64std(published.kem), signPublicKey: b64std(published.sign), sealedGrant: e.sealedGrant ?? undefined }
+      }),
+    }
+  })
+  fakeApi(moderationApi, { listMyModerationGrants })
+  const putRotationStageModerationGrants = vi.fn<AccountRotationApi['putRotationStageModerationGrants']>(
+    async ({ stageId, rotationStageModerationGrants }) => {
+      online()
+      if (!stage || stage.id !== stageId) throw httpError(404, 'rotation_stage_not_found')
+      const chunk = rotationStageModerationGrants.grants
+      if (chunk.length < 1 || chunk.length > STAGE_CHUNK) throw httpError(400)
+      if (chunk.some((g) => !heldEpochs().some((e) => e.epoch === g.epoch))) throw httpError(409, 'rotation_plan_changed')
+      for (const g of chunk) stage.moderation.set(g.epoch!, g.sealedGrant ?? null)
+    },
+  )
 
   // What this account rooted (ADR 0111 decisions 20 and 21), as phase 2's server serves, stages
   // and applies it: each re-signature and endorsement verified at upload under the stage's identity, over what it stores.
@@ -468,6 +515,8 @@ function fakeServer(opts: ServerOpts = {}) {
     // What this account rooted: every open invite it signed staged at its anchor epoch, every record it rooted staged.
     for (const i of invites) if (stage.invites.get(i.inviteId)?.anchorEpoch !== i.anchorEpoch) throw planChanged()
     for (const r of records) if (!stage.endorsements.has(recordKeyOf(r))) throw planChanged()
+    // The moderation key: every live epoch the account holds staged, re-sealed or declared.
+    for (const e of heldEpochs()) if (!stage.moderation.has(e.epoch)) throw planChanged()
     if (req.identityPins.revision !== pins.revision || req.deviceRegister.revision !== register.revision) throw httpError(409, 'stale_revision')
     // Apply, in one transaction.
     pinServer.land(req.identityPins)
@@ -505,6 +554,7 @@ function fakeServer(opts: ServerOpts = {}) {
       }
     }
     for (const r of records) r.joinEndorsement = stage.endorsements.get(recordKeyOf(r))?.endorsement ?? null
+    for (const e of heldEpochs()) e.sealedGrant = stage.moderation.get(e.epoch) ?? null
     applied.push({ stageId: stage.id, rows: new Map(stage.rows), recoveryWrap: req.recoveryWrap })
     stage = null
     if (opts.abandonAfterPublish) offline = true
@@ -527,6 +577,7 @@ function fakeServer(opts: ServerOpts = {}) {
   fakeApi(accountRotationApi, {
     getAccountRotationPlan, openRotationStage, putRotationStageGrants, rotateAccountKeys, listRotationScopeStates,
     getRotationPlanInvites, getRotationPlanJoinRecords, putRotationStageInvites, putRotationStageJoinEndorsements,
+    putRotationStageModerationGrants,
   })
 
   const summary = (s: Scope): ScopeSummary => {
@@ -600,6 +651,7 @@ function fakeServer(opts: ServerOpts = {}) {
     getAccountKeyMaterial, getAccountRotationPlan, openRotationStage, putRotationStageGrants, rotateAccountKeys, rotateScope,
     listRotationScopeStates, putIdentityPins, putDeviceRegister,
     invites, records, endedInvites, putRotationStageInvites, putRotationStageJoinEndorsements,
+    moderation, listMyModerationGrants, putRotationStageModerationGrants,
     get stage() {
       return stage
     },
@@ -1479,6 +1531,71 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
 // ADR 0111 decision 13: the outgoing key's verifications are carried to the new key — read BEFORE the publish, while the
 // old identity is still the account's, and re-signed by the new identity after it. A statement placed in this account's
 // slot after the publish (a thief's, signed with the retired key) is never among them.
+// ADR 0099 § 4: a holder of the instance moderation key keeps it through securing the account. The publish deletes the
+// grants sealed to the identity it retires, so the client — which holds `M_n` here, through the outgoing identity —
+// re-seals every live epoch to the new identity inside the same stage; the fake server, like the real one, refuses a
+// holder's publish without them. What carries the weight is the sole holder: nobody else could deliver the key again.
+describe('securing the account keeps the moderation key it holds (ADR 0099 § 4)', () => {
+  const stagedModeration = (srv: ReturnType<typeof fakeServer>): StagedModerationGrant[] =>
+    srv.putRotationStageModerationGrants.mock.calls.flatMap((c) => c[0].rotationStageModerationGrants.grants)
+  /** [e]'s grant as the server holds it after the publish, opened with [priv] — the vault's (the published identity). */
+  const openHeld = (e: ModerationEpoch, priv = vault.priv!) =>
+    v1.openAs({ purpose: 'moderation-grant', epoch: e.epoch }, priv.kemSeed, fromB64std(e.sealedGrant!))
+
+  it('a sole holder\'s live epochs — a pre-rotation one and the current one — are re-sealed to the NEW identity and open to the same key', async () => {
+    const pre = heldEpoch(1)
+    const current = heldEpoch(2)
+    const srv = fakeServer({ scopes: ordinaryScopes(), moderation: [pre, current] })
+    await rotate()
+    expect(stagedModeration(srv).map((g) => g.epoch).sort()).toEqual([1, 2])
+    expect(srv.putRotationStageModerationGrants.mock.invocationCallOrder[0]).toBeLessThan(srv.rotateAccountKeys.mock.invocationCallOrder[0])
+    for (const e of [pre, current]) {
+      expect(same(openHeld(e), e.m), `epoch ${e.epoch} opens under the published identity`).toBe(true)
+      expect(() => openHeld(e, oldPriv()), `epoch ${e.epoch} is not the retired identity's`).toThrow()
+    }
+  })
+
+  it('an account that is no moderator stages no epoch, and its publish goes through (control: the same flow)', async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes() })
+    await rotate()
+    expect(srv.listMyModerationGrants).toHaveBeenCalled()
+    expect(srv.putRotationStageModerationGrants).not.toHaveBeenCalled()
+    expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(1)
+  })
+
+  it('a grant this device cannot open, or one whose key the published bundle disowns, is declared — the rest re-sealed', async () => {
+    const unopenable = { ...heldEpoch(1), sealedGrant: moderationGrantTo(1, v1.randomBytes(32), B_PUB) }
+    const disowned = { ...heldEpoch(2), published: v1.moderationBundle(v1.randomBytes(32)) }
+    const fine = heldEpoch(3)
+    const srv = fakeServer({ scopes: ordinaryScopes(), moderation: [unopenable, disowned, fine] })
+    await rotate()
+    const staged = new Map(stagedModeration(srv).map((g) => [g.epoch, g.sealedGrant]))
+    expect(staged.get(1)).toBeNull()
+    expect(staged.get(2)).toBeNull()
+    expect(staged.get(3)).not.toBeNull()
+    expect(same(openHeld(fine), fine.m)).toBe(true)
+  })
+
+  it('409 rotation_plan_changed: an epoch delivered between stage and publish is re-sealed ALONE, into the same stage', async () => {
+    const first = heldEpoch(1)
+    const delivered = heldEpoch(2)
+    const srv = fakeServer({
+      scopes: ordinaryScopes(),
+      moderation: [first],
+      beforePublish: (n) => {
+        if (n === 1) srv.moderation!.push(delivered)
+      },
+    })
+    await rotate()
+    expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(2)
+    expect(srv.openRotationStage).toHaveBeenCalledTimes(1)
+    const puts = srv.putRotationStageModerationGrants.mock.calls.map((c) => c[0].rotationStageModerationGrants.grants.map((g) => g.epoch))
+    expect(puts).toEqual([[1], [2]])
+    expect(srv.putRotationStageGrants).toHaveBeenCalledTimes(1) // the self-grants did not move: none went up again
+    for (const e of [first, delivered]) expect(same(openHeld(e), e.m), `epoch ${e.epoch}`).toBe(true)
+  })
+})
+
 describe('securing the account re-signs this account\'s verifications (ADR 0111 decision 13)', () => {
   /** The tenant's verification rows: ME's verification of B, as ME's OLD identity signed it at ME's genesis head — and,
    *  once the publish committed, a statement the retired key signs about a stranger (the thief's). */

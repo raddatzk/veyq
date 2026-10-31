@@ -5,12 +5,8 @@ import me.raddatz.veyq.core.account.rotation.RotationHandler
 import me.raddatz.veyq.core.account.rotation.RotationOutcome
 import me.raddatz.veyq.core.account.rotation.TestAccountKeys
 import me.raddatz.veyq.core.account.rotation.TestRotation
+import me.raddatz.veyq.core.account.rotation.toRequest
 import me.raddatz.veyq.core.crypto.AuthAttestation
-import me.raddatz.veyq.core.account.identitypins.toPinWrite
-import me.raddatz.veyq.core.account.rotation.ResealedDocument
-import me.raddatz.veyq.core.account.rotation.RewrittenWrap
-import me.raddatz.veyq.core.account.rotation.RotationRequest
-import me.raddatz.veyq.core.generated.model.RotateAccountKeysRequest
 import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.ModeratorEntity
@@ -58,10 +54,11 @@ import java.util.concurrent.atomic.AtomicReference
  * forced: one side held uncommitted through its real in-transaction body ([AccountErasureHandler.eraseOwnIn],
  * [RotationHandler.rotateIn]), the other the real request, seen waiting on the held one ([whileUncommitted]).
  *
- * What must hold either way: no grant stays sealed to an identity the Server Owner retired — the erasure that reads the
- * identity after the rotation is refused with nothing written (`identity_changed`), and a rotation that comes after the
- * delivery deletes the grants it delivered as exposed (ADR 0099 § 4) — and no side dies on a lock wait (a deadlock or
- * a lock timeout surfaces as a status other than the one asserted). A second moderator's acceptance, which takes the
+ * What must hold either way: no grant stays sealed to an identity the Server Owner retired, and the key is never lost —
+ * the erasure that reads the identity after the rotation is refused with nothing written (`identity_changed`), and a
+ * rotation that comes after the delivery is refused (`rotation_plan_changed`) until its stage carries the epoch it was
+ * handed, re-sealed to the new identity, since the Server Owner is then the sole holder (ADR 0099 § 4) — and no side dies
+ * on a lock wait (a deadlock or a lock timeout surfaces as a status other than the one asserted). A second moderator's acceptance, which takes the
  * epoch row the delivery takes, overlaps too, in both orders.
  *
  * The instance has one Server Owner; the `%test` database holds many, seeded by other classes, so each round demotes
@@ -93,7 +90,7 @@ class ErasureKeyDeliveryRacesSliceTest {
     fun aServerOwnersRotationCommittedFirstRefusesTheDeliverySealedToTheIdentityItRetired() = raceRounds { round ->
         val w = world()
         val publish = w.rotation.prepared()
-        val request = rotationRequestOf(publish)
+        val request = publish.toRequest(mapper)
         val token = TestFixtures.bearer(w.serverOwner).removePrefix("Bearer ")
         val proof = w.proof()
         val rotated = AtomicReference<RotationOutcome>()
@@ -118,9 +115,9 @@ class ErasureKeyDeliveryRacesSliceTest {
     }
 
     @Test
-    fun aServerOwnersRotationAfterTheDeliveryDeletesTheGrantsSealedToTheIdentityItRetired() = raceRounds { round ->
+    fun aServerOwnersRotationAfterTheDeliveryIsRefusedUntilItReSealsTheKeyItWasHanded() = raceRounds { round ->
         val w = world()
-        val publish = w.rotation.prepared()
+        val (stageId, publish) = w.rotation.preparedStage()
         val proof = w.proof()
         val token = TestFixtures.bearer(w.serverOwner).removePrefix("Bearer ")
         val erased = AtomicReference<ErasureOutcome>()
@@ -130,18 +127,33 @@ class ErasureKeyDeliveryRacesSliceTest {
             overlapping = { w.rotation.send(publish, token) },
         )
 
+        // The stage was filled before the delivery, so it carries no epoch — and the Server Owner, now the sole holder,
+        // holds one: a publish that went through would lose the key with nobody left to deliver it (ADR 0099 § 4).
         assertInstanceOf(ErasureOutcome.Pending::class.java, erased.get(), "round $round: the erasure committed")
-        assertEquals(200, answer.statusCode(), "round $round: ${answer.body().asString()}")
+        assertEquals(409, answer.statusCode(), "round $round: ${answer.body().asString()}")
+        assertEquals("rotation_plan_changed", answer.path<String>("code"), "round $round")
         tx {
-            assertEquals(w.rotation.next.bundle, VeyqUser.findById(w.serverOwner)!!.identityPublicKey)
+            assertEquals(w.rotation.current.bundle, VeyqUser.findById(w.serverOwner)!!.identityPublicKey, "round $round: not published")
             assertNotNull(AccountErasureEntity.findById(w.holder))
             assertFalse(ModeratorEntity.isModerator(w.holder))
             assertTrue(ModeratorEntity.isModerator(w.serverOwner), "round $round: the delivery reappointed the Server Owner")
             assertEquals(
-                0L, ModerationGrantEntity.count("moderatorId", w.serverOwner),
-                "round $round: the grants sealed to the identity the rotation retired are gone (ADR 0099 § 4)",
+                listOf(GRANT), ModerationGrantEntity.list("moderatorId", w.serverOwner).map { it.sealedGrant },
+                "round $round: the delivered grant stands, at the identity still current",
             )
-            assertNotNull(ModerationEpochEntity.findById(1)!!.rotationDueAt)
+        }
+
+        // The client's retry: it opens the grant it was handed with the identity it is retiring, re-seals it to the new
+        // one, stages it and resubmits the same keys.
+        w.rotation.stageModeration(stageId, mapOf(1 to RESEALED)).then().statusCode(204)
+        w.rotation.send(publish, token).then().statusCode(200)
+        tx {
+            assertEquals(w.rotation.next.bundle, VeyqUser.findById(w.serverOwner)!!.identityPublicKey)
+            assertTrue(ModeratorEntity.isModerator(w.serverOwner), "round $round")
+            assertEquals(
+                listOf(RESEALED), ModerationGrantEntity.list("moderatorId", w.serverOwner).map { it.sealedGrant },
+                "round $round: the sole holder keeps the key through securing the account",
+            )
         }
     }
 
@@ -256,34 +268,14 @@ class ErasureKeyDeliveryRacesSliceTest {
     }
 
     /** The Server Owner's publish, its stage opened and filled before the race: only the publish overlaps. */
-    private fun TestRotation.prepared(): Publish {
+    private fun TestRotation.prepared(): Publish = preparedStage().second
+
+    /** [prepared], with the stage it names. */
+    private fun TestRotation.preparedStage(): Pair<String, Publish> {
         val stageId = openStageId()
         val grants = plan().map { selfGrant(it) }
         if (grants.isNotEmpty()) stage(stageId, grants).then().statusCode(204)
-        return publish(stageId, grants)
-    }
-
-    /** [publish] as the handler takes it — the wire body read by the generated model, mapped as `AccountRotationResource` maps it. */
-    private fun rotationRequestOf(publish: Publish): RotationRequest {
-        val r = mapper.readValue(publish.json(), RotateAccountKeysRequest::class.java)
-        return RotationRequest(
-            identityPublicKey = r.identityPublicKey,
-            wrappedIdentityPrivateKey = r.wrappedIdentityPrivateKey,
-            passwordWrap = RewrittenWrap(r.passwordWrap.wrappedKey, r.passwordWrap.kdfParams),
-            recoveryWrap = RewrittenWrap(r.recoveryWrap.wrappedKey, r.recoveryWrap.kdfParams),
-            secretKeyProofSignature = r.secretKeyProofSignature,
-            pins = r.identityPins.toPinWrite(),
-            register = ResealedDocument(r.deviceRegister.blob, r.deviceRegister.revision!!),
-            stepIdentitySignature = r.keyChainStep.identitySignature,
-            stepProofSignature = r.keyChainStep.proofSignature,
-            stageId = r.stageId.toString(),
-            stagedGrantsDigest = r.stagedGrantsDigest,
-            unreadableScopeIds = r.unreadableScopeIds.map { it.toString() }.toSet(),
-            authPublicKey = r.authPublicKey,
-            attestationSignature = r.attestationSignature,
-            secretKeyProofPublicKey = r.secretKeyProofPublicKey,
-            secretKeyProofPossession = r.secretKeyProofPossession,
-        )
+        return stageId to publish(stageId, grants)
     }
 
     private fun sign(kp: KeyPair, message: ByteArray): String =
@@ -296,5 +288,8 @@ class ErasureKeyDeliveryRacesSliceTest {
     private companion object {
         /** Epoch 1 as the holder's client sealed it to the Server Owner — opaque to the server. */
         const val GRANT = "Z3JhbnQtdG8tdGhlLXNlcnZlci1vd25lcg=="
+
+        /** Epoch 1 as the Server Owner's own client re-sealed it to the identity its securing installs. */
+        const val RESEALED = "cmVzZWFsZWQtdG8tdGhlLW5ldy1pZGVudGl0eQ=="
     }
 }

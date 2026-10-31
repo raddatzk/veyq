@@ -92,7 +92,7 @@ acceptanceCriteria:
           - AccountErasureSliceTest.aHolderWhoIsNotTheLastIsServedNoDeliveryAndErasesWithoutOne
           - AccountErasureSliceTest.theServerOwnersDoorErasesTheLastHolderOnlyOnceTheKeysLossIsConfirmedAndTheKeyIsThenGone
           - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationCommittedFirstRefusesTheDeliverySealedToTheIdentityItRetired
-          - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationAfterTheDeliveryDeletesTheGrantsSealedToTheIdentityItRetired
+          - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationAfterTheDeliveryIsRefusedUntilItReSealsTheKeyItWasHanded
           - ErasureKeyDeliveryRacesSliceTest.aSecondModeratorsAcceptanceAndTheDeliveryMeetOnTheEpochRowInEitherOrder
           - ModerationSliceTest.theLastHolderCannotLeaveAndTheServerOwnerMayStepDownWhileAnotherHolds
       web:

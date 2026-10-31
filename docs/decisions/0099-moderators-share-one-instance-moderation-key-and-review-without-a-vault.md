@@ -105,10 +105,19 @@ What there is to build on:
 ### 4. Rotation: a new epoch for the remaining moderators; old reports stay sealed to their epoch
 
 - **When:** a moderator is removed or steps down, a moderator's identity rotation
-  ([ADR 0060](0060-key-rotation-after-compromise.md) — the grants that identity opened are treated as exposed, and
-  the moderator receives the live epochs again at their new identity from a holder), a suspected compromise, or by
-  hand. admin-web (or `veyq-admin moderation rotate`, which carries the same suite) mints `M_{n+1}`
-  for the remaining moderators (decision 3); reports from then on seal to it.
+  ([ADR 0060](0060-key-rotation-after-compromise.md) — the grants that identity opened are treated as exposed), a
+  suspected compromise, or by hand. admin-web (or `veyq-admin moderation rotate`, which carries the same suite) mints
+  `M_{n+1}` for the remaining moderators (decision 3); reports from then on seal to it.
+- **A holder who secures their account keeps the key.** Their grants sealed to the retired identity are deleted, and
+  in the same publish their own client, which holds every `M_n` at that moment through the identity it retires,
+  re-seals each live epoch to the new identity — staged before the publish as its self-grants are. The server takes a
+  holder's publish only with every live epoch the account holds staged, re-sealed or declared, and reads that set under
+  the current epoch's lock, so a delivery to them either is in it or meets the new identity. A sole holder — the Server
+  Owner right after first-run setup — has nobody to deliver the key again, and without this the securing would lose
+  every report and hold sealed to it. An epoch the device cannot open, or whose key the published bundle disowns, is
+  declared: its grant goes, as it was already closed to them, and another holder delivers it at the new identity. The
+  re-sealed grants are unsigned like every moderation grant (decision 3) and hand the key only to the identity the
+  publish installs, so the stage's digest does not cover them.
 - **The removed moderator's grants are deleted, for every epoch**, at once (layer 1: the role is gone with the row).
 - **Old reports are not re-sealed.** Their epochs stay granted to the remaining moderators and are dropped when
   nothing sealed to them remains (the last case under them has passed the log's retention, 0093 § 11). Re-sealing

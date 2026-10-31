@@ -59,7 +59,8 @@
    stage takes **what the account rooted** (E3): every open member invite it signed (`getRotationPlanInvites`),
    re-signed by the new identity, and every join record it rooted (`getRotationPlanJoinRecords`), endorsed by the new
    identity — each verified at upload under the stage's identity (`422 invite_resign_invalid`,
-   `422 join_endorsement_invalid`).
+   `422 join_endorsement_invalid`). A holder of the instance moderation key also stages every live epoch it holds,
+   re-sealed to the new identity (E6).
 5. **Publish.** One request, one transaction: the account rewrite, the new proof key with its possession signature,
    the auth key with the current auth key's attestation, the key-chain step, the stage it applies (named by
    `stageId` and its digest, inside the statement the current Secret-Key proof key signs), and the identity-pin store
@@ -67,9 +68,10 @@
    opened under the old key through this device's trust-state marks first (E8). The server checks the step against
    the stored head, identity and proof key, the proof, the possession and the attestation, and applies the stage only
    if every grant-carrying membership of the account is staged at its current epoch or declared unreadable, every
-   open invite it signed is staged at its current anchor epoch, and every join record it rooted is staged against the
-   record stored now; a membership, an epoch, an invite or a record that moved since — an accept between stage and
-   publish included — is `409 rotation_plan_changed`, and the client re-stages only the delta and resubmits the same
+   open invite it signed is staged at its current anchor epoch, every join record it rooted is staged against the
+   record stored now, and every live moderation epoch it holds is staged (E6); a membership, an epoch, an invite, a
+   record or a moderation epoch that moved since — an accept or a delivery between stage and publish included — is
+   `409 rotation_plan_changed`, and the client re-stages only the delta and resubmits the same
    keys, bounded. A `stale_revision` on either document fails that attempt whole; the client re-reads, re-seals and
    resubmits; a request past the server's limit is refused whole and not resubmitted (E10). In the same transaction
    the re-signed invites and the endorsements are written (a declared invite ends), every `DEVICE`, `DEVICE_KEY` and
@@ -152,6 +154,16 @@ sequenceDiagram
   entry says so.
 - **E5 — a group invitation to this account is pending.** The publish re-grants it like every scope, so accepting it
   still opens the group; its name key is sealed to the old identity, so it is shown as an unnamed group.
+- **E6 — the holder holds the instance moderation key**
+  ([ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4). The
+  grants sealed to the outgoing identity go with it, so the client opens every live epoch it holds a grant of
+  (`listMyModerationGrants`) with the outgoing identity, checks each against the published bundle and stages its key
+  re-sealed to the new identity (`putRotationStageModerationGrants`); the publish writes them in place of the old ones
+  and is refused (`409 rotation_plan_changed`) while one is missing — a delivery between stage and publish included.
+  So a sole holder, the Server Owner right after first-run setup, keeps every report and hold the key opens. An epoch
+  this device cannot open, or whose key the published bundle disowns, is declared and goes: it was already closed to
+  the holder, and another holder delivers it at the new identity. The current epoch is then due for rotation, as after
+  any exposure of the key. An account that is no moderator stages nothing.
 - **E7 — the ceremony is interrupted after the publish.** The answer is lost, the tab closes, a space's new epoch
   fails, or a space is in another tenant. Each space the holder was in already holds its current key for the new
   identity, so nothing is lost. The new epoch follows from any device that unlocks the account, the Emergency Kit's
