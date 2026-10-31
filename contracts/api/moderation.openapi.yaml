@@ -748,7 +748,9 @@ paths:
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
         "404":
-          description: "`case_not_found`, or `measure_not_found` = no measure of this case has that id."
+          description: >-
+            `case_not_found`, or `measure_not_found` = no measure of this case has that id. A Server Owner's step on the
+            case (a sign-in block, a tenant offline) is none: the Server Owner lifts it, on the admin channel (ADR 0099 § 6).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: measure_not_found } }
         "409":
