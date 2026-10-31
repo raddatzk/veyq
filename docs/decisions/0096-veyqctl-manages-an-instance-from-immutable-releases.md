@@ -59,9 +59,8 @@ keys, so it stays a deliberate act. In order, and nothing is stopped before step
    the next `upgrade` enters the next major; running a later one (a fix release cut after that release), it refuses,
    since no path from it was proved and a later release of the next major is entered from it — and no run crosses
    more than one major. That entry is the path the lanes test
-   ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6). *Amended
-   2026-10-31 (inbox #436): it was "the running major's newest release", which a fix release published after the
-   next major's release turned into a path nobody proved;*
+   ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6). Not the running
+   major's newest release: a fix release published after the next major's release is one nobody proved it from;
 2. verify the manifest's signature, then both images' signatures by the manifest's digests, then download its assets
    into `releases/<release>/`, each against the manifest's sha256;
 3. refuse if the new `.env` template requires a value `.env` lacks, naming it — with `latest` this is what stops a
