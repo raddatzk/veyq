@@ -87,6 +87,42 @@ def request_cases() -> None:
           "names the predecessor" in refused(R, ["--upgrade-from", e2e.MAJOR_ENTRY_REQUEST]))
 
 
+def resolve_cases() -> None:
+    """`--resolve`, the question `ci.yml`'s `upgrade-proof` legs ask before they build anything: the predecessor as the
+    last line `predecessor=<ref>`, empty where the major entry has no second proof, and nothing started — `docker` is
+    never looked for. Run against stand-ins for the two derivations."""
+    import contextlib
+    import io
+
+    def resolved(argv: list, entry: str | None, default: str = "v2.3") -> tuple:
+        real = e2e.major_entry_proof_ref, e2e.default_predecessor_ref, e2e.shutil.which
+        looked: list = []
+        e2e.major_entry_proof_ref = lambda root=None: (entry, "stand-in")
+        e2e.default_predecessor_ref = lambda root=None: (default, "stand-in")
+        e2e.shutil.which = lambda name: (looked.append(name), None)[1]
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                try:
+                    rc = e2e.main(argv)
+                except SystemExit as e:
+                    rc = f"exit {e}"
+        finally:
+            e2e.major_entry_proof_ref, e2e.default_predecessor_ref, e2e.shutil.which = real
+        lines = out.getvalue().splitlines()
+        return rc, lines[-1] if lines else "", looked
+
+    check("--resolve: the major entry's predecessor, nothing started",
+          resolved(["--upgrade-major-entry", "--resolve"], "v1.10") == (0, "predecessor=v1.10", []))
+    check("--resolve: no second proof, an empty predecessor, nothing started",
+          resolved(["--upgrade-major-entry", "--resolve"], None) == (0, "predecessor=", []))
+    check("--resolve: the default predecessor", resolved(["--upgrade", "--resolve"], None) == (0, "predecessor=v2.3", []))
+    check("--resolve: a named one", resolved(["--resolve", "--upgrade-from", "abc"], None) == (0, "predecessor=abc", []))
+    rc, _, looked = resolved(["--resolve"], None)
+    check("--resolve without an upgrade flag is refused before anything", str(rc).startswith("exit") and not looked,
+          str(rc))
+
+
 def predecessor_cases() -> None:
     D = e2e.default_predecessor
     check("release: none -> the first parent of HEAD", D("none", ["v1.0", "v1.1"]) == "HEAD^1")
@@ -320,6 +356,7 @@ def main() -> int:
     request_cases()
     predecessor_cases()
     major_entry_cases()
+    resolve_cases()
     pin_cases()
     flyway_cases()
     seeder_cases()

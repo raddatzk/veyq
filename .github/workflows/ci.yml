@@ -866,9 +866,12 @@ jobs:
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
   # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
-  # `v<major>.<minor>` tag it reaches from then on. A second run proves the release's major entry (ADR 0085 decision
+  # `v<major>.<minor>` tag it reaches from then on. A second leg proves the release's major entry (ADR 0085 decision
   # 10), the newest release of the previous major among EVERY tag — a fix release tagged on `release/<old>.x`, which this
-  # commit does not reach — hence the full history and every tag (fetch-depth: 0 fetches both).
+  # commit does not reach — hence the full history and every tag (fetch-depth: 0 fetches both). One leg per predecessor,
+  # each with the job's budget (ADR 0091 decision 1): each builds two jars and proves once, as one leg did before the
+  # second proof. A leg asks `--resolve` first and builds nothing when there is nothing to prove from: the major-entry
+  # leg while the entry is the default predecessor (a major's first release) or there is none.
   #
   # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
   # (src/backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
@@ -879,6 +882,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: false
+    strategy:
+      fail-fast: false
+      matrix:
+        predecessor:
+          - { leg: default, flag: --upgrade }
+          - { leg: major-entry, flag: --upgrade-major-entry }
     permissions:
       contents: read
     steps:
@@ -886,40 +895,54 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Resolve the predecessor (${{ matrix.predecessor.leg }})
+        id: predecessor
+        env:
+          FLAG: ${{ matrix.predecessor.flag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/run_web_e2e.py "$FLAG" --resolve | tee "${RUNNER_TEMP}/resolve.log"
+          ref="$(sed -n 's/^predecessor=//p' "${RUNNER_TEMP}/resolve.log" | tail -n 1)"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
       - name: Set up Java
+        if: steps.predecessor.outputs.ref != ''
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
       - name: Validate the Gradle wrapper JAR
+        if: steps.predecessor.outputs.ref != ''
         uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - name: Set up Node
+        if: steps.predecessor.outputs.ref != ''
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Build the candidate's fast-jar
+        if: steps.predecessor.outputs.ref != ''
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
       - name: Install the candidate's dependencies
+        if: steps.predecessor.outputs.ref != ''
         # The registry half is asked once per commit, by this workflow's `frontend`.
         run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
       # The orchestrator builds the predecessor itself, in a worktree of its ref inside the run directory, and removes
       # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
-      - name: Run the upgrade proof
-        run: python3 scripts/run_web_e2e.py --upgrade
-      # The proof from the major entry, which the tools image bakes and its gate admits alone (ADR 0098 decision 3). The
-      # orchestrator resolves it and exits 0, saying why, when there is none or it is the default predecessor above;
-      # its run directory sits beside the first one's in `.e2e-out/` (VEYQ_E2E_KEEP_RUNS keeps both).
-      - name: Run the upgrade proof from the major entry
-        run: python3 scripts/run_web_e2e.py --upgrade-major-entry
+      # The major-entry leg proves from the release the tools image bakes and its gate admits alone (ADR 0098 decision
+      # 3), the one the manifest names as `majorEntry`; it resolves the entry again, from the same tags.
+      - name: Run the upgrade proof (${{ matrix.predecessor.leg }})
+        if: steps.predecessor.outputs.ref != ''
+        env:
+          FLAG: ${{ matrix.predecessor.flag }}
+        run: python3 scripts/run_web_e2e.py "$FLAG"
       - name: Keep the e2e run directory
-        if: always()
+        if: always() && steps.predecessor.outputs.ref != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: upgrade-proof-out
+          name: upgrade-proof-out-${{ matrix.predecessor.leg }}
           path: .e2e-out/
           include-hidden-files: true
           if-no-files-found: warn

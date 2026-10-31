@@ -79,6 +79,7 @@ Usage:
     python3 scripts/run_web_e2e.py --upgrade         # the upgrade proof against the default predecessor
     python3 scripts/run_web_e2e.py --upgrade-from <git ref>
     python3 scripts/run_web_e2e.py --upgrade-major-entry   # the second proof, from the major entry (none: no run)
+    python3 scripts/run_web_e2e.py --upgrade-major-entry --resolve   # its predecessor (`predecessor=<ref>`), run nothing
 
 With no arguments it runs every `src/web/src/**/*.e2e.test.ts` — that is how CI invokes it — except the
 **measurements**, `*.measure.e2e.test.ts`: a suite that takes a reading rather than holding a claim CI must keep (the
@@ -1419,6 +1420,8 @@ SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 # The `ref` [upgrade_request] returns for `--upgrade-major-entry`: resolved by [main] through [major_entry_proof_ref]. No
 # git ref collides with it — `--upgrade-from` refuses a ref that starts with `--`.
 MAJOR_ENTRY_REQUEST = "--upgrade-major-entry"
+# With an upgrade flag: print the predecessor it resolves to and run nothing ([main]).
+RESOLVE_REQUEST = "--resolve"
 
 
 def upgrade_request(argv: list[str]) -> tuple[bool, str | None, list[str]]:
@@ -2040,14 +2043,26 @@ def keep_runs() -> int:
 
 
 def main(argv: list[str]) -> int:
+    # `--resolve`: name the predecessor this proof would run from, as its last line `predecessor=<ref>` (empty: no run),
+    # and start nothing — `ci.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
+    resolve = RESOLVE_REQUEST in argv
+    argv = [a for a in argv if a != RESOLVE_REQUEST]
     try:
         upgrade, upgrade_from, argv = upgrade_request(argv)
+        if resolve and not upgrade:
+            raise ValueError(f"{RESOLVE_REQUEST} names an upgrade proof's predecessor: pass it with --upgrade, "
+                             f"--upgrade-from or {MAJOR_ENTRY_REQUEST}")
         if upgrade_from == MAJOR_ENTRY_REQUEST:
             upgrade_from, why = major_entry_proof_ref()
             log(f"upgrade proof from the major entry: {why}")
             if upgrade_from is None:
                 log("no second upgrade proof to run (ADR 0085 decision 10) — nothing was started")
+                if resolve:
+                    print("predecessor=", flush=True)
                 return 0
+        if resolve:
+            print(f"predecessor={upgrade_from if upgrade_from is not None else default_predecessor_ref()[0]}", flush=True)
+            return 0
     except ValueError as e:
         raise SystemExit(f"[e2e] {e}") from e
     if upgrade and argv:
