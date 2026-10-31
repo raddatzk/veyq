@@ -14,8 +14,18 @@ and anyone in the Pot sees at any time who owes whom.
 
 ## The Pot
 
-- **Participants** are only names in this Pot, linked to no account — a link guest has no stable identity to link
-  to. Whoever may write adds and renames one. The rest is a member's (ADR 0108 decisions 3 and 6):
+- **Participants** are a **member** of the space or a **name** (ADR 0108 decision 2). Whoever may write adds either:
+  a name typed, or one of the space's current members not yet in the Pot, chosen from the member list a Memory's
+  participants come from (`core/people/directory.ts`). A member participant's record holds the member's user id and,
+  sealed with it, their display name when they were added (`member` in [the entry format](../../contracts/expenses/entry.v1.schema.json), optional and additive under `v: 1`: a Pot written before it reads as names). A link guest adds
+  names only — it cannot see the space's members — which is the member's view with one function fewer. A member is a
+  participant of a Pot once at most. **Reading one:** a member's view shows a member participant by their current
+  display name and picture; once the space no longer lists the account (erased, or gone from the space) it shows as a
+  **former member** by the name sealed at adding, its entries and balance standing. A link guest reads no member list:
+  it shows the sealed name and the letter, never a picture, and a later rename does not reach it (the residual
+  ADR 0108 decision 2 accepts). A participant **never changes kind**: no name is linked to an account later, and a
+  member participant is not renamed (its name is the member's own). Whoever may write renames a name participant. The
+  rest is a member's (ADR 0108 decisions 3 and 6):
 
   | Step | Only when | Entries show | New entries, overviews | Undone |
   |---|---|---|---|---|
@@ -84,6 +94,10 @@ compute alike:
 
 **Reading a Pot.** Where the schema leaves a reader a choice, every client chooses alike:
 
+- A participant's **kind** is its record's **first** revision's: whether it is a member, and which, is fixed for the
+  record's life, and a later revision that adds, drops or changes `member` moves nothing — so neither a client that
+  predates the field (it drops `member` like any unknown field, and reads the record as its name) nor a writer naming
+  their own account can change whom a participant is. Everything else of the record is its latest revision's.
 - A record counts by its **latest** revision. One whose latest revision does not open counts nowhere — never an earlier
   one in its place, which would count what the server chose to serve.
 - The ledger check ([uc.expenses.verify-ledger](../features/expenses/use-cases/uc.expenses.verify-ledger.md)) marks a
@@ -92,8 +106,9 @@ compute alike:
 - A missing revision is covered only by a revision of the **same** record that opened to `kind: "erasure"`; the
   server's own erasure flag is never read for it.
 - A writer refuses before sealing anything: a money entry that does not add up, two revisions of one record in a batch,
-  an erasure through the append, a participant whose `joined` moved, and a deactivation or an erasure while the
-  balance is not settled.
+  an erasure through the append, a participant whose `joined` moved or whose `member` is not its first revision's, a
+  member added who already is a participant (an erased one names nobody any more), and a deactivation or an erasure
+  while the balance is not settled.
 
 **Editing and deleting** are open to everyone who may write (ADR 0108 decision 6). Each change keeps the earlier
 version: an entry shows that it was edited, and its history what changed and when — and, for a member, who (the
@@ -185,6 +200,7 @@ A share is the member's view with functions removed. On a Pot:
 | see entries, history, balances, overviews; download receipts | ✓ | ✓ | ✓ |
 | create, edit, delete and restore entries; add and remove receipts | ✓ | ✗ | ✓ |
 | add and rename participants | ✓ | ✗ | ✓ |
+| add a member of the space as a participant | ✓ | ✗ | ✗ |
 | deactivate, activate, delete and remove participants | ✓ | ✗ | ✗ |
 | own categories, base currency (the Pot's meta) | ✓ | ✗ | ✗ |
 | create a Pot | ✓ | ✗ | ✗ |
@@ -201,7 +217,11 @@ device. History is not exported; an import starts each entry at its current revi
 256 records after another, each on what the one before wrote, and uploads each receipt under a new id into the new Pot
 before the batch whose revision lists it. A receipt the operator blocked is not read, so it is left out of its entry. A
 deleted person comes back as a deactivated one shown as "deleted people": its name is gone, and an erasure on import
-would need its balance settled first; a member can delete it again. A copy is the download and the import without the
+would need its balance settled first; a member can delete it again. A member participant downloads with its name sealed
+at adding and, in a member's download, its user id beside the tenant the id belongs to (`memberId`, `tenantId`): an
+import into that same tenant, and every copy, keeps the member; an import into another tenant or instance makes it the
+name sealed with it, as a Memory's participants are never restored outside their space (ADR 0083). A link guest's
+download names no tenant and carries no member id. A copy is the download and the import without the
 file: it reads each receipt by frame and seals it again under a fresh key bound to the copy.
 
 ## Out of the first cut

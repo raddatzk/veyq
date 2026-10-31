@@ -16,7 +16,7 @@ const root: RightsTarget = { kind: null, inIdentityFolder: false, shareable: fal
 describe('expensesRights', () => {
   it('a member does everything on a Pot, and sees each revision\'s writer', () => {
     expect(expensesRights(memberAccessOf(), pot)).toEqual({
-      view: true, writeEntries: true, addPeople: true, managePeople: true, settings: true, writers: true, createPot: false,
+      view: true, writeEntries: true, addPeople: true, addMembers: true, managePeople: true, settings: true, writers: true, createPot: false,
       share: true, shareContribute: true, renameNode: true, moveNode: true, deleteNode: true,
     })
   })
@@ -26,6 +26,8 @@ describe('expensesRights', () => {
     expect(r).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writeEntries: true, addPeople: true })
     // the member-only steps, each false here and true for a member (above)
     expect([r.managePeople, r.settings, r.writers, r.share, r.renameNode, r.moveNode, r.deleteNode]).toEqual([false, false, false, false, false, false, false])
+    // it adds names only: the space's members are a member's to see (ADR 0108 decision 2; control: the member above)
+    expect(r.addMembers).toBe(false)
   })
 
   it('a READ guest only views (control: the READ_WRITE one above writes)', () => {

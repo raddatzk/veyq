@@ -9,10 +9,10 @@ import { categoryLabel } from '../domain/categories'
 import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { PotLedger } from '../domain/ledger'
 import { formatMoney } from '../amounts'
-import { personLabel } from '../people'
+import { personLabel, type MemberDirectory } from '../people'
 import { whoAmI } from '../whoAmI'
 
-const props = defineProps<{ ledger: PotLedger; meta: PotMeta; potId: string }>()
+const props = defineProps<{ ledger: PotLedger; meta: PotMeta; potId: string; directory?: MemberDirectory }>()
 /** The viewer's own row, as they chose in the balances ("Who am I", `../whoAmI.ts`). */
 const me = computed(() => whoAmI(props.potId).me.value)
 const { t, locale } = useI18n()
@@ -32,7 +32,7 @@ const persons = computed(() => {
   for (const [id, v] of props.ledger.overview.byPerson) {
     const p = props.ledger.participants.find((x) => x.id === id)
     const key = p?.erased ? 'deleted-people' : id
-    const row = rows.get(key) ?? { name: personLabel(props.ledger, id, t), paid: 0n, share: 0n }
+    const row = rows.get(key) ?? { name: personLabel(props.ledger, id, t, props.directory ?? null), paid: 0n, share: 0n }
     row.paid += v.paid
     row.share += v.share
     rows.set(key, row)

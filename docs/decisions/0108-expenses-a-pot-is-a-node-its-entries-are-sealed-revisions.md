@@ -1,7 +1,7 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
 - Status: Accepted
-- Built: partly (not built: decision 2's member participants (inbox #783))
+- Built: yes
 - Date: 2026-10-23
 - Model: [Application: Expenses](../apps/expenses.md)
 

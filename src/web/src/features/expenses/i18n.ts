@@ -220,6 +220,9 @@ const en = {
       deletedPeople: 'deleted people',
       deletedSummary: 'One deleted person. | {n} deleted people.',
       settleFirst: 'A person can be deactivated or deleted once their balance is settled.',
+      chooseMember: 'A member of this space',
+      addMember: 'Add member',
+      formerMember: 'former member',
       failed: 'The change was not saved. Please try again.',
     },
     settings: {
@@ -459,6 +462,9 @@ const de: typeof en = {
       deletedPeople: 'gelöschte Personen',
       deletedSummary: 'Eine gelöschte Person. | {n} gelöschte Personen.',
       settleFirst: 'Eine Person lässt sich deaktivieren oder löschen, sobald ihr Saldo ausgeglichen ist.',
+      chooseMember: 'Ein Mitglied dieses Bereichs',
+      addMember: 'Mitglied hinzufügen',
+      formerMember: 'ehemaliges Mitglied',
       failed: 'Die Änderung wurde nicht gespeichert. Bitte versuche es erneut.',
     },
     settings: {

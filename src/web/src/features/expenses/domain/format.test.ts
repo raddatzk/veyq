@@ -80,6 +80,9 @@ describe('reading a body', () => {
     ['a participant without a join time', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true }, '/joined'],
     ['a participant with a 101-character name', { v: 1, heads: [], kind: 'participant', name: 'x'.repeat(101), active: true, joined: 1 }, '/name'],
     ['an erasure without its join time', { v: 1, heads: [], kind: 'erasure' }, '/joined'],
+    ['a member that is no object', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true, joined: 1, member: Q }, '/member'],
+    ['a member without a user id', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true, joined: 1, member: {} }, '/member/userId'],
+    ['a member whose user id is no uuid', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true, joined: 1, member: { userId: 'u-ada' } }, '/member/userId'],
     ['not an object', [expense], ''],
   ]
 
@@ -92,6 +95,32 @@ describe('reading a body', () => {
     }
     expect(thrown).toBeInstanceOf(RevisionFormatInvalid)
     expect((thrown as RevisionFormatInvalid).path).toBe(path)
+  })
+
+  // A participant that is a member (ADR 0108 decision 2, inbox #783): an optional field, additive under `v: 1`.
+  const ada = { v: 1, heads: [], kind: 'participant', name: 'Ada Lovelace', active: true, joined: 1 } as const
+  it('a member participant round-trips through the bytes with its user id and the name sealed beside it', () => {
+    const body = readRevisionBody({ ...ada, member: { userId: Q } })
+    expect(body).toEqual({ ...ada, member: { userId: Q } })
+    expect(decodeRevisionBody(encodeRevisionBody(body))).toEqual(body)
+  })
+
+  it('a record written before the field reads as a name: no member, nothing invented (control: the one above has one)', () => {
+    const body = readRevisionBody({ ...ada })
+    expect(body).toEqual(ada)
+    expect(body).not.toHaveProperty('member')
+  })
+
+  it('unknown fields stay additive beside and inside the member: dropped, the member kept (the rule by which a reader that predates the field drops `member` and reads the name)', () => {
+    const body = readRevisionBody({ ...ada, member: { userId: Q, avatar: 'x' }, linkedLater: true })
+    expect(body).toEqual({ ...ada, member: { userId: Q } })
+  })
+
+  it('the member field is the schema\'s: optional, an object whose required user id is the schema\'s uuid', () => {
+    const def = defs.participant
+    expect(def.required).toEqual(['kind', 'name', 'active', 'joined'])
+    expect(def.properties.member.required).toEqual(['userId'])
+    expect(def.properties.member.properties.userId.$ref).toBe('#/$defs/uuid')
   })
 
   it('counts a name in code points, as the schema does: a 100-emoji name reads', () => {

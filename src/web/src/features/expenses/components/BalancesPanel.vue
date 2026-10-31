@@ -14,11 +14,11 @@ import type { PotMeta } from '../domain/potMeta'
 import type { PotSession } from '../potSession'
 import type { PotWrite } from '../domain/potApi'
 import { formatMoney } from '../amounts'
-import { personLabel, shownBalances } from '../people'
+import { personLabel, shownBalances, type MemberDirectory } from '../people'
 import { today } from '../entryForm'
 import { whoAmI } from '../whoAmI'
 
-const props = defineProps<{ session: PotSession; ledger: PotLedger; meta: PotMeta; canWrite: boolean; potId: string }>()
+const props = defineProps<{ session: PotSession; ledger: PotLedger; meta: PotMeta; canWrite: boolean; potId: string; directory?: MemberDirectory }>()
 const { t, locale } = useI18n()
 
 /** Reka's select takes no empty value: "not chosen" is this token. */
@@ -31,7 +31,7 @@ const me = computed(() => {
 })
 const meOptions = computed(() => [
   { value: NOBODY, label: t('expenses.whoAmI.nobody') },
-  ...props.ledger.participants.filter((p) => !p.erased && p.name !== null).map((p) => ({ value: p.id, label: p.name! })),
+  ...props.ledger.participants.filter((p) => !p.erased && p.name !== null).map((p) => ({ value: p.id, label: personLabel(props.ledger, p.id, t, props.directory ?? null) })),
 ])
 const picked = computed<string>({
   get: () => me.value ?? NOBODY,
@@ -42,7 +42,7 @@ const money = (v: bigint) => formatMoney(v, props.meta.base.currency, props.meta
 const rows = computed(() =>
   shownBalances(props.ledger).map((r) => ({
     key: r.id ?? 'deleted-people',
-    name: r.id ? personLabel(props.ledger, r.id, t) : t('expenses.people.deletedPeople'),
+    name: r.id ? personLabel(props.ledger, r.id, t, props.directory ?? null) : t('expenses.people.deletedPeople'),
     balance: r.balance,
     text: r.balance > 0n ? t('expenses.balances.owed', { amount: money(r.balance) }) : r.balance < 0n ? t('expenses.balances.owes', { amount: money(-r.balance) }) : t('expenses.balances.settled'),
   })),
@@ -97,7 +97,7 @@ async function record(list: readonly Transfer[]) {
     <ul v-else class="veyq-list">
       <li v-for="(tr, i) in transfers" :key="i" class="veyq-list-row expenses-static-row">
         <span class="veyq-row-main">
-          <span class="veyq-row-title">{{ t('expenses.balances.pays', { from: personLabel(ledger, tr.from, t), to: personLabel(ledger, tr.to, t) }) }}</span>
+          <span class="veyq-row-title">{{ t('expenses.balances.pays', { from: personLabel(ledger, tr.from, t, directory ?? null), to: personLabel(ledger, tr.to, t, directory ?? null) }) }}</span>
         </span>
         <span class="expenses-amount">{{ money(tr.amount) }}</span>
         <VeyqButton v-if="canWrite" :label="t('expenses.balances.record')" variant="secondary" appearance="outlined" size="small" :disabled="busy" @click="record([tr])" />

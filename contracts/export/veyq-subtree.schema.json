@@ -548,6 +548,10 @@
             }
           }
         },
+        "tenantId": {
+          "$ref": "../expenses/entry.v1.schema.json#/$defs/uuid",
+          "description": "The tenant whose members the participants' `memberId`s are, the exporting member's; present exactly when one carries a `memberId`. An import into this same tenant keeps each member, an import anywhere else makes each the name sealed with it (ADR 0108 decision 2)."
+        },
         "participants": {
           "type": "array",
           "maxItems": 1000,
@@ -606,6 +610,10 @@
         },
         "joined": {
           "$ref": "../expenses/entry.v1.schema.json#/$defs/joined"
+        },
+        "memberId": {
+          "$ref": "../expenses/entry.v1.schema.json#/$defs/uuid",
+          "description": "The participant is this member of the content's `tenantId` (ADR 0108 decision 2); its `name` is the display name sealed at adding. Only in a member's download (a link guest's names no tenant), never on a deleted one, and no member twice."
         }
       }
     },

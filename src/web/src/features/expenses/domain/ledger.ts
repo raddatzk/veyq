@@ -16,8 +16,21 @@ import { byRecord, type HeldRevision } from './revisions'
 export type BaseCurrency = { currency: string; minorUnits: number }
 
 /** A participant of the Pot, as its record's latest revision says. An erased one (deleted by a member) keeps its id and
- *  its join order and has no name; the screen shows every erased one as one "deleted people". */
-export type Participant = { id: string; name: string | null; active: boolean; joined: number; erased: boolean }
+ *  its join order and has no name; the screen shows every erased one as one "deleted people". `member` is the user id of
+ *  the member it is (ADR 0108 decision 2), or null for a name — decided by the record's FIRST revision, never a later one
+ *  ({@link participantMemberOf}); `name` is the record's own (for a member, the display name sealed at adding). */
+export type Participant = { id: string; name: string | null; active: boolean; joined: number; erased: boolean; member: string | null }
+
+/**
+ * The member a participant record is, from its revisions ascending: the `member` of its earliest revision that opened to a
+ * participant, or null. A participant never changes kind (ADR 0108 decision 2), so a later revision that adds, drops or
+ * changes the field — an older client that did not know it, or a writer turning someone else's name into their own
+ * account — moves nothing; this client's writer carries the first's unchanged (`potApi.ts`' `sealPotWrites`).
+ */
+export function participantMemberOf(revisions: readonly HeldRevision[]): string | null {
+  for (const r of revisions) if (r.body?.kind === 'participant') return r.body.member?.userId ?? null
+  return null
+}
 
 export type EntryProblem =
   | 'payers-unbalanced'
@@ -274,8 +287,8 @@ export function buildLedger(held: readonly HeldRevision[], base: BaseCurrency): 
   const money: { id: string; revisions: HeldRevision[] }[] = []
   for (const [id, revisions] of byRecord(held)) {
     const latest = revisions[revisions.length - 1]!.body
-    if (latest?.kind === 'participant') participants.push({ id, name: latest.name, active: latest.active, joined: latest.joined, erased: false })
-    else if (latest?.kind === 'erasure') participants.push({ id, name: null, active: false, joined: latest.joined, erased: true })
+    if (latest?.kind === 'participant') participants.push({ id, name: latest.name, active: latest.active, joined: latest.joined, erased: false, member: participantMemberOf(revisions) })
+    else if (latest?.kind === 'erasure') participants.push({ id, name: null, active: false, joined: latest.joined, erased: true, member: null })
     else money.push({ id, revisions })
   }
   const order = joinOrder(participants)

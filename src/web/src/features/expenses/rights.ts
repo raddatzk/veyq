@@ -13,10 +13,14 @@
 // | create, edit, delete and restore entries; add and       | ✓      | ✗          | ✓                |
 // |   remove their receipts (`writeEntries`)                 |        |            |                  |
 // | add and rename participants                             | ✓      | ✗          | ✓                |
+// | add a member of the space as a participant (`addMembers`) | ✓    | ✗          | ✗                |
 // | deactivate, activate, delete and remove participants    | ✓      | ✗          | ✗                |
 // | the Pot's meta (own categories, base currency)          | ✓      | ✗          | ✗                |
 // | the writer of each revision (the history's "who")       | ✓      | ✗          | ✗                |
 // | create a Pot                                            | ✓      | ✗          | ✗                |
+//
+// A link guest adds names only: it cannot see the space's members (ADR 0108 decision 2) — the member's view with one
+// function fewer, not a guest's own.
 //
 // A member's write needs the Expenses switch on (uc.platform.switch-application-off: off, a Pot is read-only — but its
 // delete to the trash and restore stay, as the server's exemptions) and the scope not pending deletion. A guest is never
@@ -34,6 +38,8 @@ export interface ExpensesRights {
   writeEntries: boolean
   /** Add a participant and rename one. */
   addPeople: boolean
+  /** Add a member of the space as a participant, beside typing a name (reads the space's member list). */
+  addMembers: boolean
   /** Deactivate, activate, delete and remove a participant (the member's steps, ADR 0108 decision 6). */
   managePeople: boolean
   /** Change the Pot's meta: its base currency (while it holds no entry) and its own categories. */
@@ -56,6 +62,7 @@ export const NO_EXPENSES_RIGHTS: Readonly<ExpensesRights> = Object.freeze({
   view: false,
   writeEntries: false,
   addPeople: false,
+  addMembers: false,
   managePeople: false,
   settings: false,
   writers: false,
@@ -87,6 +94,7 @@ function memberRights(access: MemberAccess, at: RightsTarget): ExpensesRights {
     writers: true,
     writeEntries: write,
     addPeople: write,
+    addMembers: write,
     managePeople: write,
     settings: write,
     share: write && access.publicShares && at.shareable,

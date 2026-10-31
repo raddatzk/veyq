@@ -13,6 +13,8 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 const server = vi.hoisted(() => ({ current: null as unknown as import('../potTestUtil').PotServer, targets: [] as unknown[], uploads: [] as unknown[] }))
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+// every member has a picture on this device: a guest's page must draw none, which only a row that hands PersonAvatar a user id would
+vi.mock('../../../core/people/avatarCache', async (orig) => ({ ...(await orig<object>()), avatarUrlOf: vi.fn((id: string | null | undefined) => (id ? `blob:picture-${id}` : null)) }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readGuestPot: vi.fn(), appendPotWrites: vi.fn() }))
 vi.mock('../receipts', async (orig) => ({ ...(await orig<object>()), readGuestReceipts: vi.fn(), uploadReceipt: vi.fn() }))
 
@@ -149,6 +151,27 @@ describe('a Pot under its own link', () => {
       expect.objectContaining({ kind: 'guest', shareId: SHARE_ID, nodeId: POT_ID, contributorToken: 'dG9rZW4=' }),
       expect.objectContaining({ kind: 'guest', shareId: SHARE_ID }),
     ])
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  it('READ_WRITE: a member participant reads by the name sealed at adding, with no picture; the guest adds a name, never a member', async () => {
+    const DANA = '0e000000-0000-4000-8000-0000000000d1'
+    const U_DANA = '0d000000-0000-4000-8000-000000000001'
+    server.current.append([{ entryId: DANA, content: { kind: 'participant', name: 'Dana Sealed', active: true, joined: 3, member: { userId: U_DANA } } }])
+    const page = await mountShare(ShareRole.ReadWrite)
+    await openTab(page, t('expenses.tabs.people'))
+    const dana = page.find(`[data-person="${DANA}"]`)
+    expect(dana.text()).toContain('Dana Sealed')
+    expect(dana.find('.veyq-avatar').exists()).toBe(true)
+    expect(dana.find('img').exists()).toBe(false)
+    expect(dana.find('[data-former]').exists()).toBe(false)
+    expect(page.find('form.expenses-add-member').exists()).toBe(false)
+    // a name is still added (the member's view with the member choice removed)
+    await page.find('form.expenses-inline-form input').setValue('Cleo')
+    await page.find('form.expenses-inline-form').trigger('submit')
+    await flushPromises()
+    expect(server.current.held().at(-1)!.body).toMatchObject({ kind: 'participant', name: 'Cleo' })
+    expect(server.current.held().at(-1)!.body).not.toHaveProperty('member')
     expect(authenticatedCalls).toEqual([])
   })
 

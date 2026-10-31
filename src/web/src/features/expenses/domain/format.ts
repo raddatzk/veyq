@@ -37,7 +37,13 @@ export type RefundBody = Money & {
   refunds?: string
 }
 export type TransferBody = Money & { kind: 'transfer'; title?: string; from: string; to: string }
-export type ParticipantBody = { kind: 'participant'; name: string; active: boolean; joined: number }
+/** A participant that is a member of the space (ADR 0108 decision 2): their user id. The record's `name` beside it is their
+ *  display name as it was when they were added, sealed with it — what a reader without the member directory (a link
+ *  guest, an older client) shows. */
+export type ParticipantMember = { userId: string }
+/** A person of the Pot: a name, or a member with the name sealed at adding (`member`). A participant never changes kind:
+ *  its first revision decides it for the record's life (`ledger.ts`' `buildLedger`, `potApi.ts`' `sealPotWrites`). */
+export type ParticipantBody = { kind: 'participant'; name: string; active: boolean; joined: number; member?: ParticipantMember }
 export type DeletedBody = { kind: 'deleted' }
 export type ErasureBody = { kind: 'erasure'; joined: number }
 
@@ -159,13 +165,18 @@ function content(o: Obj): RevisionContent {
       if (o.title !== undefined) body.title = title(o.title)
       return body
     }
-    case 'participant':
-      return {
+    case 'participant': {
+      const body: ParticipantBody = {
         kind: 'participant',
         name: str(o.name, '/name', undefined, 1, 100),
         active: typeof o.active === 'boolean' ? o.active : fail('/active'),
         joined: int(o.joined, '/joined', 0, MAX_SAFE),
       }
+      // Optional and additive under `v: 1`: a reader that predates it drops it like any unknown field and reads the record
+      // as the name sealed beside it.
+      if (o.member !== undefined) body.member = { userId: uuid(obj(o.member, '/member').userId, '/member/userId') }
+      return body
+    }
     case 'deleted':
       return { kind: 'deleted' }
     case 'erasure':

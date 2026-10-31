@@ -3,7 +3,8 @@
 // a new entry is offered only active people beside whoever the edited entry already names.
 import { describe, it, expect } from 'vitest'
 import { buildLedger } from './domain/ledger'
-import { offeredPeople, personLabel, shownBalances } from './people'
+import { addableMembers, offeredPeople, personLabel, shownBalances, standingOf, type MemberDirectory } from './people'
+import type { Person } from '../../core/people/directory'
 import { ANNA, BEN, CLEO, EUR, PotServer, expense, person } from './potTestUtil'
 
 const DAN = '0e000000-0000-4000-8000-000000000004'
@@ -45,5 +46,49 @@ describe('people on screen', () => {
     expect(offeredPeople(ledger).map((p) => p.id)).toEqual([ANNA, CLEO, DAN])
     expect(offeredPeople(ledger, [BEN]).map((p) => p.id)).toEqual([ANNA, BEN, CLEO, DAN])
     expect(shownBalances(ledger).map((r) => r.id)).toEqual([ANNA, CLEO, DAN]) // settled and deactivated: left out
+  })
+})
+
+// A participant that is a member (ADR 0108 decision 2): a member's view reads it by the directory's current name, as a
+// former member by the sealed name once the directory no longer lists them; a guest, handed no directory, by the sealed one.
+describe('a member participant on screen', () => {
+  const U_DANA = '0d000000-0000-4000-8000-000000000001'
+  const U_GUS = '0d000000-0000-4000-8000-000000000003'
+  const U_ERIK = '0d000000-0000-4000-8000-000000000002'
+  const GUS = '0e000000-0000-4000-8000-0000000000a7'
+  const who = (userId: string, displayName: string): Person => ({ userId, username: displayName.toLowerCase(), realName: displayName, displayName })
+  function withMembers() {
+    const s = pot()
+    s.append([
+      { entryId: '0e000000-0000-4000-8000-0000000000d1', content: { kind: 'participant', name: 'Dana Old', active: true, joined: 5, member: { userId: U_DANA } } },
+      { entryId: GUS, content: { kind: 'participant', name: 'Gus Sealed', active: true, joined: 6, member: { userId: U_GUS } } },
+    ])
+    return buildLedger(s.held(), EUR)
+  }
+  const DANA = '0e000000-0000-4000-8000-0000000000d1'
+  const directory: MemberDirectory = new Map([[U_DANA, who(U_DANA, 'Dana Now')], [U_ERIK, who(U_ERIK, 'Erik')]])
+
+  it('a member reads the current name; one the directory no longer lists is a former member by the sealed name', () => {
+    const ledger = withMembers()
+    expect(personLabel(ledger, DANA, t, directory)).toBe('Dana Now')
+    expect(personLabel(ledger, GUS, t, directory)).toBe('Gus Sealed')
+    const p = (id: string) => ledger.participants.find((x) => x.id === id)!
+    expect([standingOf(p(DANA), directory), standingOf(p(GUS), directory), standingOf(p(ANNA), directory)]).toEqual(['member', 'former', 'name'])
+  })
+
+  it('a guest, handed no directory, reads the name sealed at adding and never a former member (control: the member\'s view above)', () => {
+    const ledger = withMembers()
+    expect(personLabel(ledger, DANA, t)).toBe('Dana Old')
+    expect(standingOf(ledger.participants.find((x) => x.id === GUS)!, null)).toBe('sealed')
+  })
+
+  it('offers to add only the members not yet in the Pot — an erased one\'s member again', () => {
+    const ledger = withMembers()
+    const members = [who(U_DANA, 'Dana Now'), who(U_ERIK, 'Erik'), who(U_GUS, 'Gus')]
+    expect(addableMembers(ledger, members).map((m) => m.userId)).toEqual([U_ERIK])
+    const s = pot()
+    s.append([{ entryId: DANA, content: { kind: 'participant', name: 'Dana', active: true, joined: 5, member: { userId: U_DANA } } }])
+    s.erase(DANA)
+    expect(addableMembers(buildLedger(s.held(), EUR), members).map((m) => m.userId)).toEqual([U_DANA, U_ERIK, U_GUS])
   })
 })

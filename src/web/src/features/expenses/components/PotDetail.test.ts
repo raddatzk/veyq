@@ -25,7 +25,11 @@ vi.mock('../../../core/node/rekey/floor', async (orig) => ({
 vi.mock('../../../core/people/directory', async (orig) => ({
   ...(await orig<object>()),
   loadTenantPeople: vi.fn(async () => new Map([['u-anna', { userId: 'u-anna', username: 'anna', realName: 'Anna Member', displayName: 'Anna Member' }]])),
+  // the Pot's scope's current members (ADR 0108 decision 2): none unless a case says so
+  loadScopePeople: vi.fn(async () => []),
 }))
+// every member has a picture on this device: a row draws it exactly where it hands PersonAvatar a user id
+vi.mock('../../../core/people/avatarCache', async (orig) => ({ ...(await orig<object>()), avatarUrlOf: vi.fn((id: string | null | undefined) => (id ? `blob:picture-${id}` : null)) }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn(), eraseParticipant: vi.fn() }))
 vi.mock('../../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn(async () => ({})) }))
 vi.mock('../../../core/report/report', async (orig) => {
@@ -53,6 +57,7 @@ import { headerButtonIds } from '../../../test/nodeHeader'
 import { ANNA, BEN, CLEO, PotServer, POT_ID, SCOPE, expense, person, potNode } from '../potTestUtil'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import { setAccountUserId } from '../../../app/account'
+import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { whoAmIBase } from '../whoAmI'
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
@@ -293,6 +298,82 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), CLEO, expect.anything())
     expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
+  })
+
+  // A participant that is a member of the space (ADR 0108 decision 2, inbox #783).
+  const U_DANA = '0d000000-0000-4000-8000-000000000001'
+  const U_ERIK = '0d000000-0000-4000-8000-000000000002'
+  const U_GUS = '0d000000-0000-4000-8000-000000000003'
+  const DANA = '0e000000-0000-4000-8000-0000000000d1'
+  const GUS = '0e000000-0000-4000-8000-0000000000a7'
+  const who = (userId: string, displayName: string): Person => ({ userId, username: displayName.toLowerCase(), realName: displayName, displayName })
+  const memberRow = (userId: string, name: string, joined: number) => ({ kind: 'participant' as const, name, active: true, joined, member: { userId } })
+
+  it('adds a member of the space beside a name: the record holds the id and the display name sealed with it, and that member is not offered again', async () => {
+    vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Member'), who(U_ERIK, 'Erik Member')])
+    const w = mountPot()
+    await flushPromises()
+    expect(loadScopePeople).toHaveBeenCalledWith(SCOPE)
+    await openTab(w, t('expenses.tabs.people'))
+    const picker = () => w.find('form.expenses-add-member')
+    type SelectProps = { placeholder?: string; options: { value: string }[] }
+    const propsOf = (c: VueWrapper) => c.props() as unknown as SelectProps
+    const select = () => w.findAllComponents(VeyqSelect).find((c) => propsOf(c).placeholder === t('expenses.people.chooseMember'))!
+    const offered = () => propsOf(select()).options.map((o) => o.value)
+    expect(offered()).toEqual([U_DANA, U_ERIK])
+    select().vm.$emit('update:modelValue', U_DANA)
+    await flushPromises()
+    await picker().trigger('submit')
+    await flushPromises()
+    const added = server.current.held().at(-1)!
+    expect(added.body).toMatchObject({ kind: 'participant', name: 'Dana Member', active: true, member: { userId: U_DANA } })
+    expect(w.find(`[data-person="${added.entryId}"]`).text()).toContain('Dana Member')
+    expect(offered()).toEqual([U_ERIK])
+    // and a name, typed, as before: a record without a member
+    await w.find('form.expenses-inline-form input').setValue('Finn')
+    await w.find('form.expenses-inline-form').trigger('submit')
+    await flushPromises()
+    const finn = server.current.held().at(-1)!
+    expect(finn.body).toMatchObject({ kind: 'participant', name: 'Finn' })
+    expect(finn.body).not.toHaveProperty('member')
+  })
+
+  it('reads a member participant by the current name and picture, one the space no longer lists as a former member by the sealed name, its entries standing', async () => {
+    server.current.append([{ entryId: DANA, content: memberRow(U_DANA, 'Dana Old', 4) }, { entryId: GUS, content: memberRow(U_GUS, 'Gus Sealed', 5) }])
+    server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000007', content: expense('Boat', 2000, GUS, [GUS, DANA]) }])
+    vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Now')])
+    const w = mountPot()
+    await flushPromises()
+    expect(w.find('[data-entry="0e000000-0000-4000-9000-000000000007"]').text()).toContain('Gus Sealed')
+    await openTab(w, t('expenses.tabs.people'))
+    const dana = w.find(`[data-person="${DANA}"]`)
+    expect(dana.text()).toContain('Dana Now')
+    expect(dana.text()).not.toContain('Dana Old')
+    expect(dana.find('img').attributes('src')).toBe(`blob:picture-${U_DANA}`)
+    expect(dana.find('[data-former]').exists()).toBe(false)
+    const gus = w.find(`[data-person="${GUS}"]`)
+    expect(gus.text()).toContain('Gus Sealed')
+    expect(gus.find('[data-former]').text()).toBe(t('expenses.people.formerMember'))
+    expect(gus.find('img').exists()).toBe(false)
+    // a member participant is never renamed (its name is the member's own); a name is (control)
+    expect(buttonIn(dana.element, t('expenses.people.rename', { name: 'Dana Old' }))).toBeUndefined()
+    expect(buttonIn(w.find(`[data-person="${ANNA}"]`).element, t('expenses.people.rename', { name: 'Anna' }))).toBeDefined()
+    // the balances name them the same way
+    await openTab(w, t('expenses.tabs.balances'))
+    expect(w.text()).toContain('Dana Now')
+    expect(w.text()).not.toContain('Dana Old')
+  })
+
+  it('deactivating a member participant keeps it the member (control for the kind rule: the writer carries the member along)', async () => {
+    server.current.append([{ entryId: DANA, content: memberRow(U_DANA, 'Dana Old', 4) }])
+    vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Now')])
+    const w = mountPot()
+    await flushPromises()
+    await openTab(w, t('expenses.tabs.people'))
+    await buttonIn(w.find(`[data-person="${DANA}"]`).element, t('expenses.people.deactivate'))!.click()
+    await flushPromises()
+    const latest = server.current.held().filter((r) => r.entryId === DANA).at(-1)!
+    expect(latest.body).toEqual(expect.objectContaining({ kind: 'participant', name: 'Dana Old', active: false, member: { userId: U_DANA } }))
   })
 
   it('a deleted entry leaves the list for the deleted ones and is restored as its next revision', async () => {

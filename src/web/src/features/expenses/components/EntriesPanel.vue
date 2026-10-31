@@ -9,9 +9,10 @@ import { categoryLabel } from '../domain/categories'
 import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { LedgerEntry, PotLedger } from '../domain/ledger'
 import { formatMoney } from '../amounts'
-import { personLabel } from '../people'
+import { personLabel, type MemberDirectory } from '../people'
 
-const props = defineProps<{ ledger: PotLedger; meta: PotMeta; canWrite: boolean }>()
+/** `directory`: the space's members for a member's view (a member participant by their current name), none for a guest. */
+const props = defineProps<{ ledger: PotLedger; meta: PotMeta; canWrite: boolean; directory?: MemberDirectory }>()
 const emit = defineEmits<{ open: [entryId: string | null] }>()
 const { t, locale } = useI18n()
 
@@ -24,7 +25,7 @@ const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' 
 function title(e: LedgerEntry): string {
   const c = e.content
   if (!c) return t('expenses.entries.unreadable')
-  if (c.kind === 'transfer') return c.title || t('expenses.entries.transferTitle', { from: personLabel(props.ledger, c.from, t), to: personLabel(props.ledger, c.to, t) })
+  if (c.kind === 'transfer') return c.title || t('expenses.entries.transferTitle', { from: personLabel(props.ledger, c.from, t, props.directory ?? null), to: personLabel(props.ledger, c.to, t, props.directory ?? null) })
   return c.title
 }
 function subtitle(e: LedgerEntry): string {
@@ -34,7 +35,7 @@ function subtitle(e: LedgerEntry): string {
   if (c.kind !== 'transfer') {
     const l = categoryLabel(c.category, own.value)
     parts.push('key' in l ? t(l.key) : 'name' in l ? l.name : t('expenses.unknownCategory'))
-    const who = (c.kind === 'expense' ? c.payers : c.receivers).map((p) => personLabel(props.ledger, p.participant, t))
+    const who = (c.kind === 'expense' ? c.payers : c.receivers).map((p) => personLabel(props.ledger, p.participant, t, props.directory ?? null))
     parts.push(t(c.kind === 'expense' ? 'expenses.entries.paidBy' : 'expenses.entries.receivedBy', { names: [...new Set(who)].join(', ') }))
   }
   if (c.currency !== props.meta.base.currency) parts.push(formatMoney(BigInt(c.amount), c.currency, c.minorUnits, locale.value))

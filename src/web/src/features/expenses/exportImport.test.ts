@@ -2,14 +2,14 @@
 // on both ends: the content holds the settings, the people and each live entry's current revision; it passes its own
 // contract check; and imported into a new Pot — every id minted anew — its balances and settle-up equal the original's.
 // An archive that breaks the contract is refused before anything is written.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const state = vi.hoisted(() => ({
   source: null as unknown as import('./potTestUtil').PotServer,
   target: null as unknown as import('./potTestUtil').PotServer,
   meta: null as string | null,
 }))
-vi.mock('./domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn() }))
+vi.mock('./domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), readGuestPot: vi.fn(), appendPotWrites: vi.fn() }))
 vi.mock('../../core/node/tree', async (orig) => ({
   ...(await orig<object>()),
   createContentNode: vi.fn(async (scopeId: string, _e: unknown, _p: unknown, _k: unknown, _n: unknown, sealer: (key: Uint8Array, node: { scopeId: string; nodeId: string }) => string) => {
@@ -21,13 +21,15 @@ vi.mock('../../core/node/tree', async (orig) => ({
 import * as v1 from '@veyq/crypto/v1'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
-import { memberAccessOf } from '../../test/models'
+import { guestAccessOf, memberAccessOf } from '../../test/models'
+import { activeSpace } from '../../app/activeSpace'
+import { ShareRole } from '../../api/generated/sharing'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { readFileSync } from 'node:fs'
 import { MAX_RECEIPT_NAME, exportPot, importPot, validatePotContent } from './exportImport'
 import { RECEIPT_MAX_BYTES } from './receipts'
 import { MAX_RECEIPTS } from './domain/format'
-import { appendPotWrites, readMemberPot, sealPotWrites } from './domain/potApi'
+import { appendPotWrites, readGuestPot, readMemberPot, sealPotWrites } from './domain/potApi'
 import { buildLedger } from './domain/ledger'
 import { potMetaOf } from './domain/potMeta'
 import { ANNA, BEN, CLEO, EUR, PotServer, SCOPE, expense, person, potNode } from './potTestUtil'
@@ -88,6 +90,63 @@ describe('the Pot as a download', () => {
     expect(after.participants.map((p) => p.id).some((id) => [ANNA, BEN, CLEO].includes(id))).toBe(false)
     // the own category an entry named is the new one
     expect(after.entries.find((e) => e.content?.title === 'Ski pass')!.content).toMatchObject({ category: meta.categories[0]!.id })
+  })
+})
+
+// A participant that is a member of the space (ADR 0108 decision 2): its user id means a person in its own tenant only.
+describe('a member participant in a download and its import', () => {
+  const U_DANA = '0d000000-0000-4000-8000-000000000001'
+  const DANA = '0e000000-0000-4000-8000-0000000000d1'
+  const T_HERE = '7e000000-0000-4000-8000-000000000001'
+  const T_ELSEWHERE = '7e000000-0000-4000-8000-000000000002'
+  const importCtx = (content: Record<string, unknown>) =>
+    ({ purpose: 'import', scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), parent: null, name: 'Trip', node: { id: 'x', kind: 'EXPENSES_POT', name: 'Trip', content }, cache: new Map(), payload: vi.fn() }) as unknown as ImportNodeContext
+  beforeEach(() => {
+    state.source.append([{ entryId: DANA, content: { kind: 'participant', name: 'Dana Sealed', active: true, joined: 4, member: { userId: U_DANA } } }])
+    state.source.append([{ entryId: '0e000000-0000-4000-9000-000000000007', content: expense('Boat', 2000, DANA, [DANA, ANNA]) }])
+    activeSpace.tenantId = T_HERE
+  })
+  afterEach(() => {
+    activeSpace.tenantId = null
+  })
+  const imported = () => buildLedger(state.target.held(), EUR).participants.find((p) => p.name === 'Dana Sealed')!
+
+  it('a member\'s download carries the member id with its tenant; an import into that tenant keeps the member', async () => {
+    const content = (await exportPot(exportCtx()))!
+    expect(content.tenantId).toBe(T_HERE)
+    expect((content.participants as { name: string; memberId?: string }[]).map((p) => [p.name, p.memberId])).toEqual([['Anna', undefined], ['Ben', undefined], ['Cleo', undefined], ['Dana Sealed', U_DANA]])
+    expect(validatePotContent(content)).toBeNull()
+    await importPot(importCtx(content))
+    expect(imported()).toMatchObject({ member: U_DANA })
+    expect(imported().id).not.toBe(DANA)
+  })
+
+  it('an import into another tenant drops the id: the participant is the name sealed with it, its entry standing (control: the same tenant above)', async () => {
+    const content = (await exportPot(exportCtx()))!
+    activeSpace.tenantId = T_ELSEWHERE
+    await importPot(importCtx(content))
+    expect(imported()).toMatchObject({ member: null, name: 'Dana Sealed' })
+    const boat = buildLedger(state.target.held(), EUR).entries.find((e) => e.content?.title === 'Boat')!
+    expect(boat.status).toBe('live')
+    expect(state.target.held().filter((r) => r.body?.kind === 'participant').every((r) => !('member' in r.body!))).toBe(true)
+  })
+
+  it('a link guest\'s download names no tenant and so carries no member id', async () => {
+    vi.mocked(readGuestPot).mockImplementation(async () => ({ revisions: state.source.guestRows(), etag: null, exchangeRateService: null }))
+    const content = (await exportPot({ ...exportCtx(), access: guestAccessOf(ShareRole.Read) }))!
+    expect(content).not.toHaveProperty('tenantId')
+    expect((content.participants as { memberId?: string }[]).some((p) => p.memberId !== undefined)).toBe(false)
+  })
+
+  it('refuses a member without its tenant, a member who is two people, a deleted one who is a member, and a member id that is no id', () => {
+    const base = { type: 'expenses.pot', schema: 1, baseCurrency: 'EUR', baseMinorUnits: 2, entries: [] }
+    const ok = { ...base, tenantId: T_HERE, participants: [{ id: ANNA, joined: 1, name: 'Anna', memberId: U_DANA }] }
+    expect(validatePotContent(ok)).toBeNull()
+    expect(validatePotContent({ ...ok, tenantId: undefined })?.message).toContain('without their tenant')
+    expect(validatePotContent({ ...ok, tenantId: 'tenant-1' })?.message).toContain('tenant that is no id')
+    expect(validatePotContent({ ...ok, participants: [...ok.participants, { id: BEN, joined: 2, name: 'Dana', memberId: U_DANA }] })?.message).toContain('two people')
+    expect(validatePotContent({ ...ok, participants: [{ id: ANNA, joined: 1, deleted: true, memberId: U_DANA }] })?.message).toContain('deleted person who is a member')
+    expect(validatePotContent({ ...ok, participants: [{ id: ANNA, joined: 1, name: 'Anna', memberId: 'u-dana' }] })?.message).toContain('member that is no id')
   })
 })
 

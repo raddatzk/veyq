@@ -23,12 +23,12 @@ import { downloadHeaderActions } from '../../../core/export/downloadActions'
 import { copyHeaderActions } from '../../../core/export/copyActions'
 import { canReport, nodeTarget, reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
-import { loadTenantPeople, type Person } from '../../../core/people/directory'
+import { loadScopePeople, loadTenantPeople, type Person } from '../../../core/people/directory'
 import { useToast } from '../../../shared/state/useToast'
 import { targetOf } from '../../../core/access'
 import { expensesRights } from '../rights'
 import { usePotSession } from '../potSession'
-import { personLabel } from '../people'
+import { personLabel, type MemberDirectory } from '../people'
 import { reportEntry, reportReceipt } from '../report'
 import { potReceiptSource, type HeldReceipt } from '../receipts'
 import EntriesPanel from './EntriesPanel.vue'
@@ -56,9 +56,17 @@ const { meta, ledger, check, loaded, failed } = session
 
 // A member's history names each writer; the people come from the tenant's directory (a guest's page reads none).
 const people = shallowRef<ReadonlyMap<string, Person> | null>(null)
+// The space's current members (ADR 0108 decision 2): a member participant reads by their current name and picture, one the
+// list no longer holds as a former member, and the People tab offers the others to add. A member's read only: a guest's
+// page reads no member list, so it is handed none and shows each participant by the name sealed at adding.
+const members = shallowRef<Person[] | null>(null)
+const directory = computed<MemberDirectory>(() => (members.value ? new Map(members.value.map((m) => [m.userId, m] as const)) : null))
 onMounted(() => {
   void session.refresh().catch(() => {})
-  if (props.access.mode === 'member') void loadTenantPeople().then((p) => (people.value = p)).catch(() => {})
+  if (props.access.mode === 'member') {
+    void loadTenantPeople().then((p) => (people.value = p)).catch(() => {})
+    void loadScopePeople(props.scopeId).then((m) => (members.value = m)).catch(() => {})
+  }
 })
 
 const reportOn = useReportOffered()
@@ -90,7 +98,7 @@ const missingEntries = computed(() =>
     const l = ledger.value
     const e = l?.entries.find((x) => x.id === id)
     if (e?.content) return e.content.kind === 'transfer' ? (e.content.title ?? t('expenses.kind.transfer')) : e.content.title
-    if (l?.participants.some((p) => p.id === id)) return personLabel(l, id, t)
+    if (l?.participants.some((p) => p.id === id)) return personLabel(l, id, t, directory.value)
     return t('expenses.ledger.unknownEntry')
   }),
 )
@@ -136,16 +144,25 @@ function receiptSource(receipt: HeldReceipt) {
         <VeyqTabPanels>
           <template v-if="meta && ledger">
             <VeyqTabPanel value="entries">
-              <EntriesPanel :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" @open="(entryId) => (editing = { entryId })" />
+              <EntriesPanel :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :directory="directory" @open="(entryId) => (editing = { entryId })" />
             </VeyqTabPanel>
             <VeyqTabPanel value="balances">
-              <BalancesPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" />
+              <BalancesPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" :directory="directory" />
             </VeyqTabPanel>
             <VeyqTabPanel value="overview">
-              <OverviewPanel :ledger="ledger" :meta="meta" :pot-id="node.id" />
+              <OverviewPanel :ledger="ledger" :meta="meta" :pot-id="node.id" :directory="directory" />
             </VeyqTabPanel>
             <VeyqTabPanel value="people">
-              <PeoplePanel :session="session" :ledger="ledger" :meta="meta" :add-people="rights.addPeople" :manage-people="rights.managePeople" />
+              <PeoplePanel
+                :session="session"
+                :ledger="ledger"
+                :meta="meta"
+                :add-people="rights.addPeople"
+                :add-members="rights.addMembers"
+                :manage-people="rights.managePeople"
+                :members="rights.addMembers ? members : null"
+                :directory="directory"
+              />
             </VeyqTabPanel>
           </template>
           <VeyqTabPanel v-if="rights.settings" value="settings">
@@ -164,6 +181,7 @@ function receiptSource(receipt: HeldReceipt) {
       :can-write="rights.writeEntries"
       :writers="rights.writers"
       :people="people"
+      :directory="directory"
       :on-report="reportsEntries ? onReport : undefined"
       :receipt-source="receiptSource"
       :on-report-receipt="reportsEntries ? onReportReceipt : undefined"

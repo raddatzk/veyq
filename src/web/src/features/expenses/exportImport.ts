@@ -15,6 +15,14 @@
 // A participant whose name was erased (a member's delete) exports as `deleted: true` with no name, and only while an
 // exported entry still names it; it imports as a deactivated person under the catalog's "deleted people", which a member
 // can delete again — the name it had is gone, and the import does not pretend otherwise.
+//
+// A participant that is a member of the space (ADR 0108 decision 2) exports its name sealed at adding and, in a member's
+// download, its user id (`memberId`) with the tenant the id belongs to beside the people (`tenantId`, the exporting
+// session's): a user id means a person only in its own tenant. An import or a copy into that same tenant keeps the member;
+// into any other — another tenant, another instance — the participant becomes the name sealed with it, as a Memory's
+// participants are never restored outside (ADR 0083). A link guest's download carries no member id: a guest names no
+// tenant. The importer could link a participant to any member through the People tab as well, so an archive that claims
+// the tenant can do no more than that; a user id the tenant does not list shows as a former member.
 import type { ExportContentHook, ExportNodeContext, ImportContentHook } from '../../core/export/hooks'
 import type { ContentProblem } from '../../core/applications/registry'
 import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
@@ -35,6 +43,7 @@ import {
   RECEIPT_MAX_BYTES, readGuestReceipts, readMemberReceipts, receiptChunks, receiptName, receiptPresign, receiptSize, uploadReceipt, type HeldReceipt,
 } from './receipts'
 import { decimalOf } from './amounts'
+import { activeSpace } from '../../app/activeSpace'
 
 export const EXPENSES_POT_CONTENT = 'expenses.pot'
 /** The application id of the content type above, and the content schema this build writes and reads. */
@@ -46,7 +55,7 @@ const MAX_ENTRIES = 100_000
 /** The longest receipt name the content carries (the schema's `expensesReceipt.name` maxLength). */
 export const MAX_RECEIPT_NAME = 1024
 
-type ExportedParticipant = { id: string; joined: number; name?: string; active?: boolean; deleted?: true }
+type ExportedParticipant = { id: string; joined: number; name?: string; active?: boolean; deleted?: true; memberId?: string }
 /** One receipt as the content carries it (`expensesReceipt`): the id its entry lists, its sealed name, its bytes. */
 type ExportedReceipt = { id: string; name?: string; file: ManifestPayload }
 type ExportedEntry = { id: string; entry: MoneyContent; receipts?: ExportedReceipt[] }
@@ -144,9 +153,17 @@ export const exportPot: ExportContentHook = async (ctx) => {
     : new Map<string, HeldReceipt>()
   const entries: ExportedEntry[] = live.map((e) => withReceipts(ctx, e.id, contentOnly(e.content!), listed))
   const named = new Set(entries.flatMap((e) => namedParticipants(e.entry)))
+  // A member id travels only with the tenant it means a person in: a member's session names its tenant, a guest's none.
+  const tenantId = ctx.access.mode === 'member' ? activeSpace.tenantId : null
   const participants: ExportedParticipant[] = ledger.participants
     .filter((p) => !p.erased || named.has(p.id))
-    .map((p) => (p.erased ? { id: p.id, joined: p.joined, deleted: true } : { id: p.id, joined: p.joined, name: p.name!, active: p.active }))
+    .map((p): ExportedParticipant => {
+      if (p.erased) return { id: p.id, joined: p.joined, deleted: true }
+      const out: ExportedParticipant = { id: p.id, joined: p.joined, name: p.name!, active: p.active }
+      if (tenantId && p.member !== null) out.memberId = p.member
+      return out
+    })
+  const carriesMembers = participants.some((p) => p.memberId !== undefined)
   const effects = new Map(ledger.entries.map((e) => [e.id, e.effect?.base ?? 0n] as const))
   const baseOf = new Map(entries.map((e) => [e.entry, effects.get(e.id) ?? 0n] as const))
   let table = null
@@ -168,6 +185,7 @@ export const exportPot: ExportContentHook = async (ctx) => {
     baseCurrency: meta.base.currency,
     baseMinorUnits: meta.base.minorUnits,
     ...(meta.categories.length ? { categories: meta.categories } : {}),
+    ...(carriesMembers ? { tenantId } : {}),
     participants,
     entries,
     table,
@@ -196,9 +214,11 @@ export function validatePotContent(content: ManifestContent): ContentProblem | n
       if ([...c.name].length > MAX_CATEGORY_NAME) return tooLarge('a category name too long')
     }
   }
+  if (content.tenantId !== undefined && (typeof content.tenantId !== 'string' || !UUID.test(content.tenantId))) return bad('a tenant that is no id')
   if (!Array.isArray(content.participants)) return bad('a Pot without its people')
   if (content.participants.length > MAX_PARTICIPANTS) return tooLarge('too many people')
   const ids = new Set<string>()
+  const members = new Set<string>()
   for (const p of content.participants) {
     if (!isObj(p) || typeof p.id !== 'string' || !UUID.test(p.id) || ids.has(p.id)) return bad('a person without an id of its own')
     ids.add(p.id)
@@ -207,7 +227,14 @@ export function validatePotContent(content: ManifestContent): ContentProblem | n
     if (p.deleted !== true && (typeof p.name !== 'string' || p.name.length < 1)) return bad('a person without a name')
     if (typeof p.name === 'string' && [...p.name].length > 100) return tooLarge('a name too long')
     if (p.active !== undefined && typeof p.active !== 'boolean') return bad('a person whose state is no switch')
+    if (p.memberId !== undefined) {
+      if (typeof p.memberId !== 'string' || !UUID.test(p.memberId)) return bad('a member that is no id')
+      if (p.deleted === true) return bad('a deleted person who is a member')
+      if (members.has(p.memberId)) return bad('a member who is two people')
+      members.add(p.memberId)
+    }
   }
+  if (members.size > 0 && content.tenantId === undefined) return bad('members without their tenant')
   if (!Array.isArray(content.entries)) return bad('a Pot without its entries')
   if (content.entries.length > MAX_ENTRIES) return tooLarge('too many entries')
   const receiptIds = new Set<string>()
@@ -297,9 +324,17 @@ export const importPot: ImportContentHook = async (ctx) => {
   const entries = content.entries as { id: string; entry: Record<string, unknown>; receipts?: ExportedReceipt[] }[]
   const categories = ((content.categories ?? []) as { id: string; name: string }[]).map((c) => ({ id: id(c.id), name: c.name }))
   const deletedName = i18n.global.t('expenses.people.deletedPeople')
+  // A member stays one only in the tenant its id belongs to (see the header); anywhere else it is the name sealed with it.
+  const sameTenant = typeof content.tenantId === 'string' && content.tenantId === activeSpace.tenantId
   const people: PotWrite[] = participants.map((p) => ({
     entryId: id(p.id),
-    content: { kind: 'participant', name: p.deleted ? deletedName : p.name!, active: p.deleted ? false : p.active !== false, joined: p.joined },
+    content: {
+      kind: 'participant',
+      name: p.deleted ? deletedName : p.name!,
+      active: p.deleted ? false : p.active !== false,
+      joined: p.joined,
+      ...(sameTenant && p.memberId ? { member: { userId: p.memberId } } : {}),
+    },
   }))
   // Entry ids are minted first, so a refund naming an expense maps to that expense's new id.
   for (const e of entries) id(e.id)

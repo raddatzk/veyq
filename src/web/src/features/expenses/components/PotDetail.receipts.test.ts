@@ -27,7 +27,7 @@ vi.mock('../../../core/node/treeStore', async () => {
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}) }
 })
 vi.mock('../../../core/node/rekey/floor', async (orig) => ({ ...(await orig<object>()), nodeKeyForWrite: vi.fn(() => ({ key: server.current.potKey, epoch: 0 })) }))
-vi.mock('../../../core/people/directory', async (orig) => ({ ...(await orig<object>()), loadTenantPeople: vi.fn(async () => new Map()) }))
+vi.mock('../../../core/people/directory', async (orig) => ({ ...(await orig<object>()), loadTenantPeople: vi.fn(async () => new Map()), loadScopePeople: vi.fn(async () => []) }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), readMemberPot: vi.fn(), appendPotWrites: vi.fn() }))
 vi.mock('../receipts', async (orig) => ({ ...(await orig<object>()), readMemberReceipts: vi.fn(), uploadReceipt: vi.fn() }))
 vi.mock('../../../core/report/report', async (orig) => {

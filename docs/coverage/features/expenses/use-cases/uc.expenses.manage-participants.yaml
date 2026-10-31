@@ -43,6 +43,31 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/expenses/people.test.ts, src/features/expenses/domain/ledger.test.ts]
+  - id: a-writer-adds-a-member-or-a-name
+    text: "A member adds a participant that is a member of the space (its record holds the user id and the display name sealed at adding) or a name; a member already in the Pot is not offered again and a second record for them is refused; a link guest's view adds a name only and calls no authenticated client."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/people.test.ts, src/features/expenses/domain/memberParticipants.test.ts, src/features/expenses/rights.test.ts]
+  - id: a-member-participant-reads-by-who-looks
+    text: "A member's view shows a member participant by the current display name and picture, and one the space no longer lists as a former member by the name sealed at adding, its entries standing; a link guest's view shows the sealed name and no picture."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts, src/features/expenses/people.test.ts]
+  - id: a-participant-never-changes-kind
+    text: "A participant's kind is its record's first revision's: a reader ignores a later revision that adds, drops or changes the member, and the writer refuses one and carries the member along on every later revision (a deactivation included)."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/memberParticipants.test.ts, src/features/expenses/components/PotDetail.test.ts]
+  - id: the-member-field-is-additive
+    text: "The member field is optional and additive in the entry format v1: a member participant round-trips, a record without it reads as a name, and unknown fields beside or inside it are dropped."
+    coverage:
+      web:
+        unit: [src/features/expenses/domain/format.test.ts]
+  - id: a-member-id-stays-in-its-tenant
+    text: "A member's download carries a member participant's user id with its tenant; an import into the same tenant keeps the member, one into another tenant makes it the sealed name; a link guest's download carries no member id; an archive whose member ids lack their tenant, repeat, or sit on a deleted person is refused."
+    coverage:
+      web:
+        unit: [src/features/expenses/exportImport.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `writers-add-and-rename` (a
@@ -50,5 +75,6 @@ gaps:
     and `member-removes-an-unnamed-participant` in Chromium, in English (ADR 0090 decision 9), against the release
     candidate's two images installed through `veyqctl` (ADR 0090), each test tagged with its criterion: once
     settled, a person deactivated, activated and deleted (their entries name "deleted people"), one no entry names
-    removed, neither offered for a new entry. Green only in local runs of the lane (the V1 heavy stage), and ADR
+    removed, neither offered for a new entry. No browser case adds a member participant yet (inbox #783's criteria
+    are unit-covered). Green only in local runs of the lane (the V1 heavy stage), and ADR
     0040 admits `stack` refs only once a CI run's log shows the suite executed.

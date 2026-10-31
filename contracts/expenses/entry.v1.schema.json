@@ -219,12 +219,20 @@
       }
     },
     "participant": {
-      "description": "A person of the Pot: only a name in this Pot, linked to no account (ADR 0108 decision 2). Entries name it by the record's entry id.",
+      "description": "A person of the Pot (ADR 0108 decision 2): a name, or a member of the space (`member`). Entries name it by the record's entry id. A participant never changes kind: its record's first revision decides whether it is a member, and which, for the record's life — a reader ignores a later revision's `member` that differs from the first's, and a writer carries the first's unchanged.",
       "type": "object",
       "required": ["kind", "name", "active", "joined"],
       "properties": {
         "kind": { "const": "participant" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The name the Pot shows. For a member, their display name when they were added, sealed with their id: what a reader without the space's member directory (a link guest) shows; a member's client shows the current one." },
+        "member": {
+          "type": "object",
+          "required": ["userId"],
+          "description": "Added after the first records were written, additive under `v: 1`: a reader that predates it ignores it and reads the record as its `name`. Present: the participant is this member of the space. An erased or departed account leaves it standing, shown as a former member.",
+          "properties": {
+            "userId": { "$ref": "#/$defs/uuid", "description": "The member's user id, as the space's member list serves it." }
+          }
+        },
         "active": { "type": "boolean", "description": "False once a member deactivated it: entries keep the name; new entries and the overviews no longer offer it." },
         "joined": { "$ref": "#/$defs/joined" }
       }

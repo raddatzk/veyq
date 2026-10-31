@@ -162,8 +162,9 @@ export type PotWrite = {
 }
 
 /** The client refuses to send a write: an entry that does not add up, a person the Pot does not know, two revisions of one
- *  record in a batch, a participant deactivated or erased while not settled, or whose join order moved. Nothing reached
- *  the server. */
+ *  record in a batch, a participant deactivated or erased while not settled, whose join order moved or whose kind would
+ *  change (a name made a member, a member made a name or another member), or a member added who already is a
+ *  participant. Nothing reached the server. */
 export class PotWriteRefused extends Error {
   constructor(
     readonly reason:
@@ -173,6 +174,8 @@ export class PotWriteRefused extends Error {
       | 'not-a-participant'
       | 'not-settled'
       | 'joined-moved'
+      | 'kind-changed'
+      | 'member-twice'
       | 'empty'
       | 'receipt-dropped-and-kept',
   ) {
@@ -245,8 +248,19 @@ export function sealPotWrites(
       const before = known.get(w.entryId)
       if (before?.erased) throw new PotWriteRefused('not-a-participant')
       if (before && before.joined !== c.joined) throw new PotWriteRefused('joined-moved')
+      // A participant never changes kind (ADR 0108 decision 2): every later revision carries its first one's member, or none.
+      if (before && before.member !== (c.member?.userId ?? null)) throw new PotWriteRefused('kind-changed')
       if (before?.active && !c.active && !isSettled(ledger, w.entryId)) throw new PotWriteRefused('not-settled')
     }
+  }
+  // A member is one participant of the Pot at most: a new record naming one who already is (not erased), or two new ones
+  // naming the same, is refused. An erased participant's record no longer names anyone, so the member may be added again.
+  const members = new Set(ledger.participants.filter((p) => !p.erased && p.member !== null).map((p) => p.member!))
+  for (const w of writes) {
+    const c = w.content
+    if (c.kind !== 'participant' || !c.member || known.has(w.entryId)) continue
+    if (members.has(c.member.userId)) throw new PotWriteRefused('member-twice')
+    members.add(c.member.userId)
   }
   const latest = latestOf(held)
   const heads = headsToName(held)

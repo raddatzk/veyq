@@ -38,7 +38,7 @@ import type { PotSession } from '../potSession'
 import { contentOf, emptyForm, formOf, problemKey, today, typedSum, withCurrency, type EntryForm, type FormProblem } from '../entryForm'
 import { crossRate, dayTable } from '../exchangeRates'
 import { formatMoney, knownCurrencies } from '../amounts'
-import { offeredPeople, personLabel } from '../people'
+import { offeredPeople, personLabel, type MemberDirectory } from '../people'
 import EntryHistory from './EntryHistory.vue'
 import EntryReceipts from './EntryReceipts.vue'
 import { purgeAfterOf, receiptsToDrop, restoreOffered } from '../domain/receiptRules'
@@ -57,6 +57,8 @@ const props = defineProps<{
   /** Whether the history names each revision's writer (a member's read only). */
   writers: boolean
   people: ReadonlyMap<string, Person> | null
+  /** The space's members for a member's view: a member participant reads by their current name. None for a guest. */
+  directory?: MemberDirectory
   /** Report this entry (core's report dialog, uc.moderation.report); absent where the viewer reports nothing. */
   onReport?: (entryId: string) => void
   /** Open a listed receipt for whoever looks (`potReceiptSource`). */
@@ -112,8 +114,8 @@ const offered = computed(() => {
   const content = entry.value?.content
   return offeredPeople(props.ledger, content ? namedParticipants(content) : [])
 })
-const personOptions = computed(() => offered.value.map((p) => ({ label: personLabel(props.ledger, p.id, t), value: p.id })))
-const label = (id: string) => personLabel(props.ledger, id, t)
+const personOptions = computed(() => offered.value.map((p) => ({ label: personLabel(props.ledger, p.id, t, props.directory ?? null), value: p.id })))
+const label = (id: string) => personLabel(props.ledger, id, t, props.directory ?? null)
 
 const kindOptions = computed(() => (['expense', 'refund', 'transfer'] as const).map((k) => ({ label: t(`expenses.kind.${k}`), value: k })))
 const modeOptions = computed(() => (['equal', 'shares', 'exact', 'items'] as const).map((m) => ({ label: t(`expenses.split.${m}`), value: m })))
