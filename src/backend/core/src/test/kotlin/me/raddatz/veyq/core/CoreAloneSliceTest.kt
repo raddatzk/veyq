@@ -230,7 +230,8 @@ class CoreAloneSliceTest {
     @Test
     fun aFolderIsSharedToReadOrContributeAndNothingElseIs() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        // ADR 0080 decision 6 / bite test 20: a FOLDER is a share root although no application writes under it
+        // ADR 0080 decision 6 / uc.sharing.share-public-viewer:folder-share-root: a FOLDER is a share root although no
+        // application writes under it
         for (role in listOf("READ", "READ_WRITE")) {
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             postShare(userId, folder, role).statusCode(201)
@@ -246,10 +247,10 @@ class CoreAloneSliceTest {
     }
 
     /**
-     * ADR 0080 decisions 2, 6 and 9 (bite test 2): a guest of a `FOLDER` share resolves the live subtree under it —
-     * `rootKind` FOLDER, every descendant's name and wrap as stored (the guest opens them down the chain from the
-     * root's key), the root's own entry not at all, and nothing beside or above it. A blob attached under the
-     * subtree is presigned for the guest; one beside it is not. All of it with core alone.
+     * ADR 0080 decisions 2, 6 and 9 (uc.sharing.share-public-viewer:folder-share-root): a guest of a `FOLDER` share
+     * resolves the live subtree under it — `rootKind` FOLDER, every descendant's name and wrap as stored (the guest
+     * opens them down the chain from the root's key), the root's own entry not at all, and nothing beside or above it.
+     * A blob attached under the subtree is presigned for the guest; one beside it is not. All of it with core alone.
      */
     @Test
     fun aGuestOfAFolderShareResolvesTheSubtreeUnderIt() {

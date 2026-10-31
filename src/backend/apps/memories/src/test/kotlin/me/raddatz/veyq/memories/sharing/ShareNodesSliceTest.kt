@@ -22,8 +22,8 @@ import me.raddatz.veyq.core.sharing.GuestTreeShare
  * Between folders core decides — a `READ_WRITE` guest moves a Memory from one subfolder to another, and creates none
  * (Memories declares no kind guest-creatable); inside a Memory
  * Memories decides, and it declares nothing ([GuestNodeRules]), so a guest creates, moves and renames nothing there
- * (bite test 18: a write refused, the read served). A Memory-rooted link gains no tree operation; its media
- * operations are its own (`ShareMediaRouteSliceTest`, the share media suites).
+ * (uc.sharing.share-contributor:guest-tree-refusals: a write refused, the read served). A Memory-rooted link gains no
+ * tree operation; its media operations are its own (`ShareMediaRouteSliceTest`, the share media suites).
  */
 @QuarkusTest
 class ShareNodesSliceTest {
@@ -75,7 +75,8 @@ class ShareNodesSliceTest {
         assertEquals(t.memory, parentOf(t.chapter))
     }
 
-    /** Bite test 18: inside a kind no one declares guest operations for — a write refused, the read served. */
+    /** uc.sharing.share-contributor:guest-tree-refusals: inside a kind no one declares guest operations for — a write
+     *  refused, the read served. */
     @Test
     fun insideAMemoryAGuestWritesNothingAndReadsEverything() {
         val (t, link) = tree()

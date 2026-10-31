@@ -8,7 +8,7 @@ acceptanceCriteria:
       backend: { integration: [ScopesSliceTest.createPersonalScopeThenListReturnsBoth] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: list-and-decrypt-tree
-    text: The whole tree is listed as opaque rows and names are decrypted on device under K_SC; the level is assembled client-side.
+    text: The whole tree is listed as opaque rows and names are decrypted on device, each under its parent's key (K_SC at the scope root), top-down in one pass; the level is assembled client-side.
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
       web: { unit: [src/core/node/tree.test.ts, src/core/node/browse.test.ts] }
@@ -85,8 +85,12 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
       web: { unit: [src/core/node/tree.test.ts, src/core/node/LevelView.test.ts, src/features/memories/levelRows.test.ts, src/core/node/FolderNameDialog.test.ts, src/core/node/FolderNameDialog.slug.test.ts, src/features/memories/components/MemoryNodeDialog.test.ts] }
+  - id: every-node-is-born-with-a-key
+    text: Every node, a FOLDER included, is created with its own content key wrapped under its parent's key (ADR 0080 decision 1) — a create without the wrap, or with an empty one, is 400 and stores nothing, and the node table refuses a row without a key whichever path writes it.
+    coverage:
+      backend: { integration: [NodesCoreSliceTest.aFolderWithoutAWrapIs400AndNothingIsStored, NodesCoreSliceTest.theNodeTableRefusesARowWithoutAContentKey] }
   - id: rename-and-delete-subtree
-    text: Rename re-seals the name + recomputes the slug; delete removes the node and its whole subtree.
+    text: Rename re-seals the name + recomputes the slug; delete takes the node and its whole subtree to the space's trash (uc.memory.delete-node).
     coverage:
       backend: { integration: [NodesSliceTest.renameThenDeleteSubtree] }
       web: { unit: [src/core/node/tree.test.ts] }

@@ -30,10 +30,10 @@ acceptanceCriteria:
         unit: [src/features/memories/share.test.ts]
         e2e: [src/features/memories/shareUploader.e2e.test.ts]
   - id: guest-never-holds-the-memory-key
-    text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The WRITE_ONLY resolve serves the drop public key sealed under K_share and no wrap, and the client opens no wrap for that role even when one is served; the guest seals its name, media meta and EXIF under field keys derived from its own K_up, its blob keys under K_up itself, and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under a field key derived from the same K_up.
+    text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The WRITE_ONLY resolve serves the drop public key sealed under K_share and no wrap and no node name, and the client opens no wrap for that role even when one is served; the guest seals its name, media meta and EXIF under field keys derived from its own K_up, its blob keys under K_up itself, and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under a field key derived from the same K_up.
     coverage:
       backend:
-        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.anUploaderIdentityHandsOverItsWrappedKey, ShareUploaderSliceTest.everyReaderOfTheMemoryIsServedWhatOpensAnUpload]
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareDirectoryEntrySliceTest.aWriteOnlyResolveCarriesNoNameAndNoContentKey, ShareUploaderSliceTest.anUploaderIdentityHandsOverItsWrappedKey, ShareUploaderSliceTest.everyReaderOfTheMemoryIsServedWhatOpensAnUpload]
       web:
         unit: [src/features/memories/shareUploader.test.ts]
         e2e: [src/features/memories/shareUploader.e2e.test.ts]

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The "Erase account" section of the settings hub — uc.account.erase-account (ADR 0101). It says what goes and what
 // stays (decisions 4, 5, 7) before anything else, reads which spaces the person owns last, asks for each one with
-// other members whether it is deleted along or handed to a member (decision 9, owner Q18), names the spaces deleted
+// other members whether it is deleted along or handed to a member (decision 9), names the spaces deleted
 // along because nobody else is in them, takes the password, and confirms through the shared danger dialog. The
 // request and everything after it — this browser's records, the ending — live in `eraseAccount.ts`.
 //

@@ -46,9 +46,9 @@ class RekeyCoreSliceTest {
     @Inject
     lateinit var scopes: ScopesStore
 
-    /** ADR 0109 bite test 2, the listing half: every live and trashed node with its epoch; only a caller holding the
-     *  current grant reads it. A plain member's legs are [aMemberWithTheCurrentGrantReKeysANode] and
-     *  [aMemberWithAGrantBehindIsRefused]. */
+    /** uc.spaces.rekey-after-rotation:every-node-rekeyed, the listing half: every live and trashed node with its epoch;
+     *  only a caller holding the current grant reads it. A plain member's legs are
+     *  [aMemberWithTheCurrentGrantReKeysANode] and [aMemberWithAGrantBehindIsRefused]. */
     @Test
     fun theListingServesEveryNodeTrashedIncludedAndOnlyWithTheCurrentGrant() {
         val w = world(rotated = false)
@@ -272,8 +272,9 @@ class RekeyCoreSliceTest {
     }
 
     /**
-     * ADR 0109 bite test 3: a write stating a node's epoch from before → `stale_epoch`; into a node not re-keyed yet →
-     * `node_rekey_pending`; into a re-keyed one → accepted. A create under C and a meta write on R, each before and after.
+     * uc.spaces.rekey-after-rotation:writes-wait-per-node: a write stating a node's epoch from before → `stale_epoch`;
+     * into a node not re-keyed yet → `node_rekey_pending`; into a re-keyed one → accepted. A create under C and a meta
+     * write on R, each before and after.
      */
     @Test
     fun writesWaitPerNodeAndRefuseAKeyFromBefore() {
@@ -296,8 +297,8 @@ class RekeyCoreSliceTest {
         create(w, parent = w.child, parentEpoch = 1).statusCode(201) // control
     }
 
-    /** ADR 0109 bite test 7, the server's half: a trashed node comes back only once the re-key reached it — never with
-     *  a key from before. */
+    /** uc.spaces.rekey-after-rotation:every-node-rekeyed, a restore's server half: a trashed node comes back only once
+     *  the re-key reached it — never with a key from before. */
     @Test
     fun aTrashedNodeIsRestoredOnlyOnceTheReKeyReachedIt() {
         val w = world()
@@ -315,7 +316,8 @@ class RekeyCoreSliceTest {
         assertTrue(row(w.trashed).deletedAt == null)
     }
 
-    /** ADR 0109 bite test 2, the job half: a queued rotation whose epoch is in completes only once no node lags. */
+    /** uc.spaces.rekey-after-rotation:resumable, the job half: a queued rotation whose epoch is in completes only once
+     *  no node lags. */
     @Test
     fun aQueuedRotationCompletesOnlyOnceItsReKeyIsDone() {
         val w = world()
@@ -406,8 +408,8 @@ class RekeyCoreSliceTest {
         assertEquals(false, rowRekeying(member, tenantId, scopeId))
     }
 
-    /** ADR 0109 bite test 8: a re-key reads and writes no store object — every blob keeps its storage key and size, and
-     *  nothing enters the reclaim list. */
+    /** uc.spaces.rekey-after-rotation:blobs-rewrapped-not-reencrypted: a re-key reads and writes no store object —
+     *  every blob keeps its storage key and size, and nothing enters the reclaim list. */
     @Test
     fun aReKeyTouchesNoStoreObject() {
         val w = world()

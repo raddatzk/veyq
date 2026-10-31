@@ -21,9 +21,10 @@ import me.raddatz.veyq.core.sharing.ShareWriteProof
  * B1 (uc.sharing.share-note, ADR 0036 point 4): the server holds the recovery copy's epoch honestly. A share's
  * recovery copy of `K_share` is sealed under `K_SC` at the scope's **current** epoch, and the epoch is stored beside
  * it — so a create tagged with any other epoch is `409 stale_epoch` with nothing written (ADR 0024 Decision 6: a copy
- * under an epoch a removed member holds would be theirs to open). The copy is mandatory (ADR 0080 decision 12, bite
- * test 14): a create without it, a key without its epoch, or the reverse, is a `400` before the handler. This proves nothing against an operator — the epoch check is a server check; the operator-facing guarantee
- * is the web `share.test.ts` W1, which a client runs with a key no link carries.
+ * under an epoch a removed member holds would be theirs to open). The copy is mandatory (ADR 0080 decision 12,
+ * uc.sharing.share-note:share-key-recoverable-by-members-only): a create without it, a key without its epoch, or the
+ * reverse, is a `400` before the handler. This proves nothing against an operator — the epoch check is a server check;
+ * the operator-facing guarantee is the web `share.test.ts` W1, which a client runs with a key no link carries.
  */
 @QuarkusTest
 class ShareKeyRecoveryEpochSliceTest {
@@ -72,8 +73,9 @@ class ShareKeyRecoveryEpochSliceTest {
             .body("find { it.shareId == '$shareId' }.sealedShareKeyEpoch", equalTo(2))
     }
 
-    /** ADR 0080 bite test 14: every member can always re-show and edit a link, so a create without the copy is
-     *  refused and writes nothing; the control is the same body with the copy, from the same caller on the same Memory. */
+    /** uc.sharing.share-note:share-key-recoverable-by-members-only (ADR 0080 decision 12): every member can always
+     *  re-show and edit a link, so a create without the copy is refused and writes nothing; the control is the same
+     *  body with the copy, from the same caller on the same Memory. */
     @Test
     fun aCreateWithoutARecoveryCopyIs400AndWritesNothing() {
         val (userId, scopeId) = seedMemberScope()

@@ -443,7 +443,7 @@ def store_is_provisioned() -> bool:
     This is an OBSERVATION of the provisioner's output, never a second copy of it. That distinction is the whole
     design: re-implementing layout/bucket/key/grant here through the `garage()` helper is cheaper to write and
     puts a drifting second bring-up in the harness, after which a green e2e run would stop meaning the
-    provisioner works (ADR 0067 § the orchestrator's own problem). So the harness asserts the outcome and
+    provisioner works (ADR 0067 decision 4). So the harness asserts the outcome and
     produces none of it.
 
     It also proves more than the Server-Owner read could. That read is `@RolesAllowed(SERVER_OWNER)` and the

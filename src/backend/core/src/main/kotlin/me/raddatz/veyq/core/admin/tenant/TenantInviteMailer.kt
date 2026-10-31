@@ -25,10 +25,11 @@ interface TenantInviteMailer {
      *    mail_unavailable`, ADR 0055 §2), and a `FAILED` send compensates the mint and answers `503
      *    mail_send_failed` rather than a success body (§6). The response carries no `bootstrapSecret` — there is
      *    no copy-link to hand back.
-     *  - **Server-Owner tenant-bootstrap invite** (`POST /api/tenants` plus the resend/reassign of that same
-     *    invite): all three stay reachable. A `PENDING` tenant has no mail settings by construction, so this is
-     *    the one surviving copy-link (§3), and the returned `bootstrapSecret` is the channel on
-     *    `FALLBACK_COPYLINK` / `FAILED`.
+     *  - **Server-Owner owner invites** (`POST /api/tenants` plus the resend/reassign of that same invite, and the
+     *    owner invite into an ownerless ACTIVE tenant, ADR 0101 decision 9): all three stay reachable. A `PENDING`
+     *    tenant has no mail settings by construction and an ownerless one nobody to repair its relay, so these are
+     *    the surviving copy-links (§3), and the returned `bootstrapSecret` is the channel on `FALLBACK_COPYLINK` /
+     *    `FAILED`.
      */
     fun sendInvite(tenantId: String, domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult
 

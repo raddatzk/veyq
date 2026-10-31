@@ -16,6 +16,24 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/move.wire.test.ts, src/core/node/tree.wire.test.ts]
 
+  - id: a-placement-is-compare-and-set
+    text: "A rename or move states the placement revision it was built on and carries the node's key re-wrapped for the new placement: a rename without the re-wrap or without the revision is 400, one built on revision n after a move took the node to n+1 is 409 stale_placement and leaves the name as it was, and a cycle-forming move is 422 illegal_structure with the revision unchanged (ADR 0080 decision 3)."
+    coverage:
+      backend:
+        integration: [NodePlacementCoreSliceTest.aRenameBuiltOnTheRevisionBeforeAMoveIs409AndLeavesTheName, NodePlacementCoreSliceTest.aRenameWithoutItsRewrapOrItsRevisionIs400AndAStaleOneIs409, NodePlacementCoreSliceTest.aCycleFormingMoveIs422AndLeavesTheRevision]
+
+  - id: a-wrap-opens-only-at-its-placement
+    text: "A node's name and key wrap open only at the node and placement revision they were sealed for: the same entry served on another node's row, or at another placement revision (a replay of an older placement), does not open — for a member's tree and for a guest's chapter alike (ADR 0080 decision 3, ADR 0072 decision 1)."
+    coverage:
+      web:
+        unit: [src/core/node/tree.test.ts, src/features/memories/share.test.ts]
+
+  - id: a-placement-keeps-the-nodes-epoch
+    text: "A placement never changes a node's epoch: it states the node's own, and any other is 409 stale_epoch at every destination; an entry at the scope root lives under K_SC at the node's epoch, so a node the last rotation's re-key has not reached is 409 node_rekey_pending into the root, and a destination parent not re-keyed is 409 node_rekey_pending too (ADR 0080 decision 4, ADR 0109 point 6)."
+    coverage:
+      backend:
+        integration: [NodePlacementCoreSliceTest.aRootRenameOfANodeTheReKeyHasNotReachedIsPendingAndAnotherEpochStale, NodePlacementCoreSliceTest.aPlacementKeepsTheNodesEpochAndWaitsForItsDestination, NodePlacementCoreSliceTest.anEpochThatIsNotTheNodesIsRefusedForAnyDestination]
+
   - id: the-picker-offers-what-the-server-takes
     text: "Core's move dialog is a folder browser over what the session can see — a member's whole space up to its root, a guest's subtree up to the link's root, never above it. It opens where the node is, lists only the places that can take its kind (folders as the way down, a Memory for a chapter; no file, no drop box, no guest's identity folder), lists the node itself as not to be opened, and disables Move here, with the reason, where the node is now, inside itself, in a guest's identity folder and wherever its kind's placement does not take it (a mirror of NodeKindRules: a folder, Memory, file or drop box at the root or in a folder, a chapter only in a Memory; a guest only into a folder). Every place and crumb is a button, and focus goes to the list of a place opened. The browser takes a node list, a place offered only where it takes every one. A node at the destination whose name folds to the same slug is named before anything is sent."
     coverage:
@@ -28,7 +46,7 @@ acceptanceCriteria:
     text: "A member moves any node it may write (not during a pending deletion), a guest's identity folder or a file in one out of a drop box included; a READ_WRITE guest moves only a node a FOLDER of its subtree holds — never the link's root, never in or of an identity folder, never a chapter or a drop box — and only through its link after the page's naming flow; a READ or WRITE_ONLY guest moves nothing. A guest's move touches no authenticated client."
     coverage:
       backend:
-        integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
+        integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
       web:
         unit: [src/core/access.test.ts, src/features/depot/rights.test.ts, src/features/memories/rights.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/core/node/LevelView.test.ts]
 

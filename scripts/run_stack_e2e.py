@@ -71,7 +71,7 @@ the recipe:
      The guest-write record skips, saying so, on every leg whose selection did not run that spec.
      **A red browser stage skips nothing after it**: the stages 7b and 8 read what the run left on the stack, so they
      run whenever the stack came up (`PAST_BROWSER`); a red of any stage before the browser still skips them.
-  7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
+  7b. **guest-write record** — the stack scenario ADR 0094 decision 3 asks for, the half the `client port`
      stage leaves open (that one reads an echo): `tests/e2e/tests/features/moderation/guest-write-record.spec.ts` has a
      guest create a folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
      Traefik's :443 and the folder's id (`guest-write-record.json`). This stage reads the app's record of that write off

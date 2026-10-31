@@ -77,10 +77,11 @@ class NodeTreeRaceCoreSliceTest {
     }
 
     /**
-     * ADR 0080 Decision 8 / bite test 8 under overlap: a child (trashed earlier, a trash root while its parent is live)
-     * restored while its parent's trash is uncommitted. The restore waits for the trash on the scope lock and then reads
-     * the parent trashed: `NOT_FOUND`, the child stays in the trash on the parent's marker. Restored on the parent read
-     * live before the trash committed, it would come back live under a trashed parent whose key the purge erases.
+     * ADR 0080 Decision 8 / uc.memory.delete-node:only-a-trash-root-restores under overlap: a child (trashed earlier, a
+     * trash root while its parent is live) restored while its parent's trash is uncommitted. The restore waits for the
+     * trash on the scope lock and then reads the parent trashed: `NOT_FOUND`, the child stays in the trash on the
+     * parent's marker. Restored on the parent read live before the trash committed, it would come back live under a
+     * trashed parent whose key the purge erases.
      */
     @Test
     fun aChildRestoredWhileItsParentIsTrashedStaysInTheTrash() {

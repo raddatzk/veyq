@@ -136,9 +136,10 @@ export function registerDepot(registry: Registry): void {
     copyLosses: ['depot.dropBox.copyLoss'],
   })
   registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
-  // Depot is the one application with NO route segment (inbox #328, ADR 0015 amendment): a file or a drop box is its plain
-  // name in the path (`#reisen/report`), a folder of the same name needs the trailing slash (`#reisen/report/`). Declared,
-  // not defaulted, so the registry knows it was chosen — and no second application can choose it too.
+  // Depot is the one application with NO route segment (inbox #328, ADR 0015, the grammar of a node's path): a file or
+  // a drop box is its plain name in the path (`#reisen/report`), a folder of the same name needs the trailing slash
+  // (`#reisen/report/`). Declared, not defaulted, so the registry knows it was chosen — and no second application can
+  // choose it too.
   registry.claimNoRouteSegment([FILE_KIND, DROPBOX_KIND])
   // Its kinds are the Depot application's, switched as one by its register entry (uc.platform.switch-application-off).
   registry.registerApplication({ id: DEPOT, name: 'depot.title', kinds: [FILE_KIND, DROPBOX_KIND] })

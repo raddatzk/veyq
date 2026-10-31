@@ -104,7 +104,7 @@ class TenantDeletionSliceTest {
             assertEquals(0L, MembershipEntity.count("tenantId", tenant))
             assertEquals(0L, TenantProfileEntity.count("tenantId", tenant))
             assertEquals(0L, TenantTermsAcceptanceEntity.count("tenantId", tenant))
-            assertNotNull(VeyqUser.findById(member), "every account stays (owner, Q20)")
+            assertNotNull(VeyqUser.findById(member), "every account stays (ADR 0101 decision 10)")
             assertNotNull(VeyqUser.findById(owner))
             assertNotNull(HoldEntity.findById(liveHold), "a hold hangs on its case, not on the tenant")
             assertNotNull(HoldEntity.findById(endedHold), "the tenant purge ends no hold, not even an ended one")

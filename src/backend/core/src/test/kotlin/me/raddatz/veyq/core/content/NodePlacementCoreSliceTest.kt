@@ -31,7 +31,8 @@ import org.junit.jupiter.api.Test
 @QuarkusTest
 class NodePlacementCoreSliceTest {
 
-    /** ADR 0080 bite test 3: a rename built on revision n after a move took the node to n+1 → 409, name unchanged. */
+    /** uc.memory.move-node:a-placement-is-compare-and-set: a rename built on revision n after a move took the node to
+     *  n+1 → 409, name unchanged. */
     @Test
     fun aRenameBuiltOnTheRevisionBeforeAMoveIs409AndLeavesTheName() {
         val t = tree()
@@ -48,8 +49,9 @@ class NodePlacementCoreSliceTest {
         assertRow(t.child, parent = t.b, name = "cmVuYW1lZA==", wrap = "cmVuYW1lZC13cmFw", revision = 2)
     }
 
-    /** Bite test 15: a rename without its re-wrapped key is malformed — the old wrap is sealed at the old revision and
-     *  would stop opening; so is one without its revision or its epoch. A stale revision is `stale_placement`. */
+    /** uc.memory.move-node:a-placement-is-compare-and-set: a rename without its re-wrapped key is malformed — the old
+     *  wrap is sealed at the old revision and would stop opening; so is one without its revision or its epoch. A stale
+     *  revision is `stale_placement`. */
     @Test
     fun aRenameWithoutItsRewrapOrItsRevisionIs400AndAStaleOneIs409() {
         val t = tree()
@@ -72,9 +74,10 @@ class NodePlacementCoreSliceTest {
     }
 
     /**
-     * Bite test 5, under ADR 0109 point 6: an entry at the scope root lives under `K_SC` at the node's epoch — the epoch
-     * its key was minted at, which a placement never changes. After a rotation a node the re-key has not reached may not
-     * be renamed at the root (`node_rekey_pending`); a placement stating another epoch than the node's is `stale_epoch`.
+     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0109 point 6: an entry at the scope root lives
+     * under `K_SC` at the node's epoch — the epoch its key was minted at, which a placement never changes. After a
+     * rotation a node the re-key has not reached may not be renamed at the root (`node_rekey_pending`); a placement
+     * stating another epoch than the node's is `stale_epoch`.
      */
     @Test
     fun aRootRenameOfANodeTheReKeyHasNotReachedIsPendingAndAnotherEpochStale() {
@@ -92,10 +95,10 @@ class NodePlacementCoreSliceTest {
     }
 
     /**
-     * Bite test 16, under ADR 0109 point 6: a placement never changes the node's epoch. Below the root the entry is under
-     * the destination's key, so a destination the re-key has not reached refuses (`node_rekey_pending`); the node itself
-     * may still be not re-keyed and move between re-keyed parents (its key is re-wrapped, nothing is sealed under it) —
-     * but not into the root.
+     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0109 point 6: a placement never changes the
+     * node's epoch. Below the root the entry is under the destination's key, so a destination the re-key has not
+     * reached refuses (`node_rekey_pending`); the node itself may still be not re-keyed and move between re-keyed
+     * parents (its key is re-wrapped, nothing is sealed under it) — but not into the root.
      */
     @Test
     fun aPlacementKeepsTheNodesEpochAndWaitsForItsDestination() {
@@ -145,7 +148,8 @@ class NodePlacementCoreSliceTest {
         assertRow(t.a, parent = t.b, name = "b3V0", wrap = "b3V0LXdyYXA=", revision = 1, epoch = 0)
     }
 
-    /** Bite test 11: a cycle-forming move → `illegal_structure`, the placement revision unchanged. */
+    /** uc.memory.move-node:a-placement-is-compare-and-set: a cycle-forming move → `illegal_structure`, the placement
+     *  revision unchanged. */
     @Test
     fun aCycleFormingMoveIs422AndLeavesTheRevision() {
         val t = tree()
@@ -158,8 +162,9 @@ class NodePlacementCoreSliceTest {
         assertRow(t.a, parent = t.b, name = "dW5kZXItYg==", wrap = "dW5kZXItYg==", revision = 1)
     }
 
-    /** ADR 0080 Decision 8 / bite test 6, the half that belongs to the placement: a trashed destination is refused —
-     *  the move would hang a live node, whose key wraps under the trashed one, below a subtree the purge erases. */
+    /** ADR 0080 Decision 8 / uc.memory.delete-node:a-trashed-parent-takes-no-child, the placement's half: a trashed
+     *  destination is refused — the move would hang a live node, whose key wraps under the trashed one, below a subtree
+     *  the purge erases. */
     @Test
     fun aMoveIntoATrashedParentIs422() {
         val t = tree()

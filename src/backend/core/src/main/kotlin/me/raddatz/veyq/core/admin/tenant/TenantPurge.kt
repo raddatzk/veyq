@@ -27,7 +27,7 @@ import org.jboss.logging.Logger
  * What stays: holds and the moderation records hang on cases, not tenants, so they survive to their own ends; the terms
  * acceptance rows of a member a case names — its owners too, when the tenant's own step over content told them — stay as
  * an account's erasure keeps them ([TermsEvidence]); every account
- * stays, also one this leaves in no tenant (owner, Q20). `scripts/validate_account_erasure_arity.py` holds
+ * stays, also one this leaves in no tenant (ADR 0101 decision 10). `scripts/validate_account_erasure_arity.py` holds
  * that every table reachable by foreign key from `veyq_tenant` is deleted here, is the scope erasure's, or cascades.
  * Operator-blind: nothing is decrypted; store objects go only through the reclaim list (ADR 0062).
  */

@@ -32,8 +32,8 @@ class AccountEmailResource(
 ) : AccountEmailApi {
 
     override fun getAccountEmail(): Response {
-        // An authenticated principal always names an account (no path deletes one); a missing row answers as the
-        // auth layer's own generic 401.
+        // An authenticated principal always names an account (an erasure ends its sessions before its row goes,
+        // ADR 0101 decision 2); a missing row answers as the auth layer's own generic 401.
         val view = handler.get(identity.principal.name)
             ?: return httpError(httpFailure("authentication_failed", FailureStatus.UNAUTHORIZED))
         return Response.ok(AccountEmail(email = view.email, confirmed = view.confirmed)).build()

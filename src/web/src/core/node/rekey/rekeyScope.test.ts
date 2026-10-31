@@ -1,8 +1,8 @@
 // A scope's re-key (ADR 0109) through the REAL crypto: no seal is mocked, only the transport — a small in-memory server
 // that serves the rows and applies a commit as the backend's `RekeyStore.commit` does (every staged value swapped in,
 // the node's epoch moved). The world is built at epoch 0 with the real seals, then the scope rotates to 1 (E_1 chained to
-// E_0, as a member's device holds them) and `rekeyScope` runs. Each ADR 0109 bite test is a negative with its positive
-// control on the same key.
+// E_0, as a member's device holds them) and `rekeyScope` runs. Each uc.spaces.rekey-after-rotation criterion is a
+// negative with its positive control on the same key.
 //
 // ADR 0111 decision 11 on the same server: a member's run leaves the nodes only an owner re-keys (`ownerOnly`, which the
 // server derives as the backend's `OwnerOnlyRekey` does), and a member's write pulls its own path forward through
@@ -192,6 +192,7 @@ beforeEach(() => {
 })
 
 describe('rekeyScope (ADR 0109, real crypto)', () => {
+  // uc.spaces.rekey-after-rotation:every-node-rekeyed
   it('bite 1: after the re-key, what is added inside a node that existed before opens with no key from before', async () => {
     expect((await rekeyScope(SCOPE)).done).toBe(true)
     expect(rows().every((n) => n.epoch === 1)).toBe(true)
@@ -220,6 +221,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     expect(new TextDecoder().decode(v1.openField(identityNameContext(SCOPE, ids.link, ids.reader), newRoot, fromB64std(reader.sealedDisplayName)))).toBe('Ada')
   })
 
+  // uc.spaces.rekey-after-rotation:resumable
   it('bite 4: interrupted after the parent\'s commit, the tree opens as it stands and a second run finishes it', async () => {
     server.crashOnCommitOf = ids.child
     await expect(rekeyScope(SCOPE)).rejects.toThrow('the device stopped')
@@ -235,6 +237,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     expect(keyOf(ids.child)).not.toEqual(K.child)
   })
 
+  // uc.spaces.rekey-after-rotation:links-follow-and-stay-marked
   it('bite 5: a link from before keeps showing what is added, stays re-issue-required, and a re-issue closes it', async () => {
     await rekeyScope(SCOPE)
     const link = server.shares.find((s) => s.shareId === ids.link)!
@@ -248,6 +251,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     expect(v1.open(SHARE_KEY, fresh, fromB64std(reissued))).toEqual(keyOf(ids.root)) // control
   })
 
+  // uc.spaces.rekey-after-rotation:drop-key-replaced
   it('bite 6: an upload to a drop box after the re-key does not open with the drop key from before', async () => {
     await rekeyScope(SCOPE)
     const box = server.nodes.get(ids.box)!

@@ -1,4 +1,4 @@
-// Bite test (e) of cr-node-key-hierarchy slice 2, on the wire: a chapter's create is recorded at `fetch` — the JSON
+// uc.memory.chapters:chapter-own-recursive-knode, on the wire: a chapter's create is recorded at `fetch` — the JSON
 // the real generated client serializes, not the object handed to it — and its `encryptedName` opens under the
 // Memory's `K_node` and NOT under `K_SC` (ADR 0080 Decision 2: a chapter's entry is its parent's). The slug token is
 // keyed the same way. No mock of the API client here: a field the client dropped or renamed would fail this.

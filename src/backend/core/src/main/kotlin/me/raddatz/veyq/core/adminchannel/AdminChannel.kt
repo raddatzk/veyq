@@ -23,8 +23,9 @@ object AdminChannel {
         // `Forwarded: for=10.0.0.1` or `X-Forwarded-Host` looks private through them (Quarkus'
         // ForwardedServerRequestWrapper rewrites exactly those). And under the PROXY protocol the connection's own
         // `localAddress()` / `remoteAddress()` are the PROXY header's destination and source (Vert.x's overrides,
-        // ADR 0094 M10): a header naming the admin port and a private client would open the Server-Owner operations
-        // on the public port. `(true)` asks for the channel's real addresses, which nothing a client sends can move.
+        // read in Vert.x 4.5.27's `ConnectionBase`): a header naming the admin port and a private client would open the
+        // Server-Owner operations on the public port.
+        // `(true)` asks for the channel's real addresses, which nothing a client sends can move.
         isAdminChannel(request.connection().localAddress(true), request.connection().remoteAddress(true), adminPort)
 
     fun isAdminChannel(local: SocketAddress?, peer: SocketAddress?, adminPort: Int): Boolean {

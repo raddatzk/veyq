@@ -19,11 +19,12 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * A `READ_WRITE` guest's tree operations on a `FOLDER` share, with core alone (ADR 0080 decisions 6, 9, 10; sub-slice
- * 5a.3 of cr-node-key-hierarchy): `createShareNode` and `updateShareNode`, behind the guest gate, structure only.
- * Bite tests 13 (out of the subtree, the root, a cycle, a WRITE_ONLY guest), 17 (a kind `NodeKindRules` refuses, and
- * before it a kind no application declares guest-creatable),
- * 19 (the root's rename) and 20 (a READ folder share exists although no application writes under it), plus what the
+ * A `READ_WRITE` guest's tree operations on a `FOLDER` share, with core alone (ADR 0080 decisions 6, 9, 10):
+ * `createShareNode` and `updateShareNode`, behind the guest gate, structure only. The criteria it holds:
+ * uc.memory.move-node:who-may-move-what (out of the subtree, the root, a cycle, a WRITE_ONLY guest),
+ * uc.sharing.share-contributor:guest-tree-refusals (a kind `NodeKindRules` refuses, and before it a kind no
+ * application declares guest-creatable) and uc.sharing.share-contributor:folder-guest-tree-operations (the root's
+ * rename; a READ folder share exists although no application writes under it), plus what the
  * slice promises: a guest's tree is a member's tree, a create's epoch is the scope's current one (ADR 0109 point 6
  * narrowed ADR 0080 decision 6's "at or below") and its parent's epoch is checked under the parent's lock, a placement
  * is compare-and-set.
@@ -103,7 +104,8 @@ class ShareNodesCoreSliceTest {
 
     /** The entry is sealed under the parent's key: a `parentEpoch` below the parent's stored one is `stale_epoch`, a
      *  parent the rotation's re-key has not reached is `node_rekey_pending` — nothing stored either way, and the same
-     *  create lands once the parent is re-keyed (ADR 0109 point 6, bite test 2). */
+     *  create lands once the parent is re-keyed (ADR 0109 point 6,
+     *  uc.spaces.rekey-after-rotation:writes-wait-per-node). */
     @Test
     fun aParentEpochBelowTheStoredIsStaleAndALaggingParentIsPending() {
         val t = tree(epoch = 2, nodesAt = 1) // a rotation to 2 the re-key has not brought to the tree yet
@@ -169,7 +171,8 @@ class ShareNodesCoreSliceTest {
         assertEquals(t.root, parentOf(t.b))
     }
 
-    // --- bite 13: never out of the subtree, never the root, never a cycle; a WRITE_ONLY guest does nothing ---
+    // --- uc.memory.move-node:who-may-move-what: never out of the subtree, never the root, never a cycle; a WRITE_ONLY
+    //     guest does nothing ---
 
     @Test
     fun aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle() {
@@ -214,14 +217,14 @@ class ShareNodesCoreSliceTest {
         }
     }
 
-    // --- bite 17: placement by NodeKindRules ---
+    // --- uc.sharing.share-contributor:guest-tree-refusals: placement by NodeKindRules ---
 
     /**
      * Two layers refuse a guest's create under a folder, each tested with the other held open. Core's own (owner decision
      * 2026-10-14, [FolderGuestNodeRules]): a kind no application declares guest-creatable is `illegal_scope`, before
      * any placement rule is asked — a `MEMORY` here, which no rule of core alone places either. And `NodeKindRules`
-     * behind it (bite test 17): a kind declared guest-creatable ([CoreTestGuestCreatableKinds]) that no rule places is
-     * still `illegal_structure`. Neither stores anything.
+     * behind it (uc.sharing.share-contributor:guest-tree-refusals): a kind declared guest-creatable
+     * ([CoreTestGuestCreatableKinds]) that no rule places is still `illegal_structure`. Neither stores anything.
      */
     @Test
     fun aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused() {
@@ -232,7 +235,7 @@ class ShareNodesCoreSliceTest {
         create(t.link, t.a, NodeEntity.FOLDER).statusCode(201) // control
     }
 
-    // --- bite 19: the root is never renamed by a guest ---
+    // --- uc.sharing.share-contributor:folder-guest-tree-operations: the root is never renamed by a guest ---
 
     @Test
     fun aGuestNeverRenamesTheShareRoot() {

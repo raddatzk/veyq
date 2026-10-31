@@ -170,7 +170,8 @@ acceptanceCriteria:
       A READ_WRITE folder link's guest creates folders (and, through Depot, files) inside the shared subtree and moves or renames
       a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
       the node's placementRevision (409 stale_placement, nothing written). A create states the epoch the guest sealed
-      with: above the scope's current one is 409 stale_epoch, at or below it is stored as sent. Never the share root,
+      with: any but the scope's current one is 409 stale_epoch, and a parent the last rotation's re-key has not reached
+      is 409 node_rekey_pending (ADR 0109 point 6). Never the share root,
       never out of the subtree, never into a cycle; a taken slug is 409 on create and on move; a trashed root takes
       no tree operation. Each is decided under the scope lock, then the share row's.
     coverage:
@@ -201,7 +202,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
-        unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
+        unit: [GuestNodeRulesPartitionTest.aKindNobodyHandlesAllowsNothing, GuestNodeRulesPartitionTest.aKindTwoImplementationsClaimAllowsNothing, GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
         unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memories/rights.test.ts]
         e2e: [src/features/memories/folderShareGuest.e2e.test.ts]

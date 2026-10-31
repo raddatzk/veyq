@@ -1113,9 +1113,10 @@ paths:
         makes that member an OWNER (`acceptTenantInvite`), so nobody is made to answer for a space without being asked.
         Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 3), so an owner the invite
         brought in from outside would wait for a key no member could vouch for. A newer owner invite supersedes an older
-        one; the tenant's member invites are untouched. The link is mailed through the instance mail where it is set up,
-        and returned for the Server Owner to hand over otherwise. `409 tenant_not_active` unless the tenant is ACTIVE;
-        `409 not_tenant_member` when the address is no member of it. Server-Owner only.
+        one; the tenant's member invites are untouched. The link is mailed through the tenant's own relay where that
+        relay can send — never through the instance mail (ADR 0097 decision 3) — and is always returned for the Server
+        Owner to hand over (ADR 0055 §3); `delivery` says whether the mail went out. `409 tenant_not_active` unless the
+        tenant is ACTIVE; `409 not_tenant_member` when the address is no member of it. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
@@ -2804,10 +2805,11 @@ components:
         (cr-email-invite-send-hardening; ADR 0048/0049). Request-scoped only — never persisted, so it adds no
         stored metadata (operator-blind untouched). SENT = the tenant's SMTP is configured and the mail was
         accepted by the server. FALLBACK_COPYLINK = no sendable SMTP, so the copy-link is the channel — reachable
-        **only on the Server-Owner's bootstrap invite**, where a PENDING tenant has no mail settings by
-        construction (ADR 0055 §3). FAILED = SMTP is configured but the send errored; the returned
-        `bootstrapSecret` copy-link is the fallback, again on the bootstrap invite only. On a **member** invite
-        neither of the latter two occurs: both are refused as `503` (`mail_unavailable` / `mail_send_failed`).
+        **only on the Server Owner's owner invites** (ADR 0055 §3): the first owner's invite of a PENDING tenant,
+        which has no mail settings by construction, and the owner invite into an ownerless ACTIVE tenant. FAILED =
+        SMTP is configured but the send errored; the returned `bootstrapSecret` copy-link is the fallback, again on
+        those owner invites only. On a **member** invite neither of the latter two occurs: both are refused as `503`
+        (`mail_unavailable` / `mail_send_failed`).
       enum: [SENT, FALLBACK_COPYLINK, FAILED]
       example: SENT
 
@@ -2975,10 +2977,12 @@ components:
       x-veyq-visibility: token
       type: string
       description: >
-        The raw single-use invite secret, returned to the **Server Owner** who mints a tenant's *bootstrap*
-        invite, so they can hand it off out-of-band by copying the invite link (`/tenant/accept#<bootstrapSecret>`).
-        This is the one place veyq still does that, and only because a `PENDING` tenant has no mail settings by
-        construction, so no other channel can exist yet ([ADR 0055](../../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §3).
+        The raw single-use invite secret, returned to the **Server Owner** who mints an owner invite — a tenant's
+        *bootstrap* invite, or the owner invite into an ownerless tenant ([ADR 0101](../../docs/decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
+        decision 9) — so they can hand it off out-of-band by copying the invite link (`/tenant/accept#<bootstrapSecret>`).
+        These are the only places veyq still does that, because each must work when the tenant cannot send: a
+        `PENDING` tenant has no mail settings by construction, and an ownerless one has nobody left to repair its relay
+        ([ADR 0055](../../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §3).
         A **member** invite never carries it. It is the **admission token, not a key** ([ADR 0006](../../docs/decisions/0006-cold-tenant-scope-birth.md));
         it rides the URL **fragment** on the invitee side and is matched server-side by hash only (never stored
         plaintext, never echoed in the tenant list — only here at mint time, over TLS to the owner-gated caller).

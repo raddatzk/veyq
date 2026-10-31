@@ -14,9 +14,10 @@ import java.time.format.DateTimeFormatter
 /**
  * The mail a tenant's deletion sends (uc.admin.delete-tenant step 3, ADR 0101 decision 10): every member of its TENANT
  * scope, at their account address, through the instance mail (ADR 0097 decision 3) — after the deletion committed, so a
- * mail that fails costs the deletion nothing. It says the space is going and when, and that the account stays (owner,
- * Q20): nothing erases an account its person did not ask to erase. Best effort, one try: the tenant is offline from the
- * deletion on, so the mail informs and gates nothing. Nothing here logs an address (ADR 0092 § 1).
+ * mail that fails costs the deletion nothing. It says the space is going and when, and that the account stays
+ * (ADR 0101 decision 10): nothing erases an account its person did not ask to erase. Best effort, one try: the
+ * tenant is offline from the deletion on, so the mail informs and gates nothing. Nothing here logs an address
+ * (ADR 0092 § 1).
  */
 @ApplicationScoped
 class TenantDeletionMail(private val mailer: InstanceNoticeMailer) {

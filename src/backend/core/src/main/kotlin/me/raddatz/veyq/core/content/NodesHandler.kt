@@ -272,7 +272,8 @@ class NodesHandler(
                 epoch != null || placementRevision != null
 
         /** Whether every field a placement needs is there: a rename without a re-wrapped key cannot land, because
-         *  the old wrap is sealed at the old revision and would stop opening (bite test 15). */
+         *  the old wrap is sealed at the old revision and would stop opening
+         *  (uc.memory.move-node:a-placement-is-compare-and-set). */
         val complete: Boolean
             get() = completeWithoutEpoch && epoch != null
 

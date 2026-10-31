@@ -250,7 +250,7 @@ class AccountErasureSliceTest {
         eraseOwn(u, kp, token).then().statusCode(200)
     }
 
-    // --- the last owner (ADR 0101 decision 9, owner Q18) ---
+    // --- the last owner (ADR 0101 decision 9) ---
 
     @Test
     fun theLastOwnerWithMembersChoosesAndNoChoiceIsRefused() {

@@ -41,7 +41,7 @@ import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 
 /**
- * A `CHAPTER` as a share root (ADR 0080 decisions 9 and 13, bite tests 12 and 21; cr-node-key-hierarchy 5a.4): a
+ * A `CHAPTER` as a share root (ADR 0080 decisions 9 and 13; uc.sharing.share-public-viewer:chapter-share-root): a
  * chapter link is a smaller Memory link. Its guest is served the chapter and what hangs under it and nothing of the
  * Memory above or of a sibling chapter; a contributor's and an uploader's media land in the chapter (the guest complete
  * attaches to the share's root), an uploader seals to the chapter's own drop key, and a member reads what opens it on
@@ -83,10 +83,10 @@ class ChapterShareSliceTest {
     }
 
     /**
-     * Bite tests 21 and 12: a chapter's guest is served the chapter (its root entry without the parent's placement),
-     * the chapter's media and its blobs — and of the parent Memory and the sibling chapter nothing: no id, no name, no
-     * wrap, no medium, no blob. The control is a Memory link on the same tree, which serves all of it, so every
-     * absence above is one the subtree rule makes, not one of missing rows.
+     * uc.sharing.share-public-viewer:chapter-share-root: a chapter's guest is served the chapter (its root entry
+     * without the parent's placement), the chapter's media and its blobs — and of the parent Memory and the sibling
+     * chapter nothing: no id, no name, no wrap, no medium, no blob. The control is a Memory link on the same tree,
+     * which serves all of it, so every absence above is one the subtree rule makes, not one of missing rows.
      */
     @Test
     fun aChapterGuestReadsTheChapterAndNothingOfItsMemory() {

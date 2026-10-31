@@ -21,8 +21,9 @@ import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 
 /**
- * A share serves the directory entries of its subtree and nothing above it (ADR 0080 Decisions 2 and 9; bite tests
- * 9 and 12). Every descendant's `encryptedName` — sealed under its parent's content key, which the guest derives from
+ * A share serves the directory entries of its subtree and nothing above it (ADR 0080 Decisions 2 and 9;
+ * uc.sharing.share-uploader:guest-never-holds-the-memory-key, uc.sharing.share-public-viewer:chapter-share-root).
+ * Every descendant's `encryptedName` — sealed under its parent's content key, which the guest derives from
  * the root down — is served as stored; the **root's** own entry (its name, its wrap and its parent id, all under the
  * parent's key above the share) is not, nor any node outside the subtree. A WRITE_ONLY link holds no key of the
  * subtree, so it is served no node at all: no name, no content key.

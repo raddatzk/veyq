@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * [GuestNodeRules] partitions container kinds as `NodeKindRules` and [ShareRoots] do (ADR 0080 decision 6, bite test
- * 18): the one implementation that handles a kind decides; none or several allow a guest nothing — never the first
- * by CDI bean order, never open by default.
+ * [GuestNodeRules] partitions container kinds as `NodeKindRules` and [ShareRoots] do (ADR 0080 decision 6,
+ * uc.sharing.share-contributor:guest-tree-refusals): the one implementation that handles a kind decides; none or
+ * several allow a guest nothing — never the first by CDI bean order, never open by default.
  */
 class GuestNodeRulesPartitionTest {
 

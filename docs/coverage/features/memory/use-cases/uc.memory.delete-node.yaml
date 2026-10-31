@@ -77,6 +77,24 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/tree.test.ts]
 
+  - id: a-trashed-parent-takes-no-child
+    text: "A create or a move under a trashed parent is 422 illegal_structure and stores nothing: a child's key would wrap under a key the purge is about to erase (ADR 0080 decision 8)."
+    coverage:
+      backend:
+        integration: [NodeTrashConsistencyCoreSliceTest.aCreateUnderATrashedParentIs422, NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422]
+
+  - id: a-purge-leaves-no-row-below-it
+    text: "Purging a trashed folder whose child or grandchild a narrower delete trashed earlier leaves no row of that subtree: the delete re-stamped it, so the whole subtree ages out on one marker and no child row outlives the parent whose key wraps its own (ADR 0080 decision 8)."
+    coverage:
+      backend:
+        integration: [NodeTrashConsistencyCoreSliceTest.aPurgedFolderLeavesNoRowOfASubtreeANarrowerDeleteTrashedEarlier]
+
+  - id: only-a-trash-root-restores
+    text: "A node whose parent is trashed does not restore on its own (404): live under a trashed parent it would be in no listing; a child trashed earlier stays in the trash, a trash root of its own, also when its restore overlaps its parent's (ADR 0080 decision 8, ADR 0061)."
+    coverage:
+      backend:
+        integration: [NodeTrashConsistencyCoreSliceTest.aChildWhoseParentIsTrashedDoesNotRestore, NodeTreeRaceCoreSliceTest.aChildRestoredWhileItsParentIsTrashedStaysInTheTrash]
+
   - id: space-trash-lists-deleted-subtree-roots
     text: "The space's Trash lists only the ROOT of each soft-deleted subtree (descendants went with it and return with it), each carrying when it was deleted and when it will be purged — purgeAfter derived at the resource boundary from deleted_at plus the configured retention, never stored."
     coverage:

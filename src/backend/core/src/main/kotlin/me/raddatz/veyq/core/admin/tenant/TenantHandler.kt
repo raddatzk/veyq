@@ -414,7 +414,7 @@ class TenantHandler(
      * `SUSPENDED` — and [reproject] withdraws its routers; `TenantPurge` erases it after the scope trash's retention.
      * The domain the confirmation typed must be this tenant's, so a wrong id deletes nothing. A moderator's proposal to
      * take the tenant offline is taken by the deletion, as by a suspension. Every member is mailed after the commit;
-     * every account stays (owner, Q20).
+     * every account stays (ADR 0101 decision 10).
      */
     fun delete(
         tenantId: String, domain: String, serverOwnerId: String, overContent: Boolean = false, statement: StepStatementInput? = null,

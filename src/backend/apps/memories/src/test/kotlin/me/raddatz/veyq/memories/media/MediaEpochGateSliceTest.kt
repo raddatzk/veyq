@@ -24,9 +24,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 
 /**
- * Layer 1 of ADR 0109 point 6 on Memories' writes (bite test 3): a write that seals under a Memory's key states the
- * Memory's epoch. Each write is tried three times on ONE predicate — the node's stored epoch against the stated one and
- * the scope's current one:
+ * Layer 1 of ADR 0109 point 6 on Memories' writes (uc.spaces.rekey-after-rotation:writes-wait-per-node): a write that
+ * seals under a Memory's key states the Memory's epoch. Each write is tried three times on ONE predicate — the node's
+ * stored epoch against the stated one and the scope's current one:
  *
  * - the scope rotated to 1 and the Memory is still at 0, stated 0 → `node_rekey_pending` (the re-key has not reached it);
  * - the Memory re-keyed to 1, stated 0 → `stale_epoch` (the writer holds the key from before);

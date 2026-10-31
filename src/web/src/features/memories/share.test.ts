@@ -252,8 +252,9 @@ describe('resolveShare (anonymous viewer)', () => {
     expect(resolved.items[0].nodeId).toBe(CHAPTER_ID)
   })
 
-  // Bite test (b): a Memory-share guest opens every chapter title it is served — nested ones through the chain it
-  // derives — from a resolve that carries no name for the root (its title is `sealedName`).
+  // uc.sharing.share-public-viewer:anonymous-resolve-decrypt: a Memory-share guest opens every chapter title it is
+  // served — nested ones through the chain it derives — from a resolve that carries no name for the root (its title is
+  // `sealedName`).
   it('opens every served chapter title down the chain; the root carries none, a K_SC-sealed one does not open', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-3' })
     mockCurator(create)
@@ -282,9 +283,10 @@ describe('resolveShare (anonymous viewer)', () => {
     expect(Object.fromEntries(chapterNames)).toEqual({ [CHAPTER_ID]: 'Day 1', [NESTED]: 'Morning' })
   })
 
-  // ADR 0080 Decision 3 / bite test 4, the guest's half: a chapter's name and wrap open at the placement revision
-  // served WITH them. A chapter renamed to version 2 opens there; the same entry served at version 1 (a replay of the
-  // row a rename superseded) opens neither its title nor its key — and nothing below it.
+  // ADR 0080 Decision 3 / uc.memory.move-node:a-wrap-opens-only-at-its-placement, the guest's half: a chapter's name
+  // and wrap open at the placement revision served WITH them. A chapter renamed to version 2 opens there; the same
+  // entry served at version 1 (a replay of the row a rename superseded) opens neither its title nor its key — and
+  // nothing below it.
   it('opens a chapter at the placement revision it is served with, and nothing at another', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-pv' })
     mockCurator(create)

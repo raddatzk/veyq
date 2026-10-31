@@ -146,7 +146,8 @@ describe('createFolder', () => {
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'trips')))
   })
 
-  // Bite test (a), the write half: a nested node's directory entry is its parent's (ADR 0080 Decision 2).
+  // uc.memory.browse:create-folder-and-memory, the write half: a nested node's directory entry is its parent's
+  // (ADR 0080 Decision 2).
   it('below a parent, wraps its key AND seals its name under the PARENT\'s key, never K_SC', async () => {
     const create = echoCreate()
     mockContent({ createNode: create })
@@ -160,8 +161,9 @@ describe('createFolder', () => {
     expect(() => opened(scopeKey, id, req.encryptedName)).toThrow(v1.OpenRefused)
   })
 
-  // Bite test (d): the slug key is the parent's content key — stable per parent, so the same name under the same
-  // parent collides (the server's UNIQUE(parentId, slugToken) refuses it), and it is not the K_SC-keyed token.
+  // uc.memory.browse:create-folder-and-memory: the slug key is the parent's content key — stable per parent, so the
+  // same name under the same parent collides (the server's UNIQUE(parentId, slugToken) refuses it), and it is not the
+  // K_SC-keyed token.
   it('the slug token is keyed by the parent key: equal for the same name under the same parent, unlike K_SC\'s', async () => {
     const create = echoCreate()
     mockContent({ createNode: create })
@@ -197,8 +199,8 @@ describe('listTree', () => {
     expect(tree[0].parentId).toBeNull()
   })
 
-  // Bite test (a), the read half: a nested name opens under its parent's content key, derived top-down in one pass —
-  // listed child-first, so the order of the rows is not what makes it work.
+  // uc.memory.browse:list-and-decrypt-tree, the read half: a nested name opens under its parent's content key, derived
+  // top-down in one pass — listed child-first, so the order of the rows is not what makes it work.
   it('opens every nested name under its parent\'s content key, top-down, whatever the row order', async () => {
     const k1 = v1.randomBytes(32)
     const k2 = v1.randomBytes(32)
@@ -471,7 +473,8 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     expect(noRead).not.toHaveBeenCalled()
   })
 
-  // ADR 0080 bite test 4: the revision is part of the address a wrap or a name is opened at.
+  // uc.memory.move-node:a-wrap-opens-only-at-its-placement: the revision is part of the address a wrap or a name is
+  // opened at.
   it('a wrap or a name served at another placement revision, or on another node\'s row, does not open', () => {
     const moved = treeRow(M, B, 'MEMORY', 'Italien', keys.B, keys.M, 0, 1) // M after a move, at revision 1
     const name = b64std(v1.sealField({ purpose: 'node-name', ...at(M, 0, 1) }, keys.B, v1.utf8('Italien')))

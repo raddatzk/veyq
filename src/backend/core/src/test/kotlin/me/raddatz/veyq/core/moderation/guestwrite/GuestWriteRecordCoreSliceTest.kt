@@ -94,7 +94,7 @@ class GuestWriteRecordCoreSliceTest {
         TenantCapabilitySwitchFixtures.clear()
     }
 
-    // --- the address: ADR 0094's resolver, never the client's choice (ADR 0094 § For the moderation CR) ----------------
+    // --- the address: ADR 0094's resolver, never the client's choice (ADR 0094 decision 3) ---------------------------
 
     @Test
     fun theRightmostEntryIsRecordedAndTheClientsOwnLeftmostIsInNoRecordAndNoLog() {

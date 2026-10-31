@@ -41,9 +41,9 @@ acceptanceCriteria:
       backend: { integration: [ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey, ShareNoteSliceTest.createWithANameShowsItInTheManageListButNeverToTheViewer] }
       web: { unit: [src/features/memories/share.test.ts] }
   - id: share-key-recoverable-by-members-only
-    text: A share's K_share is recoverable only by the Memory's scope members - its recovery copy is sealed under K_SC(epoch), which no share link carries. So no link, with or without a dump, opens another share's password, private label or note, or rebuilds its link. The copy is sealed at the scope's current epoch - a create at any other epoch is 409 stale_epoch with nothing written, and a key without its epoch (or the reverse) is 400.
+    text: A share's K_share is recoverable only by the Memory's scope members - its recovery copy is sealed under K_SC(epoch), which no share link carries. So no link, with or without a dump, opens another share's password, private label or note, or rebuilds its link. Every create carries the copy (a create without it is 400 and writes nothing, ADR 0080 decision 12), so every member can always re-show and edit a link. The copy is sealed at the scope's current epoch - a create at any other epoch is 409 stale_epoch with nothing written, and a key without its epoch (or the reverse) is 400.
     coverage:
-      backend: { integration: [ShareKeyRecoveryEpochSliceTest.aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing, ShareKeyRecoveryEpochSliceTest.aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400, ShareKeyRecoveryEpochSliceTest.aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch] }
+      backend: { integration: [ShareKeyRecoveryEpochSliceTest.aCreateWithoutARecoveryCopyIs400AndWritesNothing, ShareKeyRecoveryEpochSliceTest.aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing, ShareKeyRecoveryEpochSliceTest.aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400, ShareKeyRecoveryEpochSliceTest.aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch] }
       web: { unit: [src/features/memories/share.test.ts] }
   - id: note-acceptance-switch-sealed-inside-the-note
     text: >

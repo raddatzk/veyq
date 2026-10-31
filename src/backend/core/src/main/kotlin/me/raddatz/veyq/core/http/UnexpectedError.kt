@@ -83,7 +83,9 @@ object UnexpectedError {
 /**
  * The entry point an unexpected error takes, for a JAX-RS resource and a Vert.x route alike: a Vert.x failure handler
  * ordered just ahead of Quarkus' own (`QuarkusErrorHandler`, `route().last()`), whose line names the request URI with
- * its query and logs the exception with its message (ADR 0092 M6).
+ * its query and logs the exception with its message. Read in Quarkus 3.36.0's sources: that handler's
+ * `log.errorf(exception, "HTTP Request to %s failed, error id: %s", event.request().uri(), uuid)`, and Quarkus REST's
+ * own `Request failed` line, reached only when no mapper matches.
  *
  * **One handler, and deliberately not an `ExceptionMapper<Throwable>`.** Quarkus REST hands an exception no mapper
  * matches to the routing context's failure (`QuarkusResteasyReactiveRequestContext.handleUnrecoverableError` →

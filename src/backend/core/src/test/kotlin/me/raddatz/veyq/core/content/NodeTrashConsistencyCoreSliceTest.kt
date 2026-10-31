@@ -30,11 +30,12 @@ import org.junit.jupiter.api.Test
  * the marker selects), and create, move and restore refuse a trashed parent. `veyq_node.parent_id` has no foreign key,
  * so these tests are the guarantee.
  *
- * Bite tests 6 (the create half; the move half is `NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422`), 7 and 8,
- * and inbox #357's: a delete frees only its root's slug, so a restored descendant comes back with its own, and one
- * whose slug an earlier delete freed stays in the trash; no live node ever holds a freed token.
- * The races (a trash overlapping a create, a move or a restore under it) are `NodeTreeRaceCoreSliceTest` and
- * `NodeTreeRaceSliceTest`. Core alone: every node is a `FOLDER`.
+ * uc.memory.delete-node:a-trashed-parent-takes-no-child (the create half; the move half is
+ * `NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422`), :a-purge-leaves-no-row-below-it and
+ * :only-a-trash-root-restores, and the freed slug's rule: a delete frees only its root's slug, so a restored descendant
+ * comes back with its own, and one whose slug an earlier delete freed stays in the trash; no live node ever holds a
+ * freed token. The races (a trash overlapping a create, a move or a restore under it) are `NodeTreeRaceCoreSliceTest`
+ * and `NodeTreeRaceSliceTest`. Core alone: every node is a `FOLDER`.
  */
 @QuarkusTest
 class NodeTrashConsistencyCoreSliceTest {
@@ -43,8 +44,9 @@ class NodeTrashConsistencyCoreSliceTest {
 
     @Inject lateinit var config: VeyqConfig
 
-    /** Bite test 6, the create half: a node created under a trashed parent would wrap its key under a key the purge
-     *  erases with its row. Refused as `illegal_structure`, nothing written. */
+    /** uc.memory.delete-node:a-trashed-parent-takes-no-child, the create half: a node created under a trashed parent
+     *  would wrap its key under a key the purge erases with its row. Refused as `illegal_structure`, nothing
+     *  written. */
     @Test
     fun aCreateUnderATrashedParentIs422() {
         val t = tree()
@@ -61,9 +63,10 @@ class NodeTrashConsistencyCoreSliceTest {
     }
 
     /**
-     * Bite test 7: a folder purged whose child — or grandchild — a narrower delete trashed EARLIER leaves no row of
-     * the subtree behind, and no row whose parent is gone. Driven through the scheduled purge after the retention
-     * passed: every marker of the scope is moved back by the same span, so their order is the one the deletes left.
+     * uc.memory.delete-node:a-purge-leaves-no-row-below-it: a folder purged whose child — or grandchild — a narrower
+     * delete trashed EARLIER leaves no row of the subtree behind, and no row whose parent is gone. Driven through the
+     * scheduled purge after the retention passed: every marker of the scope is moved back by the same span, so their
+     * order is the one the deletes left.
      */
     @Test
     fun aPurgedFolderLeavesNoRowOfASubtreeANarrowerDeleteTrashedEarlier() {
@@ -87,9 +90,10 @@ class NodeTrashConsistencyCoreSliceTest {
     }
 
     /**
-     * Bite test 8: a node whose parent is trashed does not restore on its own — live under a trashed parent it is in no
-     * listing, and the purge erases its parent's key with the parent. `404 node_not_found` (the restore of a node that
-     * is no trash root), nothing changed. Both ways it got there: trashed with the parent, or trashed earlier.
+     * uc.memory.delete-node:only-a-trash-root-restores: a node whose parent is trashed does not restore on its own —
+     * live under a trashed parent it is in no listing, and the purge erases its parent's key with the parent. `404
+     * node_not_found` (the restore of a node that is no trash root), nothing changed. Both ways it got there: trashed
+     * with the parent, or trashed earlier.
      */
     @Test
     fun aChildWhoseParentIsTrashedDoesNotRestore() {

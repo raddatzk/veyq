@@ -29,8 +29,9 @@ import java.util.logging.Logger
 /**
  * An unexpected error logs one ERROR line with an error id, the method, the route template, the class chain, a
  * SQLState where a database failed, and the first own frame — never the URI, the query or any exception's message
- * (ADR 0092 § 4). The capture is the root JUL logger, so Quarkus' own `HTTP Request to … failed` line (M6) and
- * Hibernate's statement error (M7) are inside it too: a value absent here is absent from every log line.
+ * (ADR 0092 § 4). The capture is the root JUL logger, so Quarkus' own `HTTP Request to … failed` line
+ * ([UnexpectedError]) and Hibernate's statement error are inside it too: a value absent here is absent from every
+ * log line.
  *
  * Each case is red on the line it replaces — drop [UnexpectedErrorRoutes]'s registration and Quarkus' line carries the
  * URI and the message; drop `quarkus.log.category."org.hibernate.orm.jdbc.error".level` and Hibernate's WARN carries
