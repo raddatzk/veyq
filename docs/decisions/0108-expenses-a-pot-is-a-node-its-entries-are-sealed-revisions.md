@@ -1,7 +1,7 @@
 # ADR 0108 — Expenses: a Pot is a node, its entries are sealed revisions
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: decision 2's member participants (inbox #783))
 - Date: 2026-10-23
 - Model: [Application: Expenses](../apps/expenses.md)
 
@@ -41,11 +41,21 @@ its deleted entries never do, they stay inside it (decision 6). The Pot's `node-
 its own categories, written by a member whole with the revision it read
 ([ADR 0077](0077-a-write-carries-the-version-it-read.md)). Its **participants are records in its list** (decision 3),
 not meta: a guest adds them (decision 6), and meta is written whole with no history, so a guest who could write it could
-rewrite the list without a trace. A participant is **only a name in this Pot**, linked
-to no account (owner 2026-10-23): the friends of a trip have none, and a link guest has no stable identity to link to.
-That is unlike a Memory's participants, which are member ids
-([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)) — a Memory says who was there, a
-Pot only whose money it is. Who *wrote* a revision is a separate fact and stays the platform's (decision 6).
+rewrite the list without a trace. A participant is **a member or a name**. A member is added by choosing them from
+the space's members, as a Memory's participants are
+([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)): the record holds their member id
+and, sealed with it, their display name at the time they were added. A person without an account is a name, as before:
+the friends of a trip often have none. Whoever may write adds either kind, except that a link guest adds names only —
+it cannot see the space's members — which is the member's view with one function fewer, not a guest's own. A member
+reads a member participant by their current display name and picture; a link guest reads the name sealed at adding,
+since it has no access to the members (the residual: whoever holds the link sees that name, and a later rename does not
+reach it — accepted because a guest who settles a Pot must know whom it owes, where a Memory's guest needs no
+participants at all). A participant never changes kind: no later linking of a name to an account, so nobody can turn
+someone else's participant into their own account and receive what another owes. An erased account leaves its
+participant and its entries standing, shown as a former member. Who *wrote* a revision is a separate fact and stays
+the platform's (decision 6). Rejected: **names only**, which the first version built — it leaves a member's payment
+details (inbox #551) and a reminder (inbox #782) nobody to reach; **linking a name to an account later** — it lets a
+writer link someone else's participant to their own account.
 
 **3. An entry — an expense, a refund, a transfer or a participant — is a record with revisions, in Expenses' own
 table — not a node, and never overwritten.** The server cannot tell the four apart. The client

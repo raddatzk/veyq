@@ -125,9 +125,12 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
   3), so an owner it brought in from outside would wait forever for a key no member could vouch for; the member accepts
   it and becomes an owner, nothing is born and no key moves.
 - **The last holder of the moderation key** is not refused: an erasure cannot wait on a third person (Art. 12(2)). At
-  the self-service door the erasure takes one step first — the person's own client hands the key to another moderator
-  or to the Server Owner ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-  § 5), so every report and hold sealed to it, the very records decision 7 keeps, stays readable. At the Server
+  the self-service door the erasure takes one step first — the person's own client delivers every live epoch of the key
+  to the Server Owner ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
+  § 5), so every report and hold sealed to it, the very records decision 7 keeps, stays readable. The Server Owner,
+  whose own account is never erased here, is always there to receive it and needs no acceptance; handing it to another
+  moderator instead was rejected, because that moderator would have to accept first, which is the wait this rule
+  removes. At the Server
   Owner's door, where the person's client is not there to hand it over, the erasure proceeds after a warning that what
   only this key opens becomes unreadable; admin-web shows an instance whose key one person alone holds. Refusing until
   another moderator held the key was rejected: it made the erasure wait on someone else.

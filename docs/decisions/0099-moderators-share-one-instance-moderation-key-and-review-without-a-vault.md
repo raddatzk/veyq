@@ -1,7 +1,7 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
 - Status: Accepted
-- Built: yes
+- Built: partly (not built: decision 5's delivery to the Server Owner on the last holder's erasure (inbox #812))
 - Date: 2026-10-17
 - Model: [Moderation](../features/moderation/_index.md)
 
@@ -128,7 +128,12 @@ What there is to build on:
   measure unreviewed indefinitely; the courts stay open either way (0093 § 7).
 - **The Server Owner is a moderator from first-run setup on**, and holds the key. They may step
   down while at least one other accepted moderator holds it: their grants go, the key rotates (decision 4), and they
-  can reappoint themselves. A company's IT admin who runs the instance should not have to see what Legal reviews,
+  can reappoint themselves. A step-down or a removal that would leave no holder is refused. An erasure is not: when the
+  last holder erases their own account, their client first delivers every live epoch to the Server Owner, who is
+  reappointed by that delivery and needs no acceptance — an erasure may not wait on a third person
+  ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9). Erased at the
+  Server Owner's door, where no client of the person is there to deliver, the key is lost after a warning, and with it
+  what only it opens; admin-web shows an instance whose key one person alone holds. A company's IT admin who runs the instance should not have to see what Legal reviews,
   child sexual abuse material above all; it is a boundary of duty, not of security — the Server Owner owns the roster
   and the server — and the docs say so.
 - **Against the operator this is accountability, not a control.** The Server Owner owns the server and the roster;
