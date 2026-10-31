@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -131,8 +132,9 @@ class AccountErasureHandler(
      * (`ErasureKeyDeliveryRacesSliceTest`). [challengeEmail] is the address the spent challenge was minted for.
      * A refusal after a write throws ([refuse]); the caller's transaction then rolls back whole.
      *
-     * [delivery]: the moderation key for the Server Owner, which the last holder must carry (decision 9). With one, the
-     * Server Owner's account row is locked after the person's and before anything else — before the moderation epoch's
+     * [delivery]: the moderation key for the Server Owner, which the last holder must carry (decision 9). With one from an
+     * accepted moderator (anyone else's is ignored, and locks nothing), the Server Owner's account row is locked after
+     * the person's and before anything else — before the moderation epoch's
      * row above all — so an identity rotation of the Server Owner, which holds that row from its first read, either
      * committed before the identity is read ([ModerationHandler.leaveForErasure]: `identity_changed`) or waits for this
      * transaction and then finds the grants it delivered, which it deletes as exposed (ADR 0099 § 4).
@@ -157,7 +159,8 @@ class AccountErasureHandler(
         val proven = challengeEmail != null && challengeEmail == user.email &&
             AuthAttestation.verify(user.authPublicKey, AuthAttestation.eraseAccountStatement(accountId, nonce), signature)
         if (!proven) return ErasureOutcome.AttestationFailed
-        if (delivery != null) accounts.serverOwnerId()?.let { accounts.lock(it) }
+        // A plain read: an appointment accepted after it holds no grant yet, so it is no last holder (ModerationHandler).
+        if (delivery != null && ModeratorEntity.isModerator(accountId)) accounts.serverOwnerId()?.let { accounts.lock(it) }
         return start(
             user, AccountErasureEntity.SELF, actorId = accountId, choices = choices.associateBy { it.tenantId }, byOwner = false,
             door = ErasureDoor.Own(delivery),

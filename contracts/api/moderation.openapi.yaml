@@ -182,8 +182,8 @@ paths:
       description: >
         The caller's appointment ends at once: the `MODERATOR` role and their grants for every epoch go, and the
         Server Owner is told a rotation is due (ADR 0099 § 4; reports keep sealing to the current epoch until the Server
-        Owner mints the next). Key-proved. `409 moderation_last_holder` while it would leave no accepted moderator
-        holding the current epoch — the key would be lost with them (ADR 0099 § 5).
+        Owner mints the next). Key-proved. `409 moderation_last_holder` while it would leave a live epoch no accepted
+        moderator holds — the key, or that part of it, would be lost with them (ADR 0099 § 5).
       security:
         - bearerAuth: []
       parameters:

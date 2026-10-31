@@ -1371,8 +1371,8 @@ paths:
       description: >
         Ends the appointment (pending or accepted) and deletes the moderator's grants for every epoch in the same
         transaction (ADR 0099 § 4, layer 1); admin-web then mints the next epoch for the remaining moderators
-        (`mintModerationEpoch`, reason `REMOVAL`). `409 moderation_last_holder` while it would leave no accepted
-        moderator holding the current epoch. Server-Owner only.
+        (`mintModerationEpoch`, reason `REMOVAL`). `409 moderation_last_holder` while it would leave a live epoch no
+        accepted moderator holds. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
@@ -2390,7 +2390,7 @@ paths:
         this was is left with no owner, which `listTenants` shows. **Nor does it refuse the last holder of the
         moderation key** (ADR 0101 decision 9, ADR 0099 § 5): the person's client, which alone could hand the key to
         the Server Owner, is not here, so the key is lost with them, and with it every report and hold that only it
-        opens. That is said first: while the account is the last accepted moderator holding the current epoch, the
+        opens. That is said first: while the account is the only accepted moderator holding some live epoch, the
         request is refused (`409 moderation_last_holder`, nothing written) unless it carries
         `confirmModerationKeyLoss: true`, which the console and the CLI send only after their warning. The roster then
         has no holder and a rotation is due. One mail goes to the account's address through the instance mail where it

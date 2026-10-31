@@ -18,6 +18,8 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationGrantEntity
+import me.raddatz.veyq.core.moderation.ModerationHandler
+import me.raddatz.veyq.core.moderation.ModerationOutcome
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.ModerationTestKit
@@ -76,6 +78,9 @@ class AccountErasureSliceTest {
 
     @Inject
     lateinit var config: VeyqConfig
+
+    @Inject
+    lateinit var moderation: ModerationHandler
 
     // --- the request, the lockout and the purge ---
 
@@ -481,6 +486,7 @@ class AccountErasureSliceTest {
             tx {
                 assertNotNull(AccountErasureEntity.findById(u))
                 assertTrue(ModeratorEntity.isModerator(owner), "the Server Owner is an accepted moderator, with no acceptance step")
+                assertEquals(u, ModeratorEntity.findById(owner)!!.appointedBy, "appointed by the holder's delivery, as the log says")
                 assertEquals(
                     setOf(1 to "Zw1=", 2 to "Zw2="),
                     ModerationGrantEntity.list("moderatorId", owner).map { it.epoch to it.sealedGrant }.toSet(),
@@ -521,6 +527,42 @@ class AccountErasureSliceTest {
                 assertFalse(ModeratorEntity.isModerator(u))
                 assertTrue(ModeratorEntity.isModerator(other), "the other holder keeps the key")
                 assertEquals(0L, ModerationGrantEntity.count("moderatorId", u))
+            }
+        } finally {
+            ModerationTestKit.reset()
+        }
+    }
+
+    /** The current epoch is not the whole key: a moderator accepted after epoch 1 holds 2 from its mint before anyone
+     *  delivered them 1, so the one who alone holds 1 is its last holder all the same. */
+    @Test
+    fun theOnlyHolderOfAnOlderLiveEpochDeliversItThoughAnotherHoldsTheCurrentOne() {
+        ModerationTestKit.reset()
+        try {
+            val (u, kp) = keyedUser()
+            val other = seedUser()
+            serverOwnerToken()
+            QuarkusTransaction.requiringNew().run {
+                epoch(1)
+                epoch(2)
+                moderator(u, 1)
+                grant(u, 2)
+                moderator(other, 2)
+            }
+            val token = TestFixtures.bearer(u)
+            val preview = given().header("Authorization", token).`when`().get("/api/account/erasure")
+                .then().statusCode(200).extract()
+            val owner: String = preview.path("serverOwnerDelivery.serverOwnerId")
+            val identity: String = preview.path("serverOwnerDelivery.identityPublicKey")
+            assertEquals(listOf(1, 2), preview.path<List<Int>>("serverOwnerDelivery.epochs"))
+            // A step-down would lose epoch 1 as well, so it is refused like the current epoch's last holder's.
+            assertTrue(moderation.stepDown(u) is ModerationOutcome.Refused)
+
+            eraseOwn(u, kp, token).then().statusCode(409).body("code", equalTo("moderation_delivery_required"))
+            eraseOwn(u, kp, token, delivery = delivery(identity, 1, 2)).then().statusCode(200)
+            tx {
+                assertEquals(setOf(1, 2), ModerationGrantEntity.list("moderatorId", owner).map { it.epoch }.toSet(), "epoch 1 lives on")
+                assertTrue(ModeratorEntity.isModerator(other), "the other holder keeps the current epoch")
             }
         } finally {
             ModerationTestKit.reset()

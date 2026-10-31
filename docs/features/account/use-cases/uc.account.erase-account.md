@@ -56,7 +56,7 @@
 - **A6 — No instance mail:** the erasure runs all the same; admin-web already warns that mail is missing.
 - **A7 — Restored from a backup:** the instance re-applies the erasure ledger before it serves, and the account is
   erased again, mailing nobody (ADR 0056 decision 8); a backup itself is kept at most B days.
-- **A8 — The last holder of the moderation key** (the last accepted moderator holding its current epoch) is not
+- **A8 — The last holder of the moderation key** (the only accepted moderator holding one of its live epochs) is not
   refused: an erasure may not wait on a third person (ADR 0101 decision 9, ADR 0099 § 5). A step-down or a removal
   that would leave no holder stays refused ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md) A4).
   - **At the self-service door** the preview names the Server Owner (their identity beside the head of their key

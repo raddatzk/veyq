@@ -1585,9 +1585,10 @@ paths:
         with no other member is deleted with the account, and the dialog names it. Session only: this is membership
         metadata the caller already sees.
 
-        `serverOwnerDelivery` is set exactly when the caller is the last accepted moderator holding the current epoch
-        of the instance moderation key (uc.account.erase-account A8, ADR 0101 decision 9, ADR 0099 § 5): the erasure
-        then carries the key to the Server Owner, and this names whom to seal to — the Server Owner's identity beside
+        `serverOwnerDelivery` is set exactly when the caller is the only accepted moderator holding some live epoch
+        of the instance moderation key and the Server Owner misses an epoch the caller holds (uc.account.erase-account
+        A8, ADR 0101 decision 9, ADR 0099 § 5): the erasure then carries the key to the Server Owner, and this names
+        whom to seal to — the Server Owner's identity beside
         the head of their key chain, which the client anchors as a moderation delivery anchors its recipient (ADR 0028
         Decision 2; `getKeyChain` serves the Server Owner's chain to an accepted moderator), and the epochs the caller
         holds that the Server Owner misses.
@@ -1734,9 +1735,9 @@ components:
           items: { $ref: "#/components/schemas/ErasureTenant" }
         serverOwnerDelivery:
           description: >
-            Set exactly when the caller is the last accepted moderator holding the current epoch of the moderation key:
-            the erasure must carry the key to the Server Owner (`EraseOwnAccountRequest.serverOwnerDelivery`). Absent
-            or null otherwise.
+            Set exactly when the caller is the only accepted moderator holding some live epoch of the moderation key
+            and the Server Owner misses an epoch the caller holds: the erasure must carry the key to the Server Owner
+            (`EraseOwnAccountRequest.serverOwnerDelivery`). Absent or null otherwise.
           oneOf:
             - $ref: "#/components/schemas/ServerOwnerKeyDelivery"
             - type: "null"
