@@ -245,6 +245,10 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * its granter's signature verifies (ADR 0028 Decision 6, {@link verifyOwnGrant}): the key inside a refused grant is
  * never used — {@link GrantRefused} is thrown before the unwrap, and the scope does not open.
  *
+ * Never below this device's epoch floor for the scope (ADR 0024 Decision 6): an older grant the server serves again is
+ * refused ({@link AwaitingCurrentKey}) on every path that opens one — a scope, the switcher's names and icons, a slug —
+ * so no path decrypts under an epoch this device already knows to be superseded.
+ *
  * A grant at or above the epoch this device holds must reach the key it holds (ADR 0111 decision 23,
  * {@link requireLinkToHeld}), else it is refused as `epoch_unlinked` before the key is used. A grant that opened is then
  * held: this device's epoch floor for the scope rises to its epoch (ADR 0024 Decision 6) — the epoch is authentic because
@@ -253,6 +257,7 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
 async function openOwnGrant(
   scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
+  if (scope.grantedEpoch < (await epochFloor(scope.id))) throw new AwaitingCurrentKey(scope.id)
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self, scope.tenantId)
   const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
   try {
@@ -342,7 +347,6 @@ async function toOpenedScope(
   staleGrant: 'refuse' | 'open' = 'refuse',
 ): Promise<OpenedScope> {
   if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
-  if (scope.grantedEpoch < (await epochFloor(scope.id))) throw new AwaitingCurrentKey(scope.id)
   const grantKey = await openOwnGrant(scope, priv, self)
   const epochs = await epochKeysFor(scope, grantKey)
   let name: string | undefined
@@ -387,7 +391,6 @@ export async function openPlanGrantKey(row: RotationPlanScope): Promise<Uint8Arr
   try {
     const scope = rowOfPlan(row)
     if (scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
-    if (scope.grantedEpoch < (await epochFloor(scope.id))) throw new AwaitingCurrentKey(scope.id)
     return await openOwnGrant(scope, priv, await me(priv))
   } finally {
     zero(priv)
