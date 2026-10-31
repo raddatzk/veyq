@@ -124,13 +124,19 @@ def stamp_cases() -> None:
     try:
         e2e.major_entry_ref = lambda major=None, root=None: (asked.append(major), "v1.10")[1]
         stamped = release_assets.major_entry("2.3")
+        asked_for_stamp = list(asked)
+        with tempfile.TemporaryDirectory(prefix="major-entry-manifest-") as out:
+            dest = release_assets.produce(pathlib.Path(out), "veyq:local", "veyq-admin:local", False, release="2.3")
+            manifest = json.loads((dest / release_assets.MANIFEST).read_text())
         e2e.major_entry_ref = lambda major=None, root=None: None
         none = release_assets.major_entry("2.0")
     finally:
         e2e.major_entry_ref = real
     check("stamp: the tools image bakes run_web_e2e's major entry for the release's major, as `<major>.<minor>`",
-          stamped == "1.10" and asked == [2], f"{stamped!r}, asked for {asked}")
+          stamped == "1.10" and asked_for_stamp == [2], f"{stamped!r}, asked for {asked_for_stamp}")
     check("stamp: no entry, no stamp", none is None, repr(none))
+    check("stamp: the release's manifest names the same entry as `majorEntry`, which veyqctl routes by",
+          manifest.get("majorEntry") == "1.10", repr(manifest.get("majorEntry")))
 
 
 def history_cases() -> None:

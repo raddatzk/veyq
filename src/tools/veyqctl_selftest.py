@@ -8,9 +8,11 @@ what prove it. Everything here runs against a mirror directory this file writes 
   1. **the resolver** — `VEYQ_RELEASE` per line of ADR 0096 decision 4 (a pin, a major, `latest`) against a mirror
      whose minors sort differently as strings (`1.12` after `1.7`), prereleases never taken and a pin to one refused,
      a selector that selects nothing refused, and the newer major `check` reports; and ADR 0096 decision 5 step 1 on
-     top of it (`upgrade_target`): a later major entered only from the running major's last release, never more than
-     one major per run, a pin in the next major reached directly from its predecessor's last, a prerelease never the
-     "last" of a major, a next major without a release refused;
+     top of it (`upgrade_target`): a later major entered only from the release its manifest names as `majorEntry`,
+     never more than one major per run, a pin in the next major reached directly from its entry, a fix release of the
+     old major cut after the new one (1.10 after 2.0, entered from 1.9) never a way in — from below it stops on 1.9,
+     from 1.10 it waits for a release of major 2 entered from 1.10 —, a next major without a release refused, the
+     entry read only from a verified manifest;
   2. **the manifest parse** — the fields veyqctl reads, and a refusal for each way one is wrong: another release's
      manifest, an image missing, `unscheduled` not a boolean, an asset name that is a path (`../`, a directory), an
      asset without a sha256, a required asset missing;
@@ -257,9 +259,9 @@ def bundle_token(blob: bytes) -> str:
 
 
 def write_release(root: pathlib.Path, tag: str, *, prerelease=False, app="veyq:local", admin="veyq-admin:local",
-                  files=None, manifest_edit=None, signed=False) -> None:
+                  files=None, manifest_edit=None, signed=False, entry=None) -> None:
     """One release in the mirror layout, as `release_assets.py` writes it — and, `signed`, as the publish leaves it:
-    with the manifest's bundle beside it."""
+    with the manifest's bundle beside it. `entry` is its `majorEntry` (null by default)."""
     files = files or {vc.COMPOSE_ASSET: COMPOSE, vc.TEMPLATE_ASSET: TEMPLATE, vc.BACKUP_ASSET: "# backup tool\n",
                       vc.SELF_ASSET: "# veyqctl\n", "garage.toml": "# garage\n"}
     d = root / tag
@@ -267,7 +269,8 @@ def write_release(root: pathlib.Path, tag: str, *, prerelease=False, app="veyq:l
     for name, text in files.items():
         (d / name).write_text(text)
     manifest = {"release": tag[1:], "date": "2026-10-16", "images": {"app": app, "admin": admin},
-                "unscheduled": False, "assets": {name: sha(text.encode()) for name, text in files.items()}}
+                "unscheduled": False, "majorEntry": entry,
+                "assets": {name: sha(text.encode()) for name, text in files.items()}}
     if manifest_edit:
         manifest_edit(manifest)
     # The producer's own form (indent 2, a final newline): a signature is over these bytes, and a verifier that
@@ -282,11 +285,16 @@ def write_release(root: pathlib.Path, tag: str, *, prerelease=False, app="veyq:l
     index.write_text(json.dumps(doc))
 
 
+NULL = object()  # manifest_bytes(key=NULL): the key present with a JSON null (None removes it)
+
+
 def manifest_bytes(**changes) -> bytes:
     doc = {"release": "1.12", "date": "2026-10-16", "images": {"app": SIGNED_APP, "admin": SIGNED_ADMIN},
-           "unscheduled": False, "assets": {a: "0" * 64 for a in vc.REQUIRED_ASSETS}}
+           "unscheduled": False, "majorEntry": "0.9", "assets": {a: "0" * 64 for a in vc.REQUIRED_ASSETS}}
     for key, value in changes.items():
-        if value is None:
+        if value is NULL:
+            doc[key] = None
+        elif value is None:
             doc.pop(key, None)
         else:
             doc[key] = value
@@ -325,43 +333,81 @@ def test_resolver(tmp: pathlib.Path) -> None:
 
 
 def test_major_entry() -> None:
-    """ADR 0096 decision 5 step 1, the resolution alone: where one `upgrade` from `running` goes."""
+    """ADR 0096 decision 5 step 1, the resolution alone: where one `upgrade` from `running` goes. `entries` stands for
+    each release's signed `majorEntry`; every read of one is recorded."""
     def listed(*releases: str, pre: tuple = ()) -> list:
         return [vc.Listed(f"v{r}", *(int(x) for x in r.split(".")), r in pre) for r in releases]
 
-    def goes(rel: list, running: str, selector: str) -> str:
+    def goes(rel: list, running: str, selector: str, entries: dict, read: list | None = None) -> str:
         chosen = vc.select(rel, selector, "the mirror")
-        return vc.upgrade_target(rel, tuple(int(x) for x in running.split(".")), chosen, "the mirror").release
+        entry_of = lambda r: ((read if read is not None else []).append(r.release), entries.get(r.release))[1]  # noqa: E731
+        return vc.upgrade_target(rel, tuple(int(x) for x in running.split(".")), chosen, "the mirror", entry_of).release
 
     two = listed("1.3", "1.9", "2.2", "2.5")
     three = listed("1.3", "1.9", "2.2", "2.5", "3.1")
-    # the control: within a major nothing stops on the way
-    check("major entry: within a major, 1.3 → 1.9 directly (control)", goes(two, "1.3", "1") == "1.9")
-    check("major entry: `latest` from 1.3 (1.9 the newest of major 1, 2.5 of all) stops on 1.9",
-          goes(two, "1.3", "latest") == "1.9")
-    check("major entry: a pin in the next major (2.5) from 1.3 stops on 1.9", goes(two, "1.3", "2.5") == "1.9")
-    check("major entry: `2` from 1.3 stops on 1.9", goes(two, "1.3", "2") == "1.9")
-    check("major entry: from 1.9, the last of major 1, a pin in major 2 (2.2) is reached directly",
-          goes(two, "1.9", "2.2") == "2.2")
+    at19 = {"2.2": "1.9", "2.5": "1.9", "3.1": "2.5"}
+    # the control: within a major nothing stops on the way, and no manifest is read for it
+    read: list = []
+    check("major entry: within a major, 1.3 → 1.9 directly, no entry read (control)",
+          goes(two, "1.3", "1", at19, read) == "1.9" and read == [], str(read))
+    read = []
+    check("major entry: `latest` from 1.3 (2.5 entered from 1.9) stops on 1.9, reading 2.5's entry alone",
+          goes(two, "1.3", "latest", at19, read) == "1.9" and read == ["2.5"], str(read))
+    check("major entry: a pin in the next major (2.5) from 1.3 stops on 1.9", goes(two, "1.3", "2.5", at19) == "1.9")
+    check("major entry: `2` from 1.3 stops on 1.9", goes(two, "1.3", "2", at19) == "1.9")
+    check("major entry: from 1.9, its entry, a pin in major 2 (2.2) is reached directly",
+          goes(two, "1.9", "2.2", at19) == "2.2")
     check("major entry: from 1.9, `latest` within the next major (2.5) is reached directly",
-          goes(two, "1.9", "latest") == "2.5")
+          goes(two, "1.9", "latest", at19) == "2.5")
     check("major entry: from 1.9 with 3.1 listed, `latest` enters major 2 only, at its newest (2.5)",
-          goes(three, "1.9", "latest") == "2.5")
-    check("major entry: from 1.9, a pin in major 3 (3.1) goes to the newest of major 2", goes(three, "1.9", "3.1") == "2.5")
-    check("major entry: from 1.3 with 3.1 listed, `latest` stops on 1.9 first", goes(three, "1.3", "latest") == "1.9")
-    check("major entry: a prerelease (1.10) is never the last of a major — from 1.9 `latest` goes to 2.5",
-          goes(listed("1.3", "1.9", "1.10", "2.5", pre=("1.10",)), "1.9", "latest") == "2.5")
+          goes(three, "1.9", "latest", at19) == "2.5")
+    check("major entry: from 1.9, a pin in major 3 (3.1) goes to the newest of major 2",
+          goes(three, "1.9", "3.1", at19) == "2.5")
+    check("major entry: from 1.3 with 3.1 listed, `latest` stops on 1.9 first", goes(three, "1.3", "latest", at19) == "1.9")
+    check("major entry: a prerelease (1.10) is never a way in — from 1.9 `latest` goes to 2.5",
+          goes(listed("1.3", "1.9", "1.10", "2.5", pre=("1.10",)), "1.9", "latest", at19) == "2.5")
     gap = listed("1.9", "2.0", "3.1", pre=("2.0",))
-    message = refused(lambda: goes(gap, "1.9", "latest"))
+    message = refused(lambda: goes(gap, "1.9", "latest", {"3.1": "2.0"}))
     check("major entry: a next major with only a prerelease is refused, naming it, never crossed",
           "no release of major 2" in message, message)
+
+    # The late fix release (ADR 0085 decision 10): 2.0 was cut from 1.9, then `release/1.x` released 1.10. Nobody
+    # proved 1.10 → 2.0, so it is no way in; 2.1, cut after 1.10, is entered from it.
+    late = listed("1.3", "1.9", "1.10", "2.0")
+    entries = {"2.0": "1.9"}
+    check("late fix: `latest` from 1.3 stops on 2.0's entry 1.9, not on the newest of major 1 (1.10)",
+          goes(late, "1.3", "latest", entries) == "1.9")
+    check("late fix: from 1.9 `latest` enters 2.0", goes(late, "1.9", "latest", entries) == "2.0")
+    message = refused(lambda: goes(late, "1.10", "latest", entries))
+    check("late fix: from 1.10 nothing of major 2 is entered from it yet — refused, naming both and the wait",
+          "entered from 1.9" in message and "runs 1.10" in message and "wait for it" in message
+          and "Nothing was stopped" in message, message)
+    check("late fix: …and within major 1 from 1.10 nothing is in the way of `1`", goes(late, "1.10", "1", entries) == "1.10")
+    fixed = listed("1.3", "1.9", "1.10", "2.0", "2.1")
+    entries = {"2.0": "1.9", "2.1": "1.10"}
+    check("late fix: once 2.1 (entered from 1.10) is out, `latest` from 1.10 enters 2.1",
+          goes(fixed, "1.10", "latest", entries) == "2.1")
+    check("late fix: …and `latest` from 1.3 now stops on 1.10, 2.1's entry", goes(fixed, "1.3", "latest", entries) == "1.10")
+    check("late fix: …while a pin to 2.0 from 1.9 is still reached directly", goes(fixed, "1.9", "2.0", entries) == "2.0")
+    message = refused(lambda: goes(fixed, "1.10", "2.0", entries))
+    check("late fix: a pin to 2.0 from 1.10 is refused, pointing at the major's newest",
+          "entered from 1.9" in message and "select `2`" in message, message)
+
+    message = refused(lambda: goes(two, "1.9", "latest", {}))
+    check("major entry: a next-major release whose manifest names no entry is refused, never crossed",
+          "names no release major 2 is entered from" in message, message)
+    message = refused(lambda: goes(listed("1.3", "2.5"), "1.3", "latest", at19))
+    check("major entry: an entry the source does not list is refused, naming it",
+          "lists no release 1.9" in message, message)
 
 
 def test_manifest() -> None:
     m = vc.parse_manifest(manifest_bytes(), "v1.12")
     check("manifest: the fields veyqctl reads",
-          (m.release, m.app, m.admin, m.unscheduled, sorted(m.assets)) ==
-          ("1.12", SIGNED_APP, SIGNED_ADMIN, False, sorted(vc.REQUIRED_ASSETS)))
+          (m.release, m.app, m.admin, m.unscheduled, sorted(m.assets), m.major_entry) ==
+          ("1.12", SIGNED_APP, SIGNED_ADMIN, False, sorted(vc.REQUIRED_ASSETS), "0.9"))
+    check("manifest: a null `majorEntry` (no release of the major before) parses as none",
+          vc.parse_manifest(manifest_bytes(majorEntry=NULL), "v1.12").major_entry is None)
     # A release names a third image, `images.tools` (ADR 0098: a cluster's backup gate runs it, Compose never does);
     # veyqctl reads the two it runs and still parses the manifest whole.
     tools = "ghcr.io/raddatzk/veyq-tools:1.12@sha256:" + "c" * 64
@@ -377,12 +423,20 @@ def test_manifest() -> None:
         "an asset without a sha256": (manifest_bytes(assets={**{a: "0" * 64 for a in vc.REQUIRED_ASSETS},
                                                              "garage.toml": "abc"}), "no sha256"),
         "a required asset missing": (manifest_bytes(assets={vc.COMPOSE_ASSET: "0" * 64}), "lacks"),
+        "no `majorEntry`": (manifest_bytes(majorEntry=None), "names no `majorEntry`"),
+        "a `majorEntry` of its own major": (manifest_bytes(majorEntry="1.11"), "no release of the major before"),
+        "a `majorEntry` of a later major": (manifest_bytes(majorEntry="2.0"), "no release of the major before"),
+        "a `majorEntry` that is no release": (manifest_bytes(majorEntry="v0.9"), "no release of the major before"),
+        "a `majorEntry` that is no string": (manifest_bytes(majorEntry=9), "no release of the major before"),
         "no asset list": (manifest_bytes(assets=None), "lists no"),
         "not JSON": (b"{", "not JSON"),
     }
     for what, (raw, needle) in cases.items():
         message = refused(vc.parse_manifest, raw, "v1.12")
         check(f"manifest: {what} is refused", needle in message, message or "accepted")
+    message = refused(vc.parse_manifest, manifest_bytes(release="2.1", majorEntry="0.9"), "v2.1")
+    check("manifest: a `majorEntry` two majors back is refused", "no release of the major before" in message,
+          message or "accepted")
 
 
 def test_assets_on_disk(tmp: pathlib.Path) -> None:
@@ -588,9 +642,10 @@ INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@
 
 
 def upgrade_mirror(root: pathlib.Path) -> pathlib.Path:
-    """v1.3 → v1.7 → v1.12 → v2.1, and a prerelease v2.2; each release names images of its own."""
+    """v1.3 → v1.7 → v1.12 → v2.1 (entered from 1.12), and a prerelease v2.2; each release names images of its own."""
     for tag, pre in (("v1.3", False), ("v1.7", False), ("v1.12", False), ("v2.1", False), ("v2.2", True)):
-        write_release(root, tag, prerelease=pre, app=f"veyq:{tag[1:]}", admin=f"veyq-admin:{tag[1:]}")
+        write_release(root, tag, prerelease=pre, app=f"veyq:{tag[1:]}", admin=f"veyq-admin:{tag[1:]}",
+                      entry="1.12" if tag.startswith("v2.") else None)
     return root
 
 
@@ -647,7 +702,8 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
     home = installed(tmp, "home-check", mirror, "1.3", "latest")
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        rc = vc.main(["--home", str(home), "check"], FakeHost(local_images=all_images(), project="veyq-proof"))
+        rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
+                     FakeHost(local_images=all_images(), project="veyq-proof"))
     check("check: from 1.3 with `latest`, `upgrade` would take 1.12 and the one after it enters major 2",
           rc == 0 and "would take release 1.12" in out.getvalue()
           and "the `upgrade` after that one enters major 2" in out.getvalue(), out.getvalue()[-400:])
@@ -1389,6 +1445,41 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
         vc.SELF = saved
 
 
+def test_entry_signed(tmp: pathlib.Path) -> None:
+    """A major's entry is a field of a SIGNED manifest, read only once that manifest verified: a mirror that rewrites
+    2.0's `majorEntry` to the late fix 1.10 (to route an instance through the path nobody proved) is refused by the
+    signature, never routed by it; and an upgrade reads each manifest once, the one it installs included."""
+    def mirror(name: str) -> pathlib.Path:
+        root = tmp / name
+        for tag, entry in (("v1.9", "0.4"), ("v1.10", "0.4"), ("v2.0", "1.9")):
+            write_release(root, tag, app=f"ghcr.io/raddatzk/veyq:{tag[1:]}@{DIGEST_A}",
+                          admin=f"ghcr.io/raddatzk/veyq-admin:{tag[1:]}@{DIGEST_B}", signed=True, entry=entry)
+        return root
+
+    good = vc.DirSource(mirror("mirror-entry-signed"))
+    listed = good.releases()
+    host = FakeHost(signed=SIGNED_TARGETS)
+    manifest_of = vc.manifest_reader(host, good, False)
+    with contextlib.redirect_stdout(io.StringIO()):
+        target = vc.upgrade_target(listed, (1, 9), vc.select(listed, "latest", "x"), "x",
+                                   lambda r: manifest_of(r).major_entry)
+        manifest_of(vc.select(listed, "2.0", "x"))
+    check("entry signed: from 1.9 the verified 2.0 manifest's entry admits 2.0", target.release == "2.0")
+    check("entry signed: the manifest the run installs is the one it routed by, verified once",
+          len(host.ran("verify-blob")) == 1, str(host.commands))
+
+    forged = mirror("mirror-entry-forged")
+    path = forged / "v2.0" / vc.MANIFEST_ASSET
+    path.write_text(path.read_text().replace('"majorEntry": "1.9"', '"majorEntry": "1.10"'))
+    source = vc.DirSource(forged)
+    host = FakeHost(signed=SIGNED_TARGETS)
+    manifest_of = vc.manifest_reader(host, source, False)
+    message = refused(lambda: vc.upgrade_target(source.releases(), (1, 10), vc.select(source.releases(), "latest", "x"),
+                                                "x", lambda r: manifest_of(r).major_entry))
+    check("entry signed: a `majorEntry` rewritten after signing is refused at `verify-blob`, never routed by",
+          "does not verify" in message and bool(host.ran("verify-blob")), message)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
@@ -1410,6 +1501,7 @@ def main() -> int:
         test_retention_and_ledger(tmp)
         test_self_update(tmp)
         test_manifest_signature(tmp)
+        test_entry_signed(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1

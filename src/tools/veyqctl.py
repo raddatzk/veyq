@@ -7,7 +7,7 @@
     start | stop | status                            the stack, addressed by the project the recipe names
     logs [-f] [--tail N] [SERVICE …]                 its logs
     verify [--release SEL] [--unsigned-local]        the signatures of the selected release, and nothing else
-    check [--release SEL]                            which release `upgrade` would take, and a newer major beyond it
+    check [--release SEL] [--unsigned-local]         which release `upgrade` would take, and a newer major beyond it
     upgrade --key-into FILE [--objects-to P] [--unsigned-local]   toward what VEYQ_RELEASE selects (decision 5's order)
     backup --key-into FILE [--objects-to P]          the three legs, by the running release's `instance_backup.py`
     backup prune                                     every capture under backups/ older than B (a daily timer's)
@@ -45,12 +45,15 @@ in it (`../`) is refused: a release's assets are flat names, by construction of 
 
 **`VEYQ_RELEASE` in `.env` selects the release** (decision 4): `<major>.<minor>` pins one, `<major>` takes the newest
 of that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes
-it into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the last release
-of the one before (decision 5 step 1, `upgrade_target`): a selector beyond the running major takes the running major's
-newest release first when the running one is not it, and never more than the next major — so `latest` from 1.3, with
-1.9 the newest of major 1, goes to 1.9, and from 1.9 with 3.1 listed to the newest of major 2. A pin inside the next
-major is reached directly from its predecessor's last release; a next major with no release (only prereleases, or a
-mirror that lacks it) is refused, since going past it would cross two.
+it into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the release that
+major's release names as its entry (decision 5 step 1, `upgrade_target`): `majorEntry` in its signed manifest, the
+newest release of the previous major when it was cut — the one its upgrade proof ran from (ADR 0085 decision 10) — and
+never more than the next major per run. So `latest` from 1.3, with 2.5 entered from 1.9, goes to 1.9, and from 1.9
+with 3.1 listed to the newest of major 2; a pin inside the next major is reached directly from its entry. A fix release
+of the old major cut after it (1.10) is no way in: 2.5 was never proved from it, and from 1.10 only a later release of
+major 2 (entered from 1.10) is taken, else the upgrade is refused. A next major with no release (only prereleases, or a
+mirror that lacks it) is refused, since going past it would cross two. Reading an entry fetches and verifies that
+release's manifest, so `check` verifies too.
 
 **Nothing unverified is pulled or started** (ADR 0057). First the manifest: the publish signs it with `cosign
 sign-blob` into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest
@@ -483,8 +486,8 @@ def open_source(spec: str | None) -> Source:
 def check_selector(selector: str) -> str:
     if not SELECTOR.match(selector or ""):
         raise Refused(f"{RELEASE_KEY}={selector!r} selects nothing: it is `<major>.<minor>` (pinned), `<major>` (the "
-                      f"newest of that major) or `latest` (the newest; `upgrade` enters each major from the last "
-                      f"release of the one before)")
+                      f"newest of that major) or `latest` (the newest; `upgrade` enters each major from the release "
+                      f"it names as its entry)")
     return selector
 
 
@@ -510,27 +513,48 @@ def newest_of(listed: list[Listed], major: int) -> Listed | None:
     return max(of, key=lambda r: (r.major, r.minor)) if of else None
 
 
-def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Listed, where: str) -> Listed:
+def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Listed, where: str,
+                   entry_of: Callable[[Listed], str | None]) -> Listed:
     """Where an `upgrade` from `running` toward `chosen` (above it) goes in this run — ADR 0096 decision 5 step 1.
 
-    A major is entered only from the last release of the one before, the one path the lanes test (ADR 0091 decision
-    6), and no run crosses more than one major: so `chosen` itself within the running major, or in the next one when
-    the running release is the newest of its own; otherwise the stop on the way — the running major's newest release,
-    or (from that one) the next major's newest. "Newest" never counts a prerelease."""
+    No run crosses more than one major, and a major is entered only from the release its own upgrade proof ran from
+    (ADR 0085 decision 10): the one its signed manifest names as `majorEntry`, which `entry_of` reads — the newest
+    release of the previous major when it was cut, a `release/<major>.x` fix included. Not simply the running major's
+    newest NOW: a fix release cut after the next major's release (1.10 after 2.0, entered from 1.9) is one nobody
+    proved 2.0 from, and its migrations may be ones 2.0 lacks. So the gate is `chosen` in the next major, or that
+    major's newest when `chosen` lies beyond it; this run takes the gate when the instance runs its entry, else the
+    entry on the way; and an instance past the entry is refused, since a later release of the next major (whose entry is
+    the newest of the running major then) is the one that enters from it. Within a major `chosen` itself. "Newest"
+    never counts a prerelease."""
     major = running[0]
     if chosen.major <= major:
         return chosen
-    last = newest_of(listed, major)
-    if last is not None and (last.major, last.minor) > running:
-        return last
-    if chosen.major == major + 1:
-        return chosen
-    entry = newest_of(listed, major + 1)
-    if entry is None:
+    gate = chosen if chosen.major == major + 1 else newest_of(listed, major + 1)
+    if gate is None:
         raise Refused(f"{chosen.release} lies beyond major {major + 1}, and {where} lists no release of major "
                       f"{major + 1} to enter it from: a run never crosses more than one major (ADR 0096 decision 5). "
                       f"Nothing was stopped.")
-    return entry
+    entry = entry_of(gate)
+    if entry is None:
+        raise Refused(f"the manifest of {gate.tag} names no release major {major + 1} is entered from (`majorEntry`), so "
+                      f"no upgrade into it from major {major} was proved (ADR 0096 decision 5). Nothing was stopped.")
+    at = tuple(int(x) for x in entry.split("."))
+    if at == running:
+        return gate
+    if at > running:
+        stop = next((r for r in listed if (r.major, r.minor) == at and not r.prerelease), None)
+        if stop is None:
+            raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), and {where} lists no "
+                          f"release {entry} to go through (ADR 0096 decision 5). Nothing was stopped.")
+        return stop
+    running_release = f"{running[0]}.{running[1]}"
+    raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), and this instance runs "
+                  f"{running_release}, a later release of major {major}: no upgrade from {running_release} into "
+                  f"{gate.release} was proved, and {running_release} may carry migrations {gate.release} lacks (ADR "
+                  f"0096 decision 5). A later release of major {major + 1} is entered from {running_release} or after: "
+                  + (f"select `{major + 1}` for the newest one, or wait for it." if gate is chosen and chosen != newest_of(listed, major + 1)
+                     else f"wait for it — none is listed yet.")
+                  + " Nothing was stopped.")
 
 
 def newer_major(listed: list[Listed], chosen: Listed) -> Listed | None:
@@ -549,6 +573,7 @@ class Manifest(NamedTuple):
     assets: dict  # asset name -> sha256 hex
     raw: bytes = b""  # the manifest as the source served it, kept verbatim beside the release
     bundle: bytes = b""  # its signature as the source served it, verified; empty under --unsigned-local
+    major_entry: str | None = None  # `majorEntry`: the previous major's release this one is entered from, or none
 
 
 def parse_manifest(raw: bytes, tag: str) -> Manifest:
@@ -567,6 +592,15 @@ def parse_manifest(raw: bytes, tag: str) -> Manifest:
     unscheduled = doc.get("unscheduled")
     if not isinstance(unscheduled, bool):
         raise Refused(f"the manifest of {tag} has no boolean `unscheduled`")
+    # The release the producer derived as this major's entry (`release_assets.major_entry`): null where the previous
+    # major has none, else one of the previous major's releases. The key itself is required — every manifest carries it.
+    if "majorEntry" not in doc:
+        raise Refused(f"the manifest of {tag} names no `majorEntry` — the release its major is entered from, or null")
+    major_entry = doc["majorEntry"]
+    entry = TAG.match(f"v{major_entry}") if isinstance(major_entry, str) else None
+    if major_entry is not None and (entry is None or int(entry.group(1)) != int(release.split(".")[0]) - 1):
+        raise Refused(f"the manifest of {tag} gives `majorEntry` {major_entry!r}, which is no release of the major "
+                      f"before {release}")
     assets = doc.get("assets")
     if not isinstance(assets, dict) or not assets:
         raise Refused(f"the manifest of {tag} lists no `assets` — veyqctl takes a release's files from that list")
@@ -580,7 +614,7 @@ def parse_manifest(raw: bytes, tag: str) -> Manifest:
     if missing:
         raise Refused(f"the manifest of {tag} lacks {', '.join(missing)}, which every release carries")
     return Manifest(release, str(doc.get("date") or ""), images["app"], images["admin"], unscheduled, dict(assets),
-                    bytes(raw))
+                    bytes(raw), major_entry=major_entry)
 
 
 def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: bool) -> Manifest:
@@ -600,6 +634,18 @@ def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: b
                       f"--unsigned-local. Nothing was pulled, written or started.") from None
     verify_manifest(host, cosign, raw, bundle, f"the manifest of {chosen.tag} from {source.describe()}")
     return parse_manifest(raw, chosen.tag)._replace(bundle=bytes(bundle))
+
+
+def manifest_reader(host: Host, source: Source, unsigned_local: bool) -> Callable[[Listed], Manifest]:
+    """[fetch_manifest] for one run, each release's manifest fetched and verified once: `upgrade_target` reads a
+    major's entry from the same verified manifest the run then installs."""
+    seen: dict[str, Manifest] = {}
+
+    def read(chosen: Listed) -> Manifest:
+        if chosen.tag not in seen:
+            seen[chosen.tag] = fetch_manifest(host, source, chosen, unsigned_local)
+        return seen[chosen.tag]
+    return read
 
 
 # ---- verification ---------------------------------------------------------------------------------------------
@@ -1114,8 +1160,8 @@ def cmd_verify(args: argparse.Namespace, host: Host) -> int:
 
 def entry_note(selector: str, chosen: Listed, target: Listed, then: str) -> str:
     """What a run that stops short of `chosen` says: the selected release, the rule, and the major `then` enters."""
-    return (f"{RELEASE_KEY}={selector} selects {chosen.release}, and a major is entered only from the last release of "
-            f"the one before (ADR 0096 decision 5): {then} enters major {target.major + 1}")
+    return (f"{RELEASE_KEY}={selector} selects {chosen.release}, and a major is entered only from the release its "
+            f"manifest names as its entry (ADR 0096 decision 5): {then} enters major {target.major + 1}")
 
 
 def cmd_check(args: argparse.Namespace, host: Host) -> int:
@@ -1132,7 +1178,8 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
         say(f"{RELEASE_KEY}={selector}: release {chosen.release} runs already; `upgrade` would do nothing")
     else:
         current = tuple(int(x) for x in running.split(".")) if running else None
-        target = (upgrade_target(listed, current, chosen, source.describe())
+        manifest_of = manifest_reader(host, source, args.unsigned_local)
+        target = (upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
                   if current and (chosen.major, chosen.minor) > current else chosen)
         say(f"{RELEASE_KEY}={selector}: `upgrade` would take release {target.release}"
             + (f" (running: {running})" if running else ""))
@@ -1480,13 +1527,14 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the running {state.release}. "
                       f"An upgrade migrates the schema and there is no downgrade: going back is restoring a backup "
                       f"taken under that release (ADR 0056 §6). Nothing was stopped.")
-    chosen = upgrade_target(listed, running, selection, source.describe())
+    manifest_of = manifest_reader(host, source, args.unsigned_local)
+    chosen = upgrade_target(listed, running, selection, source.describe(), lambda r: manifest_of(r).major_entry)
     say(f"step 1: {RELEASE_KEY}={selector} takes release {chosen.release} (running: {state.release})"
-        + (f" — {selection.release} lies in a later major, entered from the last release of the one before"
+        + (f" — {selection.release} lies in a later major, entered from the release its manifest names"
            if chosen != selection else ""))
 
     # 2. its manifest verified, both images verified by the manifest's digests, then its assets into releases/<release>/
-    manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
+    manifest = manifest_of(chosen)
     verify_images(host, manifest, args.unsigned_local)
     directory = fetch_release(source, chosen, manifest, home)
     say(f"step 2: release {manifest.release} fetched and " + ("NOT verified (--unsigned-local)" if args.unsigned_local
@@ -1786,10 +1834,12 @@ def parser() -> argparse.ArgumentParser:
 
     check = sub.add_parser("check", help="which release `upgrade` would take, and a newer major beyond it")
     check.add_argument("--release", default=None, help="a selector instead of .env's VEYQ_RELEASE")
+    check.add_argument("--unsigned-local", action="store_true",
+                       help="read a local build's manifests unverified (a major's entry is read from one)")
     check.set_defaults(func=cmd_check)
 
     upgrade = sub.add_parser("upgrade", help="move toward the release .env's VEYQ_RELEASE selects, entering a major "
-                                             "only from the last release of the one before (ADR 0096 decision 5)")
+                                             "only from the release it names as its entry (ADR 0096 decision 5)")
     upgrade.add_argument("--key-into", metavar="FILE", help="where the backup's leg (c) goes — required, its own medium")
     upgrade.add_argument("--unsigned-local", action="store_true",
                          help="a release produced from a local docker build: no signature is checked")
