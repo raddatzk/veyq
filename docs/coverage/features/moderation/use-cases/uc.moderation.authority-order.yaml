@@ -71,7 +71,7 @@ acceptanceCriteria:
       statement, never as a removal (uc.moderation.object-to-a-measure).
     coverage:
       backend:
-        integration: [AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementAndNoRemoval, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
+        integration: [AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementOfTheirOwnInitiativeAndNoRemoval, GuestStatementsSliceTest.onARemovalOrdersCaseTheOrderIsARemovalAndAModeratorsFurtherMeasureAStatementOfTheirOwnInitiative, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
       web:
         unit: [src/core/sharing/OrderNotice.test.ts]
 gaps:

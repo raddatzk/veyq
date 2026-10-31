@@ -42,8 +42,11 @@ client compares each epoch's derived public bundle with the published one on eve
   a mint whose grants do not cover exactly the accepted moderators.
 - **Delivered** by a holder's client to an accepted moderator missing an epoch, after the anchor check; only by an
   account holding a grant of that epoch, only to an accepted moderator, idempotent.
-- **Deleted** for every epoch at once when the moderator is removed, steps down, or rotates their identity (then the
-  delivery becomes pending again at the new identity).
+- **Deleted** for every epoch at once when the moderator is removed or steps down.
+- **Re-sealed** by the moderator's own client when they secure their account: every live epoch they hold, to the new
+  identity, inside the securing publish, which replaces the grants sealed to the old one and is refused without them
+  (ADR 0099 § 4). An epoch their device cannot open is declared, deleted, and its delivery pending again at the new
+  identity.
 
 ## The key proof
 

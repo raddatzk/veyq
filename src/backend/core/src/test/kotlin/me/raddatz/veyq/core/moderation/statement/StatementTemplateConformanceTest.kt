@@ -122,6 +122,38 @@ class StatementTemplateConformanceTest {
     }
 
     @Test
+    fun aMeasureOnACaseNoReportOpenedIsTheHostsOwnInitiativeAndOnlyARemovalOrdersOwnBlockNamesTheOrder() {
+        // DSA Art. 17(3)(b) asks: an Art. 16 notice, or own initiative (inbox #820). A report's case reads the report; a
+        // case an authority's order opened — no Art. 16 notice — and no case at all read own initiative; a restored case's
+        // stub reads as a report's. `ORDER` is never a host's measure's: only a removal order's own block.
+        assertEquals(StatementBasis.REPORT, StatementBasis.ofCase("REPORT"))
+        assertEquals(StatementBasis.OWN_FINDING, StatementBasis.ofCase("ORDER"))
+        assertEquals(StatementBasis.REPORT, StatementBasis.ofCase("RESTORED"))
+        assertEquals(StatementBasis.OWN_FINDING, StatementBasis.ofCase(null))
+        val fields = StatementFields(
+            measureKind = "CONTENT", roles = listOf(StatementRole.SCOPE_OWNER), basis = StatementBasis.OWN_FINDING,
+            ground = StatementGround.ILLEGAL_CONTENT, date = "2026-10-31 09:00 UTC", contact = "abuse@example.org", hasFacts = true,
+            provision = "§ 130 StGB",
+        )
+        // The own-initiative words name neither an order nor a report, so a confidential order is never revealed.
+        val en = StatementTemplate.renderMail(StatementLang.EN, fields, "club.example.org")
+        assertTrue(en.contains("The measure was taken after their own finding."), en)
+        assertFalse(en.contains("authority") || en.contains("report by"), en)
+        val de = StatementTemplate.renderMail(StatementLang.DE, fields, "club.example.org")
+        assertTrue(de.contains("Die Maßnahme wurde ergriffen nach eigener Feststellung."), de)
+        assertFalse(de.contains("Behörde") || de.contains("Meldung"), de)
+        // The other bases read in the dative "nach" asks for: a report's and an order's own.
+        assertTrue(
+            StatementTemplate.renderMail(StatementLang.DE, fields.copy(basis = StatementBasis.REPORT), "x")
+                .contains("Die Maßnahme wurde ergriffen nach einer Meldung von jemandem, der es sehen konnte."),
+        )
+        assertTrue(
+            StatementTemplate.renderMail(StatementLang.DE, fields.copy(basis = StatementBasis.ORDER), "x")
+                .contains("Die Maßnahme wurde ergriffen nach einer Anordnung einer Behörde. "),
+        )
+    }
+
+    @Test
     fun aServerOwnersStepCarriesItsFactsAndSendsTheObjectionToTheContact() {
         val fields = StatementFields(
             measureKind = "TENANT_OFFLINE", roles = listOf(StatementRole.TENANT_OWNER), basis = StatementBasis.OWN_FINDING,

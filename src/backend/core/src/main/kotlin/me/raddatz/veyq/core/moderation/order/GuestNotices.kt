@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.generated.model.ModerationGround
 import me.raddatz.veyq.core.generated.model.ShareGuestNotice
 import me.raddatz.veyq.core.generated.model.ShareGuestStatement
 import me.raddatz.veyq.core.generated.model.ShareOrderRemoval
+import me.raddatz.veyq.core.generated.model.StatementBasis as WireBasis
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
@@ -46,7 +47,8 @@ import java.util.UUID
  *    (TCO Art. 11(3), ADR 0093 § 7): the same row the statement's mail waits on, so the two cannot disagree.
  *
  * An order's own statements (basis `ORDER`) count as removals only on a case a removal order opened; a moderator's
- * measure (basis `REPORT`, a case's, of a kind with a wire name) as a statement. Anything else — and nothing to tell —
+ * measure as a statement — every other basis (`REPORT`, or `OWN_FINDING` on a case an order opened, inbox #820), of a
+ * kind with a wire name, on a case — whose basis the guest reads as a member does. Anything else — and nothing to tell —
  * answers null, which the resource turns into the link's ordinary unknown answer: the read tells nobody else the link
  * exists. The server learns nothing it did not hold: the rows are the measure's own, and the read is § 12's.
  */
@@ -69,7 +71,7 @@ class GuestNotices(private val store: SharingStore, private val operator: Operat
                 .map { it.receivedAt }
                 .distinct()
                 .sorted()
-            val statements = standing.filter { (s, _) -> s.basis == StatementBasis.REPORT.name }
+            val statements = standing.filter { (s, _) -> s.basis != StatementBasis.ORDER.name }
                 .mapNotNull { (s, m) -> view(s, m) }
                 .sortedWith(compareByDescending<ShareGuestStatement> { it.takenAt }.thenBy { it.id })
             if (received.isEmpty() && statements.isEmpty()) return@call null
@@ -98,6 +100,7 @@ class GuestNotices(private val store: SharingStore, private val operator: Operat
             covers = if (m.blockKind == BlockKind.CONTENT_UPLOADER) ModerationBlockReachEntity.list("blockId", m.id).map { it.targetId } else emptyList(),
             ground = ModerationGround.valueOf(s.ground),
             provision = s.provision,
+            basis = WireBasis.valueOf(s.basis),
             takenAt = m.takenAt.atOffset(ZoneOffset.UTC),
         )
     }

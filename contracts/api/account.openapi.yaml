@@ -603,8 +603,8 @@ paths:
         (an unspent envelope carries the *old* Master Key and a live delegated session); void every open change of the
         sign-in address (its proof was taken under the old proof key); delete the declines of every `grant-delivery`
         job whose target is this account (a worker that could not anchor the old key tries the new one); revoke every
-        other session; and **apply the stage** `stageId` — its self-grants, its re-signed invites and its join-record
-        endorsements (ADR 0111 decisions 20 and 21).
+        other session; and **apply the stage** `stageId` — its self-grants, its re-signed invites, its join-record
+        endorsements (ADR 0111 decisions 20 and 21) and the moderation-key epochs it re-sealed (ADR 0099 § 4).
 
         **The stage is applied here and nowhere else.** Under the account lock the server takes the stage: missing,
         expired, of another account, or declaring another identity bundle than `identityPublicKey` is
@@ -639,6 +639,20 @@ paths:
         only through the new key's endorsement, and one a thief signs with the retired key afterwards never counts.
         Neither list widens `stagedGrantsDigest`: a re-signed invite and an endorsement hand nobody a key, each carries
         the new identity's own signature verified at upload, and the publish installs only that identity (ADR 0111 decision 21).
+
+        **A holder of the instance moderation key keeps it** (ADR 0099 § 4). The grants of the moderation key sealed to the
+        identity this publish retires are treated as exposed and deleted, and where the caller held the current epoch a
+        rotation of the key is due. Under the current epoch's row lock — the lock every roster and key write takes, so
+        a delivery to the caller either committed before this read or waits and then meets the new identity (`409
+        identity_changed`) — the server requires every live epoch the caller holds a grant of to be staged
+        (`putRotationStageModerationGrants`), re-sealed to the new identity or declared; otherwise `409
+        rotation_plan_changed`, nothing written. It writes each re-sealed one as the caller's grant of that epoch in
+        place of the one it deletes; a declared one is not written, and a staged epoch the caller no longer holds is not
+        written either (writing it would hand the key to an account the roster dropped). So a sole holder — the Server
+        Owner right after first-run setup — keeps the key through securing their account, and an account that holds no
+        grant stages nothing and meets no check. The grants do not widen `stagedGrantsDigest`: they are unsigned, as
+        every moderation grant is, and hand the key only to the identity this publish installs, whose client checks
+        each against the published bundle (ADR 0099 § 3).
 
         **One mode, and the request cannot express another.** There is no `mode`, no `identityOnly`, no `scopes`
         subset, and every field is required. Every path to the identity private key runs through the Master Key, so an
@@ -722,7 +736,8 @@ paths:
             documents. `rotation_plan_changed` — the stage is missing, expired or declares another identity, its digest
             is not `stagedGrantsDigest`, a membership that carries a grant is neither staged at its scope's current
             epoch nor in `unreadableScopeIds`, an open member invite the caller signed is not staged at its current
-            anchor epoch, or a join record the caller rooted is neither endorsed nor declared in the stage; the client
+            anchor epoch, a join record the caller rooted is neither endorsed nor declared in the stage, or a live
+            epoch of the moderation key the caller holds is neither re-sealed nor declared in it; the client
             re-reads the plans, re-stages the delta (or opens a new stage) and resubmits. **Nothing was written** in any case — a half-rotated account is a lockout, not a degraded
             state.
           content:
@@ -1124,6 +1139,71 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: join_endorsement_invalid }
+
+  /api/account/rotation/stage/{stageId}/moderation-grants:
+    put:
+      tags: [account-rotation]
+      operationId: putRotationStageModerationGrants
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder stages into their own stage, and an epoch staged twice is the same key
+          re-sealed (or declared) by the caller's client. What the publish applies is checked there against every live
+          epoch the caller holds, under the current epoch's row lock.
+      summary: Stage the caller's live epochs of the instance moderation key, re-sealed to the identity the stage declares.
+      description: >
+        Upserts up to 256 epochs into the stage, by `epoch` (ADR 0099 § 4, ADR 0060 Decision 4). A holder of the instance
+        moderation key secures their account without losing it: their client, which opens every grant it holds with the
+        identity it is retiring (`listMyModerationGrants`, checked against each epoch's published bundle), seals each
+        `M_n` to the identity the stage declares (`sealTo` purpose `moderation-grant` [epoch], as a delivery seals) and
+        stages it here; the publish then writes those grants in place of the ones it deletes. An entry whose
+        `sealedGrant` is `null` **declares** the epoch instead: a grant this device cannot open, or whose key the
+        published bundle disowns — the publish deletes it, as it was already closed to the account, and a holder
+        delivers it again at the new identity. An epoch the caller holds no grant of is `409 rotation_plan_changed`.
+        The server opens nothing: the grants are opaque, unsigned as every moderation grant is (ADR 0099 § 3), and hand
+        the key only to the identity the publish installs, so the stage digest does not cover them. Nothing of a
+        refused chunk is written; nothing staged is applied before the publish.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: stageId, in: path, required: true, description: The stage `openRotationStage` answered., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RotationStageModerationGrants" }
+      responses:
+        "204":
+          description: The chunk is staged.
+        "400":
+          description: The request was malformed (more than 256 epochs, a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No open stage of the caller has this id — unknown, expired, replaced, or another account's (indistinguishable,
+            `rotation_stage_not_found`). The client opens a new stage and stages everything again. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_stage_not_found }
+        "409":
+          description: >
+            An epoch the caller holds no grant of — no live epoch, or one never delivered to the caller, the same answer
+            (`rotation_plan_changed`); the client re-reads its grants. Nothing of the chunk was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_plan_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/rotation/scopes:
     get:
@@ -2779,6 +2859,46 @@ components:
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotationStageModerationGrants:
+      type: object
+      description: One chunk of the caller's moderation-key epochs, re-sealed or declared. At most 256 a chunk.
+      required: [grants]
+      properties:
+        grants:
+          type: array
+          description: The epochs of this chunk, upserted by `epoch`.
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/StagedModerationGrant" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 256)'
+
+    StagedModerationGrant:
+      type: object
+      description: >
+        A live epoch of the instance moderation key the caller holds, its `M_n` re-sealed to the identity the stage
+        declares — or declared (`sealedGrant: null`): a grant this device cannot open, or whose key the published bundle
+        disowns, which the publish deletes.
+      required: [epoch]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: The epoch — one the caller holds a grant of (`409 rotation_plan_changed` otherwise).
+          minimum: 1
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.NotNull'
+        sealedGrant:
+          type: [string, "null"]
+          description: >
+            `M_n` sealed to the identity the stage declares (`sealTo` purpose `moderation-grant` [epoch]) — opaque to the
+            server; `null` declares the epoch, and the publish deletes its grant.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotationScopeState:
       type: object

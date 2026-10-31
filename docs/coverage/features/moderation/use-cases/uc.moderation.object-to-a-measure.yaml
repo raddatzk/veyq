@@ -87,9 +87,23 @@ acceptanceCriteria:
       template's guest words, with sentences of their own where no contact is named, calling no authenticated client.
     coverage:
       backend:
-        integration: [GuestStatementsSliceTest.aGuestUploaderReadsAModeratorsStatementOnItsLinkWithoutTheFactsAndNobodyElseDoes, GuestStatementsSliceTest.aBlockedGuestIdentityReadsItsStatementOnItsBlockedLink, GuestStatementsSliceTest.aDeferredStatementReachesTheGuestOnlyOnceTheDeferralEnds, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementAndNoRemoval, UploaderContentMemoriesSliceTest.theStepBlocksExactlyThatUploadersMediaAndTheHoldNowHoldsThem]
+        integration: [GuestStatementsSliceTest.aGuestUploaderReadsAModeratorsStatementOnItsLinkWithoutTheFactsAndNobodyElseDoes, GuestStatementsSliceTest.aBlockedGuestIdentityReadsItsStatementOnItsBlockedLink, GuestStatementsSliceTest.aDeferredStatementReachesTheGuestOnlyOnceTheDeferralEnds, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementOfTheirOwnInitiativeAndNoRemoval, GuestStatementsSliceTest.onARemovalOrdersCaseTheOrderIsARemovalAndAModeratorsFurtherMeasureAStatementOfTheirOwnInitiative, UploaderContentMemoriesSliceTest.theStepBlocksExactlyThatUploadersMediaAndTheHoldNowHoldsThem]
       web:
         unit: [src/views/ShareView.guestStatement.test.ts, src/features/depot/components/DropBoxShareBody.guestStatement.test.ts, src/features/memories/components/MemoryShareBody.test.ts, src/features/moderation/statement/statements.test.ts, src/features/moderation/statement/template.test.ts, src/core/sharing/OrderNotice.test.ts]
+  - id: the-statement-names-a-report-or-own-initiative
+    # Added by inbox #820 (ADR 0093 § 7, DSA Art. 17(3)(b)): never a fixed "after a report".
+    text: >-
+      A measure's statement says what led to it: a case a report opened reads "after a report"; any other case — one an
+      authority's order opened (a preservation order, a request for information, a removal order's case) included —
+      reads the host's own finding and names no order, for a moderator's measure and a Server Owner's step alike, in the
+      member's statement, its mail and the guest uploader's read; only a removal order's own blocks name the order, and
+      a guest is told them as a removal. The German words take the dative "nach" asks for.
+    coverage:
+      backend:
+        unit: [StatementTemplateConformanceTest.aMeasureOnACaseNoReportOpenedIsTheHostsOwnInitiativeAndOnlyARemovalOrdersOwnBlockNamesTheOrder]
+        integration: [GuestStatementsSliceTest.aGuestUploaderReadsAModeratorsStatementOnItsLinkWithoutTheFactsAndNobodyElseDoes, GuestStatementsSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementOfTheirOwnInitiativeAndNoRemoval, GuestStatementsSliceTest.onARemovalOrdersCaseTheOrderIsARemovalAndAModeratorsFurtherMeasureAStatementOfTheirOwnInitiative, ServerOwnerStatementSliceTest.aSignInBlockOnACaseAnOrderOpenedIsTheirOwnFindingAndNamesNoOrder, AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs]
+      web:
+        unit: [src/views/ShareView.guestStatement.test.ts, src/features/moderation/statement/template.test.ts]
   - id: the-hold-counts-from-the-statement
     text: >-
       A measure's hold ends six months after its statement is sent, and from the decision where nobody can be told.

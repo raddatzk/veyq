@@ -122,6 +122,28 @@ class RotationStageEndorsementEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<RotationStageEndorsementEntity, String>
 }
 
+/** One staged epoch of the instance moderation key (ADR 0099 § 4): `M_n` re-sealed by the caller's client to the stage's
+ *  identity — opaque here — or null, a declared epoch the publish deletes. Upserted by `(stage, epoch)`. */
+@Entity
+@DynamicUpdate
+@Table(name = "veyq_rotation_stage_moderation_grant")
+class RotationStageModerationGrantEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "stage_id", nullable = false, columnDefinition = "uuid")
+    lateinit var stageId: String
+
+    @Column(name = "epoch", nullable = false)
+    var epoch: Int = 0
+
+    @Column(name = "sealed_grant", columnDefinition = "TEXT")
+    var sealedGrant: String? = null
+
+    companion object : PanacheCompanionBase<RotationStageModerationGrantEntity, String>
+}
+
 /**
  * The pending re-key of one scope a publish re-granted (ADR 0111 decision 8): the epoch the scope had then. While the
  * scope's current epoch still equals [epochAtRotation], the account may commit the next one without being an owner

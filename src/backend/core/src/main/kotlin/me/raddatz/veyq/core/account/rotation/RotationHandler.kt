@@ -66,8 +66,9 @@ sealed interface RotationOutcome {
 
     /** The stage is missing, expired or declares another identity, its digest is not the request's, a membership that
      *  carries a grant is neither staged at its scope's current epoch nor declared unreadable (decision 3), an open invite
-     *  the caller signed is not staged at its anchor epoch, or a join record the caller rooted is not staged over the
-     *  record stored now (ADR 0111 decisions 20 and 21). */
+     *  the caller signed is not staged at its anchor epoch, a join record the caller rooted is not staged over the
+     *  record stored now (ADR 0111 decisions 20 and 21), or a live moderation-key epoch the caller holds is not staged
+     *  (ADR 0099 § 4). */
     data object PlanChanged : RotationOutcome, HttpFailure by Failures.rotationPlanChanged
 
     /** The pin store or the device register moved since the client read it — the whole rotation rolled back. The client
@@ -120,6 +121,21 @@ sealed interface StageEndorsementsOutcome {
     /** An endorsement does not verify under the stage's identity over the stored sealed record. */
     data object JoinEndorsementInvalid : StageEndorsementsOutcome, HttpFailure by httpFailure("join_endorsement_invalid", UNPROCESSABLE)
 }
+
+/** Outcome of staging a chunk of the caller's moderation-key epochs (ADR 0099 § 4). Every refusal wrote nothing. */
+sealed interface StageModerationGrantsOutcome {
+    data object Staged : StageModerationGrantsOutcome
+
+    /** No open stage of the caller has this id — unknown, expired, replaced or another account's. */
+    data object StageNotFound : StageModerationGrantsOutcome, HttpFailure by httpFailure("rotation_stage_not_found", NOT_FOUND)
+
+    /** An epoch the caller holds no grant of. */
+    data object PlanChanged : StageModerationGrantsOutcome, HttpFailure by Failures.rotationPlanChanged
+}
+
+/** One staged moderation-key epoch as a chunk carries it: `M_n` re-sealed to the stage's identity, or declared
+ *  ([sealedGrant] null). */
+data class StagedModerationGrantInput(val epoch: Int, val sealedGrant: String?)
 
 /** One staged invite as a chunk carries it: re-signed, or declared (both signatures null — the resource refuses one
  *  without the other). */
@@ -343,6 +359,24 @@ class RotationHandler(
             StageEndorsementsOutcome.Staged
         }
 
+    /**
+     * Stage one chunk of [userId]'s moderation-key epochs into its open stage [stageId] (ADR 0099 § 4): every epoch named
+     * is one the caller holds a grant of (else `409 rotation_plan_changed`); its `M_n` re-sealed by the caller's client to
+     * the stage's identity, or null — declared. Nothing is checked of the ciphertext: a moderation grant is unsigned
+     * (ADR 0099 § 3) and opaque here. All checked before anything is written. Whether every held epoch is staged is the
+     * publish's to judge, under the epoch lock.
+     */
+    fun stageModerationGrants(userId: String, stageId: String, entries: List<StagedModerationGrantInput>): StageModerationGrantsOutcome =
+        QuarkusTransaction.requiringNew().call {
+            accounts.lock(userId) ?: return@call StageModerationGrantsOutcome.StageNotFound
+            val stage = stages.live(userId, stageId, Instant.now()) ?: return@call StageModerationGrantsOutcome.StageNotFound
+            val held = moderation.heldEpochs(userId)
+            if (entries.any { it.epoch !in held }) return@call StageModerationGrantsOutcome.PlanChanged
+            // An epoch named twice in one chunk: the last one stands, as a later chunk's would.
+            stages.upsertModerationGrants(stage.id, entries.associate { it.epoch to it.sealedGrant })
+            StageModerationGrantsOutcome.Staged
+        }
+
     // --- the publish -------------------------------------------------------------------------------------------
 
     /**
@@ -360,7 +394,9 @@ class RotationHandler(
      *     server rebuilds (`403 secret_key_proof_failed`); then **the attestation** under the stored auth key
      *     (`403 attestation_failed`).
      * Then the writes: the account rewrite; the pin store and device register (a stale revision rolls everything back,
-     * `409 stale_revision`); the live pairing channels superseded; the moderation hook; **the stage applied** in one
+     * `409 stale_revision`); the live pairing channels superseded; the moderation hook, which writes the staged
+     * moderation-key epochs in place of the grants it deletes and refuses (`409 rotation_plan_changed`, rolled back) a
+     * holder whose every live epoch is not staged ([ModerationHandler.onIdentityRotated]); **the stage applied** in one
      * ascending pass under each scope's row lock ([applyStage], whose set check can still roll everything back, `409
      * rotation_plan_changed`) and deleted; the chain step appended; every open address change voided; the declines of
      * every job targeting the account cleared; and the other sessions cut **last** — the one step that changes what the
@@ -444,8 +480,10 @@ class RotationHandler(
         }
         // A live channel's envelope carries the OLD Master Key and a live delegated session.
         pairings.supersede(pairings.liveChannels(userId).map { it.id })
-        // A moderator's grants of the instance moderation key were sealed to the identity this replaces (ADR 0099 § 4).
-        moderation.onIdentityRotated(userId)
+        // A moderator's grants of the instance moderation key were sealed to the identity this replaces (ADR 0099 § 4):
+        // deleted, and the epochs the stage re-sealed to the new identity written in their place — or the publish refused,
+        // so a holder (a sole one has nobody to deliver it again) never loses the key by securing the account.
+        if (!moderation.onIdentityRotated(userId, stages.moderationGrants(stage.id))) throw Refused(RotationOutcome.PlanChanged)
 
         val regranted = applyStage(
             userId, staged, r.unreadableScopeIds, r.identityPublicKey, stages.invites(stage.id), stages.endorsements(stage.id),

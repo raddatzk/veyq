@@ -227,6 +227,14 @@ nothing names its objects, and the step ends at once. The review and the steps a
   the terms relied on**, required, with the facts explaining why the content falls under it
   (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
   (Art. 17(3)(a)), and the objection and the courts (Art. 17(3)). A dismissed report is told only to the reporter.
+  **What led to it is the report that opened its case, else the host's own initiative** (DSA Art. 17(3)(b), which
+  asks only whether a decision followed an Art. 16 notice or was taken on the provider's own initiative; inbox #820):
+  a measure on a case a report opened names the report; every other measure — a Server Owner's step on no case, and
+  a moderator's or the Server Owner's measure on a case an authority's order opened (§ 12: a preservation order, a
+  request for information, or a further step on a removal order's case) — names their own finding. Only an
+  authority's removal order's own blocks name the order. Reading a measure on an order-opened case as own initiative
+  is our reading, not a reviewed answer — an order is no Art. 16 notice — chosen so that a confidential order (the
+  e-Evidence Regulation, §§ 100j–100k StPO) is never revealed by the statement.
   Each member reads the measure in the words of their own relation to it, which their recipient row records: a blocked
   link's creator "a link you created", a member whose upload the link reaches "a link to something you uploaded" (a
   member uploads as a member, never through a link), and a member with neither relation neutral words (inbox #821).

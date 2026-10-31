@@ -60,7 +60,7 @@ describe("Memories' drop page (a WRITE_ONLY link)", () => {
     saveGuestSession('s1', uploader)
     const statement = {
       id: '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e', measureKind: 'CONTENT' as const, targetId: 'medium-1', covers: [],
-      ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', takenAt: new Date('2026-10-18T09:00:00Z'),
+      ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', basis: 'REPORT' as const, takenAt: new Date('2026-10-18T09:00:00Z'),
     }
     const { getShareGuestNotice } = stubApi(publicSharesApi, { getShareGuestNotice: { removals: [], statements: [statement], contactAddress: 'abuse@example.org' } })
     openGuestPage('s1')

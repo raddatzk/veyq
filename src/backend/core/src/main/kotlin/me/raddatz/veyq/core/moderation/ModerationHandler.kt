@@ -394,19 +394,38 @@ class ModerationHandler(
         return ModerationOutcome.Ok(Unit)
     }
 
+    /** The live epochs [accountId] holds a grant of — what a securing of the account must carry (ADR 0099 § 4). */
+    @Transactional
+    fun heldEpochs(accountId: String): Set<Int> = epochsHeldBy(accountId)
+
     /**
-     * A moderator rotated their identity (ADR 0099 § 4, ADR 0060): the grants their old identity opened are treated as
-     * exposed and deleted — a holder delivers the live epochs again at the new identity — and, where they held the
-     * current epoch, a rotation is due. Joins the rotation's transaction, which holds the account row.
+     * The account secures itself (ADR 0099 § 4, ADR 0060): the grants its old identity opened are treated as exposed and
+     * deleted, and, where it held the current epoch, a rotation is due. [resealed] is what the securing publish staged:
+     * per epoch `M_n` re-sealed by the account's own client to the identity the publish installs, or null where it was
+     * declared (a grant that device could not open). False — the publish is refused, nothing written here — unless every
+     * live epoch the account holds is staged, so a holder never loses the key silently; a sole holder (the Server Owner
+     * after first-run setup) has nobody else to deliver it again. Each re-sealed epoch it still holds is written as its
+     * grant, logged as a delivery by itself; a declared one, or one it no longer holds, is not written.
+     *
+     * Joins the rotation's transaction, which holds the account row; takes the current epoch's row first, as every roster
+     * and key write does, and reads the held epochs only under it — so a delivery to the account either committed before
+     * (and must be staged) or waits and meets the new identity (`identity_changed`).
      */
     @Transactional
-    fun onIdentityRotated(accountId: String, now: Instant = Instant.now()) {
-        if (ModeratorEntity.findById(accountId)?.accepted != true) return
-        val current = currentEpoch(lock = true) ?: return
-        val heldCurrent = ModerationGrantEntity.count("moderatorId = ?1 and epoch = ?2", accountId, current.epoch) > 0
+    fun onIdentityRotated(accountId: String, resealed: Map<Int, String?>, now: Instant = Instant.now()): Boolean {
+        val current = currentEpoch(lock = true) ?: return true
+        val held = epochsHeldBy(accountId)
+        if (!resealed.keys.containsAll(held)) return false
+        if (ModeratorEntity.findById(accountId)?.accepted != true) return true
         ModerationGrantEntity.delete("moderatorId", accountId)
-        if (heldCurrent && current.rotationDueAt == null) current.rotationDueAt = now
         log.append(ModerationEvent.IDENTITY_ROTATED, now, accountId, accountId)
+        held.sorted().forEach { epoch ->
+            val sealed = resealed[epoch] ?: return@forEach
+            insertGrant(accountId, epoch, sealed, accountId)
+            log.append(ModerationEvent.DELIVERED, now, accountId, accountId, epoch = epoch)
+        }
+        if (current.epoch in held && current.rotationDueAt == null) current.rotationDueAt = now
+        return true
     }
 
     // ── shared ───────────────────────────────────────────────────────────────────────────────────

@@ -2834,9 +2834,9 @@ components:
       description: >
         A moderator's statement of reasons as the guest uploader it names reads it (ADR 0093 § 7): the clear fields the
         one template renders — a member's `ModerationStatement` without the facts and their key, the objection and the
-        case. A guest is always told as the uploader, after a moderator's measure (`REPORT`), and objects through the
-        instance contact. It names the host, never the moderator.
-      required: [id, measureKind, targetId, covers, ground, takenAt]
+        case. A guest is always told as the uploader, and objects through the instance contact. It names the host, never
+        the moderator.
+      required: [id, measureKind, targetId, covers, ground, basis, takenAt]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
         measureKind:
@@ -2871,6 +2871,11 @@ components:
           example: []
         ground: { $ref: "#/components/schemas/ModerationGround" }
         provision: { $ref: "#/components/schemas/StatementProvision" }
+        basis:
+          $ref: "#/components/schemas/StatementBasis"
+          description: >
+            What led to the moderator's measure — `REPORT` on a case a report opened, else `OWN_FINDING`; never `ORDER`:
+            a removal order's own block is told as a removal (`ShareGuestNotice.removals`), not as a statement.
         takenAt:
           x-veyq-visibility: time
           type: string
@@ -2883,6 +2888,8 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/ModerationGround'
     StatementProvision:
       $ref: '_common.openapi.yaml#/components/schemas/StatementProvision'
+    StatementBasis:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementBasis'
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:
