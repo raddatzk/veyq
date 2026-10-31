@@ -33,6 +33,7 @@ import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person, potNode } from '.
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import { setPreferenceAudience } from '../../../shared/state/scopedPreference'
 import { whoAmIBase } from '../whoAmI'
+import { setAccountUserId } from '../../../app/account'
 import { httpError } from '../../../test/httpError'
 
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_8'
@@ -188,6 +189,27 @@ describe('a Pot under its own link', () => {
     await flushPromises()
     expect(dialog()!.textContent).toContain(t('expenses.entry.saveFailed'))
     expect(dialog()!.textContent).not.toContain(t('expenses.entry.blocked'))
+  })
+
+  // A link guest has no member identity: "Who am I" picks nothing for it, even where an account signed in on this browser
+  // is a member participant of the Pot (control: PotDetail.test.ts preselects it for that member). Before the case below,
+  // which stores the guest's choice: a setting caches per storage key, so this one reads the guest's key fresh.
+  it('READ: who am I preselects nobody for a guest, though the browser\'s account is a member participant', async () => {
+    const self = '0d000000-0000-4000-8000-0000000000f9'
+    setAccountUserId(self)
+    server.current.append([{ entryId: '0e000000-0000-4000-8000-0000000000e9', content: { kind: 'participant', name: 'Me Sealed', active: true, joined: 3, member: { userId: self } } }])
+    setPreferenceAudience('guest')
+    localStorage.clear()
+    try {
+      const page = await mountShare(ShareRole.Read)
+      await openTab(page, t('expenses.tabs.balances'))
+      expect(page.find('[data-person="0e000000-0000-4000-8000-0000000000e9"]').text()).toContain('Me Sealed')
+      expect(page.findAll('.expenses-you')).toHaveLength(0)
+      expect((page.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
+    } finally {
+      setPreferenceAudience('account')
+      setAccountUserId('')
+    }
   })
 
   it('READ: who am I is a guest\'s too — its row marked, kept under the guest\'s own key on this device, nothing sent', async () => {

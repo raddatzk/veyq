@@ -3,7 +3,7 @@
 // a new entry is offered only active people beside whoever the edited entry already names.
 import { describe, it, expect } from 'vitest'
 import { buildLedger } from './domain/ledger'
-import { addableMembers, offeredPeople, personLabel, shownBalances, standingOf, type MemberDirectory } from './people'
+import { addableMembers, offeredPeople, participantRecord, personLabel, shownBalances, standingOf, type MemberDirectory } from './people'
 import type { Person } from '../../core/people/directory'
 import { ANNA, BEN, CLEO, EUR, PotServer, expense, person } from './potTestUtil'
 
@@ -90,5 +90,16 @@ describe('a member participant on screen', () => {
     s.append([{ entryId: DANA, content: { kind: 'participant', name: 'Dana', active: true, joined: 5, member: { userId: U_DANA } } }])
     s.erase(DANA)
     expect(addableMembers(buildLedger(s.held(), EUR), members).map((m) => m.userId)).toEqual([U_DANA, U_ERIK, U_GUS])
+  })
+
+  it('the create dialog\'s people so far take a member off the offer as a record does (control: the ledger above)', () => {
+    const members = [who(U_DANA, 'Dana'), who(U_ERIK, 'Erik')]
+    expect(addableMembers({ participants: [{ erased: false, member: U_ERIK }, { erased: false, member: null }] }, members).map((m) => m.userId)).toEqual([U_DANA])
+  })
+
+  it('a new participant\'s first record: a name as typed; a member by id with the display name sealed, cut to 100 characters', () => {
+    expect(participantRecord({ name: 'Finn' }, 7)).toEqual({ kind: 'participant', name: 'Finn', active: true, joined: 7 })
+    const long = 'Ä'.repeat(120)
+    expect(participantRecord({ member: who(U_DANA, long) }, 8)).toEqual({ kind: 'participant', name: 'Ä'.repeat(100), active: true, joined: 8, member: { userId: U_DANA } })
   })
 })

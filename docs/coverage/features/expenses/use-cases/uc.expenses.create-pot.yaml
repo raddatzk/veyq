@@ -12,6 +12,11 @@ acceptanceCriteria:
         integration: [ModuleCompositionTest.theRulesOfCoreAndEveryApplicationPartitionTheKinds, PotSliceTest.aStaleAppendLandsNothingOfItsBatch_aFreshOneLandsAll]
       web:
         unit: [src/features/expenses/components/PotCreateDialog.test.ts, src/features/expenses/register.test.ts, src/features/expenses/domain/potMeta.test.ts]
+  - id: create-offers-the-spaces-members
+    text: "The create dialog offers the space's current members beside typed names, each at most once, by People's rules: a member participant's first record holds the member's id and their display name sealed at adding, in the order added; where the member list is not read, names only."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotCreateDialog.test.ts, src/features/expenses/people.test.ts]
   - id: no-guest-creates-a-pot
     text: "A guest of any link creates no Pot: Expenses declares no guest-creatable kind, and the server refuses the create from a link."
     coverage:

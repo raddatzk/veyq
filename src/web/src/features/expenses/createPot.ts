@@ -1,8 +1,8 @@
 // Creating a Pot (uc.expenses.create-pot, ADR 0108 decision 2): core's node create with Expenses' kind, its settings
 // sealed into the node's meta in the same request (`pot`, contracts/expenses/pot-meta.v1.schema.json), then its first
-// records — the people, and for an import or a copy its entries — appended as batches of the server's cap (ADR 0108
-// decision 1). The node exists before its records do: a records append that fails leaves an empty Pot, which the caller
-// says ({@link PotPeopleNotAdded}); nothing is rolled back behind the person's back.
+// records — the people (names and members of the space), and for an import or a copy its entries — appended as batches
+// of the server's cap (ADR 0108 decision 1). The node exists before its records do: a records append that fails leaves
+// an empty Pot, which the caller says ({@link PotPeopleNotAdded}); nothing is rolled back behind the person's back.
 //
 // The two steps are apart ({@link createPotNode}, {@link appendInBatches}) for the import: a new entry's receipts are
 // completed before its first revision, so the import uploads each batch's receipts between the node and that batch.
@@ -15,6 +15,7 @@ import type { HeldRevision } from './domain/revisions'
 import type { BaseCurrency } from './domain/ledger'
 import { POT_META_KEY, potMetaObject, type OwnCategory } from './domain/potMeta'
 import { POT_KIND } from './kinds'
+import { participantRecord, type NewParticipant } from './people'
 
 /** The append's batch cap (`PotAppendRequest.revisions` maxItems). */
 export const APPEND_BATCH = 256
@@ -27,10 +28,11 @@ export class PotPeopleNotAdded extends Error {
   }
 }
 
-/** Every participant record for [names], in the order given (each joins a millisecond after the one before, so the join
- *  order — the rounding's tie-break — is the order they were typed in). */
-export function participantWrites(names: readonly string[], now = Date.now()): PotWrite[] {
-  return names.map((name, i) => ({ entryId: crypto.randomUUID(), content: { kind: 'participant', name, active: true, joined: now + i } }))
+/** Every participant record for [people] — names and members of the space, as People writes them (`people.ts`'
+ *  `participantRecord`) — in the order given (each joins a millisecond after the one before, so the join order, the
+ *  rounding's tie-break, is the order they were added in). */
+export function participantWrites(people: readonly NewParticipant[], now = Date.now()): PotWrite[] {
+  return people.map((p, i) => ({ entryId: crypto.randomUUID(), content: participantRecord(p, now + i) }))
 }
 
 /**
@@ -69,14 +71,14 @@ export async function createPotNode(
   return { nodeId: created.nodeId, nodeKey: created.contentKey, epoch: created.epoch }
 }
 
-/** Create a Pot named [name] under [parent] with [base] and [categories], and its people [names]. Returns its id and
- *  key. Throws {@link PotPeopleNotAdded} when the node exists but its people were not appended. */
+/** Create a Pot named [name] under [parent] with [base] and [categories], and its [people]. Returns its id and key.
+ *  Throws {@link PotPeopleNotAdded} when the node exists but its people were not appended. */
 export async function createPot(
-  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency, names: readonly string[],
+  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency, people: readonly NewParticipant[],
   opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [],
 ): Promise<CreatedPot> {
   const created = await createPotNode(scopeId, epochs, parent, name, base, opts, categories)
-  const writes = participantWrites(names)
+  const writes = participantWrites(people)
   if (writes.length) {
     try {
       await appendInBatches(memberNodeWriter(scopeId, created.nodeId, { key: created.nodeKey, epoch: created.epoch }), base, writes)

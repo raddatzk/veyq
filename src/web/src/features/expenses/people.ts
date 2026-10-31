@@ -9,6 +9,7 @@
 // directory: it is handed none and shows the sealed name.
 import type { Person } from '../../core/people/directory'
 import type { Participant, PotLedger } from './domain/ledger'
+import type { ParticipantBody } from './domain/format'
 
 type Translate = (key: string) => string
 
@@ -41,10 +42,22 @@ export function personLabel(ledger: PotLedger, id: string, t: Translate, directo
 }
 
 /** The members a writer may add as participants: the space's current members [members] that are no participant of the
- *  Pot yet (an erased participant names nobody any more), in the order given. */
-export function addableMembers(ledger: PotLedger, members: readonly Person[]): Person[] {
-  const taken = new Set(ledger.participants.filter((p) => !p.erased && p.member !== null).map((p) => p.member!))
+ *  Pot yet (an erased participant names nobody any more), in the order given. [pot] is the Pot's ledger — or, in the
+ *  create dialog, the people chosen so far, before any record exists. */
+export function addableMembers(pot: { readonly participants: readonly Pick<Participant, 'erased' | 'member'>[] }, members: readonly Person[]): Person[] {
+  const taken = new Set(pot.participants.filter((p) => !p.erased && p.member !== null).map((p) => p.member!))
   return members.filter((m) => !taken.has(m.userId))
+}
+
+/** A participant a writer adds: a name typed, or a member of the space chosen ({@link addableMembers}). */
+export type NewParticipant = { readonly name: string } | { readonly member: Person }
+
+/** The first revision of the participant [p], joining at [joined]. A member's record holds their user id and, sealed
+ *  with it, their display name as it is now — what a reader without the directory (a link guest) shows — cut to the
+ *  format's 100 characters. */
+export function participantRecord(p: NewParticipant, joined: number): ParticipantBody {
+  if ('name' in p) return { kind: 'participant', name: p.name, active: true, joined }
+  return { kind: 'participant', name: [...p.member.displayName].slice(0, 100).join(''), active: true, joined, member: { userId: p.member.userId } }
 }
 
 /** The people an entry may name: every active one, then those [named] already (in join order). */

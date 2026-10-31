@@ -19,7 +19,7 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import type { Person } from '../../../core/people/directory'
-import { addableMembers, shownName, standingOf, type MemberDirectory } from '../people'
+import { addableMembers, participantRecord, shownName, standingOf, type MemberDirectory } from '../people'
 import type { ParticipantBody } from '../domain/format'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { isMoney } from '../domain/format'
@@ -91,17 +91,14 @@ async function run(write: () => Promise<void>) {
 async function add() {
   const name = newName.value.trim()
   if (!name || name.length > 100) return
-  const ok = await run(() => props.session.write([{ entryId: crypto.randomUUID(), content: { kind: 'participant', name, active: true, joined: Date.now() } }]))
+  const ok = await run(() => props.session.write([{ entryId: crypto.randomUUID(), content: participantRecord({ name }, Date.now()) }]))
   if (ok) newName.value = ''
 }
 async function addMember() {
   const m = addable.value.find((x) => x.userId === newMember.value)
   if (!m) return
   // The display name as it is now, sealed with the id: what a reader without the directory (a link guest) shows.
-  const name = [...m.displayName].slice(0, 100).join('')
-  const ok = await run(() =>
-    props.session.write([{ entryId: crypto.randomUUID(), content: { kind: 'participant', name, active: true, joined: Date.now(), member: { userId: m.userId } } }]),
-  )
+  const ok = await run(() => props.session.write([{ entryId: crypto.randomUUID(), content: participantRecord({ member: m }, Date.now()) }]))
   if (ok) newMember.value = null
 }
 function startRename(p: Participant) {

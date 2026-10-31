@@ -10,11 +10,12 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { PotLedger } from '../domain/ledger'
 import { formatMoney } from '../amounts'
 import { personLabel, type MemberDirectory } from '../people'
-import { whoAmI } from '../whoAmI'
+import { ownParticipant, whoAmI } from '../whoAmI'
 
-const props = defineProps<{ ledger: PotLedger; meta: PotMeta; potId: string; directory?: MemberDirectory }>()
-/** The viewer's own row, as they chose in the balances ("Who am I", `../whoAmI.ts`). */
-const me = computed(() => whoAmI(props.potId).me.value)
+const props = defineProps<{ ledger: PotLedger; meta: PotMeta; potId: string; directory?: MemberDirectory; selfId?: string | null }>()
+/** The viewer's own row, as they chose in the balances ("Who am I", `../whoAmI.ts`; a member's own member participant
+ *  until they choose). */
+const me = computed(() => whoAmI(props.potId, ownParticipant(props.ledger, props.selfId ?? null)).me.value)
 const { t, locale } = useI18n()
 
 const money = (v: bigint) => formatMoney(v, props.meta.base.currency, props.meta.base.minorUnits, locale.value)

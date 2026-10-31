@@ -3,7 +3,8 @@
 // who is owed and who owes, every erased participant summed into one "deleted people", a settled deactivated one left
 // out until an edit unsettles them. The suggestion is `ledger.ts`'s greedy one, the same on every device; a writer records
 // one transfer of it, or all of them in one batch (ADR 0108 decision 1: one append, all or nothing). Above them the
-// viewer says who they are ("Who am I", `../whoAmI.ts`): kept on this device only, it marks their row *you*.
+// viewer says who they are ("Who am I", `../whoAmI.ts`): kept on this device only, it marks their row *you* — and until
+// they say, a member who is a member participant is that one.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -16,14 +17,18 @@ import type { PotWrite } from '../domain/potApi'
 import { formatMoney } from '../amounts'
 import { personLabel, shownBalances, type MemberDirectory } from '../people'
 import { today } from '../entryForm'
-import { whoAmI } from '../whoAmI'
+import { ownParticipant, whoAmI } from '../whoAmI'
 
-const props = defineProps<{ session: PotSession; ledger: PotLedger; meta: PotMeta; canWrite: boolean; potId: string; directory?: MemberDirectory }>()
+const props = defineProps<{
+  session: PotSession; ledger: PotLedger; meta: PotMeta; canWrite: boolean; potId: string; directory?: MemberDirectory
+  /** The signed-in member's user id — their own member participant is who they are until they choose; null for a guest. */
+  selfId?: string | null
+}>()
 const { t, locale } = useI18n()
 
 /** Reka's select takes no empty value: "not chosen" is this token. */
 const NOBODY = 'nobody'
-const who = computed(() => whoAmI(props.potId))
+const who = computed(() => whoAmI(props.potId, ownParticipant(props.ledger, props.selfId ?? null)))
 /** The viewer's participant while it is still one of this Pot's named people (an erased one is nobody's to be). */
 const me = computed(() => {
   const id = who.value.me.value

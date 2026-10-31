@@ -300,6 +300,67 @@ describe('PotDetail for a member', () => {
     expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
   })
 
+  // "Who am I" defaults to the viewer's own member participant (ADR 0108 decision 2): a read, never written, until they
+  // choose. Each case is its own account, so its stored choice is read fresh (a setting caches per storage key).
+  describe('who am I for a member participant', () => {
+    const own = (userId: string, joined: number) => ({ kind: 'participant' as const, name: 'Me Sealed', active: true, joined, member: { userId } })
+    const ME = '0e000000-0000-4000-8000-0000000000e1'
+    const marked = (w: VueWrapper, panel: string) => w.findAll(`${panel} .expenses-you`).map((x) => x.element.closest('[data-person]')?.getAttribute('data-person'))
+
+    it('preselects the signed-in member\'s own participant while none is stored, in both tabs, storing nothing', async () => {
+      const self = '0d000000-0000-4000-8000-0000000000f1'
+      setAccountUserId(self)
+      server.current.append([{ entryId: ME, content: own(self, 4) }])
+      server.current.append([{ entryId: '0e000000-0000-4000-9000-0000000000e3', content: expense('Boat', 2000, ME, [ME, ANNA]) }])
+      const w = mountPot()
+      await flushPromises()
+      await openTab(w, t('expenses.tabs.balances'))
+      expect(marked(w, '.expenses-balances')).toEqual([ME])
+      expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe(ME)
+      await openTab(w, t('expenses.tabs.overview'))
+      expect(marked(w, '.expenses-overview')).toEqual([ME])
+      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:${self}`), 'a default, never written').toBeNull()
+      expect(server.appends).toEqual([])
+    })
+
+    it('a choice the member made stays theirs — another participant, or nobody — over their own participant', async () => {
+      const chose = '0d000000-0000-4000-8000-0000000000f2'
+      setAccountUserId(chose)
+      localStorage.setItem(`${whoAmIBase(POT_ID)}:u:${chose}`, BEN)
+      server.current.append([{ entryId: ME, content: own(chose, 4) }])
+      let w = mountPot()
+      await flushPromises()
+      await openTab(w, t('expenses.tabs.balances'))
+      expect(marked(w, '.expenses-balances')).toEqual([BEN])
+      // choosing nobody is a choice too: stored, and the default does not come back
+      w.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'nobody')
+      await flushPromises()
+      expect(marked(w, '.expenses-balances')).toEqual([])
+      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:${chose}`)).toBe('nobody')
+      w.unmount()
+      // and read back from storage by a fresh setting (another account's key, stored "nobody" before its first read)
+      const later = '0d000000-0000-4000-8000-0000000000f3'
+      setAccountUserId(later)
+      localStorage.setItem(`${whoAmIBase(POT_ID)}:u:${later}`, 'nobody')
+      server.current.append([{ entryId: '0e000000-0000-4000-8000-0000000000e2', content: own(later, 5) }])
+      w = mountPot()
+      await flushPromises()
+      await openTab(w, t('expenses.tabs.balances'))
+      expect(marked(w, '.expenses-balances')).toEqual([])
+    })
+
+    it('a member who is no participant of the Pot is nobody until they choose (control: the first case is preselected)', async () => {
+      const outsider = '0d000000-0000-4000-8000-0000000000f4'
+      setAccountUserId(outsider)
+      server.current.append([{ entryId: ME, content: own('0d000000-0000-4000-8000-0000000000f5', 4) }])
+      const w = mountPot()
+      await flushPromises()
+      await openTab(w, t('expenses.tabs.balances'))
+      expect(marked(w, '.expenses-balances')).toEqual([])
+      expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
+    })
+  })
+
   // A participant that is a member of the space (ADR 0108 decision 2, inbox #783).
   const U_DANA = '0d000000-0000-4000-8000-000000000001'
   const U_ERIK = '0d000000-0000-4000-8000-000000000002'

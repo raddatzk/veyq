@@ -4,7 +4,7 @@ title: See who owes whom, settle up, and see where the money went
 # Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
-# `who-am-i-stays-on-the-device` by inbox #541 (features/expenses/whoAmI.ts).
+# `who-am-i-stays-on-the-device` by inbox #541 (features/expenses/whoAmI.ts); `who-am-i-defaults-to-the-own-member` by #783's follow-up.
 acceptanceCriteria:
   - id: balances-from-the-live-entries
     text: "Each participant's balance is what they paid and received against their share of every expense and refund, transfers included, computed in the client from the live entries."
@@ -23,6 +23,11 @@ acceptanceCriteria:
         unit: [src/features/expenses/domain/ledger.test.ts]
   - id: who-am-i-stays-on-the-device
     text: "The viewer's choice of who they are marks their row you in the balances and the overview, for a member and a guest alike, is kept in this browser per Pot and per account (or per guest), and never leaves the device: no request carries it."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts]
+  - id: who-am-i-defaults-to-the-own-member
+    text: "Until the viewer has chosen on this device, a signed-in member who is a member participant of the Pot is that participant, in the balances and the overview, without anything stored; a choice made — another participant or nobody — is kept over it; a link guest and a member who is no participant start with nobody."
     coverage:
       web:
         unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts]

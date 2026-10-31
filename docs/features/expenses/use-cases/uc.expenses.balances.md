@@ -15,7 +15,8 @@
    transfers included ([docs/apps/expenses.md](../../../apps/expenses.md) § What the client computes). The viewer's
    own row is marked *you* when they chose who they are (step 2), here and in the overview.
 2. **Who am I:** the viewer picks their participant once, above the balances; the choice stays on the device — per Pot,
-   and per account or per guest on that browser — and is never sent.
+   and per account or per guest on that browser — and is never sent. Until a signed-in member has chosen, their own
+   member participant is preselected; it is not stored, so their choice — "nobody" too — is never overwritten.
 3. **Settle up:** the suggested transfers that bring every balance to zero, computed greedily as the domain says — at
    most one fewer than there are people, the same on every device.
 4. **Record** (a writer): one suggested transfer, or all of them, is saved as transfer entries
@@ -31,6 +32,8 @@
   ([uc.expenses.verify-ledger](uc.expenses.verify-ledger.md) step 5).
 - **E3 — a `READ` guest:** balances, settle-up suggestion and overviews, no **Record**.
 - **E4 — all settled:** the settle-up says nobody owes anything.
+- **E5 — no member identity to preselect:** a link guest, or a member who is no participant of the Pot, starts with
+  nobody chosen.
 
 ## Quality notes
 
