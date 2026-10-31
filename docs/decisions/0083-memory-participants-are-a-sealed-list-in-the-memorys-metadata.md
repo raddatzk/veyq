@@ -1,7 +1,7 @@
 # ADR 0083 — Memory participants are a sealed list in the Memory's metadata
 
 - Status: Accepted
-- Built: partly (not built: decision 9's display name in the Contributions tab (inbox #816))
+- Built: yes
 - Date: 2026-10-13
 - Model: [Application: Memories](../apps/memories.md)
 

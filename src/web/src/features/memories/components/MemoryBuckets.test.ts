@@ -4,6 +4,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 // The buckets data layer is mocked — this test drives the component's selection / delete-to-trash+undo / move-gating
 // UX (cr-0122), not the crypto/network layer. Names come back via a stubbed openBucketName.
+// Every authenticated client throws and is recorded (`test/guestMode.ts`): the guest's mount below asserts none was called.
+vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../media', () => ({
   listBuckets: vi.fn(),
   createBucket: vi.fn(),
@@ -20,7 +23,10 @@ vi.mock('../media', () => ({
   isVideoMediaType: vi.fn(),
   hasDerivatives: vi.fn(),
 }))
-vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
+// The scope's people as core's directory names them (ADR 0083 decision 9) — its own suite proves the rule; here, who shows.
+vi.mock('../../../core/people/directory', async (orig) => ({
+  ...(await orig<typeof import('../../../core/people/directory')>()), loadScopePeople: vi.fn(),
+}))
 // The member's epoch keys, for the chain to a guest's name sealed above this node; none unless a test sets them.
 const space = vi.hoisted(() => ({ epochs: null as null | import('../../spaces/epochs').EpochKeys }))
 vi.mock('../../../app/activeSpace', () => ({ activeEpochKeys: () => space.epochs }))
@@ -47,16 +53,19 @@ import {
   type MediaItem,
   type BucketItem,
 } from '../media'
-import { listScopeMembers } from '../../spaces/members'
+import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { treeStore } from '../../../core/node/treeStore'
 import type { TreeNode } from '../../../core/node/tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../../../test/i18n'
-import { mediaItem, treeNode, memberMemoryRights } from '../../../test/models'
+import { mediaItem, treeNode, memberMemoryRights, guestAccessFor } from '../../../test/models'
 import { computed } from 'vue'
-import { MEMORY_VIEW, memberMemorySource } from '../source'
+import { MEMORY_VIEW, memberMemorySource, guestMemorySource } from '../source'
+import { ShareRole } from '../../../api/generated/sharing'
+import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { authenticatedCalls } from '../../../test/guestMode'
 
 // Stub the layer's Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -74,6 +83,9 @@ const MediaGridStub = {
 }
 
 const media = (id: string, ownerKey: string, bucketId: string): MediaItem => mediaItem({ mediaId: id, ownerKey, bucketId })
+/** A member as core's directory hands them: the display name is the real name when one opened, else the username. */
+const person = (userId: string, username: string, realName: string | null = null): Person =>
+  ({ userId, username, realName, displayName: realName ?? username })
 const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedName?: string, isPrimary = true, parentBucketId?: string): BucketItem =>
   ({ bucketId, ownerKey, isPrimary, mediaCount, sealedName, parentBucketId }) as BucketItem
 
@@ -100,7 +112,7 @@ beforeEach(() => {
   vi.mocked(isVideoMediaType).mockReturnValue(false)
   vi.mocked(hasDerivatives).mockReturnValue(true)
   vi.mocked(originalBlobMeta).mockReturnValue(null)
-  vi.mocked(listScopeMembers).mockResolvedValue([])
+  vi.mocked(loadScopePeople).mockResolvedValue([])
 })
 
 const selectBucket = (w: Awaited<ReturnType<typeof mountBuckets>>, id: string) =>
@@ -341,7 +353,7 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
 
 describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)', () => {
   it('a contributor primary reads "<name> (guest)"; a member\'s primary and a member\'s sub-bucket stay as they are', async () => {
-    vi.mocked(listScopeMembers).mockResolvedValue([{ userId: 'u-anna', username: 'Anna Meyer' } as Awaited<ReturnType<typeof listScopeMembers>>[number]])
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer')])
     vi.mocked(listBuckets).mockResolvedValue([
       bucket('b-own', 'user:u-anna', 0),
       bucket('b-share', 'share:x', 1, 'ct'),
@@ -368,6 +380,56 @@ describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)
     await selectBucket(wrapper, 'b-share')
     expect(wrapper.find('.bucket-select-value').text()).toContain('Contribution')
     expect(wrapper.find('.bucket-select-value').text()).not.toContain('(guest)')
+  })
+})
+
+describe('MemoryBuckets — a member is named by the display rule (uc.memory.buckets:members-named-by-the-display-rule)', () => {
+  it("a member's primary reads their real name, one without a real name their username; the names are the scope's", async () => {
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer'), person('u-ben', 'ben')])
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-anna', 'user:u-anna', 1), bucket('b-ben', 'user:u-ben', 1)])
+    const wrapper = mountBuckets([media('m1', 'user:u-anna', 'b-anna'), media('m2', 'user:u-ben', 'b-ben')])
+    await flushPromises()
+    expect(loadScopePeople).toHaveBeenCalledWith('s-1')
+    const shown = async (id: string) => {
+      await selectBucket(wrapper, id)
+      return wrapper.find('.bucket-select-value > span:not(.veyq-icon)').text()
+    }
+    expect(await shown('b-anna')).toBe('Anna Meyer')
+    expect(await shown('b-ben')).toBe('ben')
+  })
+
+  it('a member the directory does not list, or a directory that cannot be read, leaves the neutral "Member"', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-gone', 'user:u-gone', 1)])
+    const reads = [async () => [person('u-anna', 'anna', 'Anna Meyer')], async (): Promise<Person[]> => { throw new Error('offline') }]
+    for (const read of reads) {
+      vi.mocked(loadScopePeople).mockImplementationOnce(read)
+      const wrapper = mountBuckets([media('m1', 'user:u-gone', 'b-gone')])
+      await flushPromises()
+      await selectBucket(wrapper, 'b-gone')
+      expect(wrapper.find('.bucket-select-value > span:not(.veyq-icon)').text()).toBe(t('memory.buckets.member'))
+      wrapper.unmount()
+    }
+  })
+})
+
+describe("MemoryBuckets — a link's guest (ADR 0030 point 8, ADR 0083 decision 7)", () => {
+  it("is never drawn on the guest's source, and reads no member's name and no authenticated client", async () => {
+    authenticatedCalls.length = 0
+    const head = { shareId: 'sh-1', scopeId: 's-1', role: ShareRole.Read, share: { role: ShareRole.Read, scopeId: 's-1', nodes: [] } } as unknown as PublicShareHead
+    const source = guestMemorySource(() => guestAccessFor(head), { rootId: 'n-1' })
+    expect(source.buckets, "the guest's source carries no buckets door").toBeUndefined()
+    // it refuses to render rather than reach for a member's read
+    expect(() => mount(MemoryBuckets, {
+      props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: [], thumbs: new Map() },
+      global: {
+        plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub },
+        provide: { [MEMORY_VIEW as symbol]: { source, rights: computed(() => memberMemoryRights()) } },
+      },
+    })).toThrow('without a buckets door')
+    await flushPromises()
+    expect(loadScopePeople).not.toHaveBeenCalled()
+    expect(listBuckets).not.toHaveBeenCalled()
+    expect(authenticatedCalls).toEqual([])
   })
 })
 

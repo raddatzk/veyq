@@ -56,7 +56,8 @@
 
 - **Virtual-until-upload primary.** A primary bucket materializes **lazily** — a find-or-create keyed on
   `(node_id, owner_key)` on the uploader's **first upload** (or first sub-bucket). An uploader with no media has
-  **no row** and does not appear. Its name is **derived** (member = the per-tenant username; contributor = the
+  **no row** and does not appear. Its name is **derived** (member = the display name, the real name else the username,
+  [en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md) § The display name; contributor = the
   identity's sealed name) and **sealed** like any bucket name, so the grouping view is uniform + operator-blind; the
   primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: every find-or-create of a primary
   (`MediaStore.ensurePrimaryBucket` — an attach, a sub-bucket create, a move and a sub-bucket delete all go through it)

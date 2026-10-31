@@ -49,9 +49,9 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const toast = useToast()
 // Every read and write of the organizer goes through the Memory detail's data source (`../source.ts`, inbox #401 S4):
-// its buckets door — the scope's buckets and members, the tree's ancestor keys. A member's only; the detail mounts this
-// where the rights AND the source say so, and outside a detail, or on a source without the door, it throws rather
-// than reach for the member's API itself.
+// its buckets door — the scope's buckets and its members' display names, the tree's ancestor keys. A member's only; the
+// detail mounts this where the rights AND the source say so, and outside a detail, or on a source without the door, it
+// throws rather than reach for the member's API itself.
 const buckets = (() => {
   const door = useMemoryView().source.buckets
   if (!door) throw new Error('MemoryBuckets mounted without a buckets door')
@@ -119,11 +119,12 @@ async function loadBuckets() {
   const key = props.memoryKey
   status.value = 'loading'
   try {
-    const [raw, members] = await Promise.all([
+    const [raw, people] = await Promise.all([
       buckets.list(props.nodeId),
-      buckets.members().catch(() => []),
+      buckets.people().catch(() => []),
     ])
-    const names = new Map(members.map((m) => [m.userId, m.username]))
+    // A member is named as everywhere else (ADR 0083 decision 9): the real name, else the username, from core's directory.
+    const names = new Map(people.map((p) => [p.userId, p.displayName]))
     const above = ancestorKeys()
     rawBuckets.value = raw.map((b) => ({
       id: b.bucketId,

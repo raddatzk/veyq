@@ -34,7 +34,7 @@ vi.mock('./memoryDate', async (orig) => ({ ...(await orig<object>()), setMemoryD
 vi.mock('./memoryLocation', async (orig) => ({ ...(await orig<object>()), setMemoryLocation: vi.fn() }))
 vi.mock('../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn() }))
 vi.mock('./itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
-vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
+vi.mock('../../core/people/directory', async (orig) => ({ ...(await orig<object>()), loadScopePeople: vi.fn() }))
 
 import {
   guestMemorySource,
@@ -49,7 +49,7 @@ import { setMemoryDate, reconcileMemoryDate } from './memoryDate'
 import { setMemoryLocation } from './memoryLocation'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
-import { listScopeMembers } from '../spaces/members'
+import { loadScopePeople } from '../../core/people/directory'
 import { publicShareMediaApi } from './api'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { openBlobVia } from '../../core/blob/transport'
@@ -306,7 +306,7 @@ describe("the member's source is today's calls, with its scope", () => {
     ['marks.load', () => src.marks!.load('n', key), loadItemFavoritesFor, [S, 'n', key]],
     ['marks.toggle', () => src.marks!.toggle('m-1', 'n', key), toggleItemFavorite, ['m-1', S, 'n', key]],
     ['buckets.list', () => src.buckets!.list('n'), media.listBuckets, [S, 'n']],
-    ['buckets.members', () => src.buckets!.members(), listScopeMembers, [S]],
+    ['buckets.people', () => src.buckets!.people(), loadScopePeople, [S]],
     ['buckets.create', () => src.buckets!.create('n', key, 2, 'A', 'p'), media.createBucket, [S, 'n', key, 2, 'A', 'p']],
     ['buckets.rename', () => src.buckets!.rename('n', key, 2, 'b', 'B'), media.renameBucket, [S, 'n', key, 2, 'b', 'B']],
     ['buckets.remove', () => src.buckets!.remove('n', 'b'), media.deleteBucket, [S, 'n', 'b']],

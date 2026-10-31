@@ -29,7 +29,9 @@ carrying a **lazy primary** bucket per uploader plus optional **one-level sub-bu
 primary grouping**: each uploader's **primary bucket** (everything they contributed). The **sub-bucket management
 UI** (create/rename/move/delete folders) followed on the same table + endpoints (cr-0122).
 
-Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-tenant **username**) and anonymous
+Uploaders span **members** (`owner_key = user:{userId}`, named by the display rule — the **real name**, else the
+**username**, [en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md) § The display name)
+and anonymous
 **public contributors** (`owner_key = share:{shareIdentityId}`, display name = the **sealed** name from
 [ADR 0030](../../../decisions/0030-contributor-public-share.md)), shown marked as a guest's — "Ben (guest)" (inbox #433):
 a contributor names itself freely and could pick a member's name; a sub-bucket's name is a member's and stays as it is.
@@ -52,7 +54,7 @@ One's own bucket reads **"Deine Beiträge"**.
   keep the tab quiet.
 - **A sealed name won't unseal** (missing/rotated `K_node`) → fall back to a neutral placeholder ("Beitrag"),
   **never block the grid**.
-- **Group / tenant scope** → **member buckets only** (name = username). Anonymous contributor shares are
+- **Group / tenant scope** → **member buckets only** (each named by the display rule). Anonymous contributor shares are
   **personal-scope-only** ([ADR 0029](../../../decisions/0029-public-viewer-share.md) / ADR 0030), so they do not
   appear in group/tenant memories.
 - **A medium with `bucket_id = null`** (no write produces one; the column is merely nullable) → it
@@ -73,9 +75,11 @@ One's own bucket reads **"Deine Beiträge"**.
 - **A guest named above the node.** A link's guest names itself under the link root's key, whichever node it
   uploads into, so a member opens a guest's bucket name below the root with an ancestor's key through the tree's key
   chain ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6).
-- **Open: members are named by username here.** The rest of the interface names a member by the display rule
-  ([en.spaces.member-identity](../../spaces/enablers/en.spaces.member-identity.md) § The display name); the
-  Contributions tab still shows the username. Whether it follows the rule is open.
+- **A member is named as everywhere else.** A member's bucket reads the member's display name from core's people
+  directory — the real name when it opens on this device (sealed under the tenant's key), else the username; a user
+  the scope no longer lists reads "Member". A link's guest never sees the tab, so never a member's name
+  ([ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8,
+  [ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decisions 7, 9).
 - **A real data model.** The bucket table ([en.memory.buckets](../enablers/en.memory.buckets.md)) carries
   sub-buckets from day one, and the organizer UI (create/rename/delete a sub-bucket, move media in) is built on the
   shipped endpoints.

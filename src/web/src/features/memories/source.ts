@@ -28,8 +28,7 @@ import { useGuestSession, type GuestIdentity } from '../../core/sharing/guestIde
 import type { OpenedBlobMeta } from '../../core/blob/meta'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import { activeEpochKeys } from '../../app/activeSpace'
-import { listScopeMembers } from '../spaces/members'
-import type { ScopeMember } from '../../api/generated/scopes'
+import { loadScopePeople, type Person } from '../../core/people/directory'
 import { ShareRole } from '../../api/generated/sharing'
 import type { ShareMediaListing } from '../../api/generated/share-media'
 import type { ChunkProvider } from '../../sw/protocol'
@@ -206,7 +205,8 @@ export interface MarksDoor {
 /** The contributions organizer (uc.memory.buckets): the buckets, the scope's members that name them, and the moves. */
 export interface BucketsDoor {
   list(nodeId: string): Promise<BucketItem[]>
-  members(): Promise<ScopeMember[]>
+  /** The scope's current members, named by the display rule (ADR 0083 decision 9): core's directory, the tenant's names. */
+  people(): Promise<Person[]>
   /** The keys of `nodeId`'s ancestors, nearest first — a link's guest named itself under its root's key. */
   ancestorKeys(nodeId: string): Uint8Array[]
   create(nodeId: string, key: Uint8Array, nodeEpoch: number, name: string, parentBucketId?: string): Promise<BucketItem>
@@ -377,7 +377,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     },
     buckets: {
       list: (nodeId) => listBuckets(scope(), nodeId),
-      members: () => listScopeMembers(scope()),
+      people: () => loadScopePeople(scope()),
       ancestorKeys(nodeId) {
         const epochs = activeEpochKeys()
         if (!epochs) return []

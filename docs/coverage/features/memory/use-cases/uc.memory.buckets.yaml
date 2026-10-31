@@ -30,10 +30,19 @@ acceptanceCriteria:
       web:
         unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
   - id: contributions-tab-primary-grouping
-    text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed with K_node client-side (a contributor's sealed name, shown marked as a guest's - "Ben (guest)", inbox #433 - while a sub-bucket's name, a member's, is not; a member's the per-tenant username), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
+    text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed with K_node client-side (a contributor's sealed name, shown marked as a guest's - "Ben (guest)", inbox #433 - while a sub-bucket's name, a member's, is not; a member's by the display rule, see members-named-by-the-display-rule), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
     coverage:
       web:
         unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
+  - id: members-named-by-the-display-rule
+    text: >-
+      A member's bucket is named by the one display rule (ADR 0083 decision 9), read from core's people directory: the
+      member's real name when it opens on this device, else the username; a user the scope does not list, or a directory
+      that cannot be read, reads the neutral "Member". A link's guest is never drawn the tab — the guest's source carries
+      no buckets door — so it reads no member's name and calls no authenticated client (ADR 0030 point 8).
+    coverage:
+      web:
+        unit: [src/features/memories/components/MemoryBuckets.test.ts, src/features/memories/source.test.ts, src/features/memories/components/MemoryDetail.guest.test.ts]
   - id: move-beyond-one-request
     text: Moving more media than one request carries moves all of them — the selection goes out as consecutive requests inside the contract's `MoveMediaRequest.mediaIds` bound, which the server enforces. The slices are not atomic together; a failing one surfaces through the move dialog's error after the earlier ones have moved.
     coverage:
