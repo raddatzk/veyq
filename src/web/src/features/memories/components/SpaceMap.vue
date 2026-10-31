@@ -14,12 +14,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useMapConfig, setMapsConsent } from '../../../shared/state/useMapConfig'
+import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { clusterPins, sortPinsByStartDate, type LocatedPin, type PinCluster } from '../spaceMap'
 import { coverImageStyle, type LoadedCover } from '../memoryCover'
 import { formatClosedRange, formatDay } from '../memoryDateRange'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import MapConsentPrompt from './MapConsentPrompt.vue'
+import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
 
 // `covers` maps a node id → the node's chosen cover (a decrypted thumbnail URL + its crop, loaded by the host,
@@ -245,7 +246,8 @@ onMounted(() => {
 })
 
 // The map container is `v-if`-gated on `showMap`; when it flips on (consent granted / first pin) mount Leaflet on
-// the freshly-rendered element, and tear it down when it flips off (consent revoked / pins emptied).
+// the freshly-rendered element, and tear it down when it flips off (consent withdrawn — the map's own "Turn map off",
+// the settings, another tab — or pins emptied): `map.remove()` drops the tile layer, so no further tile is requested.
 watch(showMap, async (on) => {
   if (on) {
     await nextTick()
@@ -279,10 +281,6 @@ watch(
 )
 
 onBeforeUnmount(teardown)
-
-function enableMaps() {
-  setMapsConsent(true)
-}
 </script>
 
 <template>
@@ -293,12 +291,7 @@ function enableMaps() {
       <VeyqIcon name="map" class="space-map-panel-icon" />
       <p>{{ t('memory.place.mapsNotOffered') }}</p>
     </div>
-    <div v-else-if="!mapsAvailable" class="space-map-panel">
-      <VeyqIcon name="map" class="space-map-panel-icon" />
-      <component :is="`h${headingLevel}`" class="space-map-panel-title">{{ t('memory.place.consentTitle') }}</component>
-      <p>{{ t('memory.place.consentBody') }}</p>
-      <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
-    </div>
+    <MapConsentPrompt v-else-if="!mapsAvailable" :heading-level="headingLevel" />
 
     <!-- consented but nothing located in this subtree yet -->
     <div v-else-if="pins.length === 0" class="space-map-panel">
@@ -307,13 +300,19 @@ function enableMaps() {
       <p>{{ t('memory.map.emptyHint') }}</p>
     </div>
 
-    <div v-else ref="el" class="space-map-canvas" role="application" :aria-label="t('memory.viewMap')" />
+    <div v-else class="space-map-mapwrap">
+      <div ref="el" class="space-map-canvas" role="application" :aria-label="t('memory.viewMap')" />
+      <MapOffButton />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .space-map {
   width: 100%;
+}
+.space-map-mapwrap {
+  position: relative;
 }
 .space-map-canvas {
   width: 100%;

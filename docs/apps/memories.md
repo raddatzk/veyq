@@ -58,10 +58,20 @@ OpenStreetMap's standard tile server and public Nominatim — and the Server Own
 is active only while its address is configured and its switches are on, and the served CSP names its origin only then
 ([en.platform.capability-register § What "off" does](../features/platform/enablers/en.platform.capability-register.md#what-off-does)).
 
-**The consent, as built.** One consent covers both, because tiles gate geocoding. It is off by default and asked in
-context, by the place editor or a level's map before the first tile loads; it is kept per browser, not per account,
-and no request leaves before it. It cannot be withdrawn in the interface yet, and the opt-in in personal settings and a
-group's per-space consent are not built (ADR 0016). A member without it sees resolved names as text.
+**The consent, as built** ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)). One consent covers both,
+because tiles gate geocoding. It is off by default and kept per browser, not per account, in every space; the server
+holds no consent state, and no request leaves before it. It is given in context — the place editor or a map asks before
+the first tile loads — or under Settings → *Map and place names*, which names the tile host and the geocoder host this
+server configured (or that none is) and what each receives: the part of the map in view or a place's coordinate, and the
+device's IP address. The consent names those hosts and holds only for them: a new tile host, or a new or changed
+geocoder host, shows the prompt again, naming the new host, and nothing reaches it until the member agrees (a geocoder
+the Server Owner removed asks nothing; a consent stored before hosts were recorded is asked once more, and the settings
+show which hosts an earlier consent named). It is withdrawn there, with the same switch, or by *Turn map off* on any
+map (a level's, a person's, the place editor's and the photo panel's), beside the attribution — the one control a share guest, who has no
+settings, withdraws with. A withdrawal acts at once: the flag is removed, every open map unmounts with its tile layer
+(another tab of the browser follows), no geocoding request leaves, and the consent prompt stands where the map was.
+Nothing stored is touched: resolved names stay in the Memories. A member without the consent sees resolved names as
+text. A space owner's enabling notice is decided and not built (ADR 0016).
 
 **Request discipline** ([ADR 0016 § Request discipline](../decisions/0016-geocoding-provider-neutrality.md#request-discipline--the-providers-policy-is-part-of-the-decision-not-an-optimisation)):
 a resolved name is sealed into the node's meta (a photo's into its tier) and read from there. The client asks the

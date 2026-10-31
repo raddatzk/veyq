@@ -69,6 +69,7 @@ import MemoryBanner from '../banner/MemoryBanner.vue'
 import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
 import { useBannerEditor } from '../banner/useBannerEditor'
+import MapConsentRenewal from './MapConsentRenewal.vue'
 
 const props = defineProps<{
   node: TreeNode
@@ -956,6 +957,7 @@ watch(
       @update:visible="consentDialogOpen = false"
     >
       <p>{{ t('memory.place.consentBody') }}</p>
+      <MapConsentRenewal />
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="consentDialogOpen = false" />
         <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />

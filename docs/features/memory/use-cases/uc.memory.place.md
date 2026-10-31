@@ -55,6 +55,20 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   only with the map (ADR 0018). The position is the medoid of the photos' GPS (`auto`), a pin set earlier on a map
   (kept, `fixed`), or none: a place that is a **name only** (E3), kept `auto` so the first geotagged photo gives
   it the medoid. Renaming a geocoded place there makes it `manual`; saving it untouched keeps its anchor.
+- **A5 — give or withdraw the map consent, in settings or at the map** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md),
+  GDPR Art. 7(3)): the one consent per browser covers the tiles and the geocoder in every space. Under Settings →
+  *Map and place names* the member sees whether it is on, the tile host and the geocoder host this server configured
+  ("none configured" for one that is absent; with no tile service there is nothing to consent to and no switch), and
+  what they receive — the part of the map in view or a place's coordinate, plus the device's IP address; a switch turns
+  it on or off. The consent names the hosts it was given for and holds only for them: when the Server Owner configures a
+  new tile host, or a new or changed geocoder host, the next map shows the prompt again, naming the new host, and nothing
+  is requested from it until the member agrees — a removed geocoder asks nothing, a consent stored before hosts were
+  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map off* beside the
+  attribution withdraws it too, the same control for a member and a share guest (who has no settings). A withdrawal
+  acts at once: the stored flag is removed, every open map unmounts with its tile layer (another tab of the browser
+  follows), no further tile or geocoding request leaves, and the consent prompt stands where the map was; in the open
+  place editor the name field stays, with what was framed and resolved so far. Nothing stored is touched: resolved
+  names and positions stay in the Memories.
 
 - **E1 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   place is unavailable until unlock + open.
@@ -74,13 +88,12 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
 
 ## Quality notes
 
-- **Sharing (groups/tenant) — one consent, decided per space, built per browser.** Tiles + geocoding are **one
-  opt-in**. What is built is one consent per browser, asked in context and applied in every space; it cannot be
-  withdrawn in the interface yet. The per-space consent of a group — and the opt-in in personal settings — are
-  decided and **not built** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md); the current
-  picture is [Memories § Places and the map](../../../apps/memories.md#places-and-the-map)). Either way a
-  **non-consenting** member's device makes no request, so they get **no map** and see an already-resolved name only
-  as **text**. A resolved name is sealed in the shared `wrappedMeta`, so members holding `K_node` see it without
+- **Sharing (groups/tenant) — one consent per browser, the member's own.** Tiles + geocoding are **one opt-in**,
+  given in context or in settings and withdrawn in settings or at the map (A5), applied in every space; no group and
+  no owner can bind it, and declining costs the map and nothing else. A space owner's enabling notice to its members
+  is decided and **not built** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md); the current
+  picture is [Memories § Places and the map](../../../apps/memories.md#places-and-the-map)). A **non-consenting**
+  member's device makes no request, so they get **no map** and see an already-resolved name only as **text**. A resolved name is sealed in the shared `wrappedMeta`, so members holding `K_node` see it without
   their own device contacting the provider.
 - **Multilingual names.** A stored `name` is a **single frozen string**. For **shared** content it resolves in
   the **tenant's configured language** (a tenant setting) — consistent across members, not the random locale of

@@ -10,6 +10,7 @@ import { computed, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppearancePanel from '../features/settings/AppearancePanel.vue'
+import MapsPanel from '../features/settings/MapsPanel.vue'
 import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
 import KeyRotationPanel from '../features/account/rotation/KeyRotationPanel.vue'
 import ChangePasswordPanel from '../features/account/changePassword/ChangePasswordPanel.vue'
@@ -132,6 +133,9 @@ const categories = computed<NavCategory[]>(() => {
       collapsible: false,
       items: [
         { id: 'appearance', label: t('settings.appearance'), icon: 'palette' },
+        // This browser's consent to the map tiles and the place-name lookup (uc.memory.place A5): device-local like
+        // appearance, so it sits beside it; always listed, since a consent must be withdrawable wherever it was given.
+        { id: 'maps', label: t('settings.maps'), icon: 'map' },
         // Every signed-in device + the remote sign-out (uc.account.sessions), AND how this device unlocks
         // (uc.account.trust-device § Untrust) — one rubric, because both are facts about a device and the list
         // already carries a row for this one. Account-wide, not scope-bound, and gated on a session rather than
@@ -281,6 +285,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }
   }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
+  if (id === 'maps') return { component: MapsPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
   if (id === 'password') return { component: ChangePasswordPanel, props: {} }
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }

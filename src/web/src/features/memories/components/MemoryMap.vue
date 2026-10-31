@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // A thin Leaflet slippy-map wrapper honoring the ADR 0018 tile seam: a raster `TileLayer` from a
 // provider-neutral, **third-party** tile URL (client-direct — never the veyq backend/operator), with mandatory
-// attribution. It is presentation only — no crypto, no consent logic (the parent gates it behind `mapsAvailable`).
+// attribution. It is presentation only — no crypto, no consent logic (the parent gates it behind `mapsAvailable`), except
+// that it carries the map's "Turn map off" (`MapOffButton`, uc.memory.place A5): withdrawing flips `mapsAvailable`, the
+// parent unmounts this component and `onBeforeUnmount` removes the Leaflet map with its tile layer.
 //
 // Interaction is **frame-based** (cr-0069): the user pans/zooms to frame a spot; the map reports its centre+zoom
 // via `frame` (→ the geocode `nameAnchor`, and, for a `fixed` place, the position itself). A centre **crosshair**
@@ -12,6 +14,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '../memoryLocation'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
 
 const props = defineProps<{
@@ -111,6 +114,7 @@ defineExpose({
     <div ref="el" class="memory-map" role="application" />
     <!-- centre crosshair: the framed point (the `fixed` position + the naming anchor) -->
     <VeyqIcon v-if="crosshair" name="map-marker" class="memory-map-crosshair" />
+    <MapOffButton />
   </div>
 </template>
 

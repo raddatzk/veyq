@@ -12,7 +12,42 @@ import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
-vi.mock('leaflet', () => ({ default: {} }))
+// A fake Leaflet for the one test that draws the real map (the others stub `SpaceMap`): it counts the tile layers made and
+// the maps removed, so a guest's "Turn map off" shows its effect.
+const leaflet = vi.hoisted(() => {
+  const calls = { tileLayers: 0, removed: 0 }
+  const map = {
+    setView: () => map,
+    fitBounds: () => map,
+    remove: () => {
+      calls.removed++
+    },
+    on: () => map,
+    latLngToLayerPoint: ([lat, lng]: [number, number]) => ({ x: lng * 1000, y: lat * 1000 }),
+    layerPointToLatLng: ([x, y]: [number, number]) => ({ lat: y / 1000, lng: x / 1000 }),
+  }
+  const mk = () => {
+    const m = { on: () => m, addTo: () => m, setIcon: () => m }
+    return m
+  }
+  const L = {
+    map: () => map,
+    tileLayer: () => {
+      calls.tileLayers++
+      return { addTo: () => ({}) }
+    },
+    layerGroup: () => {
+      const g = { addTo: () => g, clearLayers: () => g, remove: () => {} }
+      return g
+    },
+    marker: mk,
+    polyline: mk,
+    divIcon: () => ({}),
+    DomEvent: { stop: () => {} },
+  }
+  return { L, calls }
+})
+vi.mock('leaflet', () => ({ default: leaflet.L }))
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('./api', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
@@ -39,6 +74,7 @@ import { t } from '../../test/i18n'
 import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
 import { actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
+import { setMapsConsent } from '../../shared/state/useMapConfig'
 
 const SCOPE_ID = '77777777-7777-4777-8777-777777777777'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_g'
@@ -93,13 +129,14 @@ const SpaceMapStub = { name: 'SpaceMap', props: ['pins', 'covers'], emits: ['ope
 
 let harness: RowsHarness | null = null
 /** `viewMode`: the mode the level hands in (inbox #404). */
-function mountGuest(role: ShareRole, viewMode: ViewMode = 'grid') {
+/** `realMap`: draw the real `SpaceMap` over the fake Leaflet instead of its stub. */
+function mountGuest(role: ShareRole, viewMode: ViewMode = 'grid', realMap = false) {
   const h = head(role)
   const tree = guestTreeSource(h, reactive({ hash: `#k=${b64url(K_SHARE)}` }))
   const root = tree.node(ROOT)!
   const nodes = tree.children(ROOT).filter((n) => n.kind === MEMORY_KIND)
   harness = mountRows(memoryRows, { folder: root, nodes, epochs: null, access: guestAccessFor(h), tree, viewMode, liveTick: undefined }, 'grid', {
-    stubs: { SpaceMap: SpaceMapStub },
+    stubs: realMap ? {} : { SpaceMap: SpaceMapStub },
   })
   return harness
 }
@@ -178,6 +215,28 @@ describe('Memories rows for a share guest', () => {
     map.vm.$emit('open', DEEP)
     await flushPromises()
     expect(h.events.open[0].id).toBe(DEEP)
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  // uc.memory.place A5: a guest has no settings, so the map's own "Turn map off" is where a guest withdraws - the member's
+  // very map, with nothing of the member's world reached.
+  it('a guest withdraws the map consent on the map itself: the map is removed, no further tile layer, the prompt returns', async () => {
+    setMapsConsent(true)
+    leaflet.calls.tileLayers = 0
+    leaflet.calls.removed = 0
+    const h = mountGuest(ShareRole.Read, 'map', true)
+    await flushPromises()
+    expect(h.w.find('.space-map-canvas').exists()).toBe(true)
+    expect(leaflet.calls.tileLayers).toBe(1)
+
+    await h.w.get('.veyq-map-off').trigger('click')
+    await flushPromises()
+
+    expect(localStorage.getItem('veyq:maps-consent')).toBeNull()
+    expect(leaflet.calls.removed).toBe(1)
+    expect(h.w.find('.space-map-canvas').exists()).toBe(false)
+    expect(h.w.text()).toContain(t('memory.place.consentTitle'))
+    expect(leaflet.calls.tileLayers).toBe(1)
     expect(authenticatedCalls).toEqual([])
   })
 

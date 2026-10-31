@@ -1,7 +1,7 @@
-# ADR 0016 — Reverse geocoding: third-party-only, provider-neutral, consented per space (Nominatim reference)
+# ADR 0016 — Reverse geocoding: third-party-only, provider-neutral, consented by the member (Nominatim reference)
 
 - Status: Accepted
-- Built: partly (not built: the opt-in in personal settings and its withdrawal, the per-space consent of a group, the tenant language for shared names)
+- Built: partly (not built: a space owner's enabling notice, the tenant language for shared names)
 - Date: 2026-07-01
 - Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
 
@@ -24,9 +24,10 @@ basemap tiles, [ADR 0018](0018-map-tiles-provider-neutrality.md)). The tensions:
   address breakdown (road … country), from which a name of any granularity can be picked
   (`Atlantik → Kanaren → Teneriffa`), and localizes via `accept-language` with **graceful fallback** to the local name
   (never a hard error). Photon is built for forward search-as-you-type, which we don't need.
-- **Consent must be fair in a group.** "I won't expose my coordinate — someone else can" is, unlike a hardware/
-  cost gate, a *"my privacy matters more than yours"* asymmetry. It cannot be imposed, and free-riding inside a
-  committed group is unfair. Consent is therefore modelled **per space**, not silently global and not owner-decreed.
+- **Consent must be free, and so must its withdrawal.** "I won't expose my coordinate — someone else can" is a
+  choice about the member's own device and address, not the group's: it cannot be imposed by an owner or by the rest
+  of a group, and withdrawing it must be as easy as giving it and cost nothing else (GDPR Art. 7(3) and (4), recitals
+  42 and 43). A member who declines gives up the map, not their membership.
 
 Considered and rejected:
 
@@ -35,15 +36,21 @@ Considered and rejected:
   invariant. Rejected (the inverse of the earlier framing).
 - **Proxying the geocode through the veyq backend.** Same break — the operator sees the coordinate. Rejected;
   requests go client-direct.
-- **Auto-consent on veyq signup / a single global toggle.** Coercive for a privacy choice; rejected in favour of
-  the per-space model below.
+- **Auto-consent on veyq signup.** Coercive for a privacy choice: a consent bundled into creating an account is not
+  given for this purpose. Rejected; the consent is asked in context, before the first request.
+- **A unanimity ratchet in a group** — once every current member consented, joining the space would be consenting,
+  and a member who no longer consents would leave the space. Rejected: a consent tied to joining a group is not freely
+  given, and a withdrawal that costs one's membership is not without detriment (GDPR Art. 7(4), recitals 42 and 43).
+  The fairness worry it answered — a member who sees the map's names without exposing their own coordinate — is
+  bounded already: such a member has no map and sees resolved names as text only.
 - **Forward autocomplete.** Not needed by the coordinate-first flow.
 
 ## Decision
 
 **Reverse geocoding is coordinate-first, behind a provider-neutral seam, sent client-direct to a third-party
-(never the operator, never a proxy), and consented per space. Tiles + geocoding are one coupled opt-in
-([ADR 0018](0018-map-tiles-provider-neutrality.md)). Nominatim is the reference provider.**
+(never the operator, never a proxy), and consented by the member, per browser, withdrawable at any time. Tiles +
+geocoding are one coupled opt-in ([ADR 0018](0018-map-tiles-provider-neutrality.md)). Nominatim is the reference
+provider.**
 
 - **The seam is `reverse(lat, lng, lang) → level[]`** (the address hierarchy, finest→coarsest — road, suburb,
   city, county, state, country). The client **picks the granularity level** (and may type its own name); `lang` =
@@ -56,20 +63,30 @@ Considered and rejected:
   backend and never to an operator-run instance**. It carries **no veyq identity and no Memory context** — a bare
   coordinate. The **veyq operator stays blind**; the *user* consents to the third party seeing a coordinate + IP.
   A fully-blind, no-third-party path exists only via a future **on-device coarse gazetteer**.
-- **Consent is per space (coupled with tiles), never global or owner-decreed:**
-  - A user may **pre-opt-in in personal settings** (tiles + geocoding); then joining a space shows only an info
-    pill — no per-space action needed.
-  - Otherwise a user opts in **per space** explicitly.
-  - A **space owner enabling** it is the owner's wish but **does not bind members**: each member is *notified* and
-    consents individually (or is already covered by their personal opt-in). A **non-consenting** member's device
-    makes **no external request** — no tiles (no map) and no geocode; they see already-resolved names only as
-    **text**. (Not pure free-riding: they give up the map to keep their privacy.)
-  - **Unanimity binds (a ratchet):** once **all** current members have consented, the opt-in becomes **binding
-    for new members** (joining = consenting). Binding does **not** revert — a member who no longer wants to
-    consent **leaves the space** rather than staying as a text-only free-rider.
-  - A **personal space** is just the user's own two-stage toggle (no group).
-  - **Built so far** is one consent per browser, given in context (the place editor or a level's map asks before the
-    first request) and applied in every space; it cannot be withdrawn yet. The rest of this model is not built.
+- **The consent is the member's, one per browser (coupled with tiles), never owner-decreed:**
+  - **One consent per browser**, applied in every space. It is device-local
+    ([ADR 0022](0022-settings-information-architecture.md)): the server holds no consent state, and a consent given
+    on one device does not reach another.
+  - **Given in context or in settings.** The place editor or a map asks before the first request; the member may
+    also turn it on under Settings → *Map and place names*, which names the tile and geocoder hosts this server
+    configured and what each receives.
+  - **The consent names its recipients, and a new one is asked again** (GDPR Art. 4(11) and 7: a consent is informed
+    only about the recipients it named). The consent records the tile host and the geocoder host it was given for, and
+    holds only while those are the hosts the server serves: a new tile host, or a new or changed geocoder host, makes
+    the map show the prompt again, naming the new host, and nothing is requested from it until the member agrees. A
+    geocoder the Server Owner removed needs no new consent — a recipient fewer, never a new one. A consent recorded
+    before hosts were, which names none, is asked once more. The settings show the hosts an earlier consent named
+    where they differ from the current ones.
+  - **Withdrawn in settings or at the map, at once.** The same settings switch turns it off, and every map carries a
+    *Turn map off* control beside its attribution — so withdrawing is as easy as giving, and a share guest, who has
+    no settings, withdraws there too. A withdrawal takes effect immediately: every open map is torn down, no further
+    tile or geocoding request leaves, and the consent prompt stands where the map was. What is already sealed —
+    resolved names, positions — is not touched.
+  - A **non-consenting** member's device makes **no external request** — no tiles (no map) and no geocode; they see
+    already-resolved names only as **text**. Declining costs the map and nothing else: no membership, no other
+    function.
+  - A **space owner enabling** maps for a space is the owner's wish and **never binds members**: each member is
+    *notified* and consents on their own device (or is already covered by their consent). Not built.
 - **Tenant language for shared names.** A resolved name is sealed into the shared `wrappedMeta`
   ([ADR 0012](0012-content-key-hierarchy.md)) so members (incl. non-consenting ones) see it as text. To keep it
   **consistent** rather than in the random locale of whoever resolved it first, shared names resolve in the
@@ -119,12 +136,12 @@ reads.
   would forfeit this, so it is not offered.
 - **No vendor lock-in.** Swapping Nominatim for another OSM-based geocoder is an endpoint + a thin adapter behind
   the same `reverse()` seam.
-- **Fairness without coercion.** No one is forced; the owner can't impose; free-riding is bounded (non-consenters
-  lose the map) and ends at unanimity, after which the commitment is binding and can't be silently undone.
+- **Freedom without coercion.** No one is forced and the owner can't impose; a member may withdraw at any time at no
+  cost but the map, and free-riding is bounded (non-consenters lose the map and see names as text).
 - **Consistent shared names, still re-resolvable.** The tenant language fixes the stored string; `nameAnchor` +
   `accept-language` let a viewer re-resolve in their locale on demand.
-- **Operator visibility is coarse.** The operator sees a space's map/geocoding state as **on / off / binding** —
-  operational metadata, never a coordinate or a per-member consent detail.
+- **The operator sees no consent.** The consent lives in the member's browser; the operator sees which services the
+  instance offers, never who consented, a coordinate or a place name.
 - **A blind, leak-free path remains open.** Manual names need no request; a future **on-device coarse gazetteer**
   (a bundled `lat/lng → country/region/city` dataset) can sit behind the same seam as a fully-blind provider —
   deferred for its per-locale data cost, not excluded. Note that a platform's *built-in* geocoder is never the

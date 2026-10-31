@@ -5,10 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // test can assert what got pinned and simulate a pin click.
 const leaflet = vi.hoisted(() => {
   const markers: Array<{ latlng: [number, number]; click: ((e?: unknown) => void) | null }> = []
+  // How often a map was created with its tile layer, and removed: a withdrawn consent must remove it and add no other.
+  const calls = { tileLayers: 0, removed: 0 }
   const map = {
     setView: () => map,
     fitBounds: () => map,
-    remove: () => {},
+    remove: () => {
+      calls.removed++
+    },
     on: () => map,
     // A trivial projection: layer pixels ∝ lat/lng, so far-apart pins never cluster in these contract tests.
     latLngToLayerPoint: ([lat, lng]: [number, number]) => ({ x: lng * 1000, y: lat * 1000 }),
@@ -16,7 +20,10 @@ const leaflet = vi.hoisted(() => {
   }
   const L = {
     map: () => map,
-    tileLayer: () => ({ addTo: () => ({}) }),
+    tileLayer: () => {
+      calls.tileLayers++
+      return { addTo: () => ({}) }
+    },
     layerGroup: () => {
       const g = { addTo: () => g, clearLayers: () => markers.splice(0), remove: () => {} }
       return g
@@ -40,13 +47,14 @@ const leaflet = vi.hoisted(() => {
     divIcon: () => ({}),
     DomEvent: { stop: () => {} },
   }
-  return { L, markers }
+  return { L, markers, calls }
 })
 vi.mock('leaflet', () => ({ default: leaflet.L }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import SpaceMap from './SpaceMap.vue'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
+import { setTileUrl } from '../../../test/services'
 import { MEMORY_KIND } from '../kinds'
 import type { LocatedPin } from '../spaceMap'
 import { realI18n, t } from '../../../test/i18n'
@@ -66,6 +74,8 @@ const mountMap = (pins: LocatedPin[]) => mount(SpaceMap, { props: { pins }, glob
 
 beforeEach(() => {
   leaflet.markers.splice(0)
+  leaflet.calls.tileLayers = 0
+  leaflet.calls.removed = 0
   setMapsConsent(true) // consented by default; the opt-in test turns it off
 })
 
@@ -113,9 +123,61 @@ describe('SpaceMap', () => {
     const person = mount(SpaceMap, { props: { pins: [], headingLevel: 3 }, global: { plugins: [realI18n()], stubs } })
     await flushPromises()
 
-    expect(level.get('h2.space-map-panel-title').text()).toBe(t('memory.place.consentTitle'))
+    expect(level.get('h2.map-consent-prompt-title').text()).toBe(t('memory.place.consentTitle'))
     expect(level.find('h3').exists()).toBe(false)
-    expect(person.get('h3.space-map-panel-title').text()).toBe(t('memory.place.consentTitle'))
+    expect(person.get('h3.map-consent-prompt-title').text()).toBe(t('memory.place.consentTitle'))
     expect(person.find('h2').exists()).toBe(false)
+  })
+
+  it('"Turn map off" withdraws at once: the map is removed, no further tile layer is made, the consent prompt returns', async () => {
+    const wrapper = mountMap([pin('m1', 'Rome', 41.9, 12.5)])
+    await flushPromises()
+    expect(leaflet.calls.tileLayers).toBe(1)
+
+    await wrapper.get('.veyq-map-off').trigger('click')
+    await flushPromises()
+
+    expect(localStorage.getItem('veyq:maps-consent')).toBeNull()
+    expect(leaflet.calls.removed).toBe(1)
+    expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
+    expect(wrapper.text()).toContain(t('memory.place.consentTitle'))
+
+    await wrapper.setProps({ pins: [pin('m1', 'Rome', 41.9, 12.5), pin('m2', 'Paris', 48.85, 2.35)] }) // the level moves on
+    await flushPromises()
+    expect(leaflet.calls.tileLayers, 'no tile layer after the withdrawal').toBe(1)
+  })
+
+  it('a new tile host asks again: no tile layer for it, the prompt names it, the map comes once the member agrees', async () => {
+    const wrapper = mountMap([pin('m1', 'Rome', 41.9, 12.5)]) // consented for the default tile host
+    await flushPromises()
+    expect(leaflet.calls.tileLayers).toBe(1)
+
+    setTileUrl('https://tiles.new.example/{z}/{x}/{y}.png') // the Server Owner changed the tile service
+    await flushPromises()
+    expect(leaflet.calls.removed).toBe(1)
+    expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
+    expect(wrapper.get('.map-consent-renewal').text()).toContain('tiles.new.example')
+    expect(leaflet.calls.tileLayers, 'nothing from the new host before the consent').toBe(1)
+
+    const fresh = mountMap([pin('m1', 'Rome', 41.9, 12.5)]) // a map opened now
+    await flushPromises()
+    expect(fresh.find('.space-map-canvas').exists()).toBe(false)
+    expect(leaflet.calls.tileLayers).toBe(1)
+
+    await wrapper.get('.btn-stub').trigger('click') // "Enable maps" for the new host
+    await flushPromises()
+    expect(wrapper.find('.space-map-canvas').exists()).toBe(true)
+    expect(leaflet.calls.tileLayers).toBeGreaterThan(1)
+  })
+
+  it('the legacy consent "1" named no host: the prompt shows and no tile layer is made', async () => {
+    localStorage.setItem('veyq:maps-consent', '1')
+    window.dispatchEvent(new StorageEvent('storage', { key: 'veyq:maps-consent', newValue: '1' }))
+    const wrapper = mountMap([pin('m1', 'Rome', 41.9, 12.5)])
+    await flushPromises()
+    expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
+    expect(wrapper.text()).toContain(t('memory.place.consentTitle'))
+    expect(wrapper.find('.map-consent-renewal').exists()).toBe(true)
+    expect(leaflet.calls.tileLayers).toBe(0)
   })
 })

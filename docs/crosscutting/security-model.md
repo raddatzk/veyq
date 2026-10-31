@@ -57,7 +57,8 @@ operator's view:
   coordinate or a tile's `{z,x,y}` (+ the client IP) — never a user id, a Memory id, or any veyq token.
 - **Opt-in + transparent — and opt-in is standing consent** (two stated exceptions: the breached-password check and
   the exchange rates, below). Off by default; enabling it is an explicit choice
-  with a plain-language note that a request leaves the device. Once enabled it may run **automatically** (e.g. a
+  with a plain-language note that a request leaves the device, and withdrawing it is as easy: for the map and place
+  names, in Settings → *Map and place names* or by *Turn map off* on the map itself, effective at once. Once enabled it may run **automatically** (e.g. a
   reverse lookup on the first geotagged media of an auto-location) — enabling it *is* the consent to those
   requests; it **never** fires without opt-in. A blind, request-free alternative stays available (e.g. typing a
   place name).

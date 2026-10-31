@@ -11,6 +11,10 @@
 // editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the photos' GPS (`auto`), a
 // pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the map views skip. The
 // name is always typed here, even where the geocoder is on: the one consent it rides on is asked only with the map.
+//
+// **Withdrawn while open** (the map's "Turn map off", uc.memory.place A5): the map unmounts at once, no further tile or
+// geocoder request leaves, and the consent prompt stands where the map was; the editor goes on as the name field, keeping
+// what was framed and resolved so far, and turning the map back on there brings it back.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -19,6 +23,7 @@ import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MemoryMap from './MemoryMap.vue'
+import MapConsentPrompt from './MapConsentPrompt.vue'
 import { reverseGeocode, defaultLevel, nameAtLevel, type GeoLevel } from '../geocode'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { MAX_PLACE_NAME, type LatLng, type MemoryLocation } from '../memoryLocation'
@@ -31,7 +36,7 @@ const props = defineProps<{
 const emit = defineEmits<{ save: [MemoryLocation | null]; close: [] }>()
 
 const { t, locale } = useI18n()
-const { tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable, mapsAvailable } = useMapConfig()
+const { tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable, mapsAvailable, mapsOffered } = useMapConfig()
 const mapRef = ref<{ fitPoints: (p: LatLng[]) => void; setView: (c: LatLng, z: number) => void } | null>(null)
 
 const DEFAULT_ZOOM = 13
@@ -133,8 +138,10 @@ function toggleNameMode() {
 function save() {
   if (!canSave.value) return
   const p = anchorPoint.value
-  // Without the map nothing is resolved here: an untouched geocoded name keeps the anchor it was resolved at.
-  const anchor = !withMap.value
+  // Without the map nothing is resolved here: an untouched geocoded name keeps the anchor it was resolved at. A map that
+  // was turned off while the editor was open resolved its levels before that, so a level picked from them anchors here.
+  const resolvedHere = withMap.value || levels.value.length > 0
+  const anchor = !resolvedHere
     ? (nameSource.value === 'geocoded' ? props.location?.nameAnchor : undefined)
     : nameSource.value === 'geocoded' && chosenLevel.value && p ? { lat: p.lat, lng: p.lng, level: chosenLevel.value } : undefined
   emit('save', {
@@ -192,7 +199,8 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <p v-else class="memory-location-position">
+      <MapConsentPrompt v-if="!withMap && mapsOffered" />
+      <p v-if="!withMap" class="memory-location-position">
         <template v-if="anchorPoint && derivedMode === 'auto'">
           <VeyqIcon name="images" /> {{ t('memory.place.followsPhotos') }}
         </template>

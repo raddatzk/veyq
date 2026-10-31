@@ -7,8 +7,9 @@ title: Curate a Memory's place — one sealed, named location
 # position = the MEDOID of the media GPS, reverse-only opt-in geocoding (client-direct, Nominatim reference, ADR
 # 0016), and a per-folder-subtree "Karte" view plotting every located Memory/Chapter from listNodes without loading
 # media (cr-0071). On a server without the map (memories.map off) the editor is a name field: a typed name, the
-# medoid or no position at all - a place that is a name only (inbox #458). The group consent
-# state-machine + a blind gazetteer remain prose gaps (own CRs), not unref'd criteria.
+# medoid or no position at all - a place that is a name only (inbox #458). The consent is one per browser, given and
+# withdrawn in settings or at the map (A5); a space owner's enabling notice (ADR 0016, not built) + a blind gazetteer
+# remain prose gaps (inbox #47), not unref'd criteria.
 acceptanceCriteria:
   - id: sealed-location-on-node
     text: A MEMORY/CHAPTER node's `wrappedMeta.location` carries ONE named place — name (mandatory, except a pending auto place) + nameSource (geocoded|manual) + derived {lat,lng} + derivedMode (fixed|auto) + nameAnchor {lat,lng,level} — sealed under a field key derived from K_node in the same client-versioned blob as the date (no contract change), set via the partial updateNode and returned on listNodes. The operator-blind server never sees a coordinate or a place name.
@@ -83,3 +84,28 @@ acceptanceCriteria:
           - src/features/memories/components/SpaceMap.test.ts
           - src/features/memories/levelRows.test.ts
           - src/core/node/ViewModeToggle.test.ts
+  - id: consent-in-settings
+    text: Settings → Personal → Map and place names shows this browser's one consent to the map tiles and the reverse geocoder (device-local, no server state) - whether it is on, the tile host and the geocoder host this server configured ("none configured" for an absent one), and what they receive (the part of the map in view or a place's coordinate, plus the device's IP address) - and a switch that gives it (the flag is stored, the map is available) or withdraws it at once (the flag is removed, `mapsAvailable` and `geocodingAvailable` turn false). With no tile service there is nothing to consent to and no switch is offered, except to withdraw a consent still stored.
+    coverage:
+      web:
+        unit:
+          - src/features/settings/MapsPanel.test.ts
+          - src/shared/state/useMapConfig.test.ts
+  - id: withdraw-at-the-map
+    text: Every map that loads tiles - a level's and a person's map, the place editor's, the photo panel's - carries "Turn map off" beside its attribution, the same control for a member and a share guest (who has no settings, and whose withdrawal calls no authenticated client). A withdrawal takes effect immediately - the stored flag is removed, the open map is removed with its tile layer and no further tile layer is made, a pending geocoding lookup asks nothing, another tab of the browser follows through the storage event - and the consent prompt stands where the map was (in the place editor above the name field, which keeps what was framed and resolved); enabling it there brings the map back. Nothing stored is touched.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/SpaceMap.test.ts
+          - src/features/memories/components/MemoryLocationEditor.withdraw.test.ts
+          - src/features/memories/levelRows.guest.test.ts
+          - src/shared/state/useMapConfig.test.ts
+  - id: a-new-host-asks-again
+    text: A consent names its recipients (GDPR Art. 4(11), 7) - it is stored with the tile host and the geocoder host it was given for and holds only while they are the hosts this server serves now. A changed tile host, or a changed or newly added geocoder host, is no consent - an open map is removed, no tile layer is made and no geocoding request leaves for the new host, and the prompt shows again naming it - until the member agrees; the same hosts under another path keep the map as before; a geocoder the Server Owner removed needs no new consent; the legacy stored value "1", which names no host, shows the prompt. The settings name the hosts an earlier consent was given for where they differ, with the switch off until the member agrees to the current ones.
+    coverage:
+      web:
+        unit:
+          - src/shared/state/useMapConfig.test.ts
+          - src/features/memories/components/SpaceMap.test.ts
+          - src/features/memories/components/MemoryLocationEditor.withdraw.test.ts
+          - src/features/settings/MapsPanel.test.ts

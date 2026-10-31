@@ -301,8 +301,8 @@ map the same way the level does, the same component over the person's Memories t
 
 - **The capability register's open entries and requirements** (ADR 0088):
   [en.platform.capability-register § Decided, not built](../features/platform/enablers/en.platform.capability-register.md#decided-not-built).
-- **Place names and the map** ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)): the opt-in in personal
-  settings and its withdrawal, a group's per-space consent and the tenant language for shared names. What is built:
+- **Place names and the map** ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)): a space owner's enabling
+  notice to its members and the tenant language for shared names. What is built:
   [Memories § Places and the map](memories.md#places-and-the-map).
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.
