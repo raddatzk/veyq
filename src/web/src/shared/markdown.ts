@@ -4,7 +4,8 @@
 // journal renderer (`legacy/frontend/.../journal/markdown.ts`); first consumer is the tenant terms (cr-0114),
 // and the journal reuses it when it lands. Rich embed tokens (::media / ::track …) are out of scope here.
 
-function escapeHtml(s: string): string {
+/** Escape text for a place that parses HTML (also Leaflet's attribution control, which writes `innerHTML`). */
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 

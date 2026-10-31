@@ -16,6 +16,7 @@ import type { LatLng } from '../memoryLocation'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
+import { escapeHtml } from '../../../shared/markdown'
 
 const props = defineProps<{
   tileUrl: string
@@ -72,7 +73,8 @@ function reportFrame() {
 onMounted(() => {
   if (!el.value) return
   map = L.map(el.value).setView([props.center.lat, props.center.lng], props.zoom)
-  L.tileLayer(props.tileUrl, { attribution: props.attribution, maxZoom: props.maxZoom }).addTo(map)
+  // Leaflet writes the attribution as HTML; the Server Owner's text is shown as text, never as markup.
+  L.tileLayer(props.tileUrl, { attribution: escapeHtml(props.attribution), maxZoom: props.maxZoom }).addTo(map)
   syncDots(props.dots)
   syncPin(props.marker)
   map.on('dragstart', () => (userDragged = true)) // fires only on a real user pan (not programmatic recenters)
