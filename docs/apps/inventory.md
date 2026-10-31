@@ -42,11 +42,12 @@ never learns what anyone owns, who lent it to whom, or when it is due back.
 - **Reservations** are loans asked for ahead, for a span of days. Two confirmed spans of one item may not overlap: the
   client checks before writing, and the record's compare-and-swap below makes a second write over a stale view fail
   instead of double-booking.
-- **An owner who leaves takes their items along.** When a member leaves the space, their items leave the pool and go
-  to the pool of their personal space, with their fields, notes, pictures and history; an item lent out at that
-  moment goes along still lent, its holder kept as the name it had. Items of others that the leaving member holds
-  stay in the pool, held by a former member, until their owner confirms them back. An account erased takes its items
-  with it.
+- **An owner who leaves, their items go.** An item is bound to its owner and its space: when its owner leaves the
+  space, is removed from it or is erased, their items are gone from the pool, with their fields, notes, pictures and
+  history. Leaving of their own accord, the owner is asked first: whether to keep a copy of their items in their
+  personal space's pool, and — where one is lent out — that it is still with its holder. A copy is a new item there,
+  its history along, a loan in it kept with the holder's name. Items of others that the leaving member holds stay in
+  the pool, held by a former member, until their owner confirms them back.
 - **No links.** A pool cannot be shared by a link: a link guest is anonymous and names itself, which is not who should
   hold a club's rope. A person outside the space asks a member.
 - **QR labels.** A printable label per item that holds only a URL with the item's id on the tenant's domain — never a
@@ -59,7 +60,8 @@ sealed, and the owner's client reads them. With no push, an open request shows w
 
 **Not in the first cut:** packing lists (a list of items to tick off for a trip), a finder card (a label a stranger
 can read to reach the owner — it would need a public link, which Inventory otherwise has none of), reminders by
-notification (below), a field set per tag, and import from a spreadsheet.
+notification (below), a field set per tag, handing an item to another owner (sold or given away: the new owner adds
+it again), and import from a spreadsheet.
 
 ## On the platform
 
@@ -72,7 +74,7 @@ What it takes from the platform as it stands:
 | A dropped or reordered revision is caught | ADR 0108 decision 5's graph of seen revisions, no signature (a seal under the pool's key already proves a key holder wrote it). |
 | Pictures per item | **New core piece:** a record with attachments, which ADR 0108 left until a third application needed it. Expenses' receipt table (`veyq_expenses_receipt`, the fourth `veyq_blob` arm) is where it is drawn from, so Inventory does not add a fifth arm of its own. |
 | Only the owner writes an item; others write requests | **New, Inventory's own:** a writer check per record — revision `n + 1` only from the writer of revision 1 — over what the operator sees already. |
-| An owner takes their items along | **New, Inventory's own:** the server knows an item's owner already — the writer of its first revision is operator-visible, as every revision's writer is — so it can hand a member who leaves their own items and nothing else. Their client re-seals them into their personal pool, and the server then drops them from the space's. An erased account's items go with it. |
+| An owner's items go when they do | The writer check above names them: when a member leaves the space, the server drops the items whose first revision they wrote, in the same step. A copy to their personal pool is their own client's, before they leave, as any write to their own space. |
 | Search and filter by tag, field, location, holder | In the client, over the decrypted list — a few thousand items fit in memory, as a Pot's entries do. |
 | "Due", "due back", "asked of me" | Shown when the pool opens, computed on the device. |
 
@@ -85,17 +87,10 @@ The node `kind` `INVENTORY` in each space that uses it; the number of items, the
 class and writer, and with the first revision's writer **whose item it is** — tombstones and erasures; the number and
 sizes of the pictures. From the times of writes: **when** the pool is used, and with that the rhythm of requests,
 loans and returns, but not which item, to whom, or until when. No item name, tag, field, location, holder, date or note
-is readable by it. That the owner is visible is the price of taking one's items along: the writer of every revision
-is visible in a Pot today already.
+is readable by it. That the owner is visible is the price of the owner alone writing their items: the writer of every
+revision is visible in a Pot today already.
 
 ## Open questions
 
-- **A member removed rather than leaving.** The recommendation: they take their items along as well — removing
-  someone does not keep their things. Their client fetches them at its next sign-in, within a window; after it, the
-  items are gone from the space's pool all the same.
-- **Bound to the space, or taken along?** An item is bound to its owner and its space. When its owner leaves, does it
-  go with them to their personal pool, as written above, or is it gone with them from the space and nowhere else?
-- **An item changing owner** (sold or given to another member): no transfer, since the owner is fixed to who added it;
-  the new owner adds it again. The recommendation is to keep it so in the first cut.
 - **Reminders beyond opening the pool** — a local notification on a phone after a sync, as Expenses' #550 — wait for
   the native clients (#438).
