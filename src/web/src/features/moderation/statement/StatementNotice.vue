@@ -35,12 +35,12 @@ const day = (d: Date) => d.toLocaleDateString(locale.value, { year: 'numeric', m
 
 const facts = computed(() => (statement.value ? openFacts(statement.value) : null))
 
-/** A guest's statement in the template's guest words: always told as the uploader, after a moderator's measure. */
+/** A guest's statement in the template's guest words: always told as the uploader, on the basis its case's opening gave it. */
 const guestPassages = (g: GuestStatement) =>
   renderStatement(lang.value, {
     measureKind: g.statement.measureKind,
     roles: ['UPLOADER'],
-    basis: 'REPORT',
+    basis: g.statement.basis,
     ground: g.statement.ground,
     date: day(g.statement.takenAt),
     contact: g.contact,

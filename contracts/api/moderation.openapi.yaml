@@ -2216,13 +2216,6 @@ components:
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
 
-    StatementBasis:
-      x-veyq-visibility: enum
-      type: string
-      description: What led to the measure — a report, or an authority's order (ADR 0093 § 12).
-      enum: [REPORT, ORDER]
-      example: REPORT
-
     ModerationStatementInput:
       type: object
       description: >
@@ -2865,6 +2858,8 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/ModerationGround'
     StatementProvision:
       $ref: '_common.openapi.yaml#/components/schemas/StatementProvision'
+    StatementBasis:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementBasis'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -363,7 +363,8 @@ class CaseDecisions(
             this.caseId = case.id
             ground = statement.ground.name
             provision = statement.provision.trim().takeIf { it.isNotEmpty() }
-            basis = StatementBasis.REPORT.name
+            // A report's case reads the report; any other — an authority's order's too — the host's own initiative (inbox #820).
+            basis = StatementBasis.ofCase(case.origin).name
             epoch = facts.epoch
             sealedFacts = facts.sealed
             sealedMemberFacts = statement.sealedFacts

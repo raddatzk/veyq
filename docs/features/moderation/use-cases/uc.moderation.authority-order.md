@@ -46,6 +46,10 @@
    from the instance contact (Art. 11(2)). Nothing else of the order is served to it; another identity's token gets the
    link's ordinary unknown answer. The same read answers a moderator's measure on its upload by that measure's
    statement ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) A8), never as a removal.
+   A measure a moderator or the Server Owner takes later on the order's case — of any kind of order — is theirs, not
+   the order's: its statement's basis is their own finding (`OWN_FINDING`, DSA Art. 17(3)(b)), which names no order,
+   so a confidential one is never revealed (ADR 0093 § 7, inbox #820); a guest reads it as that statement, beside any
+   removal.
 6. **The deferral is the authority's switch** (TCO Art. 11(3)): entered with the removal order — an end at most six
    weeks ahead, the order's reference as its reason — the statement is held and the case shows when it goes out. Once
    the end has passed, the hourly cleanup sends it; a moderator may enter one renewal before then, at most six weeks

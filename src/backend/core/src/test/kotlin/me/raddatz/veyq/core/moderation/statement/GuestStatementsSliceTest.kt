@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.moderation.statement
 import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.moderation.ModerationPurge
+import me.raddatz.veyq.core.moderation.ModerationTestKit
+import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.PROVISION
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.case
@@ -109,6 +111,8 @@ class GuestStatementsSliceTest {
             .body("statements[0].shareId", nullValue())
             .body("statements[0].ground", equalTo("ILLEGAL_CONTENT"))
             .body("statements[0].provision", equalTo(PROVISION))
+            // A report opened the case: the measure was taken after it (inbox #820).
+            .body("statements[0].basis", equalTo("REPORT"))
             // The facts are sealed to the members' identity keys; a guest identity has none, so none of it is served.
             .body("statements[0].sealedFacts", nullValue())
             .body("statements[0].wrappedFactsKey", nullValue())
@@ -162,16 +166,47 @@ class GuestStatementsSliceTest {
     }
 
     @Test
-    fun aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementAndNoRemoval() {
+    fun aModeratorsMeasureOnAPreservationOrdersCaseIsAStatementOfTheirOwnInitiativeAndNoRemoval() {
         val mod = CaseTestKit.moderator()
         val w = world()
         // A preservation order blocks nothing and opens a case; a moderator then blocks the content on that case. No
-        // removal order took the upload down, so no removal is told — the moderator's statement is.
+        // removal order took the upload down, so no removal is told — the moderator's statement is. No report led to it
+        // and an order is no Art. 16 notice: it is their own initiative (DSA Art. 17(3)(b), inbox #820), which never
+        // reveals the order — for the guest, the case view and the member alike.
         val caseId = mod.order(orderBody(w.link, kind = "PRESERVATION")).then().statusCode(201).extract().path<String>("caseId")
         notice(w.link, w.guestToken).then().statusCode(404).body("code", equalTo("share_not_found"))
         mod.take(caseId, "CONTENT", targetId = w.root).then().statusCode(201)
         notice(w.link, w.guestToken).then().statusCode(200)
             .body("removals.size()", equalTo(0))
             .body("statements.size()", equalTo(1))
+            .body("statements[0].basis", equalTo("OWN_FINDING"))
+        mod.case(caseId).then().statusCode(200).body("measures[0].statement.basis", equalTo("OWN_FINDING"))
+        ModerationTestKit.asUser(w.ownerId).get("/api/statements").then().statusCode(200)
+            .body("statements.size()", equalTo(1)).body("statements[0].basis", equalTo("OWN_FINDING"))
+    }
+
+    @Test
+    fun onARemovalOrdersCaseTheOrderIsARemovalAndAModeratorsFurtherMeasureAStatementOfTheirOwnInitiative() {
+        val mod = CaseTestKit.moderator()
+        val w = world()
+        // The removal order blocks the link and the folder itself (§ 12): its own statements are a removal for the guest.
+        val caseId = mod.order(orderBody(w.link)).then().statusCode(201).extract().path<String>("caseId")
+        notice(w.link, w.guestToken).then().statusCode(200)
+            .body("removals.size()", equalTo(1))
+            .body("statements.size()", equalTo(0))
+        // A moderator then blocks the uploading guest on the order's case: the authority did not ask for that measure,
+        // so it is a moderator's statement of their own initiative beside the removal — never the order's own basis.
+        mod.take(caseId, "GUEST_IDENTITY", targetId = w.guestIdentity).then().statusCode(201)
+        notice(w.link, w.guestToken).then().statusCode(200)
+            .body("removals.size()", equalTo(1))
+            .body("statements.size()", equalTo(1))
+            .body("statements[0].measureKind", equalTo("GUEST_IDENTITY"))
+            .body("statements[0].basis", equalTo("OWN_FINDING"))
+        val bases = QuarkusTransaction.requiringNew().call {
+            ModerationStatementEntity.list("caseId", caseId).map { s ->
+                ModerationBlockEntity.findById(s.measureId)!!.kind to s.basis
+            }.toSet()
+        }
+        assertEquals(setOf("SHARE" to "ORDER", "CONTENT_NODE" to "ORDER", "GUEST_IDENTITY" to "OWN_FINDING"), bases)
     }
 }

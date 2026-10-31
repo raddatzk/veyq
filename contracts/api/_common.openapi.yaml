@@ -402,6 +402,17 @@ components:
       enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
       example: TERMS_BREACH
 
+    StatementBasis:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        What led to the measure (ADR 0093 §§ 7, 12; DSA Art. 17(3)(b); inbox #820): `REPORT` = a measure the host took
+        on a case a report opened; `ORDER` = an authority's removal order's own block, taken by the order (§ 12);
+        `OWN_FINDING` = the host's own initiative — a measure on a case an authority's order opened (an order is no
+        Art. 16 notice, and the statement never reveals it), or a Server Owner's step on no case.
+      enum: [REPORT, ORDER, OWN_FINDING]
+      example: REPORT
+
     StatementProvision:
       x-veyq-visibility: public
       type: [string, "null"]

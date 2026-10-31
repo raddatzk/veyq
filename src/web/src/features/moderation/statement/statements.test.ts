@@ -82,7 +82,7 @@ describe('the statements of an affected member', () => {
   it('finds a guest uploader’s statement on the guest page by the same ids, with the contact, and none off that page (ADR 0093 § 7)', () => {
     const guestOne = {
       id: STATEMENT, measureKind: 'UPLOADER_CONTENT' as const, targetId: 'identity-1', covers: ['medium-1'],
-      ground: 'TERMS_BREACH' as const, takenAt: new Date('2026-10-17T12:00:00Z'),
+      ground: 'TERMS_BREACH' as const, basis: 'REPORT' as const, takenAt: new Date('2026-10-17T12:00:00Z'),
     }
     const link = { ...guestOne, id: 'other', measureKind: 'SHARE' as const, targetId: 'link-1', shareId: 'link-1', covers: [] }
     openGuestPage('link-1')

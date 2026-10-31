@@ -17,6 +17,8 @@ import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.order
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.orderBody
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.propose
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
@@ -25,6 +27,8 @@ import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
 import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.sharing.GuestTreeShare
+import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
@@ -167,6 +171,29 @@ class ServerOwnerStatementSliceTest {
         assertEquals("Space terms, clause 4", written.provision)
         // A Server Owner's statement is a mail's: it is not listed in the app (the member cannot sign in to read it).
         assertTrue(statements.mine(proposed).isEmpty())
+    }
+
+    @Test
+    fun aSignInBlockOnACaseAnOrderOpenedIsTheirOwnFindingAndNamesNoOrder() {
+        // A preservation order on a link to a folder the member uploaded a cover to opens a case, blocking nothing; a
+        // moderator proposes the member's sign-in block on it, and the Server Owner takes it (inbox #820).
+        val uploader = seedUser()
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val root = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        seedAttachment(m.scopeId, root, NodeCover.SLOT, uploaderUserId = uploader)
+        val link = GuestTreeShare.seed(m.userId, m.scopeId, root, ShareEntity.READ).shareId
+        val caseId = mod.order(orderBody(link, kind = "PRESERVATION")).then().statusCode(201).extract().path<String>("caseId")
+        mod.propose(caseId, "MEMBER_SIGN_IN", targetId = uploader).then().statusCode(201)
+        block(emailOf(uploader), ""","statement":${statement()}""").then().statusCode(200)
+        val row = QuarkusTransaction.requiringNew().call { ModerationBlockEntity.find("targetId = ?1 and kind = ?2", uploader, BlockKind.MEMBER_SIGN_IN.name).firstResult()!! }
+        assertEquals(caseId, row.caseId)
+        val written = QuarkusTransaction.requiringNew().call { ModerationStatementEntity.find("measureId", row.id).firstResult()!! }
+        assertEquals("OWN_FINDING", written.basis)
+        // The host's own initiative (DSA Art. 17(3)(b)): the mail never reveals that an authority's order was involved.
+        val text = textOf(mailsTo(emailOf(uploader)).single())
+        assertTrue(text.contains("The measure was taken after their own finding."), text)
+        assertTrue(text.contains("Die Maßnahme wurde ergriffen nach eigener Feststellung."), text)
+        assertFalse(text.contains("authority") || text.contains("Behörde"), text)
     }
 
     @Test
