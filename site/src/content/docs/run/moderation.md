@@ -524,6 +524,16 @@ it. `veyq-admin moderator list` prints the roster.
 their copy of every key end at once, and the console then makes a new key for everyone who stays, so reports from then
 on are sealed to a key they never held. A removal that would leave nobody holding the key is refused.
 
+**When one person alone holds the key.** **Server → Moderation** says so: lost with that person, the key takes every
+report and held copy sealed to it along. Appoint a second moderator to share it. A step-down or a removal of that person
+is refused; an erasure of their account is not, because an erasure may not wait on someone else
+([ADR 0101](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
+decision 9). When they erase their own account in their settings, their browser first hands every key they hold to you,
+and you are a moderator holding it again — with no acceptance, from that moment, even if you had stepped down. Erased
+at your console instead (**Server → Accounts**, `veyq-admin account erase --lose-moderation-key`), their browser is not
+there to hand it on, so the key is lost after a warning you accept, and with it what only it opens: rotate the key once
+you or another moderator accepted again, and reports from then on can be read.
+
 **Rotate the key by hand.** Choose a reason (by hand, suspected compromise, identity rotation, removal) and **Rotate
 the key**, or `veyq-admin moderation rotate --reason compromise`. Reports already made stay sealed to the key they
 were made under; only later ones use the new key.

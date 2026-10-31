@@ -5,6 +5,9 @@ import me.raddatz.veyq.core.generated.model.AccountErasurePreview
 import me.raddatz.veyq.core.generated.model.EraseOwnAccountRequest
 import me.raddatz.veyq.core.generated.model.ErasureTenant
 import me.raddatz.veyq.core.generated.model.OwnAccountErasure
+import me.raddatz.veyq.core.generated.model.ServerOwnerKeyDelivery
+import me.raddatz.veyq.core.moderation.EpochGrantIn
+import me.raddatz.veyq.core.moderation.ServerOwnerDeliveryIn
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimit
@@ -28,11 +31,14 @@ class AccountErasureResource(
 ) : AccountErasureApi {
 
     override fun getOwnAccountErasurePreview(): Response {
-        val tenants = handler.preview(identity.principal.name) ?: return httpError(ErasureOutcome.ServerOwnerAccount)
+        val preview = handler.preview(identity.principal.name) ?: return httpError(ErasureOutcome.ServerOwnerAccount)
         return Response.ok(
             AccountErasurePreview(
-                tenants.map { t ->
+                tenants = preview.tenants.map { t ->
                     ErasureTenant(UUID.fromString(t.tenantId), t.name, t.otherMemberIds.map(UUID::fromString))
+                },
+                serverOwnerDelivery = preview.serverOwnerDelivery?.let {
+                    ServerOwnerKeyDelivery(UUID.fromString(it.serverOwnerId), it.identityPublicKey, it.keyChainHead, it.epochs)
                 },
             ),
         ).build()
@@ -40,8 +46,11 @@ class AccountErasureResource(
 
     override fun eraseOwnAccount(eraseOwnAccountRequest: EraseOwnAccountRequest): Response {
         val choices = eraseOwnAccountRequest.lastOwnerChoices.map { OwnerChoice(it.tenantId.toString(), it.newOwnerId?.toString()) }
+        val delivery = eraseOwnAccountRequest.serverOwnerDelivery?.let { d ->
+            ServerOwnerDeliveryIn(d.identityPublicKey, d.grants.map { EpochGrantIn(it.epoch, it.sealedGrant) })
+        }
         return when (val o = handler.eraseOwn(
-            identity.principal.name, eraseOwnAccountRequest.nonce, eraseOwnAccountRequest.attestationSignature, choices,
+            identity.principal.name, eraseOwnAccountRequest.nonce, eraseOwnAccountRequest.attestationSignature, choices, delivery,
         )) {
             is ErasureOutcome.Pending -> Response.ok(OwnAccountErasure(o.dueAt.atOffset(ZoneOffset.UTC))).build()
             is HttpFailure -> httpError(o)

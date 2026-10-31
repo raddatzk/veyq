@@ -41,7 +41,8 @@ import {
   stopTenantDeletion,
   suspendTenant,
 } from '../features/tenants/tenants'
-import { eraseAccount, listAccountErasures, stopAccountErasure } from '../features/instance/accounts'
+import { eraseAccount, isLastKeyHolder, listAccountErasures, stopAccountErasure } from '../features/instance/accounts'
+import { decodeHttpError } from '../shared/httpError'
 import { CliError, renderResult } from './output'
 import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, noticesMailedTo, setReleaseCheck } from '../features/instance/releaseNotices'
@@ -782,11 +783,28 @@ export const COMMANDS: Record<string, Command> = {
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'account erase': {
-    usage: 'account erase --address <address>',
+    usage: 'account erase --address <address> [--lose-moderation-key]',
     summary:
-      'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 14 days, or the window `veyq.account.erasure.window` sets (printed as dueAt), unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay.',
-    flags: { address: { describe: 'the account’s address', required: true } },
-    run: (f) => eraseAccount(f.address),
+      'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 14 days, or the window `veyq.account.erasure.window` sets (printed as dueAt), unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay. An account that alone holds the moderation key is refused with a warning unless --lose-moderation-key: erased here, the key goes with it, and every report and hold sealed only to it can no longer be read.',
+    flags: {
+      address: { describe: 'the account’s address', required: true },
+      'lose-moderation-key': {
+        describe: 'erase it even though it alone holds the moderation key: the key, and what only it opens, is lost',
+        required: false,
+        switch: true,
+      },
+    },
+    run: async (f) => {
+      const loseModerationKey = f['lose-moderation-key'] === 'true'
+      try {
+        return await eraseAccount(f.address, { loseModerationKey })
+      } catch (e) {
+        if (loseModerationKey || !isLastKeyHolder((await decodeHttpError(e)).code)) throw e
+        throw new CliError(
+          `${f.address.trim()} alone holds the moderation key. Erased here, the key goes with it: every report, objection and held copy sealed only to it can no longer be read, and only the person's own erasure in their settings hands it to you. Nothing was erased. To erase it all the same, run it again with --lose-moderation-key.`,
+        )
+      }
+    },
   },
   'account stop-erasure': {
     usage: 'account stop-erasure --address <address>',

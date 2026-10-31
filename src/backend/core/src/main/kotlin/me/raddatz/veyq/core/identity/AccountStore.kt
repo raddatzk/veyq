@@ -41,6 +41,16 @@ class AccountStore(private val keyChain: KeyChainStore) {
      */
     fun lock(userId: String): VeyqUser? = VeyqUser.findById(userId, LockModeType.PESSIMISTIC_WRITE)
 
+    /**
+     * The Server Owner's account id, or null on an instance not set up. One per instance: first-run setup makes it and
+     * nothing moves the role yet (inbox #43); the order only makes a world with several — a test's — answer the same
+     * every time. Ids alone, no entity loaded, so a caller can still take [lock] as the account's first read.
+     */
+    fun serverOwnerId(): String? =
+        VeyqUser.getEntityManager()
+            .createQuery("select u.id from VeyqUser u where u.serverRole = :role order by u.id", String::class.java)
+            .setParameter("role", ServerRoles.SERVER_OWNER).setMaxResults(1).resultList.firstOrNull()
+
     /** Persist a new account (identity + wraps) with the given server role, and step 0 of its key chain — the identity
      *  and Secret-Key proof key it is born with (ADR 0111 decision 7) — in the same transaction. Returns the new user id. */
     @Transactional

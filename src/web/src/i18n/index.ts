@@ -305,8 +305,16 @@ const en = {
     errorLocked: 'Unlock your account on this device first, then erase it.',
     errorPassword: 'That password didn’t match. Nothing was erased.',
     errorChoiceRequired: 'Choose what happens to every space you are the last owner of. Nothing was erased.',
-    errorModerationLastHolder:
-      'You hold the moderation key alone. Another moderator must hold it before you can go — stepping down is refused the same way. Nothing was erased.',
+    keyDeliveryTitle: 'You hold the moderation key alone',
+    keyDeliveryBody:
+      'When you erase your account, this device first hands every moderation key you hold to the Server Owner, so the reports and held copies sealed to it stay readable. The Server Owner is a moderator again from then on.',
+    errorKeyDelivery: 'The moderation key could not be handed to the Server Owner whole. Nothing was erased — please try again.',
+    errorKeyIdentityChanged:
+      'The Server Owner’s account keys changed in the meantime. Nothing was erased — please try again.',
+    errorKeyUnanchored:
+      'This device could not verify the Server Owner’s key, so it did not hand them the moderation key. Nothing was erased. You can ask the Server Owner to erase your account in their console instead.',
+    errorKeyNotHeld:
+      'This device could not open every moderation key you hold, so it could not hand them on. Nothing was erased — please try again.',
     errorFailed: 'Your account could not be erased. Nothing was changed — please try again.',
     // Shown on the sign-in page: the ending replaced the panel.
     ended:
@@ -1468,6 +1476,8 @@ const en = {
     members: 'Members',
     membersSub: 'People in this group and their access.',
     noneOwned: 'You don’t own any groups yet.',
+    // ADR 0022 decision 3 (inbox #814): a member who does not own the group reads its directory, and changes nothing
+    readonlyNote: 'Only an owner of this group can change its members and settings.',
     addMember: 'Add',
     addMemberIntro: 'Add a member of this space by their username — they get access right away.',
     usernamePlaceholder: 'username',
@@ -1476,8 +1486,6 @@ const en = {
     promote: 'Make co-owner',
     demote: 'Remove co-owner',
     lastOwner: 'A group needs at least one owner.',
-    // ADR 0022 decision 3 (inbox #814): a member who does not own the group reads its directory, and changes nothing
-    readonlyNote: 'Only an owner of this group can change its members and settings.',
     roleChangeFailed: 'Could not change the role. Please try again.',
     remove: 'Remove',
     removeConfirm: 'Remove and rotate the key?',
@@ -2336,8 +2344,17 @@ const de: typeof en = {
     errorLocked: 'Entsperre dein Konto zuerst auf diesem Gerät, dann lösche es.',
     errorPassword: 'Das Passwort stimmt nicht. Es wurde nichts gelöscht.',
     errorChoiceRequired: 'Wähle für jeden Bereich, der nur noch dir gehört, was mit ihm geschieht. Es wurde nichts gelöscht.',
-    errorModerationLastHolder:
-      'Du hältst den Moderationsschlüssel allein. Eine andere moderierende Person muss ihn halten, bevor du gehen kannst – ein Rücktritt wird genauso abgelehnt. Es wurde nichts gelöscht.',
+    keyDeliveryTitle: 'Du hältst den Moderationsschlüssel allein',
+    keyDeliveryBody:
+      'Wenn du dein Konto löschst, übergibt dieses Gerät zuerst jeden Moderationsschlüssel, den du hältst, an die Person, die den Server betreibt – so bleiben die Meldungen und gesicherten Kopien, die mit ihm versiegelt sind, lesbar. Diese Person moderiert von da an wieder.',
+    errorKeyDelivery:
+      'Der Moderationsschlüssel ließ sich nicht vollständig an die Person übergeben, die den Server betreibt. Es wurde nichts gelöscht – bitte erneut versuchen.',
+    errorKeyIdentityChanged:
+      'Die Kontoschlüssel der Person, die den Server betreibt, haben sich inzwischen geändert. Es wurde nichts gelöscht – bitte erneut versuchen.',
+    errorKeyUnanchored:
+      'Dieses Gerät konnte den Schlüssel der Person, die den Server betreibt, nicht prüfen und hat ihr den Moderationsschlüssel deshalb nicht übergeben. Es wurde nichts gelöscht. Du kannst sie stattdessen bitten, dein Konto in ihrer Konsole zu löschen.',
+    errorKeyNotHeld:
+      'Dieses Gerät konnte nicht jeden Moderationsschlüssel öffnen, den du hältst, und ihn deshalb nicht übergeben. Es wurde nichts gelöscht – bitte erneut versuchen.',
     errorFailed: 'Dein Konto konnte nicht gelöscht werden. Es wurde nichts geändert – bitte erneut versuchen.',
     // Auf der Anmeldeseite: Das Ende der Sitzung hat das Panel ersetzt.
     ended:
@@ -3460,6 +3477,7 @@ const de: typeof en = {
     members: 'Mitglieder',
     membersSub: 'Personen in dieser Gruppe und ihr Zugang.',
     noneOwned: 'Du besitzt noch keine Gruppen.',
+    readonlyNote: 'Nur wer die Gruppe besitzt, kann ihre Mitglieder und Einstellungen ändern.',
     addMember: 'Hinzufügen',
     addMemberIntro: 'Füge ein Mitglied dieses Bereichs über den Benutzernamen hinzu — es erhält sofort Zugang.',
     usernamePlaceholder: 'benutzername',
@@ -3477,7 +3495,6 @@ const de: typeof en = {
     removeMemberFailed: 'Das Mitglied konnte nicht entfernt werden. Bitte erneut versuchen.',
     invitationSent: 'Einladung gesendet — wartet auf ihre Zustimmung.',
     rescind: 'Zurückziehen',
-    readonlyNote: 'Nur wer die Gruppe besitzt, kann ihre Mitglieder und Einstellungen ändern.',
     rescindFailed: 'Die Einladung konnte nicht zurückgezogen werden. Bitte erneut versuchen.',
     untitled: 'Unbenannte Gruppe',
     rename: 'Umbenennen',

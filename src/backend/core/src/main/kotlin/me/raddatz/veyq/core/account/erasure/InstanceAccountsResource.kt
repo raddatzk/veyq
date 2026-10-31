@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.generated.model.AccountAddressRequest
 import me.raddatz.veyq.core.generated.model.AccountErasureList
 import me.raddatz.veyq.core.generated.model.AccountErasureRequester
 import me.raddatz.veyq.core.generated.model.PendingAccountErasure
+import me.raddatz.veyq.core.generated.model.ServerOwnerAccountErasureRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.AccountErasureEntity
@@ -44,8 +45,11 @@ class InstanceAccountsResource(
         ),
     ).build()
 
-    override fun eraseAccount(accountAddressRequest: AccountAddressRequest): Response =
-        when (val o = handler.eraseByServerOwner(identity.principal.name, accountAddressRequest.address)) {
+    override fun eraseAccount(serverOwnerAccountErasureRequest: ServerOwnerAccountErasureRequest): Response =
+        when (val o = handler.eraseByServerOwner(
+            identity.principal.name, serverOwnerAccountErasureRequest.address,
+            keyLossConfirmed = serverOwnerAccountErasureRequest.confirmModerationKeyLoss == true,
+        )) {
             is ErasureOutcome.Pending -> Response.ok(
                 PendingAccountErasure(
                     address = o.address,

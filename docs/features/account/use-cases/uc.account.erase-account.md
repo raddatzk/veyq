@@ -18,11 +18,12 @@
 1. **The request.** The member opens the settings' account section, chooses to erase the account, reads what goes and
    what stays (decision 7 of the ADR), deletes from shared scopes whatever they want gone first, and confirms with their
    password (a signature with the auth key over the account and a login challenge, spent by the request). Or the Server Owner enters the account's address in admin-web (or `veyq-admin account erase --address`)
-   and confirms by typing it again.
+   and confirms by typing it again. Where the account is the last holder of the moderation key, A8 adds one step at
+   either door.
 2. **The account stops.** In one transaction the server ends every session, refuses sign-in, drops pending invites,
    pairings, recoveries and address changes, runs the member removal in every tenant (own scopes into the scope trash,
    shared scopes cut, a sole-owned group handed on, links in shared scopes switched off), removes the account from the
-   moderator roster if it is on it, and records the erasure as pending, due the erasure's window after the request
+   moderator roster if it is on it (after A8's delivery, where it is the last holder of the key), and records the erasure as pending, due the erasure's window after the request
    (14 days by default; ADR 0101 decision 3, a safeguard for a mistaken or coerced request). The due date is stored
    with the request: a window changed later moves no pending erasure.
 3. **The person is told.** One mail to the account address, through the instance mail where it is set up: erasure
@@ -55,8 +56,26 @@
 - **A6 — No instance mail:** the erasure runs all the same; admin-web already warns that mail is missing.
 - **A7 — Restored from a backup:** the instance re-applies the erasure ledger before it serves, and the account is
   erased again, mailing nobody (ADR 0056 decision 8); a backup itself is kept at most B days.
-- **A8 — The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down
-  is: the key, and every report and hold sealed to it, would be lost with them. Another moderator holds it first.
+- **A8 — The last holder of the moderation key** (the last accepted moderator holding its current epoch) is not
+  refused: an erasure may not wait on a third person (ADR 0101 decision 9, ADR 0099 § 5). A step-down or a removal
+  that would leave no holder stays refused ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md) A4).
+  - **At the self-service door** the preview names the Server Owner (their identity beside the head of their key
+    chain, which the server serves to an accepted moderator) and the live epochs the person holds that the Server
+    Owner misses; the dialog says the key goes to the Server Owner. Before the request the person's client anchors that
+    identity (ADR 0028 Decision 2), opens its grants with the vault the settings hold, checks each against its
+    published bundle and seals each epoch to the Server Owner (`moderation-grant` [epoch]); the grants travel in the
+    request. In its one transaction the server stores them as a delivery, makes the Server Owner an accepted moderator
+    holding them — reappointed by the delivery, with no acceptance — and then takes the person off the roster as a
+    step-down does (the epoch is due for rotation). A request that does not carry every such epoch, or names one the
+    person does not hold, is refused (`moderation_delivery_required`), one sealed to an identity that is no longer the
+    Server Owner's too (`identity_changed`), nothing written — so a client that skips the step cannot lose the key. A
+    Server Owner whose key the client cannot anchor is not sealed to; nothing is sent, and the dialog says the Server
+    Owner can erase the account at their door instead.
+  - **At the Server Owner's door** the person's client is not there to hand the key over: the request is refused
+    (`moderation_last_holder`, nothing written) until it confirms the loss (`confirmModerationKeyLoss`), which admin-web
+    sends after a warning the Server Owner accepts and `veyq-admin account erase` with `--lose-moderation-key`, its
+    refusal printing the warning. The key then goes with the account, and with it what only it opens; the roster has no
+    holder and a rotation is due. admin-web's moderation panel shows an instance whose key one person alone holds.
 
 ## Quality notes
 

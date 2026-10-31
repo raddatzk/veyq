@@ -21,11 +21,15 @@ import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.ModerationHandler
+import me.raddatz.veyq.core.moderation.ErasureDoor
 import me.raddatz.veyq.core.moderation.ModerationOutcome
+import me.raddatz.veyq.core.moderation.ServerOwnerDelivery
+import me.raddatz.veyq.core.moderation.ServerOwnerDeliveryIn
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
+import jakarta.transaction.Transactional
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import java.time.Duration
@@ -36,6 +40,10 @@ data class LastOwnerTenant(val tenantId: String, val name: String, val otherMemb
 
 /** One choice for a last-owner tenant: a member to make its owner, or null to delete the tenant along. */
 data class OwnerChoice(val tenantId: String, val newOwnerId: String?)
+
+/** What erasing an account decides ([AccountErasureHandler.preview]): its last-owner tenants, and where it is the last
+ *  holder of the moderation key, whom it delivers the key to. */
+data class ErasurePreview(val tenants: List<LastOwnerTenant>, val serverOwnerDelivery: ServerOwnerDelivery?)
 
 /** A pending erasure as the Server Owner sees it. */
 data class PendingErasureView(val address: String, val requestedAt: Instant, val requestedBy: String, val dueAt: Instant)
@@ -64,7 +72,10 @@ sealed interface StopErasureOutcome {
  * The account erasure's two doors and its stop (uc.account.erase-account, ADR 0101 decisions 1-3 and 9). Both doors
  * start the same erasure, in one transaction under the account row's lock — the lock a sign-in takes, so no session
  * can be issued past the request:
- *  1. the moderator roster ([ModerationHandler.leaveForErasure]) — first, as it is the one step that may refuse;
+ *  1. the moderator roster ([ModerationHandler.leaveForErasure]) — first, as it is the one step that may refuse: at the
+ *     member's door the last holder of the moderation key delivers it to the Server Owner in the request, and is
+ *     refused without that delivery; at the Server Owner's the key goes with them, once the Server Owner confirmed it
+ *     (ADR 0101 decision 9);
  *  2. the last-owner tenants: at the member's door each one with other members carries the member's choice (a member
  *     made OWNER, or the tenant deleted along), and one with no other member is deleted along; the Server Owner's door
  *     chooses nothing and leaves such a tenant with no owner;
@@ -96,36 +107,76 @@ class AccountErasureHandler(
     /** A tenant deletion's window (decision 10), the one `TenantHandler.delete` gives a tenant the Server Owner deletes. */
     private val tenantDeletionRetention: Duration = config.scope().delete().retention()
 
-    /** The tenants the erasure decides about (`getOwnAccountErasurePreview`); null for the Server Owner's own account. */
-    fun preview(accountId: String): List<LastOwnerTenant>? = QuarkusTransaction.requiringNew().call {
-        val user = VeyqUser.findById(accountId) ?: return@call emptyList()
-        if (user.serverRole == ServerRoles.SERVER_OWNER) null else lastOwnerTenants(accountId)
+    /** What the erasure decides about (`getOwnAccountErasurePreview`); null for the Server Owner's own account. */
+    fun preview(accountId: String): ErasurePreview? = QuarkusTransaction.requiringNew().call {
+        val user = VeyqUser.findById(accountId) ?: return@call ErasurePreview(emptyList(), null)
+        if (user.serverRole == ServerRoles.SERVER_OWNER) null
+        else ErasurePreview(lastOwnerTenants(accountId), moderation.serverOwnerDeliveryFor(accountId))
     }
 
     /**
      * The member's door: the proof is a login challenge for the account's own address, signed with its auth key over
      * the account and the challenge. The challenge is spent in a transaction of its own before anything else, so it is
-     * gone whether or not the proof verifies, and a refusal later rolls back nothing but the request.
+     * gone whether or not the proof verifies, and a refusal later rolls back nothing but the request ([eraseOwnIn]).
      */
-    fun eraseOwn(accountId: String, nonce: String, signature: String, choices: List<OwnerChoice>): ErasureOutcome {
+    fun eraseOwn(
+        accountId: String, nonce: String, signature: String, choices: List<OwnerChoice>, delivery: ServerOwnerDeliveryIn? = null,
+    ): ErasureOutcome {
         val challengeEmail = QuarkusTransaction.requiringNew().call { spendChallenge(nonce) }
-        val outcome = refusable {
-            val user = accounts.lock(accountId) ?: return@refusable ErasureOutcome.AttestationFailed
-            if (user.serverRole == ServerRoles.SERVER_OWNER) return@refusable ErasureOutcome.ServerOwnerAccount
-            val proven = challengeEmail != null && challengeEmail == user.email &&
-                AuthAttestation.verify(user.authPublicKey, AuthAttestation.eraseAccountStatement(accountId, nonce), signature)
-            if (!proven) return@refusable ErasureOutcome.AttestationFailed
-            start(user, AccountErasureEntity.SELF, actorId = accountId, choices = choices.associateBy { it.tenantId }, byOwner = false)
-        }
-        return finish(outcome)
+        return finish(refusable { eraseOwnIn(accountId, challengeEmail, nonce, signature, choices, delivery) })
     }
 
-    /** The Server Owner's door, by address: never refuses a last owner (an erasure cannot wait on a third person). */
-    fun eraseByServerOwner(serverOwnerId: String, address: String): ErasureOutcome {
+    /**
+     * [eraseOwn]'s request, **in the caller's transaction** — the race test holds it uncommitted
+     * (`ErasureKeyDeliveryRacesSliceTest`). [challengeEmail] is the address the spent challenge was minted for.
+     * A refusal after a write throws ([refuse]); the caller's transaction then rolls back whole.
+     *
+     * [delivery]: the moderation key for the Server Owner, which the last holder must carry (decision 9). With one, the
+     * Server Owner's account row is locked after the person's and before anything else — before the moderation epoch's
+     * row above all — so an identity rotation of the Server Owner, which holds that row from its first read, either
+     * committed before the identity is read ([ModerationHandler.leaveForErasure]: `identity_changed`) or waits for this
+     * transaction and then finds the grants it delivered, which it deletes as exposed (ADR 0099 § 4).
+     *
+     * **Lock order** (checked against every writer of these rows, 2026-10-31): the person's account row → the Server
+     * Owner's account row → the current moderation epoch's row → the Server Owner's moderator row → the person's
+     * moderator row → the grants → the scope rows, ascending. Every other writer of an account row locks that one row
+     * alone (`AccountStore.lock` / `findByEmail(lock = true)`: a sign-in, a password change, a recovery, a pairing, the
+     * pin store, key material, an address change, a tenant accept, a sign-in block, the purge, the Server Owner's door
+     * here, which locks only its target), and the one that goes on to the epoch row — an identity rotation, through
+     * [ModerationHandler.onIdentityRotated] — takes it after its account row, as this does. No writer of the epoch row
+     * ([ModerationHandler]'s appoint, accept, removal, step-down, mint, delivery; `RotationDueNotice`) locks an account
+     * row after it, and no writer locks two account rows but this, in this order: so no cycle.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun eraseOwnIn(
+        accountId: String, challengeEmail: String?, nonce: String, signature: String, choices: List<OwnerChoice>,
+        delivery: ServerOwnerDeliveryIn?,
+    ): ErasureOutcome {
+        val user = accounts.lock(accountId) ?: return ErasureOutcome.AttestationFailed
+        if (user.serverRole == ServerRoles.SERVER_OWNER) return ErasureOutcome.ServerOwnerAccount
+        val proven = challengeEmail != null && challengeEmail == user.email &&
+            AuthAttestation.verify(user.authPublicKey, AuthAttestation.eraseAccountStatement(accountId, nonce), signature)
+        if (!proven) return ErasureOutcome.AttestationFailed
+        if (delivery != null) accounts.serverOwnerId()?.let { accounts.lock(it) }
+        return start(
+            user, AccountErasureEntity.SELF, actorId = accountId, choices = choices.associateBy { it.tenantId }, byOwner = false,
+            door = ErasureDoor.Own(delivery),
+        )
+    }
+
+    /**
+     * The Server Owner's door, by address: never refuses a last owner, nor the last holder of the moderation key (an
+     * erasure cannot wait on a third person) — the key goes with them once [keyLossConfirmed] says the Server Owner was
+     * warned (`moderation_last_holder` until then, decision 9).
+     */
+    fun eraseByServerOwner(serverOwnerId: String, address: String, keyLossConfirmed: Boolean = false): ErasureOutcome {
         val outcome = refusable {
             val user = accounts.findByEmail(address, lock = true) ?: return@refusable ErasureOutcome.NotFound
             if (user.serverRole == ServerRoles.SERVER_OWNER) return@refusable ErasureOutcome.ServerOwnerAccount
-            start(user, AccountErasureEntity.SERVER_OWNER, actorId = serverOwnerId, choices = emptyMap(), byOwner = true)
+            start(
+                user, AccountErasureEntity.SERVER_OWNER, actorId = serverOwnerId, choices = emptyMap(), byOwner = true,
+                door = ErasureDoor.ServerOwners(keyLossConfirmed),
+            )
         }
         return finish(outcome)
     }
@@ -152,7 +203,9 @@ class AccountErasureHandler(
         return outcome
     }
 
-    private fun start(user: VeyqUser, requestedBy: String, actorId: String, choices: Map<String, OwnerChoice>, byOwner: Boolean): ErasureOutcome {
+    private fun start(
+        user: VeyqUser, requestedBy: String, actorId: String, choices: Map<String, OwnerChoice>, byOwner: Boolean, door: ErasureDoor,
+    ): ErasureOutcome {
         val accountId = user.id
         if (AccountErasureEntity.isPending(accountId)) return ErasureOutcome.AlreadyPending
         val now = Instant.now()
@@ -160,7 +213,7 @@ class AccountErasureHandler(
         val tenantsDueAt = now.plus(tenantDeletionRetention)
 
         // 1. The roster — the one step that may refuse after the gates, so it runs before anything is written.
-        val left = moderation.leaveForErasure(accountId, actorId, now)
+        val left = moderation.leaveForErasure(accountId, actorId, now, door)
         if (left is ModerationOutcome.Refused) return refuse(ErasureOutcome.Refused(left.failure))
 
         // Every scope the account is in, locked in ascending id order before any owner count is read — the order every

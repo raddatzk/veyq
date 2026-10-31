@@ -733,7 +733,8 @@ decisions 6–10, [uc.account.rotate-keys](https://github.com/raddatzk/veyq/blob
   never rotated). Byte formats: the `key_chain` vectors.
 - **Who reads it.** The server serves the whole chain and its head to the person, to users who share a tenant with
   them, between two accepted moderators of the instance (a moderator hands the moderation key to another, and
-  the two may share no tenant), and — the inviting owner's — to the holder of an open invite's token, in the invite's
+  the two may share no tenant), the Server Owner's to an accepted moderator (the last holder of the moderation key
+  hands it to the Server Owner when erasing their account), and — the inviting owner's — to the holder of an open invite's token, in the invite's
   preview (section 3); anyone else gets the `404` an unknown user gets. Every read that serves another
   user's key to a check — a member list, a group candidate, a delivery target, an open or served invite, a moderation
   delivery — serves that user's head beside it.

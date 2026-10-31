@@ -7,7 +7,10 @@
 //   - what happens is said before it happens — the account stops at once, it is erased after its window, it can be
 //     stopped until then, the Server Owner's own account cannot be erased, a last owner's tenant is left ownerless, and
 //     holds and moderation records stay;
-//   - each refusal the server can give is named apart, not one generic failure.
+//   - each refusal the server can give is named apart, not one generic failure;
+//   - the last holder of the moderation key is erased only after a warning that the key goes with it (ADR 0101
+//     decision 9): the server's `moderation_last_holder` opens the confirmation, and only its accept asks again with
+//     `loseModerationKey`.
 // Operator-blind: an address, who asked and two dates — nothing the account holds.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -15,10 +18,12 @@ import { useRouter } from 'vue-router'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import { useConfirm } from '../../shared/state/useConfirm'
 import {
   addressConfirmed,
   AccountErasureRequester,
   eraseAccount,
+  isLastKeyHolder,
   listAccountErasures,
   stopAccountErasure,
   type PendingAccountErasure,
@@ -32,6 +37,7 @@ import { decodeHttpError, isUnauthorized } from '../../shared/httpError'
 const emit = defineEmits<{ changed: [] }>()
 
 const { t, locale } = useI18n()
+const { ask } = useConfirm()
 const on401 = handle401(useRouter())
 
 const address = ref('')
@@ -50,7 +56,6 @@ const ERASE_REFUSALS: Record<string, string> = {
   account_not_found: 'accounts.notFound',
   server_owner_account: 'accounts.serverOwner',
   account_erasure_pending: 'accounts.alreadyPending',
-  moderation_last_holder: 'accounts.lastModerationHolder',
 }
 
 async function erase() {
@@ -59,7 +64,8 @@ async function erase() {
   notice.value = ''
   busy.value = true
   try {
-    const pending = await eraseAccount(address.value)
+    const pending = await eraseOrWarn(address.value)
+    if (!pending) return
     notice.value = t('accounts.erased', { address: pending.address, date: at(pending.dueAt) })
     address.value = ''
     again.value = ''
@@ -73,6 +79,22 @@ async function erase() {
   } finally {
     busy.value = false
   }
+}
+
+/** Erase [typed]; where it alone holds the moderation key, only after the warning was accepted (null if declined). */
+async function eraseOrWarn(typed: string): Promise<PendingAccountErasure | null> {
+  try {
+    return await eraseAccount(typed)
+  } catch (e) {
+    if (!isLastKeyHolder((await decodeHttpError(e)).code)) throw e
+  }
+  const accepted = await ask({
+    header: t('accounts.keyLossTitle', { address: typed.trim() }),
+    message: t('accounts.keyLossBody'),
+    acceptLabel: t('accounts.keyLossAccept'),
+    acceptIcon: 'user-minus',
+  })
+  return accepted ? eraseAccount(typed, { loseModerationKey: true }) : null
 }
 
 // Stopping only ever gives an account back, so it is not confirm-gated (as bringing a tenant back online is not).
@@ -117,6 +139,7 @@ const requestedLine = (row: PendingAccountErasure) =>
           <li>{{ t('accounts.eraseNotServerOwner') }}</li>
           <li>{{ t('accounts.eraseLastOwner') }}</li>
           <li>{{ t('accounts.eraseStays') }}</li>
+          <li>{{ t('accounts.eraseKeyHolder') }}</li>
         </ul>
         <label>
           {{ t('accounts.address') }}

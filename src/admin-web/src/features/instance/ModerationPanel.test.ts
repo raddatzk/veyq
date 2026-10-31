@@ -116,6 +116,21 @@ describe('ModerationPanel (uc.moderation.appoint-moderators, admin-web)', () => 
     vi.mocked(statementMailNotSetUp).mockResolvedValue(false)
   })
 
+  it('says so when one person alone holds the key, and not while two do (ADR 0101 decision 9)', async () => {
+    const two = await mountPanel(on())
+    expect(two.find('.mod-sole-holder').exists()).toBe(false)
+    // The deputy is accepted but still waits for the key, and a pending appointee holds nothing: the owner alone holds it.
+    const one = await mountPanel(on({
+      moderators: [
+        moderator({}),
+        moderator({ accountId: 'deputy', address: 'deputy@example.com', holdsCurrentEpoch: false }),
+        moderator({ accountId: 'new', address: 'new@example.com', state: 'PENDING', holdsCurrentEpoch: false }),
+      ],
+    }))
+    expect(one.find('.mod-sole-holder').text()).toBe(t('moderation.soleHolder', { address: 'owner@example.com' }))
+    expect(one.find('.mod-sole-holder').attributes('data-severity')).toBe('warn')
+  })
+
   it('says reporting is off while no key exists, and offers no way to make one here (setup makes epoch 1)', async () => {
     const w = await mountPanel(off)
     expect(w.find('.mod-off').text()).toBe(t('moderation.off'))

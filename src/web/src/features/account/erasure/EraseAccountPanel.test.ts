@@ -50,7 +50,10 @@ const ready = (): ErasurePreview => ({
     { tenantId: CLUB, name: 'Verein Beispiel', otherMemberIds: [STRANGER] },
     { tenantId: ALONE, name: 'Nur ich', otherMemberIds: [] },
   ],
+  serverOwnerDelivery: null,
 })
+const OWNER = '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a'
+const delivery = { serverOwnerId: OWNER, identityPublicKey: 'aWQ=', keyChainHead: 'aGVhZA==', epochs: [1, 2] }
 const anna = (): Person => ({ userId: ANNA, username: 'anna', realName: 'Anna Muster', displayName: 'Anna Muster' })
 
 async function mountPanel() {
@@ -117,7 +120,7 @@ describe('EraseAccountPanel (uc.account.erase-account, web)', () => {
     expect(eraseOwnAccount).toHaveBeenCalledWith('my password', [
       { tenantId: SHARED, newOwnerId: ANNA },
       { tenantId: CLUB, newOwnerId: null },
-    ])
+    ], null)
   })
 
   it('erases nothing when the confirmation is declined', async () => {
@@ -132,22 +135,33 @@ describe('EraseAccountPanel (uc.account.erase-account, web)', () => {
   })
 
   it('with no space to decide about, the password alone is asked', async () => {
-    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [] })
+    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [], serverOwnerDelivery: null })
     const w = await mountPanel()
     expect(w.find('[data-choice-tenant]').exists()).toBe(false)
     expect(submitButton(w).attributes('disabled')).toBeDefined()
     await w.find('#erasure-password').setValue('my password')
     await submit(w)
-    expect(eraseOwnAccount).toHaveBeenCalledWith('my password', [])
+    expect(eraseOwnAccount).toHaveBeenCalledWith('my password', [], null)
+    expect(w.find('.erasure-key-delivery').exists()).toBe(false)
+  })
+
+  it('the last holder of the moderation key is told it goes to the Server Owner, and the erasure carries it', async () => {
+    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [], serverOwnerDelivery: delivery })
+    const w = await mountPanel()
+    expect(w.find('.erasure-key-delivery').text()).toContain(t('erasure.keyDeliveryTitle'))
+    expect(w.text()).toContain(t('erasure.keyDeliveryBody'))
+    await w.find('#erasure-password').setValue('my password')
+    await submit(w)
+    expect(eraseOwnAccount).toHaveBeenCalledWith('my password', [], delivery)
   })
 
   it.each([
     [httpError(403, 'attestation_failed'), 'erasure.errorPassword'],
-    [httpError(409, 'moderation_last_holder'), 'erasure.errorModerationLastHolder'],
+    [httpError(409, 'moderation_delivery_required'), 'erasure.errorKeyDelivery'],
     [httpError(409, 'last_owner_choice_required'), 'erasure.errorChoiceRequired'],
   ])('shows the refusal in the person’s words (%#)', async (err, key) => {
     vi.mocked(eraseOwnAccount).mockRejectedValue(err)
-    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [] })
+    vi.mocked(loadErasurePreview).mockResolvedValue({ kind: 'ready', tenants: [], serverOwnerDelivery: null })
     const w = await mountPanel()
     await w.find('#erasure-password').setValue('wrong')
     await submit(w)

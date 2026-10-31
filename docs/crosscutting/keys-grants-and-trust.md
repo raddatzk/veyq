@@ -400,8 +400,9 @@ one the operator substituted (ADR 0111 decisions 12–17,
 | **Verifications** | `veyq_verification`, one row per verifier and subject per tenant, sealed under a tenant epoch key | each verifier, into their own row only | "in this tenant, I at my head confirmed you at your head", signed by the verifier's identity |
 | **Pin store** | per account, synced, sealed under the Master Key | the device | per person the highest key-chain head seen, its index, the identity fingerprint at it, the first-seen time and a *replaced* mark — no verdict |
 
-The chain is served to the person, to users who share a tenant with them, and between two accepted moderators
-(`KeyChainStore.mayRead`), and an inviting owner's chain to the holder of their open invite's token (the preview); every read that serves another user's key to a check serves their head beside it
+The chain is served to the person, to users who share a tenant with them, between two accepted moderators, and the
+Server Owner's to an accepted moderator (the last holder's erasure delivers the moderation key to the Server Owner, on
+the roster or not, ADR 0101 decision 9) (`KeyChainStore.mayRead`), and an inviting owner's chain to the holder of their open invite's token (the preview); every read that serves another user's key to a check serves their head beside it
 (`ScopeMember.keyChainHead`, the grant-delivery target, an open invite's signer).
 
 ### The anchor, per tenant

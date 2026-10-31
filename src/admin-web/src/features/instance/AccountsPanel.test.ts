@@ -15,6 +15,8 @@ vi.mock('./accounts', async () => {
   const actual = await vi.importActual<typeof import('./accounts')>('./accounts')
   return { ...actual, listAccountErasures: vi.fn(), eraseAccount: vi.fn(), stopAccountErasure: vi.fn() }
 })
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import AccountsPanel from './AccountsPanel.vue'
 import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from './accounts'
@@ -101,6 +103,7 @@ describe('AccountsPanel (uc.account.erase-account, admin-web)', () => {
     await submit(w)
     await flushPromises()
     expect(eraseAccount).toHaveBeenCalledWith('member@example.com')
+    expect(confirmAsk).not.toHaveBeenCalled() // an account that holds no key is not warned about one
     expect(w.text()).toContain(`member@example.com will be erased on ${DUE.toLocaleString('en')}.`)
     expect(w.findAll('.account-erasures__row')).toHaveLength(1)
     expect(w.emitted('changed')).toHaveLength(1) // the console reads its tenant list again (an ownerless marker)
@@ -113,7 +116,6 @@ describe('AccountsPanel (uc.account.erase-account, admin-web)', () => {
       [404, 'account_not_found', 'No account has that address.'],
       [409, 'server_owner_account', "That is your own account, the Server Owner's."],
       [409, 'account_erasure_pending', 'An erasure of that account is already pending.'],
-      [409, 'moderation_last_holder', 'the last moderator who holds the moderation key'],
       [500, undefined, 'Couldn’t erase the account.'],
     ] as const) {
       await inputs(w)[0].setValue('x@example.com')
@@ -124,6 +126,42 @@ describe('AccountsPanel (uc.account.erase-account, admin-web)', () => {
       expect(w.find('.msg[data-severity="error"]').text()).toContain(expected)
     }
     expect(w.emitted('changed')).toBeUndefined()
+  })
+
+  it('the last holder of the moderation key: warns that the key goes with it, and erases only on its accept', async () => {
+    const w = await mountPanel()
+    expect(w.text()).toContain('If it is the last moderator who holds the moderation key, you are warned first')
+    const type = async () => {
+      await inputs(w)[0].setValue('holder@example.com')
+      await inputs(w)[1].setValue('holder@example.com')
+    }
+    vi.mocked(eraseAccount).mockImplementation(async (_a, opts) => {
+      if (!opts?.loseModerationKey) throw httpError(409, 'moderation_last_holder')
+      return row('holder@example.com', 'SERVER_OWNER')
+    })
+
+    // Declined: nothing is erased, nothing is said to have been.
+    confirmAsk.mockResolvedValueOnce(false)
+    await type()
+    await submit(w)
+    await flushPromises()
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({
+      header: 'holder@example.com alone holds the moderation key',
+      message: expect.stringContaining('can no longer be read'),
+      acceptLabel: 'Erase and lose the key',
+    }))
+    expect(eraseAccount).toHaveBeenCalledTimes(1)
+    expect(eraseAccount).not.toHaveBeenCalledWith('holder@example.com', { loseModerationKey: true })
+    expect(w.find('.msg').exists()).toBe(false)
+    expect(w.emitted('changed')).toBeUndefined()
+
+    // Accepted: asked again with the confirmation, and erased.
+    confirmAsk.mockResolvedValueOnce(true)
+    await submit(w)
+    await flushPromises()
+    expect(eraseAccount).toHaveBeenLastCalledWith('holder@example.com', { loseModerationKey: true })
+    expect(w.text()).toContain(`holder@example.com will be erased on ${DUE.toLocaleString('en')}.`)
+    expect(w.emitted('changed')).toHaveLength(1)
   })
 
   it('stops a pending erasure by its address, without asking, and reads the list again', async () => {

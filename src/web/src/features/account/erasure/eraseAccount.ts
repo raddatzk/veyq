@@ -10,11 +10,16 @@
 // not the logout (it would answer 401), not the remember-me wrap's delete (the server's wraps go with the purge). The
 // browser clears its OWN records for the account (decision 4: session vault, remembered and trusted device, trust
 // marks) and the session ends the way a sign-out ends one, leaving the sign-in page the `erased` notice.
+//
+// The last holder of the moderation key (A8, decision 9): the preview then names the Server Owner
+// (`serverOwnerDelivery`), and the request carries every epoch this account holds to them, sealed here before it is sent
+// (`sealForServerOwner`) — the server refuses the erasure without it, so a client that skipped the step loses no key.
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountErasureApi, loginApi } from '../../../api/client'
-import type { ErasureTenant, LastOwnerChoice } from '../../../api/generated/account'
+import type { ErasureTenant, LastOwnerChoice, ServerOwnerKeyDelivery } from '../../../api/generated/account'
+import { sealForServerOwner, ServerOwnerDeliveryRefused } from '../../moderation/serverOwnerDelivery'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { endSession } from '../../../app/sessionEnd'
 import { explainEnding } from '../../../app/endingNotice'
@@ -26,16 +31,19 @@ import { clearTrust } from '../trustDevice/deviceKey'
 import { forgetMarks } from '../trustMarks'
 import { HttpStatus, decodeHttpError } from '../../../shared/httpError'
 
-export type { ErasureTenant, LastOwnerChoice } from '../../../api/generated/account'
+export type { ErasureTenant, LastOwnerChoice, ServerOwnerKeyDelivery } from '../../../api/generated/account'
 
-/** What the panel can offer: the tenants the erasure decides about, or the Server Owner's refusal (A2). */
-export type ErasurePreview = { kind: 'ready'; tenants: ErasureTenant[] } | { kind: 'serverOwner' }
+/** What the panel can offer: the tenants the erasure decides about and, for the last holder of the moderation key, whom
+ *  it hands the key to (A8) — or the Server Owner's refusal (A2). */
+export type ErasurePreview =
+  | { kind: 'ready'; tenants: ErasureTenant[]; serverOwnerDelivery: ServerOwnerKeyDelivery | null }
+  | { kind: 'serverOwner' }
 
 /** Read the preview. The Server Owner's account is never erased: its `409` is an answer here, not a failure. */
 export async function loadErasurePreview(): Promise<ErasurePreview> {
   try {
-    const { tenants } = await withRefresh(() => accountErasureApi().getOwnAccountErasurePreview())
-    return { kind: 'ready', tenants }
+    const { tenants, serverOwnerDelivery } = await withRefresh(() => accountErasureApi().getOwnAccountErasurePreview())
+    return { kind: 'ready', tenants, serverOwnerDelivery: serverOwnerDelivery ?? null }
   } catch (e) {
     const { status, code } = await decodeHttpError(e)
     if (status === HttpStatus.conflict && code === 'server_owner_account') return { kind: 'serverOwner' }
@@ -53,13 +61,22 @@ export class EraseAccountRefused extends Error {
 
 /**
  * Erase the signed-in account. `choices` holds one entry per tenant the preview lists with other members
- * (`newOwnerId` null deletes it along). Resolves once the ending has started the sign-in page's load; a refusal
- * rejects with the server's error and changes nothing — not on the server, not in this browser.
+ * (`newOwnerId` null deletes it along); `serverOwnerDelivery` is the preview's, set when this account is the last holder
+ * of the moderation key — its epochs are sealed to the Server Owner first and travel in the request. Resolves once the
+ * ending has started the sign-in page's load; a refusal rejects with the server's error (or a
+ * {@link ServerOwnerDeliveryRefused} before any request) and changes nothing — not on the server, not in this browser.
  */
-export async function eraseOwnAccount(password: string, choices: LastOwnerChoice[]): Promise<void> {
+export async function eraseOwnAccount(
+  password: string,
+  choices: LastOwnerChoice[],
+  serverOwnerDelivery: ServerOwnerKeyDelivery | null = null,
+): Promise<void> {
   const userId = account.userId
   const email = account.email
   if (!userId || !email) throw new EraseAccountRefused('vaultLocked')
+
+  // The hand-over first: it opens the grants with the vault's identity key, which the ending below drops.
+  const delivery = serverOwnerDelivery ? await sealForServerOwner(serverOwnerDelivery) : null
 
   // The challenge is the nonce the proof binds, and it carries the instance salt sign-in derives under.
   const challenge = await loginApi().requestLoginChallenge({ loginChallengeRequest: { email } })
@@ -75,7 +92,12 @@ export async function eraseOwnAccount(password: string, choices: LastOwnerChoice
 
   await withRefresh(() =>
     accountErasureApi().eraseOwnAccount({
-      eraseOwnAccountRequest: { nonce: challenge.nonce, attestationSignature, lastOwnerChoices: choices },
+      eraseOwnAccountRequest: {
+        nonce: challenge.nonce,
+        attestationSignature,
+        lastOwnerChoices: choices,
+        ...(delivery ? { serverOwnerDelivery: delivery } : {}),
+      },
     }),
   )
 
@@ -104,11 +126,16 @@ async function forgetThisBrowser(email: string): Promise<void> {
 /** The message for a refused erasure, by the contract's one meaning per status and code. Nothing was written. */
 export async function erasureErrorKey(e: unknown): Promise<string> {
   if (e instanceof EraseAccountRefused) return 'erasure.errorLocked'
+  if (e instanceof ServerOwnerDeliveryRefused) {
+    if (e.reason === 'locked') return 'erasure.errorLocked'
+    return e.reason === 'unanchored' ? 'erasure.errorKeyUnanchored' : 'erasure.errorKeyNotHeld'
+  }
   const { status, code } = await decodeHttpError(e)
   if (status === HttpStatus.forbidden) return 'erasure.errorPassword'
   if (status === HttpStatus.conflict) {
     if (code === 'last_owner_choice_required') return 'erasure.errorChoiceRequired'
-    if (code === 'moderation_last_holder') return 'erasure.errorModerationLastHolder'
+    if (code === 'moderation_delivery_required') return 'erasure.errorKeyDelivery'
+    if (code === 'identity_changed') return 'erasure.errorKeyIdentityChanged'
     if (code === 'server_owner_account') return 'erasure.serverOwner'
   }
   return 'erasure.errorFailed'

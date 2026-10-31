@@ -35,6 +35,11 @@ vi.mock('../rememberMe/deviceKeyWrap', () => ({ clearDeviceKey: vi.fn() }))
 vi.mock('../trustDevice/deviceKey', () => ({ clearTrust: vi.fn() }))
 vi.mock('../trustMarks', () => ({ forgetMarks: vi.fn() }))
 vi.mock('@veyq/crypto/argonWorker', () => ({ deriveAuthKeypairAsync: vi.fn() }))
+// The hand-over's crypto is `serverOwnerDelivery.test.ts`'s; here it is a mock that keeps its error class.
+vi.mock('../../moderation/serverOwnerDelivery', async (orig) => ({
+  ...(await orig<typeof import('../../moderation/serverOwnerDelivery')>()),
+  sealForServerOwner: vi.fn(),
+}))
 
 const held: { mk: Uint8Array | null } = vi.hoisted(() => ({ mk: null }))
 vi.mock('../../../app/vault', () => ({ masterKey: () => (held.mk ? held.mk.slice() : null) }))
@@ -49,6 +54,7 @@ import { clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { clearTrust } from '../trustDevice/deviceKey'
 import { forgetMarks } from '../trustMarks'
 import { deriveAuthKeypairAsync } from '@veyq/crypto/argonWorker'
+import { sealForServerOwner, ServerOwnerDeliveryRefused } from '../../moderation/serverOwnerDelivery'
 
 const requestLoginChallenge = vi.fn<LoginApi['requestLoginChallenge']>()
 const eraseCall = vi.fn<AccountErasureApi['eraseOwnAccount']>()
@@ -104,6 +110,31 @@ describe('eraseOwnAccount — the request', () => {
     expect(wire).not.toContain(b64std(MK))
   })
 
+  it('without a hand-over in the preview, seals nothing and sends no delivery', async () => {
+    await eraseOwnAccount(PASSWORD, CHOICES)
+    expect(sealForServerOwner).not.toHaveBeenCalled()
+    expect(sent()).not.toHaveProperty('serverOwnerDelivery')
+  })
+
+  it('the last holder: seals the key for the Server Owner before the request, and the request carries it', async () => {
+    const delivery = { serverOwnerId: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', identityPublicKey: 'aWQ=', keyChainHead: 'aA==', epochs: [1, 2] }
+    const sealed = { identityPublicKey: 'aWQ=', grants: [{ epoch: 1, sealedGrant: 'Zw==' }, { epoch: 2, sealedGrant: 'Zg==' }] }
+    vi.mocked(sealForServerOwner).mockResolvedValue(sealed)
+    await eraseOwnAccount(PASSWORD, CHOICES, delivery)
+    expect(sealForServerOwner).toHaveBeenCalledWith(delivery)
+    expect(vi.mocked(sealForServerOwner).mock.invocationCallOrder[0]).toBeLessThan(requestLoginChallenge.mock.invocationCallOrder[0])
+    expect(sent().serverOwnerDelivery).toEqual(sealed)
+  })
+
+  it('a hand-over that cannot be sealed sends nothing and clears nothing', async () => {
+    const delivery = { serverOwnerId: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', identityPublicKey: 'aWQ=', keyChainHead: 'aA==', epochs: [1] }
+    vi.mocked(sealForServerOwner).mockRejectedValue(new ServerOwnerDeliveryRefused('unanchored'))
+    await expect(eraseOwnAccount(PASSWORD, CHOICES, delivery)).rejects.toBeInstanceOf(ServerOwnerDeliveryRefused)
+    expect(requestLoginChallenge).not.toHaveBeenCalled()
+    expect(eraseCall).not.toHaveBeenCalled()
+    for (const f of localClears()) expect(f).not.toHaveBeenCalled()
+  })
+
   it('refuses before any request while the account id is unknown (the proof binds it)', async () => {
     acct.userId = ''
     await expect(eraseOwnAccount(PASSWORD, CHOICES)).rejects.toBeInstanceOf(EraseAccountRefused)
@@ -140,7 +171,7 @@ describe('eraseOwnAccount — after the answer', () => {
   it.each([
     ['403 attestation_failed', httpError(403, 'attestation_failed')],
     ['409 last_owner_choice_required', httpError(409, 'last_owner_choice_required')],
-    ['409 moderation_last_holder', httpError(409, 'moderation_last_holder')],
+    ['409 moderation_delivery_required', httpError(409, 'moderation_delivery_required')],
     ['500', httpError(500)],
   ])('%s: rejects and clears nothing — the session stays', async (_, err) => {
     eraseCall.mockRejectedValue(err)
@@ -154,7 +185,11 @@ describe('erasureErrorKey', () => {
     expect(await erasureErrorKey(new EraseAccountRefused('vaultLocked'))).toBe('erasure.errorLocked')
     expect(await erasureErrorKey(httpError(403, 'attestation_failed'))).toBe('erasure.errorPassword')
     expect(await erasureErrorKey(httpError(409, 'last_owner_choice_required'))).toBe('erasure.errorChoiceRequired')
-    expect(await erasureErrorKey(httpError(409, 'moderation_last_holder'))).toBe('erasure.errorModerationLastHolder')
+    expect(await erasureErrorKey(httpError(409, 'moderation_delivery_required'))).toBe('erasure.errorKeyDelivery')
+    expect(await erasureErrorKey(httpError(409, 'identity_changed'))).toBe('erasure.errorKeyIdentityChanged')
+    expect(await erasureErrorKey(new ServerOwnerDeliveryRefused('unanchored'))).toBe('erasure.errorKeyUnanchored')
+    expect(await erasureErrorKey(new ServerOwnerDeliveryRefused('notHeld'))).toBe('erasure.errorKeyNotHeld')
+    expect(await erasureErrorKey(new ServerOwnerDeliveryRefused('locked'))).toBe('erasure.errorLocked')
     expect(await erasureErrorKey(httpError(409, 'server_owner_account'))).toBe('erasure.serverOwner')
     expect(await erasureErrorKey(httpError(409))).toBe('erasure.errorFailed')
     expect(await erasureErrorKey(httpError(500))).toBe('erasure.errorFailed')
@@ -165,7 +200,13 @@ describe('loadErasurePreview', () => {
   it('lists the tenants the erasure decides about', async () => {
     const tenants = [{ tenantId: CHOICES[0].tenantId, name: 'Familie Muster', otherMemberIds: ['2b6e4c1a-8d3f-4e7a-9c2b-5f1e3d4a6b7c'] }]
     stubApi(accountErasureApi, { getOwnAccountErasurePreview: { tenants } })
-    expect(await loadErasurePreview()).toEqual({ kind: 'ready', tenants })
+    expect(await loadErasurePreview()).toEqual({ kind: 'ready', tenants, serverOwnerDelivery: null })
+  })
+
+  it('carries whom the last holder hands the moderation key to', async () => {
+    const serverOwnerDelivery = { serverOwnerId: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', identityPublicKey: 'aWQ=', keyChainHead: 'aA==', epochs: [1] }
+    stubApi(accountErasureApi, { getOwnAccountErasurePreview: { tenants: [], serverOwnerDelivery } })
+    expect(await loadErasurePreview()).toEqual({ kind: 'ready', tenants: [], serverOwnerDelivery })
   })
 
   it('reads the Server Owner’s 409 as an answer, and any other failure as one', async () => {

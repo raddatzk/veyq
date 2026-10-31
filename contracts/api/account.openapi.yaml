@@ -1504,6 +1504,13 @@ paths:
         the new owner — and lists who those members are by id (the client names them from the tenant's directory). One
         with no other member is deleted with the account, and the dialog names it. Session only: this is membership
         metadata the caller already sees.
+
+        `serverOwnerDelivery` is set exactly when the caller is the last accepted moderator holding the current epoch
+        of the instance moderation key (uc.account.erase-account A8, ADR 0101 decision 9, ADR 0099 § 5): the erasure
+        then carries the key to the Server Owner, and this names whom to seal to — the Server Owner's identity beside
+        the head of their key chain, which the client anchors as a moderation delivery anchors its recipient (ADR 0028
+        Decision 2; `getKeyChain` serves the Server Owner's chain to an accepted moderator), and the epochs the caller
+        holds that the Server Owner misses.
       security:
         - bearerAuth: []
       responses:
@@ -1544,10 +1551,19 @@ paths:
         until then only the Server Owner can stop it. One mail goes to the account's address through the instance mail where
         it is set up.
 
+        **The last holder of the moderation key** is not refused (ADR 0101 decision 9): their client delivers every
+        live epoch they hold to the Server Owner in `serverOwnerDelivery`, sealed to the identity the preview served
+        (`moderation-grant` [epoch], as `putModerationDelivery` seals). In the same transaction the Server Owner becomes
+        an accepted moderator holding those epochs — reappointed by the delivery, with no acceptance — and then the
+        caller leaves the roster as a step-down does. A request from anyone else ignores `serverOwnerDelivery`.
+
         Checked in this order: the Server Owner's account (`409 server_owner_account`); the proof (`403
-        attestation_failed`); a last-owner tenant without a choice, or a choice naming no member of that tenant (`409
-        last_owner_choice_required`); the last holder of the moderation key, who must step down the way a moderator does
-        first (`409 moderation_last_holder`). A refusal writes nothing.
+        attestation_failed`); the last holder of the moderation key whose request does not deliver to the Server Owner
+        every live epoch the caller holds that the Server Owner misses, or delivers an epoch the caller does not hold
+        (`409 moderation_delivery_required`), or seals to an identity that is no longer the Server Owner's (`409
+        identity_changed`: read the preview again and anchor again); a last-owner tenant without a choice, or a choice
+        naming no member of that tenant (`409 last_owner_choice_required`). A refusal writes nothing — no grant, no
+        appointment.
       security:
         - bearerAuth: []
       requestBody:
@@ -1585,8 +1601,9 @@ paths:
           description: >
             `server_owner_account` — the Server Owner's own account is never erased; `last_owner_choice_required` — a
             tenant whose last owner the caller is has other members and the request names no choice for it (or names a
-            new owner who is not its member); `moderation_last_holder` — the caller is the last holder of the moderation
-            key. Nothing was written.
+            new owner who is not its member); `moderation_delivery_required` — the caller is the last holder of the
+            moderation key and the request does not carry it to the Server Owner whole; `identity_changed` — the
+            delivery is sealed to an identity that is no longer the Server Owner's. Nothing was written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1635,6 +1652,91 @@ components:
           type: array
           maxItems: 10000
           items: { $ref: "#/components/schemas/ErasureTenant" }
+        serverOwnerDelivery:
+          description: >
+            Set exactly when the caller is the last accepted moderator holding the current epoch of the moderation key:
+            the erasure must carry the key to the Server Owner (`EraseOwnAccountRequest.serverOwnerDelivery`). Absent
+            or null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerKeyDelivery"
+            - type: "null"
+
+    ServerOwnerKeyDelivery:
+      type: object
+      description: >
+        Whom the last holder's erasure delivers the moderation key to (ADR 0101 decision 9): the Server Owner, as a
+        pending moderation delivery serves a recipient (`ModerationPendingDelivery`).
+      required: [serverOwnerId, identityPublicKey, keyChainHead, epochs]
+      properties:
+        serverOwnerId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The Server Owner's account id (what the pin store keys by).
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        identityPublicKey:
+          type: string
+          description: >
+            The Server Owner's identity public bundle as the directory serves it; the client anchors it beside
+            `keyChainHead` before sealing (ADR 0028 Decision 2).
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+        keyChainHead:
+          type: string
+          description: >
+            The head of the Server Owner's key chain (ADR 0111 decision 7): SHA-256 over its newest step. The server's
+            word until the client's walk of the chain (`getKeyChain`) checked it.
+          contentEncoding: base64
+          maxLength: 64
+          example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
+        epochs:
+          x-veyq-visibility: structure
+          type: array
+          maxItems: 1000
+          description: The live epochs the caller holds that the Server Owner misses, ascending — never empty.
+          items: { type: integer, format: int32 }
+          example: [1, 2]
+
+    ServerOwnerKeyDeliveryUpload:
+      type: object
+      description: The moderation key the last holder's erasure delivers to the Server Owner, one grant per epoch.
+      required: [identityPublicKey, grants]
+      properties:
+        identityPublicKey:
+          type: string
+          description: The Server Owner's identity the grants are sealed to, as the preview served it.
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grants:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ServerOwnerKeyGrant" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 1000)'
+
+    ServerOwnerKeyGrant:
+      type: object
+      description: One epoch of the moderation key, sealed to the Server Owner's identity.
+      required: [epoch, sealedGrant]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch.
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedGrant:
+          type: string
+          description: "`M_n` sealed to the Server Owner's identity (`sealTo` purpose `moderation-grant` [epoch])."
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWdyYW50
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     LastOwnerChoice:
       type: object
@@ -1681,6 +1783,14 @@ components:
           description: One choice per tenant the preview lists with other members; an entry for any other tenant is ignored.
           items: { $ref: "#/components/schemas/LastOwnerChoice" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 10000)'
+        serverOwnerDelivery:
+          description: >
+            The moderation key delivered to the Server Owner — required when the preview served `serverOwnerDelivery`
+            (the caller is its last holder), ignored otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerKeyDeliveryUpload"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     OwnAccountErasure:
       type: object

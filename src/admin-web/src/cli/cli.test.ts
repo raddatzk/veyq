@@ -22,7 +22,8 @@ vi.mock('../features/tenants/tenants', async (importOriginal) => ({
   stopTenantDeletion: vi.fn(),
   inviteTenantOwner: vi.fn(),
 }))
-vi.mock('../features/instance/accounts', () => ({
+vi.mock('../features/instance/accounts', async (importOriginal) => ({
+  isLastKeyHolder: (await importOriginal<typeof import('../features/instance/accounts')>()).isLastKeyHolder,
   eraseAccount: vi.fn(), stopAccountErasure: vi.fn(), listAccountErasures: vi.fn(),
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
@@ -1058,14 +1059,14 @@ describe('veyq-admin — an account’s erasure (uc.account.erase-account)', () 
     vi.mocked(eraseAccount).mockResolvedValueOnce(pending)
     const r = await invoke(['account', 'erase', '--address', 'member@example.com'])
     expect(r.code).toBe(0)
-    expect(eraseAccount).toHaveBeenCalledWith('member@example.com')
+    expect(eraseAccount).toHaveBeenCalledWith('member@example.com', { loseModerationKey: false })
     expect(JSON.parse(r.out)).toEqual({
       address: 'member@example.com', requestedAt: EXPIRES.toISOString(), requestedBy: 'SERVER_OWNER', dueAt: '2026-11-09T12:00:00.000Z',
     })
   })
 
   it('account erase exits 1 with each refusal’s code, and refuses a missing address before signing in', async () => {
-    for (const [status, code] of [[404, 'account_not_found'], [409, 'server_owner_account'], [409, 'account_erasure_pending'], [409, 'moderation_last_holder']] as const) {
+    for (const [status, code] of [[404, 'account_not_found'], [409, 'server_owner_account'], [409, 'account_erasure_pending']] as const) {
       vi.mocked(eraseAccount).mockRejectedValueOnce(httpError(status, code))
       const r = await invoke(['account', 'erase', '--address', 'member@example.com'])
       expect(r.code).toBe(1)
@@ -1078,6 +1079,27 @@ describe('veyq-admin — an account’s erasure (uc.account.erase-account)', () 
     expect(missing.err).toContain('--address is required')
     expect(signIn).not.toHaveBeenCalled()
     expect(eraseAccount).not.toHaveBeenCalled()
+  })
+
+  it('account erase of the last key holder warns and erases nothing, and erases it with --lose-moderation-key', async () => {
+    vi.mocked(eraseAccount).mockRejectedValueOnce(httpError(409, 'moderation_last_holder'))
+    const warned = await invoke(['account', 'erase', '--address', 'holder@example.com'])
+    expect(warned.code).toBe(1)
+    expect(warned.err).toContain('holder@example.com alone holds the moderation key')
+    expect(warned.err).toContain('can no longer be read')
+    expect(warned.err).toContain('Nothing was erased')
+    expect(warned.err).toContain('--lose-moderation-key')
+    expect(eraseAccount).toHaveBeenCalledWith('holder@example.com', { loseModerationKey: false })
+
+    vi.mocked(eraseAccount).mockResolvedValueOnce(pending)
+    const erased = await invoke(['account', 'erase', '--address', 'holder@example.com', '--lose-moderation-key'])
+    expect(erased.code).toBe(0)
+    expect(eraseAccount).toHaveBeenLastCalledWith('holder@example.com', { loseModerationKey: true })
+
+    // Refused again with the switch (it cannot be, but if it were): the server's code, not the warning.
+    vi.mocked(eraseAccount).mockRejectedValueOnce(httpError(409, 'moderation_last_holder'))
+    const again = await invoke(['account', 'erase', '--address', 'holder@example.com', '--lose-moderation-key'])
+    expect(again.err).toBe('veyq-admin: request failed: HTTP 409 moderation_last_holder')
   })
 
   it('account stop-erasure reaches its own operation; account erasures prints the pending ones', async () => {

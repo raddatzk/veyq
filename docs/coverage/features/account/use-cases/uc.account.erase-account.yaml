@@ -27,7 +27,6 @@ acceptanceCriteria:
         integration:
           - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
           - AccountErasureSliceTest.noSessionOutlivesAnErasureASignInRacedAgainst
-          - AccountErasureSliceTest.theLastHolderOfTheModerationKeyIsRefusedUntilAnotherHoldsIt
           - AccountErasureSliceTest.theErasureMailIsRetriedUntilItGoesOutAndADeletionMailsEveryMember
       web:
         unit:
@@ -82,6 +81,25 @@ acceptanceCriteria:
       backend:
         integration:
           - ErasureLedgerSliceTest.anErasedAccountComesBackLiveAndIsErasedAgain
+  - id: the-last-holder-hands-the-key-to-the-server-owner
+    # A8 (ADR 0101 decision 9, inbox #812). The step-down and the removal that would leave no holder stay refused:
+    # `ModerationSliceTest.theLastHolderCannotLeaveAndTheServerOwnerMayStepDownWhileAnotherHolds`.
+    text: The last holder of the moderation key erasing their own account delivers every live epoch they hold to the Server Owner in the request, who is then an accepted moderator holding them with no acceptance; without that delivery, with one short of an epoch, naming one not held or sealed to another identity, the erasure is refused and nothing written; the Server Owner's door erases the last holder only once the request confirms the key's loss, and the key is then gone; a holder who is not the last needs no delivery.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.theLastHolderIsRefusedUntilTheErasureDeliversEveryLiveEpochToTheServerOwnerWhoIsThenAModerator
+          - AccountErasureSliceTest.aHolderWhoIsNotTheLastIsServedNoDeliveryAndErasesWithoutOne
+          - AccountErasureSliceTest.theServerOwnersDoorErasesTheLastHolderOnlyOnceTheKeysLossIsConfirmedAndTheKeyIsThenGone
+          - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationCommittedFirstRefusesTheDeliverySealedToTheIdentityItRetired
+          - ErasureKeyDeliveryRacesSliceTest.aServerOwnersRotationAfterTheDeliveryDeletesTheGrantsSealedToTheIdentityItRetired
+          - ErasureKeyDeliveryRacesSliceTest.aSecondModeratorsAcceptanceAndTheDeliveryMeetOnTheEpochRowInEitherOrder
+          - ModerationSliceTest.theLastHolderCannotLeaveAndTheServerOwnerMayStepDownWhileAnotherHolds
+      web:
+        unit:
+          - src/features/moderation/serverOwnerDelivery.test.ts
+          - src/features/account/erasure/eraseAccount.test.ts
+          - src/features/account/erasure/EraseAccountPanel.test.ts
   - id: the-last-owner-is-handled
     text: A last owner with other members chooses at the self-service door, per tenant, to delete it along or to name a new owner from its members, and a request without that choice is refused; a sole-member tenant is deleted with the account; the Server Owner's door leaves the tenant ownerless instead of refusing.
     coverage:
@@ -99,8 +117,10 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     Built and passing locally: `src/features/instance/AccountsPanel.test.ts` (erase refused until the address is typed
-    twice, the pending list and its stop), `accounts.test.ts` and `src/cli/cli.test.ts` (`account erase`,
-    `stop-erasure`, `erasures`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
+    twice, the pending list and its stop, the last key holder's warning and its accept), `ModerationPanel.test.ts` (the
+    notice while one person alone holds the key), `accounts.test.ts` and `src/cli/cli.test.ts` (`account erase` with
+    `--lose-moderation-key`, `stop-erasure`, `erasures`). admin-web's job has never executed, so ADR 0040 admits it
+    nowhere.
   crypto: >-
     `src/packages/crypto/src/v1.conformance.test.ts` asserts the erase-account statement and signature against the
     `auth_attestation.erase_account` vector; crypto's job has never executed, so ADR 0040 admits it nowhere. The backend

@@ -217,9 +217,13 @@ someone who lost their password — you answer it here (GDPR Art. 17; you have a
   as one you delete does.
 - Until then it is listed under **Pending erasures**, and **Stop erasure** lets it sign in again — for a mistaken or
   coerced request. The memberships it was cut from need a new invitation.
-- Your own account cannot be erased this way. The last holder of the moderation key is refused until another
-  moderator holds it. The last owner of a tenant is not refused: the tenant is left with **No owner**
-  ([above](#tenants)).
+- Your own account cannot be erased this way. The last owner of a tenant is not refused: the tenant is left with
+  **No owner** ([above](#tenants)).
+- Nor is the last moderator who holds the moderation key, but the console warns you first: erased here, the key goes
+  with the account, and every report and held copy sealed only to it can no longer be read. Only after you accept
+  **Erase and lose the key** is it erased (`veyq-admin account erase` refuses with the same warning until you add
+  `--lose-moderation-key`). When that person erases their own account in their settings instead, their browser hands
+  the key to you first, and you are a moderator holding it again ([Moderation](/veyq/run/moderation/#moderators)).
 - The person is told by mail through the instance mail.
 
 ## The veyq-admin CLI

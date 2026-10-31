@@ -1,7 +1,7 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
 - Status: Accepted
-- Built: partly (not built: decision 9's hand-over of the moderation key (inbox #812))
+- Built: yes
 - Date: 2026-10-18
 - Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
 

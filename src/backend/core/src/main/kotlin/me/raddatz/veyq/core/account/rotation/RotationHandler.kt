@@ -37,6 +37,7 @@ import me.raddatz.veyq.core.tasks.TasksStore
 import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.transaction.Transactional
 import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
@@ -371,6 +372,15 @@ class RotationHandler(
     } catch (refused: Refused) {
         refused.outcome
     }
+
+    /**
+     * [rotate]'s publish **in the caller's transaction** — the race test holds it uncommitted
+     * (`ErasureKeyDeliveryRacesSliceTest`, a Server Owner's rotation against the last holder's delivery to them). A
+     * refusal after a write throws; the caller's transaction then rolls back whole.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun rotateIn(userId: String, presentedAccessToken: String?, r: RotationRequest): RotationOutcome =
+        applyAll(userId, presentedAccessToken, r)
 
     private fun applyAll(userId: String, presentedAccessToken: String?, r: RotationRequest): RotationOutcome {
         val user = accounts.lock(userId) ?: return RotationOutcome.Unavailable

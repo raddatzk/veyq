@@ -36,7 +36,11 @@ describe('accounts facade (uc.account.erase-account, admin-web)', () => {
 
   it('erase wraps the trimmed address in an AccountAddressRequest and hands back the pending erasure', async () => {
     expect(await eraseAccount(' member@example.com ')).toEqual(PENDING)
-    expect(api.eraseAccount).toHaveBeenCalledWith({ accountAddressRequest: { address: 'member@example.com' } })
+    expect(api.eraseAccount).toHaveBeenCalledWith({ serverOwnerAccountErasureRequest: { address: 'member@example.com' } })
+    await eraseAccount('holder@example.com', { loseModerationKey: true })
+    expect(api.eraseAccount).toHaveBeenLastCalledWith({
+      serverOwnerAccountErasureRequest: { address: 'holder@example.com', confirmModerationKeyLoss: true },
+    })
   })
 
   it('stop wraps the trimmed address the same way', async () => {

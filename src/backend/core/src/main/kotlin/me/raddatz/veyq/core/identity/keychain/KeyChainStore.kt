@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.identity.keychain
 
 import me.raddatz.veyq.core.crypto.KeyChainStatements
 import me.raddatz.veyq.core.identity.ModeratorEntity
+import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import jakarta.enterprise.context.ApplicationScoped
@@ -92,12 +93,16 @@ class KeyChainStore {
      * a tenant with them — a membership of each on the same tenant root scope (`scopeId == tenantId`) — or, when both
      * are accepted moderators of the instance, each other (ADR 0099: a holder anchors the moderator it delivers the
      * moderation key to before it seals to them, and the two may share no tenant; the roster is the instance's, so
-     * the moderators already know each other). Its status does not matter: a suspended tenant does not hide public keys
-     * the person's other tenants serve too.
+     * the moderators already know each other) — and the Server Owner's to an accepted moderator, on the roster or not
+     * (ADR 0101 decision 9: the last holder's erasure delivers the key to the Server Owner and anchors them first; the
+     * roster is the Server Owner's, so every moderator knows them). Its status does not matter: a suspended tenant does
+     * not hide public keys the person's other tenants serve too.
      */
     fun mayRead(callerId: String, userId: String): Boolean {
         if (callerId == userId) return true
-        if (ModeratorEntity.isModerator(callerId) && ModeratorEntity.isModerator(userId)) return true
+        if (ModeratorEntity.isModerator(callerId) &&
+            (ModeratorEntity.isModerator(userId) || VeyqUser.findById(userId)?.serverRole == ServerRoles.SERVER_OWNER)
+        ) return true
         return MembershipEntity.getEntityManager().createQuery(
             "select count(a) from MembershipEntity a, MembershipEntity b where a.userId = :caller and b.userId = :target " +
                 "and a.scopeId = a.tenantId and b.scopeId = a.scopeId and a.pendingConsent = false and b.pendingConsent = false",

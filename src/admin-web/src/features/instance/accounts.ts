@@ -17,11 +17,21 @@ export async function listAccountErasures(): Promise<PendingAccountErasure[]> {
 /**
  * Erase the account at this address: it stops at once (sessions end, sign-in refused, member removal in every tenant)
  * and is purged after the erasure's own window (`veyq.account.erasure.window`, 14 days). Refusals: 404 `account_not_found`; 409 `server_owner_account`,
- * `account_erasure_pending`, `moderation_last_holder`. A last owner is NOT refused — its tenant is left ownerless.
+ * `account_erasure_pending`, and `moderation_last_holder` — the account alone holds the moderation key, which goes with
+ * it at this door (ADR 0101 decision 9): asked again with `loseModerationKey` once the Server Owner was warned, it is
+ * erased all the same. A last owner is NOT refused — its tenant is left ownerless.
  */
-export function eraseAccount(address: string): Promise<PendingAccountErasure> {
-  return instanceAccountsApi().eraseAccount({ accountAddressRequest: { address: address.trim() } })
+export function eraseAccount(address: string, opts: { loseModerationKey?: boolean } = {}): Promise<PendingAccountErasure> {
+  return instanceAccountsApi().eraseAccount({
+    serverOwnerAccountErasureRequest: {
+      address: address.trim(),
+      ...(opts.loseModerationKey ? { confirmModerationKeyLoss: true } : {}),
+    },
+  })
 }
+
+/** Whether a refusal of {@link eraseAccount} is the last holder's: erasing it needs the warning and `loseModerationKey`. */
+export const isLastKeyHolder = (code: string | null | undefined): boolean => code === 'moderation_last_holder'
 
 /** Stop a pending erasure before the purge; the account signs in again. 404 `account_erasure_not_found`. */
 export function stopAccountErasure(address: string): Promise<void> {

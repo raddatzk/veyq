@@ -2382,10 +2382,14 @@ paths:
         the account is purged with its own scopes after the erasure's own window (`veyq.account.erasure.window`, 14
         days). **This door never
         refuses a last owner** (an erasure cannot wait on a third person, GDPR Art. 12(2)): a tenant whose last owner
-        this was is left with no owner, which `listTenants` shows. It does refuse the last holder of the moderation key
-        (`409 moderation_last_holder`), at both doors: the key, and every report and hold sealed to it, would be lost with
-        them (ADR 0099 § 5) — another moderator holds it first. One mail goes to the account's address through the
-        instance mail where it is set up.
+        this was is left with no owner, which `listTenants` shows. **Nor does it refuse the last holder of the
+        moderation key** (ADR 0101 decision 9, ADR 0099 § 5): the person's client, which alone could hand the key to
+        the Server Owner, is not here, so the key is lost with them, and with it every report and hold that only it
+        opens. That is said first: while the account is the last accepted moderator holding the current epoch, the
+        request is refused (`409 moderation_last_holder`, nothing written) unless it carries
+        `confirmModerationKeyLoss: true`, which the console and the CLI send only after their warning. The roster then
+        has no holder and a rotation is due. One mail goes to the account's address through the instance mail where it
+        is set up.
         `409 server_owner_account` for the Server Owner's own account; `409 account_erasure_pending` while one is
         pending already. Server-Owner only.
       security:
@@ -2394,7 +2398,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/AccountAddressRequest" }
+            schema: { $ref: "#/components/schemas/ServerOwnerAccountErasureRequest" }
             example: { address: member@example.com }
       responses:
         "200":
@@ -2427,7 +2431,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: account_not_found }
         "409":
-          description: "`server_owner_account` = it is the Server Owner's own account; `account_erasure_pending` = its erasure is pending already; `moderation_last_holder` = it is the last holder of the moderation key."
+          description: "`server_owner_account` = it is the Server Owner's own account; `account_erasure_pending` = its erasure is pending already; `moderation_last_holder` = it is the last holder of the moderation key and the request does not confirm the key's loss (`confirmModerationKeyLoss`)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -4328,6 +4332,31 @@ components:
           format: int64
           description: Storage keys the sweep gave up on after its retries — bytes that are counted, not deleted.
           example: 0
+
+    ServerOwnerAccountErasureRequest:
+      type: object
+      description: An account to erase, named by its address, and the Server Owner's word on the moderation key.
+      required: [address]
+      properties:
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner names an existing account by its address, as a sign-in block names it; the server looks the
+            account up by the address it already holds and stores nothing new.
+          type: string
+          format: email
+          description: The account's address.
+          maxLength: 254
+          example: member@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
+        confirmModerationKeyLoss:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            `true` = the Server Owner was warned that this account alone holds the moderation key and erases it all the
+            same: the key is lost, and with it what only it opens. Absent, null or false refuses such an account
+            (`409 moderation_last_holder`); for any other account it changes nothing.
+          example: true
 
     AccountAddressRequest:
       type: object

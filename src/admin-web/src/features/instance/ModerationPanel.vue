@@ -8,7 +8,9 @@
 //   - every server refusal is shown as the panel's error, in words for its code — a refused mint is never swallowed,
 //     and the roster is read again after it, so what is shown is what is stored (a removal whose rotation was refused
 //     stands, and then shows as a due rotation);
-//   - each step that changes who holds the key asks first.
+//   - each step that changes who holds the key asks first;
+//   - an instance whose key one person alone holds says so (ADR 0101 decision 9, ADR 0099 § 5): erased at this console,
+//     that person takes the key with them.
 // uc.moderation.take-a-measure step 5 adds the Server Owner's steps below the roster: the moderators' open proposals
 // — a member's sign-in block, taken here with its statement of reasons (a proposal is over content, ADR 0093 § 7) after
 // a confirm, or the tenant's suspension, taken on the tenant's own page
@@ -140,6 +142,14 @@ function stateOf(m: InstanceModerator): { text: string; tone: 'success' | 'warni
 
 const dueSince = computed(() => moderation.value?.rotationDueSince?.toLocaleString(locale.value) ?? '')
 
+/** The one moderator who holds the current epoch, when exactly one does — the key is then one loss from gone. */
+const soleHolder = computed(() => {
+  const holders = (moderation.value?.moderators ?? []).filter(
+    (m) => m.state === ModeratorState.Accepted && m.holdsCurrentEpoch,
+  )
+  return holders.length === 1 ? holders[0] : null
+})
+
 /** The panel's words for each refusal the Server Owner's step operations name (tag instance-moderation). */
 const STEP_REFUSALS: Record<string, string> = {
   account_not_found: 'moderation.steps.errors.accountNotFound',
@@ -265,6 +275,9 @@ const at = (d: Date) => d.toLocaleString(locale.value)
               <VeyqButton class="mod-due__rotate" :label="t('moderation.rotate')" icon="refresh" :loading="busy" @click="rotate" />
             </div>
           </template>
+          <VeyqMessage v-if="soleHolder" tone="warn" class="mod-sole-holder">
+            {{ t('moderation.soleHolder', { address: soleHolder.address }) }}
+          </VeyqMessage>
           <p class="settings-muted mod-epoch">{{ t('moderation.epoch', { epoch: moderation.currentEpoch ?? 0 }) }}</p>
 
           <h3>{{ t('moderation.rosterTitle') }}</h3>

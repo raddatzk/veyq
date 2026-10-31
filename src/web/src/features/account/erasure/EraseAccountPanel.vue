@@ -2,7 +2,8 @@
 // The "Erase account" section of the settings hub — uc.account.erase-account (ADR 0101). It says what goes and what
 // stays (decisions 4, 5, 7) before anything else, reads which spaces the person owns last, asks for each one with
 // other members whether it is deleted along or handed to a member (decision 9), names the spaces deleted
-// along because nobody else is in them, takes the password, and confirms through the shared danger dialog. The
+// along because nobody else is in them, says that the last holder of the moderation key hands it to the Server Owner
+// first (A8, decision 9), takes the password, and confirms through the shared danger dialog. The
 // request and everything after it — this browser's records, the ending — live in `eraseAccount.ts`.
 //
 // Markup mirrors KeyRotationPanel (veyq-surface + settings-form + settings-section-header, its facts list) and its
@@ -60,6 +61,8 @@ const tenants = computed<ErasureTenant[]>(() => (preview.value?.kind === 'ready'
 const choiceTenants = computed(() => tenants.value.filter((tn) => tn.otherMemberIds.length > 0))
 /** The spaces deleted along without a choice: the person is their only member. */
 const soleTenants = computed(() => tenants.value.filter((tn) => tn.otherMemberIds.length === 0))
+/** Where this account is the last holder of the moderation key: whom the erasure hands it to first. */
+const serverOwnerDelivery = computed(() => (preview.value?.kind === 'ready' ? preview.value.serverOwnerDelivery : null))
 
 const nameOf = (userId: string): string => people.value.get(userId)?.displayName || userId
 
@@ -98,7 +101,7 @@ async function submit() {
   busy.value = true
   try {
     // On success the ending loads the sign-in page; this component does not outlive it.
-    await eraseOwnAccount(password.value, lastOwnerChoices())
+    await eraseOwnAccount(password.value, lastOwnerChoices(), serverOwnerDelivery.value)
   } catch (e) {
     error.value = t(await erasureErrorKey(e))
     busy.value = false
@@ -148,6 +151,11 @@ async function submit() {
               </li>
             </ul>
           </section>
+
+          <VeyqMessage v-if="serverOwnerDelivery" tone="info" class="erasure-key-delivery">
+            <strong>{{ t('erasure.keyDeliveryTitle') }}</strong>
+            <span>{{ t('erasure.keyDeliveryBody') }}</span>
+          </VeyqMessage>
 
           <section v-if="soleTenants.length" class="erasure-tenants">
             <h3>{{ t('erasure.soleTitle') }}</h3>
@@ -212,6 +220,9 @@ async function submit() {
   list-style: none;
   margin: 0.5rem 0 0;
   padding: 0;
+}
+.erasure-key-delivery strong {
+  display: block;
 }
 .erasure-action {
   display: flex;

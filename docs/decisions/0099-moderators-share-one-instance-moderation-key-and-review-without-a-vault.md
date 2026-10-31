@@ -1,7 +1,7 @@
 # ADR 0099 — Moderators share one instance moderation key, and review without a vault
 
 - Status: Accepted
-- Built: partly (not built: decision 5's delivery to the Server Owner on the last holder's erasure (inbox #812))
+- Built: yes
 - Date: 2026-10-17
 - Model: [Moderation](../features/moderation/_index.md)
 

@@ -18,7 +18,9 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationGrantEntity
+import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tasks.CapabilityTags
@@ -43,6 +45,7 @@ import jakarta.enterprise.inject.Vetoed
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -432,32 +435,129 @@ class AccountErasureSliceTest {
     }
 
     @Test
-    fun theLastHolderOfTheModerationKeyIsRefusedUntilAnotherHoldsIt() {
-        val (u, kp) = keyedUser()
-        val other = seedUser()
-        val epoch = QuarkusTransaction.requiringNew().call {
-            val next = (ModerationEpochEntity.listAll().maxOfOrNull { it.epoch } ?: 0) + 1
-            ModerationEpochEntity().apply { this.epoch = next; kemPublicKey = "a2Vt"; signPublicKey = "c2lnbg=="; reason = "BY_HAND" }.persist()
-            moderator(u, next)
-            next
-        }
+    fun theLastHolderIsRefusedUntilTheErasureDeliversEveryLiveEpochToTheServerOwnerWhoIsThenAModerator() {
+        ModerationTestKit.reset()
         try {
+            val (u, kp) = keyedUser()
+            val stranger = seedUser()
+            val ownerToken = serverOwnerToken() // the instance has a Server Owner before anything is read
+            QuarkusTransaction.requiringNew().run {
+                epoch(1)
+                epoch(2)
+                moderator(u, 1)
+                grant(u, 2)
+            }
             val token = TestFixtures.bearer(u)
-            eraseOwn(u, kp, token).then().statusCode(409).body("code", equalTo("moderation_last_holder"))
-            tx { assertTrue(ModeratorEntity.isModerator(u)) }
-            QuarkusTransaction.requiringNew().run { moderator(other, epoch) }
+
+            // The preview names the Server Owner, its identity and chain head, and the two epochs to deliver.
+            val preview = given().header("Authorization", token).`when`().get("/api/account/erasure")
+                .then().statusCode(200).extract()
+            val owner: String = preview.path("serverOwnerDelivery.serverOwnerId")
+            val identity: String = preview.path("serverOwnerDelivery.identityPublicKey")
+            assertEquals(listOf(1, 2), preview.path<List<Int>>("serverOwnerDelivery.epochs"))
+            assertEquals(tx { VeyqUser.findById(owner)!!.identityPublicKey }, identity)
+            assertNotNull(preview.path<String>("serverOwnerDelivery.keyChainHead"))
+            // The holder may read the Server Owner's chain to anchor that identity, and still no stranger's.
+            given().header("Authorization", token).`when`().get("/api/people/$owner/key-chain").then().statusCode(200)
+            given().header("Authorization", token).`when`().get("/api/people/$stranger/key-chain").then().statusCode(404)
+
+            // No delivery, a delivery missing an epoch, one naming an epoch the holder does not hold, one sealed to
+            // another identity: refused, and nothing written.
+            eraseOwn(u, kp, token).then().statusCode(409).body("code", equalTo("moderation_delivery_required"))
+            eraseOwn(u, kp, token, delivery = delivery(identity, 2)).then().statusCode(409)
+                .body("code", equalTo("moderation_delivery_required"))
+            eraseOwn(u, kp, token, delivery = delivery(identity, 1, 2, 3)).then().statusCode(409)
+                .body("code", equalTo("moderation_delivery_required"))
+            eraseOwn(u, kp, token, delivery = delivery("c3RhbGUtaWRlbnRpdHk=", 1, 2)).then().statusCode(409)
+                .body("code", equalTo("identity_changed"))
+            tx {
+                assertNull(AccountErasureEntity.findById(u))
+                assertTrue(ModeratorEntity.isModerator(u))
+                assertEquals(0L, ModerationGrantEntity.count("moderatorId", owner), "a refused delivery stores no grant")
+                assertFalse(ModeratorEntity.isModerator(owner), "nor an appointment")
+            }
+
+            eraseOwn(u, kp, token, delivery = delivery(identity, 1, 2)).then().statusCode(200)
+            tx {
+                assertNotNull(AccountErasureEntity.findById(u))
+                assertTrue(ModeratorEntity.isModerator(owner), "the Server Owner is an accepted moderator, with no acceptance step")
+                assertEquals(
+                    setOf(1 to "Zw1=", 2 to "Zw2="),
+                    ModerationGrantEntity.list("moderatorId", owner).map { it.epoch to it.sealedGrant }.toSet(),
+                    "holding every live epoch, as sealed by the holder's client",
+                )
+                assertEquals(setOf(u), ModerationGrantEntity.list("moderatorId", owner).map { it.deliveredBy }.toSet())
+                assertFalse(ModeratorEntity.isModerator(u), "the holder left the roster as a step-down does")
+                assertEquals(0L, ModerationGrantEntity.count("moderatorId", u))
+                assertNotNull(ModerationEpochEntity.findById(2)!!.rotationDueAt, "the epoch the holder held is due for rotation")
+                assertEquals(2L, ModerationEventEntity.count("event = ?1 and moderatorId = ?2", "DELIVERED", owner))
+            }
+            // The roster the Server Owner reads says so.
+            givenAdminChannel().header("Authorization", "Bearer $ownerToken").`when`().get("/api/instance/moderation")
+                .then().statusCode(200)
+                .body("moderators.find { it.accountId == '$owner' }.state", equalTo("ACCEPTED"))
+                .body("moderators.find { it.accountId == '$owner' }.holdsCurrentEpoch", equalTo(true))
+        } finally {
+            ModerationTestKit.reset()
+        }
+    }
+
+    @Test
+    fun aHolderWhoIsNotTheLastIsServedNoDeliveryAndErasesWithoutOne() {
+        ModerationTestKit.reset()
+        try {
+            val (u, kp) = keyedUser()
+            val other = seedUser()
+            QuarkusTransaction.requiringNew().run {
+                epoch(1)
+                moderator(u, 1)
+                moderator(other, 1)
+            }
+            val token = TestFixtures.bearer(u)
+            given().header("Authorization", token).`when`().get("/api/account/erasure")
+                .then().statusCode(200).body("serverOwnerDelivery", nullValue())
             eraseOwn(u, kp, token).then().statusCode(200)
             tx {
-                assertFalse(ModeratorEntity.isModerator(u), "it left the roster as a step-down does")
+                assertFalse(ModeratorEntity.isModerator(u))
+                assertTrue(ModeratorEntity.isModerator(other), "the other holder keeps the key")
                 assertEquals(0L, ModerationGrantEntity.count("moderatorId", u))
-                assertNotNull(ModerationEpochEntity.findById(epoch)!!.rotationDueAt, "the epoch is due for rotation")
             }
         } finally {
+            ModerationTestKit.reset()
+        }
+    }
+
+    @Test
+    fun theServerOwnersDoorErasesTheLastHolderOnlyOnceTheKeysLossIsConfirmedAndTheKeyIsThenGone() {
+        ModerationTestKit.reset()
+        try {
+            val (u, _) = keyedUser()
             QuarkusTransaction.requiringNew().run {
-                ModerationGrantEntity.delete("epoch", epoch)
-                ModeratorEntity.delete("accountId in ?1", listOf(u, other))
-                ModerationEpochEntity.deleteById(epoch)
+                epoch(1)
+                moderator(u, 1)
             }
+            val ownerToken = serverOwnerToken()
+            eraseByOwner(ownerToken, emailOf(u)).then().statusCode(409).body("code", equalTo("moderation_last_holder"))
+            eraseByOwner(ownerToken, emailOf(u), confirm = "false").then().statusCode(409).body("code", equalTo("moderation_last_holder"))
+            tx {
+                assertNull(AccountErasureEntity.findById(u), "unconfirmed: nothing written")
+                assertTrue(ModeratorEntity.isModerator(u))
+                assertEquals(1L, ModerationGrantEntity.count("epoch", 1))
+            }
+
+            eraseByOwner(ownerToken, emailOf(u), confirm = "true").then().statusCode(200)
+            tx {
+                assertNotNull(AccountErasureEntity.findById(u))
+                assertFalse(ModeratorEntity.isModerator(u))
+                assertEquals(0L, ModerationGrantEntity.count("epoch", 1), "nobody holds the key any more")
+                assertEquals(0L, ModeratorEntity.count("removedAt is null and acceptedAt is not null"), "and the roster is empty")
+                assertNotNull(ModerationEpochEntity.findById(1)!!.rotationDueAt)
+            }
+            // Control: an account that holds no key needs no confirmation at this door.
+            val (plain, _) = keyedUser()
+            eraseByOwner(ownerToken, emailOf(plain)).then().statusCode(200)
+        } finally {
+            ModerationTestKit.reset()
         }
     }
 
@@ -558,19 +658,27 @@ class AccountErasureSliceTest {
             .`when`().post("/api/login/verify").statusCode == 200
     }
 
-    private fun eraseOwn(userId: String, kp: KeyPair, token: String, choices: String = "[]"): Response {
+    private fun eraseOwn(userId: String, kp: KeyPair, token: String, choices: String = "[]", delivery: String? = null): Response {
         val nonce = challenge(emailOf(userId))
-        return eraseOwnWith(token, nonce, sign(kp, AuthAttestation.eraseAccountStatement(userId, nonce)!!), choices)
+        return eraseOwnWith(token, nonce, sign(kp, AuthAttestation.eraseAccountStatement(userId, nonce)!!), choices, delivery)
     }
 
-    private fun eraseOwnWith(token: String, nonce: String, signature: String, choices: String = "[]"): Response =
+    private fun eraseOwnWith(token: String, nonce: String, signature: String, choices: String = "[]", delivery: String? = null): Response =
         given().header("Authorization", token).contentType(ContentType.JSON)
-            .body("""{"nonce":"$nonce","attestationSignature":"$signature","lastOwnerChoices":$choices}""")
+            .body(
+                """{"nonce":"$nonce","attestationSignature":"$signature","lastOwnerChoices":$choices""" +
+                    (delivery?.let { ""","serverOwnerDelivery":$it""" } ?: "") + "}",
+            )
             .`when`().post("/api/account/erasure")
 
-    private fun eraseByOwner(ownerToken: String, address: String): Response =
+    /** A delivery to the Server Owner of [epochs], sealed to [identity]; each grant is "Zw" + its epoch, opaque. */
+    private fun delivery(identity: String, vararg epochs: Int): String =
+        """{"identityPublicKey":"$identity","grants":[${epochs.joinToString(",") { """{"epoch":$it,"sealedGrant":"Zw$it="}""" }}]}"""
+
+    private fun eraseByOwner(ownerToken: String, address: String, confirm: String? = null): Response =
         givenAdminChannel().header("Authorization", "Bearer $ownerToken").contentType(ContentType.JSON)
-            .body("""{"address":"$address"}""").`when`().post("/api/instance/accounts/erasures")
+            .body("""{"address":"$address"${confirm?.let { ""","confirmModerationKeyLoss":$it""" } ?: ""}}""")
+            .`when`().post("/api/instance/accounts/erasures")
 
     private fun stopByOwner(ownerToken: String, address: String): Response =
         givenAdminChannel().header("Authorization", "Bearer $ownerToken").contentType(ContentType.JSON)
@@ -610,10 +718,18 @@ class AccountErasureSliceTest {
             this.accountId = accountId; appointedBy = UUID.randomUUID().toString(); appointedAt = Instant.now()
             acceptedAt = Instant.now()
         }.persist()
+        grant(accountId, epoch)
+    }
+
+    private fun grant(accountId: String, epoch: Int) {
         ModerationGrantEntity().apply {
             id = UUID.randomUUID().toString(); moderatorId = accountId; this.epoch = epoch; sealedGrant = "Zw=="
             deliveredBy = accountId
         }.persist()
+    }
+
+    private fun epoch(epoch: Int) {
+        ModerationEpochEntity().apply { this.epoch = epoch; kemPublicKey = "a2Vt"; signPublicKey = "c2lnbg=="; reason = "BY_HAND" }.persist()
     }
 
     private fun roleOf(userId: String, tenantId: String): String? =

@@ -1057,7 +1057,8 @@ paths:
         taken for it. Host-independent: one chain per account, the same in every tenant. Served to the person, to
         users who share a tenant with them (a membership on the same tenant root scope), and between two accepted
         moderators of the instance (ADR 0099: a holder anchors the moderator it delivers the moderation key to, who may
-        share no tenant with it); anyone else gets the `404 not_found` an unknown user gets, so the read enumerates
+        share no tenant with it), and the Server Owner's to an accepted moderator (ADR 0101 decision 9: the last
+        holder's erasure delivers the key to the Server Owner, on the roster or not); anyone else gets the `404 not_found` an unknown user gets, so the read enumerates
         nobody (ADR 0042). Operator-blind: public keys and
         signatures the server stores, and the server-observed time of each step — it already knows every rotation.
       security:

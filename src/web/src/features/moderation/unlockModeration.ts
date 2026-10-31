@@ -62,8 +62,10 @@ export async function unlockModeration(email: string, password: string, secretKe
   }
 }
 
-/** Open every grant this account holds and check it against the published bundle; a mismatch opens nothing. */
-function openGrants(epochs: ModerationEpochGrant[]): Map<number, Uint8Array> {
+/** Open every grant this account holds and check it against the published bundle; a mismatch opens nothing. The caller
+ *  owns the opened keys and zeroes them; the last holder's hand-over to the Server Owner opens them the same way
+ *  (`serverOwnerDelivery.ts`). */
+export function openGrants(epochs: ModerationEpochGrant[]): Map<number, Uint8Array> {
   const priv = identityPrivate()
   if (!priv) throw new Error('moderation unlock requires an unlocked vault')
   const opened = new Map<number, Uint8Array>()
